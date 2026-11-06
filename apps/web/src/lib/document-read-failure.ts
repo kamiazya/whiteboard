@@ -14,12 +14,15 @@
  */
 export type DocumentReadFailure =
   | 'unsupported-version'
+  | 'retired-comment-plane'
   | 'corrupt-snapshot'
   | 'corrupt-delta'
   | 'read-unavailable'
 
 const MESSAGES: Record<DocumentReadFailure, string> = {
   'unsupported-version': 'This canvas was saved by a newer version of the app. Update to open it.',
+  'retired-comment-plane':
+    'This canvas holds comments saved by an older version, in a form this version no longer reads. Its data has not been changed.',
   'corrupt-snapshot': 'This canvas’s data could not be read.',
   'corrupt-delta': 'This canvas’s edit history could not be read.',
   // The fourth is the one that is NOT about the bytes: storage did not answer,

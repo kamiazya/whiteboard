@@ -10,14 +10,11 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../scene-digest.js'
+import { type CommentBoard, layoutBoard } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { seedFromId } from './seed.js'
-import {
-  layoutSpatialCanvas,
-  type RenderContribution,
-  type SpatialLayoutOptions,
-} from './spatial-canvas.js'
+import type { RenderContribution, SpatialLayoutOptions } from './spatial-canvas.js'
 
 const PENCIL: ThemeTokens = { ...SAMPLE_THEME_TOKENS, ink: 'sketch', defaults: {} }
 const CRISP: ThemeTokens = { ...SAMPLE_THEME_TOKENS, ink: 'clean', defaults: {} }
@@ -37,7 +34,7 @@ function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
   }
 }
 
-const canvas: SpatialCanvas = {
+const canvas: CommentBoard = {
   nodes: [
     textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a', color: '5' }),
     textNode({ id: 'b', x: 300, y: 200, width: 100, height: 60, text: 'b' }),
@@ -57,7 +54,7 @@ const edges = (scene: Scene) => scene.nodes.filter((n): n is ResolvedEdgeNode =>
 
 describe('sketch ink assignment', () => {
   it('a sketch theme inks every document node and edge with a seed from its id', () => {
-    const scene = layoutSpatialCanvas(canvas, options({ style: 'demo.pencil' }))
+    const scene = layoutBoard(canvas, options({ style: 'demo.pencil' }))
     const a = shapes(scene).find((s) => s.id === 'a')
     const b = shapes(scene).find((s) => s.id === 'b')
     expect(a?.ink).toEqual({ style: 'sketch', seed: seedFromId('a'), fill: 'hatch' })
@@ -76,7 +73,7 @@ describe('sketch ink assignment', () => {
         ...canvas.nodes,
       ],
     }
-    const scene = layoutSpatialCanvas(framed, options({ style: 'demo.pencil' }))
+    const scene = layoutBoard(framed, options({ style: 'demo.pencil' }))
     expect(shapes(scene).find((s) => s.id === 'g')?.ink).toEqual({
       style: 'sketch',
       seed: seedFromId('g'),
@@ -85,14 +82,14 @@ describe('sketch ink assignment', () => {
 
   it('a clean theme, and no theme, assign no ink', () => {
     for (const style of ['demo.crisp', 'clean'] as const) {
-      const scene = layoutSpatialCanvas(canvas, options({ style }))
+      const scene = layoutBoard(canvas, options({ style }))
       expect(shapes(scene).every((s) => s.ink === undefined)).toBe(true)
       expect(edges(scene).every((e) => e.ink === undefined)).toBe(true)
     }
   })
 
   it('comment chrome stays crisp — the annotation layer must read as chrome, not content', () => {
-    const scene = layoutSpatialCanvas(canvas, options({ style: 'demo.pencil' }))
+    const scene = layoutBoard(canvas, options({ style: 'demo.pencil' }))
     const chrome = scene.nodes.filter((n) => n.kind === 'shape' && n.commentChrome === true)
     expect(chrome.length).toBeGreaterThan(0)
     expect(chrome.every((n) => n.kind === 'shape' && n.ink === undefined)).toBe(true)
@@ -101,8 +98,8 @@ describe('sketch ink assignment', () => {
   })
 
   it('ink changes nothing the digest reads', () => {
-    const inked = layoutSpatialCanvas(canvas, options({ style: 'demo.pencil' }))
-    const crisp = layoutSpatialCanvas(canvas, options({ style: 'demo.crisp' }))
+    const inked = layoutBoard(canvas, options({ style: 'demo.pencil' }))
+    const crisp = layoutBoard(canvas, options({ style: 'demo.crisp' }))
     expect(sceneDigest(inked)).toEqual(sceneDigest(crisp))
   })
 })

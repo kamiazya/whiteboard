@@ -24,13 +24,4 @@ describe('wb_canvas_edit — an object nested inside an op refuses a key it does
     expect(accepts(addNode({ facets: { 'example.kanban/v1': { status: 'todo' } } }))).toBe(true)
     expect(accepts(addNode({ facets: { nope: {} } }))).toBe(false)
   })
-
-  test('a comment draft', () => {
-    const add = (comment: Record<string, unknown>) => ({
-      op: 'comment.add',
-      comment: { text: 'x', x: 5, y: 5, ...comment },
-    })
-    expect(accepts(add({}))).toBe(true)
-    expect(accepts(add({ foo: 1 }))).toBe(false)
-  })
 })

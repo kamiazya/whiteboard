@@ -16,7 +16,12 @@
  */
 
 import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { commentCornerOf, isFrame, spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import {
+  canvasCommentsOf,
+  commentCornerOf,
+  isFrame,
+  spatialAnchorRect,
+} from '@kamiazya/whiteboard-model'
 import type { Appearance, BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
@@ -123,13 +128,11 @@ const REGION_OUTLINE_RADIUS_PX = 6
  * the comments stay on its own page. The host's threads and proposals are
  * dropped too: both are the HOST's, keyed by its node ids, so a nested board
  * would outline a host addition again inside every embed, and a host patch
- * or removal on any same-id node it holds. An empty `comments` replaces the
- * board's own envelope copy.
+ * or removal on any same-id node it holds.
  */
 export function withoutOverlays(options: ResolvedLayoutOptions): ResolvedLayoutOptions {
   return {
     ...options,
-    comments: [],
     threads: [],
     proposals: [],
     passagesByNode: new Map(),
@@ -365,8 +368,8 @@ export function composeComments(
   bodyLayout: BodyLayoutSeam,
   labelBoxes: readonly BoundingBox[] = [],
 ): readonly SceneNode[] {
-  const comments = options.comments ?? canvas.comments
-  if (comments === undefined || comments.length === 0) return []
+  const comments = canvasCommentsOf(options.threads ?? [], canvas.nodes)
+  if (comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()
   const visible = comments.filter(

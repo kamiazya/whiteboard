@@ -22,7 +22,7 @@
 
 import type { BoundingBox, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
-import type { CanvasComment } from '@kamiazya/whiteboard-model'
+import { type CanvasComment, threadFromCanvasComment } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -52,10 +52,16 @@ export function CommentDragLayer({
   const fragment = useMemo(
     () =>
       renderCanvasToSvg(
-        { nodes: [], edges: [], comments: [comment] },
+        { nodes: [], edges: [] },
         // The dragged comment was hit-tested on the drawn scene, so it is
         // visible whatever its resolved state: draw it unconditionally.
-        { measure, theme, commentObstacles: obstacles, showResolved: true },
+        {
+          measure,
+          theme,
+          threads: [threadFromCanvasComment(comment)],
+          commentObstacles: obstacles,
+          showResolved: true,
+        },
       ),
     [comment, measure, theme, obstacles],
   )

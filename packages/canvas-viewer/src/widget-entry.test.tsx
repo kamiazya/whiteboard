@@ -760,7 +760,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     ).toContain('(100, 60)')
   })
 
-  it('submitting a comment sends comment.add with the clicked anchor, clears, and refreshes', async () => {
+  it('submitting a comment opens a thread at the clicked anchor, clears, and refreshes', async () => {
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)
 
@@ -797,14 +797,15 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     expect(callServerToolMock).toHaveBeenNthCalledWith(1, {
-      name: 'wb_canvas_edit',
+      name: 'wb_thread_edit',
       arguments: {
         workspaceId: 'ws-1',
         documentId: 'ws/path',
         ops: [
           {
-            op: 'comment.add',
-            comment: { x: 100, y: 60, targetNodeId: 'a', text: 'move this left' },
+            op: 'thread.add',
+            anchor: { kind: 'spatial', x: 100, y: 60, nodeId: 'a' },
+            body: 'move this left',
           },
         ],
       },
@@ -1358,13 +1359,13 @@ describe('widget-entry append-only invariant', () => {
     ].join('\n')
 
     // The widget's whole outbound surface: re-reading the canvas it shows
-    // (canvas_view) and writing one comment (wb_canvas_edit, reached only
+    // (canvas_view) and opening one comment thread (wb_thread_edit, reached only
     // from the comment submit path). Anything else a widget source calls is a
     // widening someone must do here deliberately, not by accident — the old
     // `annotate` call outlived its tool exactly that way. Calls are built in
     // widget-tool-calls.ts, which mcp-server checks against the server's
     // schemas, so an inline literal at a call site is refused.
-    const allowlist = new Set(['canvas_view', 'wb_canvas_edit'])
+    const allowlist = new Set(['canvas_view', 'wb_thread_edit'])
     expect(sources).not.toMatch(/callServerTool\(\s*\{/)
     const callSiteNames = [...sources.matchAll(/name:\s*'([^']+)'\s+as const/g)].map((m) => m[1])
     expect(callSiteNames.length).toBeGreaterThan(0)

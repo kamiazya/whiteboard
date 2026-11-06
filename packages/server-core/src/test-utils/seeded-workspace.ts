@@ -8,6 +8,7 @@
  */
 
 import {
+  writeCommentThread,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
@@ -61,7 +62,12 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
           to: { kind: 'point', point: { x: 700, y: 300 } },
         },
       ],
-      comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }],
+    })
+    writeCommentThread(doc, {
+      id: 'c1',
+      anchor: { kind: 'spatial', x: 10, y: 10, nodeId: 'n1' },
+      status: 'open',
+      messages: [{ id: 'c1', body: 'why?' }],
     })
   })
   await seedDoc(store, SEEDED_MARKDOWN_ID, (doc) => {

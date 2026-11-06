@@ -22,13 +22,11 @@
 import {
   applyCanvasChange,
   type CanvasColor,
-  type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
   type CommentMessage,
   type CommentThread,
   type CommentThreadStatus,
-  canvasCommentFromThread,
   type EdgeRoutingStyle,
   type EdgeSide,
   endIn,
@@ -364,24 +362,14 @@ export type EditorLeafCommand =
       readonly target: EndTarget
     }
   | {
-      // Appends one comment verbatim (ADR-0024's annotation layer). A
-      // colliding id is a no-op, like create-node/create-edge.
-      readonly kind: 'create-comment'
-      readonly comment: CanvasComment
-    }
-  | {
-      // Rewrites one comment's `resolved` field. A missing target id is a
-      // no-op, matching every other single-field write in this union.
-      readonly kind: 'set-comment-resolved'
-      readonly id: string
-      readonly resolved: boolean
-    }
-  | {
-      // Rewrites one comment's stored anchor. Meaningful for a point-anchored
-      // comment; on a node-anchored one it only moves the fallback the layer
-      // draws at when the target is gone. A missing id is a no-op.
-      readonly kind: 'move-comment'
-      readonly id: string
+      /**
+       * A conversation's pin dragged to another spot (`movedAnchor` says
+       * what moves: a point's anchor, or the fallback a node or edge pin
+       * draws at once its subject is gone). Like every thread command it
+       * leaves the CANVAS untouched — the layer is a plane beside it.
+       */
+      readonly kind: 'move-thread'
+      readonly threadId: string
       readonly x: number
       readonly y: number
     }
@@ -389,11 +377,8 @@ export type EditorLeafCommand =
       /**
        * Appends a message to an existing conversation (ADR-0026 decision 2).
        *
-       * The one command in this union that leaves the CANVAS untouched: a
-       * reply changes no node and no edge, and it cannot travel through the
-       * `x-whiteboard.comments` envelope the other comment commands use,
-       * because that shape holds a single `text` per comment with nowhere
-       * for a second message to sit. It is committed by writing the thread's
+       * Leaves the CANVAS untouched, like every thread command: a reply
+       * changes no node and no edge. It is committed by writing the thread's
        * messages map directly — see the sync session's own case for it.
        *
        * It stays a command rather than a session method so a reply is one
@@ -406,12 +391,10 @@ export type EditorLeafCommand =
     }
   | {
       /**
-       * Opens a conversation whose anchor a flat comment cannot carry — a
-       * passage of a node's text, today. The thread itself is what the sync
-       * session writes; on the canvas it appears as its projection (a
-       * comment on the node, at its corner), appended so the renderer draws
-       * a pin without waiting for the annotation channel. A colliding id is
-       * a no-op, like create-comment.
+       * Opens a conversation, on any anchor: a point, a node, an edge, a
+       * selection, a passage. The thread itself is what the sync session
+       * writes, and publishes at once so the pin is drawn before the commit.
+       * A colliding id is a no-op, like create-node/create-edge.
        */
       readonly kind: 'create-thread'
       readonly thread: CommentThread
@@ -419,11 +402,8 @@ export type EditorLeafCommand =
   | {
       /**
        * Closes or reopens a conversation in the threads plane — for every
-       * kind of anchor, which is what `set-comment-resolved` cannot do: that
-       * one travels through the flat projection, and a note's passage or a
-       * document-level thread has no projection to travel in. On the canvas
-       * the projected comment's flag follows, so the pin mutes without
-       * waiting for the annotation channel.
+       * kind of anchor, a note's passage and a document-level thread
+       * included.
        */
       readonly kind: 'set-thread-status'
       readonly threadId: string
@@ -432,8 +412,7 @@ export type EditorLeafCommand =
   | {
       /**
        * Rewrites one message of a conversation, `editedAt` stamped by the
-       * caller. The projected comment's text follows when the message is
-       * the opening one — the only one the canvas draws.
+       * caller.
        */
       readonly kind: 'edit-thread-message'
       readonly threadId: string
@@ -1131,49 +1110,6 @@ function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): Spatial
   })
 }
 
-/**
- * Rewrites the canvas's `x-whiteboard.comments` array via `update`, which
- * receives the CURRENT comments (empty when none) and returns either the
- * next array or `undefined` to signal a no-op (matching every other
- * command's totality contract: a missing/colliding target id returns the
- * input canvas reference unchanged). Same envelope-canonicality discipline
- * as `withEdgeStyle`/`setNodeFacet`: an empty `comments` result drops the
- * key, an empty extension disappears entirely, and sibling extension fields
- * (facets) survive untouched.
- */
-function withComments(
-  canvas: SpatialCanvas,
-  update: (comments: readonly CanvasComment[]) => CanvasComment[] | undefined,
-): SpatialCanvas {
-  const { comments, ...rest } = canvas
-  const nextComments = update(comments ?? [])
-  if (nextComments === undefined) return canvas
-  return nextComments.length > 0 ? { ...rest, comments: nextComments } : rest
-}
-
-function createComment(canvas: SpatialCanvas, comment: CanvasComment): SpatialCanvas {
-  return withComments(canvas, (comments) => {
-    if (comments.some((existing) => existing.id === comment.id)) return undefined
-    return [...comments, comment]
-  })
-}
-
-/** One comment rewritten field-wise; a missing id leaves the canvas reference untouched. */
-function patchComment(
-  canvas: SpatialCanvas,
-  id: string,
-  patch: Partial<Pick<CanvasComment, 'resolved' | 'x' | 'y' | 'text'>>,
-): SpatialCanvas {
-  return withComments(canvas, (comments) => {
-    if (!comments.some((comment) => comment.id === id)) return undefined
-    return comments.map((comment) => (comment.id === id ? { ...comment, ...patch } : comment))
-  })
-}
-
-function setCommentResolved(canvas: SpatialCanvas, id: string, resolved: boolean): SpatialCanvas {
-  return patchComment(canvas, id, { resolved })
-}
-
 export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): SpatialCanvas {
   switch (command.kind) {
     case 'move-node':
@@ -1264,32 +1200,17 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return reorderNodes(canvas, command.ids, command.placement)
     case 'create-edge':
       return createEdge(canvas, command.edge)
-    case 'create-comment':
-      return createComment(canvas, command.comment)
-    case 'set-comment-resolved':
-      return setCommentResolved(canvas, command.id, command.resolved)
-    case 'move-comment':
-      return patchComment(canvas, command.id, { x: command.x, y: command.y })
-    case 'create-thread': {
-      const projected = canvasCommentFromThread(command.thread, (id) =>
-        canvas.nodes.find((node) => node.id === id),
-      )
-      return projected === undefined ? canvas : createComment(canvas, projected)
-    }
+    case 'create-thread':
     case 'reply-to-thread':
-      // Identity, and deliberately: the conversation is a plane beside the
-      // canvas, so a reply has no canvas effect to compute. Returning the same reference keeps the union-wide
-      // "nothing changed → same object" contract that callers memoise on.
-      return canvas
     case 'set-thread-status':
-      // The projection follows when there is one; a thread with no pin on
-      // this canvas (a note's passage, the document) leaves it untouched.
-      return patchComment(canvas, command.threadId, { resolved: command.status === 'resolved' })
     case 'edit-thread-message':
-      // Only the opening message is drawn, so only its edit reaches the pin.
-      return command.opening
-        ? patchComment(canvas, command.threadId, { text: command.message.body })
-        : canvas
+    case 'move-thread':
+      // Identity, and deliberately: the conversation is a plane beside the
+      // canvas (ADR-0026 decision 1), so a thread command has no canvas
+      // effect to compute — `threadsAfterCommand` is its effect. Returning
+      // the same reference keeps the union-wide "nothing changed → same
+      // object" contract that callers memoise on.
+      return canvas
     case 'decide-proposal':
       // A passage change is skipped rather than refused: its subject is a
       // markdown body, which this canvas does not hold. Dismissing folds

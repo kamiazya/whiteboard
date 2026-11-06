@@ -86,16 +86,6 @@ const WRITERS: ReadonlyArray<readonly [string, (actor: string) => unknown]> = [
       }),
   ],
   [
-    'wb_canvas_edit comment.add author',
-    (author) =>
-      canvasEditInputSchema.safeParse({
-        workspaceId: WS,
-        documentId: DOC,
-        mode: 'apply',
-        ops: [{ op: 'comment.add', comment: { text: 'hi', x: 0, y: 0, author } }],
-      }),
-  ],
-  [
     'wb_body_edit proposal author',
     (author) =>
       bodyEditInputSchema.safeParse({

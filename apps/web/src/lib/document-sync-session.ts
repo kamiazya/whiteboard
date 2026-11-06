@@ -5,6 +5,7 @@ import type {
 import {
   type DocumentContainers,
   documentContainers,
+  holdsRetiredCommentPlane,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -36,6 +37,9 @@ const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 export type BackendErrorReason =
   | Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
   | 'document-removed'
+  // A record still holding comments in the plane before threads, which no
+  // reader serves; refused rather than shown without them (decision 27).
+  | 'retired-comment-plane'
 
 import type {
   CommentThread,
@@ -59,6 +63,7 @@ import {
 import { PersistenceLedger } from './persistence-ledger.js'
 import { type BodyBinding, bodyBindingFor } from './session-body-binding.js'
 import type { EditorCommand } from './spatial/commands.js'
+import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
 
@@ -590,6 +595,14 @@ export function createDocumentSyncSession(
     deps.generations.nextApplyGeneration()
     const content = isStale() ? null : contentOf(targetDoc)
     if (content === null) return
+    // The same refusal the snapshot gets: an update from an older peer can
+    // bring the retired plane in after load, and a throw here would escape
+    // the import subscription unhandled while the stale canvas stays up.
+    if (holdsRetiredCommentPlane(content)) {
+      deps.onBackendError('retired-comment-plane')
+      deps.onStatusChange('error')
+      return
+    }
     const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
     // Read from the same doc read that produced the canvas, so the two
@@ -876,6 +889,12 @@ export function createDocumentSyncSession(
           deps.onStatusChange('error')
           return
         }
+        const arriving = contentOf(newDoc)
+        if (arriving !== null && holdsRetiredCommentPlane(arriving)) {
+          deps.onBackendError('retired-comment-plane')
+          deps.onStatusChange('error')
+          return
+        }
         doc = newDoc
         undoManager = new UndoManager(newDoc, {
           mergeInterval: 500,
@@ -1080,6 +1099,15 @@ export function createDocumentSyncSession(
     if (latestNext === null) windowStart = currentCanvas
     currentCanvas = next
     notify(next, 'local')
+    // The conversations a thread command leaves, published as immediately as
+    // the canvas is: the layer is a plane beside the canvas, so a pin opened,
+    // moved or closed would otherwise wait out the commit's debounce. The
+    // commit's own read then answers the same list and publishes nothing.
+    const threads = threadsAfterCommand(currentAnnotations, command)
+    if (threads !== currentAnnotations) {
+      currentAnnotations = threads
+      notifyAnnotations(threads)
+    }
     onCanvasChange(next, command)
   }
 

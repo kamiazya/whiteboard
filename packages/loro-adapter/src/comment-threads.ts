@@ -1,17 +1,15 @@
 import {
-  type CanvasComment,
   type CommentMessage,
   type CommentThread,
   type CommentThreadStatus,
-  canvasCommentSchema,
   commentMessageSchema,
   commentThreadSchema,
   compareCodeUnit,
   compareMessages,
-  threadFromCanvasComment,
+  movedAnchor,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
-import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
+import { type DocumentContainers, THREADS_KEY } from './containers.js'
 import { acceptedEntries } from './lenient-read.js'
 import { openMergeableMap } from './mergeable-containers.js'
 
@@ -69,17 +67,6 @@ function assertFiniteAnchor(thread: CommentThread): void {
  * conversation. `writeThreadMessage` returns without writing instead.
  */
 export function writeCommentThread(doc: DocumentContainers, thread: CommentThread): void {
-  writeThreadInto(doc, thread)
-  doc.commit()
-}
-
-/**
- * The same write without the commit, for a caller that owns the commit
- * boundary — `withSpatialBatch`, where an extra commit would split one user
- * action into two undo steps, and the migration below, which is always run
- * from a seam that commits after it.
- */
-export function writeThreadInto(doc: DocumentContainers, thread: CommentThread): void {
   assertFiniteAnchor(thread)
   const container = openMergeableMap(doc.getMap(THREADS_KEY), thread.id)
   container.set(ANCHOR_FIELD, thread.anchor)
@@ -87,6 +74,7 @@ export function writeThreadInto(doc: DocumentContainers, thread: CommentThread):
   if (thread.createdAt !== undefined) container.set(CREATED_AT_FIELD, thread.createdAt)
   const messages = openMergeableMap(container, MESSAGES_KEY)
   for (const message of thread.messages) messages.set(message.id, messageToFields(message))
+  doc.commit()
 }
 
 /**
@@ -113,9 +101,8 @@ export function writeThreadMessage(
  * status needs: two peers resolving concurrently agree, and neither touches
  * the messages beneath.
  *
- * Answers whether it wrote: a thread this replica does not hold in the
- * threads plane — a legacy comment no writer has migrated — has no status to
- * set, and a caller counting open threads must not count it as changed.
+ * Answers whether it wrote: a thread this replica does not hold has no status
+ * to set, and a caller counting open threads must not count it as changed.
  */
 export function setCommentThreadStatus(
   doc: DocumentContainers,
@@ -125,6 +112,28 @@ export function setCommentThreadStatus(
   const container = threadContainer(doc, threadId)
   if (container === undefined) return false
   container.set(STATUS_FIELD, status)
+  doc.commit()
+  return true
+}
+
+/**
+ * A thread's pin dragged to `point` (`movedAnchor` decides what moves). One
+ * key, last-writer-wins, like the status: the messages beneath are untouched.
+ * Answers whether it wrote — nothing for a thread this replica does not hold
+ * (for `writeThreadMessage`'s reason), or one whose anchor stays put.
+ */
+export function moveCommentThread(
+  doc: DocumentContainers,
+  threadId: string,
+  point: { readonly x: number; readonly y: number },
+): boolean {
+  const held = readCommentThread(doc, threadId)
+  const container = threadContainer(doc, threadId)
+  if (held === undefined || container === undefined) return false
+  const anchor = movedAnchor(held.anchor, point)
+  if (anchor === held.anchor) return false
+  assertFiniteAnchor({ ...held, anchor })
+  container.set(ANCHOR_FIELD, anchor)
   doc.commit()
   return true
 }
@@ -151,10 +160,7 @@ export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
  * writer that rewrites one thread and must not pay for the whole plane.
  * Absent, or rejected by the schema, it is `undefined`.
  */
-export function readCommentThread(
-  doc: DocumentContainers,
-  threadId: string,
-): CommentThread | undefined {
+function readCommentThread(doc: DocumentContainers, threadId: string): CommentThread | undefined {
   const container = threadContainer(doc, threadId)
   if (container === undefined) return undefined
   const messagesContainer = container.get(MESSAGES_KEY)
@@ -171,42 +177,6 @@ export function readCommentThread(
     messages: messages.sort(compareMessages),
   })
   return parsed.success ? parsed.data : undefined
-}
-
-/**
- * Reads every stored canvas comment as the one-message thread it always was,
- * clears the legacy `comments` map, and returns how many it converted.
- *
- * Idempotent, and destructive on purpose now that every writer puts comments
- * in the threads plane: a legacy row left behind would outlive the thread it
- * became, and come back through `readSpatialCanvas`'s fallback as a comment
- * the user had closed. An id that ALREADY has a thread is dropped rather than
- * rewritten — a second pass must not clobber a reply written since the first.
- *
- * A row the schema rejects is dropped too. It was already unreadable (every
- * reader parses before projecting), so keeping it would preserve nothing but
- * the fallback's reason to exist.
- *
- * Does NOT commit: every caller is a write seam that commits after it, and
- * one of them is `withSpatialBatch`, where an extra commit would split a user
- * action into two undo steps.
- */
-export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number {
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  // Every write seam calls this, once per comment it writes, so the common
-  // case — nothing left to migrate — must not materialise the thread ids.
-  if (commentsMap.size === 0) return 0
-  const existing = new Set(doc.getMap(THREADS_KEY).keys())
-  let migrated = 0
-  for (const commentId of commentsMap.keys()) {
-    const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
-    if (parsed.success && !existing.has(commentId)) {
-      writeThreadInto(doc, threadFromCanvasComment(parsed.data satisfies CanvasComment))
-      migrated += 1
-    }
-    commentsMap.delete(commentId)
-  }
-  return migrated
 }
 
 /**

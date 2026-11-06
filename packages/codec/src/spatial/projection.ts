@@ -119,18 +119,6 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'nodes[].embed.documentId': EXTENSION,
   'nodes[].embed.versionRef': EXTENSION,
 
-  // The annotation layer (ADR-0024). A strict reader keeps the whole content
-  // and loses the conversation about it, which is what an annotation is.
-  'comments[].id': EXTENSION,
-  'comments[].x': EXTENSION,
-  'comments[].y': EXTENSION,
-  'comments[].text': EXTENSION,
-  'comments[].author': EXTENSION,
-  'comments[].createdAt': EXTENSION,
-  'comments[].targetNodeId': EXTENSION,
-  'comments[].targetEdgeId': EXTENSION,
-  'comments[].resolved': EXTENSION,
-
   // The facet buckets (ADR-0013). Counted as buckets rather than descended:
   // the format can say one is present and nothing about what is in it, and a
   // plugin's payloads are not this table's to enumerate.
@@ -176,7 +164,6 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
  */
 export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
   const extension = {
-    ...(canvas.comments !== undefined && { comments: canvas.comments }),
     ...(canvas.lines !== undefined && { lines: canvas.lines.map(projectLine) }),
     ...(canvas.facets !== undefined && { facets: canvas.facets }),
     ...(canvas.tags !== undefined && { tags: canvas.tags }),
@@ -205,7 +192,6 @@ export function fromJsonCanvas(wire: JsonCanvasDocument): SpatialCanvas {
   return {
     nodes: wire.nodes.map(liftNode),
     edges: wire.edges.map(liftEdge),
-    ...(extension?.comments !== undefined && { comments: extension.comments }),
     ...(extension?.lines !== undefined && { lines: extension.lines }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
     ...(extension?.tags !== undefined && { tags: extension.tags }),

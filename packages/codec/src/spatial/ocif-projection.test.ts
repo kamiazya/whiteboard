@@ -53,15 +53,21 @@ describe('what the two formats reach, read side by side', () => {
     // native count UNMOVED at 23 — the row that was degraded is simply GONE,
     // since the discriminator OCIF had no field for is no longer a field of
     // ours, and the three content rows it kept natively it still keeps.
+    //
+    // Then ADR-0026 decision 1b: the nine `comments[]` positions left the
+    // model, since a conversation is the document's annotation layer and not
+    // part of the canvas — `extension` 37 -> 28 and 32 -> 23. Neither format
+    // carries the conversation, and a file an older export wrote it into is
+    // refused on import rather than read without it.
     expect(kinds(JSON_CANVAS_PROJECTION)).toEqual({
       native: 17,
-      extension: 37,
+      extension: 28,
       degraded: 5,
       dropped: 0,
     })
     expect(kinds(OCIF_PROJECTION)).toEqual({
       native: 23,
-      extension: 32,
+      extension: 23,
       degraded: 4,
       dropped: 0,
     })

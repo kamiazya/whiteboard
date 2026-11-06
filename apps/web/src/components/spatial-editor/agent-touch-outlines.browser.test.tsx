@@ -3,15 +3,15 @@
 // are outlined — nodes, strokes and comment chrome alike — and nothing is
 // drawn when the sets are empty.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { type CommentBoard, splitBoard } from '../../test-utils/spatial-editor-host.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-const canvas: SpatialCanvas = {
+const board: CommentBoard = {
   nodes: [
     textNode({ id: 'touched', x: 40, y: 40, width: 120, height: 60, text: 'moved by an agent' }),
     textNode({ id: 'untouched', x: 300, y: 40, width: 120, height: 60, text: 'left alone' }),
@@ -34,6 +34,7 @@ const canvas: SpatialCanvas = {
     },
   ],
 }
+const { canvas, threads } = splitBoard(board)
 
 function mount(
   agentTouchedNodeIds: ReadonlySet<string>,
@@ -47,6 +48,7 @@ function mount(
       <SpatialEditor
         defaultTool="select"
         canvas={canvas}
+        threads={threads}
         onChange={() => {}}
         theme="light"
         agentTouchedNodeIds={agentTouchedNodeIds}

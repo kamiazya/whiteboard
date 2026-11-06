@@ -672,7 +672,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       pressedCommentRef,
       commentDrag,
       setCommentDrag,
-    } = useCommentState({ canvasRef, commentChromeBoxes })
+      comments,
+    } = useCommentState({ canvasRef, canvas, threads, commentChromeBoxes })
     /**
      * The proposal opened in place — at most one, for the reason a
      * conversation is: a card is where ONE thing is decided.
@@ -764,6 +765,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       useDragLayers({
         gestureState,
         canvas,
+        threads,
         extraIds,
         isLocked,
         lockEnabled,
@@ -1567,6 +1569,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             setContextMenu={setContextMenu}
             canvas={canvas}
             canvasRef={canvasRef}
+            comments={comments}
             theme={theme}
             gestureState={gestureState}
             isEdgeLocked={isEdgeLocked}
@@ -2076,7 +2079,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 onResolve={(resolved) =>
                   applyResult({
                     state: { kind: 'idle' },
-                    commands: [{ kind: 'set-comment-resolved', id: thread.id, resolved } as const],
+                    commands: [
+                      {
+                        kind: 'set-thread-status',
+                        threadId: thread.id,
+                        status: resolved ? 'resolved' : 'open',
+                      } as const,
+                    ],
                   })
                 }
                 onEditMessage={(messageId, body) => {

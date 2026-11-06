@@ -2,59 +2,11 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/kamiazya/whiteboard/main/docs/reference/x-whiteboard.schema.json",
   "title": "x-whiteboard JSON Canvas extension",
-  "description": "Definitions for the single extension key (\"x-whiteboard\") that extended JSON Canvas documents produced by whiteboard may carry, at three sites: the document root (canvas facets, tags, lines and comments; #/$defs/canvasExtension), a node (canvas embed, node facets and tags; #/$defs/nodeExtension) and an edge (edge facets, tags and bends; #/$defs/edgeExtension). Documents contain no non-standard fields beyond these three sites. Consumers that drop the key still read a valid JSON Canvas 1.0 document.",
+  "description": "Definitions for the single extension key (\"x-whiteboard\") that extended JSON Canvas documents produced by whiteboard may carry, at three sites: the document root (canvas facets, tags and lines; #/$defs/canvasExtension), a node (canvas embed, node facets and tags; #/$defs/nodeExtension) and an edge (edge facets, tags and bends; #/$defs/edgeExtension). Documents contain no non-standard fields beyond these three sites. Consumers that drop the key still read a valid JSON Canvas 1.0 document.",
   "$defs": {
     "canvasExtension": {
       "type": "object",
       "properties": {
-        "comments": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string",
-                "minLength": 1
-              },
-              "x": {
-                "type": "integer"
-              },
-              "y": {
-                "type": "integer"
-              },
-              "text": {
-                "type": "string",
-                "minLength": 1
-              },
-              "author": {
-                "type": "string",
-                "minLength": 1
-              },
-              "createdAt": {
-                "type": "string",
-                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$"
-              },
-              "targetNodeId": {
-                "type": "string",
-                "minLength": 1
-              },
-              "targetEdgeId": {
-                "type": "string",
-                "minLength": 1
-              },
-              "resolved": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "id",
-              "x",
-              "y",
-              "text"
-            ],
-            "additionalProperties": false
-          }
-        },
         "lines": {
           "type": "array",
           "items": {

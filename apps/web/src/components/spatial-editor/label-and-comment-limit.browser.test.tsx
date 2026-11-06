@@ -102,5 +102,5 @@ it('the comment bubble refuses a paste past the message limit, makes no comment,
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="comment-compose"]')).toBeNull(),
   )
-  expect(latest.canvas.comments ?? []).toHaveLength(0)
+  expect(latest.comments ?? []).toHaveLength(0)
 })

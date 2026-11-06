@@ -32,25 +32,31 @@ export function canvasViewCall(target: {
   }
 }
 
-export function commentAddCall(
+/**
+ * A comment from the widget's box, opened as a thread on the document's
+ * annotation layer (ADR-0026 decision 6). The click's point is the anchor; a
+ * click inside a node names it too, so the pin follows that node.
+ */
+export function threadAddCall(
   target: { workspaceId: string; documentId: string },
   anchor: CommentAnchor,
   text: string,
 ) {
   return {
-    name: 'wb_canvas_edit' as const,
+    name: 'wb_thread_edit' as const,
     arguments: {
       workspaceId: target.workspaceId,
       documentId: target.documentId,
       ops: [
         {
-          op: 'comment.add' as const,
-          comment: {
+          op: 'thread.add' as const,
+          anchor: {
+            kind: 'spatial' as const,
             x: anchor.x,
             y: anchor.y,
-            ...(anchor.targetNodeId === undefined ? {} : { targetNodeId: anchor.targetNodeId }),
-            text,
+            ...(anchor.targetNodeId === undefined ? {} : { nodeId: anchor.targetNodeId }),
           },
+          body: text,
         },
       ],
     },

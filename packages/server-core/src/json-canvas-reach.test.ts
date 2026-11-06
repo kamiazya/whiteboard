@@ -94,7 +94,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     ])
   })
 
-  it('leaves 37 to the extension key — 33 named fields and 4 facet buckets', () => {
+  it('leaves 28 to the extension key — 24 named fields and 4 facet buckets', () => {
     // 16 -> 34, and almost all of it is one collection: a LINE's 18 positions
     // all ride `x-whiteboard.lines`. A line between two nodes COULD be emitted
     // as a JSON Canvas edge and read better in a foreign tool; that is the lie
@@ -105,7 +105,11 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // decision 2): the format has no classification vocabulary, so a board's,
     // a box's and a relation's tag set ride the extension key, and a strict
     // reader keeps the content and loses what it was called.
-    expect(withKind('extension')).toHaveLength(37)
+    //
+    // 37 -> 28: the nine `comments[]` positions left the model (ADR-0026
+    // decision 1b). A conversation is the document's annotation layer, never
+    // part of the canvas, so no export carries it.
+    expect(withKind('extension')).toHaveLength(28)
     expect(census.facetBuckets).toHaveLength(4)
   })
 
@@ -206,8 +210,11 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     //
     // 56/78 -> 58/80 for `visual.stroke/v0`'s two positions: both halves
     // again, so 71.8% -> 72.5%.
+    //
+    // 58/80 -> 49/71: the nine `comments[]` positions left the model, all of
+    // them outside the format, so 72.5% -> 69.0%.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(58)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(80)
+    expect(outside).toBe(49)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(71)
   })
 })

@@ -125,11 +125,10 @@ describe('canvas_view tool', () => {
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(canvasViewOutputSchema.parse(result).threads).toEqual([thread])
-    // The projection still rides in the scene: the widget's pins come from
-    // there, at the corner of the box the set occupies.
-    expect(result.scene['x-whiteboard']?.comments).toEqual([
-      expect.objectContaining({ id: 'set', x: 520, y: 0, text: 'both of these' }),
-    ])
+    // The scene is the board alone: a file carries content and not the
+    // conversation (ADR-0026 decision 1b), so the widget draws every pin
+    // from the threads beside it.
+    expect(JSON.stringify(result.scene)).not.toContain('both of these')
   })
 
   describe('themeFont', () => {

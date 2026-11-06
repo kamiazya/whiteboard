@@ -199,17 +199,21 @@ describe('renderCanvasForExport', () => {
       nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'A' })],
       edges: [],
     }
-    const commented: SpatialCanvas = {
-      ...bare,
-      comments: [{ id: 'c1', x: 150, y: 20, text: 'check this' }],
-    }
+    const threads: CommentThread[] = [
+      {
+        id: 'c1',
+        anchor: { kind: 'spatial', x: 150, y: 20 },
+        status: 'open',
+        messages: [{ id: 'c1', body: 'check this' }],
+      },
+    ]
     const plain = renderCanvasForExport(bare, { measure: fakeMeasure })
-    expect(renderCanvasForExport(commented, { measure: fakeMeasure }).svg).toBe(plain.svg)
-    expect(renderCanvasForExport(commented, { measure: fakeMeasure, comments: true }).svg).not.toBe(
-      plain.svg,
-    )
+    expect(renderCanvasForExport(bare, { measure: fakeMeasure, threads }).svg).toBe(plain.svg)
+    expect(
+      renderCanvasForExport(bare, { measure: fakeMeasure, threads, comments: true }).svg,
+    ).not.toBe(plain.svg)
     // The editor's own render keeps drawing them.
-    expect(renderCanvasToSvg(commented, { measure: fakeMeasure }).svg).not.toBe(
+    expect(renderCanvasToSvg(bare, { measure: fakeMeasure, threads }).svg).not.toBe(
       renderCanvasToSvg(bare, { measure: fakeMeasure }).svg,
     )
   })

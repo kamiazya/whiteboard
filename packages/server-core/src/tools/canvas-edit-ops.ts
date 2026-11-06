@@ -10,7 +10,6 @@ import {
   CANVAS_MAX_EDGES_AND_LINES,
   CANVAS_MAX_NODES,
   CANVAS_NODES_LIMIT_PHRASE,
-  canvasCommentDraftSchema,
   canvasEdgeSchema,
   canvasLineSchema,
   documentIdSchema,
@@ -394,178 +393,179 @@ const nodePatchSchema = z
   .strict()
 
 /**
+ * The refusal a retired comment verb gets. A conversation is the document's
+ * annotation layer, one plane for a canvas and a note alike (ADR-0026
+ * decision 6), so its verbs live on `wb_thread_edit`; a model that reaches
+ * for `comment.*` here is told where they went rather than handed the list
+ * of ops this tool does take. Free on the table: an error map emits nothing
+ * into the published schema.
+ */
+const retiredCommentVerb = {
+  error: (issue: { code: string; input?: unknown }) => {
+    const op =
+      issue.code === 'invalid_union' &&
+      issue.input !== null &&
+      typeof issue.input === 'object' &&
+      'op' in issue.input
+        ? issue.input.op
+        : undefined
+    return typeof op === 'string' && op.startsWith('comment.')
+      ? `"${op}" is not a wb_canvas_edit op: comments are threads, written with wb_thread_edit (thread.add, message.add, thread.resolve).`
+      : undefined
+  },
+}
+
+/**
  * One step of a batch. The verbs are the ones the retired single-purpose
  * tools carried, so nothing an agent could do before is missing here — plus
  * `node.remove` / `edge.remove`, which had no tool at all: without them the
  * only way to delete anything is a whole-document replace.
  */
-const canvasOpSchema = z.discriminatedUnion('op', [
-  z
-    .object(
-      {
-        op: z.literal('node.add'),
-        node: nodeDraftSchema,
+const canvasOpSchema = z.discriminatedUnion(
+  'op',
+  [
+    z
+      .object(
+        {
+          op: z.literal('node.add'),
+          node: nodeDraftSchema,
+          stencil: STENCIL_FIELD,
+          within: nodeIdSchema
+            .nullable()
+            .optional()
+            .describe(
+              'A group on the canvas, or added earlier in this batch, to place the node inside; it grows to fit, and one added in this batch with no position is placed around what goes in it. To wrap boxes that already exist in a new group, add the group and then region.set.',
+            ),
+        },
+        draftKeysBelongInside('node', NODE_DRAFT_KEYS),
+      )
+      .strict(),
+    z
+      .object({
+        op: z.literal('node.patch'),
+        ...NODE_TARGET,
+        patch: nodePatchSchema,
         stencil: STENCIL_FIELD,
-        within: nodeIdSchema
-          .nullable()
+      })
+      .strict()
+      .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+    /**
+     * A line-range splice of a text node's body, `[startLine, endLine]`
+     * inclusive and 0-indexed. `node.patch`'s `text` replaces the whole body;
+     * this replaces part of it, so a caller editing one line of a long note
+     * sends that line. Retired `wb_body_patch` into this tool: as an op it
+     * batches with everything else, and it falls under the propose-by-default
+     * rule that tool had no mode for.
+     */
+    z
+      .object({
+        op: z.literal('node.splice'),
+        id: nodeIdSchema,
+        startLine: nonnegativeIntegerSchema,
+        endLine: nonnegativeIntegerSchema,
+        replacement: nodeTextInputSchema,
+      })
+      .strict()
+      .refine((value) => value.startLine <= value.endLine, {
+        message: 'startLine must be <= endLine',
+      }),
+    z
+      .object({ op: z.literal('node.remove'), ...NODE_TARGET })
+      .strict()
+      .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+    z
+      .object(
+        { op: z.literal('edge.add'), edge: edgeDraftSchema },
+        draftKeysBelongInside('edge', EDGE_DRAFT_KEYS),
+      )
+      .strict(),
+    z.object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchSchema }).strict(),
+    z
+      .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
+      .strict()
+      .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+    /**
+     * The same three verbs for INK. A line asserts nothing about what is
+     * connected to what, so it is what to reach for when a stroke is
+     * decoration — a bracket, an underline, an arrow pointing at empty space —
+     * and `edge.*` is what to reach for when the drawing means two boxes are
+     * related. Nothing here takes a selector: `within` and `all` answer "every
+     * edge between these boxes", and a line has no such relation to read.
+     */
+    z
+      .object(
+        {
+          op: z.literal('line.add'),
+          line: lineDraftSchema.describe(
+            'A stroke to draw. Either end is a node or a bare point, so this is what to use when the line is decoration rather than a claim that two boxes are related — for that, use edge.add.',
+          ),
+        },
+        draftKeysBelongInside('line', LINE_DRAFT_KEYS),
+      )
+      .strict(),
+    z.object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchSchema }).strict(),
+    z.object({ op: z.literal('line.remove'), id: nodeIdSchema }).strict(),
+    z
+      .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
+      .strict()
+      .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+    z
+      .object({ op: z.literal('edge.lock'), ...EDGE_TARGET, locked: z.boolean() })
+      .strict()
+      .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+    z
+      .object({
+        op: z.literal('tidy'),
+        scope: z
+          .array(nodeIdSchema)
+          .min(1)
+          .max(CANVAS_MAX_NODES, `more nodes than ${CANVAS_NODES_LIMIT_PHRASE}`)
+          .optional(),
+        within: nodeIdSchema.optional().describe('Instead of scope: every node inside this group.'),
+      })
+      .strict()
+      .refine((value) => value.scope === undefined || value.within === undefined, {
+        message: 'scope and within are alternatives; pass one',
+      }),
+    /**
+     * "This group contains exactly these." The ONE declarative op, and so the
+     * only one that deletes something it was not told about.
+     *
+     * It names MEMBERS by id and nothing else. A full node declaration per
+     * member would be the node union a second time, a third of this tool's
+     * bytes — and a model given one writes x/y/width/height for every box, the
+     * ones already there included.
+     * Creating a member is `node.add` with `within`.
+     *
+     * Scope is STRICT containment in `within`'s stored box. That rule is what
+     * makes the boundary safe rather than a judgement call: a node straddling
+     * the edge — a human mid-drag — is not enclosed, so it is out of scope and
+     * survives. A listed node that is elsewhere is moved in and placed — except
+     * into a group this batch added without a position, which goes around
+     * its members instead.
+     */
+    z
+      .object({
+        op: z.literal('region.set'),
+        within: nodeIdSchema,
+        nodes: z
+          .array(nodeIdSchema)
+          .max(CANVAS_MAX_NODES, `more nodes than ${CANVAS_NODES_LIMIT_PHRASE}`)
+          .describe(
+            'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in — unless the group was added in this batch with no position, which is placed around them where they sit. Create a new member with node.add and within.',
+          ),
+        edges: z
+          .array(nodeIdSchema)
+          .max(CANVAS_MAX_EDGES_AND_LINES, `more edges than ${CANVAS_EDGES_AND_LINES_LIMIT_PHRASE}`)
           .optional()
           .describe(
-            'A group on the canvas, or added earlier in this batch, to place the node inside; it grows to fit, and one added in this batch with no position is placed around what goes in it. To wrap boxes that already exist in a new group, add the group and then region.set.',
+            'Edges to keep among the members; omitted keeps every edge whose ends survive.',
           ),
-      },
-      draftKeysBelongInside('node', NODE_DRAFT_KEYS),
-    )
-    .strict(),
-  z
-    .object({
-      op: z.literal('node.patch'),
-      ...NODE_TARGET,
-      patch: nodePatchSchema,
-      stencil: STENCIL_FIELD,
-    })
-    .strict()
-    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
-  /**
-   * A line-range splice of a text node's body, `[startLine, endLine]`
-   * inclusive and 0-indexed. `node.patch`'s `text` replaces the whole body;
-   * this replaces part of it, so a caller editing one line of a long note
-   * sends that line. Retired `wb_body_patch` into this tool: as an op it
-   * batches with everything else, and it falls under the propose-by-default
-   * rule that tool had no mode for.
-   */
-  z
-    .object({
-      op: z.literal('node.splice'),
-      id: nodeIdSchema,
-      startLine: nonnegativeIntegerSchema,
-      endLine: nonnegativeIntegerSchema,
-      replacement: nodeTextInputSchema,
-    })
-    .strict()
-    .refine((value) => value.startLine <= value.endLine, {
-      message: 'startLine must be <= endLine',
-    }),
-  z
-    .object({ op: z.literal('node.remove'), ...NODE_TARGET })
-    .strict()
-    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
-  z
-    .object(
-      { op: z.literal('edge.add'), edge: edgeDraftSchema },
-      draftKeysBelongInside('edge', EDGE_DRAFT_KEYS),
-    )
-    .strict(),
-  z.object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchSchema }).strict(),
-  z
-    .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
-    .strict()
-    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
-  /**
-   * The same three verbs for INK. A line asserts nothing about what is
-   * connected to what, so it is what to reach for when a stroke is
-   * decoration — a bracket, an underline, an arrow pointing at empty space —
-   * and `edge.*` is what to reach for when the drawing means two boxes are
-   * related. Nothing here takes a selector: `within` and `all` answer "every
-   * edge between these boxes", and a line has no such relation to read.
-   */
-  z
-    .object(
-      {
-        op: z.literal('line.add'),
-        line: lineDraftSchema.describe(
-          'A stroke to draw. Either end is a node or a bare point, so this is what to use when the line is decoration rather than a claim that two boxes are related — for that, use edge.add.',
-        ),
-      },
-      draftKeysBelongInside('line', LINE_DRAFT_KEYS),
-    )
-    .strict(),
-  z.object({ op: z.literal('line.patch'), id: nodeIdSchema, patch: linePatchSchema }).strict(),
-  z.object({ op: z.literal('line.remove'), id: nodeIdSchema }).strict(),
-  z
-    .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
-    .strict()
-    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
-  z
-    .object({ op: z.literal('edge.lock'), ...EDGE_TARGET, locked: z.boolean() })
-    .strict()
-    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
-  z
-    .object({
-      op: z.literal('tidy'),
-      scope: z
-        .array(nodeIdSchema)
-        .min(1)
-        .max(CANVAS_MAX_NODES, `more nodes than ${CANVAS_NODES_LIMIT_PHRASE}`)
-        .optional(),
-      within: nodeIdSchema.optional().describe('Instead of scope: every node inside this group.'),
-    })
-    .strict()
-    .refine((value) => value.scope === undefined || value.within === undefined, {
-      message: 'scope and within are alternatives; pass one',
-    }),
-  /**
-   * The annotation layer (ADR-0024). A draft may omit the id (minted) and
-   * the anchor point — a comment about a NODE names `targetNodeId` and the
-   * server anchors it at that node's top-right corner. `createdAt` defaults
-   * to now, stamped by the server so the record orders without trusting
-   * every caller's clock format.
-   */
-  z
-    .object({
-      op: z.literal('comment.add'),
-      comment: canvasCommentDraftSchema,
-    })
-    .strict(),
-  /**
-   * Resolution keeps the record in the document (the conversation is the
-   * point); `resolved: false` reopens. There is deliberately NO remove op:
-   * resolving is the only way to close a comment, for a person in the
-   * editor and for an agent alike (ADR-0025 decision 2) — a verb one side
-   * had and the other did not would let an agent erase feedback a person
-   * could only close.
-   */
-  z
-    .object({
-      op: z.literal('comment.resolve'),
-      id: nodeIdSchema,
-      resolved: z.boolean().optional(),
-    })
-    .strict(),
-  /**
-   * "This group contains exactly these." The ONE declarative op, and so the
-   * only one that deletes something it was not told about.
-   *
-   * It names MEMBERS by id and nothing else. A full node declaration per
-   * member would be the node union a second time, a third of this tool's
-   * bytes — and a model given one writes x/y/width/height for every box, the
-   * ones already there included.
-   * Creating a member is `node.add` with `within`.
-   *
-   * Scope is STRICT containment in `within`'s stored box. That rule is what
-   * makes the boundary safe rather than a judgement call: a node straddling
-   * the edge — a human mid-drag — is not enclosed, so it is out of scope and
-   * survives. A listed node that is elsewhere is moved in and placed — except
-   * into a group this batch added without a position, which goes around
-   * its members instead.
-   */
-  z
-    .object({
-      op: z.literal('region.set'),
-      within: nodeIdSchema,
-      nodes: z
-        .array(nodeIdSchema)
-        .max(CANVAS_MAX_NODES, `more nodes than ${CANVAS_NODES_LIMIT_PHRASE}`)
-        .describe(
-          'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in — unless the group was added in this batch with no position, which is placed around them where they sit. Create a new member with node.add and within.',
-        ),
-      edges: z
-        .array(nodeIdSchema)
-        .max(CANVAS_MAX_EDGES_AND_LINES, `more edges than ${CANVAS_EDGES_AND_LINES_LIMIT_PHRASE}`)
-        .optional()
-        .describe('Edges to keep among the members; omitted keeps every edge whose ends survive.'),
-    })
-    .strict(),
-])
+      })
+      .strict(),
+  ],
+  retiredCommentVerb,
+)
 
 export const canvasEditInputSchema = z
   .object({
@@ -585,14 +585,11 @@ export const canvasEditInputSchema = z
      * `node.splice` — is proposed, because nobody watches an agent type and
      * there is no moment
      * at which a person could object (decision 3). A batch carrying anything
-     * else applies: `comment.*` is the annotation layer, a lock is a claim on
-     * a document rather than a change to it, and `tidy`/`region.set` have no
-     * anchor to follow — the same line the layer already drew when it said
-     * which verbs a proposal can carry.
-     *
+     * else applies: a lock is a claim on a document rather than a change to
+     * it, and `tidy`/`region.set` have no anchor to follow — the same line
+     * the layer already drew when it said which verbs a proposal can carry.
      * A default that refused those instead would refuse a verb this tool
-     * supports, and one of its callers is the widget's comment box: a person
-     * typing there would get an error rather than a comment.
+     * supports.
      *
      * A MIXED batch applies, because the batch is all-or-nothing and
      * splitting it would be a third thing neither mode means.
@@ -643,14 +640,17 @@ export const geometryEntrySchema = z
  * Keyed by the notifier port's kinds, so a kind this answer reports is one
  * the watching browser's outline is told about too: a kind added here and
  * not there (or the reverse) fails to compile instead of reaching the model
- * and vanishing on its way to the browser.
+ * and vanishing on its way to the browser. All but `comments`, which only
+ * `wb_thread_edit` touches: a canvas batch has no comment verb.
  */
 const canvasEditTouchedShape = {
   nodes: z.array(nodeIdSchema),
   edges: z.array(nodeIdSchema),
   lines: z.array(nodeIdSchema),
-  comments: z.array(nodeIdSchema),
-} satisfies Record<keyof AgentActivityTouched, z.ZodType<string[]>>
+} satisfies Record<keyof CanvasEditTouched, z.ZodType<string[]>>
+
+/** What a canvas batch can touch: every notifier kind but a comment thread. */
+export type CanvasEditTouched = Omit<AgentActivityTouched, 'comments'>
 
 export const canvasEditOutputSchema = z
   .object({

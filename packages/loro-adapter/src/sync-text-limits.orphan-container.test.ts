@@ -91,7 +91,7 @@ const BOARDS = [
   },
   {
     bound: 'open-threads',
-    key: 'comments',
+    key: 'threads',
     entries: DOCUMENT_MAX_OPEN_THREADS + 1,
     value: (i: number) => ({ id: `k${i}`, body: 'x' }),
   },

@@ -203,7 +203,7 @@ describe('what an errand costs in tool calls', () => {
         // complete. A total is what makes a cut visible.
         calls: 2,
         requestBytes: 1592,
-        responseBytes: 3394,
+        responseBytes: 3334, // -60: wb_canvas_edit's answer no longer carries an always-empty `touched.comments` (the batch has no comment verb) nor the snapshot's `comments` (wb_document_get reads threads whole)
       },
       // A DISCOVERY errand (足場4b): learn what this workspace's own stencil
       // library defines, then wear one of its ids. Two calls, and the id is
@@ -323,7 +323,7 @@ describe('what an errand costs in tool calls', () => {
         // Then 14,256 -> 14,966: +710 for `visual.stroke/v0`, how heavy a
         // stroke is drawn — one two-value field on one target, so near the
         // floor a facet costs the listing, the same price `visual.ink/v0` paid.
-        responseBytes: 14966,
+        responseBytes: 14906, // -60: wb_canvas_edit's answer no longer carries an always-empty `touched.comments` (the batch has no comment verb) nor the snapshot's `comments` (wb_document_get reads threads whole)
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
@@ -421,7 +421,7 @@ describe('what an errand costs in tool calls', () => {
         // badge symbol and the dress writes it beside the stencil facet, so
         // six symbol facets ride in the echoed board — about 75 bytes a box.
         // Same one call; the extra bytes are the badge saying what it is.
-        responseBytes: 3926,
+        responseBytes: 3866, // -60: wb_canvas_edit's answer no longer carries an always-empty `touched.comments` (the batch has no comment verb) nor the snapshot's `comments` (wb_document_get reads threads whole)
       },
       // 2,060 -> 2,056 when an auto-placed box took the board's own width
       // instead of a flat 260. Four bytes, and what they are worth reading
@@ -436,7 +436,7 @@ describe('what an errand costs in tool calls', () => {
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,
-        responseBytes: 2134,
+        responseBytes: 2074, // -60: wb_canvas_edit's answer no longer carries an always-empty `touched.comments` (the batch has no comment verb) nor the snapshot's `comments` (wb_document_get reads threads whole)
       },
     })
   })

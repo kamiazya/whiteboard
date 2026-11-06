@@ -1,6 +1,10 @@
-export { readAnnotations, readCanvasComments } from './annotations.js'
 export {
-  migrateCanvasCommentsToThreads,
+  holdsRetiredCommentPlane,
+  RetiredCommentPlaneError,
+  readAnnotations,
+} from './annotations.js'
+export {
+  moveCommentThread,
   readCommentThreads,
   setCommentThreadStatus,
   storedThreadMessageCount,
@@ -35,7 +39,6 @@ export {
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,
-  deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
   readEdgeLocks,
@@ -47,7 +50,6 @@ export {
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,
-  writeCanvasComment,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,

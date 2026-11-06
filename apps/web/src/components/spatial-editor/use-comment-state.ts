@@ -7,13 +7,23 @@
 // its whole hit-testing input.
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
-import { type CanvasComment, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { type MutableRefObject, useEffect, useRef, useState } from 'react'
+import {
+  type CanvasComment,
+  type CommentThread,
+  canvasCommentsOf,
+  isFrame,
+  type SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
+import { type MutableRefObject, useEffect, useMemo, useRef, useState } from 'react'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { CommentComposeState } from './canvas-commands.js'
 
 export interface CommentStateInputs {
   readonly canvasRef: MutableRefObject<SpatialCanvas>
+  /** The canvas as rendered, whose nodes a pin on a node stands at. */
+  readonly canvas: SpatialCanvas
+  /** The document's conversations; absent, the canvas draws no pin. */
+  readonly threads: readonly CommentThread[] | undefined
   readonly commentChromeBoxes: readonly {
     readonly commentId: string
     readonly part: string
@@ -21,7 +31,20 @@ export interface CommentStateInputs {
   }[]
 }
 
-export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateInputs) {
+export function useCommentState({
+  canvasRef,
+  canvas,
+  threads,
+  commentChromeBoxes,
+}: CommentStateInputs) {
+  // The pins this canvas draws: the threads' render-time view, the one the
+  // layout itself projects, so a press and a menu name what is on screen.
+  const comments = useMemo(
+    () => canvasCommentsOf(threads ?? [], canvas.nodes),
+    [threads, canvas.nodes],
+  )
+  const commentsRef = useRef(comments)
+  commentsRef.current = comments
   /**
    * What a comment's bubble is placed around — the same obstacle set
    * canvas-render's placer sees for it: every node that is not a group
@@ -58,7 +81,7 @@ export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateI
     return undefined
   }
   const commentById = (id: string): CanvasComment | undefined =>
-    canvasRef.current.comments?.find((entry) => entry.id === id)
+    commentsRef.current.find((entry) => entry.id === id)
   /**
    * Opens a conversation in place, or shuts the one already open. Pressing
    * the comment whose card is up is how it closes without hunting for the
@@ -132,6 +155,7 @@ export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateI
   }, [commentDrag, commentChromeBoxes])
 
   return {
+    comments,
     commentPlacementObstacles,
     hitTestComment,
     commentById,

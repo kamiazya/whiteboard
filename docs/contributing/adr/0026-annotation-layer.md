@@ -466,6 +466,31 @@ SVG), and `wb_scene_render` takes `comments` (default `false`). The layout's
 the export entries switch it off. This is about pictures only: the document files
 (`.md`, `.canvas`) still carry content and not the conversation, per decision 1b.
 
+## Addendum (2026-11-06): decisions 1b, 6 and 7.1 implemented as written
+
+The decisions above are unchanged; this records that the code now does
+what they say, and where it had not.
+
+- **Decision 6.** `wb_canvas_edit` carries no comment verbs. `comment.add`
+  and `comment.resolve` are retired, a guessed `comment.*` op is refused
+  with a message naming `wb_thread_edit`, and `wb_thread_edit` is the one
+  MCP writer of the layer on every document kind. The MCP Apps widget's
+  comment box opens a thread through it. `wb_canvas_snapshot` no longer
+  returns the flat `comments` projection; `wb_document_get` reads threads
+  whole.
+- **Decision 1 / 1b.** The internal `SpatialCanvas` no longer has a
+  `comments` field, and no canvas write reaches the threads plane. The flat
+  comment survives only as a render-time view (`canvasCommentsOf`), drawn
+  by `layoutSpatialCanvas` from the threads handed beside the canvas. The
+  extended JSON Canvas export and the OCIF projection do not carry the
+  conversation; a file an older export wrote it into is refused on import,
+  naming the key, rather than read with its comments gone.
+- **Decision 7.1.** The one-pass migration is replaced by deletion (owner
+  decision, 2026-11-06: old stored shapes are discarded). Nothing reads or
+  migrates the flat `comments` plane; a record still holding rows there is
+  refused (`RetiredCommentPlaneError`; `retired_comment_plane` on the
+  routes, a read failure in the web app) rather than read as having none.
+
 ## Alternatives considered
 
 - **A facet on the document** — rejected in decision 1: wholesale writes lose

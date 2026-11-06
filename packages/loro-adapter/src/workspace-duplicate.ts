@@ -1,5 +1,5 @@
 import type { LoroDoc } from 'loro-crdt'
-import { COMMENTS_KEY, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
+import { PROPOSALS_KEY, THREADS_KEY } from './containers.js'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -59,4 +59,4 @@ export function duplicateWorkspaceDocument(
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
-const ANNOTATION_LAYER_KEYS = new Set([THREADS_KEY, COMMENTS_KEY, PROPOSALS_KEY])
+const ANNOTATION_LAYER_KEYS = new Set([THREADS_KEY, PROPOSALS_KEY])

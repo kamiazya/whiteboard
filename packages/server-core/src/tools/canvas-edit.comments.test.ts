@@ -1,19 +1,26 @@
-// The comment ops of `wb_canvas_edit` (ADR-0024): comment.add /
-// comment.resolve — and, pinned here, NO comment.remove (ADR-0025 decision
-// 2: resolving is the only close, for agents and people alike) — plus the
-// preservation rule the layer
-// depends on — a batch writes back the WHOLE canvas, so everything the batch
-// did not touch (the canvas-level extension, every stored comment) must
-// survive the save.
+// `wb_canvas_edit` carries no comment verbs (ADR-0026 decision 6): a
+// conversation is the document's annotation layer, written through
+// `wb_thread_edit` on a canvas and a note alike. What is pinned here is the
+// refusal a model gets when it reaches for the retired verbs, and that a
+// canvas batch leaves the layer exactly as it found it.
 
-import { okfTimestampSchema, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  readAnnotations,
+  writeCommentThread,
+  writeDocumentKind,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
 import { loadDocument } from '../document-io.js'
-import { FakeDocumentStore } from '../test-utils/fake-document-store.js'
-import { DOCUMENT_ID, makeDeps, seedCanvas, WORKSPACE_ID } from './_test-canvas-edit.js'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+  seedDoc,
+} from '../test-utils/fake-document-store.js'
+import { DOCUMENT_ID, makeDeps, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { createCanvasEditTool } from './canvas-edit.js'
-import { createCanvasSnapshotTool } from './canvas-snapshot.js'
 
 const NODE: SpatialCanvas['nodes'][number] = textNode({
   id: 'n1',
@@ -24,343 +31,54 @@ const NODE: SpatialCanvas['nodes'][number] = textNode({
   text: 'content',
 })
 
-async function storedComments(store: FakeDocumentStore) {
-  const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-  return canvas.comments ?? []
+const THREAD: CommentThread = {
+  id: 't1',
+  anchor: { kind: 'spatial', x: 9, y: 9, nodeId: 'n1' },
+  status: 'open',
+  messages: [{ id: 't1-m1', body: 'still here after the batch' }],
 }
 
-describe('wb_canvas_edit comment ops', () => {
-  test('comment.add anchors at the given point, mints an id, stamps createdAt, and reports it', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [NODE], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    const result = await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'comment.add', comment: { x: 400, y: 60, text: 'この矢印は逆では?' } }],
-    })
-
-    const comments = await storedComments(store)
-    expect(comments).toHaveLength(1)
-    const comment = comments[0]
-    expect(comment?.x).toBe(400)
-    expect(comment?.y).toBe(60)
-    expect(comment?.text).toBe('この矢印は逆では?')
-    // Stamped by the server so the record orders without trusting callers;
-    // an OKF timestamp, not merely "some string".
-    expect(okfTimestampSchema.safeParse(comment?.createdAt).success).toBe(true)
-    expect(result.touched.comments).toEqual([comment?.id])
-    expect(result.snapshot.comments).toEqual(comments)
-  })
-
-  test('comment.add with only a target node anchors at that node top-right corner', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [NODE], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'rename this' } }],
-    })
-
-    const [comment] = await storedComments(store)
-    expect(comment?.targetNodeId).toBe('n1')
-    expect(comment?.x).toBe(NODE.x + NODE.width)
-    expect(comment?.y).toBe(NODE.y)
-  })
-
+describe('wb_canvas_edit has no comment verbs', () => {
   test.each([
-    ['only x', { x: 5 }],
-    ['only y', { y: 5 }],
-  ])('comment.add with %s and a target node ignores the half point and anchors at the node corner', async (_what, point) => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [NODE], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'half a point', ...point } }],
-    })
-
-    const [comment] = await storedComments(store)
-    expect({ x: comment?.x, y: comment?.y }).toEqual({ x: 300, y: 40 })
-  })
-
-  test('comment.add with only half a point and no target is refused, not stored without a coordinate', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [NODE], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [{ op: 'comment.add', comment: { x: 5, text: 'half a point' } }],
-      }),
-    ).rejects.toThrow(/needs an anchor/)
-    expect(await storedComments(store)).toEqual([])
-  })
-
-  test('comment.add refuses an anchorless comment naming the op, and applies nothing', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [NODE], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [
-          { op: 'node.add', node: { type: 'text', text: 'should not land' } },
-          { op: 'comment.add', comment: { targetNodeId: 'missing', text: 'about nothing' } },
-        ],
-      }),
-    ).rejects.toMatchObject({ message: expect.stringMatching(/comment\.add/) })
-
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes).toHaveLength(1)
-    expect(canvas.comments ?? []).toHaveLength(0)
-  })
-
-  describe('a comment names a target that is on the canvas', () => {
-    const BOARD: SpatialCanvas = {
-      nodes: [NODE, textNode({ id: 'n2', x: 500, y: 40, width: 200, height: 80, text: 'other' })],
-      edges: [{ id: 'e1', from: { node: 'n1' }, to: { node: 'n2' } }],
-    }
-
-    async function add(comment: Record<string, unknown>) {
-      const store = new FakeDocumentStore()
-      await seedCanvas(store, BOARD)
-      const run = createCanvasEditTool(makeDeps(store)).execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [{ op: 'comment.add', comment: { text: 'c', ...comment } as never }],
-      })
-      return { run, store }
-    }
-
-    test.each([
-      [
-        'a node that is not there, with an anchor point',
-        { targetNodeId: 'ghost', x: 1, y: 2 },
-        /ops\[0\] \(comment\.add\).*node "ghost" is not on the canvas/,
-      ],
-      [
-        'an edge that is not there, with an anchor point',
-        { targetEdgeId: 'ghost', x: 1, y: 2 },
-        /ops\[0\] \(comment\.add\).*edge "ghost" is not on the canvas/,
-      ],
-      [
-        'an edge that is not there, without one',
-        { targetEdgeId: 'ghost' },
-        /edge "ghost" is not on the canvas/,
-      ],
-    ])('refuses %s, and stores nothing', async (_label, comment, refusal) => {
-      const { run, store } = await add(comment)
-
-      await expect(run).rejects.toThrow(refusal)
-
-      expect(await storedComments(store)).toHaveLength(0)
-    })
-
-    test('an edge with no anchor point is refused naming targetEdgeId, since only a node gives the server a corner to anchor at', async () => {
-      const { run } = await add({ targetEdgeId: 'e1' })
-
-      await expect(run).rejects.toThrow(/x\/y beside targetEdgeId/)
-    })
-
-    test.each([
-      ['a node', { targetNodeId: 'n2', x: 1, y: 2 }],
-      ['an edge', { targetEdgeId: 'e1', x: 1, y: 2 }],
-    ])('keeps the target of %s that is on the canvas, anchored where it was given', async (_label, comment) => {
-      const { run, store } = await add(comment)
-
-      await run
-
-      const [stored] = await storedComments(store)
-      expect(stored).toMatchObject(comment)
-    })
-  })
-
-  test('comment.resolve marks the record and comment.resolve with resolved:false reopens it', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [],
-      edges: [],
-      comments: [{ id: 'c1', x: 0, y: 0, text: 'open question' }],
-    })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'comment.resolve', id: 'c1' }],
-    })
-    expect((await storedComments(store))[0]?.resolved).toBe(true)
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'comment.resolve', id: 'c1', resolved: false }],
-    })
-    // Reopened, and read back as an open comment with no `resolved` field.
-    // The thread plane stores one bit for a two-value status (ADR-0026), so
-    // the projection emits the canonical encoding of each state — and
-    // `canvasCommentSchema` already made absent and `false` the same state.
-    // Asserting the MEANING is what this test is about; the encoding is
-    // pinned by `comment-source-of-truth.test.ts`.
-    expect((await storedComments(store))[0]?.resolved).toBeFalsy()
-  })
-
-  test('there is no comment.remove op: the batch is refused whole and the comment stays', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [],
-      edges: [],
-      comments: [{ id: 'c1', x: 0, y: 0, text: 'kept' }],
-    })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    // The op union is the contract the SDK validates every call against
-    // BEFORE `execute` runs, so a guessed verb is refused with nothing
-    // written — including the rest of the batch. Asserted on the schema the
-    // tool registers, which is the same object the SDK is handed.
+    ['comment.add', { comment: { x: 1, y: 2, text: 'hello' } }],
+    ['comment.resolve', { id: 'c1' }],
+    ['comment.remove', { id: 'c1' }],
+  ])('%s is refused by the schema, and the refusal names wb_thread_edit', (op, rest) => {
+    const tool = createCanvasEditTool(makeDeps(new FakeDocumentStore()))
     const refused = tool.inputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'comment.remove', id: 'c1' }],
+      ops: [{ op, ...rest }],
     })
     expect(refused.success).toBe(false)
-    expect(
-      JSON.stringify(
-        tool.inputSchema.safeParse({
-          workspaceId: WORKSPACE_ID,
-          documentId: DOCUMENT_ID,
-          mode: 'apply',
-          ops: [{ op: 'comment.resolve', id: 'c1' }],
-        }).success,
-      ),
-    ).toBe('true')
-    expect((await storedComments(store)).map((comment) => comment.id)).toEqual(['c1'])
+    expect(refused.error?.issues.map((issue) => issue.message).join('\n')).toMatch(/wb_thread_edit/)
   })
 
-  test('comment.add with an id already on the canvas is refused, and the first comment keeps its text', async () => {
-    // A comment is a person's words; an add that reused an id would replace
-    // them with no error at all.
+  test('a batch leaves the document comment threads exactly as it found them', async () => {
     const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [NODE], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-    await tool.execute({
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, { nodes: [NODE], edges: [] })
+      writeCommentThread(doc, THREAD)
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const before = readAnnotations(
+      (await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)).doc,
+    )
+    expect(before.map((thread) => thread.id)).toEqual(['t1'])
+
+    await createCanvasEditTool(makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'comment.add', comment: { id: 'c1', x: 10, y: 10, text: 'first' } }],
+      ops: [
+        { op: 'node.patch', id: 'n1', patch: { x: 111 } },
+        { op: 'node.add', node: { type: 'text', text: 'beside it' } },
+      ],
     })
 
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [{ op: 'comment.add', comment: { id: 'c1', x: 10, y: 10, text: 'second' } }],
-      }),
-    ).rejects.toMatchObject({
-      name: 'CanvasEditError',
-      opIndex: 0,
-      message: expect.stringMatching(/comment id "c1" is already on the canvas/),
-    })
-    const stored = await storedComments(store)
-    expect(stored.map((comment) => comment.id)).toEqual(['c1'])
-    expect(stored[0]).toMatchObject({ text: 'first' })
-  })
-
-  test('comment.resolve on an unknown id fails loudly', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [{ op: 'comment.resolve', id: 'nope' }],
-      }),
-    ).rejects.toMatchObject({ message: expect.stringMatching(/"nope"/) })
-  })
-
-  test('a batch that never mentions comments preserves them AND the rendering preferences', async () => {
-    // The regression this file exists for: the batch used to write back
-    // `{ nodes, edges }` alone, which deletes the stored canvas-level
-    // extension (edge routing) — and would delete every comment.
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [NODE],
-      edges: [],
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-      comments: [{ id: 'c1', x: 9, y: 9, text: 'still here after the batch' }],
-    })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'node.patch', id: 'n1', patch: { x: 111 } }],
-    })
-
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
-    expect(canvas.comments).toEqual([{ id: 'c1', x: 9, y: 9, text: 'still here after the batch' }])
-  })
-
-  test('wb_canvas_snapshot carries the comments so a reader sees the conversation', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [NODE],
-      edges: [],
-      comments: [{ id: 'c1', x: 1, y: 2, text: 'feedback', author: 'human:reviewer' }],
-    })
-    const tool = createCanvasSnapshotTool(makeDeps(store))
-
-    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
-    expect(result.comments).toEqual([
-      { id: 'c1', x: 1, y: 2, text: 'feedback', author: 'human:reviewer' },
-    ])
-  })
-})
-
-describe('wb_canvas_edit comment anchors on fractional nodes', () => {
-  test('comment.add on a node at fractional coordinates rounds the derived anchor to whole pixels', async () => {
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [textNode({ id: 'n1', x: 0.4, y: 10.7, width: 200.5, height: 80, text: 'content' })],
-      edges: [],
-    })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'rename this' } }],
-    })
-
-    const [comment] = await storedComments(store)
-    expect(Number.isInteger(comment?.x)).toBe(true)
-    expect(Number.isInteger(comment?.y)).toBe(true)
-    expect(comment?.x).toBe(201)
-    expect(comment?.y).toBe(11)
+    const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(readAnnotations(doc)).toEqual(before)
   })
 })

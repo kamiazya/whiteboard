@@ -44,6 +44,8 @@ export interface RenderCanvasOptions {
   readonly commentObstacles?: readonly BoundingBox[]
   /** See RenderCanvasCoreOptions: draw resolved comments (muted) too. */
   readonly showResolved?: boolean
+  /** See RenderCanvasCoreOptions: the conversations this render draws. */
+  readonly threads?: readonly CommentThread[]
   /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
   readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
   readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>

@@ -317,10 +317,9 @@ describe('the default mode (ADR-0029 decision 7)', () => {
   // The flip that finishes the ADR. What the default answers is decided by
   // WHAT THE BATCH CARRIES, not by who is calling: content is proposed, and
   // anything that is not content applies — the same line the ADR already
-  // drew when it said which verbs a proposal can carry (`comment.*` is the
-  // annotation layer, a lock is a claim, `tidy`/`region.set` have no anchor
-  // to follow). A default that refused those instead would refuse a verb
-  // the tool supports, and the widget's comment box is one of its callers.
+  // drew when it said which verbs a proposal can carry (a lock is a claim,
+  // `tidy`/`region.set` have no anchor to follow). A default that refused
+  // those instead would refuse a verb the tool supports.
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -341,19 +340,19 @@ describe('the default mode (ADR-0029 decision 7)', () => {
     expect(await storedProposals(deps)).toHaveLength(1)
   })
 
-  test('applies a batch that carries nothing proposable — the widget comment box', async () => {
+  test('applies a batch that carries nothing proposable — a lock', async () => {
     const store = new FakeDocumentStore()
     await seed(store, BOARD)
     const deps = makeDeps(store)
     const result = await createCanvasEditTool(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      ops: [{ op: 'comment.add', comment: { x: 10, y: 20, text: 'is this right?' } }],
+      ops: [{ op: 'node.lock', id: 'a', locked: true }],
     })
 
     expect(result.applied).toBe(1)
     expect(result.proposed).toBeUndefined()
-    expect(result.snapshot.comments).toHaveLength(1)
+    expect(result.snapshot.nodes.find((n) => n.id === 'a')?.locked).toBe(true)
     expect(await storedProposals(deps)).toEqual([])
   })
 
@@ -366,7 +365,7 @@ describe('the default mode (ADR-0029 decision 7)', () => {
       documentId: DOCUMENT_ID,
       ops: [
         { op: 'node.patch', id: 'a', patch: { x: 400 } },
-        { op: 'comment.add', comment: { x: 10, y: 20, text: 'moved it' } },
+        { op: 'node.lock', id: 'b', locked: true },
       ],
     })
 
@@ -391,9 +390,9 @@ describe('the default mode (ADR-0029 decision 7)', () => {
     expect(await storedProposals(deps)).toEqual([])
   })
 
-  test('an EXPLICIT propose carrying a comment is still refused, not quietly applied', async () => {
+  test('an EXPLICIT propose carrying a lock is still refused, not quietly applied', async () => {
     // The default resolving by content must not soften what an explicit
-    // request means: a caller that asked to propose a comment asked for
+    // request means: a caller that asked to propose a lock asked for
     // something the layer cannot represent, and is told so.
     const store = new FakeDocumentStore()
     await seed(store, BOARD)
@@ -403,7 +402,7 @@ describe('the default mode (ADR-0029 decision 7)', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         mode: 'propose',
-        ops: [{ op: 'comment.add', comment: { x: 10, y: 20, text: 'no' } }],
+        ops: [{ op: 'node.lock', id: 'a', locked: true }],
       }),
     ).rejects.toThrow(/cannot carry this verb/)
   })

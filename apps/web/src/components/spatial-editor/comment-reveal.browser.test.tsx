@@ -2,16 +2,16 @@
 // about: the canvas pans so the anchor is on screen and the pin briefly
 // pulses. The page hands the thread id to the editor through its handle.
 
-import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 
 afterEach(cleanup)
 
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [
     textNode({ id: 'near', x: 0, y: 0, width: 120, height: 60, text: 'here' }),
     textNode({ id: 'far', x: 4000, y: 3000, width: 120, height: 60, text: 'over there' }),

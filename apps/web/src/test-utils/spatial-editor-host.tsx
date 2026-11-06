@@ -1,9 +1,32 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  type CanvasComment,
+  type CommentThread,
+  canvasCommentsOf,
+  type SpatialCanvas,
+  threadFromCanvasComment,
+} from '@kamiazya/whiteboard-model'
 import { type CSSProperties, useState } from 'react'
 import { SpatialEditor, type SpatialEditorProps } from '../components/spatial-editor/index.js'
 import type { EditorTool } from '../lib/editor-tool.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
+import { threadsAfterCommand } from '../lib/spatial/thread-commands.js'
+
+/**
+ * A board written with its comments inline, the shorthand a test reads most
+ * easily. The host hands them to the editor the way a page really does: as
+ * the threads they are, beside the canvas, which never carries them.
+ */
+export type CommentBoard = SpatialCanvas & { readonly comments?: readonly CanvasComment[] }
+
+/** A board's canvas and the threads its inline comments stand for. */
+export function splitBoard(board: CommentBoard): {
+  readonly canvas: SpatialCanvas
+  readonly threads: readonly CommentThread[]
+} {
+  const { comments = [], ...canvas } = board
+  return { canvas, threads: comments.map(threadFromCanvasComment) }
+}
 
 /**
  * What the editor handed back through `onChange`, which is the value that
@@ -13,6 +36,10 @@ import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 interface EditorHostLatest {
   /** The canvas as of the last render. */
   canvas: SpatialCanvas
+  /** The conversations as of the last render — what a page's sync session would publish. */
+  threads: readonly CommentThread[]
+  /** `threads` as the pins the canvas draws: the render-time view. */
+  readonly comments: readonly CanvasComment[]
   /** Every command the editor reported, in order. */
   commands: EditorCommand[]
   /** `commands` by kind, for a test that asserts the sequence and not the payload. */
@@ -22,7 +49,7 @@ interface EditorHostLatest {
 }
 
 export interface EditorHostOptions {
-  initial: SpatialCanvas
+  initial: CommentBoard
   /**
    * `'select'` unless said otherwise. `null` passes no `defaultTool`, which
    * leaves the choice to the editor — the way to test its own default.
@@ -55,6 +82,27 @@ const DEFAULT_SIZE = { width: 800, height: 600 }
  * back in and recording the command. One definition, so a change to how the
  * editor is mounted in tests is made once.
  */
+/** Threads a case hands over explicitly win by id over its inline comments. */
+function seededThreads(
+  inline: readonly CommentThread[],
+  given: readonly CommentThread[],
+): CommentThread[] {
+  return [...given, ...inline.filter((thread) => !given.some((held) => held.id === thread.id))]
+}
+
+function freshLatest(canvas: SpatialCanvas, threads: readonly CommentThread[]): EditorHostLatest {
+  return {
+    canvas,
+    threads,
+    get comments() {
+      return canvasCommentsOf(this.threads, this.canvas.nodes)
+    },
+    commands: [],
+    kinds: [],
+    handle: null,
+  }
+}
+
 export function makeEditorHost(options: EditorHostOptions) {
   const {
     initial,
@@ -64,10 +112,14 @@ export function makeEditorHost(options: EditorHostOptions) {
     lockedNodes,
     editorProps,
   } = options
-  const latest: EditorHostLatest = { canvas: initial, commands: [], kinds: [], handle: null }
+  const seeded = splitBoard(initial)
+  const initialThreads = seededThreads(seeded.threads, editorProps?.threads ?? [])
+  const latest = freshLatest(seeded.canvas, initialThreads)
   function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
+    const [canvas, setCanvas] = useState<SpatialCanvas>(seeded.canvas)
+    const [threads, setThreads] = useState<readonly CommentThread[]>(initialThreads)
     latest.canvas = canvas
+    latest.threads = threads
     return (
       <div style={{ ...size, ...frameStyle }}>
         <SpatialEditor
@@ -80,15 +132,33 @@ export function makeEditorHost(options: EditorHostOptions) {
             latest.commands.push(command)
             latest.kinds.push(command.kind)
             setCanvas(next)
+            // What a page's sync session publishes for the same command.
+            setThreads((held) => threadsAfterCommand(held, command))
           }}
           theme="light"
           {...(lockedNodes
             ? { lockedNodeIds: new Set(lockedNodes), onToggleNodeLock: () => {} }
             : {})}
           {...editorProps}
+          threads={threads}
         />
       </div>
     )
   }
   return { Host, latest }
+}
+
+/**
+ * The comments a command list opened, as the pins they draw: each
+ * `create-thread`'s render-time view, against the nodes given (a passage of a
+ * node's text stands at that node's corner).
+ */
+export function createdComments(
+  commands: readonly EditorCommand[],
+  nodes: SpatialCanvas['nodes'] = [],
+): CanvasComment[] {
+  return canvasCommentsOf(
+    commands.flatMap((command) => (command.kind === 'create-thread' ? [command.thread] : [])),
+    nodes,
+  )
 }

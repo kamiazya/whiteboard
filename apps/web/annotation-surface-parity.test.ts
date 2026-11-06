@@ -142,7 +142,7 @@ const PARITY = {
     'static-scene': { absent: PICTURE },
     widget: {
       pinnedBy:
-        'packages/canvas-viewer/src/widget-entry.test.tsx#submitting a comment sends comment.add with the clicked anchor, clears, and refreshes',
+        'packages/canvas-viewer/src/widget-entry.test.tsx#submitting a comment opens a thread at the clicked anchor, clears, and refreshes',
       gap: `a spot only — a node, an edge or a selection cannot be named from the widget: ${ONE_WRITE}`,
     },
     mcp: {
@@ -210,7 +210,7 @@ const PARITY = {
   'resolve-reopen': {
     canvas: {
       pinnedBy:
-        'apps/web/src/components/spatial-editor/comment-resolve.browser.test.tsx#"Resolve" on a comment writes set-comment-resolved and the comment leaves the canvas',
+        'apps/web/src/components/spatial-editor/comment-resolve.browser.test.tsx#"Resolve" on a comment writes set-thread-status and the comment leaves the canvas',
     },
     rail: {
       pinnedBy:
@@ -341,7 +341,7 @@ const PARITY = {
     },
     widget: {
       pinnedBy:
-        'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs#wb_canvas_edit → comment.add reaches canvas_view, comment.resolve marks it',
+        "packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs#wb_thread_edit ← the widget's comment box, read back by canvas_view",
     },
     mcp: { absent: WRITES_ONLY },
   },

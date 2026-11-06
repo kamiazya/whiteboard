@@ -295,8 +295,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'generates the published JSON Canvas loss table that loss-table.test.ts holds equal to the committed docs page',
   'packages/codec/src/spatial/loss-table.ts#ocifLossTable':
     'generates the published OCIF loss table that loss-table.test.ts holds equal to the committed docs page',
-  'packages/loro-adapter/src/loro-bridge.ts#deleteCanvasComment':
-    'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
   'packages/loro-adapter/src/loro-bridge.ts#deleteSpatialEdge':
     'the single-commit form that withSpatialBatch is held byte-identical to, the sequential reference of loro-bridge.property.test.ts',
   'packages/loro-adapter/src/workspace-tree.ts#createWorkspaceDocument':

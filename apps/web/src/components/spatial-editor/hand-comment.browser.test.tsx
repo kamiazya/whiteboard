@@ -4,12 +4,16 @@
 // on comment chrome that never travels opens the card under the hand tool
 // too, while one that travels is the pan it always was.
 
-import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, CommentThread } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import {
+  type CommentBoard,
+  createdComments,
+  makeEditorHost,
+} from '../../test-utils/spatial-editor-host.js'
 import { touch } from '../../test-utils/spatial-editor-pointer.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -22,7 +26,7 @@ const THREAD: CommentThread = {
   status: 'open',
   messages: [{ id: 'm1', body: 'free note' }],
 }
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE],
@@ -64,7 +68,7 @@ it('a press on a bubble that does not travel opens the card under the hand tool'
   expect(latest.commands).toEqual([])
 })
 
-it('a press on a bubble that travels is the pan it always was: no card, no move-comment', async () => {
+it('a press on a bubble that travels is the pan it always was: no card, no move-thread', async () => {
   const { Host, latest } = makeEditorHost({
     initial: start,
     tool: 'hand',
@@ -171,11 +175,12 @@ it('Comment here from the hand-tool menu composes and commits a point-anchored c
   await userEvent.keyboard('seen while panning')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
   await vi.waitFor(() =>
-    expect(latest.commands.map((entry) => entry.kind)).toContain('create-comment'),
+    expect(latest.commands.map((entry) => entry.kind)).toContain('create-thread'),
   )
-  expect(latest.commands[0]).toMatchObject({
-    kind: 'create-comment',
-    comment: { x: 60, y: 560, text: 'seen while panning' },
+  expect(createdComments(latest.commands)[0]).toMatchObject({
+    x: 60,
+    y: 560,
+    text: 'seen while panning',
   })
 })
 

@@ -26,7 +26,7 @@ const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
  */
 describe('the open-thread bound counts a document once per update', () => {
   it('counts the threads once however many thread containers the update writes', async () => {
-    const { writeThreadInto } = await import('./comment-threads.js')
+    const { writeCommentThread } = await import('./comment-threads.js')
     const { importWithinTextLimits } = await import('./sync-text-limits.js')
     const { createWorkspaceDocumentAtPath, documentContainers } = await import(
       './workspace-tree.js'
@@ -37,7 +37,7 @@ describe('the open-thread bound counts a document once per update', () => {
     const board = documentContainers(record, DOC_ID)
     const threads = DOCUMENT_MAX_OPEN_THREADS
     for (let i = 0; i < threads; i += 1) {
-      writeThreadInto(board, {
+      writeCommentThread(board, {
         id: `t${i}`,
         anchor: { kind: 'document' },
         status: 'open',

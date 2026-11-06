@@ -200,7 +200,7 @@ export function commitCommentDrag(
   })
   c.applyResult({
     state: { kind: 'idle' },
-    commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
+    commands: [{ kind: 'move-thread', threadId: commentDrag.comment.id, ...dropped } as const],
   })
   return true
 }

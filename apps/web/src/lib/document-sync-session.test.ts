@@ -13,10 +13,10 @@ import type {
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  readAnnotations,
   readMarkdownBody,
   readSpatialCanvas,
   setNodeLock,
-  writeCanvasComment,
   writeCommentThread,
   writeFacets,
   writeMarkdownBody,
@@ -25,14 +25,13 @@ import {
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
-  CanvasComment,
   CommentThread,
   Proposal,
   ProposedChange,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
+import { canvasCommentsOf, nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -707,14 +706,16 @@ describe('createDocumentSyncSession', () => {
     const listener = vi.fn()
     const unsubscribe = session.subscribeAnnotations(listener)
 
-    const comment: CanvasComment = {
-      id: 'c1',
-      x: 40,
-      y: 60,
-      text: 'made right here',
-      createdAt: '2026-09-03T00:00:00.000Z',
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 'c1',
+        anchor: { kind: 'spatial', x: 40, y: 60 },
+        status: 'open',
+        createdAt: '2026-09-03T00:00:00.000Z',
+        messages: [{ id: 'c1-m1', body: 'made right here', createdAt: '2026-09-03T00:00:00.000Z' }],
+      },
     }
-    const command: EditorCommand = { kind: 'create-comment', comment }
     const next = applyCommand(emptyCanvas(), command)
     session.onChange(next, command)
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
@@ -723,6 +724,86 @@ describe('createDocumentSyncSession', () => {
       'made right here',
     ])
     expect(listener).toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('refuses a record still holding comments in the retired plane, rather than showing it without them', () => {
+    // No reader serves the plane before threads (owner decision 27): read as
+    // usual, the board would open with every comment silently gone.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, twoNodeCanvas())
+    doc.getMap('comments').set('c1', { id: 'c1', x: 0, y: 0, text: 'from before threads' })
+    doc.commit()
+
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(deps.onBackendError).toHaveBeenCalledWith('retired-comment-plane')
+    expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+    expect(session.getCanvas().nodes).toEqual([])
+  })
+
+  it('refuses a LIVE update that brings the retired plane in, instead of throwing out of the import', async () => {
+    // Only the snapshot was guarded; an older peer syncing a row into the
+    // flat plane after load reached readAnnotations inside the import
+    // subscription, and the throw escaped it as an unhandled rejection
+    // while the session kept serving the stale canvas.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const snapshot = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshot)
+    expect(deps.onBackendError).not.toHaveBeenCalled()
+    const peer = new LoroDoc()
+    peer.import(snapshot)
+    const from = peer.version()
+    peer.getMap('comments').set('c1', { id: 'c1', x: 0, y: 0, text: 'from before threads' })
+    peer.commit()
+
+    backend._ctrl.handlers!.onRemoteUpdate(peer.export({ mode: 'update', from }))
+
+    // The import subscription delivers on a later tick; a throw there is an
+    // unhandled rejection the test runner reports, not a return value.
+    await vi.waitFor(() =>
+      expect(deps.onBackendError).toHaveBeenCalledWith('retired-comment-plane'),
+    )
+    expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+  })
+
+  it('a thread command is published at once, before the debounced commit lands', async () => {
+    // The layer is a plane beside the canvas, so no canvas value carries a
+    // new pin: the session publishes the conversations the command leaves
+    // as immediately as it publishes the canvas, or a pin would wait out
+    // the debounce. The commit's own read then answers the same list.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(emptyCanvas()))
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 'c1',
+        anchor: { kind: 'spatial', x: 40, y: 60 },
+        status: 'open',
+        messages: [{ id: 'c1-m1', body: 'pinned now' }],
+      },
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
+    expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['c1'])
+    expect(listener).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    expect(listener).toHaveBeenCalledTimes(1)
     unsubscribe()
   })
 
@@ -752,25 +833,19 @@ describe('createDocumentSyncSession', () => {
       },
     }
     const next = applyCommand(session.getCanvas(), command)
-    // Optimistic: the reducer already shows a pin on the node.
-    expect(next.comments).toEqual([
+    session.onChange(next, command)
+    // Optimistic: the pin on the node is drawn from the published threads.
+    expect(canvasCommentsOf(session.getAnnotations(), next.nodes)).toEqual([
       { id: 't-passage', x: 150, y: 200, targetNodeId: 'n1', text: 'right word?' },
     ])
-    session.onChange(next, command)
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
     expect(session.getAnnotations()[0]?.anchor).toEqual(command.thread.anchor)
-    expect(session.getCanvas().comments?.[0]).toMatchObject({
-      id: 't-passage',
-      targetNodeId: 'n1',
-    })
   })
 
   it('resolving and editing reach the thread for ANY anchor, which the flat path cannot', async () => {
-    // A note's passage and a document-level thread have no projection in
-    // the canvas envelope, so `set-comment-resolved` / `move-comment`
-    // — which travel through it — never reach them. These two write the
-    // plane directly, and the canvas projection follows where one exists.
+    // A note's passage and a document-level thread have no pin on the
+    // canvas. These two write the plane directly, whatever the anchor.
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
@@ -1267,245 +1342,87 @@ describe('createDocumentSyncSession', () => {
     expect(result.edges).toEqual([])
   })
 
-  it('a local create-comment commit does not delete a comment a remote peer wrote concurrently (fine-grained comment write, not full resync)', async () => {
+  it('a local create-thread does not delete a thread a remote peer wrote concurrently', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const snapshotBytes = makeSnapshot(emptyCanvas())
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
 
-    // A remote peer wrote this comment directly into the shared doc — never
-    // reflected in this editor's own `next` canvas below, exactly as a
-    // remote update racing a local edit would arrive.
-    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
+    // A remote peer opened this thread directly in the shared doc — never in
+    // this editor's own commands below, exactly as a remote update racing a
+    // local edit would arrive.
     const remoteDoc = new LoroDoc()
     remoteDoc.import(snapshotBytes)
-    writeCanvasComment(remoteDoc, remoteComment)
+    writeCommentThread(remoteDoc, {
+      id: 'remote-c',
+      anchor: { kind: 'spatial', x: -5, y: 3 },
+      status: 'open',
+      messages: [{ id: 'remote-c-m1', body: 'remote note' }],
+    })
     backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
 
-    const localComment: CanvasComment = { id: 'local-c', x: 1, y: 1, text: 'local note' }
-    const next: SpatialCanvas = { ...emptyCanvas(), comments: [localComment] }
-    const command: EditorCommand = { kind: 'create-comment', comment: localComment }
-    session.onChange(next, command)
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 'local-c',
+        anchor: { kind: 'spatial', x: 1, y: 1 },
+        status: 'open',
+        messages: [{ id: 'local-c-m1', body: 'local note' }],
+      },
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
-
-    // The fallback's tell: if the comment command fell through to the full
-    // resync, this fires — see commitToDoc's doc comment.
-    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
 
     const merged = new LoroDoc()
     merged.import(snapshotBytes)
     merged.import(remoteDoc.export({ mode: 'update' }))
     for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
-    const comments = readSpatialCanvas(merged).comments ?? []
-    expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
+    expect(
+      readAnnotations(merged)
+        .map((thread) => thread.id)
+        .sort(),
+    ).toEqual(['local-c', 'remote-c'])
   })
 
-  it('debounce coalescing: create-comment then set-comment-resolved for the same id dedupes to a single write of the final comment value', async () => {
+  it('move-thread commits the pin where it was dropped, and a status beside it in the same window', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
-    const snapshotBytes = makeSnapshot(emptyCanvas())
-    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
-
-    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'first pass' }
-    const createCmd: EditorCommand = { kind: 'create-comment', comment }
-    const afterCreate = applyCommand(emptyCanvas(), createCmd)
-    session.onChange(afterCreate, createCmd)
-
-    const resolveCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
-    const afterResolve = applyCommand(afterCreate, resolveCmd)
-    session.onChange(afterResolve, resolveCmd)
-
-    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
-
-    // commandTargetKey maps both commands to `comment:c-1` — proof the
-    // comment case is not falling into the default arm's fresh-key-per-call
-    // behavior, which would push twice.
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
     const doc = new LoroDoc()
-    doc.import(snapshotBytes)
-    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const comments = readSpatialCanvas(doc).comments ?? []
-    expect(comments).toEqual([{ ...comment, resolved: true }])
-  })
-
-  it('debounce coalescing: move-comment then set-comment-resolved for the same id dedupes to one fine-grained write carrying both', async () => {
-    const backend = makeFakeBackend()
-    const session = createDocumentSyncSession(backend, makeDeps())
-    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'first pass' }
-    const other: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'stays' }
-    const initial: SpatialCanvas = {
-      ...emptyCanvas(),
-      comments: [comment, other],
-    }
-    session.connect()
-    const snapshotBytes = makeSnapshot(initial)
-    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
-
-    const moveCmd: EditorCommand = { kind: 'move-comment', id: 'c-1', x: 120, y: -30 }
-    const afterMove = applyCommand(initial, moveCmd)
-    session.onChange(afterMove, moveCmd)
-
-    const textCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
-    const afterText = applyCommand(afterMove, textCmd)
-    session.onChange(afterText, textCmd)
-
-    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
-
-    // Both map to `comment:c-1`, so one write; and it is the fine-grained
-    // path — the full-resync fallback's tell (the warning) must not fire.
-    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
-    const doc = new LoroDoc()
-    doc.import(snapshotBytes)
-    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const comments = readSpatialCanvas(doc).comments ?? []
-    expect(comments.find((c) => c.id === 'c-1')).toEqual({
-      ...comment,
-      x: 120,
-      y: -30,
-      resolved: true,
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 'c-1',
+      anchor: { kind: 'spatial', x: 0, y: 0 },
+      status: 'open',
+      messages: [{ id: 'c-1-m1', body: 'first pass' }],
     })
-    expect(comments.find((c) => c.id === 'c-2')).toEqual(other)
-  })
-
-  it('a batch containing a comment command plus a node command commits fine-grained: a remote comment survives, one undo step', async () => {
-    const backend = makeFakeBackend()
-    const session = createDocumentSyncSession(backend, makeDeps())
-    session.connect()
-    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    const snapshotBytes = doc.export({ mode: 'snapshot' })
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
 
-    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
-    const remoteDoc = new LoroDoc()
-    remoteDoc.import(snapshotBytes)
-    writeCanvasComment(remoteDoc, remoteComment)
-    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
-
-    const localComment: CanvasComment = { id: 'local-c', x: 1, y: 1, text: 'local note' }
-    const batch: EditorCommand = {
-      kind: 'batch',
-      commands: [
-        { kind: 'create-comment', comment: localComment },
-        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
-      ],
+    const moveCmd: EditorCommand = { kind: 'move-thread', threadId: 'c-1', x: 120, y: -30 }
+    session.onChange(applyCommand(session.getCanvas(), moveCmd), moveCmd)
+    const resolveCmd: EditorCommand = {
+      kind: 'set-thread-status',
+      threadId: 'c-1',
+      status: 'resolved',
     }
-    const next: SpatialCanvas = {
-      ...applyCommand(twoNodeCanvas(), { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
-      comments: [localComment],
-    }
-    session.onChange(next, batch)
+    session.onChange(applyCommand(session.getCanvas(), resolveCmd), resolveCmd)
     await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
 
+    // The whole-canvas fallback's tell: it must not fire for a thread write.
     expect(appLoggerSpies.warn).not.toHaveBeenCalled()
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
     const merged = new LoroDoc()
     merged.import(snapshotBytes)
-    merged.import(remoteDoc.export({ mode: 'update' }))
-    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const result = readSpatialCanvas(merged)
-    const comments = result.comments ?? []
-    expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
-    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
-  })
-
-  it('a batch containing move-comment and set-comment-resolved commits fine-grained: a remote comment survives, one undo step', async () => {
-    const backend = makeFakeBackend()
-    const session = createDocumentSyncSession(backend, makeDeps())
-    session.connect()
-    const toMove: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'move me' }
-    const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
-    const initial: SpatialCanvas = {
-      ...twoNodeCanvas(),
-      comments: [toMove, toEdit],
-    }
-    const snapshotBytes = makeSnapshot(initial)
-    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
-
-    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
-    const remoteDoc = new LoroDoc()
-    remoteDoc.import(snapshotBytes)
-    writeCanvasComment(remoteDoc, remoteComment)
-    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
-
-    const batch: EditorCommand = {
-      kind: 'batch',
-      commands: [
-        { kind: 'move-comment', id: 'c-1', x: 120, y: -30 },
-        { kind: 'set-comment-resolved', id: 'c-2', resolved: true },
-        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
-      ],
-    }
-    const next = batch.commands.reduce(applyCommand, initial)
-    session.onChange(next, batch)
-    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
-
-    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
-    const merged = new LoroDoc()
-    merged.import(snapshotBytes)
-    merged.import(remoteDoc.export({ mode: 'update' }))
-    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const result = readSpatialCanvas(merged)
-    const comments = result.comments ?? []
-    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
-    expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ x: 120, y: -30 })
-    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ resolved: true })
-    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
-  })
-
-  it('a batch containing set-comment-resolved and move-comment commits fine-grained: a remote comment survives, one undo step', async () => {
-    const backend = makeFakeBackend()
-    const session = createDocumentSyncSession(backend, makeDeps())
-    session.connect()
-    const toResolve: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'resolve me' }
-    const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
-    const initial: SpatialCanvas = {
-      ...twoNodeCanvas(),
-      comments: [toResolve, toEdit],
-    }
-    const snapshotBytes = makeSnapshot(initial)
-    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
-
-    // A remote peer's concurrent comment — the fine-grained-write tell, same
-    // as the create-comment batch test above.
-    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
-    const remoteDoc = new LoroDoc()
-    remoteDoc.import(snapshotBytes)
-    writeCanvasComment(remoteDoc, remoteComment)
-    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
-
-    const batch: EditorCommand = {
-      kind: 'batch',
-      commands: [
-        { kind: 'set-comment-resolved', id: 'c-1', resolved: true },
-        { kind: 'move-comment', id: 'c-2', x: 60, y: 61 },
-        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
-      ],
-    }
-    const next: SpatialCanvas = {
-      ...applyCommand(initial, { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
-      comments: [
-        { ...toResolve, resolved: true },
-        { ...toEdit, x: 60, y: 61 },
-      ],
-    }
-    session.onChange(next, batch)
-    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS)
-
-    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
-    const merged = new LoroDoc()
-    merged.import(snapshotBytes)
-    merged.import(remoteDoc.export({ mode: 'update' }))
-    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const result = readSpatialCanvas(merged)
-    const comments = result.comments ?? []
-    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
-    expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ resolved: true })
-    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ x: 60, y: 61 })
-    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
+    expect(readAnnotations(merged)).toEqual([
+      {
+        id: 'c-1',
+        anchor: { kind: 'spatial', x: 120, y: -30 },
+        status: 'resolved',
+        messages: [{ id: 'c-1-m1', body: 'first pass' }],
+      },
+    ])
   })
 
   it('debounce coalescing: create-node then move-node for the same id dedupes to a single write of the final node value', async () => {

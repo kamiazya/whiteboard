@@ -140,7 +140,7 @@ it('a right-click inside the node editor opens the editing catalog, Comment incl
   // On the canvas: the thread's projection is a comment ON the node, so the
   // layer pins it at the node's corner without waiting for the channel.
   await vi.waitFor(() =>
-    expect(latest.canvas.comments?.[0]).toMatchObject({
+    expect(latest.comments?.[0]).toMatchObject({
       id: 't-passage',
       targetNodeId: 'n1',
       x: NODE.x + NODE.width,

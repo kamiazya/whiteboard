@@ -17,10 +17,7 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 // The widget's own call builders: what it sends is what this smoke sends, so
 // the runtime step cannot drift from the widget by being a second hand copy.
-import {
-  canvasViewCall,
-  commentAddCall,
-} from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
+import { canvasViewCall, threadAddCall } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
 import { assertCanvasFacetWritesRefused } from './lib/facet-write-refusals.mjs'
@@ -1364,17 +1361,22 @@ async function noModeProposesContentAndAppliesTheRest({ documentId }) {
   if (afterDefault.nodes.find((node) => node.id === 'target')?.x === 4242) {
     throw new Error('the default moved the board instead of proposing')
   }
-  const defaultedComment = await callTool('wb_canvas_edit', {
+  const defaultedLock = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    ops: [{ op: 'comment.add', comment: { targetNodeId: 'target', text: 'applied by default' } }],
+    ops: [{ op: 'node.lock', id: 'target', locked: true }],
   })
-  if (defaultedComment.applied !== 1 || defaultedComment.proposed !== undefined) {
+  if (defaultedLock.applied !== 1 || defaultedLock.proposed !== undefined) {
     throw new Error(
-      `a batch carrying nothing proposable did not apply: ${JSON.stringify(defaultedComment)}`,
+      `a batch carrying nothing proposable did not apply: ${JSON.stringify(defaultedLock)}`,
     )
   }
-  console.log('[e2e] wb_canvas_edit(no mode) → content proposed, a comment applied')
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [{ op: 'node.lock', id: 'target', locked: false }],
+  })
+  console.log('[e2e] wb_canvas_edit(no mode) → content proposed, a lock applied')
 }
 
 /**
@@ -1797,42 +1799,52 @@ async function theAnnotationLayerThroughWidgetShapes(ctx) {
   }
   console.log('[e2e] wb_canvas_edit → widget-shaped sticky note lands and refreshes')
 
-  // The comment annotation layer (ADR-0024): a node-targeted comment.add,
-  // its echo through canvas_view (the widget's read), and its resolve —
-  // exercised through the real MCP SDK because the ops union, the stored
-  // per-comment map, and the outputSchema's `touched.comments` all travel
+  // The widget's comment box opens a thread (ADR-0026 decision 6), in its
+  // EXACT shape — the clicked point AND the node it landed in — and the
+  // retired canvas verb is refused naming the tool that replaced it. Through
+  // the real MCP SDK because the op unions and the outputSchema travel
   // separately from any type the compiler checks.
-  // In the widget's EXACT shape — the clicked point AND the node it landed in.
-  const widgetComment = commentAddCall(
+  await expectToolError(
+    'wb_canvas_edit',
+    {
+      workspaceId: viewed.workspaceId,
+      documentId: viewed.documentId,
+      ops: [{ op: 'comment.add', comment: { x: 1, y: 2, text: 'retired' } }],
+    },
+    'with the retired comment.add',
+    'wb_thread_edit',
+  )
+  const widgetComment = threadAddCall(
     { workspaceId: viewed.workspaceId, documentId: viewed.documentId },
     { x: 12, y: 34, targetNodeId: 'lockable' },
     'smoke comment',
   )
   const commented = await callTool(widgetComment.name, widgetComment.arguments)
-  const commentId = commented.touched?.comments?.[0]
-  if (commented.applied !== 1 || commentId === undefined) {
-    throw new Error(`comment.add did not report its comment: ${JSON.stringify(commented)}`)
+  const widgetThread = (commented.threads ?? []).find(
+    (thread) => thread.messages?.[0]?.body === 'smoke comment',
+  )
+  if (widgetThread?.anchor?.nodeId !== 'lockable') {
+    throw new Error(
+      `the widget's thread.add did not report its thread: ${JSON.stringify(commented)}`,
+    )
   }
   const widgetRefresh = canvasViewCall({ workspaceId: WORKSPACE_ID, documentId })
   const afterComment = await callTool(widgetRefresh.name, widgetRefresh.arguments)
-  const commentInScene = (afterComment.scene['x-whiteboard']?.comments ?? []).some(
-    (comment) => comment.id === commentId && comment.text === 'smoke comment',
-  )
-  if (!commentInScene) {
-    throw new Error('comment.add is not in the refreshed canvas_view scene')
+  if (!(afterComment.threads ?? []).some((thread) => thread.id === widgetThread.id)) {
+    throw new Error("the widget's thread is not in the refreshed canvas_view")
   }
-  const resolvedBatch = await callTool('wb_canvas_edit', {
+  const resolvedBatch = await callTool('wb_thread_edit', {
     workspaceId: viewed.workspaceId,
     documentId: viewed.documentId,
-    ops: [{ op: 'comment.resolve', id: commentId }],
+    ops: [{ op: 'thread.resolve', threadId: widgetThread.id }],
   })
-  const resolvedComment = (resolvedBatch.snapshot.comments ?? []).find(
-    (comment) => comment.id === commentId,
-  )
-  if (resolvedComment?.resolved !== true) {
-    throw new Error(`comment.resolve did not mark the record: ${JSON.stringify(resolvedBatch)}`)
+  const resolvedThread = resolvedBatch.threads.find((thread) => thread.id === widgetThread.id)
+  if (resolvedThread?.status !== 'resolved') {
+    throw new Error(`thread.resolve did not close the thread: ${JSON.stringify(resolvedBatch)}`)
   }
-  console.log('[e2e] wb_canvas_edit → comment.add reaches canvas_view, comment.resolve marks it')
+  console.log(
+    "[e2e] wb_thread_edit ← the widget's comment box, read back by canvas_view; wb_canvas_edit refuses comment.add",
+  )
 
   // The DOCUMENT-scoped surface (ADR-0026 decision 6): the same layer through
   // `wb_thread_edit`, which is the only way an agent can comment on a format
@@ -1978,24 +1990,20 @@ async function everyThreadAnchorReachesTheProjection({ documentId, viewed }) {
     throw new Error(`thread.add on the canvas did not report: ${JSON.stringify(anchoredOnCanvas)}`)
   }
   const afterAnchors = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
-  const projected = afterAnchors.scene['x-whiteboard']?.comments ?? []
-  const edgeProjected = projected.find((c) => c.id === 'smoke-edge-thread')
-  const passageProjected = projected.find((c) => c.id === 'smoke-passage-thread')
-  if (edgeProjected?.targetEdgeId !== 'link') {
-    throw new Error(`an edge thread did not project with its edge: ${JSON.stringify(projected)}`)
+  // The scene is the board alone (ADR-0026 decision 1b): the widget draws
+  // every pin from the threads beside it, so each anchor has to arrive whole.
+  if (afterAnchors.scene['x-whiteboard']?.comments !== undefined) {
+    throw new Error('canvas_view carried the conversation inside the scene')
   }
-  if (passageProjected?.targetNodeId !== 'lockable') {
-    throw new Error(`a node passage did not project onto its node: ${JSON.stringify(projected)}`)
+  const anchorOf = (id) => (afterAnchors.threads ?? []).find((t) => t.id === id)?.anchor
+  if (anchorOf('smoke-edge-thread')?.edgeId !== 'link') {
+    throw new Error(`an edge thread lost its edge: ${JSON.stringify(afterAnchors.threads)}`)
   }
-  // A region projects to its top-right corner; the document arm projects to
-  // nothing (the panel is its only surface) — and every thread reaches the
-  // widget whole through `threads`, which is what draws the outline.
-  const regionProjected = projected.find((c) => c.id === 'smoke-region-thread')
-  if (regionProjected?.x !== 800 || regionProjected?.y !== 600) {
-    throw new Error(`a region did not project to its corner: ${JSON.stringify(regionProjected)}`)
+  if (anchorOf('smoke-passage-thread')?.nodeId !== 'lockable') {
+    throw new Error(`a node passage lost its node: ${JSON.stringify(afterAnchors.threads)}`)
   }
-  if (projected.some((c) => c.id === 'smoke-document-thread')) {
-    throw new Error('a document-level thread projected onto the canvas')
+  if (anchorOf('smoke-region-thread')?.width !== 200) {
+    throw new Error(`a region lost its rect: ${JSON.stringify(afterAnchors.threads)}`)
   }
   const widgetThreadIds = (afterAnchors.threads ?? []).map((t) => t.id)
   for (const id of ['smoke-set-thread', 'smoke-region-thread', 'smoke-document-thread']) {

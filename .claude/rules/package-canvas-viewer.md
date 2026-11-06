@@ -59,7 +59,7 @@ paths:
   `codec`'s `parseSpatial`/`serializeSpatial`, it does not
   reimplement them.
 - Any editing affordance beyond the widget's comment (ADR-0024: click to
-  pick an anchor, submit one `comment.add`) — the viewer itself is
+  pick an anchor, submit one `wb_thread_edit` `thread.add`) — the viewer itself is
   read-only, and the widget's one write goes through the host session to
   `wb_canvas_edit` (widget-entry.test.tsx pins the callServerTool allowlist
   to exactly `canvas_view` + `wb_canvas_edit`). Real editing lives in
