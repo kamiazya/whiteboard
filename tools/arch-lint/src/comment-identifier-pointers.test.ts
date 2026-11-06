@@ -298,11 +298,24 @@ function codeIdentifiers(): Set<string> {
     // Its allowlist spells every exempt name, so reading it would make each
     // one "exist" the moment this file is committed.
     if (file === SELF) continue
-    for (const line of codeLines(file, readFileSync(join(REPO_ROOT, file), 'utf8'))) {
+    const text = readFileSync(join(REPO_ROOT, file), 'utf8')
+    for (const line of codeLines(file, text)) {
       for (const match of line.matchAll(/[A-Za-z_$][\w$]*/g)) names.add(match[0])
     }
+    if (file.endsWith('.rs')) for (const name of namesSpelledOnlyAsStrings(text)) names.add(name)
   }
   return names
+}
+
+/**
+ * An environment variable or an ELF tag is a name Rust code can only spell as
+ * a string (`env::var("SOURCE_DATE_EPOCH")`), so a comment naming one points
+ * at code even though the lexer blanks the literal. Upper-case only: a
+ * snake_case symbol inside a message string is prose, and must not rescue a
+ * comment pointing at a symbol that is gone.
+ */
+function namesSpelledOnlyAsStrings(text: string): string[] {
+  return [...text.matchAll(/"([A-Z][A-Z0-9_]{2,})"/g)].map((match) => match[1] ?? '')
 }
 
 /** The backticked names in one file's comments that have the shape of this repo's own symbol. */
@@ -371,6 +384,18 @@ describe('an identifier a source comment points at is one the code still has', (
     // Code a Rust file holds is code, and a name in its literal or comment is not.
     expect(EXISTING.has('without_negative_zero')).toBe(true)
     expect(EXISTING.has('unwrap_used')).toBe(true)
+  })
+
+  it('counts an upper-case name a Rust file spells only as a string, and no other', () => {
+    expect(namesSpelledOnlyAsStrings('std::env::var("PLANTED_ENV_VAR_X")')).toEqual([
+      'PLANTED_ENV_VAR_X',
+    ])
+    // A snake_case symbol inside a message is prose, not a spelling of code.
+    expect(namesSpelledOnlyAsStrings('"planted_symbol is unset"')).toEqual([])
+    expect(namesSpelledOnlyAsStrings('"SOURCE_DATE_EPOCH is unset"')).toEqual([])
+    // Named in the tree: dist.rs reads these through env::var and .env().
+    expect(EXISTING.has('SOURCE_DATE_EPOCH')).toBe(true)
+    expect(EXISTING.has('CARGO_ENCODED_RUSTFLAGS')).toBe(true)
   })
 
   it('has no pointer at a symbol that is gone', () => {

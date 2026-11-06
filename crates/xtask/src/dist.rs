@@ -13,8 +13,8 @@
 //! - **Native**: built through `cargo auditable` so the binary embeds its
 //!   dependency list (`.dep-v0`), with the `dist-native` profile and
 //!   `-C relocation-model=pie -C relro-level=full` pinned explicitly — both
-//!   are rustc's defaults on Linux today (measured: PIE, `BIND_NOW`,
-//!   `GNU_RELRO` with no flags), and pinning them keeps a default change or a
+//!   are rustc's defaults on Linux today (measured: PIE, `DT_BIND_NOW`,
+//!   `PT_GNU_RELRO` with no flags), and pinning them keeps a default change or a
 //!   stray `RUSTFLAGS` from silently dropping them. `harden-check` is what
 //!   proves they held.
 //! - **Wasm**: the release profile for `wasm32-unknown-unknown`, then

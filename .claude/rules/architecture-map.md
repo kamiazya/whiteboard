@@ -24,6 +24,13 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `apps/extension` | the browser extension (ADR-0050): relays the hosted app to the native host | daemon-client |
 | `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, canvas-render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, reference-graph, workspace-index, daemon-client, history + port impls |
 
+**The Rust workspace under `crates/` is a second map with the same shape**
+(ADR-0054): layers core < ports < ops < adapters < mechanics < bindings, every
+target crate declared before it exists, checked both ways by `cargo xtask
+arch-map`. Its table, gates and mechanics are the path-scoped
+`.claude/rules/crates.md`; the requirements are
+`docs/contributing/quality-requirements.md`.
+
 **A third-party dependency is judged by that criterion, not by a quota.** The
 `allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has
 been checked against it — not a cap, and not a statement that the shared layer

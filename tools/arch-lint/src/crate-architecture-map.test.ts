@@ -12,8 +12,8 @@ import { REPO_ROOT } from './scan-roots.js'
 // WORKSPACE to it (members, layers, edges). What it cannot see from cargo is
 // the rest of this repo, and that is what is checked here: the tree under
 // `crates/` against the map's `status`, the map's `absorbs` against the
-// TypeScript map it is replacing, and the always-on rule's table against the
-// map once that table exists. A crate directory nothing lists, or a listed
+// TypeScript map it is replacing, and the crates rule's table against the
+// map. A crate directory nothing lists, or a listed
 // crate whose status lies, reads in every other guard as a smaller workspace.
 
 /** The `name` in a crate manifest's `[package]` table. */
@@ -95,7 +95,8 @@ function absorbDisagreements(
 }
 
 /**
- * The crate rows of `.claude/rules/architecture-map.md`, once it has them: a
+ * The crate rows of `.claude/rules/crates.md` (the path-scoped rule for the
+ * Rust workspace; the always-on map stays within its budget): a
  * table row whose first cell is a backticked crate name or `crates/` path.
  * `undefined` while the rule names no crate at all — the state before the
  * integrator adds the table. A rule that MENTIONS a crate without such a row
@@ -135,7 +136,7 @@ const CRATES = readCrateMap()
 const MANIFESTS = new Map(
   crateDirs().map((dir) => [dir, readFileSync(join(REPO_ROOT, dir, 'Cargo.toml'), 'utf8')]),
 )
-const RULE_PATH = '.claude/rules/architecture-map.md'
+const RULE_PATH = '.claude/rules/crates.md'
 
 const workspacePackageName = (dir: string): string | undefined => {
   const manifest = join(REPO_ROOT, dir, 'package.json')
@@ -254,10 +255,16 @@ describe(`${RULE_PATH} and the crate map`, () => {
     expect(ruleTableDisagreements(rows, CRATES)).toEqual([])
   })
 
-  it('stops being pending the moment the rule names a crate', () => {
-    const named = ruleCrateRows(`${rule}\nThe Rust half is \`crates/\`.\n`, CRATES)
+  it('stops being pending the moment a rule names a crate', () => {
+    const named = ruleCrateRows('The Rust half is `crates/`.\n', CRATES)
     expect(named).toEqual([])
     expect(ruleTableDisagreements(named ?? [], CRATES)).toHaveLength(CRATES.length)
+  })
+
+  it('has the table now, naming every crate once', () => {
+    const rows = ruleCrateRows(rule, CRATES)
+    expect(rows, 'the rule must name the crates').toBeDefined()
+    expect(rows?.length).toBe(CRATES.length)
   })
 
   it('reads a crate table by name or path, and a mention without one as a table missing', () => {

@@ -132,7 +132,9 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // `package-canvas-render.md` already said. What stays is the rule a session
   // placing code needs and the NAMES (`background-work.ts`, `cycle-check.ts`,
   // `web-app-boundary.test.ts`) a doc-sync guard and a grep look for.
-  '.claude/rules/architecture-map.md': 14,
+  // 15 since the map gained its six-line pointer at the Rust workspace
+  // (`crates.md`, path-scoped, carries the crate table), at 15331 characters.
+  '.claude/rules/architecture-map.md': 15,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human
@@ -265,8 +267,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
+ *
+ * 21 when architecture-map.md gained its pointer at the Rust workspace: the
+ * crate table itself went to the path-scoped `crates.md`, so the always-on
+ * set grew by six lines rather than a layer. The room above was spent one
+ * sentence at a time first (CI scoping, 2026-11-06), which this entry
+ * records rather than approves.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 20
+const ALWAYS_ON_TOTAL_BUDGET = 21
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
@@ -489,7 +497,11 @@ const CANVAS_RENDER_BUDGET = 108
 // 45 -> 46: one paragraph naming the shared AST helpers, the worker-URL edge,
 // the comparator ban and the v1 refusal coverage guard, each a guard a reader
 // of this directory now meets.
-const TOOL_ARCH_LINT_BUDGET = 46
+//
+// 46 -> 47: the paragraph on the Rust arms — the `.rs` comment lexer and
+// function measure the size, vocabulary and comment guards read through, and
+// the crate-map guard — a new source language, not a new sentence.
+const TOOL_ARCH_LINT_BUDGET = 47
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
