@@ -23,7 +23,7 @@ import {
   linkNodeDefaults,
   resolveSpawnPoint,
 } from './node-factories.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
 
 const GROUP_FRAME_SIZE = { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }
 
@@ -153,7 +153,7 @@ export function useNodeCreation({
       x: topLeft.x,
       y: topLeft.y,
       width: containerSize.width / viewport.zoom,
-      height: (containerSize.height - DOCK_OCCLUSION_PX) / viewport.zoom,
+      height: (containerSize.height - bottomChromeOcclusionPx(rootRef.current)) / viewport.zoom,
     }
   }
 
@@ -161,7 +161,10 @@ export function useNodeCreation({
     const containerSize = containerSizeOf(rootRef.current)
     if (containerSize === null) return
     setViewport(
-      (vp) => panToShowTarget(box, vp, containerSize, { bottom: DOCK_OCCLUSION_PX }) ?? vp,
+      (vp) =>
+        panToShowTarget(box, vp, containerSize, {
+          bottom: bottomChromeOcclusionPx(rootRef.current),
+        }) ?? vp,
     )
   }
 

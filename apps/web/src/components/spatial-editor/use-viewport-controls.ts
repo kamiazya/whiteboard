@@ -21,7 +21,7 @@ import {
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import { insetsClearingCorners, sameInsets } from '../../lib/spatial/viewport-insets.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
 import { initialViewport, useRememberViewport } from './use-viewport-memory.js'
 import { useVisibleInsets } from './use-visible-insets.js'
 
@@ -40,10 +40,13 @@ const NODE_TOOLS_CLEARANCE_PX = 50
  * plus the dock floating over its bottom edge and room for the selection's
  * tool chip along its top.
  */
-function framingInsets(insets: ViewportOcclusion): Required<ViewportOcclusion> {
+function framingInsets(
+  insets: ViewportOcclusion,
+  root: HTMLElement | null,
+): Required<ViewportOcclusion> {
   return {
     top: Math.max(NODE_TOOLS_CLEARANCE_PX, insets.top ?? 0),
-    bottom: Math.max(DOCK_OCCLUSION_PX, insets.bottom ?? 0),
+    bottom: Math.max(bottomChromeOcclusionPx(root), insets.bottom ?? 0),
     left: insets.left ?? 0,
     right: insets.right ?? 0,
   }
@@ -78,7 +81,7 @@ function frameClearOfCorners(
   insets: ViewportOcclusion,
   root: HTMLElement | null,
 ): Viewport {
-  const base = framingInsets(insets)
+  const base = framingInsets(insets, root)
   const plain = frameViewport(bounds, size, zoom, FRAME_MARGIN_PX, base)
   const cards = root === null || size === null ? [] : cornerCards(root)
   const under = boxes.some(({ box }) => {
