@@ -275,7 +275,7 @@ function trashMembers(
       // section show its restore error instead of silently reloading
       // with the row still there, in the words the daemon refuses with.
       const placed = await index.resolveDocumentById({ workspaceId, documentId })
-      throw new Error(trashRestoreRefusal(documentId, placed?.path ?? null).title)
+      throw new Error(trashRestoreRefusal(documentId, placed?.path ?? null).message)
     },
     async purgeFromTrash(documentId) {
       // false means the trash held no such entry; rejecting is what the
@@ -284,7 +284,7 @@ function trashMembers(
         workspaceId: getBrowserWorkspaceId(),
         documentId,
       })
-      if (!purged) throw new Error(trashPurgeRefusal(documentId).title)
+      if (!purged) throw new Error(trashPurgeRefusal(documentId).message)
     },
   }
 }

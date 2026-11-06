@@ -5,7 +5,6 @@ import {
   documentPathForFile,
   parseDocumentApiPath,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
-import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
@@ -38,27 +37,14 @@ type DocumentFileHandler = (
 ) => Promise<Response> | Response
 
 // Not `parseWorkspaceHandle`: the handle and the document path are validated in
-// one try, with the 400 shape chosen per route, and the handle is resolved
-// only after both pass.
-function validated(
-  c: Context,
-  workspaceId: string,
-  path: string,
-  badRequest: 'legacy' | 'problem-details' = 'legacy',
-): Response | null {
+// one try, and the handle is resolved only after both pass.
+function validated(c: Context, workspaceId: string, path: string): Response | null {
   try {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
   } catch (err) {
     const body = validationErrorBody(err)
-    // Two 400 shapes coexist on this surface: the older { error, message }
-    // and Problem Details { title } (delete/rename, pinned by tests). The
-    // caller says which its route speaks.
-    if (body) {
-      return badRequest === 'problem-details'
-        ? c.json({ title: body.message } satisfies ApiErrorBody, 400)
-        : c.json(body, 400)
-    }
+    if (body) return c.json(body, 400)
     throw err
   }
   return null
@@ -180,14 +166,13 @@ export function onDocumentsRoute(
   method: 'get' | 'post' | 'put' | 'delete' | 'patch',
   suffixPattern: string[],
   handler: DocumentsHandler,
-  options: { badRequest?: 'legacy' | 'problem-details' } = {},
   ...middleware: MiddlewareHandler[]
 ): void {
   const dispatch = async (c: Context, next: Next) => {
     const matched = matchDocumentsTail(c.req.path, suffixPattern)
     if (matched === null) return next()
     const { workspaceId, path, params } = matched
-    const invalid = validated(c, workspaceId, path, options.badRequest)
+    const invalid = validated(c, workspaceId, path)
     if (invalid) return invalid
     return handler(c, await workspaceIdFromHandle(c, workspaceId), path, params)
   }

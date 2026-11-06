@@ -220,7 +220,6 @@ async function acceptInvitation(c: Context, routing: Routing, providerById: Prov
     return c.json(errorBody('forbidden', 'Accept an invitation on this server’s own page.'), 403)
   }
   const body = await readJsonBody(c, acceptInvitationRequestSchema, {
-    voice: 'code',
     refuseShape: () => errorBody('invalid_body', 'The body names no invitation.'),
     maxBytes: ACCEPT_BODY_LIMIT_BYTES,
   })

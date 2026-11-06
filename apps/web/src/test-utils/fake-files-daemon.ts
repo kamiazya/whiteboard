@@ -56,7 +56,7 @@ interface State {
 type Body = Record<string, string | boolean | undefined>
 type Handler = (state: State, match: RegExpMatchArray, body: Body) => Response
 
-const notFound = () => jsonResponse({ title: 'Not found' }, 404)
+const notFound = () => jsonResponse({ error: 'not_found', message: 'Not found' }, 404)
 
 // The contracts require canonical ULIDs.
 function nextId(state: State): string {

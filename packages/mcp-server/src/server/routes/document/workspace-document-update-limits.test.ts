@@ -35,6 +35,7 @@ import {
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -81,12 +82,7 @@ async function setup() {
     nodes: [textNode({ id: 'n-a', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
     edges: [],
   })
-  const seeded = await app.request(`/api/w/${WS}/document/c/update`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: new Uint8Array(seed.export({ mode: 'update' })),
-  })
-  expect(seeded.status).toBe(200)
+  await writeDocumentUpdate(serverDeps, WS, 'c', seed.export({ mode: 'update' }))
   const res = await app.request(`/api/w/${WS}/workspace-document/snapshot`)
   expect(res.status).toBe(200)
   const peer = LoroDoc.fromSnapshot(new Uint8Array(await res.arrayBuffer()))
@@ -179,25 +175,6 @@ describe('a sync update nesting a container under a key past the bound', () => {
     expect(await nodesAfterRestart()).toEqual(['n-a'])
     const snapshot = await app.request(`/api/w/${WS}/workspace-document/snapshot`)
     expect(snapshot.status).toBe(200)
-  })
-
-  it('answers 413 on the per-document route', async () => {
-    const { app } = await setup()
-    const res = await app.request(`/api/w/${WS}/document/c/snapshot`)
-    const peer = LoroDoc.fromSnapshot(new Uint8Array(await res.arrayBuffer()))
-    const from = peer.version()
-    nestUnderLongKey(peer.getMap('nodes'))
-    peer.commit()
-
-    const refused = await app.request(`/api/w/${WS}/document/c/update`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: new Uint8Array(peer.export({ mode: 'update', from })),
-    })
-
-    expect(refused.status).toBe(413)
-    expect(syncWriteRefusalOf(await refused.json()).code).toBe('container_name_too_long')
-    expect(await nodesAfterRestart()).toEqual(['n-a'])
   })
 })
 

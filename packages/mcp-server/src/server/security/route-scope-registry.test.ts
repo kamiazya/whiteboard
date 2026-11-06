@@ -47,7 +47,7 @@ afterAll(async () => {
 
 const alwaysDeny: AsyncAuthStrategy = {
   async authorize() {
-    return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+    return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
   },
 }
 
@@ -321,7 +321,7 @@ const SCOPE_DECISIONS = [
   [
     'document file/action overlap',
     'POST',
-    '/api/w/ws1/document/a/file/update',
+    '/api/w/ws1/document/a/file/export',
     scoped('files:write', 'canvas:write'),
   ],
   ['document file', 'GET', '/api/w/ws1/document/a/b/file/f1', scoped('files:read')],
@@ -344,8 +344,7 @@ const SCOPE_DECISIONS = [
     '/api/w/ws1/workspace-document/update',
     scoped('canvas:write'),
   ],
-  ['document update/export', 'POST', '/api/w/ws1/document/d1/update', scoped('canvas:write')],
-  ['document update/export', 'POST', '/api/w/ws1/document/d1/export', scoped('canvas:write')],
+  ['document export', 'POST', '/api/w/ws1/document/d1/export', scoped('canvas:write')],
   ['document (rest)', 'GET', '/api/w/ws1/document/d1', scoped('canvas:read')],
   ['document (rest)', 'DELETE', '/api/w/ws1/document/d1', scoped('canvas:write')],
   // Reading the stream, subscribing and posting a message are all read-level
@@ -494,11 +493,11 @@ describe('what each rule decides', () => {
 const CLAIMED_BY = {
   'runtime/ping': ['GET', '/api/runtime/ping'],
   'runtime/proof': ['GET', '/api/runtime/proof'],
-  'document file/action overlap': ['POST', '/api/w/ws1/document/a/file/update'],
+  'document file/action overlap': ['POST', '/api/w/ws1/document/a/file/export'],
   'document file': ['GET', '/api/w/ws1/document/a/b/file/f1'],
   'workspace-document/promote': ['POST', '/api/w/ws1/workspace-document/promote'],
   'workspace-document sync': ['POST', '/api/w/ws1/workspace-document/update'],
-  'document update/export': ['POST', '/api/w/ws1/document/d1/update'],
+  'document export': ['POST', '/api/w/ws1/document/d1/export'],
   'document (rest)': ['GET', '/api/w/ws1/document/d1'],
   'sync transport': ['POST', '/api/sync/stream'],
   'document versions': ['GET', '/api/workspaces/ws1/documents/d1/versions'],
@@ -552,7 +551,7 @@ const GATED = [
   'document file',
   'workspace-document/promote',
   'workspace-document sync',
-  'document update/export',
+  'document export',
   'document (rest)',
   'document versions',
   'versions/prune-sandwiched',
@@ -650,7 +649,7 @@ const READ_VERBS = ['GET', 'HEAD'] as const
 // The rules whose `claims` name a write verb, so no GET or HEAD reaches them.
 const WRITE_VERB_ONLY: readonly string[] = [
   'workspace-document/promote',
-  'document update/export',
+  'document export',
   'files/purge-dangling',
   'documents/optimize-all',
   'workspace replica-key',

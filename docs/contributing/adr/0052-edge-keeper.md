@@ -330,3 +330,28 @@ for the maintainer, and nothing here makes it.** The alternatives are:
 The store-bound routes need a seam before either move, which is ADR-0018's work
 and not this note's. Until this is decided, treat slice 3 as serving `/api/v1`
 only.
+
+## Note (2026-11-06): one write route and one error body on the keeper protocol
+
+Two parts of the surface the table above lists are smaller now, which is less
+for a second keeper to reproduce:
+
+- **One write route.** The per-document update
+  (`POST /api/w/:ws/document/<path>/update`) is retired with its operation,
+  `applyDocumentUpdate`: no app surface wrote through it, and binary sync is
+  the workspace record's alone (`workspace-document/update`). `live-doc.ts`
+  now carries a document's snapshot by path and nothing else; that read
+  stays because the web app's embed loader and thumbnail source call it. An
+  older page that still posts to the retired route gets 404 `not_found` in
+  the error contract.
+- **One error body.** Every refusal is `{ error, message?, hint? }` with a
+  snake_case `error`; the Problem Details `{ title }` arm and the dotted
+  server-mode auth codes (now `auth_required` / `auth_forbidden`) are gone,
+  and `errorBody` refuses an ill-formed literal code at compile time.
+
+What has NOT happened yet: the document routes are still addressed by PATH in
+two families (`/api/w/:ws/document/<path>/…` and
+`/api/workspaces/:ws/documents/<path>/…`) beside `/api/v1`'s id-addressed
+one. Folding them into `/api/v1/workspaces/:ws/documents/:documentId/…` is
+the owner's decision (2026-11-06) and still open work; until it lands, a
+second keeper reproduces all three.

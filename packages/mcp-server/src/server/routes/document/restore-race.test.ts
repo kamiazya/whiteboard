@@ -5,6 +5,7 @@ import {
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-restore-race-')
@@ -76,11 +77,12 @@ describe('restore targetPath-overwrite vs delete race', () => {
     const sm0 = sourceList.insertContainer(0, new LoroMap())
     sm0.set('id', 'keep-me')
     sourceDoc.commit()
-    await app.request('/api/w/session1/document/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
-    })
+    await writeDocumentUpdate(
+      serverDeps,
+      'session1',
+      'canvas-a',
+      sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
+    )
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -95,11 +97,12 @@ describe('restore targetPath-overwrite vs delete race', () => {
     const tm0 = targetList.insertContainer(0, new LoroMap())
     tm0.set('id', 'b-only')
     targetDoc.commit()
-    await app.request('/api/w/session1/document/canvas-b/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: targetDoc.export({ mode: 'update', from: tvv0 }) as Uint8Array<ArrayBuffer>,
-    })
+    await writeDocumentUpdate(
+      serverDeps,
+      'session1',
+      'canvas-b',
+      targetDoc.export({ mode: 'update', from: tvv0 }) as Uint8Array<ArrayBuffer>,
+    )
 
     // Stall the restore route's getDoc(targetPath) call so a DELETE of the
     // target can be fired while the request is paused mid-flight, matching
@@ -176,11 +179,12 @@ describe('restore in-place vs delete race', () => {
     const sm0 = sourceList.insertContainer(0, new LoroMap())
     sm0.set('id', 'keep-me')
     sourceDoc.commit()
-    await app.request('/api/w/session1/document/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
-    })
+    await writeDocumentUpdate(
+      serverDeps,
+      'session1',
+      'canvas-a',
+      sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
+    )
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

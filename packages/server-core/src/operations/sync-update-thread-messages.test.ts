@@ -1,5 +1,5 @@
 /**
- * The per-thread message ceiling on both sync paths, which carry Loro bytes
+ * The per-thread message ceiling on the sync path, which carries Loro bytes
  * no tool op reads: a reply that takes a thread past `THREAD_MAX_MESSAGES` is
  * refused 413 with nothing kept, and the reply that brings it to the bound is
  * taken.
@@ -20,7 +20,6 @@ import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
-import { applyDocumentUpdate } from './apply-document-update.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { syncWriteAnswer } from './sync-write-refusals.js'
 
@@ -49,28 +48,6 @@ const reply = (doc: DocumentContainers) =>
 
 /** The two sync paths, each over a store seeded with one thread of `messages`. */
 const PATHS = {
-  'the per-document path': (messages: number) => {
-    const doc = new LoroDoc()
-    seedThread(doc, messages)
-    const store = new StoredDoc(doc)
-    const liveDocuments: LiveDocuments = {
-      ...unusedLiveDocuments(),
-      withWriteLock: (_workspaceId, fn) => fn(),
-      get: async () => store.get(),
-      kind: async () => 'markdown',
-      save: async (_workspaceId, _path, saved) => store.save(saved),
-      evict: () => store.evict(),
-    }
-    return {
-      store,
-      held: (): DocumentContainers => store.get(),
-      send: (edit: (doc: DocumentContainers) => void) =>
-        applyDocumentUpdate(
-          { liveDocuments },
-          { workspaceId: WS, path: 'note', update: updateFrom(store.get(), edit) },
-        ),
-    }
-  },
   'the workspace-document path': (messages: number) => {
     const doc = new LoroDoc()
     createWorkspaceDocumentAtPath(doc, { path: 'note', documentId: NOTE, kind: 'markdown' })

@@ -275,9 +275,9 @@ describe('createBrowserFilesSource trash', () => {
     const absent = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
     await expect(source.restoreFromTrash?.(absent)).rejects.toThrow(
-      trashRestoreRefusal(absent, null).title,
+      trashRestoreRefusal(absent, null).message,
     )
-    await expect(source.purgeFromTrash?.(absent)).rejects.toThrow(trashPurgeRefusal(absent).title)
+    await expect(source.purgeFromTrash?.(absent)).rejects.toThrow(trashPurgeRefusal(absent).message)
   })
 
   // The daemon answers 409 in the same words for the same case: the id is
@@ -293,7 +293,7 @@ describe('createBrowserFilesSource trash', () => {
     const source = createBrowserFilesSource({ index })
 
     await expect(source.restoreFromTrash?.(entry.documentId)).rejects.toThrow(
-      trashRestoreRefusal(entry.documentId, 'notes/live').title,
+      trashRestoreRefusal(entry.documentId, 'notes/live').message,
     )
   })
 

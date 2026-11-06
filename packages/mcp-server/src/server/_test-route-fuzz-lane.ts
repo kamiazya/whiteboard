@@ -10,7 +10,7 @@ import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { expect } from 'vitest'
-import { z } from 'zod'
+import type { z } from 'zod'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 import { IDP } from './_test-server-mode-harness.js'
 
@@ -171,25 +171,6 @@ export interface Harness {
   dispose(): Promise<void>
 }
 
-/**
- * What server mode's `/api` auth middleware answers a credential it refuses
- * with: `auth.required` (401) and `auth.forbidden` (403), the codes
- * `AuthDecision` pins one to one with their status. They are dotted, which
- * `apiErrorCodeSchema` (lowercase snake_case) does not admit, so they are not
- * `apiErrorBodySchema` bodies — the one place a refusal here is read under a
- * different contract, named rather than waved through.
- */
-const serverModeAuthRefusalSchema = z.union([
-  z.object({
-    status: z.literal(401),
-    body: z.object({ error: z.literal('auth.required') }).strict(),
-  }),
-  z.object({
-    status: z.literal(403),
-    body: z.object({ error: z.literal('auth.forbidden') }).strict(),
-  }),
-])
-
 /** A redirect that goes anywhere but the provider or a path on this origin is an open redirect. */
 function staysOnThisOriginOrGoesToTheProvider(location: string): boolean {
   if (location.startsWith(`${IDP}/authorize?`)) return true
@@ -215,18 +196,14 @@ function judgeRedirect(rule: Rule, res: Response, detail: string): boolean {
 }
 
 /** A refusal's body under the contract the web client reads it with, snake_case code included. */
-function judgeRefusal(res: Response, text: string, detail: string): void {
+function judgeRefusal(text: string, detail: string): void {
   // The runtime half of `routes/error-body-shape.test.ts`. That scan reads
-  // object LITERALS, so it cannot see a body built by `errorBody`, whose
-  // `code` parameter is a plain `string` — a sentence passed to it
-  // typechecks. This parses what actually went out.
+  // object LITERALS, and `errorBody` refuses an ill-formed LITERAL code at
+  // compile time, but a code known only as `string` reaches neither. This
+  // parses what actually went out, server mode's auth refusals included.
   const body: unknown = JSON.parse(text)
   const refusal = apiErrorBodySchema.safeParse(body)
-  const refusedByAuth = serverModeAuthRefusalSchema.safeParse({ status: res.status, body })
-  expect(
-    refusal.success || refusedByAuth.success,
-    `${detail}\n${JSON.stringify(refusal.error?.issues)}`,
-  ).toBe(true)
+  expect(refusal.success, `${detail}\n${JSON.stringify(refusal.error?.issues)}`).toBe(true)
 }
 
 /** What kind of reply this is, against what the rule says its answers are. */
@@ -247,7 +224,7 @@ function judge(rule: Rule, res: Response, text: string, detail: string): boolean
   expect(res.status === 501 || res.status === 503 || res.status < 500, detail).toBe(true)
   if (res.status >= 300 && res.status < 400) return judgeRedirect(rule, res, detail)
   judgeKind(rule, res, isJson, text, detail)
-  if (res.status >= 400 && isJson) judgeRefusal(res, text, detail)
+  if (res.status >= 400 && isJson) judgeRefusal(text, detail)
   if (res.status >= 300) return false
   if ('response' in rule && rule.response !== undefined && isJson) {
     const read = rule.response.safeParse(JSON.parse(text))

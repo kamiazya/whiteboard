@@ -1,7 +1,13 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  type DocumentContainers,
+  documentContainers,
+  resolveWorkspaceDocument,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach } from 'vitest'
 import { getDataDir } from '../config.js'
 import { type StoreScope, storeScope } from '../store/store-scope.js'
@@ -101,6 +107,55 @@ export async function createTestDocument(
     kind: input.kind ?? 'spatial',
     createWorkspace: true,
     ...(input.name === undefined ? {} : { name: input.name }),
+  })
+}
+
+/**
+ * Imports a Loro update into the document at `path` and saves it, creating
+ * the document when no document holds the path — how a fixture seeds content.
+ * Nothing serves a per-document write over HTTP (editors sync the workspace
+ * record), so a test that needs content behind a path writes it through the
+ * live-document seam the routes read from, under the same lock they take.
+ */
+export async function writeDocumentUpdate(
+  deps: Pick<ServerDeps, 'liveDocuments'>,
+  workspaceId: string,
+  path: string,
+  update: Uint8Array,
+): Promise<void> {
+  const live = deps.liveDocuments
+  await live.withWriteLock(workspaceId, async () => {
+    const doc = await live.get(workspaceId, path)
+    doc.import(update)
+    await live.save(workspaceId, path, doc, { overwrite: true })
+  })
+}
+
+/**
+ * Edits the document at `path` the way an editor does: on a replica of the
+ * workspace record read from `workspace-document/snapshot`, sent back to
+ * `workspace-document/update`. Answers that update's response, so a test
+ * driving the sync surface reads what the route said.
+ */
+export async function postDocumentEdit(
+  app: { request: (path: string, init?: RequestInit) => Response | Promise<Response> },
+  workspaceId: string,
+  path: string,
+  edit: (containers: DocumentContainers) => void,
+): Promise<Response> {
+  const base = `/api/w/${encodeURIComponent(workspaceId)}/workspace-document`
+  const snapshot = await app.request(`${base}/snapshot`)
+  if (!snapshot.ok) throw new Error(`workspace snapshot answered ${snapshot.status}`)
+  const replica = LoroDoc.fromSnapshot(new Uint8Array(await snapshot.arrayBuffer()))
+  const entry = resolveWorkspaceDocument(replica, path)
+  if (entry === null) throw new Error(`no document at "${path}" in the record`)
+  const from = replica.oplogVersion()
+  edit(documentContainers(replica, entry.documentId))
+  replica.commit()
+  return app.request(`${base}/update`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: replica.export({ mode: 'update', from }) as Uint8Array<ArrayBuffer>,
   })
 }
 

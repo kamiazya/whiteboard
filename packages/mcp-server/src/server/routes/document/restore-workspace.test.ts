@@ -23,6 +23,7 @@ import {
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -73,12 +74,8 @@ function canvasUpdate(doc: LoroDoc, ids: string[]): Uint8Array<ArrayBuffer> {
   return new Uint8Array(doc.export({ mode: 'update', from }))
 }
 
-async function push(app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
-  await app.request('/api/w/session1/document/c/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: canvasUpdate(doc, ids),
-  })
+async function push(_app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
+  await writeDocumentUpdate(serverDeps, 'session1', 'c', canvasUpdate(doc, ids))
 }
 
 async function saveVersion(app: ReturnType<typeof createDocumentRouter>): Promise<string> {
@@ -159,28 +156,16 @@ it('subtree rollback reverts the document AND its descendants, and evacuates doc
   await createDoc('c')
   await createDoc('c/child')
   await push(app, parent, ['p-1'])
-  await app.request('/api/w/session1/document/c%2Fchild/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: canvasUpdate(child, ['c-1']),
-  })
+  await writeDocumentUpdate(serverDeps, 'session1', 'c/child', canvasUpdate(child, ['c-1']))
   const versionId = await saveVersion(app)
 
   // After the version: parent and child both edited, and a NEW descendant
   // appears.
   await push(app, parent, ['p-1', 'p-2'])
-  await app.request('/api/w/session1/document/c%2Fchild/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: canvasUpdate(child, ['c-1', 'c-2']),
-  })
+  await writeDocumentUpdate(serverDeps, 'session1', 'c/child', canvasUpdate(child, ['c-1', 'c-2']))
   const late = new LoroDoc()
   await createDoc('c/late')
-  await app.request('/api/w/session1/document/c%2Flate/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: canvasUpdate(late, ['x-1']),
-  })
+  await writeDocumentUpdate(serverDeps, 'session1', 'c/late', canvasUpdate(late, ['x-1']))
 
   const res = await app.request(
     `/api/workspaces/session1/documents/c/versions/${versionId}/restore`,

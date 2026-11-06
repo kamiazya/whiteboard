@@ -134,7 +134,6 @@ describe('a file whose id is spelled like a document action', () => {
   // on the document `<path>/file`, and which answers depends on mount order —
   // so neither scope alone reaches it.
   it.for([
-    ['POST', 'update', scoped('files:write', 'canvas:write')],
     ['POST', 'export', scoped('files:write', 'canvas:write')],
     ['POST', 'export-svg', scoped('files:write', 'canvas:write')],
     ['GET', 'snapshot', scoped('files:read', 'canvas:read')],
@@ -148,7 +147,7 @@ describe('a file whose id is spelled like a document action', () => {
   // A file id is one segment, so a document filed under a `file` folder is a
   // document, and its actions answer to the document's scope alone.
   it.for([
-    ['POST', 'update', 'document update/export', 'canvas:write'],
+    ['POST', 'export', 'document export', 'canvas:write'],
     ['POST', 'export-svg', 'document (rest)', 'canvas:write'],
     ['GET', 'snapshot', 'document (rest)', 'canvas:read'],
   ] as const)('%s on a document under a file folder, …/a/file/b/%s, is %s', ([

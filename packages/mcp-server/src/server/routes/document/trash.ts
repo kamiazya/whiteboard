@@ -36,7 +36,7 @@ export interface TrashRouterOptions {
 
 type Handler = (c: Context) => Promise<Response>
 
-const NO_TRASH: ApiErrorBody = { title: 'This composition has no trash.' }
+const NO_TRASH: ApiErrorBody = errorBody('not_implemented', 'This composition has no trash.')
 
 // The addressing every trash route shares: the workspace handle parsed and
 // refused outside the try below, the unknown workspace answered 404, a
@@ -71,7 +71,7 @@ async function answering(
     }
     if (isDatabaseBusy(err)) throw err
     getLogger('document').error({ err: err as Error }, failure.logged)
-    return c.json({ title: failure.answered } satisfies ApiErrorBody, 500)
+    return c.json(errorBody('internal_error', failure.answered), 500)
   }
 }
 
@@ -118,7 +118,7 @@ const restoreHandler =
           // places; the refusal tells that conflict apart from "nothing".
           const placed = await deps.documentIndex.resolveDocumentById({ workspaceId, documentId })
           const refusal = trashRestoreRefusal(documentId, placed?.path ?? null)
-          return c.json({ title: refusal.title } satisfies ApiErrorBody, refusal.status)
+          return c.json(errorBody(refusal.code, refusal.message), refusal.status)
         }
         const response: RestoreTrashResponse = {
           restored: { documentId: restored.documentId, path: restored.path },
@@ -141,7 +141,7 @@ const purgeHandler =
         // something nobody deleted.
         if (!(await trash.purgeTrashEntry({ workspaceId, documentId }))) {
           const refusal = trashPurgeRefusal(documentId)
-          return c.json({ title: refusal.title } satisfies ApiErrorBody, refusal.status)
+          return c.json(errorBody(refusal.code, refusal.message), refusal.status)
         }
         const response: PurgeTrashEntryResponse = { purged: { documentId } }
         return c.json(response)

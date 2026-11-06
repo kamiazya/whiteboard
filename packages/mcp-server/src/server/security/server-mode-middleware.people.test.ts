@@ -32,7 +32,7 @@ const strategy: AsyncAuthStrategy = {
   async authorize({ authorizationHeader }) {
     const sub = authorizationHeader?.replace(/^Bearer /, '')
     if (sub === undefined || sub === '') {
-      return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+      return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
     }
     return {
       ok: true,
@@ -130,7 +130,7 @@ describe('server mode — who is asking, and are they a member', () => {
       headers: { cookie: `${SESSION_COOKIE}=${token}`, origin: ORIGIN },
     })
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'auth.forbidden' })
+    expect(await res.json()).toEqual({ error: 'auth_forbidden' })
   })
 
   it('treats an unknown session as no session', async () => {
@@ -199,7 +199,7 @@ describe('server mode — /mcp asks its bearer for mcp:call', () => {
     async authorize({ authorizationHeader, requiredScopes }) {
       const held = (authorizationHeader?.replace(/^Bearer /, '') ?? '').split(',')
       if (requiredScopes.some((scope) => !held.includes(scope))) {
-        return { ok: false, status: 403, code: 'auth.forbidden' }
+        return { ok: false, status: 403, code: 'auth_forbidden' }
       }
       return {
         ok: true,

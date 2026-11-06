@@ -164,7 +164,6 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
 
   app.post('/api/workspaces/:workspace/people', async (c) => {
     const body = await readJsonBody(c, addWorkspacePersonRequestSchema, {
-      voice: 'code',
       refuseShape: invalidRequestBody,
     })
     if ('refusal' in body) return body.refusal
@@ -179,7 +178,6 @@ export function createWorkspacePeopleRouter(options: WorkspacePeopleRouterOption
 
   app.patch('/api/workspaces/:workspace/people/:userId', async (c) => {
     const body = await readJsonBody(c, changeWorkspaceRoleRequestSchema, {
-      voice: 'code',
       refuseShape: invalidRequestBody,
     })
     if ('refusal' in body) return body.refusal

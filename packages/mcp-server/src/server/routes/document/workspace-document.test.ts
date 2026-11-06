@@ -28,6 +28,7 @@ import {
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 let tempDir: string
@@ -81,13 +82,8 @@ async function createDoc(path: string) {
   await createTestDocument(serverDeps, { workspaceId: 'session1', path })
 }
 
-async function pushDoc(app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
-  const res = await app.request('/api/w/session1/document/c/update', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/octet-stream' },
-    body: canvasUpdate(doc, ids),
-  })
-  expect(res.status).toBe(200)
+async function pushDoc(_app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
+  await writeDocumentUpdate(serverDeps, 'session1', 'c', canvasUpdate(doc, ids))
 }
 
 async function fetchWorkspaceSnapshot(
