@@ -1,7 +1,7 @@
 // A markdown document's body: the Loro text container it lives in.
 import { type DocumentContainers, MARKDOWN_BODY_KEY } from './containers.js'
 import { spliceText } from './minimal-change.js'
-import { refuseRetiredShape, retiredMarkdownBodyShape } from './retired-stored-shape.js'
+import { refuseRetiredShape, retiredMarkdownShape } from './retired-stored-shape.js'
 
 /**
  * A markdown document's body: the Loro TEXT CONTAINER named `body`, which
@@ -10,10 +10,11 @@ import { refuseRetiredShape, retiredMarkdownBodyShape } from './retired-stored-s
  *
  * Throws `RetiredStoredShapeError` for a body still stored as the retired
  * `okf-body` text node, which read as the container alone would be a note
- * with its prose silently gone.
+ * with its prose silently gone. Not on a recorded spatial document, whose
+ * body hydration reads too: a node of that id is content there.
  */
 export function readMarkdownBody(doc: DocumentContainers): string {
-  refuseRetiredShape(retiredMarkdownBodyShape(doc))
+  refuseRetiredShape(retiredMarkdownShape(doc))
   return doc.getText(MARKDOWN_BODY_KEY).toString()
 }
 

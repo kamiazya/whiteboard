@@ -36,6 +36,16 @@ function withBodyContainer(doc: LoroDoc, text: string): LoroDoc {
   return doc
 }
 
+describe('readMarkdownBody on a recorded spatial document', () => {
+  it('does not refuse a canvas node named okf-body, which is content there', () => {
+    // Hydration reads the body of every kind of document; a spatial document
+    // whose canvas edit minted that id must not throw on the way in.
+    const doc = withBodyNode(new LoroDoc(), 'a box, not a body')
+    writeDocumentKind(doc, 'spatial')
+    expect(readMarkdownBody(doc)).toBe('')
+  })
+})
+
 describe('readMarkdownBody', () => {
   it('reads the body text container', () => {
     expect(readMarkdownBody(withBodyContainer(new LoroDoc(), BODY))).toBe(BODY)

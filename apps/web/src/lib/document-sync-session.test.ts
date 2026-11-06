@@ -809,6 +809,35 @@ describe('createDocumentSyncSession', () => {
     expect(deps.onStatusChange).toHaveBeenCalledWith('error')
   })
 
+  it('writes nothing after a live update made the document unreadable, queued edits included', async () => {
+    // Refusing the update left the session writable: an edit after it, or one
+    // still inside its debounce window, would push onto a record this build
+    // cannot read whole, and the page shows a read failure over it.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const snapshot = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshot)
+    const peer = new LoroDoc()
+    peer.import(snapshot)
+    const from = peer.version()
+    peer
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    peer.commit()
+    const queued: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_A.id }
+    session.onChange(applyCommand(session.getCanvas(), queued), queued)
+
+    backend._ctrl.handlers!.onRemoteUpdate(peer.export({ mode: 'update', from }))
+    await vi.waitFor(() => expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape'))
+    const after: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), after), after)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(0)
+  })
+
   it('a thread command is published at once, before the debounced commit lands', async () => {
     // The layer is a plane beside the canvas, so no canvas value carries a
     // new pin: the session publishes the conversations the command leaves
