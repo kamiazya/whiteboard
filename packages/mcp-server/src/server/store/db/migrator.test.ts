@@ -1,10 +1,9 @@
-import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'kysely'
-import { Migrator } from 'kysely/migration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CAN_DENY_FILE_READ } from '../../../shared/test-utils/can-deny-file-read.js'
+import { RETIRED_MIGRATION_NAMES } from './published-migration-names.js'
 
 let tempDir: string
 
@@ -45,36 +44,6 @@ describe('runMigrations', () => {
     await expect(runMigrations(db)).resolves.toBeUndefined()
   })
 
-  // Forward-compat regression: the published mcp-server-v0.0.6 release shipped a
-  // 0002-canvases-last-compacted-at migration, so databases created by it record that
-  // name in the migration log. The current schema dropped that migration/feature; without
-  // a no-op re-registration kysely would reject those DBs with
-  // "corrupted migrations: previously executed migration 0002-canvases-last-compacted-at is missing".
-  // Remove the no-op 0002 from migrations/index.ts and this test goes red (mutation check).
-  it('migrates a v0.0.6-era DB whose log already records 0002-canvases-last-compacted-at', async () => {
-    await prepareDataDir(tempDir)
-    const db = await getDb(tempDir)
-
-    // Reproduce a v0.0.6 database: migrate with a provider that includes the
-    // 0002 name so kysely writes it into the migration log (its content is
-    // irrelevant — the corrupted check is name-based), exactly as v0.0.6 would have.
-    const { migrations } = await import('./migrations/index.js')
-    const v006Migrator = new Migrator({
-      db,
-      provider: {
-        getMigrations: async () => ({
-          ...migrations,
-          '0002-canvases-last-compacted-at': { up: async () => {}, down: async () => {} },
-        }),
-      },
-    })
-    const seed = await v006Migrator.migrateToLatest()
-    expect(seed.error).toBeUndefined()
-
-    // Current production migrator must not reject this DB as corrupted.
-    await expect(runMigrations(db)).resolves.toBeUndefined()
-  })
-
   // Inserted directly: kysely's own Migrator refuses to record a name that
   // sorts before one already executed, and a renamed migration is exactly that.
   async function seedUnknownMigration(name: string) {
@@ -108,17 +77,17 @@ describe('runMigrations', () => {
     expect(message).not.toContain('~/.whiteboard')
   })
 
-  // A name in the middle of the published list is a renamed or dropped
-  // migration: nothing newer would read this database, so re-creating it is the
+  // A name inside the published range is a renamed or dropped migration:
+  // nothing newer would read this database, so re-creating it is the
   // documented pre-1.0 remedy, and it must name the database actually in use.
   it('names the real database when a published-range migration is missing from this build', async () => {
     await prepareDataDir(tempDir)
-    const db = await seedUnknownMigration('0005-renamed-in-a-later-release')
+    const db = await seedUnknownMigration('0001-a-renamed-baseline')
 
     const err = await runMigrations(db, '/srv/wb-data/whiteboard.db').catch((e: unknown) => e)
     expect(err).toBeInstanceOf(IncompatibleDatabaseError)
     const message = (err as Error).message
-    expect(message).toContain('0005-renamed-in-a-later-release')
+    expect(message).toContain('0001-a-renamed-baseline')
     expect(message).toContain('/srv/wb-data/whiteboard.db')
     expect(message).toMatch(/re-create/i)
     expect(message).not.toContain('~/.whiteboard')
@@ -134,45 +103,46 @@ describe('runMigrations', () => {
     expect((err as Error).message).toContain(join(tempDir, 'whiteboard.db'))
   })
 
-  // 0011-import-fs-blobs walks {dataDir}/blobs/<workspaceId>/canvas — an
-  // unreadable canvas directory (permissions changed on the data dir, a
-  // restrictive umask) rethrows out of the migration with a raw Node
-  // errno error. runMigrations must reframe it the same way it reframes
-  // the corrupted-migrations case, instead of surfacing the bare
-  // "EACCES ... scandir '<path>'" message with no recovery guidance.
-  // Skipped where this process cannot be denied read access to its own
-  // files -- root, or a filesystem that ignores the mode. `shared/test-utils/can-deny-file-read.ts`
-  // PROBES that rather than inferring it from the uid, and says why.
-  it.skipIf(!CAN_DENY_FILE_READ)(
-    'reframes an EACCES readdir failure during migration into an actionable message',
-    async () => {
-      const canvasDir = join(tempDir, 'blobs', 'ws-1', 'canvas')
-      await mkdir(canvasDir, { recursive: true })
-      await writeFile(join(canvasDir, 'doc-a.loro'), 'irrelevant')
-      await chmod(canvasDir, 0o000)
+  // A database written before the schema was reset to one baseline records
+  // the retired history, and this build reads none of it. The refusal must
+  // happen before the baseline runs on top of it, and must say how to carry
+  // the documents across, since re-creating the database alone loses them.
+  it('refuses a database at the retired migration history, naming the export and re-import path', async () => {
+    const db = await getRawDb(tempDir)
+    await sql`create table kysely_migration (name varchar(255) not null primary key, timestamp varchar(255) not null)`.execute(
+      db,
+    )
+    for (const name of RETIRED_MIGRATION_NAMES) {
+      await sql`insert into kysely_migration (name, timestamp) values (${name}, ${new Date().toISOString()})`.execute(
+        db,
+      )
+    }
 
-      try {
-        const db = await getDb(tempDir)
-        await expect(runMigrations(db)).rejects.toThrow(/permission|blobs/i)
-        const err = await runMigrations(db).catch((e: unknown) => e)
-        expect((err as { cause?: unknown }).cause).toMatchObject({ code: 'EACCES' })
-      } finally {
-        await chmod(canvasDir, 0o755)
-      }
-    },
-  )
+    const err = await prepareDataDir(tempDir).catch((e: unknown) => e)
+    expect(err).toBeInstanceOf(IncompatibleDatabaseError)
+    const message = (err as Error).message
+    expect(message).toContain(join(tempDir, 'whiteboard.db'))
+    expect(message).toContain('earlier release')
+    expect(message).toContain('Export')
+    expect(message).toContain('Save as JSON Canvas')
+    expect(message).toContain('Import file')
+    expect(message).toContain('fresh data directory')
+    expect(message).not.toMatch(/newer release|renamed/i)
+    const { rows } = await sql<{ name: string }>`
+      select name from sqlite_master where type = 'table' and name not like 'kysely_%'
+    `.execute(db)
+    expect(rows).toEqual([])
+  })
 
-  it('exposes the expected workspaces + versions schema after init, with no documents row required (0016/0017)', async () => {
+  it('stores a version row with no document row beside it', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     await db
       .insertInto('workspaces')
       .values({ id: 'ws1', displayName: null, createdAt: 1, updatedAt: 1 })
       .execute()
-    // No documents row: migration 0016 dropped its FK from versions and 0017
-    // dropped the table outright, so a tree-only document's rows must insert
-    // cleanly on their own. (Branch rows were the other half of this until
-    // 0023 dropped that table.)
+    // A document lives in the workspace tree, not in a table, so its version
+    // rows reference nothing the database could hold a key to.
     await db
       .insertInto('versions')
       .values({

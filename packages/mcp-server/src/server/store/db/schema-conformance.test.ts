@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import type { DatabaseSchema } from './schema.js'
-import { LEDGER, NULLABLE_IN_DATABASE } from './schema-ledger.js'
+import { LEDGER } from './schema-ledger.js'
 import { TENANT_SCOPED_TABLES } from './tenant-scope.js'
 import { createIsolatedDb, type IsolatedDbHandle } from './test-helpers.js'
 
@@ -81,19 +81,16 @@ describe('DatabaseSchema against the migrated database', () => {
   )('%s: each column has the storage class and nullability claimed', async (table) => {
     const physical = await physicalColumns(handle, table)
     const claims = LEDGER[table] as Record<string, SqlTypeClaim>
-    const exempt = (NULLABLE_IN_DATABASE[table] ?? {}) as Record<string, string>
     for (const [column, claim] of Object.entries(claims)) {
       const actual = physical.get(column)
       expect(actual?.type, `${table}.${column} storage class`).toBe(claim.type)
-      const expectedNullable = claim.nullable || column in exempt
-      expect(actual?.nullable, `${table}.${column} nullable`).toBe(expectedNullable)
+      expect(actual?.nullable, `${table}.${column} nullable`).toBe(claim.nullable)
     }
   })
 
   // A column the schema lets an insert omit must be one the database fills with
   // the value its readers expect; `Generated` on any other column lets production
-  // code drop a value the row needs. `role` and `accountId` are the counter-case:
-  // nullable with no default, so they stay required (the exemption ledger above).
+  // code drop a value the row needs.
   it('an insert that omits generation or deactivatedAt reads back as a first snapshot and an active user', async () => {
     await handle.db
       .insertInto('documentSnapshots')
@@ -131,15 +128,24 @@ describe('DatabaseSchema against the migrated database', () => {
     expect(profile.deactivatedAt).toBeNull()
   })
 
-  it('every exempted column is declared NOT NULL by the schema yet nullable in the database', async () => {
-    const exemptions = Object.entries(NULLABLE_IN_DATABASE).flatMap(([table, columns]) =>
-      Object.keys(columns).map((column) => ({ table: table as keyof DatabaseSchema, column })),
-    )
-    expect(exemptions.length).toBeGreaterThan(0)
-    for (const { table, column } of exemptions) {
-      const claim = (LEDGER[table] as Record<string, SqlTypeClaim>)[column]
-      expect(claim?.nullable, `${table}.${column} is claimed nullable and exempted`).toBe(false)
-      expect((await physicalColumns(handle, table)).get(column)?.nullable).toBe(true)
+  // A default lets an insert omit the column, so the database fills in a value
+  // the store never chose. Only the three columns the schema declares
+  // `Generated` may carry one; any other is a value a reader trusts that no
+  // writer wrote.
+  it('carries a default only on the columns the schema lets an insert omit', async () => {
+    const defaults: string[] = []
+    for (const table of tables) {
+      const rows = await sql<{ name: string; dflt_value: string | null }>`
+        select name, dflt_value from pragma_table_info(${table})
+      `.execute(handle.rawDb)
+      for (const row of rows.rows) {
+        if (row.dflt_value !== null) defaults.push(`${table}.${row.name} = ${row.dflt_value}`)
+      }
     }
+    expect(defaults.sort()).toEqual([
+      'documentSnapshots.generation = 1',
+      'signInAttempts.fresh = 0',
+      "workspaces.namespace = 'me'",
+    ])
   })
 })

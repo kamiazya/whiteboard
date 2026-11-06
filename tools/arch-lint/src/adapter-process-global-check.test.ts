@@ -152,20 +152,16 @@ const STILL_READ_BY_COMPOSITION: Record<string, string> = {
     "a container with no store module of its own binding (the in-memory one a test builds) has no directory, so its seams take the process's",
   'di/store-local.module.ts -> SELF_HOST_TENANT_ID':
     'createSelfHostStoreLocalModule is the one place the self-host tenant is chosen for the local stores',
-  'store/backup-blob-mirror.ts -> SELF_HOST_TENANT_ID':
-    "a manifest written before tenants existed records one tenant's blobs, and reads back as the self-host tenant's",
   'store/db/index.ts -> SELF_HOST_TENANT_ID':
     'the default tenant a database handle is bound to when the caller names none',
   'store/db/index.ts -> getDataDir':
     'the default of the handle functions, which every store reaches through a StoreScope that names its directory',
-  'store/db/prepare.ts -> SELF_HOST_TENANT_ID':
-    'moves a data dir written before tenants existed under the one tenant a self-host has',
   'store/store-scope.ts -> SELF_HOST_TENANT_ID':
     'the default tenant of a scope, and of the process scope',
   'store/store-scope.ts -> getDataDir':
     'the process scope: the one place the global is read for stores that have no composition above them',
 }
-const COMPOSITION_LEDGER_SIZE = 8
+const COMPOSITION_LEDGER_SIZE = 6
 
 const composed = findCompositionGlobalReads(SRC_DIR)
 

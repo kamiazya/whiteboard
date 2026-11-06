@@ -4,10 +4,9 @@ import type { TenantDatabase, TenantScoped } from './tenant-database.js'
 
 /**
  * Did this write violate the segment's unique index — keyed on
- * (tenantId, namespace, segment) since migration 0046, on `segment` alone
- * before it — rather than fail for some other reason? SQLite names every
- * column of the index it refused, so `workspaces.segment` is in the message
- * under either.
+ * (tenantId, namespace, segment) — rather than fail for some other reason?
+ * SQLite names every column of the index it refused, so `workspaces.segment`
+ * is in the message.
  *
  * Both spellings are accepted because the driver's error SHAPE moved under
  * us: libsql 0.3.19 reported `code: 'SQLITE_CONSTRAINT_UNIQUE'`, while

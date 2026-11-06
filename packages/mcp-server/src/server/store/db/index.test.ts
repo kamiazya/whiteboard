@@ -95,8 +95,7 @@ describe('getDb / closeDb', () => {
     const db = await getDb(tempDir)
 
     // documentSnapshotChunks.docKey FKs documentSnapshots.docKey with ON
-    // DELETE CASCADE — untouched by 0016/0017 (those only touched the
-    // documents-row FK pair, since dropped along with the table).
+    // DELETE CASCADE — the one foreign key the schema declares.
     await db
       .insertInto('documentSnapshots')
       .values({

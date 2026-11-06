@@ -1,10 +1,9 @@
 import { describeThrown } from '@kamiazya/whiteboard-model'
 import { sql } from 'kysely'
 import { type MigrationProvider, Migrator } from 'kysely/migration'
-import { isErrnoCode } from '../../../shared/errno.js'
-import { IncompatibleDatabaseError } from './incompatible-database.js'
+import { IncompatibleDatabaseError, retiredStorageMessage } from './incompatible-database.js'
 import { migrations } from './migrations/index.js'
-import { PUBLISHED_MIGRATION_NAMES } from './published-migration-names.js'
+import { PUBLISHED_MIGRATION_NAMES, RETIRED_MIGRATION_NAMES } from './published-migration-names.js'
 import type { Database } from './schema.js'
 
 // kysely throws this phrase when the DB's migration log records a migration the
@@ -34,11 +33,18 @@ async function unknownRecordedMigrations(db: Database): Promise<string[]> {
   return rows.map((r) => r.name).filter((name) => !known.has(name))
 }
 
-// Migration names sort alphabetically (kysely requires it), so a recorded name
-// past the last one this build ships was written by a release newer than this
-// one. A missing name inside the published range is a rename or a dropped
-// migration instead, which no newer build would read either.
+const RETIRED = new Set<string>(RETIRED_MIGRATION_NAMES)
+
+// A retired name is checked first: it sorts after the baseline, so the
+// ordering test below would misread it as a newer release's. Otherwise names
+// sort alphabetically (kysely requires it), so a recorded name past the last
+// one this build ships was written by a release newer than this one, and a
+// missing name inside the published range is a rename or a dropped migration,
+// which no newer build would read either.
 function incompatibleDatabaseMessage(unknown: readonly string[], where: string): string {
+  if (unknown.some((name) => RETIRED.has(name))) {
+    return retiredStorageMessage(`The database at ${where}`)
+  }
   const lastShipped = PUBLISHED_MIGRATION_NAMES[PUBLISHED_MIGRATION_NAMES.length - 1]
   const newer = unknown.filter((name) => name > lastShipped)
   if (newer.length > 0) {
@@ -80,22 +86,6 @@ export async function runMigrations(db: Database, where = 'this deployment'): Pr
     if (detail.includes(KYSELY_CORRUPTED_MIGRATIONS_SIGNATURE)) {
       throw new IncompatibleDatabaseError(
         incompatibleDatabaseMessage(await unknownRecordedMigrations(db).catch(() => []), where),
-        { cause: error },
-      )
-    }
-
-    // A migration that walks the data dir's filesystem tree (e.g.
-    // 0011-import-fs-blobs reading {dataDir}/blobs/**) can hit a permission
-    // error unrelated to the database itself. Point at the fix instead of
-    // surfacing the raw "EACCES ... scandir '<path>'" errno message, which
-    // names an implementation detail no user can act on directly.
-    if (isErrnoCode(error, 'EACCES')) {
-      throw new Error(
-        `Database migration failed${failed ? ` at ${failed}` : ''}: permission denied reading ` +
-          'the data directory. Check filesystem permissions on the blob directories under ' +
-          '<data dir>/tenants/<tenant>/blobs (or <data dir>/blobs on a data directory this ' +
-          'daemon has not started yet) and restart. See docs/contributing/mcp-debugging.md ' +
-          '(Database Migration Errors).',
         { cause: error },
       )
     }

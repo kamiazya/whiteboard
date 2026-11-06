@@ -3,12 +3,11 @@
  * the agent tool surface and the daemon's own routes see ONE document.
  *
  * server-core addresses content as `document:` refs on the `DocumentStore`
- * port and placement through the `DocumentIndex` port. After the
- * workspace-document cutover, content lives on the workspace tree — so a
- * tool surface left on the raw store would read pre-fold copies and write
- * edits the web app never sees. These wrappers route both ports through the
- * tree while the `documents` table remains the placement/listing mirror
- * (versions and the fold still key off it).
+ * port and placement through the `DocumentIndex` port. Content lives on the
+ * workspace tree, so a tool surface left on the raw store would read and
+ * write per-document rows the web app never sees. These wrappers route both
+ * ports through the tree, which is also the only placement and listing
+ * record: there is no documents table.
  */
 import {
   isEngineTrap,

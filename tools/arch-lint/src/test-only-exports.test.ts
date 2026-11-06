@@ -341,8 +341,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the restorability invariant the retention property tests assert, written once beside the functions it holds to account',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#LEDGER':
     'the schema the migrations are held to, read by the schema-ledger test',
-  'packages/mcp-server/src/server/store/db/schema-ledger.ts#NULLABLE_IN_DATABASE':
-    'deliberate NOT-NULL gaps, each with its reason and checked from the other side by the schema-ledger test',
   'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts#InMemoryBlobStore':
     'the in-memory BlobStore double, the differential oracle for the fs blob store; no-production-wiring.test.ts keeps it out of production',
   'packages/model/src/facets.ts#CoreFacets':

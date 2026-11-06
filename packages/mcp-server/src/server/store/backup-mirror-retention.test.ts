@@ -41,7 +41,11 @@ async function backupReferencing(
   await mkdir(dir, { recursive: true })
   await writeFile(
     join(dir, 'blobs.json'),
-    JSON.stringify({ schemaVersion: 2, blobs, files, mirror: 'parent' }),
+    JSON.stringify({
+      schemaVersion: 3,
+      tenants: { 'self-host': { blobs, files } },
+      mirror: 'parent',
+    }),
   )
 }
 
@@ -160,6 +164,24 @@ describe('collecting from the blob mirror', () => {
     const damaged = join(backupRoot, '2026-03-05T00-00-00.000Z')
     await mkdir(damaged, { recursive: true })
     await writeFile(join(damaged, 'blobs.json'), '{ damaged')
+
+    const collected = await collectMirroredBlobs(backupRoot)
+
+    expect(collected).toBe(0)
+    expect(await mirroredDigests('blobs')).toEqual([blob])
+  })
+
+  // A backup an earlier release wrote names its blobs in a shape this build
+  // refuses to read, so it says nothing this pass can trust either.
+  it('refuses to collect anything beside a backup an earlier release wrote', async () => {
+    const blob = await mirrorBlob('would be collected by a careless pass')
+    await backupReferencing('2026-03-04T00-00-00.000Z', [])
+    const earlier = join(backupRoot, '2026-03-05T00-00-00.000Z')
+    await mkdir(earlier, { recursive: true })
+    await writeFile(
+      join(earlier, 'blobs.json'),
+      JSON.stringify({ schemaVersion: 2, blobs: [], files: {}, mirror: 'parent' }),
+    )
 
     const collected = await collectMirroredBlobs(backupRoot)
 
