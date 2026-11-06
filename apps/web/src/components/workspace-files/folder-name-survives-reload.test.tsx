@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { afterEach, describe, expect, it } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
+import { writePendingFolderNames } from './pending-folder-names-store.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 afterEach(() => {
@@ -57,19 +58,24 @@ async function trailSays(name: string) {
 }
 
 describe('an empty named folder across a reload in the same tab', () => {
-  it('keeps its name, and a subfolder made after the reload keeps both', async () => {
-    const { source, mount } = keeper()
+  it('keeps its name', async () => {
+    const { mount } = keeper()
     const first = mount('')
     await newFolder('Workshops')
     first.unmount()
 
-    const second = mount('workshops')
+    mount('workshops')
+    await trailSays('Workshops')
+  })
+
+  it('gives a subfolder made after the reload both names when a document lands', async () => {
+    const { source, mount } = keeper()
+    writePendingFolderNames('browser:w1', new Map([['workshops', 'Workshops']]))
+    mount('workshops')
     await trailSays('Workshops')
     await newFolder('Template')
-    second.unmount()
-
-    mount('workshops/template')
     await trailSays('Template')
+
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(await within(contents).findByRole('button', { name: 'New note here' }))
     await waitFor(() => expect(source.setFolderName).toHaveBeenCalledWith('workshops', 'Workshops'))
