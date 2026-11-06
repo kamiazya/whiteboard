@@ -291,7 +291,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 66, // +2: the results announcement and arrow-key handoff
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
-  'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
+  'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 70, // +7: a dismissal returns to its opener, and a saved rename is announced
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
   // +11: the reveal request and the anchor chip label.
   'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 199,

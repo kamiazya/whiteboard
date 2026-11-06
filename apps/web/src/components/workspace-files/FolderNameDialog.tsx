@@ -29,6 +29,37 @@ interface FolderNameDialogProps {
   onCloseAutoFocus: (event: Event) => void
 }
 
+/** The name field, and the line under it saying how a name is read when it is read specially. */
+function NameField({
+  value,
+  onChange,
+  hint,
+}: {
+  value: string
+  onChange: (next: string) => void
+  hint: string | undefined
+}) {
+  const hintId = useId()
+  return (
+    <>
+      <label className="flex flex-col gap-1 text-sm">
+        Folder name
+        <input
+          value={value}
+          aria-describedby={hint === undefined ? undefined : hintId}
+          onChange={(event) => onChange(event.target.value)}
+          className="rounded border px-2 py-1 pointer-coarse:min-h-11"
+        />
+      </label>
+      {hint !== undefined && (
+        <span id={hintId} className="text-muted-foreground text-xs">
+          {hint}
+        </span>
+      )}
+    </>
+  )
+}
+
 function FolderNameForm({
   title,
   description,
@@ -43,7 +74,6 @@ function FolderNameForm({
 }: Omit<FolderNameDialogProps, 'open' | 'onCloseAutoFocus'>) {
   const [name, setName] = useState(initialName)
   const [issue, setIssue] = useState<string | null>(null)
-  const hintId = useId()
 
   return (
     <form
@@ -59,20 +89,7 @@ function FolderNameForm({
         <DialogDescription>{description}</DialogDescription>
       </DialogHeader>
       <div className="flex flex-col gap-2 py-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Folder name
-          <input
-            value={name}
-            aria-describedby={hint === undefined ? undefined : hintId}
-            onChange={(event) => setName(event.target.value)}
-            className="rounded border px-2 py-1 pointer-coarse:min-h-11"
-          />
-        </label>
-        {hint !== undefined && (
-          <span id={hintId} className="text-muted-foreground text-xs">
-            {hint}
-          </span>
-        )}
+        <NameField value={name} onChange={setName} hint={hint} />
         <ErrorLine message={issue ?? error} />
       </div>
       <DialogActions

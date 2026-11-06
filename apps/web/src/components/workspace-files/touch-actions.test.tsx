@@ -70,11 +70,15 @@ describe('a touch user reaches the actions without a gesture', () => {
     ).toBeTruthy()
   })
 
-  it('a pointer that can hover is not given the button', async () => {
+  it('a pointer that can hover gets no card button, and tree rows one out of the tab order', async () => {
     coarse = false
     renderPanel()
-    await screen.findByTestId('folder-contents')
-    expect(screen.queryByRole('button', { name: /actions$/ })).toBeNull()
+    const grid = await screen.findByTestId('folder-contents')
+    expect(within(grid).queryByRole('button', { name: /actions$/ })).toBeNull()
+    const tree = screen.getByRole('tree', { name: 'Workspace folders' })
+    const rowButtons = within(tree).getAllByRole('button', { name: /actions$/ })
+    expect(rowButtons.length).toBeGreaterThan(0)
+    for (const each of rowButtons) expect(each.tabIndex).toBe(-1)
   })
 
   it('a folder card opens the folder menu with Rename and New subfolder', async () => {

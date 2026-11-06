@@ -45,3 +45,13 @@ export function focusLanding(root: HTMLElement | null, selectors: readonly strin
   }
   return false
 }
+
+/**
+ * Focus `element` again when it is still on screen and takes focus — the
+ * control a dismissed dialog was opened from — and answer whether it did.
+ */
+export function refocus(element: Element | null | undefined): boolean {
+  if (!(element instanceof HTMLElement) || !element.isConnected) return false
+  element.focus()
+  return document.activeElement === element
+}
