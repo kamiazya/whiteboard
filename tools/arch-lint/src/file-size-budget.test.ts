@@ -454,7 +454,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Its workspaces are keyed by canonical ULIDs, as every keeper now refuses
   // any other id; the 26-character literals, named once at the top, cost the
   // lines below over the budget.
-  'packages/mcp-server/src/server/routes/document/restore.test.ts': 801,
   // Its workspaces are keyed by canonical ULIDs, as every keeper now refuses
   // any other id; the 26-character literals, named once at the top, cost the
   // lines below over the budget.
