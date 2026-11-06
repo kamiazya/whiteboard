@@ -133,6 +133,22 @@ describe('affected-cli job', () => {
     expect(out.reason).toMatch(/selection unavailable/)
   })
 
+  it('runs a path-scoped job for a change under its tree, and skips it otherwise', () => {
+    // Each commit stages its own paths: `jobOutputs` leaves a root file that
+    // `add -A` would sweep in, and an unattributed root file selects everything.
+    write('crates/core/src/lib.rs', '\n')
+    git('add', 'crates')
+    git('commit', '-q', '-m', 'a crate')
+    const out = jobOutputs(['rust', '--event', 'pull_request', '--base', 'HEAD^1'])
+    expect(out.run).toBe('true')
+    expect(out.reason).toContain('crates/core/src/lib.rs')
+    expect(JSON.parse(out.projects ?? '')).toEqual([])
+    write('packages/aside/src/index.ts', 'export const b = 1\n')
+    git('add', 'packages')
+    git('commit', '-q', '-m', 'aside only')
+    expect(jobOutputs(['rust', '--event', 'pull_request', '--base', 'HEAD^1']).run).toBe('false')
+  })
+
   it('refuses a job that is not scoped', () => {
     expect(main(['job', 'verify', '--event', 'push'], { repoRoot: root, env: {} })).toBe(1)
   })

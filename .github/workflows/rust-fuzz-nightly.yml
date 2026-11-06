@@ -1,8 +1,12 @@
 # Every fuzz target of crates/fuzz, long, under AddressSanitizer, on a
-# SCHEDULE (QR-29d, QR-28f): the PR run (`pnpm rust:fuzz:pr`, in ci.yml's rust
-# job) gives each changed entry tens of seconds, which finds the shallow
-# crashes; the corpus only grows deep enough to find the rest when something
-# runs it for minutes every day and keeps what it found.
+# SCHEDULE (QR-29d, QR-28f): the PR run (`pnpm rust:fuzz:pr`, ci.yml's
+# rust-fuzz-pr job) gives each changed entry tens of seconds, which finds the
+# shallow crashes; the corpus only grows deep enough to find the rest when
+# something runs it for minutes every day and keeps what it found.
+#
+# ci.yml's `rust-fuzz-pr` job restores this run's cache entry read-only, so
+# its path list below and that job's must stay identical: the list is part of
+# the cache key.
 #
 # The corpus lives in the Actions cache, never in git: restored from the last
 # run, grown, minimised by `cargo fuzz cmin`, and saved under a new key. Only
@@ -21,8 +25,8 @@ on:
     - cron: '41 3 * * *'
   workflow_dispatch:
 
-permissions:
-  contents: read
+# Nothing at the root: the one job states what it needs.
+permissions: {}
 
 concurrency:
   group: rust-fuzz-nightly
@@ -32,6 +36,8 @@ jobs:
   fuzz:
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
     env:
       CARGO_TERM_COLOR: always
       RUST_FUZZ_SECONDS: '600'
@@ -52,7 +58,7 @@ jobs:
       # The build directory too: `--careful` rebuilds std under ASan, which
       # measured 6 min 21 s cold on a 4-core machine.
       - name: Restore the corpus, the fuzz build and the cargo-fuzz install
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             crates/fuzz/corpus
