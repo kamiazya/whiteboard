@@ -96,17 +96,18 @@ export function retiredMarkdownBodyShape(doc: DocumentContainers): string | null
 }
 
 /**
- * A MARKDOWN document whose canvas holds any node at all, with an empty body:
- * a body an older writer stored as a text node under some other id, before
- * `okf-body` was stable. Asked only where the kind is known, since on a
- * spatial document nodes are the content.
+ * A MARKDOWN document with an empty body whose canvas holds a node carrying
+ * text: a body an older writer stored as a text node under some other id,
+ * before `okf-body` was stable. Asked only where the kind is known, since on
+ * a spatial document a text node is content.
  */
 export function retiredMarkdownCanvasShape(doc: DocumentContainers): string | null {
   if (doc.getText(MARKDOWN_BODY_KEY).length > 0) return null
   const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
-  return nodes === undefined || nodes.size === 0
-    ? null
-    : 'a markdown body stored as a canvas text node'
+  const holdsText = (nodes?.values() ?? []).some(
+    (raw) => typeof recordOf(recordOf(raw)?.resource)?.content === 'string',
+  )
+  return holdsText ? 'a markdown body stored as a canvas text node' : null
 }
 
 /** Throws `RetiredStoredShapeError` for a shape a check above found. */

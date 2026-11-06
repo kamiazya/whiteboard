@@ -1,6 +1,8 @@
 import {
+  RetiredStoredShapeError,
   writeDocumentKind,
   writeFacets,
+  writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -25,13 +27,10 @@ async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
 }
 
 describe('exportOkf', () => {
-  test('exports the first text node body with facets from the doc', async () => {
+  test('exports the body with facets from the doc', async () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
-      writeSpatialCanvas(doc, {
-        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
-        edges: [],
-      })
+      writeMarkdownBody(doc, 'hello')
       writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
     })
     const result = await exportOkf(await makeDeps(store), {
@@ -42,6 +41,22 @@ describe('exportOkf', () => {
     expect(result.markdown.startsWith('---\n')).toBe(true)
     expect(result.markdown).toContain('hello')
     expect(result.frontmatter.facets).toEqual({ 'example.kanban/v1': { status: 'todo' } })
+  })
+
+  test('refuses a note whose body is still a canvas text node, rather than exporting it empty', async () => {
+    // The shape an older writer left before the body had a container of its
+    // own, which no reader serves.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: 'hello' })],
+        edges: [],
+      })
+    })
+
+    await expect(
+      exportOkf(await makeDeps(store), { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
+    ).rejects.toBeInstanceOf(RetiredStoredShapeError)
   })
 
   test('falls back to an empty body when the canvas has no text node', async () => {
@@ -107,10 +122,7 @@ describe('exportOkf', () => {
   test('answers the body on its own, beside the serialization that embeds it', async () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
-      writeSpatialCanvas(doc, {
-        nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 50, text: '# Title' })],
-        edges: [],
-      })
+      writeMarkdownBody(doc, '# Title')
     })
     const result = await exportOkf(await makeDeps(store), {
       workspaceId: WORKSPACE_ID,
