@@ -90,3 +90,25 @@ it('hand tool: a double-click on the name above a frame edits the name', async (
 
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
 })
+
+it('two quick clicks far apart on empty paper are two clicks, not a double-click', async () => {
+  const { Host, latest } = makeEditorHost({ initial: populated })
+  const { container } = render(<Host />)
+
+  await userEvent.click(rootOf(container), { position: { x: 400, y: 400 } })
+  await userEvent.click(rootOf(container), { position: { x: 600, y: 400 } })
+
+  expect(latest.kinds).not.toContain('create-node')
+  expect(nodeEditorContent(container)).toBeNull()
+})
+
+it('a double-click whose second click drifts a few pixels still adds a note', async () => {
+  const { Host, latest } = makeEditorHost({ initial: populated })
+  const { container } = render(<Host />)
+
+  await userEvent.click(rootOf(container), { position: { x: 400, y: 400 } })
+  await userEvent.click(rootOf(container), { position: { x: 404, y: 403 } })
+
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+  expect(latest.kinds.filter((kind) => kind === 'create-node')).toHaveLength(1)
+})

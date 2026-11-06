@@ -44,7 +44,7 @@ pinch zooms in every tool.
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or connection: opens the comment composer, the same one **Comment on this** opens |
 | `Delete` / `Backspace` | Delete the selected nodes, or the selected connection or line |
-| Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
+| Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode. Both clicks must land within a few pixels of each other: two quick clicks across the canvas are two clicks |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
 | `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed; with the eraser armed, put it down and go back to the tool you had before it |
