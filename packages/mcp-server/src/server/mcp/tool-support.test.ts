@@ -14,7 +14,7 @@ import { runAsMcpCaller } from '../security/mcp-caller.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
 import { corruptStoredData } from '../store/corrupt-stored-data.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
-import type { AnnotationProfile } from './tool-profiles.js'
+import type { TOOL_PROFILES } from './tool-profiles.js'
 import { registerToolWithAnnotations } from './tool-support.js'
 
 function fakeServer() {
@@ -131,6 +131,7 @@ describe('registerToolWithAnnotations', () => {
   // shape, so a hint the spec does not define is a compile error rather than
   // a key every host silently ignores.
   it('refuses an annotation key or value the SDK does not define', () => {
+    type AnnotationProfile = (typeof TOOL_PROFILES)[string]['profile']
     // @ts-expect-error a misspelled hint is not a ToolAnnotations key
     const misspelled: AnnotationProfile = { readOnlyHnt: true }
     // @ts-expect-error `title` is the profile's own field, not a hint

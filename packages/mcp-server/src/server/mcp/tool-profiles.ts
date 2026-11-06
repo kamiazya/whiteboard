@@ -35,7 +35,7 @@ export const UNPROFILED_TOOL_PROFILE = DESTRUCTIVE
 // The SDK's own ToolAnnotations, less `title` (each entry carries its own),
 // so a hint the spec does not define fails to compile instead of reaching
 // every host as a key it ignores.
-export type AnnotationProfile = Readonly<Omit<ToolAnnotations, 'title'>>
+type AnnotationProfile = Readonly<Omit<ToolAnnotations, 'title'>>
 export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string }> = {
   // Document tools (server-core)
   wb_facet_set: {

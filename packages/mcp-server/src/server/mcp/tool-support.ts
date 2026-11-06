@@ -30,6 +30,21 @@ export function structuredJsonResult<T extends object>(result: T) {
   }
 }
 
+// Mirrors the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
+// into the deprecated `_meta["ui/resourceUri"]` key too, matching what the
+// ext-apps package's own registerAppTool does — a host built before
+// ui.resourceUri was standardized only reads the legacy key.
+function withLegacyResourceUri(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const uiMeta = meta?.ui
+  const resourceUri =
+    uiMeta !== null && typeof uiMeta === 'object' && 'resourceUri' in uiMeta
+      ? (uiMeta as { resourceUri?: unknown }).resourceUri
+      : undefined
+  return typeof resourceUri === 'string' ? { ...meta, [RESOURCE_URI_META_KEY]: resourceUri } : meta
+}
+
 // Binds a registered tool's handler return shape to its declared outputSchema.
 // When outputSchema is given, the handler must hand structuredContent whose
 // shape matches z.infer<O>; drift becomes a compile error instead of a
@@ -113,19 +128,6 @@ export function registerToolWithAnnotations<
   const annotations: ToolAnnotations = profile
     ? { ...profile.profile, title: profile.title }
     : { ...UNPROFILED_TOOL_PROFILE, title: name }
-  // Mirror the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
-  // into the deprecated `_meta["ui/resourceUri"]` key too, matching what
-  // the ext-apps package's own registerAppTool does — a host built before
-  // ui.resourceUri was standardized only reads the legacy key.
-  const uiMeta = config._meta?.ui
-  const resourceUri =
-    uiMeta !== null && typeof uiMeta === 'object' && 'resourceUri' in uiMeta
-      ? (uiMeta as { resourceUri?: unknown }).resourceUri
-      : undefined
-  const meta =
-    typeof resourceUri === 'string'
-      ? { ...config._meta, [RESOURCE_URI_META_KEY]: resourceUri }
-      : config._meta
   // Wrap the handler so thrown errors become isError responses, and so
   // every tool call is observable as a single MCP-semconv span.
   const tracedHandler = (
@@ -188,7 +190,7 @@ export function registerToolWithAnnotations<
     // share one implementation, which wraps a raw shape in z.object() itself,
     // so only the first overload's declared type is narrower than it accepts.
     inputSchema: config.inputSchema as StandardSchemaWithJSON,
-    _meta: meta,
+    _meta: withLegacyResourceUri(config._meta),
     annotations,
   }
   return server.registerTool(name, sdkConfig, outerHandler)
