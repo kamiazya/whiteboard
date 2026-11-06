@@ -51,6 +51,7 @@ import {
 import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { deleteVersionRowsOfDocument } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { browserWorkspaceIdOrNull } from './browser-workspace-id.js'
 import { sweepAfterPurge } from './file-sweep-schedule.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -137,10 +138,12 @@ export class BrowserDocumentIndex
   /**
    * Settles a workspace before its first document call, once per workspace:
    * rejects with `BrowserStorageRefusedError` when it still holds documents
-   * older builds wrote outside the tree, and otherwise mints the record of a
-   * workspace the registry holds but the tree has never written — a fresh
-   * browser, or the empty workspace a demote leaves — so it lists as empty
-   * rather than as missing. A refusal is kept; a probe that FAILED is not, so
+   * older builds wrote outside the tree, and otherwise — for the ACTIVE
+   * workspace only — mints the record the registry holds but the tree has
+   * never written (a fresh browser, or the empty workspace a demote leaves),
+   * so it lists as empty rather than as missing. Any other recordless
+   * workspace keeps answering `WorkspaceNotFoundError`, which the counts and
+   * the switcher read as an empty or absent row. A refusal is kept; a probe that FAILED is not, so
    * a transient storage error is retried by the next call rather than pinned
    * for the session.
    */
@@ -159,6 +162,7 @@ export class BrowserDocumentIndex
     if (await this.registry.holdsPreTreeRecords(workspaceId)) {
       throw new BrowserStorageRefusedError('pre-tree-records', workspaceId)
     }
+    if (workspaceId !== browserWorkspaceIdOrNull()) return
     const registered = (await this.registry.listWorkspaces()).some(
       (entry) => entry.workspaceId === workspaceId,
     )
