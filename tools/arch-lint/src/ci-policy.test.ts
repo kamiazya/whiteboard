@@ -73,12 +73,14 @@ describe('release.yml — permissions are granted per job, never at the root', (
     return parseYaml(text)
   }
 
+  // An EMPTY root rather than an absent one: absent, a job with no block of
+  // its own would inherit the repository default; empty, it gets no token.
   it('grants no permission at the workflow root', async () => {
     const workflow = await releaseWorkflow()
     expect(
       workflow.permissions,
-      'release.yml declares workflow-level permissions — move the grant to the job that needs it',
-    ).toBeUndefined()
+      'release.yml must declare `permissions: {}` at the root — grant per job',
+    ).toEqual({})
   })
 
   it('has every job declare its own permissions', async () => {
