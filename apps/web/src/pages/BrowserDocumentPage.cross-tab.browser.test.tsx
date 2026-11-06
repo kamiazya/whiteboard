@@ -10,6 +10,8 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
+import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -36,8 +38,12 @@ function editorIn(container: HTMLElement): HTMLElement | null {
 beforeEach(async () => {
   await clearWhiteboardDb()
 })
+// Opening a document records it in this device's Recent lane and changed-dot
+// baseline, which live in localStorage and outlive the test.
 afterEach(async () => {
   cleanup()
+  localStorage.removeItem(RECENT_KEY)
+  localStorage.removeItem(SEEN_KEY)
   await clearWhiteboardDb()
 })
 

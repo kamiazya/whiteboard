@@ -15,6 +15,8 @@ import { userEvent } from 'vitest/browser'
 import { App } from '../App.js'
 import { documentPath } from '../lib/app-routes.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
+import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
@@ -41,7 +43,13 @@ describe('arriving on a canvas', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
   })
-  afterEach(cleanup)
+  // Opening a document records it in this device's Recent lane and changed-dot
+  // baseline, which live in localStorage and outlive the test.
+  afterEach(() => {
+    cleanup()
+    localStorage.removeItem(RECENT_KEY)
+    localStorage.removeItem(SEEN_KEY)
+  })
 
   it('gives the canvas the keyboard, so N adds a note at once', async () => {
     renderApp()

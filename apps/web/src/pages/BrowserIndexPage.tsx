@@ -614,27 +614,34 @@ export function BrowserIndexPage({
   // One at a time, for the reason the daemon row gives: two duplicates of the
   // same source race on the name the copy is given.
   const [duplicating, setDuplicating] = useState(false)
+  // Its own state rather than the list's `error`: the re-read that follows
+  // every duplicate clears that one, and would take this failure with it.
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  // SCOPE RESET — the failure names a document of the workspace it was about.
+  useEffect(() => setDuplicateError(null), [activeWorkspace])
   const handleDuplicate = useCallback(
     async (sourcePath: string, request?: DuplicateDocumentRequest) => {
       if (duplicating) return
       setDuplicating(true)
-      setError(null)
+      setDuplicateError(null)
       try {
         await duplicateBrowserDocument({ index, clock, sourcePath, ...request })
-        // ONLY the duplicate itself is under this catch. The bump is what
-        // re-reads the list (the load effect follows it) and that effect owns
-        // its own refusal — so a re-read that fails after the copy exists is
-        // reported as a list that could not be read, never as a duplicate
-        // that did not happen. The wrong answer there invites a second press,
-        // and the second copy is real too.
-        setFilesRevision((n) => n + 1)
       } catch {
-        setError('Failed to duplicate the document in this browser.')
+        setDuplicateError('Failed to duplicate the document in this browser.')
       } finally {
+        // Re-read on failure too: a refusal after the write (reading the
+        // copy back) leaves a copy the list has not seen, and the page
+        // cannot tell that from a write that never happened. The bump is
+        // outside the catch on purpose — the load effect owns its own
+        // refusal, so a re-read that fails after the copy exists is
+        // reported as a list that could not be read, never as a duplicate
+        // that did not happen. The wrong answer there invites a second
+        // press, and the second copy is real too.
+        setFilesRevision((n) => n + 1)
         setDuplicating(false)
       }
     },
-    [index, loro, clock, duplicating, setError, setFilesRevision],
+    [index, clock, duplicating, setFilesRevision],
   )
 
   const { creating, handleCreate } = useBrowserCreate({
@@ -663,6 +670,11 @@ export function BrowserIndexPage({
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+      {duplicateError && (
+        <div role="alert" className="mb-2 text-sm text-destructive">
+          {duplicateError}
         </div>
       )}
       <BrowserIndexBody

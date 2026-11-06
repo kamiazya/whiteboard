@@ -10,6 +10,8 @@ import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
+import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -40,7 +42,13 @@ describe('route presence', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
   })
-  afterEach(cleanup)
+  // Opening a document records it in this device's Recent lane and changed-dot
+  // baseline, which live in localStorage and outlive the test.
+  afterEach(() => {
+    cleanup()
+    localStorage.removeItem(RECENT_KEY)
+    localStorage.removeItem(SEEN_KEY)
+  })
 
   it('moves focus to the heading, announces and retitles on each route change', async () => {
     const router = renderApp()
