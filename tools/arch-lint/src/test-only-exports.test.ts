@@ -88,9 +88,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/theme-fonts.ts#loadedThemeFaces',
   'apps/web/src/lib/theme-fonts.ts#themeFontFamilies',
   'apps/web/src/lib/user-settings-store.ts#defaultUserSettings',
-  'apps/web/src/lib/user-settings-store.ts#migrateV1',
-  'apps/web/src/lib/user-settings-store.ts#migrateV2',
-  'apps/web/src/lib/user-settings-store.ts#migrateV3',
   'apps/web/src/lib/user-settings-store.ts#migrateV4',
   'packages/canvas-render/src/layout/comment-placement.ts#commentBubbleCandidates',
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreSegmentPair',
@@ -366,7 +363,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 146
+const DEBT_CEILING = 143
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 18
