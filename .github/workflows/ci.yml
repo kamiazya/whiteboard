@@ -90,18 +90,39 @@ jobs:
       matrix:
         shard: [1, 2]
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job test-unit --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       # Shard mcp-node (largest suite) across 2 parallel runners.
       # --shard splits the collected spec list so each runner handles a disjoint half.
       - name: Test mcp-node (shard ${{ matrix.shard }}/2)
+        if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 
       # canvas-viewer is small enough to skip sharding; run it once (shard 1)
@@ -110,11 +131,11 @@ jobs:
       # the `test-shared` job below, since serial behind this shard it was
       # the run's critical path.
       - name: Test canvas-viewer-node
-        if: matrix.shard == 1
+        if: matrix.shard == 1 && contains(fromJSON(steps.scope.outputs.projects), 'canvas-viewer-node')
         run: pnpm exec vitest run --project=canvas-viewer-node
 
       - name: Test canvas-viewer-jsdom
-        if: matrix.shard == 1
+        if: matrix.shard == 1 && contains(fromJSON(steps.scope.outputs.projects), 'canvas-viewer-jsdom')
         run: pnpm exec vitest run --project=canvas-viewer-jsdom
 
   # The shared-layer package suites and arch-lint. This is also what fails CI
@@ -151,19 +172,43 @@ jobs:
       matrix:
         shard: [1, 2]
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # This job never performs authenticated git operations; keep the
-          # job token away from dependency/build tooling.
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job test-shared --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # Only the projects the change reaches, out of this job's derived
+      # universe; affected-cli.mjs refuses a name outside it and an empty
+      # list, which cannot get here because `run` is then false.
       - name: Test shared-layer packages + arch-lint (shard ${{ matrix.shard }}/2)
-        run: node tools/checks/src/run-shared-layer-tests.mjs --shard=${{ matrix.shard }}/2
+        if: steps.scope.outputs.run == 'true'
+        env:
+          AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
+        run: node tools/checks/src/affected-cli.mjs run test-shared --shard=${{ matrix.shard }}/2
 
   test-jsdom:
     runs-on: ubuntu-24.04
@@ -191,16 +236,37 @@ jobs:
       matrix:
         shard: [1, 2]
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job test-jsdom --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Test web (jsdom + node, shard ${{ matrix.shard }}/2)
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-web test -- --shard=${{ matrix.shard }}/2
 
   test-browser:
@@ -223,22 +289,45 @@ jobs:
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job test-browser --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # Runs the root test:browser script rather than hand-listing per-package
-      # steps, so a new browser-mode project (e.g. canvas-render-browser) is
-      # covered by CI the moment it's added to that script, not only when
-      # someone remembers to add a matching CI step.
+      # The browser projects the change reaches, out of a universe DERIVED
+      # from each config's browser mode — the set the root test:browser
+      # script lists (ci-verify-coverage.test.ts holds the two equal), so a
+      # new browser-mode project is covered the moment it is registered.
       - name: Test browser projects (shard ${{ matrix.shard }}/2)
+        if: steps.scope.outputs.run == 'true'
         timeout-minutes: 12
-        run: pnpm test:browser --shard=${{ matrix.shard }}/2
+        env:
+          AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
+        run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/2
 
       # A failing browser test prints the path of its retained trace and the
       # runner is then discarded with it; the trace is the only place its
@@ -511,21 +600,41 @@ jobs:
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          # This job never performs authenticated git operations; keep the
-          # job token away from dependency/build tooling.
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job widget-smoke --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Build canvas-viewer widget
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 
       - name: Widget smoke
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-canvas-viewer smoke:widget
 
   verify:
@@ -665,13 +774,33 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job extension-smokes --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       # ADR-0050's bridge in a real browser: a real daemon on its socket, the
@@ -679,9 +808,11 @@ jobs:
       # headless Chromium. Branded Chrome (WHITEBOARD_CHROME_PATH) ignores
       # --load-extension, so this one runs on Playwright's own Chromium.
       - name: Install Playwright Chromium (extension bridge smoke)
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-extension exec playwright install chromium
 
       - name: Extension bridge smoke
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:bridge
 
       # The same in Firefox, which lets no page message an extension: the
@@ -690,6 +821,7 @@ jobs:
       # a person through a desktop portal), and its geckodriver sits at
       # $GECKOWEBDRIVER. The Chromium smoke above just built both artifacts.
       - name: Extension bridge smoke (Firefox)
+        if: steps.scope.outputs.run == 'true'
         env:
           BRIDGE_SMOKE_PREBUILT: '1'
         run: GECKODRIVER="$GECKOWEBDRIVER/geckodriver" pnpm --filter @kamiazya/whiteboard-extension smoke:bridge:firefox
@@ -701,6 +833,7 @@ jobs:
       # built web app meets it. Here because it needs the extension build and
       # Playwright's Chromium the bridge smokes above just made ready.
       - name: Read-plane real-browser smoke (ADR-0042)
+        if: steps.scope.outputs.run == 'true'
         env:
           BRIDGE_SMOKE_PREBUILT: '1'
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:read-plane
@@ -801,19 +934,73 @@ jobs:
     runs-on: windows-2025
     timeout-minutes: 20
     steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
 
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job native-host-windows --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        shell: bash
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
       - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
         with:
           cache-store: 'false'
 
       - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Native host smoke (named pipe + registry)
+        if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:native-host
+
+  # The change scope of this run, for ci-gate and the run summary: which
+  # vitest projects and jobs a pull request reaches (tools/checks/src/
+  # affected.mjs). Any event but pull_request selects everything, and so does
+  # any changed path no rule attributes.
+  #
+  # Nothing `needs` this job but ci-gate. Each scoped job computes its own
+  # share of the same plan in its first step — same code, same checkout —
+  # rather than waiting on these outputs, because a `needs` hop costs a second
+  # runner pickup (35-276s measured here) on the critical path of EVERY run,
+  # and the replay over 120 merged pull requests (affected-replay.mjs) found
+  # nearly all of them reach apps/web and so run the longest job anyway: a hop
+  # would have lengthened almost every run to shorten almost none. ci-gate
+  # holds each job's skip to this plan, so a job cannot skip work the plan
+  # says it needed.
+  scope:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      plan: ${{ steps.plan.outputs.plan }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Compute the change scope
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs plan --event "$EVENT"
 
   # The single required status check for this workflow — require THIS and
   # nothing else from ci.yml, and a shard count stops being a settings change.
@@ -829,6 +1016,7 @@ jobs:
   ci-gate:
     if: always()
     needs:
+      - scope
       - check
       - test-unit
       - test-shared

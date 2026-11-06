@@ -14,8 +14,9 @@ on:
   pull_request:
     types: [closed]
 
-permissions:
-  deployments: write
+# The root grants nothing; the one job states the write it needs, so a job
+# added later starts from no token rather than inheriting it.
+permissions: {}
 
 concurrency:
   group: preview-cleanup-${{ github.event.pull_request.number }}
@@ -25,6 +26,8 @@ jobs:
   release-deployment:
     if: github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-24.04
+    permissions:
+      deployments: write
     steps:
       - name: Deactivate and delete this PR's preview deployment records
         env:

@@ -73,12 +73,14 @@ describe('release.yml — permissions are granted per job, never at the root', (
     return parseYaml(text)
   }
 
+  // An EMPTY root rather than an absent one: absent, a job with no block of
+  // its own would inherit the repository default; empty, it gets no token.
   it('grants no permission at the workflow root', async () => {
     const workflow = await releaseWorkflow()
     expect(
       workflow.permissions,
-      'release.yml declares workflow-level permissions — move the grant to the job that needs it',
-    ).toBeUndefined()
+      'release.yml must declare `permissions: {}` at the root — grant per job',
+    ).toEqual({})
   })
 
   it('has every job declare its own permissions', async () => {
@@ -412,6 +414,9 @@ describe('workflows — a job that runs a browser project uploads its traces whe
   /** `cwd` is where the step runs; `--filter` moves the line into its package's directory. */
   function lineRunsBrowser(job: Job, line: string, browser: Browser, cwd: string): boolean {
     if (/\btest:browser\b/.test(line)) return true
+    // The scoped runner: its project names arrive at run time, out of the
+    // job's universe, and test-browser's universe is the browser projects.
+    if (/\baffected-cli\.mjs\s+run\s+test-browser\b/.test(line)) return true
     if (selectsBrowserProject(job, line, browser)) return true
     const pkg = filtered(line)
     const dir = pkg?.dir ?? cwd

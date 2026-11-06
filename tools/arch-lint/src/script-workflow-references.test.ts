@@ -11,7 +11,8 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, scriptFiles } from './scan-roots.js'
 
-const YAML_NAME = /[A-Za-z0-9_][A-Za-z0-9_.-]*\.ya?ml\b/g
+// A leading dot is part of the name: `.pinact.yaml` is a root file, `pinact.yaml` is not.
+const YAML_NAME = /\.?[A-Za-z0-9_][A-Za-z0-9_.-]*\.ya?ml\b/g
 
 /** The `.yml`/`.yaml` file names `text` mentions, path prefixes dropped. */
 function yamlNames(text: string): string[] {

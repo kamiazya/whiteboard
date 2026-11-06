@@ -349,9 +349,10 @@ pnpm eval:tool-surface # LLM-driven tool-surface eval on a seeded fixture (uses 
 pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 ```
 
-Default local pass after a change. CI runs the full matrix on every push, so a local full run is the same work twice; run the area you touched, then the gates:
+Default local pass after a change. CI runs every suite a pull request reaches (the full matrix on main), so a local full run is the same work twice; run the area you touched, then the gates:
 
 ```bash
+pnpm test:affected           # the vitest projects CI would select for your change against origin/main (working tree included); --list prints them without running
 pnpm test --project <area>   # the nearest project(s) for what you touched; CONTRIBUTING.md's table names them
 pnpm typecheck               # tsc --noEmit in every workspace package that defines a typecheck script (mcp-server also checks its test files, which its build config excludes: tsconfig.test.json)
 pnpm smoke:e2e               # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
@@ -359,6 +360,14 @@ pnpm check:local             # every gate CI's check job runs
 pnpm test:browser            # when the change touches real-browser behavior
 pnpm test                    # optional: every project at once, not required; full suite (see vitest.projects.json): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower)
 ```
+
+### What a pull request runs
+
+On a pull request, CI runs only the tests and jobs the change reaches. `tools/checks/src/affected.mjs` maps each changed file to the workspace package that owns it, adds every package that depends on one of those (dev dependencies included), and selects their vitest projects and the CI jobs that exercise them; `arch-lint-node` runs on every change, because its guards read every package. A job the change does not reach still reports: it runs a **Not affected by this change** step that says why, and `ci-gate` accepts that only when the run's `scope` job agrees.
+
+The selection fails closed. A change to a root build, install or test config (the lockfile, `package.json`, the vitest, tsconfig and biome configs, `.node-version`), to `ci.yml` or its actions, to `tools/checks`, the lint plugins or `patches/`, or to any path no rule attributes, runs everything. So does every push to `main` and every merge-queue run. Changes under `docs/`, `.claude/`, `skills/`, `tests/`, the other `.github/` files and root documents such as `README.md` run the packages whose source names that path.
+
+`pnpm test:affected` runs the same selection locally against `origin/main` (`--base <ref>` for another base). It leaves `mcp-smoke` to CI, since that project needs a widget build first. To see what the selection would have saved over recent history, run `node tools/checks/src/affected-replay.mjs --count 50`, which replays it over `main`'s merged pull requests and prices each run with job timings measured from real CI runs (`affected-replay.mjs profile` re-measures them).
 
 For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-eight configured in `vitest.projects.json`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
 

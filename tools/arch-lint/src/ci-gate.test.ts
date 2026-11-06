@@ -25,10 +25,27 @@ interface RunJob {
   steps?: { name: string; status: string; conclusion: string | null }[]
 }
 
-const { gateFailures, SKIPPABLE_JOBS, baseJobName, stillSettling, readSettledJobs } = (await import(
-  pathToFileURL(join(ROOT, 'tools/checks/src/ci-gate.mjs')).href
-)) as {
-  gateFailures: (input: { jobs: unknown; needed: string[]; gateJobName: string }) => string[]
+type ScopePlan = { jobs?: Record<string, { run?: unknown }> } | null
+
+const {
+  gateFailures,
+  SKIPPABLE_JOBS,
+  baseJobName,
+  stillSettling,
+  readSettledJobs,
+  readScopePlan,
+  NOT_AFFECTED_STEP,
+  SCOPE_JOB,
+} = (await import(pathToFileURL(join(ROOT, 'tools/checks/src/ci-gate.mjs')).href)) as {
+  gateFailures: (input: {
+    jobs: unknown
+    needed: string[]
+    gateJobName: string
+    plan?: ScopePlan
+  }) => string[]
+  readScopePlan: (needs: unknown) => ScopePlan
+  NOT_AFFECTED_STEP: string
+  SCOPE_JOB: string
   SKIPPABLE_JOBS: Record<string, string>
   baseJobName: (name: string) => string
   stillSettling: (input: { jobs: unknown; needed: string[]; gateJobName: string }) => boolean
@@ -161,7 +178,7 @@ describe('the gate judges the run, and refuses everything but success', () => {
   it('fails a real red run of this workflow', () => {
     // Captured from the run whose dry-run-docker job really failed. A job
     // added to the workflow after that capture is appended to it as a plain
-    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`), since `needs` is read live and a
+    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`, `scope`), since `needs` is read live and a
     // needed job absent from the run is one of the failures this gate
     // reports — and a red run is not something to re-capture on demand.
     // This is what settles the question the `needs` form could not: the gate
@@ -264,6 +281,73 @@ describe('the gate judges the run, and refuses everything but success', () => {
 // were reported `in_progress` six seconds after they completed, and the gate
 // failed a run whose 21 jobs had all succeeded, printing `toJSON(needs)`
 // beside it saying `"result": "success"`.
+// A scoped job that the change does not reach runs `Not affected by this
+// change` instead of its work and still concludes `success`. These pin that
+// such a success counts only when the scope job's plan agrees.
+describe('the gate holds a not-affected skip to the scope plan', () => {
+  const needed = () => gate?.needs ?? []
+  const skippedSteps = [
+    { name: 'Detect change scope', status: 'completed', conclusion: 'success' },
+    { name: NOT_AFFECTED_STEP, status: 'completed', conclusion: 'success' },
+    { name: 'Install dependencies', status: 'completed', conclusion: 'skipped' },
+    { name: 'Complete job', status: 'completed', conclusion: 'success' },
+  ]
+  const ranSteps = skippedSteps.map((step) =>
+    step.name === NOT_AFFECTED_STEP
+      ? { ...step, conclusion: 'skipped' }
+      : { ...step, conclusion: 'success' },
+  )
+  const withSteps = (legPrefix: string, steps: typeof skippedSteps) =>
+    fixture('green').map((job) => (job.name.startsWith(legPrefix) ? { ...job, steps } : job))
+  const run = (jobs: unknown, plan: ScopePlan) =>
+    gateFailures({ jobs, needed: needed(), gateJobName: 'ci-gate', plan })
+
+  it('the workflow declares the scope job the gate reads, and needs it', () => {
+    expect(jobs.map((job) => job.id)).toContain(SCOPE_JOB)
+    expect(gate?.needs).toContain(SCOPE_JOB)
+  })
+
+  it('passes a skip the plan agrees with, on every leg', () => {
+    const plan = { jobs: { 'test-browser': { run: false } } }
+    expect(run(withSteps('test-browser', skippedSteps), plan)).toEqual([])
+  })
+
+  it('fails a skip the plan says the change reaches', () => {
+    const plan = { jobs: { 'test-browser': { run: true } } }
+    const problems = run(withSteps('test-browser (1)', skippedSteps), plan)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatch(/^test-browser \(1\): skipped its work.*reaches it/)
+  })
+
+  it('fails a skip the plan does not name, and any skip when the plan is unreadable', () => {
+    expect(run(withSteps('verify', skippedSteps), { jobs: {} })).toEqual([
+      expect.stringMatching(/^verify: .*does not name it/),
+    ])
+    expect(run(withSteps('verify', skippedSteps), null)).toEqual([
+      expect.stringMatching(/scope plan is unreadable/),
+    ])
+  })
+
+  it('does not hold a job that did its work to the plan', () => {
+    expect(run(withSteps('test-browser', ranSteps), null)).toEqual([])
+  })
+
+  it('fails the run when the scope job itself failed', () => {
+    const jobs = fixture('green').map((job) =>
+      job.name === SCOPE_JOB ? { ...job, conclusion: 'failure' } : job,
+    )
+    expect(run(jobs, null)).toEqual([`${SCOPE_JOB}: failure`])
+  })
+
+  it('reads the plan out of the needs context, and nothing from a malformed one', () => {
+    const plan = { everything: false, jobs: { 'test-unit': { run: false } } }
+    expect(readScopePlan({ scope: { outputs: { plan: JSON.stringify(plan) } } })).toEqual(plan)
+    expect(readScopePlan({ scope: { outputs: { plan: '{not json' } } })).toBeNull()
+    expect(readScopePlan({ scope: { outputs: {} } })).toBeNull()
+    expect(readScopePlan({})).toBeNull()
+  })
+})
+
 describe('the gate re-reads a run the API has not caught up with', () => {
   const needed = ['verify']
   const settled: RunJob[] = [{ name: 'verify', status: 'completed', conclusion: 'success' }]
