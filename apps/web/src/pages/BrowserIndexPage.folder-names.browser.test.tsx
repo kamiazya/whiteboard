@@ -10,6 +10,8 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
+import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import '../index.css'
 import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -56,7 +58,13 @@ async function newSubfolderOf(folder: string, name: string) {
 
 describe('a named folder in a browser-kept workspace', () => {
   beforeEach(clearWhiteboardDb)
-  afterEach(cleanup)
+  // Opening a document records it in this device's Recent lane and changed-dot
+  // baseline, which live in localStorage and outlive the test.
+  afterEach(() => {
+    cleanup()
+    localStorage.removeItem(RECENT_KEY)
+    localStorage.removeItem(SEEN_KEY)
+  })
 
   it('keeps a new subfolder name once a note lands in it, across a fresh mount', async () => {
     const index = await seed()

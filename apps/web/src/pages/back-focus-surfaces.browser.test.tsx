@@ -10,7 +10,9 @@ import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
 import { forgetSearchQueries } from '../lib/search-query-memory.js'
+import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -55,6 +57,10 @@ describe('Back focus', () => {
     // The list remembers its query for the tab, so a repeat would type into
     // the last run's search.
     forgetSearchQueries()
+    // Every open also lands in the Recent lane and changed-dot baseline,
+    // which live in localStorage.
+    localStorage.removeItem(RECENT_KEY)
+    localStorage.removeItem(SEEN_KEY)
   })
 
   it('returns to the folder-tree row the document was opened from', async () => {
