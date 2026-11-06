@@ -170,6 +170,21 @@ function placeFrame(at: Point, canvas: SpatialCanvas, visible: Box | undefined):
   return spaced.free ? spaced.point : tight.point
 }
 
+/**
+ * Where Add > Frame puts a frame: a point somebody chose keeps the frame off
+ * what is there; otherwise the row of frames goes on, or failing that the
+ * view's centre does.
+ */
+function frameSpawn(
+  canvas: SpatialCanvas,
+  at: Point | undefined,
+  viewCenter: () => Point,
+  visible: Box | undefined,
+): Point {
+  if (at !== undefined) return placeFrame(at, canvas, visible)
+  return frameInRow(canvas, visible) ?? placeFrame(viewCenter(), canvas, visible)
+}
+
 export interface NodeCreationInputs {
   readonly rootRef: RefObject<HTMLDivElement | null>
   /** The editor's always-current canvas mirror. */
@@ -324,12 +339,7 @@ export function useNodeCreation({
    * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {
-    const visible = visibleCanvasRect()
-    const point =
-      at !== undefined
-        ? placeFrame(at, canvasRef.current, visible)
-        : (frameInRow(canvasRef.current, visible) ??
-          placeFrame(viewCenter(), canvasRef.current, visible))
+    const point = frameSpawn(canvasRef.current, at, viewCenter, visibleCanvasRect())
     const id = newId()
     const node = groupNodeDefaults(id, point)
     applyResult({

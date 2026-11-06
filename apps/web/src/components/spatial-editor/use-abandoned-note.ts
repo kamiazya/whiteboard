@@ -60,6 +60,20 @@ export function useRemoveAbandonedNote({
     [gestureStateRef, canvasRef],
   )
 
+  useSweepLeftBehind(canvas, documentKey, onChangeRef)
+  useRememberUnderEdit(gestureState, documentKey)
+}
+
+/**
+ * Removes what the last page in this tab left mid-edit (`unsaved-notes`): a
+ * remembered note that is present and still empty. One somebody typed into
+ * since is forgotten; one not loaded yet is waited for.
+ */
+function useSweepLeftBehind(
+  canvas: SpatialCanvas,
+  documentKey: string | undefined,
+  onChangeRef: MutableRefObject<(canvas: SpatialCanvas, command: EditorCommand) => void>,
+): void {
   // What the last page left behind, read once: notes this editor goes on to
   // make are remembered under the same key and must not be swept.
   const leftBehind = useRef<readonly string[] | null>(null)
@@ -84,7 +98,10 @@ export function useRemoveAbandonedNote({
     }
     leftBehind.current = pending.filter((id) => !settled.includes(id))
   }, [canvas, documentKey])
+}
 
+/** Remembers the fresh note under edit for as long as the edit is open. */
+function useRememberUnderEdit(gestureState: GestureState, documentKey: string | undefined): void {
   const editedId = newNoteUnderEdit(gestureState)
   useEffect(() => {
     if (editedId === undefined || documentKey === undefined) return

@@ -64,7 +64,7 @@ export const DOUBLE_PRESS_SLOP_PX = 40
  * double click does, and the 200px between two clicks meant to deselect
  * twice is far more than either.
  */
-export const DOUBLE_CLICK_SLOP_PX = 8
+const DOUBLE_CLICK_SLOP_PX = 8
 
 /** The distance two presses by `pointerType` may land apart and still be one double press. */
 export function doublePressSlopPx(pointerType: string): number {
