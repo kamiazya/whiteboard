@@ -43,13 +43,9 @@ class DocumentContentUnreadableError extends Error {
  */
 export async function loadDocumentContent(
   documentId: string,
-  options: ProjectOptions = {},
+  options: { readonly dbName?: string } = {},
 ): Promise<LoroDoc | null> {
   return projectDocumentContent(await openContentRecord(options.dbName), documentId)
-}
-
-interface ProjectOptions {
-  readonly dbName?: string
 }
 
 /**

@@ -26,10 +26,11 @@ import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
 export type LoadImageUrl = (ref: string) => Promise<string | undefined | typeof RETIRED_PICTURE>
 
+// `url` is an object URL or `RETIRED_PICTURE`: both install under the ref as-is.
 type Outcome =
   | { readonly ref: string; readonly kind: 'url'; readonly url: string }
-  | { readonly ref: string; readonly kind: 'retired' }
   | { readonly ref: string; readonly kind: 'absent' | 'failed' }
+type Installed = Extract<Outcome, { kind: 'url' }>
 
 export function useImageUrls(
   refs: readonly string[],
@@ -51,7 +52,7 @@ export function useImageUrls(
 
   useEffect(
     () => () => {
-      revokeAll(urlsRef.current)
+      revokeAll(urlsRef.current.values())
     },
     [],
   )
@@ -77,7 +78,7 @@ export function useImageUrls(
         // A URL minted after cleanup is in nobody's map, so the unmount
         // revoke below can never reach it. Dropping it leaks the decoded
         // image for the tab's lifetime.
-        for (const outcome of loaded) if (outcome.kind === 'url') URL.revokeObjectURL(outcome.url)
+        revokeAll(loaded.filter((o): o is Installed => o.kind === 'url').map((o) => o.url))
         return
       }
       recordSettled(settled.current, loaded)
@@ -99,10 +100,8 @@ export function useImageUrls(
 }
 
 /** Releases every object URL; a retired picture holds none. */
-function revokeAll(urls: ReadonlyMap<string, string>): void {
-  for (const url of urls.values()) {
-    if (url !== RETIRED_PICTURE) URL.revokeObjectURL(url)
-  }
+function revokeAll(urls: Iterable<string>): void {
+  for (const url of urls) if (url !== RETIRED_PICTURE) URL.revokeObjectURL(url)
 }
 
 type Settled = Map<string, 'absent' | number>
@@ -128,20 +127,17 @@ function withUrls(
   prev: ReadonlyMap<string, string>,
   loaded: readonly Outcome[],
 ): ReadonlyMap<string, string> {
-  const installed = loaded.filter((outcome) => outcome.kind === 'url' || outcome.kind === 'retired')
+  const installed = loaded.filter((outcome): outcome is Installed => outcome.kind === 'url')
   if (installed.length === 0) return prev
   const next = new Map(prev)
-  for (const outcome of installed) {
-    next.set(outcome.ref, outcome.kind === 'url' ? outcome.url : RETIRED_PICTURE)
-  }
+  for (const outcome of installed) next.set(outcome.ref, outcome.url)
   return next
 }
 
 async function outcomeOf(loader: LoadImageUrl, ref: string): Promise<Outcome> {
   try {
     const url = await loader(ref)
-    if (url === undefined) return { ref, kind: 'absent' }
-    return url === RETIRED_PICTURE ? { ref, kind: 'retired' } : { ref, kind: 'url', url }
+    return url === undefined ? { ref, kind: 'absent' } : { ref, kind: 'url', url }
   } catch {
     return { ref, kind: 'failed' }
   }
