@@ -16,6 +16,7 @@ import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 
 import { endNode, endSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import { type AroundLedger, aroundLedger } from './around-ledger.js'
 import { bestRepairedPair } from './coincident-ends.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
 import type { AnchorGroups } from './edge-anchors.js'
@@ -627,44 +628,6 @@ function shortened(
 }
 
 /**
- * Which `around` choices the search has priced. A straight edge is SEEDED
- * stepping round (`steppingRound`) on the expectation that `shortened`
- * prices its corner route before the search ends; a search the layout's
- * account cuts short never does, and a seeded detour nobody priced is
- * just a longer line. So on exhaustion every seeded `around` the search did
- * not confirm — by adopting it as a candidate, or by finding its corner
- * route costs more — goes back to the corner route, while what the search
- * DID confirm, and what it never seeded (a frozen override, or the aligned
- * run's input, which the first run already priced or dropped), stays.
- */
-interface AroundLedger {
-  readonly confirmed: Set<string>
-  /** Records a candidate the search adopted: stepping round, it is confirmed. */
-  readonly adopted: (id: string, pair: SidePair) => void
-  readonly unconfirmedDropped: (
-    sides: ReadonlyMap<string, SidePair>,
-  ) => ReadonlyMap<string, SidePair>
-}
-
-function aroundLedger(seeded: ReadonlySet<string>): AroundLedger {
-  const confirmed = new Set<string>()
-  return {
-    confirmed,
-    adopted: (id, pair) => {
-      if (pair.around === true) confirmed.add(id)
-    },
-    unconfirmedDropped: (sides) => {
-      const dropped = new Map(sides)
-      for (const [id, pair] of sides) {
-        if (pair.around !== true || !seeded.has(id) || confirmed.has(id)) continue
-        dropped.set(id, { fromSide: pair.fromSide, toSide: pair.toSide })
-      }
-      return dropped
-    },
-  }
-}
-
-/**
  * A straight edge's candidates, then each pair once more stepping round what
  * is in the way: tried after the corner routes, so it is taken only where no
  * side choice alone helps.
@@ -721,8 +684,7 @@ function optimizeSideChoices(
   // The layout's account (`routing-budget.ts`). Past it no trial is adopted,
   // so the search ends on the sides it has reached: a partial repair.
   budget: RoutingBudget = createRoutingBudget(),
-  // Edges whose `around` in `initial` is a seed rather than a decision
-  // (`steppingRound`): dropped again if the account ends the search first.
+  // `initial`'s seeded `around`s (`steppingRound`; see `aroundLedger`).
   seeded: ReadonlySet<string> = new Set(),
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
