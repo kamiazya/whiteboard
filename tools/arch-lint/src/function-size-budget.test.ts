@@ -211,7 +211,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 117, // +1: the exit strip told the field is one line; +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 270, // +1: the eraser's dock button
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 224, // the tools are a table now
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 108, // +1: a posted comment is announced; +1: the editor's accessible name
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,

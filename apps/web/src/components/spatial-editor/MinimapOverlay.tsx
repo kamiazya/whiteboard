@@ -15,7 +15,7 @@
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { Map as MapIcon } from 'lucide-react'
-import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { readMinimapOpen, writeMinimapOpen } from '../../lib/minimap-visibility.js'
 import {
   fitMinimap,
@@ -29,6 +29,7 @@ import {
 } from '../../lib/spatial/minimap.js'
 import { cn } from '../../lib/utils.js'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../ui/dock-button.js'
+import { useBottomChromeClearance } from './use-bottom-chrome-clearance.js'
 import { keyboardAvoidanceSubject } from './use-keyboard-avoidance.js'
 
 const PADDING_PX = 6
@@ -95,8 +96,16 @@ export interface MinimapOverlayProps {
   readonly collapsible?: boolean
 }
 
-/** Clears the dock (its height plus the bottom offset) with a gap. */
+/**
+ * Where the toggle sits until it has measured the dock: clear of a one-row
+ * dock (its height plus the bottom offset) with a gap. Once measured it stands
+ * above whatever bottom chrome reaches under it — a dock folded onto two rows,
+ * the Draw options — which a fixed offset cannot know.
+ */
 const TOGGLE_BOTTOM = 'bottom-[calc(5rem+env(safe-area-inset-bottom))]'
+/** Where the opened overview stands: 3.5rem above its toggle, once the toggle has measured. */
+const aboveToggle = (toggleLift: number | undefined): string | undefined =>
+  toggleLift === undefined ? undefined : `calc(${toggleLift}px + 3.5rem)`
 const RAISED_BOTTOM = 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))]'
 
 /**
@@ -124,69 +133,18 @@ function useTextEntryFocused(anchor: React.RefObject<HTMLElement | null>): boole
   return focused
 }
 
-/** Room kept between the overview and the bottom chrome it stands clear of. */
-const CHROME_CLEARANCE_PX = 8
-
-/** The bottom-centred chrome the overview shares the bottom edge with: the dock, and the Draw options above it. */
+/** The bottom-centred chrome the overview's toggle stands clear of: the dock, and the Draw options above it. */
 const BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"]'
-
-/**
- * How high the overview must stand to clear whatever bottom chrome reaches
- * under its column — undefined when nothing does. Measured rather than derived
- * from a breakpoint: the dock is as wide as its tools add up to on this
- * pointer, and a fixed figure went stale the moment a tool was added. Only the
- * horizontal spans decide whether something reaches under, so lifting the
- * overview does not undo the answer that lifted it.
- */
-function useBottomChromeClearance(
-  active: boolean,
-): readonly [RefObject<HTMLDivElement | null>, number | undefined] {
-  const surface = useRef<HTMLDivElement>(null)
-  const [lift, setLift] = useState<number | undefined>(undefined)
-  useLayoutEffect(() => {
-    const own = surface.current
-    const root = own?.parentElement
-    if (!active || own === null || own === undefined || root === null || root === undefined) {
-      setLift(undefined)
-      return
-    }
-    const resize =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure())
-    const measure = () => {
-      const mine = own.getBoundingClientRect()
-      const floor = root.getBoundingClientRect().bottom
-      let needed: number | undefined
-      for (const chrome of root.querySelectorAll<HTMLElement>(BOTTOM_CHROME)) {
-        resize?.observe(chrome)
-        const its = chrome.getBoundingClientRect()
-        const under =
-          its.width > 0 && its.right + CHROME_CLEARANCE_PX > mine.left && its.left < mine.right
-        if (!under) continue
-        const above = floor - its.top + CHROME_CLEARANCE_PX
-        needed = needed === undefined ? above : Math.max(needed, above)
-      }
-      setLift(needed)
-    }
-    measure()
-    resize?.observe(own)
-    // The Draw options come and go with the tool, and a new element is
-    // nothing a ResizeObserver already watching would report.
-    const mutations =
-      typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => measure())
-    mutations?.observe(root, { childList: true })
-    return () => {
-      resize?.disconnect()
-      mutations?.disconnect()
-    }
-  }, [active])
-  return [surface, lift]
-}
 
 export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlayProps) {
   const [open, setOpen] = useState(readMinimapOpen)
   const anchor = useRef<HTMLSpanElement>(null)
   const typing = useTextEntryFocused(anchor)
   const marker = <span ref={anchor} hidden />
+  const [toggleWrap, toggleLift] = useBottomChromeClearance<HTMLDivElement>(
+    collapsible && !typing,
+    BOTTOM_CHROME,
+  )
   if (typing) return <>{marker}</>
   if (!collapsible) {
     return (
@@ -200,29 +158,46 @@ export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlay
     <>
       {marker}
       <div
+        ref={toggleWrap}
         data-editor-overlay
         data-testid="minimap-toggle-wrap"
+        style={{ bottom: toggleLift }}
         className={cn(
           'absolute right-[calc(0.75rem+env(safe-area-inset-right))] z-10 rounded-lg border bg-background p-0.5 shadow-md',
           TOGGLE_BOTTOM,
         )}
       >
-        <button
-          type="button"
-          data-testid="minimap-toggle"
-          aria-label={open ? 'Hide overview' : 'Show overview'}
-          aria-expanded={open}
-          onClick={() => {
+        <MinimapToggle
+          open={open}
+          onToggle={() => {
             writeMinimapOpen(!open)
             setOpen(!open)
           }}
-          className={`${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`}
-        >
-          <MapIcon aria-hidden="true" className="size-4" />
-        </button>
+        />
       </div>
-      {open && <MinimapSurface {...props} raised />}
+      {open && <MinimapSurface {...props} raised raisedBottom={aboveToggle(toggleLift)} />}
     </>
+  )
+}
+
+function MinimapToggle({
+  open,
+  onToggle,
+}: {
+  readonly open: boolean
+  readonly onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="minimap-toggle"
+      aria-label={open ? 'Hide overview' : 'Show overview'}
+      aria-expanded={open}
+      onClick={onToggle}
+      className={`${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`}
+    >
+      <MapIcon aria-hidden="true" className="size-4" />
+    </button>
   )
 }
 
@@ -244,11 +219,16 @@ function MinimapSurface({
   height,
   onNavigate,
   raised = false,
-}: Omit<MinimapOverlayProps, 'collapsible'> & { readonly raised?: boolean }) {
+  raisedBottom,
+}: Omit<MinimapOverlayProps, 'collapsible'> & {
+  readonly raised?: boolean
+  /** Where a raised overview stands, once its toggle has measured where it stands. */
+  readonly raisedBottom?: string | undefined
+}) {
   const content = [...boxes, ...strokes.map(strokeBounds)]
   const fit = fitMinimap(content, viewportRect, { width, height }, PADDING_PX)
   const marker = projectBox(viewportRect, fit)
-  const [surface, lift] = useBottomChromeClearance(!raised)
+  const [surface, lift] = useBottomChromeClearance<HTMLDivElement>(!raised, BOTTOM_CHROME)
   const navigateTo = (event: React.PointerEvent<HTMLDivElement>) =>
     navigateFrom(event, fit, onNavigate)
 
@@ -267,7 +247,7 @@ function MinimapSurface({
       data-viewport-corner
       data-testid="minimap"
       aria-hidden="true"
-      style={{ width, height, bottom: lift }}
+      style={{ width, height, bottom: raised ? raisedBottom : lift }}
       // z-10 matches the dock. Without a stacking context of its own the
       // scene paints over the overview — it is later in the DOM and its
       // nodes are positioned, so document order wins.
@@ -275,7 +255,7 @@ function MinimapSurface({
       // fullscreen this corner is the screen corner, under the home
       // indicator and — rotated — under the display cutout.
       className={cn(
-        'absolute right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm',
+        'absolute right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background shadow-sm',
         raised ? RAISED_BOTTOM : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]',
       )}
       onPointerDown={navigateTo}
