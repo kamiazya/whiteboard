@@ -364,22 +364,30 @@ describe('straight routing quality', () => {
 
   // A layout whose account runs out ends its side search on what the search
   // was seeded with, so these two rows price that state on its own: every
-  // straight edge as the search left it with no trial affordable.
+  // straight edge as the search left it with no trial affordable. The
+  // search seeds every straight edge stepping round, and drawing those seeds
+  // as they stood cost stacked frames 87 long detours, ratio 1.266, worst
+  // 1.79, 42 foreign violations (4175 interior ink), 278 crossings and 1438
+  // bends; lattice 43 long detours, ratio 1.11, worst 1.83, 1387 crossings,
+  // 2675 bends. An exhausted search now drops every seed it never priced
+  // (`aroundLedger`), so those edges take their corner routes. Paid: grazing
+  // ends 0 -> 31 on stacked frames — the glancing first or last legs some
+  // corner routes have, which the full-budget row carries 28 of as well.
   it('reports generated stacked-frame boards on a spent routing budget', {
     timeout: 120_000,
   }, () => {
     expect(score(stackedFrameLayouts(200), routedOnSpentBudget)).toEqual({
-      violations: { foreign: 42, 'own-endpoint': 0 },
-      interiorInk: 4175,
+      violations: { foreign: 0, 'own-endpoint': 0 },
+      interiorInk: 0,
       titleCrossings: 0,
-      length: 298395,
+      length: 270523,
       direct: 235649,
-      ratio: 1.266,
-      worstRatio: 1.79,
-      longDetours: 87,
-      grazingEnds: 0,
-      bends: 1438,
-      crossings: 278,
+      ratio: 1.148,
+      worstRatio: 1.52,
+      longDetours: 13,
+      grazingEnds: 31,
+      bends: 1121,
+      crossings: 225,
       borderInk: 0,
     })
   })
@@ -389,14 +397,14 @@ describe('straight routing quality', () => {
       violations: { foreign: 0, 'own-endpoint': 0 },
       interiorInk: 0,
       titleCrossings: 0,
-      length: 1263510,
+      length: 1163968,
       direct: 1138042,
-      ratio: 1.11,
-      worstRatio: 1.83,
-      longDetours: 43,
+      ratio: 1.023,
+      worstRatio: 1.39,
+      longDetours: 0,
       grazingEnds: 0,
-      bends: 2675,
-      crossings: 1387,
+      bends: 1526,
+      crossings: 1110,
       borderInk: 0,
     })
   })
