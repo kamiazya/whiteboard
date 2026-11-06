@@ -51,6 +51,37 @@ describe('printBands', () => {
     ])
   })
 
+  it('never cuts between a heading and the block after it', () => {
+    expect(
+      printBands(
+        [
+          { y: 20, h: 30 },
+          { y: 70, h: 20, heading: true },
+          { y: 110, h: 40 },
+          { y: 170, h: 10 },
+        ],
+        200,
+      ),
+    ).toEqual([
+      { top: 0, bottom: 60 },
+      { top: 60, bottom: 160 },
+      { top: 160, bottom: 200 },
+    ])
+  })
+
+  it('keeps a run of headings with the first block that is not one', () => {
+    expect(
+      printBands(
+        [
+          { y: 0, h: 10, heading: true },
+          { y: 20, h: 10, heading: true },
+          { y: 40, h: 10 },
+        ],
+        60,
+      ),
+    ).toEqual([{ top: 0, bottom: 60 }])
+  })
+
   it('keeps the whole body as one strip with no blocks, and none for an empty one', () => {
     expect(printBands([], 80)).toEqual([{ top: 0, bottom: 80 }])
     expect(printBands([{ y: 0, h: 10 }], 0)).toEqual([])

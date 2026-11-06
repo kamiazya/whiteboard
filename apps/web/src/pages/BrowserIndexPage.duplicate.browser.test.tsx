@@ -65,12 +65,12 @@ function renderPage(store: BrowserStoreDouble, index = store.index) {
   )
 }
 
-async function duplicateTheOnlyRow() {
+async function duplicateTheOnlyRow(verb = 'Duplicate') {
   const card = (await screen.findByTestId('card-title')).closest('button')
   if (card === null) throw new Error('no button around the card')
   await userEvent.click(card, { button: 'right' })
   const menu = await screen.findByRole('menu', { name: 'Document actions' })
-  await userEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate' }))
+  await userEvent.click(within(menu).getByRole('menuitem', { name: verb }))
 }
 
 it('offers Duplicate on a row and shows the copy in the list', async () => {
@@ -85,6 +85,22 @@ it('offers Duplicate on a row and shows the copy in the list', async () => {
   })
   // The copy is a second document, not a rename of the first.
   expect(screen.queryByRole('alert')).toBeNull()
+})
+
+it('asks the browser keeper for a copy without comments from the row menu', async () => {
+  const store = await seedOne()
+  const asked = vi.spyOn(store.index, 'duplicateDocument')
+  renderPage(store)
+  await waitFor(() => expect(titles()).toEqual(['Alpha']))
+
+  await duplicateTheOnlyRow('Duplicate without comments')
+
+  await waitFor(() => expect(titles().sort()).toEqual(['Alpha', 'Alpha (copy)']), {
+    timeout: 15_000,
+  })
+  expect(asked).toHaveBeenCalledWith(
+    expect.objectContaining({ path: 'alpha', withoutAnnotations: true }),
+  )
 })
 
 /**

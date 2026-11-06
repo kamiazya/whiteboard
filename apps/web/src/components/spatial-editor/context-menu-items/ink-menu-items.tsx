@@ -13,11 +13,19 @@
  */
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor, CanvasLine } from '@kamiazya/whiteboard-model'
-import { resolveInkGroup, VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveInkGroup,
+  resolveStrokeWidth,
+  STROKE_WIDTHS,
+  type StrokeWidth,
+  VISUAL_INK_KEY,
+  VISUAL_STROKE_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { Group, Lock as LockIcon, LockOpen, Tag, Trash2, Ungroup } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
-import type { ContextMenuItem } from '../../ui/ContextMenu.js'
+import type { ContextMenuItem, ContextMenuOptionsItem } from '../../ui/ContextMenu.js'
 import type { CanvasCommands } from '../canvas-commands.js'
+import { STROKE_WIDTH_NAMES, StrokeWidthGlyph } from '../DrawOptions.js'
 import { colorRow } from './color-row.js'
 import { arrowRow, endMeetsNode, sideRow } from './end-rows.js'
 
@@ -95,21 +103,20 @@ export function inkMenuItems({
     const entry = byId.get(id)
     return entry === undefined ? [] : [entry]
   })
+  const mark = mates.length > 1 ? mates : [line]
   const recolour = (color: CanvasColor | undefined) =>
     applyResult({
       state: { kind: 'idle' },
       // The whole MARK, not the one stroke pressed — the same unit every
-      // other verb on this menu acts on, and the same unit a press selects.
-      // A handwritten character recoloured one stroke at a time is a
-      // character in two colours.
-      commands: (mates.length > 1 ? mates : [line]).map(
-        (entry) => ({ kind: 'set-line-color', id: entry.id, color }) as const,
-      ),
+      // other verb on this menu acts on, and the same unit a press selects:
+      // a character recoloured one stroke at a time is in two colours.
+      commands: mark.map((entry) => ({ kind: 'set-line-color', id: entry.id, color }) as const),
     })
   const write = (command: EditorCommand) =>
     applyResult({ state: { kind: 'idle' }, commands: [command] })
   return [
     colorRow(palette, line.color, recolour),
+    widthRow(line, mark, applyResult),
     // A stroke's ends carry an arrowhead and a side exactly as a relation's
     // do, and the rows are the relation menu's own — shared rather than
     // copied, so the two cannot grow apart. The SIDE row is offered per end
@@ -220,4 +227,42 @@ export function inkMenuItems({
       },
     },
   ]
+}
+
+/**
+ * The weights a pen draws at, as the menu's picker: the Draw tool's own
+ * three, written across the whole mark for the reason a recolour is. `thin`
+ * is the absent facet, so choosing it removes the payload rather than
+ * storing a second spelling of the default.
+ */
+function widthRow(
+  line: CanvasLine,
+  mark: readonly CanvasLine[],
+  applyResult: InkMenuItemsInput['applyResult'],
+): ContextMenuOptionsItem {
+  const current = resolveStrokeWidth(line)
+  const apply = (width: StrokeWidth) =>
+    applyResult({
+      state: { kind: 'idle' },
+      commands: mark.map(
+        (entry) =>
+          ({
+            kind: 'set-line-facet',
+            id: entry.id,
+            key: VISUAL_STROKE_KEY,
+            payload: width === 'thin' ? undefined : { width },
+          }) as const,
+      ),
+    })
+  return {
+    kind: 'options',
+    label: 'Width',
+    options: STROKE_WIDTHS.map((width) => ({
+      label: width,
+      ariaLabel: STROKE_WIDTH_NAMES[width],
+      icon: <StrokeWidthGlyph width={width} />,
+      selected: current === width,
+      onSelect: () => apply(width),
+    })),
+  }
 }

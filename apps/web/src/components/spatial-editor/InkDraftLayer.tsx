@@ -14,10 +14,17 @@ export function InkDraftLayer({
   points,
   zoom,
   stroke,
+  weight = 1,
 }: {
   points: readonly Point[]
   zoom: number
   stroke: string
+  /**
+   * The drawn stroke's multiple of the line weight, in canvas units. The
+   * draft never goes thinner than two screen pixels, so a thin pen stays
+   * visible under the hand at any zoom, and grows with the heavier weights.
+   */
+  weight?: number
 }) {
   if (points.length < 2) return null
   return (
@@ -36,7 +43,7 @@ export function InkDraftLayer({
         points={points.map((point) => `${point.x},${point.y}`).join(' ')}
         fill="none"
         stroke={stroke}
-        strokeWidth={2 / zoom}
+        strokeWidth={Math.max(2 / zoom, weight)}
         strokeLinecap="round"
         strokeLinejoin="round"
       />

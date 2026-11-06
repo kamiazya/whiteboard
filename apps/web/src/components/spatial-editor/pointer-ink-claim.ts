@@ -1,8 +1,9 @@
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { continuesStroke } from '../../lib/spatial/stroke-group.js'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
 import { reduceGesture } from './gestures.js'
-import { withGroupMates } from './ink-hit.js'
+import { drawingsAlong, withGroupMates } from './ink-hit.js'
 import type { EditorPointerInputs } from './pointer-inputs.js'
 
 type InkClaimInputs = Pick<
@@ -15,6 +16,8 @@ type InkClaimInputs = Pick<
   | 'gestureState'
   | 'gestureStateRef'
   | 'lastStrokeRef'
+  | 'pen'
+  | 'pickInputs'
   | 'selectedInkIds'
   | 'setEdgeLabelEditId'
   | 'setSelectedInkIds'
@@ -59,6 +62,7 @@ export function beginDrawStroke(
       point,
       zoom: c.viewport.zoom,
       ...(group === undefined ? {} : { group }),
+      pen: c.pen,
     }),
   )
   return true
@@ -96,7 +100,7 @@ export function armInkDrag(c: InkClaimInputs, point: Point, hitPathId: string): 
  * needs this — they recompute from their start snapshot and accumulate
  * nothing.
  */
-export function advanceDrawing(c: InkClaimInputs, screenPoint: Point): boolean {
+function advanceDrawing(c: InkClaimInputs, screenPoint: Point): boolean {
   if (c.gestureStateRef.current.kind !== 'drawing') return false
   c.applyResult(
     reduceGesture(c.gestureStateRef.current, c.canvasRef.current, {
@@ -130,4 +134,69 @@ export function releaseInkDrag(
   }
   root.focus()
   return true
+}
+
+/** The drawings the eraser passed over between two points: strokes, never anything else. */
+function erasable(c: InkClaimInputs, from: Point, to: Point): readonly string[] {
+  const drawings = new Set(
+    (c.canvasRef.current.lines ?? []).filter(isFreehandStroke).map((l) => l.id),
+  )
+  const { paths, tolerance, isEdgeLocked } = c.pickInputs
+  return drawingsAlong(paths, (id) => drawings.has(id), from, to, tolerance, isEdgeLocked)
+}
+
+/**
+ * The eraser makes the board a sheet of paper too: a press starts a sweep
+ * with no hit-test against nodes or relations at all, and only the drawings
+ * the pointer passes over are collected. Capture is taken at the press for
+ * the stroke's reason — a sweep that leaves the root must still be released.
+ */
+export function beginErase(
+  c: InkClaimInputs,
+  e: React.PointerEvent<HTMLDivElement>,
+  root: HTMLElement,
+  point: Point,
+): boolean {
+  if (c.tool !== 'erase') return false
+  c.capturePointer(root, e.pointerId)
+  c.applyResult(
+    reduceGesture(c.gestureState, c.canvas, {
+      type: 'pointerdown-erase',
+      point,
+      ids: erasable(c, point, point),
+    }),
+  )
+  return true
+}
+
+/** A sweep in progress takes each move, through the refs for `advanceDrawing`'s reason. */
+function advanceErasing(c: InkClaimInputs, screenPoint: Point): boolean {
+  const state = c.gestureStateRef.current
+  if (state.kind !== 'erasing') return false
+  const point = screenToCanvas(screenPoint, c.viewport)
+  c.applyResult(
+    reduceGesture(state, c.canvasRef.current, {
+      type: 'erase-over',
+      point,
+      ids: erasable(c, state.at, point),
+    }),
+  )
+  return true
+}
+
+/** The end of a sweep: everything it touched goes, as one undo step. */
+export function releaseErase(c: InkClaimInputs): boolean {
+  const state = c.gestureStateRef.current
+  if (state.kind !== 'erasing') return false
+  c.applyResult(reduceGesture(state, c.canvasRef.current, { type: 'pointerup', point: state.at }))
+  return true
+}
+
+/**
+ * A move while the pen or the eraser is down, answering whether one took it.
+ * Read from the ref, not the render's state: both accumulate, and a move that
+ * arrives before React commits the press must still reach them.
+ */
+export function advanceInkTool(c: InkClaimInputs, screenPoint: Point): boolean {
+  return advanceDrawing(c, screenPoint) || advanceErasing(c, screenPoint)
 }

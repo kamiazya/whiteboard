@@ -11,13 +11,19 @@
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
+  readCommentThreads,
   readMarkdownBody,
   resolveWorkspaceDocument,
   setWorkspaceDocumentName,
   setWorkspaceFolderName,
+  writeCommentThread,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  generateDocumentId,
+  SINGLE_PERSON_NAMESPACE,
+} from '@kamiazya/whiteboard-model'
 import type {
   BlobStore,
   RenameWorkspaceInput,
@@ -236,6 +242,24 @@ function markdownContentSeam(docs: WorkspaceDocs) {
     },
     read: async (workspaceId: string, path: string) =>
       readMarkdownBody((await at(workspaceId, path)).containers),
+    comment: async (workspaceId: string, path: string, threadId: string) => {
+      const { doc, containers } = await at(workspaceId, path)
+      writeCommentThread(containers, documentThread(threadId))
+      await docs.save(workspaceId, doc)
+    },
+    threadIds: async (workspaceId: string, path: string) =>
+      readCommentThreads((await at(workspaceId, path)).containers)
+        .map((thread) => thread.id)
+        .sort(),
+  }
+}
+
+function documentThread(id: string): CommentThread {
+  return {
+    id,
+    anchor: { kind: 'document' },
+    status: 'open',
+    messages: [{ id: `${id}-m1`, body: 'a question' }],
   }
 }
 

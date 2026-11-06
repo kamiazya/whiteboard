@@ -98,6 +98,17 @@ describe('a note printed from the browser', () => {
     expect(drawn()?.textContent).toContain('Week 1 - Evaporation')
   })
 
+  it('keeps each heading on the strip of the paragraph it introduces', async () => {
+    render(<Page />)
+    await expect.poll(drawn).not.toBeNull()
+    await emulatePrint(true)
+    // Twenty-four sections of a heading and a paragraph: one strip each, so
+    // no page can end on a heading whose paragraph starts the next.
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(24)
+  })
+
   it('draws nothing extra on screen, and drops the strips once printing ends', async () => {
     render(<Page />)
     await expect.poll(drawn).not.toBeNull()

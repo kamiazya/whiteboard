@@ -13,6 +13,7 @@
  * file too: the state moved HERE, not away.
  */
 
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { type RefObject, useEffect, useState } from 'react'
@@ -21,7 +22,7 @@ import { kindNoun } from '../lib/kind-noun.js'
 export interface DuplicateDocumentState {
   readonly isDuplicating: boolean
   readonly duplicateError: string | null
-  readonly handleDuplicate: () => Promise<void>
+  readonly handleDuplicate: (request?: DuplicateDocumentRequest) => Promise<void>
 }
 
 export interface UseDuplicateDocumentOptions {
@@ -36,7 +37,7 @@ export interface UseDuplicateDocumentOptions {
   /** Only for the refusal's wording: "Failed to duplicate <noun>." */
   readonly documentKind: DocumentKind
   /** Resolves with the copy; this hook ignores it and watches only the refusal. */
-  readonly duplicateDocument: () => Promise<unknown>
+  readonly duplicateDocument: (request?: DuplicateDocumentRequest) => Promise<unknown>
 }
 
 export function useDuplicateDocument({
@@ -48,7 +49,7 @@ export function useDuplicateDocument({
   const [isDuplicating, setIsDuplicating] = useState(false)
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
 
-  const handleDuplicate = async () => {
+  const handleDuplicate = async (request?: DuplicateDocumentRequest) => {
     if (isDuplicating) return
     // The document this run is about, fixed before the first await. The page
     // stays mounted across a switch, so by the time the catch below runs the
@@ -57,7 +58,7 @@ export function useDuplicateDocument({
     setIsDuplicating(true)
     setDuplicateError(null)
     try {
-      await duplicateDocument()
+      await duplicateDocument(request)
     } catch (err) {
       // Resetting on the switch is not enough on its own: this runs AFTER the
       // reset, so without the guard the failed duplicate of the document that

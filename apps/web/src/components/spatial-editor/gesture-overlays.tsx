@@ -1,4 +1,4 @@
-import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
+import { type BoundingBox, STROKE_WEIGHT_FACTOR } from '@kamiazya/whiteboard-canvas-render'
 import type { ComponentProps } from 'react'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
@@ -60,13 +60,59 @@ export function GestureOverlays(props: GestureOverlaysProps) {
       />
       {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
       {state.kind === 'drawing' && (
-        <InkDraftLayer points={state.points} zoom={viewport.zoom} stroke={props.inkStroke} />
+        <InkDraftLayer
+          points={state.points}
+          zoom={viewport.zoom}
+          stroke={props.inkStroke}
+          weight={STROKE_WEIGHT_FACTOR[state.pen?.width ?? 'thin']}
+        />
+      )}
+      {state.kind === 'erasing' && (
+        <ErasePreview ids={state.ids} paths={props.edgePaths} zoom={viewport.zoom} />
       )}
       {snapGuides !== null && (
         <SnapGuidesOverlay guides={snapGuides} boxes={props.boxes} zoom={viewport.zoom} />
       )}
       <ReachOutlines {...props} />
     </>
+  )
+}
+
+/**
+ * The drawings a sweep is about to take, marked while it runs: nothing is
+ * removed before the release, so without this the eraser would give no sign
+ * of what it has touched until the hand lifts.
+ */
+function ErasePreview({
+  ids,
+  paths,
+  zoom,
+}: {
+  readonly ids: readonly string[]
+  readonly paths: GestureOverlaysProps['edgePaths']
+  readonly zoom: number
+}) {
+  const touched = paths.filter((entry) => ids.includes(entry.id))
+  if (touched.length === 0) return null
+  return (
+    <svg
+      data-testid="erase-preview"
+      aria-hidden="true"
+      style={{ position: 'absolute', overflow: 'visible', left: 0, top: 0, pointerEvents: 'none' }}
+    >
+      {touched.map((entry) => (
+        <polyline
+          key={entry.id}
+          points={entry.path.map((point) => `${point.x},${point.y}`).join(' ')}
+          fill="none"
+          stroke="var(--destructive)"
+          strokeOpacity={0.45}
+          strokeWidth={8 / zoom}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </svg>
   )
 }
 

@@ -29,7 +29,8 @@ including a conversation whose subject has since been deleted, which is
 marked `anchor gone` rather than hidden. On a canvas such a conversation keeps
 its pin where its node used to be, and its card says that what it was about
 has been deleted: deleting a node never deletes the conversations about it,
-including ones a duplicate carried over. **Resolve** puts it away.
+including ones a duplicate carried over (**Duplicate without comments**
+makes a copy that carries none). **Resolve** puts it away.
 
 ## Comment on a passage of markdown
 
@@ -87,6 +88,10 @@ a conversation is expanded, its own button at the foot of the conversation is
 the only one. Pressing it shows a *Resolved · Undo* line above the list for a few
 seconds. A message you have rewritten is marked **(edited)**, and a thread on
 an edge is named by the two nodes it joins.
+
+A screen reader hears each of these as it lands, in the rail and on the
+canvas alike: "Comment posted" for a new conversation, "Reply sent",
+"Conversation resolved" and "Conversation reopened".
 
 A resolved conversation says **Resolved** on its rail row and in its card
 on the canvas. The card is muted, shows only the opening message, and keeps a

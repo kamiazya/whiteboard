@@ -10,7 +10,12 @@
  */
 
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
-import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
+import {
+  arrowMarkerGeometry,
+  edgeArrowEnds,
+  edgeArrowInset,
+  edgeArrowScale,
+} from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
@@ -98,17 +103,27 @@ function roundedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[] 
   return parts.join(' ')
 }
 
-function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
-  const geometry = ARROW_MARKER[direction]
-  const id = `wb-arrow-${direction}-${idToken(fill)}`
+function arrowMarkerDef(
+  direction: 'start' | 'end',
+  fill: string,
+  scale: number,
+  inset: number,
+): SvgDef {
+  const geometry = arrowMarkerGeometry(direction, scale, inset)
+  // A fixed-size head keeps its historical id, so a light line's output
+  // is unchanged; a scaled one adds its size and reference to the id,
+  // which is what tells two definitions in one colour apart.
+  const size =
+    scale === 1 && inset === 0 ? '' : `-${idToken(`${formatCoord(scale)}-${formatCoord(inset)}`)}`
+  const id = `wb-arrow-${direction}-${idToken(fill)}${size}`
   return {
     id,
     node: el(
       'marker',
       {
         id,
-        markerWidth: ARROW_MARKER.width,
-        markerHeight: ARROW_MARKER.height,
+        markerWidth: geometry.width,
+        markerHeight: geometry.height,
         refX: geometry.refX,
         refY: geometry.refY,
         markerUnits: 'userSpaceOnUse',
@@ -116,6 +131,68 @@ function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
       },
       [el('polygon', { points: pointsAttr(geometry.points), fill })],
     ),
+  }
+}
+
+/**
+ * The path with each arrowed end moved back along its terminal run, so a
+ * heavy line's butt end sits under its head rather than poking past the
+ * tip. The insets are 0 for a light line and for a run too short to
+ * shorten (`edgeArrowInset`), which returns the path as it was.
+ */
+function pulledBack(
+  path: readonly EdgePoint[],
+  fromInset: number,
+  toInset: number,
+): readonly EdgePoint[] {
+  if (fromInset === 0 && toInset === 0) return path
+  const toward = (from: EdgePoint, to: EdgePoint, by: number): EdgePoint => {
+    const length = Math.hypot(to.x - from.x, to.y - from.y)
+    return {
+      x: from.x + ((to.x - from.x) / length) * by,
+      y: from.y + ((to.y - from.y) / length) * by,
+    }
+  }
+  const last = path.length - 1
+  return path.map((point, index) =>
+    index === 0 && fromInset > 0
+      ? toward(point, path[1] as EdgePoint, fromInset)
+      : index === last && toInset > 0
+        ? toward(point, path[last - 1] as EdgePoint, toInset)
+        : point,
+  )
+}
+
+/**
+ * Arrowheads are shared <marker> definitions in the edge's stroke color and
+ * head size, referenced per end — one definition per (direction, color,
+ * size) instead of a polygon per edge end. Marker geometry derives from the
+ * same constants as `edgeArrowPolygons` (edge-arrows.ts), which sceneBounds
+ * keeps reading for the wings' reach; the arrowhead pixel goldens pin that
+ * the two stay the same ink. Which ends get one is `edgeArrowEnds` — the
+ * polygon renderer's own skip rule — because a marker on a direction-less
+ * end would paint at angle 0 where the polygon drew nothing. Answers the
+ * path to draw too, since a heavy line's arrowed ends are pulled back
+ * under their heads.
+ */
+function arrowheads(node: ResolvedEdgeNode): {
+  readonly startDef: SvgDef | undefined
+  readonly endDef: SvgDef | undefined
+  readonly path: readonly EdgePoint[]
+} {
+  const stroke = node.appearance?.stroke
+  // No stroke means the polyline itself is invisible (SVG's default
+  // stroke is none) — the arrow must match it, not fall back to the
+  // marker content's default black fill and float detached.
+  const arrowFill = typeof stroke === 'string' && stroke.length > 0 ? stroke : 'none'
+  const ends = edgeArrowEnds(node)
+  const scale = edgeArrowScale(node)
+  const fromInset = ends.from ? edgeArrowInset(node, 'from') : 0
+  const toInset = ends.to ? edgeArrowInset(node, 'to') : 0
+  return {
+    startDef: ends.from ? arrowMarkerDef('start', arrowFill, scale, fromInset) : undefined,
+    endDef: ends.to ? arrowMarkerDef('end', arrowFill, scale, toInset) : undefined,
+    path: pulledBack(node.path, fromInset, toInset),
   }
 }
 
@@ -131,23 +208,7 @@ export function renderEdge(node: ResolvedEdgeNode): SvgChild {
   // appearance spread, matching the string backend's emission order (an
   // edge appearance never carries a fill of its own).
   const jumps = node.jumps ?? []
-  // Arrowheads are shared <marker> definitions in the edge's stroke
-  // color, referenced per end — one definition per (direction, color)
-  // instead of a polygon per edge end. Marker geometry derives from the
-  // same constants as `edgeArrowPolygons` (edge-arrows.ts), which
-  // sceneBounds keeps reading for the wings' reach; the arrowhead pixel
-  // goldens pin that the two stay the same ink. Which ends get one is
-  // `edgeArrowEnds` — the polygon renderer's own skip rule — because a
-  // marker on a direction-less end would paint at angle 0 where the
-  // polygon drew nothing.
-  const stroke = node.appearance?.stroke
-  // No stroke means the polyline itself is invisible (SVG's default
-  // stroke is none) — the arrow must match it, not fall back to the
-  // marker content's default black fill and float detached.
-  const arrowFill = typeof stroke === 'string' && stroke.length > 0 ? stroke : 'none'
-  const ends = edgeArrowEnds(node)
-  const startDef = ends.from ? arrowMarkerDef('start', arrowFill) : undefined
-  const endDef = ends.to ? arrowMarkerDef('end', arrowFill) : undefined
+  const { startDef, endDef, path } = arrowheads(node)
   const markers = {
     'marker-start': startDef === undefined ? undefined : `url(#${startDef.id})`,
     'marker-end': endDef === undefined ? undefined : `url(#${endDef.id})`,
@@ -155,7 +216,7 @@ export function renderEdge(node: ResolvedEdgeNode): SvgChild {
   const polyline =
     node.rounded === true
       ? el('path', {
-          d: roundedPathData(node.path, jumps),
+          d: roundedPathData(path, jumps),
           fill: 'none',
           ...appearance,
           ...markers,
@@ -163,14 +224,14 @@ export function renderEdge(node: ResolvedEdgeNode): SvgChild {
         })
       : jumps.length > 0
         ? el('path', {
-            d: jumpedPathData(node.path, jumps),
+            d: jumpedPathData(path, jumps),
             fill: 'none',
             ...appearance,
             ...markers,
             role: PRESENTATION,
           })
         : el('polyline', {
-            points: pointsAttr(node.path),
+            points: pointsAttr(path),
             fill: 'none',
             ...appearance,
             ...markers,

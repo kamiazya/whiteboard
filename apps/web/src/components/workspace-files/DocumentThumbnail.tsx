@@ -13,13 +13,13 @@
 
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import { FileText, LayoutGrid } from 'lucide-react'
-import { type MouseEvent, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { PREVIEW_PADDING_PX } from '../../lib/preview-padding.js'
 import { cn } from '../../lib/utils.js'
-import { fitSvgToBox } from './fit-svg.js'
+import { fitSvgToBox, withoutLinks } from './fit-svg.js'
 import { type DocumentRender, EMPTY_DOCUMENT, type RowRender } from './load-row-render.js'
 
 export interface DocumentThumbnailProps {
@@ -44,17 +44,6 @@ export interface DocumentThumbnailProps {
 // letters apart instead of scaling the layout.
 const PICTURE_HOST = { 'data-testid': 'document-thumbnail', 'aria-hidden': true, inert: true }
 
-/**
- * A link drawn in the picture must not navigate: the card around it is the
- * click target, and the renderer's bare document-id href, followed by the
- * browser, reloads the tab onto a route naming no document. The click still
- * bubbles, so the card opens. `inert` already keeps a real pointer off the
- * link; this capture is what holds for a click that is not hit-tested.
- */
-function keepLinksInert(event: MouseEvent): void {
-  if (event.target instanceof Element && event.target.closest('a') !== null) event.preventDefault()
-}
-
 /** Wider than this, a note's picture is a line of text, not a page. */
 const STRIP_ASPECT = 2.5
 
@@ -70,8 +59,9 @@ function fitFor(document: WorkspaceDocumentEntry, bounds: DocumentRender['bounds
  */
 function thumbnailSvg(document: WorkspaceDocumentEntry, drawn: DocumentRender): string {
   const fit = fitFor(document, drawn.bounds)
-  if (document.kind !== 'markdown') return fitSvgToBox(drawn.svg, fit)
-  return fitSvgToBox(drawn.svg, fit, {
+  const picture = withoutLinks(drawn.svg)
+  if (document.kind !== 'markdown') return fitSvgToBox(picture, fit)
+  return fitSvgToBox(picture, fit, {
     w: drawn.bounds.w + PREVIEW_PADDING_PX,
     h: drawn.bounds.h + PREVIEW_PADDING_PX,
   })
@@ -180,7 +170,6 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
           <SceneSvg
             as="span"
             svg={thumbnailSvg(document, drawn)}
-            onClickCapture={keepLinksInert}
             className={pictureClass(document, drawn)}
           />
           {/* The icon LEAVES rather than vanishing. Measured on the real app

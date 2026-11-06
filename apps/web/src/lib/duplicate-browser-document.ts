@@ -1,3 +1,4 @@
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { type DocumentIndex, hasDocumentDuplicates } from '@kamiazya/whiteboard-ports'
 import { type ContentClock, loadBrowserDocument } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -16,16 +17,19 @@ import type { DocumentSnapshot } from './whiteboard-client.js'
  * composition without it: a copy derived out here could not promise the same
  * placement or the same serialisation.
  */
-export async function duplicateBrowserDocument(input: {
-  index: DocumentIndex
-  clock: ContentClock
-  sourcePath: string
-}): Promise<DocumentSnapshot> {
-  const { index, clock, sourcePath } = input
+export async function duplicateBrowserDocument(
+  input: {
+    index: DocumentIndex
+    clock: ContentClock
+    sourcePath: string
+  } & DuplicateDocumentRequest,
+): Promise<DocumentSnapshot> {
+  const { index, clock, sourcePath, withoutAnnotations } = input
   if (!hasDocumentDuplicates(index)) throw new Error(NO_DUPLICATES)
   const copy = await index.duplicateDocument({
     workspaceId: getBrowserWorkspaceId(),
     path: sourcePath,
+    ...(withoutAnnotations === true ? { withoutAnnotations } : {}),
   })
   const snap = await loadBrowserDocument(index, copy.documentId, clock)
   if (snap === null) throw new Error('The copy vanished before it could be read.')

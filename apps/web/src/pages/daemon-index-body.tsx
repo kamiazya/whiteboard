@@ -1,3 +1,4 @@
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 /**
  * What the daemon index LISTS, as screens: the failed-load recovery, the
  * empty daemon, the loading skeleton, onboarding, and the panel. Its own file
@@ -123,7 +124,7 @@ interface DaemonFilesSectionProps {
   routedFolder: ReturnType<typeof useRoutedFolder>['folder']
   setRoutedFolder: ReturnType<typeof useRoutedFolder>['setFolder']
   onOpenDocument: DaemonIndexPageProps['onOpenDocument']
-  onDuplicate: (path: string) => void | Promise<void>
+  onDuplicate: (path: string, request?: DuplicateDocumentRequest) => void | Promise<void>
   onRequestDelete: (pending: PendingDelete) => void
 }
 
@@ -141,7 +142,7 @@ function DaemonFilesSection(props: DaemonFilesSectionProps) {
         initialFolder={props.routedFolder}
         onFolderChange={props.setRoutedFolder}
         onOpenDocument={(path) => props.onOpenDocument(props.selectedWorkspace, path)}
-        onDuplicateDocument={(path) => void props.onDuplicate(path)}
+        onDuplicateDocument={(path, request) => void props.onDuplicate(path, request)}
         {...deleteRequestsFor(props.onRequestDelete)}
         // A new array on every successful read, which is exactly the
         // signal the panel needs: the page reloads this list after a
@@ -169,7 +170,7 @@ interface DaemonIndexBodyProps {
   workspacesLoaded: boolean
   workspaceCount: number
   onCreate: (kind: DocumentKind) => void | Promise<void>
-  onDuplicate: (path: string) => void | Promise<void>
+  onDuplicate: (path: string, request?: DuplicateDocumentRequest) => void | Promise<void>
   onRequestDelete: (pending: PendingDelete) => void
   onRetryWorkspaces: () => void | Promise<void>
   serverMode: boolean

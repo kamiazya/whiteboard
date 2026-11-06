@@ -170,7 +170,7 @@ describe('deleting a daemon-kept document from its own page', () => {
     await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
 
     await openDocumentOpsMenu()
-    const duplicate = await screen.findByRole('menuitem', { name: /duplicate/i })
+    const duplicate = await screen.findByRole('menuitem', { name: 'Duplicate' })
     await act(async () => {
       fireEvent.pointerUp(duplicate)
     })

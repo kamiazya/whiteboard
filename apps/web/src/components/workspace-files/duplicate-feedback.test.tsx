@@ -60,6 +60,43 @@ describe('duplicating a document from its menu', () => {
     expect(onOpenDocument).toHaveBeenCalledWith('budget-copy')
   })
 
+  it('names a copy made without comments as one', async () => {
+    let rows: WorkspaceDocumentEntry[] = [
+      { documentId: 'd1', path: 'budget', name: 'Budget review', kind: 'markdown' },
+    ]
+    const source = fakeFilesSource({ listDocuments: async () => rows })
+    let revision = 0
+    const panel = () => (
+      <WorkspaceFilesPanel
+        source={source}
+        revision={revision}
+        onDuplicateDocument={(path) => {
+          rows = [
+            ...rows,
+            {
+              documentId: 'd3',
+              path: `${path}-copy`,
+              name: 'Budget review (copy)',
+              kind: 'markdown',
+            },
+          ]
+          revision += 1
+          view.rerender(panel())
+        }}
+      />
+    )
+    const view = render(panel())
+
+    const card = (await screen.findAllByTestId('card-title'))
+      .find((each) => each.textContent === 'Budget review')
+      ?.closest('button') as HTMLElement
+    fireEvent.contextMenu(card, { clientX: 5, clientY: 5 })
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate without comments' }))
+
+    expect(await screen.findByText('Duplicated Budget review without comments')).toBeTruthy()
+  })
+
   it('does not take a document arriving long after a duplicate that never landed for its copy', async () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     let rows: WorkspaceDocumentEntry[] = [

@@ -855,7 +855,11 @@ describe('DaemonIndexPage', () => {
         'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
-      onDuplicateDocument: (workspaceId, path) => duplicated.push([workspaceId, path]),
+      onDuplicateDocument: (workspaceId, path, request) => {
+        duplicated.push([workspaceId, path])
+        // A plain Duplicate copies the whole document, conversation included.
+        expect(request).toEqual({})
+      },
     })
     const onOpenDocument = vi.fn()
 
@@ -867,6 +871,26 @@ describe('DaemonIndexPage', () => {
     await waitFor(() => expect(duplicated).toEqual([['ws-a', 'alpha']]))
     // Clicking the Duplicate action must not also open the source canvas.
     expect(onOpenDocument).not.toHaveBeenCalled()
+  })
+
+  it('asks the daemon for a copy without comments from the card menu', async () => {
+    const asked: unknown[] = []
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
+      },
+      namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
+      onDuplicateDocument: (_workspaceId, path, request) => asked.push([path, request]),
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    const card = (await screen.findByText('Alpha')).closest('button') as HTMLElement
+    fireEvent.contextMenu(card, { clientX: 40, clientY: 40 })
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Duplicate without comments' }))
+
+    await waitFor(() => expect(asked).toEqual([['alpha', { withoutAnnotations: true }]]))
   })
 
   it('a second Duplicate press while one is in flight starts no second copy', async () => {

@@ -21,7 +21,7 @@ const entries = [
 function renderPanel(
   overrides: {
     onOpenDocument?: (path: string) => void
-    onDuplicateDocument?: (path: string) => void
+    onDuplicateDocument?: (path: string, options?: { withoutAnnotations?: boolean }) => void
     onRequestDelete?: (path: string, displayName: string, kind?: 'spatial' | 'markdown') => void
     setPinned?: (entry: { readonly path: string }, pinned: boolean) => Promise<void>
     rows?: readonly WorkspaceDocumentEntry[]
@@ -61,6 +61,22 @@ describe('document card context menu', () => {
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull())
   })
 
+  it('Duplicate without comments asks for a copy that leaves the conversation behind', async () => {
+    const onDuplicateDocument = vi.fn()
+    renderPanel({ onDuplicateDocument })
+
+    const plain = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(plain).getByRole('menuitem', { name: 'Duplicate' }))
+    expect(onDuplicateDocument).toHaveBeenLastCalledWith('meeting-notes')
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull())
+
+    const bare = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(bare).getByRole('menuitem', { name: 'Duplicate without comments' }))
+    expect(onDuplicateDocument).toHaveBeenLastCalledWith('meeting-notes', {
+      withoutAnnotations: true,
+    })
+  })
+
   it('Open from the menu is remembered like every other open', async () => {
     // The menu is the long-press path on a phone: an open from it that skipped
     // the Recent lane and the seen baseline would leave the card's changed dot
@@ -85,6 +101,7 @@ describe('document card context menu', () => {
     renderPanel({ onRequestDelete: () => {} })
     const menu = await contextMenuOnCard('Meeting notes')
     expect(within(menu).queryByRole('menuitem', { name: 'Duplicate' })).toBeNull()
+    expect(within(menu).queryByRole('menuitem', { name: 'Duplicate without comments' })).toBeNull()
     expect(within(menu).queryByRole('menuitem', { name: 'Open' })).toBeNull()
     expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toBeTruthy()
   })

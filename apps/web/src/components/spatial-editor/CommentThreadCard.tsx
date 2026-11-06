@@ -21,6 +21,8 @@
 import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
 import { Check, CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
+import { COMMENT_ANNOUNCEMENTS } from '../../lib/comment-announcements.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { cn } from '../../lib/utils.js'
 import { CommentComposer } from '../annotations/CommentComposer.js'
@@ -56,12 +58,22 @@ export function CommentThreadCard({
   thread,
   box,
   style,
-  onReply,
-  onResolve,
+  onReply: reply,
+  onResolve: resolve,
   onEditMessage,
   onClose,
   orphaned = false,
 }: CommentThreadCardProps) {
+  // The card's writes speak on the canvas's region: the reply box clears and
+  // the status flip redraws, neither of which a screen reader reports.
+  const onReply = (body: string) => {
+    reply(body)
+    announceOnCanvas(COMMENT_ANNOUNCEMENTS.replied)
+  }
+  const onResolve = (next: boolean) => {
+    resolve(next)
+    announceOnCanvas(next ? COMMENT_ANNOUNCEMENTS.resolved : COMMENT_ANNOUNCEMENTS.reopened)
+  }
   const cardRef = useRef<HTMLDivElement | null>(null)
   const resolved = thread.status === 'resolved'
   // The message under edit, with its draft. At most one: two open editors

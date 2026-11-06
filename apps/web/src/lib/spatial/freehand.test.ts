@@ -1,5 +1,10 @@
-import { canvasLineSchema, MAX_BENDS, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
-import { VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  type CanvasLine,
+  canvasLineSchema,
+  MAX_BENDS,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
+import { VISUAL_EDGES_KEY, VISUAL_STROKE_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import {
   FREEHAND_MAX_POINTS,
@@ -7,6 +12,7 @@ import {
   MIN_STROKE_TRAVEL_PX,
   STROKE_TOLERANCE_PX,
   simplifyStroke,
+  withPen,
 } from './freehand.js'
 import type { Point } from './viewport.js'
 
@@ -86,6 +92,27 @@ describe('freehandLine', () => {
     // the same smoothing a drawing app applies to a captured stroke.
     const line = freehandLine('ink-1', [at(0, 0), at(40, 60), at(90, 10), at(140, 80)], 1)
     expect(line?.facets?.[VISUAL_EDGES_KEY]).toEqual({ routing: 'curved' })
+  })
+
+  it('carries the colour and weight the pen was set to', () => {
+    const drawn = [at(0, 0), at(40, 60), at(90, 10), at(140, 80)]
+    const line = withPen(freehandLine('ink-1', drawn, 1) as CanvasLine, {
+      color: '4',
+      width: 'thick',
+    })
+    expect(line?.color).toBe('4')
+    expect(line?.facets?.[VISUAL_STROKE_KEY]).toEqual({ width: 'thick' })
+    expect(canvasLineSchema.safeParse(line).success).toBe(true)
+  })
+
+  it('writes nothing for the default pen, so default ink stays bare', () => {
+    // `thin` is the absent weight and no colour is the theme's ink: a stroke
+    // drawn with the pen untouched must look like one drawn before pens
+    // had settings, in every renderer.
+    const drawn = [at(0, 0), at(40, 60), at(90, 10), at(140, 80)]
+    const line = withPen(freehandLine('ink-1', drawn, 1) as CanvasLine, { width: 'thin' })
+    expect(line).not.toHaveProperty('color')
+    expect(line?.facets).not.toHaveProperty(VISUAL_STROKE_KEY)
   })
 
   it('bounds what one stroke writes, however long the pointer was down', () => {

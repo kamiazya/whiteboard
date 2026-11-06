@@ -61,15 +61,12 @@ function clearSpentMarkup(userEvent: string, separateEndedList: boolean): StateC
  * bare `>` line behind and pull the following text into the quote. Bound
  * ABOVE the language keymap; reports unhandled everywhere else so
  * continuation keeps working.
- */
-export const exitEmptyListItem: StateCommand = clearSpentMarkup('delete', false)
-
-/**
- * {@link exitEmptyListItem}, plus the blank line that actually ENDS the list.
- * Without it the next line typed is a lazy continuation (CommonMark 5.2) and
- * renders inside the last item; only a heading or fence interrupts a list on
- * its own. The note editor's Enter: a line typed after leaving a list is a
- * paragraph of its own.
+ *
+ * Leaving a LIST also leaves the blank line that actually ends it. Without
+ * it the next line typed is a lazy continuation (CommonMark 5.2) and renders
+ * inside the last item; only a heading or fence interrupts a list on its own.
+ * The Enter of both the note editor and a canvas node's editor: a line typed
+ * after leaving a list is a paragraph of its own.
  */
 export const endListOnEmptyItem: StateCommand = clearSpentMarkup('delete', true)
 

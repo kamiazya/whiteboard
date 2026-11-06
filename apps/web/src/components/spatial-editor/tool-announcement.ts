@@ -7,6 +7,7 @@ const TOOL_ANNOUNCEMENT = {
   hand: 'Hand tool',
   connect: 'Connect tool',
   draw: 'Draw tool',
+  erase: 'Eraser',
 } as const satisfies Record<EditorTool, string>
 
 /**

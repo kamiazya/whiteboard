@@ -32,24 +32,37 @@ function useCanvasAnnouncements(
   selectedNodeIds: readonly string[],
   selectedEdgeId: string | null,
   externalVersion: number | undefined,
+  erasing: boolean,
 ): void {
   const selectionKey = `${selectedNodeIds.join('\u0000')}\u0001${selectedEdgeId ?? ''}`
   const previous = useRef({ canvas, selectionKey, externalVersion })
+  // Every stroke this board has shown, so one that comes back reads as
+  // restored and an undone erase is not mistaken for a document arriving.
+  const seenLines = useRef<Set<string> | null>(null)
+  seenLines.current ??= new Set((canvas.lines ?? []).map((line) => line.id))
   useEffect(() => {
     const before = previous.current
     previous.current = { canvas, selectionKey, externalVersion }
+    const seen = seenLines.current ?? new Set<string>()
     // A document arriving from outside (opened, synced) onto an empty board is
-    // a load, not something the person just added.
-    const loaded = before.externalVersion !== externalVersion && before.canvas.nodes.length === 0
+    // a load, not something the person just added — unless what arrived is
+    // ink this board already showed, which is an undo.
+    const loaded =
+      before.externalVersion !== externalVersion &&
+      before.canvas.nodes.length === 0 &&
+      !(canvas.lines ?? []).some((line) => seen.has(line.id))
     const changed =
-      before.canvas === canvas || loaded ? undefined : canvasChangeMessage(before.canvas, canvas)
+      before.canvas === canvas || loaded
+        ? undefined
+        : canvasChangeMessage(before.canvas, canvas, erasing, seen)
+    for (const line of canvas.lines ?? []) seen.add(line.id)
     const selected =
       before.selectionKey === selectionKey
         ? undefined
         : selectionMessage(canvas, selectedNodeIds, selectedEdgeId)
     const message = changed ?? selected
     if (message !== undefined) announceOnCanvas(message)
-  }, [canvas, selectionKey, selectedNodeIds, selectedEdgeId, externalVersion])
+  }, [canvas, selectionKey, selectedNodeIds, selectedEdgeId, externalVersion, erasing])
 }
 
 function A11yOption({
@@ -108,6 +121,7 @@ export function CanvasA11yTree({
   extraIds,
   selectedEdgeId,
   externalVersion,
+  erasing = false,
 }: {
   readonly canvas: SpatialCanvas
   /** The editor's external-replacement counter; a bump marks the canvas as arriving rather than edited. */
@@ -116,12 +130,14 @@ export function CanvasA11yTree({
   readonly primaryId: string | null
   readonly extraIds: ReadonlySet<string>
   readonly selectedEdgeId: string | null
+  /** The eraser is armed, so drawings that go were ERASED rather than deleted. */
+  readonly erasing?: boolean
 }) {
   const selectedNodeIds = useMemo(
     () => (primaryId === null ? [] : [primaryId, ...extraIds]),
     [primaryId, extraIds],
   )
-  useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId, externalVersion)
+  useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId, externalVersion, erasing)
   const stops = useMemo(
     () => traversalStops(canvas, { isNodeLocked: () => false, isInkLocked: () => false }),
     [canvas],

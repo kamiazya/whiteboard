@@ -32,10 +32,13 @@ describe('InMemoryDocumentIndex pins', () => {
 describe('DuplicatingInMemoryDocumentIndex', () => {
   describeDocumentDuplicatesConformance(async () => {
     const markers = new Map<string, string>()
+    const threads = new Map<string, readonly string[]>()
     const index = new DuplicatingInMemoryDocumentIndex({
-      copy: (from, to) => {
+      copy: (from, to, { withoutAnnotations }) => {
         const marker = markers.get(from)
         if (marker !== undefined) markers.set(to, marker)
+        const held = threads.get(from)
+        if (held !== undefined && !withoutAnnotations) threads.set(to, held)
       },
     })
     const idAt = async (workspaceId: string, path: string): Promise<string> => {
@@ -50,6 +53,12 @@ describe('DuplicatingInMemoryDocumentIndex', () => {
           markers.set(await idAt(workspaceId, path), marker)
         },
         read: async (workspaceId, path) => markers.get(await idAt(workspaceId, path)) ?? '',
+        comment: async (workspaceId, path, threadId) => {
+          const id = await idAt(workspaceId, path)
+          threads.set(id, [...(threads.get(id) ?? []), threadId])
+        },
+        threadIds: async (workspaceId, path) =>
+          [...(threads.get(await idAt(workspaceId, path)) ?? [])].sort(),
       },
       dispose: async () => {},
     }

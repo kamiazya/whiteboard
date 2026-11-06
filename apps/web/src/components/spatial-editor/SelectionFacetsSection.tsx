@@ -98,7 +98,7 @@ const LineSection = ({ drawing }: { drawing: boolean }) => (
   >
     <span className="text-xs font-medium">{drawing ? 'This drawing' : 'This line'}</span>
     <p className="text-xs text-muted-foreground">
-      Colour, label, lock and delete are on its more-actions button (⋯) on the canvas.
+      Colour, width, label, lock and delete are on its more-actions button (⋯) on the canvas.
     </p>
   </section>
 )
