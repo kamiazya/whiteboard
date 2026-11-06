@@ -166,6 +166,24 @@ describe('MarkdownEditor', () => {
     expect(second.getByRole('button', { name: 'Read' }).getAttribute('aria-pressed')).toBe('true')
   })
 
+  it('counts characters, not words, in a note written mostly in Japanese', async () => {
+    vi.useFakeTimers()
+    const { getByTestId } = render(
+      <MarkdownEditor
+        theme="light"
+        value={'# 2027 Q1 ロードマップ\n\n来期は検索を改善します。'}
+        onChange={() => {}}
+        previewDebounceMs={150}
+      />,
+    )
+    await act(async () => {
+      vi.advanceTimersByTime(150)
+    })
+    // Japanese is not written with spaces, so a word count of it is the
+    // number of script changes. Letters and digits, markup and punctuation out.
+    expect(getByTestId('markdown-word-count').textContent).toBe('23 characters')
+  })
+
   it('shows a word count that follows the debounced value', async () => {
     vi.useFakeTimers()
     const { getByTestId, rerender } = render(

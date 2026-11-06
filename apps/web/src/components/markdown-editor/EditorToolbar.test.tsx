@@ -15,7 +15,7 @@ function mount() {
         mode="write"
         onModeChange={vi.fn()}
         splitAvailable
-        wordCount={3}
+        bodyLength="3 words"
         onOpenCatalog={vi.fn()}
         catalogAvailable
         onUndo={vi.fn()}

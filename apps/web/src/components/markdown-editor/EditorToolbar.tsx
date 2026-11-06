@@ -22,7 +22,8 @@ export interface EditorToolbarProps {
   readonly onModeChange: (mode: MarkdownViewMode) => void
   /** Split needs room for two columns; narrow containers drop the option. */
   readonly splitAvailable: boolean
-  readonly wordCount: number
+  /** How long the body is, worded ("42 words", "120 characters"). */
+  readonly bodyLength: string
   /** Opens the editing catalog, anchored under the ⋯ trigger. */
   readonly onOpenCatalog: (anchor: { x: number; y: number }) => void
   /**
@@ -133,7 +134,7 @@ export function EditorToolbar({
   mode,
   onModeChange,
   splitAvailable,
-  wordCount,
+  bodyLength,
   onOpenCatalog,
   catalogAvailable,
   runVerb,
@@ -208,7 +209,7 @@ export function EditorToolbar({
           data-testid="markdown-word-count"
           className="text-muted-foreground hidden text-xs tabular-nums sm:block"
         >
-          {wordCount === 1 ? '1 word' : `${wordCount} words`}
+          {bodyLength}
         </span>
         <fieldset
           className="bg-muted flex items-center gap-0.5 rounded-lg p-0.5 pointer-coarse:p-0"
