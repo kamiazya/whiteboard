@@ -22,6 +22,7 @@ import {
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 import { documentLabel } from '../lib/document-label.js'
+import { duplicateLanded } from '../lib/duplicate-landed.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { newDocumentPathIn } from '../lib/new-document-path.js'
@@ -116,6 +117,24 @@ function listingRows(entries: readonly WorkspaceDocumentEntry[]): DocumentRow[] 
     updatedAt: entry.updatedAt,
     ...(entry.kind === undefined ? {} : { kind: entry.kind }),
   }))
+}
+
+/**
+ * The failure a daemon duplicate still has to show once the list is re-read.
+ * A refusal does not prove the daemon wrote nothing (the copy can exist while
+ * its answer is lost), and a copy found in the re-read is the outcome, which
+ * the panel announces — saying it failed as well would invite a second
+ * press, and the second copy is real too.
+ */
+function failureAfterReread(
+  failure: string | null,
+  before: readonly DocumentRow[],
+  after: readonly string[] | null | undefined,
+  sourcePath: string,
+): string | null {
+  if (failure === null || after == null) return failure
+  const paths = new Set(before.map((row) => row.path))
+  return duplicateLanded(paths, after, sourcePath) ? null : failure
 }
 
 export function DaemonIndexPage({
@@ -399,7 +418,7 @@ export function DaemonIndexPage({
   )
 
   const loadWorkspace = useCallback(
-    async (workspaceId: string, isStale: () => boolean) => {
+    async (workspaceId: string, isStale: () => boolean): Promise<readonly string[] | undefined> => {
       setLoadError(null)
       try {
         // Through the SAME source the panel reads, and as a refresh: this runs
@@ -412,6 +431,7 @@ export function DaemonIndexPage({
         setRows(listingRows(entries))
         setTrashCount(trash?.length ?? 0)
         setLoaded(true)
+        return entries.map((entry) => entry.path)
       } catch (err) {
         if (isStale()) return
         setRows([])
@@ -562,18 +582,20 @@ export function DaemonIndexPage({
       // workspace. Applying its outcome to the page is gated on that
       // workspace still being the one viewed.
       const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
+      let failure: string | null = null
       try {
         await duplicateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath, request)
       } catch (err) {
-        if (!isStale()) setDuplicateError(messageOf(err, 'Failed to duplicate document.'))
+        failure = messageOf(err, 'Failed to duplicate document.')
+      }
+      try {
+        const after = isStale() ? null : await loadWorkspace(workspaceAtStart, isStale)
+        if (!isStale()) setDuplicateError(failureAfterReread(failure, rows, after, sourcePath))
       } finally {
-        // A refusal does not prove the daemon wrote nothing (the copy can
-        // exist while its answer is lost), so the list is re-read either way.
-        if (!isStale()) await loadWorkspace(workspaceAtStart, isStale)
         setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }
     },
-    [daemonFetch, daemonBaseUrl, selectedWorkspace, loadWorkspace, duplicatingPath],
+    [daemonFetch, daemonBaseUrl, selectedWorkspace, loadWorkspace, duplicatingPath, rows],
   )
 
   // What the page calls itself. `workspaceLabel` owns the precedence

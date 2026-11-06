@@ -145,27 +145,30 @@ it('reports a refusing list as a list failure, not as a failed duplicate', async
   expect(await store.index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toHaveLength(2)
 })
 
-/**
- * A duplicate that fails AFTER the keeper wrote — the read-back of the copy,
- * say — leaves a copy the list has not seen. The page cannot tell that apart
- * from a write that never happened, so it says the duplicate failed and reads
- * the list again, as the daemon keeper's page does.
- */
-it('re-reads the list after a failed duplicate and keeps the failure shown', async () => {
-  const store = await seedOne()
-  const failing = new Proxy(store.index, {
+function failingDuplicate(store: BrowserStoreDouble, write: boolean) {
+  return new Proxy(store.index, {
     get(target, prop) {
       const held = Reflect.get(target, prop)
       if (prop !== 'duplicateDocument') {
         return typeof held === 'function' ? held.bind(target) : held
       }
       return async (...args: Parameters<typeof store.index.duplicateDocument>) => {
-        await target.duplicateDocument(...args)
+        if (write) await target.duplicateDocument(...args)
         throw new Error('the answer was lost')
       }
     },
   })
-  renderPage(store, failing)
+}
+
+/**
+ * A duplicate that fails AFTER the keeper wrote — the read-back of the copy,
+ * say — leaves a copy the list has not seen. The page reads the list again,
+ * and when the copy is there the outcome is a copy: one notice saying so,
+ * never that and a failure at once.
+ */
+it('reports a copy that landed despite a lost answer only as a copy', async () => {
+  const store = await seedOne()
+  renderPage(store, failingDuplicate(store, true))
   await waitFor(() => expect(titles()).toEqual(['Alpha']))
 
   await duplicateTheOnlyRow()
@@ -173,5 +176,19 @@ it('re-reads the list after a failed duplicate and keeps the failure shown', asy
   await waitFor(() => expect(titles().sort()).toEqual(['Alpha', 'Alpha (copy)']), {
     timeout: 15_000,
   })
-  expect(screen.getByRole('alert').textContent).toContain('Failed to duplicate')
+  expect(await screen.findByText('Duplicated Alpha')).toBeTruthy()
+  expect(screen.queryByRole('alert')).toBeNull()
+})
+
+it('reports a duplicate that wrote nothing only as a failure', async () => {
+  const store = await seedOne()
+  renderPage(store, failingDuplicate(store, false))
+  await waitFor(() => expect(titles()).toEqual(['Alpha']))
+
+  await duplicateTheOnlyRow()
+
+  const alert = await screen.findByRole('alert', undefined, { timeout: 15_000 })
+  expect(alert.textContent).toContain('Failed to duplicate')
+  expect(titles()).toEqual(['Alpha'])
+  expect(screen.queryByText(/^Duplicated /)).toBeNull()
 })

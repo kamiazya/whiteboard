@@ -33,6 +33,7 @@ import {
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { documentLabel } from '../lib/document-label.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
+import { duplicateLanded } from '../lib/duplicate-landed.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -553,6 +554,30 @@ function useLauncherShortcut(onCreate: (kind: DocumentKind) => Promise<void>): v
   }, [params, setParams, onCreate])
 }
 
+/**
+ * Whether a refused browser duplicate made its copy all the same. A refusal
+ * after the write (reading the copy back) leaves one, and the panel announces
+ * it once the list shows it — so the list is asked, and a copy there is the
+ * outcome. A listing that refuses here proves nothing either way: the
+ * failure stands, and the load effect reports its own refusal.
+ */
+async function browserCopyLanded(
+  index: Parameters<typeof listBrowserDocuments>[0],
+  clock: Parameters<typeof listBrowserDocuments>[1],
+  before: readonly DocumentSnapshot[] | null,
+  sourcePath: string,
+): Promise<boolean> {
+  if (before === null) return false
+  const after = await listBrowserDocuments(index, clock).catch(() => null)
+  if (after === null) return false
+  const paths = new Set(before.map((row) => row.path))
+  return duplicateLanded(
+    paths,
+    after.map((row) => row.path),
+    sourcePath,
+  )
+}
+
 export function BrowserIndexPage({
   // Safe as a parameter default (unlike the clocks below): the shared
   // accessor memoizes, so every render sees the same identity. The concrete
@@ -627,21 +652,20 @@ export function BrowserIndexPage({
       try {
         await duplicateBrowserDocument({ index, clock, sourcePath, ...request })
       } catch {
-        setDuplicateError('Failed to duplicate the document in this browser.')
+        if (!(await browserCopyLanded(index, clock, snapshots, sourcePath))) {
+          setDuplicateError('Failed to duplicate the document in this browser.')
+        }
       } finally {
-        // Re-read on failure too: a refusal after the write (reading the
-        // copy back) leaves a copy the list has not seen, and the page
-        // cannot tell that from a write that never happened. The bump is
-        // outside the catch on purpose — the load effect owns its own
-        // refusal, so a re-read that fails after the copy exists is
-        // reported as a list that could not be read, never as a duplicate
-        // that did not happen. The wrong answer there invites a second
-        // press, and the second copy is real too.
+        // Re-read either way, outside the catch on purpose: the load effect
+        // owns its own refusal, so a re-read that fails after the copy exists
+        // is reported as a list that could not be read, never as a duplicate
+        // that did not happen. The wrong answer there invites a second press,
+        // and the second copy is real too.
         setFilesRevision((n) => n + 1)
         setDuplicating(false)
       }
     },
-    [index, clock, duplicating, setFilesRevision],
+    [index, clock, duplicating, snapshots, setFilesRevision],
   )
 
   const { creating, handleCreate } = useBrowserCreate({

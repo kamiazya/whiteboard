@@ -362,7 +362,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // their own module beside the page, so what is here is wiring; the backend
   // seam left for `use-daemon-document-backend.ts`.
   'apps/web/src/pages/DaemonDocumentPage.tsx#useDaemonDocument': 454,
-  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 523,
+  'apps/web/src/pages/DaemonIndexPage.tsx#DaemonIndexPage': 526, // +3: a refused duplicate is judged after the re-read, with the in-flight flag still released in a finally
   // The inspector column, the merged header row and the markdown pane's props
   // are each a named piece, which is what keeps the page's cognitive complexity
   // under the threshold. Recorded at the measurement rather than left at an old

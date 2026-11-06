@@ -69,10 +69,10 @@ describe('duplicating from the daemon keeper’s list', () => {
   /**
    * A refused request does not prove the daemon wrote nothing: the copy can
    * exist while the answer is lost. So the list is re-read after a failure,
-   * as the browser keeper's page does, rather than left showing a state
-   * nobody knows to be current.
+   * as the browser keeper's page does, and a copy found there is the
+   * outcome — one notice saying so, never that and a failure at once.
    */
-  it('re-reads the list after a failed duplicate and keeps the failure shown', async () => {
+  it('reports a copy that landed despite a refused answer only as a copy', async () => {
     let rows = [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }]
     installFakeDaemonFetch({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -96,7 +96,24 @@ describe('duplicating from the daemon keeper’s list', () => {
         'Alpha (copy)',
       ]),
     )
-    expect(screen.getByRole('alert').textContent).toMatch(/timed out/i)
+    expect(await screen.findByText('Duplicated Alpha')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('reports a refused duplicate that wrote nothing only as a failure', async () => {
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }],
+      },
+      onDuplicateDocument: () => jsonResponse({ title: 'Upstream timed out' }, 500),
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await selectCard('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/timed out/i)
+    expect(screen.queryByText(/^Duplicated /)).toBeNull()
   })
 
   it('drops a failed duplicate’s alert when the workspace switches', async () => {
