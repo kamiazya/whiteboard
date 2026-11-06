@@ -84,7 +84,9 @@ function linkAround(value: string, at: number): { start: number; end: number } |
  * The words markdown typesets, without the typesetting: fence lines, quote /
  * list / task / heading markers, table delimiter rows and cell pipes, and
  * inline emphasis, code ticks and link syntax. Anchored on lines, so it runs
- * over the excerpt before whitespace is collapsed. A wiki link becomes what
+ * over the excerpt before whitespace is collapsed. A heading or list marker
+ * also counts at the very end of a line, since the excerpt's cut can fall
+ * between `##` and the space that made it one. A wiki link becomes what
  * it reads as, after everything else, so neither a pipe in it nor markup in
  * a display name is mistaken for the excerpt's own.
  */
@@ -98,7 +100,7 @@ function stripMarkup(chunk: string, labelOf: LinkLabel | undefined): string {
     .replace(/^[ \t]*(?:`{3,}|~{3,}).*$/gm, '')
     .replace(/^[ \t]*\|?[ \t]*:?-{2,}:?[ \t]*(?:\|[ \t]*:?-{2,}:?[ \t]*)*\|?[ \t]*$/gm, '')
     .replace(
-      /^[ \t]*(?:#{1,6}[ \t]+|(?:>[ \t]?)+|[-*+][ \t]+\[[ xX]\][ \t]+|[-*+][ \t]+|\d+[.)][ \t]+)/gm,
+      /^[ \t]*(?:#{1,6}(?:[ \t]+|$)|(?:>[ \t]?)+|[-*+][ \t]+\[[ xX]\][ \t]+|[-*+](?:[ \t]+|$)|\d+[.)](?:[ \t]+|$))/gm,
       '',
     )
     .replace(/!?\[([^\]]*)\]\([^)]*\)/g, '$1')
