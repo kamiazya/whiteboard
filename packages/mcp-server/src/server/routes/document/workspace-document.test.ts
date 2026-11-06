@@ -58,9 +58,9 @@ beforeEach(async () => {
   // The workspace exists because this fixture says so, not because the first
   // POST created it: that route passes `createWorkspace: true`, which is
   // ADR-0019's MINT boundary — a mint keys the workspace by a fresh ULID and
-  // files `session1` as its segment, leaving the direct store reads in these
-  // cases naming nothing.
-  await seedWorkspaceRow(tempDir, 'session1')
+  // never by an id the caller sent, so the one these cases address is keyed
+  // here.
+  await seedWorkspaceRow(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
@@ -78,11 +78,11 @@ function canvasUpdate(doc: LoroDoc, ids: string[]): Uint8Array<ArrayBuffer> {
 }
 
 async function createDoc(path: string) {
-  await createTestDocument(serverDeps, { workspaceId: 'session1', path })
+  await createTestDocument(serverDeps, { workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF', path })
 }
 
 async function pushDoc(app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
-  const res = await app.request('/api/w/session1/document/c/update', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/c/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: canvasUpdate(doc, ids),
@@ -93,7 +93,7 @@ async function pushDoc(app: ReturnType<typeof createDocumentRouter>, doc: LoroDo
 async function fetchWorkspaceSnapshot(
   app: ReturnType<typeof createDocumentRouter>,
 ): Promise<LoroDoc> {
-  const res = await app.request('/api/w/session1/workspace-document/snapshot')
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/snapshot')
   expect(res.status).toBe(200)
   const doc = new LoroDoc()
   doc.import(new Uint8Array(await res.arrayBuffer()))
@@ -140,9 +140,9 @@ it('POST workspace-document/update lands on the tree and refreshes per-document 
   await pushDoc(app, new LoroDoc(), ['n-a'])
   // Warm the per-document projection cache so the test proves invalidation,
   // not just a cold read.
-  expect(readSpatialCanvas(await loadDocument('session1', 'c')).nodes.map((n) => n.id)).toEqual([
-    'n-a',
-  ])
+  expect(
+    readSpatialCanvas(await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c')).nodes.map((n) => n.id),
+  ).toEqual(['n-a'])
 
   const peer = await fetchWorkspaceSnapshot(app)
   const entry = resolveWorkspaceDocument(peer, 'c')
@@ -158,17 +158,16 @@ it('POST workspace-document/update lands on the tree and refreshes per-document 
   })
   peer.commit()
 
-  const res = await app.request('/api/w/session1/workspace-document/update', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: new Uint8Array(peer.export({ mode: 'update', from })),
   })
   expect(res.status).toBe(200)
 
-  expect(readSpatialCanvas(await loadDocument('session1', 'c')).nodes.map((n) => n.id)).toEqual([
-    'n-a',
-    'n-b',
-  ])
+  expect(
+    readSpatialCanvas(await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c')).nodes.map((n) => n.id),
+  ).toEqual(['n-a', 'n-b'])
 })
 
 it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => {
@@ -184,13 +183,15 @@ it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => 
   const replica = await fetchWorkspaceSnapshot(app)
   const updates: Uint8Array[] = []
   const unsubscribe = onWorkspaceDocUpdated((workspaceId, update) => {
-    if (workspaceId === 'session1') updates.push(update)
+    if (workspaceId === '01M8BBN7JS60N0ZAR13NP8SXBF') updates.push(update)
   })
   try {
     const client = new LoroDoc()
     client.import(
       new Uint8Array(
-        await (await app.request('/api/w/session1/document/c/snapshot')).arrayBuffer(),
+        await (
+          await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/c/snapshot')
+        ).arrayBuffer(),
       ),
     )
     await pushDoc(app, client, ['n-a', 'n-b'])
@@ -215,7 +216,7 @@ it('a malformed workspace-document update is a 400, not a daemon crash', async (
     }),
   )
   await createDoc('c')
-  const res = await app.request('/api/w/session1/workspace-document/update', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: new Uint8Array([1, 2, 3, 4]),
@@ -245,7 +246,7 @@ async function editorUpdate(
     })
   }
   peer.commit()
-  const res = await app.request('/api/w/session1/workspace-document/update', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: new Uint8Array(peer.export({ mode: 'update', from })),
@@ -254,19 +255,23 @@ async function editorUpdate(
 }
 
 async function autoVersionsOf(app: ReturnType<typeof createDocumentRouter>, path: string) {
-  const res = await app.request(`/api/workspaces/session1/documents/${path}/versions`)
+  const res = await app.request(
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${path}/versions`,
+  )
   expect(res.status).toBe(200)
   const body = (await res.json()) as { versions: { auto?: boolean }[] }
   return body.versions.filter((version) => version.auto === true).length
 }
 
 async function listedUpdatedAt(app: ReturnType<typeof createDocumentRouter>, path: string) {
-  const res = await app.request('/api/workspaces/session1/documents')
+  const res = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents')
   expect(res.status).toBe(200)
   const body = (await res.json()) as { documents: { path: string; updatedAt?: string }[] }
   return {
     route: body.documents.find((document) => document.path === path)?.updatedAt,
-    store: (await listDocuments('session1')).find((document) => document.path === path)?.updatedAt,
+    store: (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).find(
+      (document) => document.path === path,
+    )?.updatedAt,
   }
 }
 

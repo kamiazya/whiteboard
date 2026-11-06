@@ -24,7 +24,7 @@ type MakeTrashingIndex = () => Promise<{
   dispose: () => Promise<void>
 }>
 
-const WS = 'ws-trash-conformance'
+const WS = '01210P9NXCXWT4T3MTTMTR1040'
 // A well-formed id the trash never held.
 const ABSENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -59,7 +59,7 @@ export function describeDocumentTrashConformance(makeIndex: MakeTrashingIndex): 
     const { index, dispose, ...seams } = await makeIndex()
     try {
       await index.createWorkspace({ workspaceId: WS })
-      await index.createWorkspace({ workspaceId: 'ws-other' })
+      await index.createWorkspace({ workspaceId: '0175T8F2WH2MX756J1T7SHKGB8' })
       await body(index, seams.evacuatedBlobCount, seams)
     } finally {
       await dispose()
@@ -221,18 +221,18 @@ function describePurgeRefusals(withIndex: WithIndex): void {
 
   it('does not reach into another workspace trash', async () => {
     await withIndex(async (index) => {
-      const documentId = await trashed(index, 'a', 'ws-other')
+      const documentId = await trashed(index, 'a', '0175T8F2WH2MX756J1T7SHKGB8')
 
       await expect(index.purgeTrashEntry({ workspaceId: WS, documentId })).resolves.toBe(false)
 
-      await expect(trashIds(index, 'ws-other')).resolves.toEqual([documentId])
+      await expect(trashIds(index, '0175T8F2WH2MX756J1T7SHKGB8')).resolves.toEqual([documentId])
     })
   })
 
   it('refuses a workspace the index does not hold, as listTrash does', async () => {
     await withIndex(async (index) => {
       await expect(
-        index.purgeTrashEntry({ workspaceId: 'ws-nobody', documentId: ABSENT_ID }),
+        index.purgeTrashEntry({ workspaceId: '01YBPQM6R23CTD6BQ2KFA2FG70', documentId: ABSENT_ID }),
       ).rejects.toThrow(WorkspaceNotFoundError)
     })
   })

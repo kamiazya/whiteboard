@@ -20,7 +20,7 @@ import type { WorkspaceDocs } from './workspace-docs.js'
 
 /** Written out rather than imported, so the test is not judged by the constant it judges. */
 const CEILING = 4000
-const WS = 'ws-folders'
+const WS = '01BSXMXYEPZGZYHNN3KTQZ33EE'
 
 const notImplemented = (): Promise<never> => Promise.reject(new Error('not implemented'))
 

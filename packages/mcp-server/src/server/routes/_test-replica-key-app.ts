@@ -26,7 +26,7 @@ import { createReplicaKeyRouter } from './replica-key.js'
 type IsolatedDbModule = typeof import('../store/db/test-helpers.js')
 type IsolatedDbHandle = Awaited<ReturnType<IsolatedDbModule['createIsolatedDb']>>
 
-export const WS = 'ws-1'
+export const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 export const DAEMON_TOKEN = 'the-daemon-token'
 export const MACAROON_ROOT_KEY = new Uint8Array(32).fill(7)
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000

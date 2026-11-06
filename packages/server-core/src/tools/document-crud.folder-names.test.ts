@@ -5,7 +5,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentList } from './document-crud.js'
 import { wbDocumentListOutputSchema } from './document-crud.schemas.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 async function depsNaming(named: { path: string; name: string }[]) {
   const folders: DocumentFolders = {

@@ -380,17 +380,18 @@ describe('canvas OKF read route', () => {
     // alone. It is still worth guarding: a document whose bytes were deleted,
     // or one written by an older build that created placements lazily, lands
     // here.
+    const WORKSPACE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
     const store = new InMemoryDocumentStore()
     const documentIndex = new InMemoryDocumentIndex()
     const { app } = createServer(makeTestDeps({ documentStore: store, documentIndex }))
-    await documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await documentIndex.createWorkspace({ workspaceId: WORKSPACE_ID })
     const { documentId } = await documentIndex.createDocument({
-      workspaceId: 'ws-1',
+      workspaceId: WORKSPACE_ID,
       path: 'orphan',
       kind: 'spatial',
     })
 
-    const res = await app.request(`/api/v1/workspaces/ws-1/documents/${documentId}/okf`)
+    const res = await app.request(`/api/v1/workspaces/${WORKSPACE_ID}/documents/${documentId}/okf`)
     expect(res.status).toBe(404)
   })
 

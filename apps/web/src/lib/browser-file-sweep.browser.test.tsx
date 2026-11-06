@@ -282,7 +282,7 @@ describe('sweepUnreferencedFiles stands down rather than delete what it could no
     const logged = expectLoggedFailures()
     await upload('img-a')
     await seedDocument('page', ['img-a'])
-    await plantUnopenableRecord('other-ws')
+    await plantUnopenableRecord('01B8T60FK83VE2ND936DJVHVN2')
     await upload('img-other')
 
     expect(await sweepUnreferencedFiles()).toEqual({
@@ -333,9 +333,9 @@ describe('sweepUnreferencedFiles stands down rather than delete what it could no
   it("does not judge a replica's sealed record, so a replica holds no sweep back", async () => {
     await upload('img-orphan')
     await seedDocument('page', [])
-    await plantUnopenableRecord('replica-ws')
+    await plantUnopenableRecord('01YGCS49QEXRKBPGSXJZA7NTAR')
     createUserSettingsStore().update((current) =>
-      withReplicaEntry(current, 'replica-ws', {
+      withReplicaEntry(current, '01YGCS49QEXRKBPGSXJZA7NTAR', {
         daemonBaseUrl: 'http://127.0.0.1:3099',
         syncedAt: new Date().toISOString(),
       }),

@@ -18,15 +18,19 @@ type WithIndex = (
 export function describeRenameHeldBy(withIndex: WithIndex): void {
   it('renames only while the namespace `heldBy` names holds the workspace', async () => {
     await withIndex(async (index, seedWorkspace) => {
-      await seedWorkspace({ workspaceId: 'ws-held', segment: 'held' })
+      await seedWorkspace({ workspaceId: '01E2VCDK8MYGEZ4GEVAVMWHSWC', segment: 'held' })
 
       await expect(
-        index.renameWorkspace({ workspaceId: 'ws-held', heldBy: 'someone', segment: 'moved' }),
+        index.renameWorkspace({
+          workspaceId: '01E2VCDK8MYGEZ4GEVAVMWHSWC',
+          heldBy: 'someone',
+          segment: 'moved',
+        }),
       ).rejects.toThrow(WorkspaceNotHeldError)
-      expect((await index.resolveWorkspace('held'))?.workspaceId).toBe('ws-held')
+      expect((await index.resolveWorkspace('held'))?.workspaceId).toBe('01E2VCDK8MYGEZ4GEVAVMWHSWC')
 
       const renamed = await index.renameWorkspace({
-        workspaceId: 'ws-held',
+        workspaceId: '01E2VCDK8MYGEZ4GEVAVMWHSWC',
         heldBy: SINGLE_PERSON_NAMESPACE,
         segment: 'moved',
       })

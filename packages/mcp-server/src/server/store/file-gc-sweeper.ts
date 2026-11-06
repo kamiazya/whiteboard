@@ -14,11 +14,11 @@
 import type { Dirent } from 'node:fs'
 import { lstat, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { isMissingFileError } from '../../shared/errno.js'
 import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
 import { getLogger } from '../log.js'
 import { workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
-import { validateWorkspaceId } from '../validators.js'
 import { listWorkspaces } from './document-store.js'
 import { FilesDirNotContainedError, purgeDanglingFiles } from './file-gc.js'
 import { parseFileGcIntervalMs } from './storage-env.js'
@@ -50,9 +50,11 @@ function resolveIntervalMs(explicit: number | undefined): number {
 
 /**
  * Whether one entry under the workspaces root looks like a workspace, and its
- * id if so: a real (non-symlinked) directory, named by a valid id, with a
- * `files/` directory inside. A workspace named `blobs` is therefore not
- * confusable with the blob root, which lives elsewhere and has no `files/`.
+ * id if so: a real (non-symlinked) directory, named by a canonical id, with a
+ * `files/` directory inside. A directory holding `files/` under any other
+ * name is a workspace stored before the re-key onto ULIDs: it is skipped and
+ * REPORTED, never swept, since nothing can say which workspace's references
+ * would protect its files.
  *
  * This is enumeration, not the safety check. Containment is decided inside
  * `purgeDanglingFiles`, under the workspace write barrier, for every id —
@@ -69,9 +71,16 @@ async function discoveredWorkspaceId(name: string, scope: StoreScope): Promise<s
       return null
     }
     if (!stats.isDirectory()) return null
-    const workspaceId = validateWorkspaceId(name)
     const filesStat = await lstat(workspaceFilesDir(dataDir, tenantId, name))
-    return filesStat.isDirectory() ? workspaceId : null
+    if (!filesStat.isDirectory()) return null
+    if (!workspaceCanonicalIdSchema.safeParse(name).success) {
+      log.warning(
+        { name },
+        'file-gc sweep: skipped a workspace directory not named by a canonical ULID; it was stored before the re-key onto ULIDs and is not read',
+      )
+      return null
+    }
+    return name
   } catch {
     return null
   }

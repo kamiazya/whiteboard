@@ -30,27 +30,34 @@ const { createDocumentRouter } = await import('../document.js')
 
 describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
-    await seedWorkspaceRow(tmp.dir, 'session1')
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
+    await seedWorkspaceRow(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   })
 
   it('answers 409 display_name_taken when the move lands beside a sibling showing its name', async () => {
     await createTestDocument(serverDeps, {
-      workspaceId: 'session1',
+      workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
       path: 'week/plan',
       name: 'Plan',
     })
-    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'month/x', name: 'plan' })
-    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/workspaces/session1/documents/month/x/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'week/x' }),
+    await createTestDocument(serverDeps, {
+      workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+      path: 'month/x',
+      name: 'plan',
     })
+    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/month/x/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'week/x' }),
+      },
+    )
     expect(res.status).toBe(409)
     await expect(res.json()).resolves.toMatchObject({ error: 'display_name_taken' })
 
-    const listRes = await app.request('/api/workspaces/session1/documents')
+    const listRes = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents')
     const listJson = (await listRes.json()) as { documents: { path: string }[] }
     expect(listJson.documents.map((c) => c.path).sort()).toEqual(['month/x', 'week/plan'])
   })

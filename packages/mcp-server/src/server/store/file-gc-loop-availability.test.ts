@@ -142,16 +142,16 @@ describe('a file-GC pass', () => {
       // rather than creeping. Each round adds NEW documents — the pass walks
       // everything seeded so far, so the fixture only grows.
       const documents = 2 * 2 ** attempt
-      await seedWorkspace('ws_loop', store, attempt, documents, 8)
+      await seedWorkspace('0183MMX8KWDAC1A0Z0CSFASC6P', store, attempt, documents, 8)
       scanned += documents
       // A fresh one each round: the previous pass unlinked the last one, and
       // an EMPTY files directory makes `purgeDanglingFiles` return before the
       // scan this test is about — measured, the growth loop otherwise reports
       // 123ms for a fixture of 240 versions, because only the first round
       // scanned anything at all.
-      await seedDanglingFile('ws_loop', `orphan-${attempt}.png`)
+      await seedDanglingFile('0183MMX8KWDAC1A0Z0CSFASC6P', `orphan-${attempt}.png`)
       measured = await measureLoopAvailability(
-        () => purgeDanglingFiles('ws_loop', { versionStore: store }),
+        () => purgeDanglingFiles('0183MMX8KWDAC1A0Z0CSFASC6P', { versionStore: store }),
         { intervalMs: 5 },
       )
       if (measured.availability.elapsedMs > MIN_PASS_MS) break

@@ -32,10 +32,10 @@ const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
-  await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+  await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
   clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
-  await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+  await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
 })
 afterEach(() => {
   clearDocCacheForTests()
@@ -45,12 +45,17 @@ afterEach(() => {
 // take effect. The refusal is only worth that if it names the field: a newer
 // page posting a field this daemon does not know must not be told that a field
 // it HAD sent was missing, which sends the person to the wrong place.
-const DOC = '/api/workspaces/session1/documents/canvas-a'
+const DOC = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a'
 
 const routes: readonly [name: string, method: string, path: string, valid: object][] = [
   ['create a workspace', 'POST', '/api/workspaces', { displayName: 'Y' }],
-  ['rename a workspace', 'PATCH', '/api/workspaces/session1', { displayName: 'X' }],
-  ['set a workspace name', 'PUT', '/api/workspaces/session1/name', { name: 'N' }],
+  [
+    'rename a workspace',
+    'PATCH',
+    '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF',
+    { displayName: 'X' },
+  ],
+  ['set a workspace name', 'PUT', '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/name', { name: 'N' }],
   ['set a document name', 'PUT', `${DOC}/name`, { name: 'N' }],
   ['pin a document', 'PUT', `${DOC}/pin`, { pinned: true }],
   ['save a version', 'POST', `${DOC}/versions`, { label: 'l' }],

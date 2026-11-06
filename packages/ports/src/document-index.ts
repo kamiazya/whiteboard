@@ -7,8 +7,8 @@ import {
   namespaceHandleSchema,
   parseWorkspaceAddress,
   SINGLE_PERSON_NAMESPACE,
+  workspaceCanonicalIdSchema,
   workspaceDisplayNameSchema,
-  workspaceIdSchema,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -77,7 +77,7 @@ export type DocumentEntry = z.infer<typeof documentEntrySchema>
  */
 export const createDocumentInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     path: documentPathSchema,
     kind: documentKindSchema,
     name: documentNameSchema.min(1).optional(),
@@ -102,16 +102,12 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
  * `workspaceSummarySchema` in daemon-client's `api-contracts/document`.
  *
  * No `canonicalId` field: ADR-0019's canonical layer already IS
- * `workspaceId`. Its schema tightens from `workspaceIdSchema` to the
- * stricter `workspaceCanonicalIdSchema` only after the daemon's minting
- * migration lands (tightening first would reject its live `'default'`; the
- * browser's `'local'` is already re-keyed onto a ULID by its IndexedDB
- * upgrade) — a separate `canonicalId` field would just be a
- * second spelling of the same layer racing that migration.
+ * `workspaceId`, a ULID on every keeper — a separate field would be a second
+ * spelling of the same layer.
  */
 export const createWorkspaceInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     /**
      * The namespace the new workspace is held in, and so the one its segment
      * must be unique within (ADR-0053): the creator's handle on a keeper with
@@ -133,7 +129,7 @@ export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
  */
 export const workspaceEntrySchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     /**
      * The handle of the namespace holding this workspace, as of this listing
      * (ADR-0053). Absent means the single-person keeper's one namespace,
@@ -161,10 +157,15 @@ export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
  *
  * Writes stay bounded: `createWorkspaceInputSchema` and
  * `renameWorkspaceInputSchema` are what every keeper parses before storing.
+ *
+ * The id is the one layer that is never read as absent: a row keyed by
+ * anything but a ULID (`default`, a nanoid) is from before the re-key and is
+ * REFUSED, by its field, so a listing holding one fails loudly instead of
+ * showing a workspace no address can reach.
  */
 export const storedWorkspaceEntrySchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     namespace: namespaceHandleSchema.optional().catch(undefined),
     segment: workspaceSegmentSchema.optional().catch(undefined),
     displayName: workspaceDisplayNameSchema.optional().catch(undefined),
@@ -189,7 +190,7 @@ export const storedWorkspaceEntrySchema = z
  *
  * - a canonical id names its workspace, whatever namespace holds it;
  * - `<handle>/<segment>` names the segment inside that namespace only;
- * - a bare segment means `callerNamespace`'s, and only then a legacy id.
+ * - a bare segment means `callerNamespace`'s, and nothing else.
  *
  * A segment is unique per namespace (ADR-0053), so a bare segment is looked
  * up inside ONE namespace — never across the registry, which would answer
@@ -199,14 +200,10 @@ export const storedWorkspaceEntrySchema = z
  * people whose call site forgets the caller therefore reaches nothing rather
  * than another person's segment.
  *
- * Segment beats legacy id in the one collision that can arise: a legacy id is
- * any `[a-zA-Z0-9_-]+` string and can equal a segment. The segment is what a
- * human chose on purpose; the shadowed workspace stays reachable by its own
- * id. A canonical id cannot collide, since no segment is ULID-shaped.
- *
- * Never turns a handle away for being legacy-shaped: the daemon's live ids
- * include `default` and nanoid-minted strings carrying `_`, none of which are
- * valid segments, and all of which must still resolve.
+ * The id and the segment cannot collide, since no segment is ULID-shaped,
+ * so every form is one lookup. A string that is neither — `default`, a
+ * nanoid carrying `_`, the ids the daemon held before the re-key onto ULIDs —
+ * reaches nothing.
  */
 export function resolveWorkspaceHandle(
   entries: readonly WorkspaceEntry[],
@@ -252,10 +249,7 @@ function workspaceHandleLookups(
     case 'qualified':
       return [{ namespace: address.namespace, segment: address.segment }]
     case 'bare':
-      return [
-        { namespace: callerNamespace, segment: address.handle },
-        { workspaceId: address.handle },
-      ]
+      return [{ namespace: callerNamespace, segment: address.handle }]
   }
 }
 
@@ -270,8 +264,8 @@ export function matchesWorkspaceLookup(entry: WorkspaceEntry, lookup: WorkspaceL
 
 /**
  * `resolveWorkspaceHandle` over a registry that answers point lookups
- * (`find`) rather than handing over every row: the same precedence, at the
- * cost of at most two lookups whatever the registry holds.
+ * (`find`) rather than handing over every row: the same answer, at the cost
+ * of at most one lookup whatever the registry holds.
  *
  * Each answer is re-checked against its lookup, so a `find` that matched on
  * a stored value the read schema refuses — and therefore hydrates without —
@@ -304,7 +298,7 @@ export async function resolveWorkspaceHandleBy(
  */
 export const renameWorkspaceInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     /**
      * A precondition, never a move: the rename lands only while this
      * namespace holds the workspace, and fails `WorkspaceNotHeldError`
@@ -320,16 +314,16 @@ export const renameWorkspaceInputSchema = z
 export type RenameWorkspaceInput = z.infer<typeof renameWorkspaceInputSchema>
 
 const resolveDocumentByIdInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
+  .object({ workspaceId: workspaceCanonicalIdSchema, documentId: documentIdSchema })
   .strict()
 export type ResolveDocumentByIdInput = z.infer<typeof resolveDocumentByIdInputSchema>
 
 const resolveDocumentInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
+  .object({ workspaceId: workspaceCanonicalIdSchema, path: documentPathSchema })
   .strict()
 export type ResolveDocumentInput = z.infer<typeof resolveDocumentInputSchema>
 
-const listDocumentsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
+const listDocumentsInputSchema = z.object({ workspaceId: workspaceCanonicalIdSchema }).strict()
 export type ListDocumentsInput = z.infer<typeof listDocumentsInputSchema>
 
 /**
@@ -339,7 +333,11 @@ export type ListDocumentsInput = z.infer<typeof listDocumentsInputSchema>
  * how it is repaired.
  */
 export const moveDocumentInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, from: z.string().min(1), to: documentPathSchema })
+  .object({
+    workspaceId: workspaceCanonicalIdSchema,
+    from: z.string().min(1),
+    to: documentPathSchema,
+  })
   .strict()
 export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
 
@@ -350,7 +348,7 @@ export type MoveDocumentInput = z.infer<typeof moveDocumentInputSchema>
  */
 export const setDocumentNameInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
     name: documentNameSchema.optional(),
   })
@@ -358,7 +356,7 @@ export const setDocumentNameInputSchema = z
 export type SetDocumentNameInput = z.infer<typeof setDocumentNameInputSchema>
 
 const deleteDocumentInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, path: documentPathSchema })
+  .object({ workspaceId: workspaceCanonicalIdSchema, path: documentPathSchema })
   .strict()
 export type DeleteDocumentInput = z.infer<typeof deleteDocumentInputSchema>
 

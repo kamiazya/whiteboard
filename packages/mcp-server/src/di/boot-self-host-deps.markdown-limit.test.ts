@@ -66,13 +66,13 @@ afterEach(async () => {
 describe('a markdown document of exactly the declared limit, over the real store', () => {
   it('is created within the CPU budget', async () => {
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const markdown = proseOfLength(MARKDOWN_MAX_CHARS)
     expect(markdown).toHaveLength(MARKDOWN_MAX_CHARS)
 
     const before = process.cpuUsage()
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'big',
       kind: 'markdown',
       markdown,
@@ -81,7 +81,9 @@ describe('a markdown document of exactly the declared limit, over the real store
     const cpuMs = (spent.user + spent.system) / 1000
 
     expect(created.documentId).toBeTruthy()
-    expect((await deps.liveDocuments.list('ws-1')).map((entry) => entry.path)).toEqual(['big'])
+    expect(
+      (await deps.liveDocuments.list('01ZVM89A4A1V9FS03Z9J64KEK1')).map((entry) => entry.path),
+    ).toEqual(['big'])
     expect(cpuMs).toBeLessThan(CREATE_CPU_BUDGET_MS)
   }, 30_000)
 })

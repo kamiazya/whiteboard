@@ -7,7 +7,7 @@ import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { workspaceEditInputSchema } from './workspace-edit.js'
 
-const WS = 'ws-names'
+const WS = '016MYJ2K2DWKE4QDWE0W114T0P'
 const DOC = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const overLimit = 'x'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1)
 const atLimit = 'x'.repeat(DOCUMENT_NAME_MAX_LENGTH)

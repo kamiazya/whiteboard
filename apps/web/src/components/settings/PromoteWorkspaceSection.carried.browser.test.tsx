@@ -49,7 +49,9 @@ function daemonStub(target: LoroDoc, confirms: boolean) {
       return Response.json(replicaKeyBody())
     }
     if (url.endsWith('/api/workspaces') && method === 'GET') {
-      return Response.json({ workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }] })
+      return Response.json({
+        workspaces: [{ workspaceId: '01PAW75F73PVC402Y3V151KT6R', displayName: 'Team notes' }],
+      })
     }
     if (url.endsWith('/workspace-document/promote') && method === 'POST') {
       const body = JSON.parse(init?.body as string) as PromoteWorkspaceRequest

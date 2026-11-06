@@ -18,7 +18,11 @@ import {
   writeDocumentContentAndName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { generateDocumentId, SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
+import {
+  generateDocumentId,
+  SINGLE_PERSON_NAMESPACE,
+  workspaceCanonicalIdSchema,
+} from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
@@ -40,6 +44,7 @@ import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { daemonBlobStore } from './backup-guarded-blob-store.js'
 import { CacheCoherentDocumentIndex } from './cache-coherent-document-index.js'
+import { CorruptStoredDataError } from './corrupt-stored-data.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad, settleSavedDoc } from './doc-cache.js'
 import { moveEvictingCache } from './moved-paths.js'
@@ -109,6 +114,14 @@ export async function requireDocumentAtPath(
 
 const REGISTRY_COLUMNS = ['id', 'namespace', 'segment', 'displayName'] as const
 
+/** A row's id as read back: a ULID, or a row from before the re-key, refused by name. */
+function storedWorkspaceId(id: string): string {
+  if (workspaceCanonicalIdSchema.safeParse(id).success) return id
+  throw new CorruptStoredDataError(
+    `Workspace row "${id}" is keyed by an id that is not a canonical ULID; a workspace stored before the re-key onto ULIDs is not read. Export it with the build that wrote it and import it again.`,
+  )
+}
+
 function registryEntry(row: {
   id: string
   namespace: string
@@ -116,7 +129,7 @@ function registryEntry(row: {
   displayName: string | null
 }): WorkspaceEntry {
   return {
-    workspaceId: row.id,
+    workspaceId: storedWorkspaceId(row.id),
     // `me` is what an absent namespace already means, so a single-person
     // keeper's rows read exactly as they did before namespaces.
     ...(row.namespace === SINGLE_PERSON_NAMESPACE ? {} : { namespace: row.namespace }),
@@ -423,7 +436,10 @@ export async function workspaceExists(
   workspaceId: string,
   scope: StoreScope = globalStoreScope,
 ): Promise<boolean> {
-  validateWorkspaceId(workspaceId)
+  // An address that resolved to nothing reaches here as the caller typed it.
+  // Anything but a canonical id keys no row, so it is answered as absent —
+  // the caller's 404 — rather than refused as a malformed id it never sent.
+  if (!workspaceCanonicalIdSchema.safeParse(workspaceId).success) return false
   const db = await scope.db()
   const row = await db
     .selectFrom('workspaces')
@@ -698,7 +714,7 @@ export async function listWorkspaces(
 ): Promise<{ workspaceId: string }[]> {
   const db = await scope.db()
   const rows = await db.selectFrom('workspaces').select(['id', 'updatedAt']).execute()
-  return rows.map((r) => ({ workspaceId: r.id }))
+  return rows.map((r) => ({ workspaceId: storedWorkspaceId(r.id) }))
 }
 
 // ── rename a document's path ──

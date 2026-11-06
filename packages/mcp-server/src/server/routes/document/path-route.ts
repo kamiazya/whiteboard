@@ -7,7 +7,11 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-server-core'
 import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
-import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import {
+  validateDocumentPath,
+  validateWorkspaceHandle,
+  validationErrorBody,
+} from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
 export const DOCUMENT_WILDCARD = '/api/w/:workspaceId/document/*'
@@ -47,7 +51,7 @@ function validated(
   badRequest: 'legacy' | 'problem-details' = 'legacy',
 ): Response | null {
   try {
-    validateWorkspaceId(workspaceId)
+    validateWorkspaceHandle(workspaceId)
     validateDocumentPath(path)
   } catch (err) {
     const body = validationErrorBody(err)

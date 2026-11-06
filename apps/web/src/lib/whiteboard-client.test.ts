@@ -5,7 +5,7 @@ import { documentSnapshotSchema } from './whiteboard-client.js'
 
 const row = {
   documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-  workspaceId: 'local',
+  workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
   path: 'design/login',
   name: 'Login flow',
   updatedAt: '2026-05-01T12:00:00.000Z',
@@ -19,7 +19,7 @@ describe('documentSnapshotSchema', () => {
   it('addresses a document by ULID, workspace and path', () => {
     const parsed = documentSnapshotSchema.parse(row)
     expect(() => documentIdSchema.parse(parsed.documentId)).not.toThrow()
-    expect(parsed.workspaceId).toBe('local')
+    expect(parsed.workspaceId).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAW')
     expect(parsed.path).toBe('design/login')
   })
 
@@ -30,6 +30,12 @@ describe('documentSnapshotSchema', () => {
   it.each(['documentId', 'workspaceId', 'path'])('requires %s', (field) => {
     const { [field]: _missing, ...without } = row as Record<string, unknown>
     expect(() => documentSnapshotSchema.parse(without)).toThrow()
+  })
+
+  // `local` was the browser's workspace key before its re-key onto a ULID; a
+  // row naming its workspace any other way than by that id is refused.
+  it('refuses a workspace id that is not a canonical ULID', () => {
+    expect(() => documentSnapshotSchema.parse({ ...row, workspaceId: 'local' })).toThrow()
   })
 
   // A UUID parses as a string but is not a document id anywhere else in the

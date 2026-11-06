@@ -49,16 +49,16 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
   })
 
   async function editThroughStdioDeps(deps: ServerDeps, edits: number) {
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'agent-only',
       kind: 'spatial',
     })
     const edit = createCanvasEditTool(deps)
     for (let i = 0; i < edits; i++) {
       await edit.execute({
-        workspaceId: 'ws-1',
+        workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
         documentId: created.documentId,
         ops: [
           {
@@ -77,16 +77,20 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
     try {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })
       await editThroughStdioDeps(serverDeps, 3)
-      expect(await versions.list('ws-1', 'agent-only')).toHaveLength(0)
-      expect((await compactWorkspace('ws-1', versions)).reason).toBe('no-versions')
+      expect(await versions.list('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-only')).toHaveLength(0)
+      expect((await compactWorkspace('01ZVM89A4A1V9FS03Z9J64KEK1', versions)).reason).toBe(
+        'no-versions',
+      )
 
       await vi.advanceTimersByTimeAsync(CHECKPOINT_QUIET_MS + 1)
       vi.useRealTimers()
 
       await vi.waitFor(async () => {
-        expect(await versions.list('ws-1', 'agent-only')).toHaveLength(1)
+        expect(await versions.list('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-only')).toHaveLength(1)
       })
-      expect((await compactWorkspace('ws-1', versions)).reason).not.toBe('no-versions')
+      expect((await compactWorkspace('01ZVM89A4A1V9FS03Z9J64KEK1', versions)).reason).not.toBe(
+        'no-versions',
+      )
     } finally {
       await work.stopAll()
     }
@@ -97,10 +101,10 @@ describe('the stdio root takes automatic checkpoints for agent-only writes', () 
     const versions = new FileVersionStore(scope)
     const work = startBackgroundWork(stdioBackgroundWork(scope))
     await editThroughStdioDeps(serverDeps, 2)
-    expect(await versions.list('ws-1', 'agent-only')).toHaveLength(0)
+    expect(await versions.list('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-only')).toHaveLength(0)
 
     await work.stopAll()
 
-    expect(await versions.list('ws-1', 'agent-only')).toHaveLength(1)
+    expect(await versions.list('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-only')).toHaveLength(1)
   })
 })

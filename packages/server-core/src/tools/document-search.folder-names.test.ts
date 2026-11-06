@@ -5,7 +5,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSearchTool, documentSearchOutputSchema } from './document-search.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 describe('wb_document_search folder names', () => {
   it('finds a document by the display name of its folder, below a document that says the word', async () => {

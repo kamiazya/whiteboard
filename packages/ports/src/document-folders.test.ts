@@ -20,7 +20,7 @@ describe('hasDocumentFolders', () => {
 })
 
 describe('setFolderNameInputSchema', () => {
-  const input = { workspaceId: 'ws', path: 'week-6' }
+  const input = { workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'week-6' }
 
   it('takes a name, or none to clear', () => {
     expect(setFolderNameInputSchema.safeParse({ ...input, name: 'Week 6' }).success).toBe(true)

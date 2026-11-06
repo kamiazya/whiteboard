@@ -64,38 +64,52 @@ async function bodyAt(workspaceId: string, path: string): Promise<string> {
 
 describe('rename routes follow references', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
   })
 
   it('PUT :path/path repoints references written as the old path', async () => {
-    await seedMarkdown('session1', 'design/login', 'the target')
-    await seedMarkdown('session1', 'notes/daily', 'see [[design/login]] and [[unrelated]]')
+    await seedMarkdown('01M8BBN7JS60N0ZAR13NP8SXBF', 'design/login', 'the target')
+    await seedMarkdown(
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'notes/daily',
+      'see [[design/login]] and [[unrelated]]',
+    )
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
-    const res = await app.request('/api/workspaces/session1/documents/design%2Flogin/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'archive/login' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/design%2Flogin/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'archive/login' }),
+      },
+    )
     expect(res.status).toBe(200)
 
-    expect(await bodyAt('session1', 'notes/daily')).toBe('see [[archive/login]] and [[unrelated]]')
+    expect(await bodyAt('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/daily')).toBe(
+      'see [[archive/login]] and [[unrelated]]',
+    )
   })
 
   it('PUT :path/path follows references to a moved DESCENDANT too', async () => {
-    await mkdir(join(tmp.dir, 'session3'), { recursive: true })
-    await seedMarkdown('session3', 'folder', 'the parent')
-    await seedMarkdown('session3', 'folder/child', 'the child')
-    await seedMarkdown('session3', 'notes/daily', 'see [[folder/child]]')
+    await mkdir(join(tmp.dir, '016BN0JHBPPS1DSRVWNNRVDCZ3'), { recursive: true })
+    await seedMarkdown('016BN0JHBPPS1DSRVWNNRVDCZ3', 'folder', 'the parent')
+    await seedMarkdown('016BN0JHBPPS1DSRVWNNRVDCZ3', 'folder/child', 'the child')
+    await seedMarkdown('016BN0JHBPPS1DSRVWNNRVDCZ3', 'notes/daily', 'see [[folder/child]]')
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
-    const res = await app.request('/api/workspaces/session3/documents/folder/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'archive/folder' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/016BN0JHBPPS1DSRVWNNRVDCZ3/documents/folder/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'archive/folder' }),
+      },
+    )
     expect(res.status).toBe(200)
 
-    expect(await bodyAt('session3', 'notes/daily')).toBe('see [[archive/folder/child]]')
+    expect(await bodyAt('016BN0JHBPPS1DSRVWNNRVDCZ3', 'notes/daily')).toBe(
+      'see [[archive/folder/child]]',
+    )
   })
 })

@@ -16,7 +16,7 @@ beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
   // The page-facing document routes refuse an unknown workspace, so the
   // workspace these tests write through exists before the first update.
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' })
 })
 
 vi.mock('../../config.js', () => ({
@@ -76,16 +76,19 @@ describe('restore targetPath-overwrite vs delete race', () => {
     const sm0 = sourceList.insertContainer(0, new LoroMap())
     sm0.set('id', 'keep-me')
     sourceDoc.commit()
-    await app.request('/api/w/session1/document/canvas-a/update', {
+    await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     })
-    const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
+    const saveRes = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      },
+    )
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     // Target canvas-b already exists.
@@ -95,7 +98,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     const tm0 = targetList.insertContainer(0, new LoroMap())
     tm0.set('id', 'b-only')
     targetDoc.commit()
-    await app.request('/api/w/session1/document/canvas-b/update', {
+    await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-b/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: targetDoc.export({ mode: 'update', from: tvv0 }) as Uint8Array<ArrayBuffer>,
@@ -121,7 +124,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     })
 
     const restorePromise = app.request(
-      `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -132,9 +135,12 @@ describe('restore targetPath-overwrite vs delete race', () => {
     await getDocCalled
 
     // Fire the delete of the overwrite target while the restore is stalled mid-flight.
-    const deletePromise = app.request('/api/workspaces/session1/documents/canvas-b', {
-      method: 'DELETE',
-    })
+    const deletePromise = app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b',
+      {
+        method: 'DELETE',
+      },
+    )
     // Give the delete a chance to run before letting the stalled read continue.
     await new Promise((r) => setTimeout(r, 20))
     releaseGetDoc()
@@ -146,7 +152,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     // The restore must not have silently resurrected a phantom canvas-b
     // after the delete removed it -- the delete serializes after the
     // restore's write under the workspace lock, so canvas-b must be gone.
-    const listRes = await app.request('/api/workspaces/session1/documents')
+    const listRes = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents')
     const listJson = (await listRes.json()) as { documents: { path: string }[] }
     expect(listJson.documents.map((c) => c.path)).toEqual(['canvas-a'])
   })
@@ -176,16 +182,19 @@ describe('restore in-place vs delete race', () => {
     const sm0 = sourceList.insertContainer(0, new LoroMap())
     sm0.set('id', 'keep-me')
     sourceDoc.commit()
-    await app.request('/api/w/session1/document/canvas-a/update', {
+    await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     })
-    const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
+    const saveRes = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      },
+    )
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     // Stall the restore route's getDoc(path) call so a DELETE of the same
@@ -208,7 +217,7 @@ describe('restore in-place vs delete race', () => {
     })
 
     const restorePromise = app.request(
-      `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
       },
@@ -218,9 +227,12 @@ describe('restore in-place vs delete race', () => {
 
     // Fire the delete of the canvas being restored while the restore is
     // stalled mid-flight.
-    const deletePromise = app.request('/api/workspaces/session1/documents/canvas-a', {
-      method: 'DELETE',
-    })
+    const deletePromise = app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a',
+      {
+        method: 'DELETE',
+      },
+    )
     // Give the delete a chance to run before letting the stalled read continue.
     await new Promise((r) => setTimeout(r, 20))
     releaseGetDoc()
@@ -232,7 +244,7 @@ describe('restore in-place vs delete race', () => {
     // The delete serializes after the restore's write under the workspace
     // lock, so canvas-a must be gone -- the restore must not have won a
     // race that resurrects it after the delete.
-    const listRes = await app.request('/api/workspaces/session1/documents')
+    const listRes = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents')
     const listJson = (await listRes.json()) as { documents: { path: string }[] }
     expect(listJson.documents.map((c) => c.path)).toEqual([])
   })

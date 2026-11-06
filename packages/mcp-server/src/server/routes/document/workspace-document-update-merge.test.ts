@@ -65,9 +65,9 @@ beforeEach(async () => {
   // The workspace exists because this fixture says so, not because the first
   // POST created it: that route passes `createWorkspace: true`, which is
   // ADR-0019's MINT boundary — a mint keys the workspace by a fresh ULID and
-  // files `session1` as its segment, leaving the direct store reads in these
-  // cases naming nothing.
-  await seedWorkspaceRow(tempDir, 'session1')
+  // never by an id the caller sent, so the one these cases address is keyed
+  // here.
+  await seedWorkspaceRow(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
@@ -104,7 +104,7 @@ function browserRecord(): LoroDoc {
 }
 
 async function listDocuments(app: ReturnType<typeof createDocumentRouter>) {
-  const res = await app.request('/api/workspaces/session1/documents')
+  const res = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents')
   expect(res.status).toBe(200)
   return listDocumentsResponseSchema.parse(await res.json()).documents
 }
@@ -119,10 +119,13 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
   // The daemon workspace pre-exists with its own document at the contested
   // path — the workspaceId maps by TARGETING an existing workspace, never by
   // the browser's fixed 'local' id leaking through.
-  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'contested' })
+  await createTestDocument(serverDeps, {
+    workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+    path: 'contested',
+  })
 
   const browser = browserRecord()
-  const res = await app.request('/api/w/session1/workspace-document/update', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: new Uint8Array(browser.export({ mode: 'snapshot' })),
@@ -147,7 +150,9 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
   expect(contested.map((d) => d.documentId)).toContain(CONTESTED_ID)
 
   // Content and name crossed with the identity.
-  const snapshotRes = await app.request('/api/w/session1/workspace-document/snapshot')
+  const snapshotRes = await app.request(
+    '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/snapshot',
+  )
   expect(snapshotRes.status).toBe(200)
   const daemonView = new LoroDoc()
   daemonView.import(new Uint8Array(await snapshotRes.arrayBuffer()))
@@ -181,9 +186,12 @@ it('an edit made after the promotion export still lands as an incremental delta 
   // Promotion targets an EXISTING workspace — the update route answers 404
   // for one the daemon never registered, so the flow registers first. Here
   // that registration rides an ordinary document create.
-  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'daemon-own' })
+  await createTestDocument(serverDeps, {
+    workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+    path: 'daemon-own',
+  })
   const browser = browserRecord()
-  const promote = await app.request('/api/w/session1/workspace-document/update', {
+  const promote = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: new Uint8Array(browser.export({ mode: 'snapshot' })),
@@ -200,14 +208,16 @@ it('an edit made after the promotion export still lands as an incremental delta 
   // viable per keystroke; a re-snapshot here would be a design regression.
   expect(delta.byteLength).toBeLessThan(4096)
 
-  const res = await app.request('/api/w/session1/workspace-document/update', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: delta,
   })
   expect(res.status).toBe(200)
 
-  const snapshotRes = await app.request('/api/w/session1/workspace-document/snapshot')
+  const snapshotRes = await app.request(
+    '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/snapshot',
+  )
   const daemonView = new LoroDoc()
   daemonView.import(new Uint8Array(await snapshotRes.arrayBuffer()))
   expect(readMarkdownBody(documentContainers(daemonView, ROADMAP_ID))).toBe(
@@ -218,7 +228,7 @@ it('an edit made after the promotion export still lands as an incremental delta 
 // --- Slice 2: targeting, idempotency, and the live-session blast radius ---
 
 async function daemonSnapshot(app: ReturnType<typeof createDocumentRouter>): Promise<LoroDoc> {
-  const res = await app.request('/api/w/session1/workspace-document/snapshot')
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/snapshot')
   expect(res.status).toBe(200)
   const doc = new LoroDoc()
   doc.import(new Uint8Array(await res.arrayBuffer()))
@@ -232,7 +242,10 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
       autoVersionQuietMs: 60_000,
     }),
   )
-  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'daemon-own' })
+  await createTestDocument(serverDeps, {
+    workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+    path: 'daemon-own',
+  })
 
   // A live daemon-mode session: its own replica of the workspace record,
   // with an UNCOMMITTED local edit pending when the promotion arrives.
@@ -251,10 +264,10 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
 
   const frames: Uint8Array[] = []
   const unsubscribe = onWorkspaceDocUpdated((workspaceId, update) => {
-    if (workspaceId === 'session1') frames.push(update)
+    if (workspaceId === '01M8BBN7JS60N0ZAR13NP8SXBF') frames.push(update)
   })
   try {
-    const res = await app.request('/api/w/session1/workspace-document/update', {
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: new Uint8Array(browserRecord().export({ mode: 'snapshot' })),
@@ -276,7 +289,7 @@ it('promotion lands as ONE fan-out frame under a live subscriber, whose pending 
 
   // The pending local edit now lands — a commutative merge, not a clobber:
   // the daemon ends up holding BOTH the promoted content and the live edit.
-  const pushed = await app.request('/api/w/session1/workspace-document/update', {
+  const pushed = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
     method: 'POST',
     headers: { 'Content-Type': 'application/octet-stream' },
     body: pendingDelta,
@@ -295,14 +308,17 @@ it('promoting the same snapshot twice is idempotent — no duplicate documents, 
       autoVersionQuietMs: 60_000,
     }),
   )
-  await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'daemon-own' })
+  await createTestDocument(serverDeps, {
+    workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+    path: 'daemon-own',
+  })
 
   // The retry case: a promotion whose response was lost re-sends the SAME
   // snapshot. Loro import of already-known ops is a no-op, so the second
   // POST must neither fail nor duplicate anything.
   const snapshot = new Uint8Array(browserRecord().export({ mode: 'snapshot' }))
   for (const _round of [1, 2]) {
-    const res = await app.request('/api/w/session1/workspace-document/update', {
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: snapshot,

@@ -13,7 +13,7 @@ import { ALL_AUTH_SCOPES } from './auth-strategy.js'
 import { runAsMcpCaller, toolErrorText } from './mcp-caller.js'
 import type { MemberProfileStore } from './member-profile-store.js'
 
-const WS = 'plans'
+const WS = '01HSCGD0M40CDVA2SJHTKTVPFD'
 
 const storageFault = () =>
   Object.assign(new Error('SQLITE_IOERR /srv/data/tenant/x.db'), { name: 'SqliteError' })

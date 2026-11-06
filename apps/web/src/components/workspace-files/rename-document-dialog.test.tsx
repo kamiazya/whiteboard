@@ -135,7 +135,7 @@ describe('rename dialog', () => {
     renderPanel({
       setDocumentName: async () => {
         setDocumentNameInputSchema.parse({
-          workspaceId: 'ws',
+          workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
           documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
           name: tooLong,
         })

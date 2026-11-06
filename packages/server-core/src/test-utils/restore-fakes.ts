@@ -14,7 +14,7 @@ import { type RestoreVersionResult, restoreVersion } from '../operations/restore
 import type { LiveDocuments, RestoreProgressEvent, VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
 
-export const WS = 'ws-1'
+export const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 // Joins a workspace id and a path into one map key. NUL cannot occur in
 // either, so the join is unambiguous — but it is spelled as an escape, not
 // typed into the source: a literal NUL byte makes grep, `file` and diff

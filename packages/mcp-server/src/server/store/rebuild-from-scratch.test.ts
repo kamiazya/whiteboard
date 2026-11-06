@@ -70,7 +70,7 @@ function canvasDoc(text: string): LoroDoc {
 const documentsTableExists = (): Promise<boolean> => tableExists(handle.rawDb, 'documents')
 
 it('the whole document surface works with no documents table at all, across a restart', async () => {
-  const WS = 'ws-scratch'
+  const WS = '01A0HSR496QFD1B6D8YRW3T85W'
 
   // ── Build a world through the real surfaces ──
   await saveDocument(WS, 'boards/main', canvasDoc('the canvas'), { kind: 'spatial' })

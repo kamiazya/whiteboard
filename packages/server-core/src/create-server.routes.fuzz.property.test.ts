@@ -17,7 +17,11 @@
  * at all, and as text that is not JSON — because the parse that answers
  * 400 for the last two is a branch the schema-drawn body never reaches.
  */
-import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentPathSchema,
+  workspaceCanonicalIdSchema,
+} from '@kamiazya/whiteboard-model'
 import {
   afterAllFloor,
   arbitraryForSchema,
@@ -85,7 +89,7 @@ const OKF_NOTE = '---\ntype: note\ntags: [a]\n---\n# Title\n\nA body.\n'
 
 /** Ids and paths inside a body follow the seeded workspace the way the tool lane's do. */
 const override = (path: string, schema: z.ZodTypeAny): fc.Arbitrary<unknown> | undefined => {
-  if (sameSchema(schema, workspaceIdSchema)) return fc.constant(SEEDED_WORKSPACE_ID)
+  if (sameSchema(schema, workspaceCanonicalIdSchema)) return fc.constant(SEEDED_WORKSPACE_ID)
   if (sameSchema(schema, documentIdSchema)) {
     return fc.constantFrom(SEEDED_SPATIAL_ID, SEEDED_MARKDOWN_ID, MISSING_DOCUMENT_ID)
   }

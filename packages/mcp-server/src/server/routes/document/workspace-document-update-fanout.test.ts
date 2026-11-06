@@ -27,7 +27,7 @@ vi.mock('../../config.js', () => ({
 
 const { createWorkspaceDocumentRouter } = await import('./workspace-document.js')
 
-const WS = 'fanout'
+const WS = '0116NJGHSB3ANHRZ893HW4SJQH'
 const EDITED = 6
 
 let serverDeps: ServerDeps

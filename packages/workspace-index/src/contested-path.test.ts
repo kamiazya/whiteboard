@@ -73,7 +73,7 @@ async function contestedIndex(): Promise<LoroWorkspaceDocumentIndex> {
 describe('contested paths', () => {
   it('lists BOTH documents, the later sibling marked shadowed', async () => {
     const index = await contestedIndex()
-    const listing = await index.listDocuments({ workspaceId: 'ws' })
+    const listing = await index.listDocuments({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
     const atPath = listing.filter((entry) => entry.path === 'design')
     expect(atPath).toHaveLength(2)
     expect(atPath.filter((entry) => entry.shadowed === true)).toHaveLength(1)
@@ -81,24 +81,30 @@ describe('contested paths', () => {
 
   it('refuses to resolve a contested path instead of silently picking the owner', async () => {
     const index = await contestedIndex()
-    await expect(index.resolveDocument({ workspaceId: 'ws', path: 'design' })).rejects.toThrow(
-      DocumentPathContestedError,
-    )
+    await expect(
+      index.resolveDocument({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'design' }),
+    ).rejects.toThrow(DocumentPathContestedError)
   })
 
   it('refuses to duplicate a contested path instead of copying whichever sibling', async () => {
     const index = await contestedIndex()
-    await expect(index.duplicateDocument({ workspaceId: 'ws', path: 'design' })).rejects.toThrow(
-      DocumentPathContestedError,
-    )
-    const listing = await index.listDocuments({ workspaceId: 'ws' })
+    await expect(
+      index.duplicateDocument({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'design' }),
+    ).rejects.toThrow(DocumentPathContestedError)
+    const listing = await index.listDocuments({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
     expect(listing.map((entry) => entry.path)).toEqual(['design', 'design'])
   })
 
   it('still resolves each contestant by id', async () => {
     const index = await contestedIndex()
-    const owner = await index.resolveDocumentById({ workspaceId: 'ws', documentId: OWNER_ID })
-    const rival = await index.resolveDocumentById({ workspaceId: 'ws', documentId: RIVAL_ID })
+    const owner = await index.resolveDocumentById({
+      workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+      documentId: OWNER_ID,
+    })
+    const rival = await index.resolveDocumentById({
+      workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+      documentId: RIVAL_ID,
+    })
     expect(owner?.path).toBe('design')
     expect(rival?.path).toBe('design')
   })
@@ -111,7 +117,10 @@ describe('contested paths', () => {
       findWorkspace: async () => null,
       renameWorkspace: notRenamed,
     })
-    const entry = await index.resolveDocument({ workspaceId: 'ws', path: 'solo' })
+    const entry = await index.resolveDocument({
+      workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+      path: 'solo',
+    })
     expect(entry?.documentId).toBe(OWNER_ID)
     expect(entry?.shadowed).toBeUndefined()
   })

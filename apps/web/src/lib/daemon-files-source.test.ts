@@ -573,7 +573,11 @@ describe('createDaemonFilesSource list and trash reads', () => {
   const writeAnswer = (url: string) =>
     url.endsWith('/restore')
       ? jsonResponse({ restored: { documentId: 'id-gone', path: 'old/plan' } })
-      : jsonResponse({ workspaceId: 'ws', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'fresh' })
+      : jsonResponse({
+          workspaceId: '01J9ZC8XK4PQRS7TVWXY0ABCDF',
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          path: 'fresh',
+        })
 
   /** Counts each route this source reads, and answers them all plausibly. */
   function countingFetch() {
@@ -733,7 +737,7 @@ describe('createDaemonFilesSource stored pictures', () => {
 
 describe('createDaemonFilesSource — importDocument', () => {
   const created = {
-    workspaceId: 'ws',
+    workspaceId: '01J9ZC8XK4PQRS7TVWXY0ABCDF',
     documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
     path: 'trip',
   }

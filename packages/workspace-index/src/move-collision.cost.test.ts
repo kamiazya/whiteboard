@@ -27,7 +27,7 @@ vi.mock('@kamiazya/whiteboard-model', async (original) => {
   }
 })
 
-const WS = 'ws-move-cost'
+const WS = '01JDZNGS07Y9E7Q7XVJ69S28B9'
 const FOLDERS = 2000
 const DOCUMENTS = 500
 

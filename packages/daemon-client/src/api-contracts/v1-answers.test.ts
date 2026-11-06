@@ -23,6 +23,7 @@ import {
 } from './index.js'
 
 const DOCUMENT_ID = '01HZX3K9Q5V8N2M4P6R7S8T9WA'
+const WORKSPACE_ID = '01HZX3K9Q5V8N2M4P6R7S8T9WB'
 const OTHER_ID = '01HZX3K9Q5V8N2M4P6R7S8T9WB'
 const extra = { futureField: 'a newer daemon says this' }
 
@@ -37,8 +38,8 @@ const ANSWERS = [
   {
     name: 'createDocumentV1ResponseSchema',
     schema: createDocumentV1ResponseSchema,
-    known: { workspaceId: 'ws-1', documentId: DOCUMENT_ID, path: 'notes/a' },
-    withExtras: { workspaceId: 'ws-1', documentId: DOCUMENT_ID, path: 'notes/a', ...extra },
+    known: { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, path: 'notes/a' },
+    withExtras: { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, path: 'notes/a', ...extra },
   },
   {
     name: 'documentBacklinksResponseSchema',
@@ -132,7 +133,11 @@ describe('the /api/v1 answers the browser parses tolerate a field they have not 
   it('still refuses a declared field of the wrong type, so tolerance is not acceptance', () => {
     expect(linkifyMentionsResponseSchema.safeParse({ linked: -1 }).success).toBe(false)
     expect(
-      createDocumentV1ResponseSchema.safeParse({ workspaceId: 'ws-1', documentId: 'nope' }).success,
+      createDocumentV1ResponseSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentId: 'nope',
+        path: 'notes/a',
+      }).success,
     ).toBe(false)
   })
 })

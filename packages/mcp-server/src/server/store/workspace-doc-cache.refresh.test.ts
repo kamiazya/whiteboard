@@ -46,7 +46,7 @@ const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
-const WS = 'ws-follow'
+const WS = '01RAZ9RNDPVKYWSQEWJ2PKYRZJ'
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-refresh-'))

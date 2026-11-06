@@ -100,14 +100,16 @@ async function stores() {
 
 it('a tool read (document ref) sees a daemon-route write, and a tool write lands on the tree', async () => {
   const { inner, routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('route-written'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('route-written'), {
+    kind: 'spatial',
+  })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
   const row = { id: rowId }
 
   // Tool read: the same content the route wrote.
   const loaded = await routed.loadSnapshot({
-    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+    docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
   })
   expect(loaded).not.toBeNull()
   if (loaded === null) return
@@ -125,16 +127,16 @@ it('a tool read (document ref) sees a daemon-route write, and a tool write lands
     1_000_000,
   )
   await routed.saveSnapshot({
-    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+    docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
     manifest,
     chunks,
     frontier: new Uint8Array(toolDoc.oplogVersion().encode()),
   })
-  expect(readText(await loadDocument('ws-a', 'design'))).toBe('tool-edited')
+  expect(readText(await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design'))).toBe('tool-edited')
   // Still nothing on the legacy per-document plane.
   expect(
     await inner.loadSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+      docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
     }),
   ).toBeNull()
 })
@@ -145,20 +147,23 @@ it('readFrontier answers for a tree-served document, and the stamp moves when it
   // is retired, so a null here silently blanks the whole search corpus —
   // the exact shape `pnpm smoke:e2e`'s wb_document_search step caught.
   const { routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('v1'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('v1'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
   const row = { id: rowId }
 
   const before = await routed.readFrontier({
-    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+    docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
   })
   expect(before).not.toBeNull()
   if (before === null) return
 
-  await saveDocument('ws-a', 'design', canvasDoc('v2'), { kind: 'spatial', overwrite: true })
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('v2'), {
+    kind: 'spatial',
+    overwrite: true,
+  })
   const after = await routed.readFrontier({
-    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+    docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: row.id },
   })
   expect(after).not.toBeNull()
   if (after === null) return
@@ -172,10 +177,14 @@ it('readSnapshotManifest answers for a tree-served document with generation 0, m
   // guard (or reporting the wrong generation for a tree-served doc) would
   // pass every test in the file.
   const { inner, routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('v1'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('v1'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
-  const ref = { kind: 'document', workspaceId: 'ws-a', documentId: rowId } as const
+  const ref = {
+    kind: 'document',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+    documentId: rowId,
+  } as const
 
   const manifestResult = await routed.readSnapshotManifest({ docRef: ref })
   expect(manifestResult).not.toBeNull()
@@ -197,12 +206,18 @@ it('routes a document ref by ITS OWN workspace, with no documents-table lookup (
   // row lookup — and migration 0017 dropped the documents table outright,
   // so there is no mirror row to fall back to even in principle.
   const { routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('tree-truth'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('tree-truth'), {
+    kind: 'spatial',
+  })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
   const row = { id: rowId }
 
-  const ref = { kind: 'document', workspaceId: 'ws-a', documentId: row.id } as const
+  const ref = {
+    kind: 'document',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+    documentId: row.id,
+  } as const
   const loaded = await routed.loadSnapshot({ docRef: ref })
   expect(loaded).not.toBeNull()
   if (loaded === null) return
@@ -228,38 +243,43 @@ it('an index create lists and resolves with NO documents row anywhere (S7)', asy
   // documents table outright, so there is nothing for a create to write to
   // it even in principle.
   const { index } = await stores()
-  await index.createWorkspace({ workspaceId: 'ws-flip' })
+  await index.createWorkspace({ workspaceId: '0199E9CNYY2432MXX4VVSRXR29' })
   const entry = await index.createDocument({
-    workspaceId: 'ws-flip',
+    workspaceId: '0199E9CNYY2432MXX4VVSRXR29',
     path: 'truth',
     kind: 'spatial',
   })
 
-  const listing = await index.listDocuments({ workspaceId: 'ws-flip' })
+  const listing = await index.listDocuments({ workspaceId: '0199E9CNYY2432MXX4VVSRXR29' })
   expect(listing.map((e) => e.path)).toEqual(['truth'])
-  const resolved = await index.resolveDocument({ workspaceId: 'ws-flip', path: 'truth' })
+  const resolved = await index.resolveDocument({
+    workspaceId: '0199E9CNYY2432MXX4VVSRXR29',
+    path: 'truth',
+  })
   expect(resolved?.documentId).toBe(entry.documentId)
 })
 
 it('an empty created workspace lists as empty (createWorkspace stores the record)', async () => {
   const { index } = await stores()
-  await index.createWorkspace({ workspaceId: 'ws-empty' })
-  expect(await index.listDocuments({ workspaceId: 'ws-empty' })).toEqual([])
-  expect(await index.resolveDocument({ workspaceId: 'ws-empty', path: 'nope' })).toBeNull()
+  await index.createWorkspace({ workspaceId: '01RXDMXP08NJQASRMRVFD19CCA' })
+  expect(await index.listDocuments({ workspaceId: '01RXDMXP08NJQASRMRVFD19CCA' })).toEqual([])
+  expect(
+    await index.resolveDocument({ workspaceId: '01RXDMXP08NJQASRMRVFD19CCA', path: 'nope' }),
+  ).toBeNull()
 })
 
 it('the index creates, renames and deletes on the tree', async () => {
   const { db, index } = await stores()
-  await index.createWorkspace({ workspaceId: 'ws-a' })
+  await index.createWorkspace({ workspaceId: '01PAW75F73PVC402Y3V151KT6R' })
   const entry = await index.createDocument({
-    workspaceId: 'ws-a',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
     path: 'twin',
     kind: 'spatial',
     name: 'Twin',
   })
 
   const openTree = async () =>
-    new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open('ws-a')
+    new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open('01PAW75F73PVC402Y3V151KT6R')
 
   let tree = await openTree()
   expect(tree).not.toBeNull()
@@ -268,11 +288,15 @@ it('the index creates, renames and deletes on the tree', async () => {
   expect(resolveWorkspaceDocumentById(tree, entry.documentId)?.name).toBe('Twin')
 
   await index.setDocumentName({
-    workspaceId: 'ws-a',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
     documentId: entry.documentId,
     name: 'Renamed twin',
   })
-  await index.moveDocument({ workspaceId: 'ws-a', from: 'twin', to: 'moved/twin' })
+  await index.moveDocument({
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+    from: 'twin',
+    to: 'moved/twin',
+  })
   tree = await openTree()
   expect(tree).not.toBeNull()
   if (tree === null) return
@@ -285,9 +309,12 @@ it('the index creates, renames and deletes on the tree', async () => {
     nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'evacuate me' })],
     edges: [],
   })
-  await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).save('ws-a', tree)
+  await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).save(
+    '01PAW75F73PVC402Y3V151KT6R',
+    tree,
+  )
 
-  await index.deleteDocument({ workspaceId: 'ws-a', path: 'moved/twin' })
+  await index.deleteDocument({ workspaceId: '01PAW75F73PVC402Y3V151KT6R', path: 'moved/twin' })
   tree = await openTree()
   expect(tree).not.toBeNull()
   if (tree === null) return
@@ -314,8 +341,10 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   // Asserted on what a reader GETS, not on whether some cache entry exists,
   // so it keeps meaning the same thing if the caching changes.
   const { routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('persisted'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('persisted'), {
+    kind: 'spatial',
+  })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
 
   const edited = canvasDoc('never-persisted')
@@ -328,7 +357,7 @@ it('does not keep serving an agent write whose persistence failed', async () => 
     .mockRejectedValueOnce(new Error('simulated persistence failure'))
   await expect(
     routed.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: rowId },
+      docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: rowId },
       manifest,
       chunks,
       frontier: new Uint8Array(edited.oplogVersion().encode()),
@@ -336,7 +365,7 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   ).rejects.toThrow('simulated persistence failure')
   saveSpy.mockRestore()
 
-  expect(readText(await loadDocument('ws-a', 'design'))).toBe('persisted')
+  expect(readText(await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design'))).toBe('persisted')
 })
 
 it('a CRDT engine trap evicts the document projection, so the next write rebuilds it from storage', async () => {
@@ -348,14 +377,20 @@ it('a CRDT engine trap evicts the document projection, so the next write rebuild
   // always throws the trap; the rebuilt projection is a different instance
   // and is not affected.
   const { routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('persisted'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('persisted'), {
+    kind: 'spatial',
+  })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
-  const docRef = { kind: 'document', workspaceId: 'ws-a', documentId: rowId } as const
+  const docRef = {
+    kind: 'document',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+    documentId: rowId,
+  } as const
   const trap = Object.assign(new Error('unreachable'), { name: 'RuntimeError' })
   expect(isEngineTrap(trap)).toBe(true)
 
-  const poisoned = await getDoc('ws-a', 'design')
+  const poisoned = await getDoc('01PAW75F73PVC402Y3V151KT6R', 'design')
   vi.spyOn(poisoned, 'import').mockImplementation(() => {
     throw trap
   })
@@ -384,22 +419,24 @@ it('a CRDT engine trap evicts the document projection, so the next write rebuild
   }
 
   await expect(save('trapped')).rejects.toBe(trap)
-  expect(peekDoc('ws-a', 'design')).toBeUndefined()
+  expect(peekDoc('01PAW75F73PVC402Y3V151KT6R', 'design')).toBeUndefined()
 
   await save('after-trap')
-  expect(readText(await loadDocument('ws-a', 'design'))).toBe('after-trap')
-  expect(await getDoc('ws-a', 'design')).not.toBe(poisoned)
+  expect(readText(await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design'))).toBe('after-trap')
+  expect(await getDoc('01PAW75F73PVC402Y3V151KT6R', 'design')).not.toBe(poisoned)
 })
 
 it('an ordinary save failure keeps the cached projection', async () => {
   // Only a trap poisons an instance; evicting on every error would make each
   // refused write cost a full re-projection of a document that is fine.
   const { routed } = await stores()
-  await saveDocument('ws-a', 'design', canvasDoc('persisted'), { kind: 'spatial' })
-  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('persisted'), {
+    kind: 'spatial',
+  })
+  const rowId = await resolveDocumentIdAtPath('01PAW75F73PVC402Y3V151KT6R', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
 
-  const live = await getDoc('ws-a', 'design')
+  const live = await getDoc('01PAW75F73PVC402Y3V151KT6R', 'design')
   vi.spyOn(live, 'import').mockImplementation(() => {
     throw new Error('not a trap')
   })
@@ -410,17 +447,17 @@ it('an ordinary save failure keeps the cached projection', async () => {
   )
   await expect(
     routed.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: rowId },
+      docRef: { kind: 'document', workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId: rowId },
       manifest,
       chunks,
       frontier: new Uint8Array(edited.oplogVersion().encode()),
     }),
   ).rejects.toThrow('not a trap')
-  expect(peekDoc('ws-a', 'design')).toBe(live)
+  expect(peekDoc('01PAW75F73PVC402Y3V151KT6R', 'design')).toBe(live)
 })
 
 describe('DocumentStore conformance (production wiring: routed over a tree-backed workspace)', () => {
-  // `conformance-ws` is tree-backed (createWorkspace + one seed document at a
+  // The suite's workspace is tree-backed (createWorkspace + one seed document at a
   // path the suite never names), but the suite's own DOC/OTHER ids are never
   // placed on that tree. A store's byte-level contract is about opaque
   // records; the tree-served path is a CRDT projection that would import the
@@ -430,8 +467,12 @@ describe('DocumentStore conformance (production wiring: routed over a tree-backe
   // any document the tree does not (yet) hold.
   describeDocumentStoreConformance(async () => {
     const { inner, routed, index } = await stores()
-    await index.createWorkspace({ workspaceId: 'conformance-ws' })
-    await index.createDocument({ workspaceId: 'conformance-ws', path: 'seed', kind: 'spatial' })
+    await index.createWorkspace({ workspaceId: '019J9VPNC5PRR4T9XSZWZJSECZ' })
+    await index.createDocument({
+      workspaceId: '019J9VPNC5PRR4T9XSZWZJSECZ',
+      path: 'seed',
+      kind: 'spatial',
+    })
     return {
       store: routed,
       writeUnreadableRecord: (docRef) => inner.writeUnreadableRecord(docRef),

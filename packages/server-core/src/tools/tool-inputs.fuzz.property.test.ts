@@ -32,7 +32,7 @@ import {
   extensionFacetsSchema,
   nodeIdSchema,
   workspaceAddressInputSchema,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import {
   afterAllFloor,
@@ -104,7 +104,10 @@ type Passage = (typeof PASSAGES)[number]
 const passages = fc.constantFrom(...PASSAGES)
 const OKF_NOTE = '---\ntype: note\ntags: [a]\n---\n# Title\n\nA body.\n'
 const override = (path: string, schema: z.ZodTypeAny): fc.Arbitrary<unknown> | undefined => {
-  if (sameSchema(schema, workspaceIdSchema) || sameSchema(schema, workspaceAddressInputSchema)) {
+  if (
+    sameSchema(schema, workspaceCanonicalIdSchema) ||
+    sameSchema(schema, workspaceAddressInputSchema)
+  ) {
     return fc.constantFrom(WORKSPACE_ID, WORKSPACE_ID, WORKSPACE_ID, 'nowhere', 'me/nowhere')
   }
   if (sameSchema(schema, documentIdSchema)) {

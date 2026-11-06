@@ -45,7 +45,7 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
 describe('live-doc routes and the deps they were handed', () => {
   it('POST /update reads and writes through the INJECTED liveDocuments', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'seam-ws' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01FCF6YZ7AZ4K20T4QCA9JJ9QM' })
     const recorded: string[] = []
     const real = deps.liveDocuments
     deps.liveDocuments = {
@@ -66,7 +66,7 @@ describe('live-doc routes and the deps they were handed', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/w/seam-ws/document/canvas-a/update', {
+    const res = await app.request('/api/w/01FCF6YZ7AZ4K20T4QCA9JJ9QM/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: updateBytes(['n1']),
@@ -76,6 +76,9 @@ describe('live-doc routes and the deps they were handed', () => {
     // The recorder on the injected deps is the discriminator: a route that
     // went around the seam to module-level stores persists the same bytes
     // and leaves this empty.
-    expect(recorded).toEqual(['get seam-ws/canvas-a', 'save seam-ws/canvas-a'])
+    expect(recorded).toEqual([
+      'get 01FCF6YZ7AZ4K20T4QCA9JJ9QM/canvas-a',
+      'save 01FCF6YZ7AZ4K20T4QCA9JJ9QM/canvas-a',
+    ])
   })
 })

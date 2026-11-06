@@ -15,7 +15,7 @@ import type {
   NodeId,
   nodeIdSchema,
   WorkspaceId,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from './ids.js'
 import type { MarkdownDocument, markdownDocumentSchema } from './markdown.js'
 import type {
@@ -40,7 +40,7 @@ it('type-source invariant: exported types equal z.infer of their schema', () => 
   expectTypeOf<FacetsRaw>().toEqualTypeOf<z.infer<typeof facetsRawSchema>>()
   expectTypeOf<DocumentId>().toEqualTypeOf<z.infer<typeof documentIdSchema>>()
   expectTypeOf<NodeId>().toEqualTypeOf<z.infer<typeof nodeIdSchema>>()
-  expectTypeOf<WorkspaceId>().toEqualTypeOf<z.infer<typeof workspaceIdSchema>>()
+  expectTypeOf<WorkspaceId>().toEqualTypeOf<z.infer<typeof workspaceCanonicalIdSchema>>()
   expectTypeOf<CanvasColor>().toEqualTypeOf<z.infer<typeof canvasColorSchema>>()
   expectTypeOf<SpatialNode>().toEqualTypeOf<z.infer<typeof spatialNodeSchema>>()
   expectTypeOf<CanvasEdge>().toEqualTypeOf<z.infer<typeof canvasEdgeSchema>>()

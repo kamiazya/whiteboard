@@ -79,7 +79,7 @@ function blockDir(prefix: string, { holdsDataDir = false } = {}): { readonly dir
 }
 
 const TOKEN = 'urls-token'
-const WS = 'ws-urls'
+const WS = '01Z8TE6HQ4T0B6F35VN0EEYM23'
 
 type Method = 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
 

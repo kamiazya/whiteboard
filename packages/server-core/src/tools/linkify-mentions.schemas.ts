@@ -6,12 +6,12 @@
  * the operation's own graph coming with them. See that file for why the split
  * exists rather than being a matter of taste.
  */
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const linkifyMentionsInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     /** The SOURCE — the document whose prose gets rewritten. */
     documentId: documentIdSchema,
     /** The document the mentions name. */

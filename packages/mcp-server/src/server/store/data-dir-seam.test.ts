@@ -45,7 +45,7 @@ describe('storage layer follows the effective data dir seam', () => {
     const doc = new LoroDoc()
     doc.getMap('root').set('k', 'v')
     doc.commit()
-    await saveDocument('ws-seam-test', 'seam-canvas', doc)
+    await saveDocument('01KYRNNBMGKJ4GKG926DJEE4HA', 'seam-canvas', doc)
 
     const overrideEntries = await readdir(overrideDir)
     expect(overrideEntries).toContain('whiteboard.db')
@@ -54,12 +54,12 @@ describe('storage layer follows the effective data dir seam', () => {
     // in the WORKSPACE record — confirm the row landed under the override
     // dir's db, keyed to the workspace just saved into.
     const db = await getDb(overrideDir)
-    const documentId = await resolveDocumentIdAtPath('ws-seam-test', 'seam-canvas')
+    const documentId = await resolveDocumentIdAtPath('01KYRNNBMGKJ4GKG926DJEE4HA', 'seam-canvas')
     expect(documentId).not.toBeNull()
     const snapshotRow = await db
       .selectFrom('documentSnapshots')
       .select(['docKey'])
-      .where('docKey', '=', 'workspace-tree:ws-seam-test')
+      .where('docKey', '=', 'workspace-tree:01KYRNNBMGKJ4GKG926DJEE4HA')
       .executeTakeFirst()
     expect(snapshotRow).toBeDefined()
 

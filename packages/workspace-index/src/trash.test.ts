@@ -34,7 +34,7 @@ import type { WorkspaceDocs } from './workspace-docs.js'
  */
 const notRenamed = (): Promise<never> => Promise.reject(new Error('not implemented'))
 
-const WS = 'ws-trash'
+const WS = '01NA8GJR52H92D8CBCA44CWA9E'
 
 function inMemoryBlobStore(): BlobStore & { size: () => number } {
   const blobs = new Map<string, Uint8Array>()
@@ -500,7 +500,7 @@ describe('purging a trashed document', () => {
 })
 
 describe('a trash blob another workspace still names', () => {
-  const OTHER = 'ws-other'
+  const OTHER = '0175T8F2WH2MX756J1T7SHKGB8'
   let blobs: ReturnType<typeof inMemoryBlobStore>
   let docs: ReturnType<typeof inMemoryWorkspaceDocs>
   let index: LoroWorkspaceDocumentIndex

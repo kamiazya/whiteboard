@@ -13,7 +13,7 @@ import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
 import { DocumentStoreWorkspaceDocs } from './document-store-workspace-docs.js'
 
-const WORKSPACE = 'ws-removed-mid-save'
+const WORKSPACE = '01NZKY725TZFCN2YEYKGKE55D5'
 const REF: DocRef = { kind: 'workspace-tree', workspaceId: WORKSPACE }
 
 /** The store, with `appendDeltas` held until `release` — the window to delete in. */

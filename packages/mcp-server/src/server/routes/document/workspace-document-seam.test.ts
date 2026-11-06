@@ -29,7 +29,7 @@ const { createDocumentRouter } = await import('../document.js')
 // workaround for document.ts's dynamic import.
 await import('../../sync-audience.js')
 
-const WS = 'seam-ws'
+const WS = '01FCF6YZ7AZ4K20T4QCA9JJ9QM'
 
 function workspaceUpdateBytes(path: string): Uint8Array<ArrayBuffer> {
   const doc = new LoroDoc()

@@ -242,7 +242,10 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
         ...state.rows,
         typeof body.name === 'string' ? { ...row, name: body.name } : row,
       ]
-      return jsonResponse({ workspaceId: 'ws', documentId: id, path: body.path }, 201)
+      return jsonResponse(
+        { workspaceId: '01J9ZC8XK4PQRS7TVWXY0ABCDF', documentId: id, path: body.path },
+        201,
+      )
     },
   },
   {

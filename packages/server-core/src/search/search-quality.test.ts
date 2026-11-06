@@ -32,7 +32,7 @@ import { createDocumentSetOperation } from '../tools/document-set.js'
 import { ndcgAt, recallAt } from './eval.js'
 import { CORPUS_DOCUMENTS, JUDGED_QUERIES, type QueryCategory } from './search-corpus.js'
 
-const WS = 'quality'
+const WS = '01TC3JM1604359T9BY1YV2427G'
 /**
  * The reporting cutoff, 10 to match what retrieval benchmarks report — BEIR
  * and the Japanese ones (JMTEB, JQaRA) all publish nDCG@10, so a number

@@ -5,7 +5,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate, wbDocumentList } from './document-crud.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 async function makeDeps(): Promise<ServerDeps> {
   const deps = makeTestDeps({ documentTeardown: inMemoryDocumentTeardown() })

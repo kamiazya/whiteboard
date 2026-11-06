@@ -48,16 +48,16 @@ describe('the shared set arms auto-compaction', () => {
     if (worker === null) throw new Error('auto-compact declares no worker')
 
     expect(_autoCompactTimerCountForTests()).toBe(0)
-    await saveDocument('ws-1', 'before-start', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'before-start', new LoroDoc())
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
     worker.start()
-    await saveDocument('ws-1', 'after-start', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'after-start', new LoroDoc())
     expect(_autoCompactTimerCountForTests()).toBe(1)
 
     await worker.stop()
     expect(_autoCompactTimerCountForTests()).toBe(0)
-    await saveDocument('ws-1', 'after-stop', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'after-stop', new LoroDoc())
     expect(_autoCompactTimerCountForTests()).toBe(0)
   })
 })

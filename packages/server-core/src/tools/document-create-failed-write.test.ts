@@ -7,7 +7,7 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
 
-const WS = 'failed-write'
+const WS = '01X4E9VJ5JTAGK199WMCTRJ9FS'
 const MARKDOWN = '---\ntype: note\n---\nthe body'
 
 /** A store whose Nth save throws, standing in for whatever fails once the document exists. */

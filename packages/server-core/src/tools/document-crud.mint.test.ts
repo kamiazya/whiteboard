@@ -91,12 +91,12 @@ describe('wbDocumentCreate mints the workspace id', () => {
 
     await expect(
       wbDocumentCreate(deps, {
-        workspaceId: 'V1StGXR8_Z5jdHi6B-myT',
+        workspaceId: 'trailing-',
         path: 'spec',
         kind: 'markdown',
         createWorkspace: true,
       }),
-    ).rejects.toThrow(/segment/i)
+    ).rejects.toThrow(/Cannot create workspace "trailing-"/)
     expect(await deps.documentIndex.listWorkspaces()).toEqual([])
   })
 

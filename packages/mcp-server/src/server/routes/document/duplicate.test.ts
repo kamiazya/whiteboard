@@ -42,7 +42,7 @@ beforeEach(() => {
   clearDocCacheForTests()
 })
 
-const WS = 'ws-duplicate'
+const WS = '01RVSYAFF984RBYQRQTG8KAZQD'
 
 function note(body: string): LoroDoc {
   const doc = new LoroDoc()

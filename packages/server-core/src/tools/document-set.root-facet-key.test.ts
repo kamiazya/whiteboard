@@ -8,7 +8,7 @@ import { wbDocumentCreate } from './document-crud.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { OkfParseError, parseWritableOkf } from './document-set.js'
 
-const WS = 'root-facet'
+const WS = '01BKWAA3N9WZX0M7JN2WQDYEDB'
 // Spelled like a facet but written where no plugin reads: the same payload
 // under `facets:` is refused by the registry, and here it would be stored
 // unvalidated and have no effect at all.

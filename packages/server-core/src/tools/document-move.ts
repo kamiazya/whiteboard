@@ -19,7 +19,11 @@
  * the one who knows whether a surface should say so.
  */
 import { movesForPathChange } from '@kamiazya/whiteboard-codec'
-import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentPathSchema,
+  workspaceCanonicalIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import {
   type FollowRenameResult,
@@ -30,7 +34,7 @@ import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 
 const wbDocumentMoveInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
     /** Where the document goes. Documents below its old path move with it. */
     path: documentPathSchema,

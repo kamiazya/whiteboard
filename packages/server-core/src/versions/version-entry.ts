@@ -1,8 +1,8 @@
 import {
   okfActorSchema,
+  PATH_SAFE_ID_PATTERN,
   utf16Max,
   versionLabelSchema,
-  WORKSPACE_ID_PATTERN,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
@@ -104,7 +104,7 @@ export const promotedTrashBytesRequestSchema = z
 export type PromotedTrashBytes = z.infer<typeof promotedTrashBytesRequestSchema>
 
 /** A version id the daemon can key a row by — the character class its validator admits. */
-const promotedVersionIdSchema = utf16Max(z.string(), 64).regex(WORKSPACE_ID_PATTERN)
+const promotedVersionIdSchema = utf16Max(z.string(), 64).regex(PATH_SAFE_ID_PATTERN)
 
 /**
  * One saved version of a promoted document, as the browser keeper recorded

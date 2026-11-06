@@ -6,7 +6,7 @@ import {
   namespaceHandleSchema,
   parseWorkspaceAddress,
   SINGLE_PERSON_NAMESPACE,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import {
@@ -255,10 +255,14 @@ export async function wbDocumentCreate(
   // dropped. A schema only guarantees what something actually runs.
   const input = wbDocumentCreateInputSchema.parse(rawInput)
 
-  // Without `createWorkspace` the address must already name a workspace, and
-  // one that is not even an id (an unresolved `<namespace>/<segment>`) names
-  // none: refused here as unknown, before the keeper's own id parse sees it.
-  if (input.createWorkspace !== true && !workspaceIdSchema.safeParse(input.workspaceId).success) {
+  // Without `createWorkspace` the address must already name a workspace, so
+  // it arrives here resolved to its canonical id; anything else (a segment or
+  // `<namespace>/<segment>` nothing answered to) names none and is refused
+  // here as unknown, before the keeper's own id parse sees it.
+  if (
+    input.createWorkspace !== true &&
+    !workspaceCanonicalIdSchema.safeParse(input.workspaceId).success
+  ) {
     throw new WorkspaceNotFoundForCallerError(
       input.workspaceId,
       'create',

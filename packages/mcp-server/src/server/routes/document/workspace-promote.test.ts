@@ -92,7 +92,7 @@ beforeEach(async () => {
   handle = await createIsolatedDb({ dataDir: tempDir })
   clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
-  await seedWorkspaceRow(tempDir, 'session1')
+  await seedWorkspaceRow(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
@@ -127,13 +127,13 @@ function harness() {
     }),
   )
   const promote = (body: unknown) =>
-    app.request('/api/w/session1/workspace-document/promote', {
+    app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/promote', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     })
   const documents = async () => {
-    const res = await app.request('/api/workspaces/session1/documents')
+    const res = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents')
     expect(res.status).toBe(200)
     return ((await res.json()) as { documents: { id: string }[] }).documents
   }
@@ -147,7 +147,7 @@ it('merges the record and leaves one explicit human checkpoint per document', as
   expect(res.status).toBe(200)
   promoteWorkspaceResponseSchema.parse(await res.json())
   expect(await documents()).toHaveLength(2)
-  const versions = await new FileVersionStore().list('session1', 'sketch')
+  const versions = await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'sketch')
   expect(versions).toHaveLength(1)
   expect(versions[0]?.auto).toBe(false)
   expect(versions[0]?.operator?.kind).toBe('human')
@@ -162,13 +162,13 @@ it("names the calling member on the promote checkpoint, not the server's OS acco
       callerName: async () => 'Ada',
     }),
   )
-  const res = await app.request('/api/w/session1/workspace-document/promote', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/promote', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ snapshot: b64u(browserSnapshot()) }),
   })
   expect(res.status).toBe(200)
-  const versions = await new FileVersionStore().list('session1', 'sketch')
+  const versions = await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'sketch')
   expect(versions[0]?.operator).toEqual({ kind: 'human', displayName: 'Ada' })
 })
 
@@ -188,7 +188,7 @@ it('refuses an attestation as a body outside the contract, since no passkey is p
   expect(res.status).toBe(400)
   expect(((await res.json()) as { error: string }).error).toBe('invalid_body')
   expect(await documents()).toEqual([])
-  expect(await new FileVersionStore().list('session1', 'sketch')).toEqual([])
+  expect(await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'sketch')).toEqual([])
 })
 
 it('refuses a body that is not the contract, and bytes that are not a record', async () => {
@@ -197,7 +197,7 @@ it('refuses a body that is not the contract, and bytes that are not a record', a
   expect((await promote({ snapshot: b64u(browserSnapshot()), extra: 1 })).status).toBe(400)
   const notLoro = await promote({ snapshot: b64u(new Uint8Array([1, 2, 3, 4])) })
   expect(notLoro.status).toBe(400)
-  expect(await new FileVersionStore().list('session1', 'sketch')).toEqual([])
+  expect(await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'sketch')).toEqual([])
 })
 
 it('answers bytes that are not a record in the code family, under a code of their own', async () => {
@@ -240,7 +240,7 @@ it('refuses a record past the document cap with 413 under its own code, and keep
   expect(body.error).toBe('promote_too_many_documents')
   expect(body.message).toContain(String(PROMOTE_DOCUMENT_CAP))
   expect(await documents()).toHaveLength(0)
-  expect(await new FileVersionStore().list('session1', 'd0')).toHaveLength(0)
+  expect(await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'd0')).toHaveLength(0)
 })
 
 it('refuses more saved versions than one move carries with 413 under its own code, and keeps none of it', async () => {
@@ -431,11 +431,14 @@ it('carries a trashed document so the daemon restores it with its content', asyn
   expect(res.status).toBe(200)
   expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
 
-  const restored = await app.request(`/api/workspaces/session1/trash/${GONE_ID}/restore`, {
-    method: 'POST',
-  })
+  const restored = await app.request(
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/trash/${GONE_ID}/restore`,
+    {
+      method: 'POST',
+    },
+  )
   expect(restored.status).toBe(200)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
@@ -452,11 +455,14 @@ it.each([
   const res = await promote(browserRecordWithTrashAndVersion(trashed))
   expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
 
-  const restored = await app.request(`/api/workspaces/session1/trash/${GONE_ID}/restore`, {
-    method: 'POST',
-  })
+  const restored = await app.request(
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/trash/${GONE_ID}/restore`,
+    {
+      method: 'POST',
+    },
+  )
   expect(restored.status).toBe(404)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(resolveWorkspaceDocumentById(workspaceDoc, GONE_ID)).toBeNull()
 })
 
@@ -466,10 +472,10 @@ it.each([
   ['purged', 'DELETE', ''],
   ['restored', 'POST', '/restore'],
 ])("keeps another workspace's trashed copy restorable when it is %s in one", async (_, method, suffix) => {
-  await seedWorkspaceRow(tempDir, 'session2')
+  await seedWorkspaceRow(tempDir, '01GMPGTKWFGGGN52ZV6JFQP5HM')
   const { app } = harness()
   const record = browserRecordWithTrashAndVersion()
-  for (const workspaceId of ['session1', 'session2']) {
+  for (const workspaceId of ['01M8BBN7JS60N0ZAR13NP8SXBF', '01GMPGTKWFGGGN52ZV6JFQP5HM']) {
     const res = await app.request(`/api/w/${workspaceId}/workspace-document/promote`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -478,14 +484,20 @@ it.each([
     expect(promoteWorkspaceResponseSchema.parse(await res.json()).trashStored).toEqual([GONE_ID])
   }
 
-  const first = await app.request(`/api/workspaces/session1/trash/${GONE_ID}${suffix}`, { method })
+  const first = await app.request(
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/trash/${GONE_ID}${suffix}`,
+    { method },
+  )
   expect(first.status).toBe(200)
 
-  const other = await app.request(`/api/workspaces/session2/trash/${GONE_ID}/restore`, {
-    method: 'POST',
-  })
+  const other = await app.request(
+    `/api/workspaces/01GMPGTKWFGGGN52ZV6JFQP5HM/trash/${GONE_ID}/restore`,
+    {
+      method: 'POST',
+    },
+  )
   expect(other.status).toBe(200)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('session2')
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('01GMPGTKWFGGGN52ZV6JFQP5HM')
   expect(readMarkdownBody(documentContainers(workspaceDoc, GONE_ID))).toBe(
     '# trashed in the browser',
   )
@@ -513,18 +525,18 @@ it('carries saved versions: listed for their document, label kept, restorable to
     DRAFTED_VERSION_ID,
   ])
 
-  const listed = await new FileVersionStore().list('session1', 'notes/roadmap')
+  const listed = await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap')
   // The browser's row and the move's own checkpoint, newest first.
   expect(listed.map((entry) => entry.label ?? null)).toEqual([null, 'as drafted'])
   expect(listed[1]?.id).toBe(DRAFTED_VERSION_ID)
   expect(listed[1]?.createdAt).toBe(new Date(1_000).toISOString())
 
   const restored = await app.request(
-    `/api/workspaces/session1/documents/notes/roadmap/versions/${DRAFTED_VERSION_ID}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/notes/roadmap/versions/${DRAFTED_VERSION_ID}/restore`,
     { method: 'POST' },
   )
   expect(restored.status).toBe(200)
-  const workspaceDoc = await serverDeps.workspaceDocuments.get('session1')
+  const workspaceDoc = await serverDeps.workspaceDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF')
   expect(readMarkdownBody(documentContainers(workspaceDoc, ROADMAP_ID))).toBe('# as drafted')
 })
 
@@ -533,7 +545,7 @@ it('keeps a re-run idempotent: the carried version is not listed twice', async (
   const record = browserRecordWithTrashAndVersion()
   expect((await promote(record)).status).toBe(200)
   expect((await promote(record)).status).toBe(200)
-  const listed = await new FileVersionStore().list('session1', 'notes/roadmap')
+  const listed = await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap')
   expect(listed.filter((entry) => entry.id === DRAFTED_VERSION_ID)).toHaveLength(1)
 })
 
@@ -570,8 +582,8 @@ it('confirms every carried version on a re-run after the daemon took a checkpoin
   const first = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
   expect([...first.versionsKept].sort()).toEqual(ids)
 
-  const doc = await serverDeps.liveDocuments.get('session1', 'notes/roadmap')
-  await serverDeps.versions.save('session1', 'notes/roadmap', doc, { auto: true })
+  const doc = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap')
+  await serverDeps.versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap', doc, { auto: true })
 
   const second = promoteWorkspaceResponseSchema.parse(await (await promote(body)).json())
   expect([...second.versionsKept].sort()).toEqual(ids)
@@ -627,7 +639,7 @@ it.each([
   const record = browserRecordWithTrashAndVersion()
   const [version] = record.versions
   const future = Date.now() + 365 * 24 * 60 * 60 * 1000
-  const res = await app.request('/api/w/session1/workspace-document/promote', {
+  const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/promote', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -636,9 +648,9 @@ it.each([
     }),
   })
   expect(res.status).toBe(200)
-  const carried = (await new FileVersionStore().list('session1', 'notes/roadmap')).find(
-    (entry) => entry.id === DRAFTED_VERSION_ID,
-  )
+  const carried = (
+    await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap')
+  ).find((entry) => entry.id === DRAFTED_VERSION_ID)
   expect(carried?.operator).toEqual({ kind: 'human', displayName: 'Ada' })
   expect(Date.parse(carried?.createdAt ?? '')).toBeLessThanOrEqual(Date.now())
 })
@@ -649,9 +661,9 @@ it('keeps the operator and date a carried version states on the local daemon', a
   const [version] = record.versions
   const operator = { kind: 'human', displayName: 'Yuki' } as const
   expect((await promote({ ...record, versions: [{ ...version, operator }] })).status).toBe(200)
-  const carried = (await new FileVersionStore().list('session1', 'notes/roadmap')).find(
-    (entry) => entry.id === DRAFTED_VERSION_ID,
-  )
+  const carried = (
+    await new FileVersionStore().list('01M8BBN7JS60N0ZAR13NP8SXBF', 'notes/roadmap')
+  ).find((entry) => entry.id === DRAFTED_VERSION_ID)
   expect(carried?.operator).toEqual(operator)
   expect(carried?.createdAt).toBe(new Date(1_000).toISOString())
 })
@@ -666,23 +678,32 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
     edges: [],
   })
   // Stored past the sync judge, as a carried version once was.
-  await serverDeps.liveDocuments.save('session1', 'canvas-a', oversized, { kind: 'spatial' })
-  const version = await serverDeps.versions.save('session1', 'canvas-a', oversized, {
-    auto: false,
+  await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', oversized, {
+    kind: 'spatial',
   })
-  const live = await serverDeps.liveDocuments.get('session1', 'canvas-a')
+  const version = await serverDeps.versions.save(
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
+    'canvas-a',
+    oversized,
+    {
+      auto: false,
+    },
+  )
+  const live = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   writeSpatialCanvas(live, {
     nodes: [textNode({ id: 'kept', text: 'k', x: 0, y: 0, width: 1, height: 1 })],
     edges: [],
   })
-  await serverDeps.liveDocuments.save('session1', 'canvas-a', live, { overwrite: true })
+  await serverDeps.liveDocuments.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', live, {
+    overwrite: true,
+  })
 
   const res = await app.request(
-    `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${version.id}/restore`,
     { method: 'POST' },
   )
   expect(res.status).toBe(413)
   expect(await res.json()).toMatchObject({ error: 'too_many_nodes_or_edges' })
-  const after = await serverDeps.liveDocuments.get('session1', 'canvas-a')
+  const after = await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   expect(readSpatialCanvas(after).nodes.map((node) => node.id)).toEqual(['kept'])
 })

@@ -39,7 +39,7 @@ const { globalStoreScope } = await import('./store-scope.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { makeSpatialDoc } = await import('../../shared/test-utils/spatial-doc.js')
 
-const WORKSPACE = 'ws_conformance'
+const WORKSPACE = '01P4AQS80F57WQYQHNS7XVHA3Z'
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from './document-crud.js'
 
-const WS = 'orphan'
+const WS = '01Q6XP8M77NX27DHDD48SFRGPZ'
 
 describe('a create that cannot finish leaves nothing behind', () => {
   it.each([

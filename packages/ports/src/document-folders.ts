@@ -1,4 +1,8 @@
-import { documentPathSchema, folderNameSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentPathSchema,
+  folderNameSchema,
+  workspaceCanonicalIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { DocumentIndex, ListDocumentsInput } from './document-index.js'
 
@@ -19,7 +23,7 @@ export type FolderNameEntry = z.infer<typeof folderNameEntrySchema>
  */
 export const setFolderNameInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     path: documentPathSchema,
     name: folderNameSchema.optional(),
   })

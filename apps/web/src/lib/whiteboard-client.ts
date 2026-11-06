@@ -2,7 +2,7 @@ import {
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
@@ -24,7 +24,7 @@ import { z } from 'zod'
 export const documentSnapshotSchema = z
   .object({
     documentId: documentIdSchema,
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     path: documentPathSchema,
     /**
      * The document's own display name, or null when it has none — the

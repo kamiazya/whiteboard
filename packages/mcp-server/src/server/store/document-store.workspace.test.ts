@@ -73,9 +73,11 @@ async function openWorkspace(workspaceId: string) {
 const documentsTableExists = (): Promise<boolean> => tableExists(handle.rawDb, 'documents')
 
 it('a save with a kind lands on the workspace tree node and writes no per-document record and no row', async () => {
-  await saveDocument('ws-a', 'design', canvasDoc('tree-borne'), { kind: 'spatial' })
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('tree-borne'), {
+    kind: 'spatial',
+  })
 
-  const workspace = await openWorkspace('ws-a')
+  const workspace = await openWorkspace('01PAW75F73PVC402Y3V151KT6R')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
   const entry = resolveWorkspaceDocument(workspace, 'design')
@@ -93,17 +95,26 @@ it('a save with a kind lands on the workspace tree node and writes no per-docume
   const store = new LibsqlDocumentStore(db)
   expect(
     await store.loadSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: entry.documentId },
+      docRef: {
+        kind: 'document',
+        workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+        documentId: entry.documentId,
+      },
     }),
   ).toBeNull()
 })
 
 it('loadDocument serves the tree content back, edits included', async () => {
-  await saveDocument('ws-a', 'design', canvasDoc('first'), { kind: 'spatial' })
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', canvasDoc('first'), {
+    kind: 'spatial',
+  })
   const edited = canvasDoc('second')
-  await saveDocument('ws-a', 'design', edited, { kind: 'spatial', overwrite: true })
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'design', edited, {
+    kind: 'spatial',
+    overwrite: true,
+  })
 
-  const loaded = await loadDocument('ws-a', 'design')
+  const loaded = await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'design')
   const canvas = readSpatialCanvas(loaded)
   expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe('second')
 })
@@ -114,9 +125,9 @@ it('a kindless save of a NEW document lands on the tree as spatial — nothing w
   // opens them, so 'spatial' is the honest default — not a guess about
   // someone else's data, because pre-kind rows no longer exist (the fold
   // deletes them as this project's own data defect).
-  await saveDocument('ws-a', 'no-kind', canvasDoc('kindless'))
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'no-kind', canvasDoc('kindless'))
 
-  const workspace = await openWorkspace('ws-a')
+  const workspace = await openWorkspace('01PAW75F73PVC402Y3V151KT6R')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
   const entry = resolveWorkspaceDocument(workspace, 'no-kind')
@@ -128,10 +139,14 @@ it('a kindless save of a NEW document lands on the tree as spatial — nothing w
   const store = new LibsqlDocumentStore(db)
   expect(
     await store.loadSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: entry.documentId },
+      docRef: {
+        kind: 'document',
+        workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+        documentId: entry.documentId,
+      },
     }),
   ).toBeNull()
-  const loaded = await loadDocument('ws-a', 'no-kind')
+  const loaded = await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'no-kind')
   const canvas = readSpatialCanvas(loaded)
   expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe(
     'kindless',
@@ -139,17 +154,19 @@ it('a kindless save of a NEW document lands on the tree as spatial — nothing w
 })
 
 it('deleteDocument evacuates the tree node into the trash', async () => {
-  await saveDocument('ws-a', 'doomed', canvasDoc('keep a copy'), { kind: 'spatial' })
-  const before = await openWorkspace('ws-a')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'doomed', canvasDoc('keep a copy'), {
+    kind: 'spatial',
+  })
+  const before = await openWorkspace('01PAW75F73PVC402Y3V151KT6R')
   expect(before).not.toBeNull()
   if (before === null) return
   const entry = resolveWorkspaceDocument(before, 'doomed')
   expect(entry).not.toBeNull()
   if (entry === null) return
 
-  expect(await deleteDocument('ws-a', 'doomed')).toBe(true)
+  expect(await deleteDocument('01PAW75F73PVC402Y3V151KT6R', 'doomed')).toBe(true)
 
-  const workspace = await openWorkspace('ws-a')
+  const workspace = await openWorkspace('01PAW75F73PVC402Y3V151KT6R')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
   expect(resolveWorkspaceDocumentById(workspace, entry.documentId)).toBeNull()
@@ -165,28 +182,30 @@ it('saving a workspace record registers the workspace — a tool-created workspa
   // tool just created (4404) and the browser never gets a snapshot.
   const { cacheBackedWorkspaceDocs, workspaceExists } = await import('./document-store.js')
   const docs = cacheBackedWorkspaceDocs()
-  const record = await docs.create('ws-tool-made')
-  await docs.save('ws-tool-made', record)
+  const record = await docs.create('0111YQJVD91QDJQ5RSC3CAAVNH')
+  await docs.save('0111YQJVD91QDJQ5RSC3CAAVNH', record)
 
-  expect(await workspaceExists('ws-tool-made')).toBe(true)
+  expect(await workspaceExists('0111YQJVD91QDJQ5RSC3CAAVNH')).toBe(true)
 })
 
 it('renameDocumentPath moves the tree node', async () => {
-  await saveDocument('ws-a', 'old-place', canvasDoc('movable'), { kind: 'spatial' })
-  const before = await openWorkspace('ws-a')
+  await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'old-place', canvasDoc('movable'), {
+    kind: 'spatial',
+  })
+  const before = await openWorkspace('01PAW75F73PVC402Y3V151KT6R')
   expect(before).not.toBeNull()
   if (before === null) return
   const entry = resolveWorkspaceDocument(before, 'old-place')
   expect(entry).not.toBeNull()
   if (entry === null) return
 
-  await renameDocumentPath('ws-a', 'old-place', 'new-place')
+  await renameDocumentPath('01PAW75F73PVC402Y3V151KT6R', 'old-place', 'new-place')
 
-  const workspace = await openWorkspace('ws-a')
+  const workspace = await openWorkspace('01PAW75F73PVC402Y3V151KT6R')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
   expect(resolveWorkspaceDocumentById(workspace, entry.documentId)?.path).toBe('new-place')
-  const loaded = await loadDocument('ws-a', 'new-place')
+  const loaded = await loadDocument('01PAW75F73PVC402Y3V151KT6R', 'new-place')
   const canvas = readSpatialCanvas(loaded)
   expect(canvas.nodes[0] === undefined ? null : (nodeText(canvas.nodes[0]) ?? null)).toBe('movable')
 })

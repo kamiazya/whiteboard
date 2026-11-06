@@ -18,6 +18,7 @@ import { fileURLToPath } from 'node:url'
 // The widget's own call builders: what it sends is what this smoke sends, so
 // the runtime step cannot drift from the widget by being a second hand copy.
 import { canvasViewCall, threadAddCall } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
+import { assertCanonicalWorkspaceId } from './lib/canonical-workspace-id.mjs'
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
 import { assertCanvasFacetWritesRefused } from './lib/facet-write-refusals.mjs'
@@ -533,6 +534,7 @@ async function anEditWithNoModeIsProposedAndTheBatchActorIsStamped(ctx) {
   if (batch.results.some((r) => typeof r.documentId !== 'string')) {
     throw new Error(`wb_workspace_edit did not report the ids it minted: ${JSON.stringify(batch)}`)
   }
+  assertCanonicalWorkspaceId('wb_workspace_edit', batch.workspaceId, WORKSPACE_ID)
   const batchExport = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
     documentIds: [batch.results[0].documentId],
@@ -1752,6 +1754,7 @@ async function canvasViewAnswersTheWidget(ctx) {
   if (typeof viewed.workspaceId !== 'string' || viewed.workspaceId.length === 0) {
     throw new Error(`canvas_view did not echo the workspaceId: ${JSON.stringify(viewed)}`)
   }
+  assertCanonicalWorkspaceId('canvas_view', viewed.workspaceId, WORKSPACE_ID)
   if (!Array.isArray(viewed.scene?.nodes) || typeof viewed.references !== 'object') {
     throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
   }

@@ -12,7 +12,7 @@ import { documentSetInputSchema } from './document-set.js'
 import { createThreadEditTool } from './thread-edit.js'
 import { createWorkspaceEditTool, workspaceEditInputSchema } from './workspace-edit.js'
 
-const WS = 'ws-actors'
+const WS = '01AYWE9XE9P0ZNZBTT9Q4RE1HH'
 const DOC = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 /**
  * Characters a snapshot cannot compress away, so what is stored measures the

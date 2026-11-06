@@ -2,7 +2,7 @@ import { SINGLE_PERSON_NAMESPACE } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandleBy } from '@kamiazya/whiteboard-ports'
 import type { Context, HonoRequest } from 'hono'
 import { workspaceRegistry } from './store/document-store.js'
-import { validateWorkspaceId, validationErrorBody } from './validators.js'
+import { validateWorkspaceHandle, validationErrorBody } from './validators.js'
 
 /**
  * The namespace of a caller who has none of their own: a server-mode grant
@@ -108,7 +108,7 @@ export async function workspaceIdFromHandle(c: Context, handle: string): Promise
  */
 export function refuseMalformedHandle(c: Context, handle: string): Response | null {
   try {
-    validateWorkspaceId(handle)
+    validateWorkspaceHandle(handle)
     return null
   } catch (err) {
     const body = validationErrorBody(err)

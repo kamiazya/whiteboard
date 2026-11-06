@@ -14,7 +14,7 @@ import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetOperation } from './document-set.js'
 import { computeDocumentTags, documentTagsOutputSchema } from './document-tags.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 function makeDeps(): ServerDeps {
   return makeTestDeps()
@@ -62,7 +62,7 @@ describe('GET /document-tags', () => {
   })
 })
 
-const WORKSPACE_ID = 'ws-tags'
+const WORKSPACE_ID = '01JCNJBZQHZ5FHWE3518G8Y4V8'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W1'
 const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W2'
 const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8W3'

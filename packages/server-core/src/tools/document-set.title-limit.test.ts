@@ -8,7 +8,7 @@ import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown
 import { OkfParseError, parseWritableOkf } from './document-set.js'
 import { createWorkspaceEditTool } from './workspace-edit.js'
 
-const WS = 'titles'
+const WS = '01GGAH4DBB5ZSV9J187CAE4ZZ5'
 const okf = (title: string) => `---\ntype: note\ntitle: ${title}\n---\nbody`
 const overLimit = 'T'.repeat(DOCUMENT_NAME_MAX_LENGTH + 1)
 const atLimit = 'T'.repeat(DOCUMENT_NAME_MAX_LENGTH)

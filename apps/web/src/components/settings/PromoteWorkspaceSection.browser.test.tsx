@@ -74,7 +74,10 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     }
     if (url.endsWith('/api/workspaces') && (init?.method ?? 'GET') === 'GET') {
       return Response.json({
-        workspaces: opts.workspaces ?? [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+        workspaces: opts.workspaces ?? [
+          { workspaceId: '01PAW75F73PVC402Y3V151KT6R' },
+          { workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR' },
+        ],
       })
     }
     if (url.endsWith('/workspace-document/promote') && init?.method === 'POST') {
@@ -82,7 +85,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
       if (opts.updateGate) await opts.updateGate
       if (opts.failUpdateStatus) {
         return Response.json(
-          { title: `Workspace "ws-a" not found` },
+          { title: `Workspace "01PAW75F73PVC402Y3V151KT6R" not found` },
           { status: opts.failUpdateStatus },
         )
       }
@@ -330,14 +333,16 @@ describe('PromoteWorkspaceSection', () => {
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
     await userEvent.click(await screen.findByTestId('promote-confirm'))
     const result = await screen.findByTestId('promote-last-result')
-    expect(result.textContent).toMatch(/moved 2 documents to daemon workspace "ws-a"/i)
+    expect(result.textContent).toMatch(
+      /moved 2 documents to daemon workspace "01PAW75F73PVC402Y3V151KT6R"/i,
+    )
 
     // Identity invariant: the same ids resolve on the daemon target, and in
     // the REPLICA this browser now holds under the daemon's id — the old
     // independent copy is gone (the verified demote deleted it).
     expect(resolveWorkspaceDocumentById(target, roadmapId)).not.toBeNull()
     expect(resolveWorkspaceDocumentById(target, sketchId)).not.toBeNull()
-    const replica = await new BrowserWorkspaceDocs().open('ws-a')
+    const replica = await new BrowserWorkspaceDocs().open('01PAW75F73PVC402Y3V151KT6R')
     expect(replica).not.toBeNull()
     expect(
       readWorkspaceDocuments(replica!)
@@ -469,7 +474,10 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target, {
-          workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }, { workspaceId: 'ws-b' }],
+          workspaces: [
+            { workspaceId: '01PAW75F73PVC402Y3V151KT6R', displayName: 'Team notes' },
+            { workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR' },
+          ],
         })}
         reload={vi.fn()}
       />,
@@ -477,7 +485,7 @@ describe('PromoteWorkspaceSection', () => {
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
     const select = await screen.findByTestId('promote-target')
     const labels = [...select.querySelectorAll('option')].map((o) => o.textContent)
-    expect(labels).toEqual(['Team notes', 'ws-b'])
+    expect(labels).toEqual(['Team notes', '01ECWTM29HBA5A9MXS76EM7JHR'])
     // The value stays the identifier: names are chrome, ids are the address.
     await userEvent.selectOptions(select, 'Team notes')
     await userEvent.click(screen.getByTestId('promote-confirm'))
@@ -494,7 +502,7 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(new LoroDoc(), {
-          workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }],
+          workspaces: [{ workspaceId: '01PAW75F73PVC402Y3V151KT6R', displayName: 'Team notes' }],
         })}
         reload={vi.fn()}
       />,
@@ -574,7 +582,7 @@ describe('PromoteWorkspaceSection', () => {
     const result = await screen.findByTestId('promote-last-result')
     expect(result.textContent).toMatch(/cached in this browser/i)
 
-    const replica = await new BrowserWorkspaceDocs().open('ws-a')
+    const replica = await new BrowserWorkspaceDocs().open('01PAW75F73PVC402Y3V151KT6R')
     expect(replica).not.toBeNull()
     expect(readWorkspaceDocuments(replica!)).toHaveLength(2)
     const promotion = createUserSettingsStore().load().migration.promotion
@@ -593,7 +601,13 @@ describe('PromoteWorkspaceSection', () => {
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
         baseFetch={daemonStub(target, {
-          workspaces: [{ workspaceId: 'ws-a', segment: 'team', displayName: 'Team docs' }],
+          workspaces: [
+            {
+              workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+              segment: 'team',
+              displayName: 'Team docs',
+            },
+          ],
         })}
         reload={vi.fn()}
       />,
@@ -602,7 +616,8 @@ describe('PromoteWorkspaceSection', () => {
     await userEvent.click(await screen.findByTestId('promote-confirm'))
     await screen.findByTestId('promote-last-result')
 
-    const replica = createUserSettingsStore().load().storage.replicas?.['ws-a']
+    const replica =
+      createUserSettingsStore().load().storage.replicas?.['01PAW75F73PVC402Y3V151KT6R']
     expect(replica).toBeTruthy()
     expect(replica?.daemonBaseUrl).toBe(BASE)
     expect(replica?.syncedAt).toBeTruthy()
@@ -633,7 +648,7 @@ describe('PromoteWorkspaceSection', () => {
 
     // The old record is gone; the replica (daemon id) still opens.
     expect(await new BrowserWorkspaceDocs().open(sourceId)).toBeNull()
-    expect(await new BrowserWorkspaceDocs().open('ws-a')).not.toBeNull()
+    expect(await new BrowserWorkspaceDocs().open('01PAW75F73PVC402Y3V151KT6R')).not.toBeNull()
     // The browser keeper stays bootable: the active identity was re-pointed
     // at a fresh empty workspace in the same operation.
     expect(getBrowserWorkspaceId()).not.toBe(sourceId)
@@ -783,7 +798,7 @@ describe('PromoteWorkspaceSection', () => {
       doc,
     ) {
       const result = await originalSave.call(this, workspaceId, doc)
-      if (workspaceId === 'ws-a') {
+      if (workspaceId === '01PAW75F73PVC402Y3V151KT6R') {
         forget(BASE, workspaceId)
         keyRefused = true
       }

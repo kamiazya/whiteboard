@@ -2,11 +2,38 @@ import { mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { newImageRef } from '@kamiazya/whiteboard-model'
-import { fileNode, groupNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, groupNode, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { workspaceDir, workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+
+const GC_BACKUP_FINISHED = '01M9F6SQQSRV3QB5E5NTTX7P1Y'
+const GC_BACKUP_RUNNING = '0126533FESFSY53NW8DNJZY9NS'
+const GC_OTHER_INSTANCE = '01MT5T2HWFS2VW9019N1YA0XA2'
+const GC_OTHER_INSTANCE_DANGLING = '014372C165ZN3XZ7JBR9PDNC3F'
+const GC_RECORD_MOVED = '01FME2G1DYV5TWG335HBPTXJRB'
+const WS_A = '01TYGJP26XH16QHBBVNW85QCE0'
+const WS_BG = '01BS99RZNWCCAPYP9GEZXKMBMG'
+const WS_BRK = '01XJ5VATJBAN5M2VN2WXB8XTGG'
+const WS_DEFERRED = '01SJV6TZ3F6DMGSKW0D9Z0VRWK'
+const WS_EMPTY = '01QSZ6KW045NSFV5A6WQ719EGF'
+const WS_ENV = '01D5XSB5W7833AP9V95CQHGXBE'
+const WS_FILES_LINK = '01ZAVFNS1E3NG0T5ARVZYPFWZ9'
+const WS_GRACE = '019JF6Y6DDX662KHRMC5SHVTZ1'
+const WS_GRACE0 = '014YJ0ZJP9BR9AHX4ZG8K9N2K5'
+const WS_LEGACY = '0149W95NTZ1DZPVKF0NG8BBBRH'
+const WS_MD = '01VJV1X9QGRPM3C44GXX8GC75V'
+const WS_MIXED = '0109C0KGY79BZNT3H78M6B74KP'
+const WS_NODES = '01MAC3KBFGR1BZTEKSGS5K84EB'
+const WS_NOSCAN = '01225QZFEZZ4415V2297YNMM1G'
+const WS_NULLVER = '017N5PKBRTSH0SR8DYDPS1H2EJ'
+const WS_PRECISION = '01YWQG4W6PX485CAW3RT99S50A'
+const WS_PURGED = '01E79AM73BMY373CJA9G72C5FP'
+const WS_RACE = '01KX3TVDNQV2JZS71CYZ5R9641'
+const WS_TRASH = '017E2PJZQV8ZPMN39SVSPZ9H52'
+const WS_UNREADABLE = '01MVE8AT3F5JXZ49DZMVQ0W37V'
+const WS_V = '011NS8H5QYXT03TKXY3CSNQBWB'
 
 let tempDir: string
 
@@ -124,14 +151,14 @@ describe('purgeDanglingFiles', () => {
     // actually persists through saveDocument. Before the fix this must be RED:
     // the collector only walks 'elements' and returns an empty set, so the
     // aged file below is (wrongly) classified as dangling and unlinked.
-    await saveDocument('ws_nodes', 'page', makeSpatialDocWithImage('asset-x'))
-    await seedFile('ws_nodes', 'asset-x', '.png', 500)
+    await saveDocument(WS_NODES, 'page', makeSpatialDocWithImage('asset-x'))
+    await seedFile(WS_NODES, 'asset-x', '.png', 500)
 
-    const result = await purgeDanglingFiles('ws_nodes', withVersions())
+    const result = await purgeDanglingFiles(WS_NODES, withVersions())
 
     expect(result.purgedCount).toBe(0)
     const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_nodes'))
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_NODES))
     ).sort()
     expect(remaining).toEqual(['asset-x.png'])
   })
@@ -139,39 +166,37 @@ describe('purgeDanglingFiles', () => {
   it('keeps files referenced by nodes-model file nodes and deletes the rest', async () => {
     // Two documents reference distinct fileIds; an additional dangling file
     // qualifies for deletion.
-    await saveDocument('ws_a', 'used-a', makeSpatialDocWithImage('used-a'))
-    await saveDocument('ws_a', 'used-b', makeSpatialDocWithImage('used-b'))
+    await saveDocument(WS_A, 'used-a', makeSpatialDocWithImage('used-a'))
+    await saveDocument(WS_A, 'used-b', makeSpatialDocWithImage('used-b'))
 
-    await seedFile('ws_a', 'used-a', '.png', 100)
-    await seedFile('ws_a', 'used-b', '.png', 200)
-    await seedFile('ws_a', 'orphan-1', '.png', 1000)
-    await seedFile('ws_a', 'orphan-2', '.jpg', 500)
+    await seedFile(WS_A, 'used-a', '.png', 100)
+    await seedFile(WS_A, 'used-b', '.png', 200)
+    await seedFile(WS_A, 'orphan-1', '.png', 1000)
+    await seedFile(WS_A, 'orphan-2', '.jpg', 500)
 
-    const result = await purgeDanglingFiles('ws_a', withVersions())
+    const result = await purgeDanglingFiles(WS_A, withVersions())
 
     expect(result.purgedCount).toBe(2)
     expect(result.purgedBytes).toBe(1500)
 
-    const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_a'))
-    ).sort()
+    const remaining = (await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_A))).sort()
     expect(remaining).toEqual(['used-a.png', 'used-b.png'])
   })
 
   it('a doc holding only the retired elements list protects no file', async () => {
     // Nothing converts that list into nodes and no reader draws it, so an
     // image only it names is as unreachable as an orphan upload.
-    await saveDocument('ws_legacy', 'page', makeDocWithImage('legacy-image'))
-    await seedFile('ws_legacy', 'legacy-image', '.png', 321)
+    await saveDocument(WS_LEGACY, 'page', makeDocWithImage('legacy-image'))
+    await seedFile(WS_LEGACY, 'legacy-image', '.png', 321)
 
-    const result = await purgeDanglingFiles('ws_legacy', withVersions())
+    const result = await purgeDanglingFiles(WS_LEGACY, withVersions())
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(321)
   })
 
   it('returns zero counts for a workspace with no files dir yet', async () => {
-    const result = await purgeDanglingFiles('ws_empty', withVersions())
+    const result = await purgeDanglingFiles(WS_EMPTY, withVersions())
     expect(result).toEqual({ purgedCount: 0, purgedBytes: 0 })
   })
 
@@ -184,13 +209,13 @@ describe('purgeDanglingFiles', () => {
       await writeFile(join(outside, 'victim.png'), Buffer.alloc(10, 1))
       const past = (Date.now() - 2 * 60 * 60 * 1000) / 1000
       await utimes(join(outside, 'victim.png'), past, past)
-      const dir = workspaceDir(tempDir, SELF_HOST_TENANT_ID, 'ws_files_link')
+      const dir = workspaceDir(tempDir, SELF_HOST_TENANT_ID, WS_FILES_LINK)
       await mkdir(dir, { recursive: true })
       await symlink(outside, join(dir, 'files'), 'dir')
 
-      await expect(purgeDanglingFiles('ws_files_link', withVersions())).rejects.toMatchObject({
+      await expect(purgeDanglingFiles(WS_FILES_LINK, withVersions())).rejects.toMatchObject({
         name: 'FilesDirNotContainedError',
-        workspaceId: 'ws_files_link',
+        workspaceId: WS_FILES_LINK,
       })
       expect(await readdir(outside)).toEqual(['victim.png'])
     } finally {
@@ -199,19 +224,19 @@ describe('purgeDanglingFiles', () => {
   })
 
   it('mixed workspace: a nodes-model doc protects its file while a legacy-elements doc does not', async () => {
-    await saveDocument('ws_mixed', 'legacy-page', makeDocWithImage('legacy-ref'))
-    await saveDocument('ws_mixed', 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
+    await saveDocument(WS_MIXED, 'legacy-page', makeDocWithImage('legacy-ref'))
+    await saveDocument(WS_MIXED, 'nodes-page', makeSpatialDocWithImage('nodes-ref'))
 
-    await seedFile('ws_mixed', 'legacy-ref', '.png', 10)
-    await seedFile('ws_mixed', 'nodes-ref', '.png', 20)
-    await seedFile('ws_mixed', 'unrelated-orphan', '.png', 30)
+    await seedFile(WS_MIXED, 'legacy-ref', '.png', 10)
+    await seedFile(WS_MIXED, 'nodes-ref', '.png', 20)
+    await seedFile(WS_MIXED, 'unrelated-orphan', '.png', 30)
 
-    const result = await purgeDanglingFiles('ws_mixed', withVersions())
+    const result = await purgeDanglingFiles(WS_MIXED, withVersions())
 
     expect(result.purgedCount).toBe(2)
     expect(result.purgedBytes).toBe(40)
     const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_mixed'))
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_MIXED))
     ).sort()
     expect(remaining).toEqual(['nodes-ref.png'])
   })
@@ -222,16 +247,16 @@ describe('purgeDanglingFiles', () => {
     // 'asset:' prefix means "this points at an uploaded blob". A same-named
     // orphan upload must not be spared by a document-path collision.
     await saveDocument(
-      'ws_precision',
+      WS_PRECISION,
       'page',
       makeSpatialDoc({
         nodes: [fileNode({ id: 'n1', file: 'some-canvas', x: 0, y: 0, width: 100, height: 100 })],
         edges: [],
       }),
     )
-    await seedFile('ws_precision', 'some-canvas', '.png', 42)
+    await seedFile(WS_PRECISION, 'some-canvas', '.png', 42)
 
-    const result = await purgeDanglingFiles('ws_precision', withVersions())
+    const result = await purgeDanglingFiles(WS_PRECISION, withVersions())
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(42)
@@ -239,30 +264,28 @@ describe('purgeDanglingFiles', () => {
 
   it('keeps files referenced by a saved version when versionStore is supplied', async () => {
     // Step 1: live state references "version-only" via a file node.
-    await saveDocument('ws_v', 'evolving', makeSpatialDocWithImage('version-only'))
+    await saveDocument(WS_V, 'evolving', makeSpatialDocWithImage('version-only'))
     const store = new FileVersionStore()
-    await store.save('ws_v', 'evolving', await loadDocument('ws_v', 'evolving'), { auto: false })
+    await store.save(WS_V, 'evolving', await loadDocument(WS_V, 'evolving'), { auto: false })
 
     // Step 2: live state changes — the original node is replaced by a
     // brand-new one. After this the live doc references only "live-now",
     // while the saved version still points at "version-only".
-    const live = await loadDocument('ws_v', 'evolving')
+    const live = await loadDocument(WS_V, 'evolving')
     setSpatialDocImage(live, 'live-now')
-    await saveDocument('ws_v', 'evolving', live, { overwrite: true })
+    await saveDocument(WS_V, 'evolving', live, { overwrite: true })
 
-    await seedFile('ws_v', 'version-only', '.png', 700)
-    await seedFile('ws_v', 'live-now', '.png', 300)
-    await seedFile('ws_v', 'truly-dangling', '.png', 100)
+    await seedFile(WS_V, 'version-only', '.png', 700)
+    await seedFile(WS_V, 'live-now', '.png', 300)
+    await seedFile(WS_V, 'truly-dangling', '.png', 100)
 
-    const result = await purgeDanglingFiles('ws_v', { versionStore: store })
+    const result = await purgeDanglingFiles(WS_V, { versionStore: store })
     // Only "truly-dangling" gets dropped — the version-only reference is
     // protected by walking past versions.
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(100)
 
-    const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_v'))
-    ).sort()
+    const remaining = (await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_V))).sort()
     expect(remaining).toEqual(['live-now.png', 'version-only.png'])
   })
 
@@ -277,9 +300,9 @@ describe('purgeDanglingFiles', () => {
     // the very behaviour this test exists to prevent.
     const cap = captureLogsForTests('debug')
 
-    await saveDocument('ws_brk', 'broken', makeSpatialDocWithImage('only-by-broken-version'))
-    await seedFile('ws_brk', 'only-by-broken-version', '.png', 222)
-    await seedFile('ws_brk', 'really-dangling', '.png', 33)
+    await saveDocument(WS_BRK, 'broken', makeSpatialDocWithImage('only-by-broken-version'))
+    await seedFile(WS_BRK, 'only-by-broken-version', '.png', 222)
+    await seedFile(WS_BRK, 'really-dangling', '.png', 33)
 
     const fakeStore = {
       listIdsByDocument: async () => ['v-broken'],
@@ -290,14 +313,14 @@ describe('purgeDanglingFiles', () => {
       }),
     }
 
-    await expect(purgeDanglingFiles('ws_brk', { versionStore: fakeStore })).rejects.toBeInstanceOf(
+    await expect(purgeDanglingFiles(WS_BRK, { versionStore: fakeStore })).rejects.toBeInstanceOf(
       IncompleteFileGcScanError,
     )
 
     // Crucially: nothing was deleted, even though only-by-broken-version
     // would have been classified as dangling under the old behaviour.
     const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_brk'))
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_BRK))
     ).sort()
     expect(remaining).toEqual(['only-by-broken-version.png', 'really-dangling.png'])
 
@@ -307,7 +330,7 @@ describe('purgeDanglingFiles', () => {
       )
       expect(fileGcWarnings).toHaveLength(1)
       expect(fileGcWarnings[0].data).toMatchObject({
-        workspaceId: 'ws_brk',
+        workspaceId: WS_BRK,
         path: 'broken',
         versionId: 'v-broken',
       })
@@ -323,15 +346,15 @@ describe('purgeDanglingFiles', () => {
     // window GC fires here and permanently deletes a file that was
     // about to be referenced. With the default 1-hour grace, freshly-
     // touched files are spared.
-    await seedFreshFile('ws_grace', 'pending', '.png', 64)
-    await seedFile('ws_grace', 'old-orphan', '.png', 32)
+    await seedFreshFile(WS_GRACE, 'pending', '.png', 64)
+    await seedFile(WS_GRACE, 'old-orphan', '.png', 32)
 
-    const result = await purgeDanglingFiles('ws_grace', withVersions())
+    const result = await purgeDanglingFiles(WS_GRACE, withVersions())
     // old-orphan is past the grace window, gone. pending is fresh —
     // preserved this round.
     expect(result.purgedCount).toBe(1)
     const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_grace'))
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_GRACE))
     ).sort()
     expect(remaining).toEqual(['pending.png'])
   })
@@ -341,10 +364,10 @@ describe('purgeDanglingFiles', () => {
     // should be deferred can pass graceMs: 0 to delete fresh dangling
     // files in the same call. Used by the tests above for the same
     // reason.
-    await seedFreshFile('ws_grace0', 'fresh-orphan', '.png', 16)
-    const result = await purgeDanglingFiles('ws_grace0', withVersions({ graceMs: 0 }))
+    await seedFreshFile(WS_GRACE0, 'fresh-orphan', '.png', 16)
+    const result = await purgeDanglingFiles(WS_GRACE0, withVersions({ graceMs: 0 }))
     expect(result.purgedCount).toBe(1)
-    const remaining = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_grace0'))
+    const remaining = await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_GRACE0))
     expect(remaining).toEqual([])
   })
 
@@ -352,8 +375,8 @@ describe('purgeDanglingFiles', () => {
     const previous = process.env.WHITEBOARD_FILE_GC_GRACE_MS
     process.env.WHITEBOARD_FILE_GC_GRACE_MS = '0'
     try {
-      await seedFreshFile('ws_env', 'fresh-orphan', '.png', 8)
-      const result = await purgeDanglingFiles('ws_env', withVersions())
+      await seedFreshFile(WS_ENV, 'fresh-orphan', '.png', 8)
+      const result = await purgeDanglingFiles(WS_ENV, withVersions())
       expect(result.purgedCount).toBe(1)
     } finally {
       if (previous === undefined) delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
@@ -388,11 +411,8 @@ describe('purgeDanglingFiles', () => {
     try {
       for (const raw of ['1h', '30m', '2s', '1e3', '-1', '1.5']) {
         process.env.WHITEBOARD_FILE_GC_GRACE_MS = raw
-        await seedFreshFile(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`, 'fresh', '.png', 8)
-        const result = await purgeDanglingFiles(
-          `ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`,
-          withVersions(),
-        )
+        await seedFreshFile(workspaceIdFor(`ws_grace_${raw}`), 'fresh', '.png', 8)
+        const result = await purgeDanglingFiles(workspaceIdFor(`ws_grace_${raw}`), withVersions())
         // A freshly-written file is inside the default one-hour window, so a
         // correctly-parsed setting purges nothing. Under the old parse `1h`
         // became 1ms and this file was deleted.
@@ -414,23 +434,23 @@ describe('purgeDanglingFiles', () => {
     // could observe the pre-save state (no references) and unlink
     // foo.png. With the lock, the save commits first and the purge
     // pass sees the new reference.
-    await seedFile('ws_race', 'about-to-reference', '.png', 200)
+    await seedFile(WS_RACE, 'about-to-reference', '.png', 200)
 
     const empty = new LoroDoc()
-    await saveDocument('ws_race', 'page', empty)
+    await saveDocument(WS_RACE, 'page', empty)
 
     // Build the post-save doc by extending the empty doc.
-    const next = await loadDocument('ws_race', 'page')
+    const next = await loadDocument(WS_RACE, 'page')
     setSpatialDocImage(next, 'about-to-reference')
 
     // Kick the save first so it acquires the lock; then kick the purge.
-    const savePromise = saveDocument('ws_race', 'page', next, { overwrite: true })
-    const purgePromise = purgeDanglingFiles('ws_race', withVersions())
+    const savePromise = saveDocument(WS_RACE, 'page', next, { overwrite: true })
+    const purgePromise = purgeDanglingFiles(WS_RACE, withVersions())
     const [, purgeResult] = await Promise.all([savePromise, purgePromise])
 
     expect(purgeResult.purgedCount).toBe(0)
     const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_race'))
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_RACE))
     ).sort()
     expect(remaining).toEqual(['about-to-reference.png'])
   })
@@ -441,7 +461,7 @@ describe('purgeDanglingFiles', () => {
     // so the store is never asked and the tripwire never fires. This is what
     // keeps the periodic sweeper cheap on the common no-uploads workspace;
     // reordering the scan back in front of the readdir turns this test red.
-    await saveDocument('ws_noscan', 'page', makeSpatialDocWithImage('never-uploaded'))
+    await saveDocument(WS_NOSCAN, 'page', makeSpatialDocWithImage('never-uploaded'))
     const exploding = {
       listIdsByDocument: async () => {
         throw new Error('the reference scan ran when it should have been skipped')
@@ -449,7 +469,7 @@ describe('purgeDanglingFiles', () => {
     } as unknown as InstanceType<typeof FileVersionStore>
 
     await expect(
-      purgeDanglingFiles('ws_noscan', { graceMs: 0, versionStore: exploding }),
+      purgeDanglingFiles(WS_NOSCAN, { graceMs: 0, versionStore: exploding }),
     ).resolves.toEqual({
       purgedCount: 0,
       purgedBytes: 0,
@@ -460,9 +480,9 @@ describe('purgeDanglingFiles', () => {
     // A silent `if (past) collectFromDoc(...)` skip is equivalent to
     // treating a version we could not load as "referencing nothing" —
     // the same permanent-data-loss hazard as a thrown load() error.
-    await saveDocument('ws_nullver', 'page', makeSpatialDocWithImage('only-by-null-version'))
-    await seedFile('ws_nullver', 'only-by-null-version', '.png', 55)
-    await seedFile('ws_nullver', 'really-dangling-3', '.png', 11)
+    await saveDocument(WS_NULLVER, 'page', makeSpatialDocWithImage('only-by-null-version'))
+    await seedFile(WS_NULLVER, 'only-by-null-version', '.png', 55)
+    await seedFile(WS_NULLVER, 'really-dangling-3', '.png', 11)
 
     const fakeStore = {
       listIdsByDocument: async () => ['v-missing'],
@@ -470,11 +490,11 @@ describe('purgeDanglingFiles', () => {
     }
 
     await expect(
-      purgeDanglingFiles('ws_nullver', { versionStore: fakeStore, graceMs: 0 }),
+      purgeDanglingFiles(WS_NULLVER, { versionStore: fakeStore, graceMs: 0 }),
     ).rejects.toBeInstanceOf(IncompleteFileGcScanError)
 
     const remaining = (
-      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_nullver'))
+      await readdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, WS_NULLVER))
     ).sort()
     expect(remaining).toEqual(['only-by-null-version.png', 'really-dangling-3.png'])
   })
@@ -487,7 +507,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
 
   it('keeps an image a frame draws as its background', async () => {
     await saveDocument(
-      'ws_bg',
+      WS_BG,
       'page',
       makeSpatialDoc({
         nodes: [
@@ -505,38 +525,38 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
         edges: [],
       }),
     )
-    await seedFile('ws_bg', 'bg-1', '.png', 700)
+    await seedFile(WS_BG, 'bg-1', '.png', 700)
 
-    const result = await purgeDanglingFiles('ws_bg', withVersions())
+    const result = await purgeDanglingFiles(WS_BG, withVersions())
 
     expect(result.purgedCount).toBe(0)
-    expect(await remainingFiles('ws_bg')).toEqual(['bg-1.png'])
+    expect(await remainingFiles(WS_BG)).toEqual(['bg-1.png'])
   })
 
   it('keeps an image only a markdown document body embeds', async () => {
     const doc = new LoroDoc()
     doc.getText('body').insert(0, 'a ![p](asset:md-1) b')
     doc.commit()
-    await saveDocument('ws_md', 'note', doc, { kind: 'markdown' })
-    await seedFile('ws_md', 'md-1', '.png', 300)
+    await saveDocument(WS_MD, 'note', doc, { kind: 'markdown' })
+    await seedFile(WS_MD, 'md-1', '.png', 300)
 
-    const result = await purgeDanglingFiles('ws_md', withVersions())
+    const result = await purgeDanglingFiles(WS_MD, withVersions())
 
     expect(result.purgedCount).toBe(0)
-    expect(await remainingFiles('ws_md')).toEqual(['md-1.png'])
+    expect(await remainingFiles(WS_MD)).toEqual(['md-1.png'])
   })
 
   it('keeps an image only a trashed document references, so a restore finds it', async () => {
     const { deleteDocument } = await import('./document-store.js')
-    await saveDocument('ws_trash', 'page', makeSpatialDocWithImage('asset-t'))
-    await seedFile('ws_trash', 'asset-t', '.png', 500)
-    await deleteDocument('ws_trash', 'page')
-    expect(await listDocuments('ws_trash')).toEqual([])
+    await saveDocument(WS_TRASH, 'page', makeSpatialDocWithImage('asset-t'))
+    await seedFile(WS_TRASH, 'asset-t', '.png', 500)
+    await deleteDocument(WS_TRASH, 'page')
+    expect(await listDocuments(WS_TRASH)).toEqual([])
 
-    const result = await purgeDanglingFiles('ws_trash', withVersions())
+    const result = await purgeDanglingFiles(WS_TRASH, withVersions())
 
     expect(result.purgedCount).toBe(0)
-    expect(await remainingFiles('ws_trash')).toEqual(['asset-t.png'])
+    expect(await remainingFiles(WS_TRASH)).toEqual(['asset-t.png'])
   })
 
   // A trash row can outlive its bytes' delete — a purge that unlinked them,
@@ -548,19 +568,19 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     const { globalStoreScope } = await import('./store-scope.js')
     const { readTrashEntries } = await import('@kamiazya/whiteboard-loro-adapter')
     const { daemonBlobStore } = await import('./backup-guarded-blob-store.js')
-    await saveDocument('ws_deferred', 'page', makeSpatialDocWithImage('asset-d'))
-    await seedFile('ws_deferred', 'asset-d', '.png', 500)
-    await deleteDocument('ws_deferred', 'page')
-    const record = await openWorkspaceDocIfStored('ws_deferred', globalStoreScope)
+    await saveDocument(WS_DEFERRED, 'page', makeSpatialDocWithImage('asset-d'))
+    await seedFile(WS_DEFERRED, 'asset-d', '.png', 500)
+    await deleteDocument(WS_DEFERRED, 'page')
+    const record = await openWorkspaceDocIfStored(WS_DEFERRED, globalStoreScope)
     const [entry] = readTrashEntries(record ?? new LoroDoc())
     if (entry === undefined) throw new Error('the delete left no trash entry')
     const blobs = daemonBlobStore(tempDir, SELF_HOST_TENANT_ID)
     await withBackupMarker(tempDir, () => blobs.delete({ ref: entry.blob }))
 
-    const result = await purgeDanglingFiles('ws_deferred', withVersions())
+    const result = await purgeDanglingFiles(WS_DEFERRED, withVersions())
 
     expect(result.purgedCount).toBe(1)
-    expect(await remainingFiles('ws_deferred')).toEqual([])
+    expect(await remainingFiles(WS_DEFERRED)).toEqual([])
   })
 
   it('collects an image only a permanently deleted document referenced', async () => {
@@ -568,24 +588,24 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
       './document-store.js'
     )
     const { globalStoreScope } = await import('./store-scope.js')
-    await saveDocument('ws_purged', 'page', makeSpatialDocWithImage('asset-p'))
-    await saveDocument('ws_purged', 'other', makeSpatialDocWithImage('asset-o'))
-    await seedFile('ws_purged', 'asset-p', '.png', 500)
-    await seedFile('ws_purged', 'asset-o', '.png', 700)
-    const documentId = await resolveDocumentIdAtPath('ws_purged', 'page')
-    await deleteDocument('ws_purged', 'page')
-    expect((await purgeDanglingFiles('ws_purged', withVersions())).purgedCount).toBe(0)
+    await saveDocument(WS_PURGED, 'page', makeSpatialDocWithImage('asset-p'))
+    await saveDocument(WS_PURGED, 'other', makeSpatialDocWithImage('asset-o'))
+    await seedFile(WS_PURGED, 'asset-p', '.png', 500)
+    await seedFile(WS_PURGED, 'asset-o', '.png', 700)
+    const documentId = await resolveDocumentIdAtPath(WS_PURGED, 'page')
+    await deleteDocument(WS_PURGED, 'page')
+    expect((await purgeDanglingFiles(WS_PURGED, withVersions())).purgedCount).toBe(0)
 
     const index = await workspaceTreeIndex(globalStoreScope)
     expect(
-      await index.purgeTrashEntry({ workspaceId: 'ws_purged', documentId: documentId ?? '' }),
+      await index.purgeTrashEntry({ workspaceId: WS_PURGED, documentId: documentId ?? '' }),
     ).toBe(true)
-    const result = await purgeDanglingFiles('ws_purged', withVersions())
+    const result = await purgeDanglingFiles(WS_PURGED, withVersions())
 
     expect(result.purgedCount).toBe(1)
     expect(result.purgedBytes).toBe(500)
     // Only the purged document's image: a live document's is still referenced.
-    expect(await remainingFiles('ws_purged')).toEqual(['asset-o.png'])
+    expect(await remainingFiles(WS_PURGED)).toEqual(['asset-o.png'])
   })
 
   const unreadable: Record<string, (doc: LoroDoc) => void> = {
@@ -608,7 +628,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
     it(`refuses to purge when ${name} hides a subtree`, async () => {
       const documentId = '01HZZZZZZZZZZZZZZZZZZZZZZZ'
       const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(handle.db))
-      const workspaceDoc = (await docs.open('ws_unreadable')) ?? new LoroDoc()
+      const workspaceDoc = (await docs.open(WS_UNREADABLE)) ?? new LoroDoc()
       createWorkspaceDocumentAtPath(workspaceDoc, {
         path: 'folder/page',
         documentId,
@@ -617,13 +637,13 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
       writeWorkspaceDocumentContent(workspaceDoc, documentId, makeSpatialDocWithImage('asset-x'))
       tamper(workspaceDoc)
       workspaceDoc.commit()
-      await docs.save('ws_unreadable', workspaceDoc)
-      await seedFile('ws_unreadable', 'asset-x', '.png', 500)
+      await docs.save(WS_UNREADABLE, workspaceDoc)
+      await seedFile(WS_UNREADABLE, 'asset-x', '.png', 500)
 
-      await expect(purgeDanglingFiles('ws_unreadable', withVersions())).rejects.toBeInstanceOf(
+      await expect(purgeDanglingFiles(WS_UNREADABLE, withVersions())).rejects.toBeInstanceOf(
         IncompleteFileGcScanError,
       )
-      expect(await remainingFiles('ws_unreadable')).toEqual(['asset-x.png'])
+      expect(await remainingFiles(WS_UNREADABLE)).toEqual(['asset-x.png'])
     })
   }
 })
@@ -641,7 +661,7 @@ describe('purgeDanglingFiles: what a live document draws or can bring back', () 
  */
 describe('purgeDanglingFiles across instances', () => {
   it('does not delete a blob referenced only by another instance', async () => {
-    const workspaceId = 'gc-other-instance'
+    const workspaceId = GC_OTHER_INSTANCE
     // This instance's own document, so the workspace record and its cache
     // both exist before the other instance writes.
     await saveDocument(workspaceId, 'mine', makeSpatialDoc({ nodes: [], edges: [] }))
@@ -665,7 +685,7 @@ describe('purgeDanglingFiles across instances', () => {
   })
 
   it('still deletes a blob nothing references, after catching up', async () => {
-    const workspaceId = 'gc-other-instance-dangling'
+    const workspaceId = GC_OTHER_INSTANCE_DANGLING
     await saveDocument(workspaceId, 'mine', makeSpatialDoc({ nodes: [], edges: [] }))
     await seedFile(workspaceId, 'orphan', '.png', 64)
 
@@ -700,7 +720,7 @@ describe('purgeDanglingFiles across instances', () => {
  * — measured.
  */
 it('stands down when another instance writes while the pass is deciding', async () => {
-  const workspaceId = 'gc-record-moved'
+  const workspaceId = GC_RECORD_MOVED
   await saveDocument(workspaceId, 'mine', makeSpatialDocWithImage('kept'))
   await seedFile(workspaceId, 'kept', '.png', 64)
   await seedFile(workspaceId, 'orphan', '.png', 64)
@@ -750,7 +770,7 @@ it('stands down when another instance writes while the pass is deciding', async 
  * point is to do no work and touch nothing while a backup reads the tree.
  */
 it('stands down while a backup is assembling this data directory', async () => {
-  const workspaceId = 'gc-backup-running'
+  const workspaceId = GC_BACKUP_RUNNING
   await saveDocument(workspaceId, 'mine', makeSpatialDocWithImage('kept'))
   await seedFile(workspaceId, 'kept', '.png', 64)
   await seedFile(workspaceId, 'orphan', '.png', 64)
@@ -768,7 +788,7 @@ it('stands down while a backup is assembling this data directory', async () => {
 })
 
 it('collects again once the backup has finished', async () => {
-  const workspaceId = 'gc-backup-finished'
+  const workspaceId = GC_BACKUP_FINISHED
   await saveDocument(workspaceId, 'mine', makeSpatialDocWithImage('kept'))
   await seedFile(workspaceId, 'kept', '.png', 64)
   await seedFile(workspaceId, 'orphan', '.png', 64)

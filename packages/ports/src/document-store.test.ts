@@ -14,7 +14,7 @@ import {
 
 const docRef = {
   kind: 'document' as const,
-  workspaceId: 'workspace-a',
+  workspaceId: '018MGSNTFWTEJHYF648G2FKPBY',
   documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
 }
 const frontier = new Uint8Array([1])

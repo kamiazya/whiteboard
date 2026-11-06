@@ -18,7 +18,7 @@ import type { WorkspaceDocs } from './workspace-docs.js'
 
 /** Written out rather than imported, so the test is not judged by the constant it judges. */
 const CEILING = 2000
-const WS = 'ws-ceiling'
+const WS = '01VVDXVXXBD837WHWMG6YE6X15'
 
 const notImplemented = (): Promise<never> => Promise.reject(new Error('not implemented'))
 

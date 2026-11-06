@@ -16,7 +16,7 @@ import {
   commentThreadSchema,
   documentIdSchema,
   type SpatialCanvas,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
@@ -49,7 +49,7 @@ export const canvasViewOutputSchema = z
      * construct a valid strict-schema call without the host having to
      * remember what it asked for.
      */
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
     /**
      * The document, for the widget to lay out rather than a pre-rendered

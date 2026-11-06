@@ -96,15 +96,18 @@ describe('GET /api/debug', () => {
   })
 
   it("reports each document's node count", async () => {
-    await mkdir(join(tempDir, 'sess-a'), { recursive: true })
-    await saveDocument('sess-a', 'canvas-1', makeDocWithNodes(3))
-    await saveDocument('sess-a', 'canvas-2', makeDocWithNodes(1))
+    await mkdir(join(tempDir, '01VPGSS6HHZJABFCD9YVAY27E6'), { recursive: true })
+    await saveDocument('01VPGSS6HHZJABFCD9YVAY27E6', 'canvas-1', makeDocWithNodes(3))
+    await saveDocument('01VPGSS6HHZJABFCD9YVAY27E6', 'canvas-2', makeDocWithNodes(1))
 
-    expect(await nodeCountsAt('sess-a')).toEqual({ 'canvas-1': 3, 'canvas-2': 1 })
+    expect(await nodeCountsAt('01VPGSS6HHZJABFCD9YVAY27E6')).toEqual({
+      'canvas-1': 3,
+      'canvas-2': 1,
+    })
   })
 
   it('counts nodes only, not the edges between them', async () => {
-    await mkdir(join(tempDir, 'sess-nodes'), { recursive: true })
+    await mkdir(join(tempDir, '01Y6HC4DNGKCTQSSQRN6CNKF33'), { recursive: true })
     const doc = makeSpatialDoc({
       nodes: [
         textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 }),
@@ -118,25 +121,25 @@ describe('GET /api/debug', () => {
         },
       ],
     })
-    await saveDocument('sess-nodes', 'canvas-1', doc)
+    await saveDocument('01Y6HC4DNGKCTQSSQRN6CNKF33', 'canvas-1', doc)
 
-    expect(await nodeCountsAt('sess-nodes')).toEqual({ 'canvas-1': 2 })
+    expect(await nodeCountsAt('01Y6HC4DNGKCTQSSQRN6CNKF33')).toEqual({ 'canvas-1': 2 })
   })
 
   it('counts no nodes for a document holding only the retired elements list', async () => {
-    await mkdir(join(tempDir, 'sess-retired'), { recursive: true })
-    await saveDocument('sess-retired', 'canvas-1', makeDocWithRetiredElements(2))
+    await mkdir(join(tempDir, '01CQ0HQWW8AY123AC8V2WTRS85'), { recursive: true })
+    await saveDocument('01CQ0HQWW8AY123AC8V2WTRS85', 'canvas-1', makeDocWithRetiredElements(2))
 
-    expect(await nodeCountsAt('sess-retired')).toEqual({ 'canvas-1': 0 })
+    expect(await nodeCountsAt('01CQ0HQWW8AY123AC8V2WTRS85')).toEqual({ 'canvas-1': 0 })
   })
 
   it('marks only documents touched through getDoc as cached in the cache section', async () => {
-    await mkdir(join(tempDir, 'sess-cache'), { recursive: true })
-    await saveDocument('sess-cache', 'touched', makeDocWithNodes(1))
-    await saveDocument('sess-cache', 'untouched', makeDocWithNodes(1))
+    await mkdir(join(tempDir, '01Y29BTH8EG1A0GW0MP9QF3ZFH'), { recursive: true })
+    await saveDocument('01Y29BTH8EG1A0GW0MP9QF3ZFH', 'touched', makeDocWithNodes(1))
+    await saveDocument('01Y29BTH8EG1A0GW0MP9QF3ZFH', 'untouched', makeDocWithNodes(1))
 
     // Only touched documents should appear in cache.
-    await getDoc('sess-cache', 'touched')
+    await getDoc('01Y29BTH8EG1A0GW0MP9QF3ZFH', 'touched')
 
     const app = createDebugRouter({ scope: testStoreScope() })
     const res = await app.request('/api/debug')
@@ -148,10 +151,10 @@ describe('GET /api/debug', () => {
       cache: { size: number; keys: string[] }
     }
 
-    expect(json.cache.keys).toContain('sess-cache/touched')
-    expect(json.cache.keys).not.toContain('sess-cache/untouched')
+    expect(json.cache.keys).toContain('01Y29BTH8EG1A0GW0MP9QF3ZFH/touched')
+    expect(json.cache.keys).not.toContain('01Y29BTH8EG1A0GW0MP9QF3ZFH/untouched')
 
-    const session = json.workspaces.find((s) => s.workspaceId === 'sess-cache')!
+    const session = json.workspaces.find((s) => s.workspaceId === '01Y29BTH8EG1A0GW0MP9QF3ZFH')!
     expect(session.documents.find((c) => c.path === 'touched')?.cached).toBe(true)
     expect(session.documents.find((c) => c.path === 'untouched')?.cached).toBe(false)
   })

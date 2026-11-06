@@ -45,7 +45,10 @@ import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { liveDocuments } from '../store/live-documents.js'
 import { registerDocumentTools } from './document-tools.js'
 
+// The errands address the workspace as a model would, by its segment; the
+// harness keys it by the canonical id every keeper stores.
 const WORKSPACE_ID = 'ws-count'
+const WORKSPACE_KEY = '01H8XJZ9K5N4M3P2Q1R0S9TWSC'
 const SEED_CANVAS: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 60, text: 'seeded' })],
   edges: [],
@@ -72,10 +75,11 @@ async function harness(
   const documentStore = new InMemoryDocumentStore()
   const documentIndex = new InMemoryDocumentIndex()
   const documentIds: string[] = []
+  documentIndex.seedWorkspace({ workspaceId: WORKSPACE_KEY, segment: WORKSPACE_ID })
   const save = async (documentId: string, doc: LoroDoc) => {
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await documentStore.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId },
+      docRef: { kind: 'document', workspaceId: WORKSPACE_KEY, documentId },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -85,7 +89,7 @@ async function harness(
     const documentId = seedId(i)
     documentIds.push(documentId)
     documentIndex.seed({
-      workspaceId: WORKSPACE_ID,
+      workspaceId: WORKSPACE_KEY,
       documentId,
       path: `doc-${i}`,
       kind: seedKind,
@@ -98,7 +102,7 @@ async function harness(
     // conversation's calls into this one's count.
     const libraryId = seedId(900)
     documentIndex.seed({
-      workspaceId: WORKSPACE_ID,
+      workspaceId: WORKSPACE_KEY,
       documentId: libraryId,
       path: STENCIL_LIBRARY_PATH,
       kind: 'markdown',

@@ -35,7 +35,7 @@ import { clearDocCacheForTests } from './store/doc-cache.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { _clearWorkspaceDocCacheForTests } from './store/workspace-doc-cache.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const SERVED_ONLY = 'only-in-served'
 
 let served: string
@@ -179,7 +179,9 @@ describe('the shared workers over a dir the process global does not name', () =>
       SERVED_ONLY,
     )
     // Present in one record only, so a tail over the other cannot open it.
-    await boot.serverDeps.documentIndex.createWorkspace({ workspaceId: 'ws-only-in-served' })
-    expect(await docs?.docs.open('ws-only-in-served')).not.toBeNull()
+    await boot.serverDeps.documentIndex.createWorkspace({
+      workspaceId: '0167ZVW5JTK6PNPG242QD3F8DE',
+    })
+    expect(await docs?.docs.open('0167ZVW5JTK6PNPG242QD3F8DE')).not.toBeNull()
   })
 })

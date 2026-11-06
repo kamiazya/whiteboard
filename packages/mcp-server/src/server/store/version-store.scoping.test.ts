@@ -56,8 +56,8 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     const { createIsolatedDb } = await import('./db/test-helpers.js')
     handle = await createIsolatedDb({ dataDir: tempDir })
     store = new FileVersionStore()
-    await saveDocument('ws-a', 'doc', new LoroDoc(), { kind: 'spatial' })
-    await saveDocument('ws-b', 'doc', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', new LoroDoc(), { kind: 'spatial' })
   })
 
   afterEach(async () => {
@@ -69,15 +69,16 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     // Each reader is asked under the OTHER workspace's path with an id that
     // exists, so a lookup that forgot the workspace filter finds a real row.
     async function foreignVersionId(): Promise<string> {
-      await edit('ws-b', 'b')
-      return (await store.save('ws-b', 'doc', new LoroDoc(), { auto: false })).id
+      await edit('01ECWTM29HBA5A9MXS76EM7JHR', 'b')
+      return (await store.save('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', new LoroDoc(), { auto: false }))
+        .id
     }
 
     it('is not answered as adopted into this workspace', async () => {
       // The caller learns a carried version did not arrive only by its id
       // being absent here; the row the insert skipped is the other workspace's.
       const id = await foreignVersionId()
-      const kept = await store.adopt('ws-a', [
+      const kept = await store.adopt('01PAW75F73PVC402Y3V151KT6R', [
         {
           id,
           documentId: 'doc-a',
@@ -98,13 +99,19 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         .select(['documentId'])
         .where('id', '=', id)
         .executeTakeFirstOrThrow()
-      expect(await store.listIdsByDocument('ws-b', row.documentId)).toContain(id)
-      expect(await store.listIdsByDocument('ws-a', row.documentId)).toEqual([])
+      expect(await store.listIdsByDocument('01ECWTM29HBA5A9MXS76EM7JHR', row.documentId)).toContain(
+        id,
+      )
+      expect(await store.listIdsByDocument('01PAW75F73PVC402Y3V151KT6R', row.documentId)).toEqual(
+        [],
+      )
     })
 
     it("is not in this workspace's history under the same document id", async () => {
-      await edit('ws-a', 'a')
-      const saved = await store.save('ws-a', 'doc', new LoroDoc(), { auto: false })
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'a')
+      const saved = await store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), {
+        auto: false,
+      })
       const own = await handle.db
         .selectFrom('versions')
         .selectAll()
@@ -112,25 +119,27 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         .executeTakeFirstOrThrow()
       await handle.db
         .insertInto('versions')
-        .values({ ...own, id: 'foreign-same-document', workspaceId: 'ws-b' })
+        .values({ ...own, id: 'foreign-same-document', workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR' })
         .execute()
-      expect((await store.list('ws-a', 'doc')).map((entry) => entry.id)).toEqual([saved.id])
+      expect(
+        (await store.list('01PAW75F73PVC402Y3V151KT6R', 'doc')).map((entry) => entry.id),
+      ).toEqual([saved.id])
     })
 
     it('is not loaded', async () => {
       const id = await foreignVersionId()
-      await expect(store.load('ws-a', id)).resolves.toBeNull()
+      await expect(store.load('01PAW75F73PVC402Y3V151KT6R', id)).resolves.toBeNull()
     })
 
     it('is not loaded as a workspace record', async () => {
       const id = await foreignVersionId()
-      await expect(store.loadWorkspaceAt('ws-a', id)).resolves.toBeNull()
+      await expect(store.loadWorkspaceAt('01PAW75F73PVC402Y3V151KT6R', id)).resolves.toBeNull()
     })
 
     it('is still served to its own workspace', async () => {
       const id = await foreignVersionId()
-      await expect(store.loadWorkspaceAt('ws-b', id)).resolves.not.toBeNull()
-      await expect(store.load('ws-b', id)).resolves.not.toBeNull()
+      await expect(store.loadWorkspaceAt('01ECWTM29HBA5A9MXS76EM7JHR', id)).resolves.not.toBeNull()
+      await expect(store.load('01ECWTM29HBA5A9MXS76EM7JHR', id)).resolves.not.toBeNull()
     })
   })
 
@@ -146,12 +155,14 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       ).length
 
     it("counts only this workspace's autos, never a neighbour's under the same document id", async () => {
-      await edit('ws-a', 'one')
-      await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: true }))
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'one')
+      await at(1_000, () =>
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: true }),
+      )
       const own = await handle.db
         .selectFrom('versions')
         .selectAll()
-        .where('workspaceId', '=', 'ws-a')
+        .where('workspaceId', '=', '01PAW75F73PVC402Y3V151KT6R')
         .executeTakeFirstOrThrow()
       // Enough of the neighbour's to fill the cap on their own, all newer than
       // ws-a's first, so a cap counted across workspaces retires ws-a's.
@@ -161,15 +172,17 @@ describe('FileVersionStore workspace scoping and ordering', () => {
           Array.from({ length: 50 }, (_, i) => ({
             ...own,
             id: `foreign-${i}`,
-            workspaceId: 'ws-b',
+            workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR',
             createdAt: own.createdAt + 1_000 + i,
           })),
         )
         .execute()
-      await edit('ws-a', 'two')
-      await at(100_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: true }))
-      expect(await autoRowCount('ws-a')).toBe(2)
-      expect(await autoRowCount('ws-b')).toBe(50)
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'two')
+      await at(100_000, () =>
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: true }),
+      )
+      expect(await autoRowCount('01PAW75F73PVC402Y3V151KT6R')).toBe(2)
+      expect(await autoRowCount('01ECWTM29HBA5A9MXS76EM7JHR')).toBe(50)
     })
 
     it('holds the cap over the automatic rows a promote carries in', async () => {
@@ -182,16 +195,20 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         elementCount: 0,
         contentDigest: 'x',
       }))
-      await store.adopt('ws-a', rows)
-      expect(await autoRowCount('ws-a')).toBe(50)
+      await store.adopt('01PAW75F73PVC402Y3V151KT6R', rows)
+      expect(await autoRowCount('01PAW75F73PVC402Y3V151KT6R')).toBe(50)
     })
 
     it("makes room for carried automatic rows from the carried ones, never this keeper's own", async () => {
       const genuine: string[] = []
       for (let i = 0; i < 10; i++) {
-        await edit('ws-a', `own-${i}`)
+        await edit('01PAW75F73PVC402Y3V151KT6R', `own-${i}`)
         genuine.push(
-          (await at(1_000 + i, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: true }))).id,
+          (
+            await at(1_000 + i, () =>
+              store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: true }),
+            )
+          ).id,
         )
       }
       const { documentId } = await handle.db
@@ -211,18 +228,21 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       }))
       // One carried row reuses an own row's id: the insert skips it, and it
       // must not become prunable by having been named.
-      await store.adopt('ws-a', [...carried, { ...carried[0]!, id: genuine[0]! }])
+      await store.adopt('01PAW75F73PVC402Y3V151KT6R', [
+        ...carried,
+        { ...carried[0]!, id: genuine[0]! },
+      ])
       const kept = new Set(
         (
           await handle.db
             .selectFrom('versions')
             .select('id')
-            .where('workspaceId', '=', 'ws-a')
+            .where('workspaceId', '=', '01PAW75F73PVC402Y3V151KT6R')
             .execute()
         ).map((row) => row.id),
       )
       expect(genuine.filter((id) => !kept.has(id))).toEqual([])
-      expect(await autoRowCount('ws-a')).toBe(50)
+      expect(await autoRowCount('01PAW75F73PVC402Y3V151KT6R')).toBe(50)
     })
   })
 
@@ -242,8 +262,8 @@ describe('FileVersionStore workspace scoping and ordering', () => {
       ).map((row) => row.id)
 
     it("does not bracket this workspace's autos with a neighbour's manual save", async () => {
-      const manual = await saveAt('ws-a', 'one', 1_000, false)
-      await saveAt('ws-a', 'two', 2_000, true)
+      const manual = await saveAt('01PAW75F73PVC402Y3V151KT6R', 'one', 1_000, false)
+      await saveAt('01PAW75F73PVC402Y3V151KT6R', 'two', 2_000, true)
       const own = await handle.db
         .selectFrom('versions')
         .selectAll()
@@ -254,20 +274,20 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         .values({
           ...own,
           id: 'foreign-manual',
-          workspaceId: 'ws-b',
+          workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR',
           createdAt: own.createdAt + 5_000,
         })
         .execute()
-      const before = await idsOf('ws-a')
-      expect(await store.pruneSandwichedAutoVersions('ws-a', 'doc')).toEqual({
+      const before = await idsOf('01PAW75F73PVC402Y3V151KT6R')
+      expect(await store.pruneSandwichedAutoVersions('01PAW75F73PVC402Y3V151KT6R', 'doc')).toEqual({
         deletedCount: 0,
         deletedIds: [],
       })
-      expect(await idsOf('ws-a')).toEqual(before)
+      expect(await idsOf('01PAW75F73PVC402Y3V151KT6R')).toEqual(before)
     })
 
     it("leaves a neighbour's sandwiched autos under the same document id alone", async () => {
-      const manual = await saveAt('ws-a', 'one', 1_000, false)
+      const manual = await saveAt('01PAW75F73PVC402Y3V151KT6R', 'one', 1_000, false)
       const own = await handle.db
         .selectFrom('versions')
         .selectAll()
@@ -277,7 +297,7 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         ...own,
         id,
         auto,
-        workspaceId: 'ws-b',
+        workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR',
         createdAt: own.createdAt + dt,
       })
       await handle.db
@@ -288,14 +308,18 @@ describe('FileVersionStore workspace scoping and ordering', () => {
           foreign('foreign-3', 0, 3_000),
         ])
         .execute()
-      await store.pruneSandwichedAutoVersions('ws-a', 'doc')
-      expect(await idsOf('ws-b')).toEqual(['foreign-1', 'foreign-2', 'foreign-3'])
+      await store.pruneSandwichedAutoVersions('01PAW75F73PVC402Y3V151KT6R', 'doc')
+      expect(await idsOf('01ECWTM29HBA5A9MXS76EM7JHR')).toEqual([
+        'foreign-1',
+        'foreign-2',
+        'foreign-3',
+      ])
     })
   })
 
   describe('adopt', () => {
     it('keeps the element count the carried version was judged with', async () => {
-      const kept = await store.adopt('ws-a', [
+      const kept = await store.adopt('01PAW75F73PVC402Y3V151KT6R', [
         {
           id: 'carried-board',
           documentId: 'doc-a',
@@ -323,36 +347,42 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     }
 
     it('judges the document against its NEWEST version', async () => {
-      await checkpoint('ws-a', 'one', 1_000)
-      await checkpoint('ws-a', 'two', 2_000)
-      expect(await store.isUnchangedSinceLastVersion('ws-a', 'doc')).toBe(true)
+      await checkpoint('01PAW75F73PVC402Y3V151KT6R', 'one', 1_000)
+      await checkpoint('01PAW75F73PVC402Y3V151KT6R', 'two', 2_000)
+      expect(await store.isUnchangedSinceLastVersion('01PAW75F73PVC402Y3V151KT6R', 'doc')).toBe(
+        true,
+      )
     })
 
     it('reports a change when the content has gone back to an OLDER version', async () => {
-      await checkpoint('ws-a', 'one', 1_000)
-      await checkpoint('ws-a', 'two', 2_000)
-      await edit('ws-a', 'one')
-      expect(await store.isUnchangedSinceLastVersion('ws-a', 'doc')).toBe(false)
+      await checkpoint('01PAW75F73PVC402Y3V151KT6R', 'one', 1_000)
+      await checkpoint('01PAW75F73PVC402Y3V151KT6R', 'two', 2_000)
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'one')
+      expect(await store.isUnchangedSinceLastVersion('01PAW75F73PVC402Y3V151KT6R', 'doc')).toBe(
+        false,
+      )
     })
 
     it('ignores a newer row another workspace holds for the same document id', async () => {
-      await checkpoint('ws-a', 'one', 1_000)
+      await checkpoint('01PAW75F73PVC402Y3V151KT6R', 'one', 1_000)
       const own = await handle.db
         .selectFrom('versions')
         .selectAll()
-        .where('workspaceId', '=', 'ws-a')
+        .where('workspaceId', '=', '01PAW75F73PVC402Y3V151KT6R')
         .executeTakeFirstOrThrow()
       await handle.db
         .insertInto('versions')
         .values({
           ...own,
           id: 'foreign-row',
-          workspaceId: 'ws-b',
+          workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR',
           contentDigest: 'a-digest-no-document-has',
           createdAt: own.createdAt + 1_000,
         })
         .execute()
-      expect(await store.isUnchangedSinceLastVersion('ws-a', 'doc')).toBe(true)
+      expect(await store.isUnchangedSinceLastVersion('01PAW75F73PVC402Y3V151KT6R', 'doc')).toBe(
+        true,
+      )
     })
   })
 
@@ -369,16 +399,22 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     }
 
     it("is every version's point in this workspace, however old another workspace's are", async () => {
-      await edit('ws-b', 'b')
-      await at(500, () => store.save('ws-b', 'doc', new LoroDoc(), { auto: false }))
-      await edit('ws-a', 'one')
-      const first = await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
-      await edit('ws-a', 'two')
+      await edit('01ECWTM29HBA5A9MXS76EM7JHR', 'b')
+      await at(500, () =>
+        store.save('01ECWTM29HBA5A9MXS76EM7JHR', 'doc', new LoroDoc(), { auto: false }),
+      )
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'one')
+      const first = await at(1_000, () =>
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: false }),
+      )
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'two')
       const second = await at(2_000, () =>
-        store.save('ws-a', 'doc', new LoroDoc(), { auto: false }),
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: false }),
       )
 
-      const points = (await store.workspaceVersionFrontiers('ws-a')).map(frontiersToBase64)
+      const points = (await store.workspaceVersionFrontiers('01PAW75F73PVC402Y3V151KT6R')).map(
+        frontiersToBase64,
+      )
       expect(points.sort()).toEqual(
         [await frontiersOf(first.id), await frontiersOf(second.id)].sort(),
       )
@@ -387,10 +423,12 @@ describe('FileVersionStore workspace scoping and ordering', () => {
     it('lets compaction cut only where every version descends from, whatever a row is dated', async () => {
       // Rewriting one node grows the op log the cut folds away, so the
       // compaction below has something to gain and really runs.
-      for (let i = 0; i < 40; i++) await edit('ws-a', `churn-${i}`)
-      const first = await at(1_000, () => store.save('ws-a', 'doc', new LoroDoc(), { auto: false }))
-      await edit('ws-a', 'after')
-      const asSaved = (await store.load('ws-a', first.id))?.toJSON()
+      for (let i = 0; i < 40; i++) await edit('01PAW75F73PVC402Y3V151KT6R', `churn-${i}`)
+      const first = await at(1_000, () =>
+        store.save('01PAW75F73PVC402Y3V151KT6R', 'doc', new LoroDoc(), { auto: false }),
+      )
+      await edit('01PAW75F73PVC402Y3V151KT6R', 'after')
+      const asSaved = (await store.load('01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()
       const { documentId } = await handle.db
         .selectFrom('versions')
         .select('documentId')
@@ -398,20 +436,22 @@ describe('FileVersionStore workspace scoping and ordering', () => {
         .executeTakeFirstOrThrow()
       // Dated before every other row while standing at the HEAD: oldest by
       // time, newest in the history.
-      const head = (await getWorkspaceDoc('ws-a')).frontiers()
+      const head = (await getWorkspaceDoc('01PAW75F73PVC402Y3V151KT6R')).frontiers()
       const carried = { id: 'carried-at-head', documentId, createdAt: 0, auto: false }
-      await store.adopt('ws-a', [
+      await store.adopt('01PAW75F73PVC402Y3V151KT6R', [
         { ...carried, frontiers: head, elementCount: 1, contentDigest: 'x' },
       ])
 
-      expect((await compactWorkspace('ws-a', store)).compacted).toBe(true)
+      expect((await compactWorkspace('01PAW75F73PVC402Y3V151KT6R', store)).compacted).toBe(true)
       _clearWorkspaceDocCacheForTests()
       expect(asSaved).toBeDefined()
-      expect((await store.load('ws-a', first.id))?.toJSON()).toEqual(asSaved)
+      expect((await store.load('01PAW75F73PVC402Y3V151KT6R', first.id))?.toJSON()).toEqual(asSaved)
     })
 
     it('is empty for a workspace with no versions', async () => {
-      await expect(store.workspaceVersionFrontiers('ws-a')).resolves.toEqual([])
+      await expect(store.workspaceVersionFrontiers('01PAW75F73PVC402Y3V151KT6R')).resolves.toEqual(
+        [],
+      )
     })
   })
 })

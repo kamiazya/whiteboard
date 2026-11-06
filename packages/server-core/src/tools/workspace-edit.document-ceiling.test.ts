@@ -5,7 +5,7 @@ import { createWorkspaceEditTool } from './workspace-edit.js'
 
 /** Written out rather than imported, so the test is not judged by the constant it judges. */
 const CEILING = 2000
-const WS = 'crowded'
+const WS = '01STG6S4Q49QC1B42TQ6P6HWJK'
 
 describe('wb_workspace_edit at the workspace document ceiling', () => {
   it('creates up to the ceiling and refuses the op that would pass it', async () => {

@@ -6,12 +6,12 @@
  * the operation's own graph coming with them. See that file for why the split
  * exists rather than being a matter of taste.
  */
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { backlinkEntrySchema } from '@kamiazya/whiteboard-reference-graph/backlink-entry'
 import { z } from 'zod'
 
 export const backlinksInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
+  .object({ workspaceId: workspaceCanonicalIdSchema, documentId: documentIdSchema })
   .strict()
 export type BacklinksInput = z.infer<typeof backlinksInputSchema>
 

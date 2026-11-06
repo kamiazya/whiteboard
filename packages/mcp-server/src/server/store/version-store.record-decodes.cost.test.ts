@@ -124,40 +124,50 @@ describe('whole-record decodes on the history plane', () => {
     const paths: string[] = []
     for (let d = 0; d < DOCUMENTS; d++) {
       paths.push(`page-${d}`)
-      await saveDocument('ws_cp', `page-${d}`, makeSpatialDoc(canvasReferencing(`d${d}`, 3)))
+      await saveDocument(
+        '014VX1BVE7G963KJC6SQ4BHKF3',
+        `page-${d}`,
+        makeSpatialDoc(canvasReferencing(`d${d}`, 3)),
+      )
     }
     const trigger = createAutoVersionTrigger(store, { quietMs: 60_000 })
-    for (const path of paths) trigger('ws_cp', path, await loadDocument('ws_cp', path))
+    for (const path of paths)
+      trigger(
+        '014VX1BVE7G963KJC6SQ4BHKF3',
+        path,
+        await loadDocument('014VX1BVE7G963KJC6SQ4BHKF3', path),
+      )
 
     const decodes = countRecordDecodes()
     await trigger.flush()
     const counted = decodes.count
 
     // Every checkpoint landed, so the count covers real work.
-    for (const path of paths) expect(await store.list('ws_cp', path)).toHaveLength(1)
+    for (const path of paths)
+      expect(await store.list('014VX1BVE7G963KJC6SQ4BHKF3', path)).toHaveLength(1)
     expect(counted).toBeLessThanOrEqual(1)
   })
 
   it('listing and previewing versions decodes the record O(1) per GET', async () => {
     const store = new FileVersionStore()
-    const [path] = await seedHistory('ws_read', store)
-    const ids = (await store.list('ws_read', path as string)).map((v) => v.id)
+    const [path] = await seedHistory('01MWTYS7HW1K32DWJF067KZ7QM', store)
+    const ids = (await store.list('01MWTYS7HW1K32DWJF067KZ7QM', path as string)).map((v) => v.id)
     expect(ids).toHaveLength(VERSIONS_EACH)
 
     const decodes = countRecordDecodes()
-    for (let i = 0; i < 5; i++) await store.list('ws_read', path as string)
+    for (let i = 0; i < 5; i++) await store.list('01MWTYS7HW1K32DWJF067KZ7QM', path as string)
     expect(decodes.count, 'five lists').toBe(0)
 
     // A preview is one checkout of one copy of the record — never a stored
     // read on top, and never a snapshot round trip.
-    await store.load('ws_read', ids[0] as string)
+    await store.load('01MWTYS7HW1K32DWJF067KZ7QM', ids[0] as string)
     expect(decodes.count, 'one preview').toBeLessThanOrEqual(1)
   })
 
   it('a file-GC pass copies the record once, not once per version', async () => {
     const store = new FileVersionStore()
-    await seedHistory('ws_gc', store)
-    const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_gc')
+    await seedHistory('01P8Y8PYRN8G1H8S3DZ84QER7Y', store)
+    const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, '01P8Y8PYRN8G1H8S3DZ84QER7Y')
     await mkdir(dir, { recursive: true })
     const orphan = join(dir, 'orphan.png')
     await writeFile(orphan, Buffer.alloc(16, 0xab))
@@ -165,7 +175,7 @@ describe('whole-record decodes on the history plane', () => {
     await utimes(orphan, past, past)
 
     const decodes = countRecordDecodes()
-    const result = await purgeDanglingFiles('ws_gc', { versionStore: store })
+    const result = await purgeDanglingFiles('01P8Y8PYRN8G1H8S3DZ84QER7Y', { versionStore: store })
 
     // The pass reached the unlink, so the scan it counts really ran.
     expect(result).toMatchObject({ purgedCount: 1 })
@@ -181,14 +191,21 @@ describe('whole-record decodes on the history plane', () => {
   it('a GC pass checks out a point many versions share only once', async () => {
     const store = new FileVersionStore()
     for (let d = 0; d < DOCUMENTS; d++) {
-      await saveDocument('ws_same', `page-${d}`, makeSpatialDoc(canvasReferencing(`d${d}`, 3)))
+      await saveDocument(
+        '01S5973HCRYM9KHRJQSYPGDEVP',
+        `page-${d}`,
+        makeSpatialDoc(canvasReferencing(`d${d}`, 3)),
+      )
     }
     // No edit between the saves, so every version names one frontier.
     for (let d = 0; d < DOCUMENTS; d++) {
-      const doc = await loadDocument('ws_same', `page-${d}`)
-      await store.save('ws_same', `page-${d}`, doc, { auto: false, label: 'same point' })
+      const doc = await loadDocument('01S5973HCRYM9KHRJQSYPGDEVP', `page-${d}`)
+      await store.save('01S5973HCRYM9KHRJQSYPGDEVP', `page-${d}`, doc, {
+        auto: false,
+        label: 'same point',
+      })
     }
-    const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_same')
+    const dir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, '01S5973HCRYM9KHRJQSYPGDEVP')
     await mkdir(dir, { recursive: true })
     const orphan = join(dir, 'orphan.png')
     await writeFile(orphan, Buffer.alloc(16, 0xab))
@@ -196,7 +213,7 @@ describe('whole-record decodes on the history plane', () => {
     await utimes(orphan, past, past)
 
     const decodes = countRecordDecodes()
-    const result = await purgeDanglingFiles('ws_same', { versionStore: store })
+    const result = await purgeDanglingFiles('01S5973HCRYM9KHRJQSYPGDEVP', { versionStore: store })
 
     expect(result).toMatchObject({ purgedCount: 1 })
     expect(decodes.checkouts).toBe(1)

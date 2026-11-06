@@ -67,13 +67,19 @@ describe('workspace handles at the server boundary', () => {
     expect(res.status).toBe(404)
   })
 
-  it('is the identity over a segmentless registry — the Stage-1 no-op', async () => {
+  // A workspace is reached by its ULID or a segment it holds. `default`, the
+  // id the daemon once keyed its first workspace by, is neither for a
+  // workspace with no segment, so it names nothing rather than an id.
+  it('reaches a segmentless workspace by its id alone, never by a legacy id', async () => {
     const plain = new InMemoryDocumentIndex()
-    await plain.createWorkspace({ workspaceId: 'default' })
-    await plain.createDocument({ workspaceId: 'default', path: 'a', kind: 'markdown' })
+    const workspaceId = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    await plain.createWorkspace({ workspaceId })
+    await plain.createDocument({ workspaceId, path: 'a', kind: 'markdown' })
     const { app } = makeServer(plain)
-    const res = await app.request('/api/v1/workspaces/default/documents')
-    expect(res.status).toBe(200)
+    expect((await app.request(`/api/v1/workspaces/${workspaceId}/documents`)).status).toBe(200)
+    const legacy = await app.request('/api/v1/workspaces/default/documents')
+    expect(legacy.status).toBe(404)
+    expect(await legacy.json()).toMatchObject({ error: 'workspace_not_found' })
   })
 })
 

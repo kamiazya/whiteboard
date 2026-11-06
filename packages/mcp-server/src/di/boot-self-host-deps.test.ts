@@ -60,32 +60,45 @@ afterEach(async () => {
 describe('bootSelfHostDeps over a dir the process global does not name', () => {
   it('writes documents, versions, blobs and teardown only under the dir it was given', async () => {
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'note',
       kind: 'spatial',
     })
 
-    const doc = await deps.liveDocuments.get('ws-1', 'note')
-    await deps.liveDocuments.save('ws-1', 'note', doc, { overwrite: true })
-    const version = await deps.versions.save('ws-1', 'note', doc, { auto: false })
+    const doc = await deps.liveDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1', 'note')
+    await deps.liveDocuments.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', doc, { overwrite: true })
+    const version = await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', doc, {
+      auto: false,
+    })
     const { ref } = await deps.blobStore.put({ bytes: new Uint8Array([1, 2, 3]) })
 
     expect((await deps.documentIndex.listWorkspaces()).map((entry) => entry.workspaceId)).toContain(
-      'ws-1',
+      '01ZVM89A4A1V9FS03Z9J64KEK1',
     )
-    await deps.documentIndex.renameWorkspace({ workspaceId: 'ws-1', displayName: 'Served' })
-    expect(await deps.workspaceDocuments.exists('ws-1')).toBe(true)
-    await deps.workspaceDocuments.save('ws-1', await deps.workspaceDocuments.get('ws-1'))
-    expect((await deps.liveDocuments.list('ws-1')).map((entry) => entry.path)).toEqual(['note'])
-    expect((await deps.versions.list('ws-1', 'note')).map((entry) => entry.id)).toEqual([
-      version.id,
-    ])
+    await deps.documentIndex.renameWorkspace({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      displayName: 'Served',
+    })
+    expect(await deps.workspaceDocuments.exists('01ZVM89A4A1V9FS03Z9J64KEK1')).toBe(true)
+    await deps.workspaceDocuments.save(
+      '01ZVM89A4A1V9FS03Z9J64KEK1',
+      await deps.workspaceDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1'),
+    )
+    expect(
+      (await deps.liveDocuments.list('01ZVM89A4A1V9FS03Z9J64KEK1')).map((entry) => entry.path),
+    ).toEqual(['note'])
+    expect(
+      (await deps.versions.list('01ZVM89A4A1V9FS03Z9J64KEK1', 'note')).map((entry) => entry.id),
+    ).toEqual([version.id])
     expect((await deps.blobStore.has({ ref })).exists).toBe(true)
 
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
-    expect(await deps.liveDocuments.exists('ws-1', 'note')).toBe(false)
+    await wbDocumentDelete(deps, {
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      documentId: created.documentId,
+    })
+    expect(await deps.liveDocuments.exists('01ZVM89A4A1V9FS03Z9J64KEK1', 'note')).toBe(false)
 
     expect(await readdir(ambient)).toEqual([])
     // Where the live store put it, spelled out rather than asked of the layout:
@@ -107,14 +120,18 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
 
   it('keeps versions and the workspace record in the served dir database, not the global one', async () => {
     const { db, serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-    await wbDocumentCreate(deps, { workspaceId: 'ws-1', path: 'note', kind: 'spatial' })
-    await deps.versions.save('ws-1', 'note', new LoroDoc(), { auto: false })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
+    await wbDocumentCreate(deps, {
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'note',
+      kind: 'spatial',
+    })
+    await deps.versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'note', new LoroDoc(), { auto: false })
 
     expect(await db.selectFrom('versions').select('id').execute()).toHaveLength(1)
     expect(
       (await db.selectFrom('workspaces').select('id').execute()).map((row) => row.id),
-    ).toContain('ws-1')
+    ).toContain('01ZVM89A4A1V9FS03Z9J64KEK1')
     expect(await readdir(ambient)).toEqual([])
     // The same handle the global would have answered, were it consulted.
     expect(await getDb(served)).toBe(db)
@@ -123,15 +140,15 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
   it('schedules the write signal against the served dir', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'note',
       kind: 'spatial',
     })
 
     await deps.documentWritten?.({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: created.documentId,
       doc: new LoroDoc(),
     })
@@ -146,17 +163,21 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
 
   it('names and file GC, handed the same scope, stay in the served dir too', async () => {
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-    await wbDocumentCreate(deps, { workspaceId: 'ws-1', path: 'note', kind: 'spatial' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
+    await wbDocumentCreate(deps, {
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'note',
+      kind: 'spatial',
+    })
     const scope = storeScope(served)
 
-    await setWorkspaceName('ws-1', 'Served', scope)
-    expect((await loadWorkspaceNames('ws-1', scope)).workspace).toBe('Served')
+    await setWorkspaceName('01ZVM89A4A1V9FS03Z9J64KEK1', 'Served', scope)
+    expect((await loadWorkspaceNames('01ZVM89A4A1V9FS03Z9J64KEK1', scope)).workspace).toBe('Served')
 
-    const files = scope.layout.workspaceFilesDir('ws-1')
+    const files = scope.layout.workspaceFilesDir('01ZVM89A4A1V9FS03Z9J64KEK1')
     await mkdir(files, { recursive: true })
     await writeFile(join(files, 'dangling.png'), 'x')
-    const purged = await purgeDanglingFiles('ws-1', {
+    const purged = await purgeDanglingFiles('01ZVM89A4A1V9FS03Z9J64KEK1', {
       versionStore: new FileVersionStore(scope),
       scope,
       graceMs: 0,
@@ -170,12 +191,12 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
   it('the file sweep, handed the scope, finds and cleans the served dir', async () => {
     vi.stubEnv('WHITEBOARD_FILE_GC_GRACE_MS', '0')
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const scope = storeScope(served)
     // One workspace the registry knows and one only the disk does, so each
     // way the sweep finds work has to follow the scope on its own.
-    const registered = scope.layout.workspaceFilesDir('ws-1')
-    const onDisk = scope.layout.workspaceFilesDir('ws-disk')
+    const registered = scope.layout.workspaceFilesDir('01ZVM89A4A1V9FS03Z9J64KEK1')
+    const onDisk = scope.layout.workspaceFilesDir('01ARZ3NDEKTSV4RRFFQ69G5FAT')
     for (const dir of [registered, onDisk]) {
       await mkdir(dir, { recursive: true })
       await writeFile(join(dir, 'dangling.png'), 'x')
@@ -191,9 +212,9 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
   it('finds a registered workspace through the scope when the disk walk finds none', async () => {
     vi.stubEnv('WHITEBOARD_FILE_GC_GRACE_MS', '0')
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const scope = storeScope(served)
-    const files = scope.layout.workspaceFilesDir('ws-1')
+    const files = scope.layout.workspaceFilesDir('01ZVM89A4A1V9FS03Z9J64KEK1')
     await mkdir(files, { recursive: true })
     await writeFile(join(files, 'dangling.png'), 'x')
 
@@ -210,14 +231,14 @@ describe('bootSelfHostDeps over a dir the process global does not name', () => {
   it('the file sweep judges containment against the served dir, not the process one', async () => {
     vi.stubEnv('WHITEBOARD_FILE_GC_GRACE_MS', '0')
     const { serverDeps: deps } = await bootSelfHostDeps(served)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const scope = storeScope(served)
     // A workspace whose files/ is a symlink out of the data dir: the sweep
     // must refuse it. Judged against the process dir this path does not exist
     // at all, which reads as "nothing to refuse".
     const outside = await mkdtemp(join(tmpdir(), 'wb-outside-'))
     await writeFile(join(outside, 'dangling.png'), 'x')
-    const files = scope.layout.workspaceFilesDir('ws-1')
+    const files = scope.layout.workspaceFilesDir('01ZVM89A4A1V9FS03Z9J64KEK1')
     await mkdir(join(files, '..'), { recursive: true })
     await symlink(outside, files)
 

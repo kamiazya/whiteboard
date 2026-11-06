@@ -22,7 +22,7 @@ const tmp = withTempDataDir('whiteboard-document-ceiling-test-')
 
 /** Written out rather than imported, so the test is not judged by the constant it judges. */
 const CEILING = 2000
-const WS = 'session1'
+const WS = '01M8BBN7JS60N0ZAR13NP8SXBF'
 
 let serverDeps: ServerDeps
 beforeEach(async () => {

@@ -184,7 +184,7 @@ async function runOnce(
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, canvasOf(nodes))
   doc.commit()
-  await saveDocument('session1', path, doc, { kind: 'spatial' })
+  await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', path, doc, { kind: 'spatial' })
 
   let saved = 0
   const trigger = createAutoVersionTrigger(store, {
@@ -193,7 +193,7 @@ async function runOnce(
       saved += 1
     },
   })
-  trigger('session1', path, doc)
+  trigger('01M8BBN7JS60N0ZAR13NP8SXBF', path, doc)
   const { availability } = await measureLoopAvailability(() => trigger.flush(), { intervalMs: 5 })
   return { saved, availability }
 }

@@ -11,6 +11,7 @@
  */
 
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
@@ -26,7 +27,7 @@ import { isWorkspaceRemovedError, refuseUnlessHeld } from './workspace-tombstone
 
 const DB_NAME = 'whiteboard-replica-append-race'
 const DAEMON = 'http://127.0.0.1:3099'
-const WORKSPACE_ID = '01JD0REPLICAAPPENDRACE0001'
+const WORKSPACE_ID = workspaceIdFor('replica-append-race')
 const MARKER = 'typed-while-the-copy-was-deleted'
 
 /** Every string IndexedDB holds for the test database, bytes decoded as text. */

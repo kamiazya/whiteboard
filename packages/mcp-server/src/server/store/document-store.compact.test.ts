@@ -4,6 +4,10 @@ import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const NEVER_WRITTEN = '012E84W05DN76Y7NXD8C878H4C'
+const SESSION1 = '01M8BBN7JS60N0ZAR13NP8SXBF'
+const SESSION2 = '01GMPGTKWFGGGN52ZV6JFQP5HM'
+
 // Swap DATA_DIR to a temp directory through vi.mock.
 let tempDir: string
 
@@ -65,7 +69,7 @@ function declinedFor(records: { scope: string; msg: string; data?: unknown }[]):
  * so there is one stamp per workspace and not one per document.
  */
 async function readLastCompactedAt(): Promise<number | null> {
-  const workspaceDoc = await openWorkspaceDocIfStored('session1')
+  const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
   if (workspaceDoc === null) return null
   return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
 }
@@ -110,15 +114,15 @@ async function buildCompactableCanvas(path: string): Promise<{
     for (const m of maps) m.set('churn', `r-${round}`)
     doc.commit()
   }
-  await saveDocument('session1', path, doc)
+  await saveDocument(SESSION1, path, doc)
   const store = new FileVersionStore()
-  const version = await store.save('session1', path, doc, { auto: true })
+  const version = await store.save(SESSION1, path, doc, { auto: true })
   for (let i = 0; i < 30; i++) {
     const m = list.insertContainer(list.length, new LoroMap())
     m.set('id', `extra-${i}`)
   }
   doc.commit()
-  await saveDocument('session1', path, doc, { overwrite: true })
+  await saveDocument(SESSION1, path, doc, { overwrite: true })
   return { store, doc, version }
 }
 
@@ -138,7 +142,7 @@ describe('compactWorkspace', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-compact-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
   })
 
   afterEach(async () => {
@@ -150,17 +154,17 @@ describe('compactWorkspace', () => {
     const doc = new LoroDoc()
     doc.getMovableList('elements').insert(0, 'x')
     doc.commit()
-    await saveDocument('session1', 'test', doc)
+    await saveDocument(SESSION1, 'test', doc)
 
     const store = new FileVersionStore()
-    const result = await compactWorkspace('session1', store)
+    const result = await compactWorkspace(SESSION1, store)
     expect(result.compacted).toBe(false)
     expect(result.reason).toBe('no-versions')
   })
 
   it('returns no-file when nothing is stored under the workspace', async () => {
     const store = new FileVersionStore()
-    const result = await compactWorkspace('never-written', store)
+    const result = await compactWorkspace(NEVER_WRITTEN, store)
     expect(result).toEqual({ compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' })
   })
 
@@ -171,8 +175,8 @@ describe('compactWorkspace', () => {
     const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
     const doc = new LoroDoc()
     const store = new FileVersionStore()
-    await saveDocument('session1', 'broken', doc)
-    await store.save('session1', 'broken', doc, { auto: true })
+    await saveDocument(SESSION1, 'broken', doc)
+    await store.save(SESSION1, 'broken', doc, { auto: true })
     const db = await getDb(tempDir)
     // Corrupt the workspace record's snapshot rows directly — the
     // beforeBytes read succeeds (the header is intact), but re-opening the
@@ -182,29 +186,29 @@ describe('compactWorkspace', () => {
     const libsqlStore = new LibsqlDocumentStore(db)
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await libsqlStore.saveSnapshot({
-      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
+      docRef: { kind: 'workspace-tree', workspaceId: SESSION1 },
       manifest,
       chunks,
       frontier: new Uint8Array(),
     })
     _clearWorkspaceDocCacheForTests()
 
-    await expect(compactWorkspace('session1', store)).rejects.toThrow()
+    await expect(compactWorkspace(SESSION1, store)).rejects.toThrow()
   })
 
   it('compacts at a version cut point while keeping restore working', async () => {
     const { store, version: v } = await buildCompactableCanvas('test')
 
-    const result = await compactWorkspace('session1', store)
+    const result = await compactWorkspace(SESSION1, store)
     expect(result.compacted).toBe(true)
     expect(result.afterBytes).toBeLessThan(result.beforeBytes)
 
     // The live state should still have all 60 elements after compaction.
-    const live = await loadDocument('session1', 'test')
+    const live = await loadDocument(SESSION1, 'test')
     expect(live.getMovableList('elements').length).toBe(60)
 
     // Restoring the oldest version should still work at the cut point.
-    const past = await store.load('session1', v.id)
+    const past = await store.load(SESSION1, v.id)
     expect(past).not.toBeNull()
     expect(past!.getMovableList('elements').length).toBe(30)
 
@@ -217,9 +221,9 @@ describe('compactWorkspace', () => {
     const db = await getDb(tempDir)
     const libsqlStore = new LibsqlDocumentStore(db)
     const frontierResult = await libsqlStore.readFrontier({
-      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
+      docRef: { kind: 'workspace-tree', workspaceId: SESSION1 },
     })
-    const workspaceDoc = await getWorkspaceDoc('session1')
+    const workspaceDoc = await getWorkspaceDoc(SESSION1)
     expect(frontierResult?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
@@ -228,9 +232,9 @@ describe('compactWorkspace', () => {
     const empty = new LoroDoc()
     empty.getMovableList('elements').insert(0, 'x')
     empty.commit()
-    await saveDocument('session1', 'untouched', empty)
+    await saveDocument(SESSION1, 'untouched', empty)
     const noopStore = new FileVersionStore()
-    const noop = await compactWorkspace('session1', noopStore)
+    const noop = await compactWorkspace(SESSION1, noopStore)
     expect(noop.reason).toBe('no-versions')
     expect(await readLastCompactedAt()).toBeNull()
 
@@ -238,7 +242,7 @@ describe('compactWorkspace', () => {
     const { store } = await buildCompactableCanvas('big')
 
     const before = Date.now()
-    const result = await compactWorkspace('session1', store)
+    const result = await compactWorkspace(SESSION1, store)
     expect(result.compacted).toBe(true)
     const after = Date.now()
     const stamp = await readLastCompactedAt()
@@ -252,7 +256,7 @@ describe('compactWorkspace', () => {
     // row stamp ('untouched' compacted nothing above).
     const { openWorkspaceDocIfStored } = await import('./document-store.js')
     const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-    const workspaceDoc = await openWorkspaceDocIfStored('session1')
+    const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
     expect(workspaceDoc).not.toBeNull()
     if (workspaceDoc === null) throw new Error('unreachable')
     const wsStamp = readWorkspaceMeta(workspaceDoc).lastCompactedAt
@@ -280,20 +284,20 @@ describe('compactWorkspace', () => {
       m.set('id', `elem-${i}`)
     }
     doc.commit()
-    await saveDocument('session1', 'test', doc)
+    await saveDocument(SESSION1, 'test', doc)
 
     const store = new FileVersionStore()
-    await store.save('session1', 'test', doc, { auto: true })
+    await store.save(SESSION1, 'test', doc, { auto: true })
 
     for (let i = 0; i < 30; i++) {
       const m = list.insertContainer(list.length, new LoroMap())
       m.set('id', `extra-${i}`)
     }
     doc.commit()
-    await saveDocument('session1', 'test', doc, { overwrite: true })
+    await saveDocument(SESSION1, 'test', doc, { overwrite: true })
 
     const db = await getDb(getDataDir())
-    const documentId = (await resolveDocumentIdAtPath('session1', 'test'))!
+    const documentId = (await resolveDocumentIdAtPath(SESSION1, 'test'))!
 
     // Hold the cut lookup open so the tool write races into compaction's
     // window instead of trivially serializing before it.
@@ -309,10 +313,10 @@ describe('compactWorkspace', () => {
       },
     })
 
-    const compactPromise = compactWorkspace('session1', delayedStore)
+    const compactPromise = compactWorkspace(SESSION1, delayedStore)
     await new Promise((r) => setTimeout(r, 20))
     const routed = new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db))
-    const docRef = { kind: 'document' as const, workspaceId: 'session1', documentId }
+    const docRef = { kind: 'document' as const, workspaceId: SESSION1, documentId }
     const existing = await routed.loadSnapshot({ docRef })
     const toolDoc = new LoroDoc()
     toolDoc.import(reassembleSnapshot(existing!.manifest, existing!.chunks))
@@ -328,7 +332,7 @@ describe('compactWorkspace', () => {
 
     await Promise.all([compactPromise, toolWrite])
 
-    const after = await loadDocument('session1', 'test')
+    const after = await loadDocument(SESSION1, 'test')
     expect(after.getMap('root').get('agentMarker')).toBe('concurrent-edit')
     expect(after.getMovableList('elements').length).toBe(60)
   })
@@ -345,7 +349,7 @@ describe('auto-compact', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-auto-compact-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
   })
 
   afterEach(async () => {
@@ -358,9 +362,9 @@ describe('auto-compact', () => {
   it('saveDocument notifies the registered document-saved listener', async () => {
     const trigger = vi.fn<(workspaceId: string, path: string) => void>()
     setDocumentSavedListener(trigger)
-    await saveDocument('session1', 'foo', new LoroDoc())
+    await saveDocument(SESSION1, 'foo', new LoroDoc())
     expect(trigger).toHaveBeenCalledTimes(1)
-    expect(trigger).toHaveBeenCalledWith('session1', 'foo')
+    expect(trigger).toHaveBeenCalledWith(SESSION1, 'foo')
   })
 
   // Every document in a workspace lives in the one workspace record, and
@@ -373,12 +377,12 @@ describe('auto-compact', () => {
   it('collapses saves to different documents of one workspace into one pending compaction', async () => {
     const store = new FileVersionStore()
     installAutoCompact(store)
-    await saveDocument('session1', 'first', new LoroDoc())
-    await saveDocument('session1', 'second', new LoroDoc())
+    await saveDocument(SESSION1, 'first', new LoroDoc())
+    await saveDocument(SESSION1, 'second', new LoroDoc())
     expect(_autoCompactTimerCountForTests()).toBe(1)
 
     // A second workspace is a second record, so it keeps a timer of its own.
-    await saveDocument('session2', 'third', new LoroDoc())
+    await saveDocument(SESSION2, 'third', new LoroDoc())
     expect(_autoCompactTimerCountForTests()).toBe(2)
   })
 
@@ -396,9 +400,9 @@ describe('auto-compact', () => {
 
     // Three rapid triggers within the debounce window must collapse into
     // a single compactWorkspace run. Use a tiny debounce so the test stays fast.
-    scheduleAutoCompact('session1', store, { debounceMs: 50 })
-    scheduleAutoCompact('session1', store, { debounceMs: 50 })
-    scheduleAutoCompact('session1', store, { debounceMs: 50 })
+    scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
+    scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
+    scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
 
     // The collapse itself, asserted where it is a FACT rather than a race:
     // three schedules leave one timer, and the count is readable synchronously
@@ -466,25 +470,25 @@ describe('auto-compact', () => {
       m.set('id', `e-${i}`)
     }
     doc.commit()
-    await saveDocument('session1', 'cached', doc)
+    await saveDocument(SESSION1, 'cached', doc)
     const store = new FileVersionStore()
-    await store.save('session1', 'cached', doc, { auto: true })
+    await store.save(SESSION1, 'cached', doc, { auto: true })
     for (let i = 0; i < 30; i++) {
       const m = list.insertContainer(list.length, new LoroMap())
       m.set('id', `x-${i}`)
     }
     doc.commit()
-    await saveDocument('session1', 'cached', doc, { overwrite: true })
+    await saveDocument(SESSION1, 'cached', doc, { overwrite: true })
 
-    await getDoc('session1', 'cached')
-    expect(peekDoc('session1', 'cached')).toBeDefined()
+    await getDoc(SESSION1, 'cached')
+    expect(peekDoc(SESSION1, 'cached')).toBeDefined()
 
-    scheduleAutoCompact('session1', store, { debounceMs: 50 })
+    scheduleAutoCompact(SESSION1, store, { debounceMs: 50 })
     await _awaitAutoCompactIdleForTests()
     {
       const { openWorkspaceDocIfStored } = await import('./document-store.js')
       const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
-      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
       expect(
         workspaceDoc && (readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null),
       ).not.toBeNull()
@@ -492,14 +496,14 @@ describe('auto-compact', () => {
 
     // Edit and save AFTER the compaction, then reload from stored bytes
     // only: everything survives.
-    const live = await getDoc('session1', 'cached')
+    const live = await getDoc(SESSION1, 'cached')
     live.getMap('root').set('post-compact', 'edit')
     live.commit()
-    await saveDocument('session1', 'cached', live, { overwrite: true })
+    await saveDocument(SESSION1, 'cached', live, { overwrite: true })
     const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
     clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
-    const reloaded = await loadDocument('session1', 'cached')
+    const reloaded = await loadDocument(SESSION1, 'cached')
     expect(reloaded.getMovableList('elements').length).toBe(60)
     expect(reloaded.getMap('root').get('post-compact')).toBe('edit')
   })
@@ -512,7 +516,7 @@ describe('auto-compact disposal', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-auto-compact-dispose-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
     disposedDb = false
   })
 
@@ -580,7 +584,7 @@ describe('auto-compact disposal', () => {
     })
 
     const logs = captureLogsForTests('info')
-    scheduleAutoCompact('session1', gatedStore, { debounceMs: 1 })
+    scheduleAutoCompact(SESSION1, gatedStore, { debounceMs: 1 })
     // Throws naming the premise if the schedule was a no-op, instead of
     // leaving that to be inferred from a null stamp three lines later.
     await _awaitAutoCompactFiredForTests()
@@ -632,7 +636,7 @@ describe('auto-compact disposal', () => {
     })
 
     expect(_loopHoldersCountForTests()).toBe(0)
-    scheduleAutoCompact('session1', gatedStore, { debounceMs: 1 })
+    scheduleAutoCompact(SESSION1, gatedStore, { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
 
     // Started and deliberately NOT awaited: this is a wait whose test timed
@@ -674,10 +678,10 @@ describe('auto-compact disposal', () => {
     const empty = new LoroDoc()
     empty.getMovableList('elements').insert(0, 'x')
     empty.commit()
-    await saveDocument('session1', 'undeclared', empty)
+    await saveDocument(SESSION1, 'undeclared', empty)
 
     const logs = captureLogsForTests('info')
-    scheduleAutoCompact('session1', new FileVersionStore(), { debounceMs: 1 })
+    scheduleAutoCompact(SESSION1, new FileVersionStore(), { debounceMs: 1 })
     await _awaitAutoCompactIdleForTests()
     logs.restore()
 
@@ -695,7 +699,7 @@ describe('auto-compact disposal', () => {
     // Do NOT call uninstallAutoCompact() here — the point of this test
     // is that DB disposal alone (without that manual call) must cancel the
     // pending timer.
-    scheduleAutoCompact('session1', store, { debounceMs: 20 })
+    scheduleAutoCompact(SESSION1, store, { debounceMs: 20 })
     await teardownIsolatedDb()
     disposedDb = true
 
@@ -712,9 +716,7 @@ describe('auto-compact disposal', () => {
   it('disposeAutoCompact awaits an already-fired in-flight compaction before resolving', async () => {
     const { store } = await buildCompactableCanvas('cached')
 
-    scheduleAutoCompact('session1', withDelayedVersionFrontiers(store, 100), {
-      debounceMs: 1,
-    })
+    scheduleAutoCompact(SESSION1, withDelayedVersionFrontiers(store, 100), { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
     expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
@@ -757,7 +759,7 @@ describe('auto-compact disposal', () => {
         if (prop === 'workspaceVersionFrontiers') {
           return async (workspaceId: string) => {
             await rescheduleGate
-            scheduleAutoCompact('session1', countingStore, { debounceMs: 0 })
+            scheduleAutoCompact(SESSION1, countingStore, { debounceMs: 0 })
             timersAfterReschedule = _autoCompactTimerCountForTests()
             return target.workspaceVersionFrontiers(workspaceId)
           }
@@ -766,7 +768,7 @@ describe('auto-compact disposal', () => {
       },
     })
 
-    scheduleAutoCompact('session1', reentrantStore, { debounceMs: 1 })
+    scheduleAutoCompact(SESSION1, reentrantStore, { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
     expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
@@ -809,7 +811,7 @@ describe('auto-compact disposal', () => {
       },
     })
 
-    scheduleAutoCompact('session1', reentrantStore, { debounceMs: 1 })
+    scheduleAutoCompact(SESSION1, reentrantStore, { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
     expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
@@ -830,7 +832,7 @@ describe('auto-compact disposal', () => {
     await disposeAutoCompact()
     await disposeAutoCompact()
 
-    scheduleAutoCompact('session1', store, { debounceMs: 20 })
+    scheduleAutoCompact(SESSION1, store, { debounceMs: 20 })
     await _awaitAutoCompactIdleForTests()
     expect(await readLastCompactedAt()).not.toBeNull()
   })
@@ -838,9 +840,7 @@ describe('auto-compact disposal', () => {
   it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
     const { store } = await buildCompactableCanvas('composed')
 
-    scheduleAutoCompact('session1', withDelayedVersionFrontiers(store, 100), {
-      debounceMs: 1,
-    })
+    scheduleAutoCompact(SESSION1, withDelayedVersionFrontiers(store, 100), { debounceMs: 1 })
     await _awaitAutoCompactFiredForTests()
     expect(_inFlightAutoCompactCountForTests()).toBeGreaterThan(0)
 
@@ -873,29 +873,29 @@ describe('auto-compact disposal', () => {
       elements.insert(i, `element-${i}-${'p'.repeat(200)}`)
       doc.commit()
     }
-    await saveDocument('session1', 'page', doc)
+    await saveDocument(SESSION1, 'page', doc)
 
     // Compaction refuses to cut history nothing pins, so the workspace needs
     // a version before the fold is even attempted.
     const store = new FileVersionStore()
-    await store.save('session1', 'page', await loadDocument('session1', 'page'), { auto: false })
+    await store.save(SESSION1, 'page', await loadDocument(SESSION1, 'page'), { auto: false })
 
     // Another instance appends, straight to the store — this instance's
     // cached workspace document knows nothing about it.
     const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(await getDb(tempDir)))
-    const theirs = (await docs.open('session1')) as LoroDoc
+    const theirs = (await docs.open(SESSION1)) as LoroDoc
     theirs.getMap('meta').set('theirs', 'kept')
     theirs.commit()
-    await docs.save('session1', theirs)
+    await docs.save(SESSION1, theirs)
 
-    const result = await compactWorkspace('session1', store)
+    const result = await compactWorkspace(SESSION1, store)
     // Asserted, not assumed: a `no-gain` or `no-versions` answer means the
     // fold never ran and everything below would pass for the wrong reason.
     expect(result.reason).toBe('ok')
     expect(result.compacted).toBe(true)
 
     // The RECORD, not this process's cache: what survived the fold on disk.
-    const settled = (await docs.open('session1')) as LoroDoc
+    const settled = (await docs.open(SESSION1)) as LoroDoc
     expect(settled.getMap('meta').get('theirs')).toBe('kept')
   })
 })

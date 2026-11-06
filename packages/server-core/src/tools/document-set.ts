@@ -24,7 +24,7 @@ import {
   markdownInputSchema,
   okfActorInputSchema,
   tagListWriteSchema,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
@@ -56,7 +56,7 @@ function isMarkdownShaped(canvas: { nodes: readonly { id: string }[]; edges: rea
 
 export const documentSetInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
     markdown: markdownInputSchema,
     /**

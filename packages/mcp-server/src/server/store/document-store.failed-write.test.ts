@@ -64,16 +64,16 @@ function unreadableSource(): LoroDoc {
 }
 
 it('a save that throws after placing its node leaves nothing for the next save to persist', async () => {
-  await saveDocument('ws', 'kept', canvasDoc('first'), { kind: 'spatial' })
+  await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('first'), { kind: 'spatial' })
 
   await expect(
-    saveDocument('ws', 'phantom', unreadableSource(), { kind: 'spatial' }),
+    saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'phantom', unreadableSource(), { kind: 'spatial' }),
   ).rejects.toThrow('this source cannot be read')
-  await saveDocument('ws', 'kept', canvasDoc('second'), { overwrite: true })
+  await saveDocument('0104Y7DY19FTA30KQYKDRRMNBN', 'kept', canvasDoc('second'), { overwrite: true })
 
   const stored = await new DocumentStoreWorkspaceDocs(
     new LibsqlDocumentStore(await getDb(tempDir)),
-  ).open('ws')
+  ).open('0104Y7DY19FTA30KQYKDRRMNBN')
   if (stored === null) throw new Error('the workspace record was never stored')
   expect(resolveWorkspaceDocument(stored, 'kept')).not.toBeNull()
   expect(resolveWorkspaceDocument(stored, 'phantom')).toBeNull()

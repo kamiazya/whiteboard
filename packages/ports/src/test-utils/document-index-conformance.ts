@@ -13,6 +13,18 @@ import { describeDuplicateDocumentName } from './document-index-duplicate-name-c
 import { describeRefusedInput } from './document-index-input-conformance.js'
 import { describeRenameHeldBy } from './document-index-rename-held-conformance.js'
 
+const FRESH = '012F53DDJXJRR3BNBM4FDP2KH7'
+const NEVER_CREATED = '01VVHTW4DPHVEBQ9C0TBXF0D42'
+const WS_ASKING = '016JETMGXA27Z1VG9A07ESTCW3'
+const WS_HOLDER = '01MYD5JHXXNFF0SJ7B9W29YQKM'
+const WS_IDEM = '01CK7V02492BHNYNRB070WY0VT'
+const WS_IDENTITY = '012Z1NTVK0GDHJMKH2QM6JS54G'
+const WS_KEEP_LAYERS = '01WXNSCTK26NPMQS0T3FT6BYNP'
+const WS_MOVING = '016MTK7QFMEEKEWSX7J1T2276A'
+const WS_OTHER = '0175T8F2WH2MX756J1T7SHKGB8'
+const WS_PARTIAL = '01Z8VPYCT367YXN1A6DNVQWBGJ'
+const WS_SEGMENTED = '01FXJ03Y0K5DVE8NAKHB730R1K'
+
 type SeedWorkspace = (entry: WorkspaceEntry) => Promise<void>
 
 type MakeIndex = () => Promise<{
@@ -40,7 +52,7 @@ type WithIndex = (
   body: (index: DocumentIndex, seedWorkspace: SeedWorkspace) => Promise<void>,
 ) => Promise<void>
 
-const WS = 'ws-conformance'
+const WS = '01C2Y0SCYA3GZY1H2DQQVR4KX1'
 // A well-formed id the index never assigned.
 const ABSENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -64,7 +76,7 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
       // Workspaces are explicit now, so the shared fixture makes the two the
       // cases below use rather than each test repeating it.
       await index.createWorkspace({ workspaceId: WS })
-      await index.createWorkspace({ workspaceId: 'ws-other' })
+      await index.createWorkspace({ workspaceId: WS_OTHER })
       await body(index, seedWorkspace)
     } finally {
       await dispose()
@@ -100,7 +112,7 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
     await withIndex(async (index) => {
       // An empty answer would make a typo'd workspaceId indistinguishable
       // from a workspace that genuinely holds nothing.
-      await expect(index.listDocuments({ workspaceId: 'never-created' })).rejects.toThrow(
+      await expect(index.listDocuments({ workspaceId: NEVER_CREATED })).rejects.toThrow(
         WorkspaceNotFoundError,
       )
       await expect(index.listDocuments({ workspaceId: WS })).resolves.toEqual([])
@@ -112,23 +124,23 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
       // A typo'd or hallucinated workspaceId must fail loudly rather than
       // quietly bringing a workspace into being and writing into it.
       await expect(
-        index.createDocument({ workspaceId: 'never-created', path: 'plan', kind: 'spatial' }),
+        index.createDocument({ workspaceId: NEVER_CREATED, path: 'plan', kind: 'spatial' }),
       ).rejects.toThrow(WorkspaceNotFoundError)
       // A second attempt, because refusing is not the same as not creating:
       // an implementation can materialize the workspace as a side effect and
       // still throw, and then only the SECOND call reveals it by succeeding.
       await expect(
-        index.createDocument({ workspaceId: 'never-created', path: 'plan-2', kind: 'spatial' }),
+        index.createDocument({ workspaceId: NEVER_CREATED, path: 'plan-2', kind: 'spatial' }),
       ).rejects.toThrow(WorkspaceNotFoundError)
     })
   })
 
   it('creates a workspace idempotently, and only then accepts documents', async () => {
     await withIndex(async (index) => {
-      await index.createWorkspace({ workspaceId: 'fresh' })
-      await index.createWorkspace({ workspaceId: 'fresh' })
+      await index.createWorkspace({ workspaceId: FRESH })
+      await index.createWorkspace({ workspaceId: FRESH })
       await expect(
-        index.createDocument({ workspaceId: 'fresh', path: 'plan', kind: 'spatial' }),
+        index.createDocument({ workspaceId: FRESH, path: 'plan', kind: 'spatial' }),
       ).resolves.toMatchObject({ path: 'plan' })
     })
   })
@@ -145,12 +157,9 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
         await index.resolveDocumentById({ workspaceId: WS, documentId: created.documentId }),
       ).toEqual(created)
       // The id alone is not the address: another workspace must not see it.
-      await index.createWorkspace({ workspaceId: 'ws-other' })
+      await index.createWorkspace({ workspaceId: WS_OTHER })
       expect(
-        await index.resolveDocumentById({
-          workspaceId: 'ws-other',
-          documentId: created.documentId,
-        }),
+        await index.resolveDocumentById({ workspaceId: WS_OTHER, documentId: created.documentId }),
       ).toBeNull()
     })
   })
@@ -400,7 +409,7 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
     await withIndex(async (index) => {
       const mine = await index.createDocument({ workspaceId: WS, path: 'p', kind: 'spatial' })
       const theirs = await index.createDocument({
-        workspaceId: 'ws-other',
+        workspaceId: WS_OTHER,
         path: 'p',
         kind: 'markdown',
       })
@@ -410,7 +419,7 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
       expect(await index.listDocuments({ workspaceId: WS })).toHaveLength(1)
 
       await index.deleteDocument({ workspaceId: WS, path: 'p' })
-      expect(await index.resolveDocument({ workspaceId: 'ws-other', path: 'p' })).not.toBeNull()
+      expect(await index.resolveDocument({ workspaceId: WS_OTHER, path: 'p' })).not.toBeNull()
     })
   })
 
@@ -508,7 +517,7 @@ function describeSetDocumentName(withIndex: WithIndex): void {
         })
 
         await expect(
-          index.setDocumentName({ workspaceId: 'ws-other', documentId, name: 'x' }),
+          index.setDocumentName({ workspaceId: WS_OTHER, documentId, name: 'x' }),
         ).rejects.toThrow(DocumentNotFoundError)
       })
     })
@@ -526,10 +535,10 @@ function describeListWorkspaces(makeIndex: MakeIndex, withIndex: WithIndex): voi
         const ids = (await index.listWorkspaces()).map((w) => w.workspaceId).sort()
 
         expect(ids).toContain(WS)
-        // `ws-other` holds nothing. A workspace is a real, addressable place
+        // The other workspace holds nothing. A workspace is a real, addressable place
         // before anything is put in it — a listing that hid the empty ones
         // would make a freshly created workspace look like it failed.
-        expect(ids).toContain('ws-other')
+        expect(ids).toContain(WS_OTHER)
       })
     })
 
@@ -565,19 +574,19 @@ function describeListWorkspaces(makeIndex: MakeIndex, withIndex: WithIndex): voi
     it('accepts a createWorkspace carrying segment and displayName, idempotently', async () => {
       await withIndex(async (index) => {
         await index.createWorkspace({
-          workspaceId: 'ws-identity',
+          workspaceId: WS_IDENTITY,
           segment: 'team-notes',
           displayName: 'Team notes',
         })
         // Idempotent, same as the bare-id case: re-creating is not an error.
         await index.createWorkspace({
-          workspaceId: 'ws-identity',
+          workspaceId: WS_IDENTITY,
           segment: 'team-notes',
           displayName: 'Team notes',
         })
 
         const ids = (await index.listWorkspaces()).map((w) => w.workspaceId)
-        expect(ids).toContain('ws-identity')
+        expect(ids).toContain(WS_IDENTITY)
       })
     })
 
@@ -593,25 +602,25 @@ function describeListWorkspaces(makeIndex: MakeIndex, withIndex: WithIndex): voi
     // accept and ignore them on create.
     it('leaves an existing workspace identity alone when re-created bare', async () => {
       await withIndex(async (index) => {
-        await index.createWorkspace({ workspaceId: 'ws-keep-layers' })
+        await index.createWorkspace({ workspaceId: WS_KEEP_LAYERS })
         await index.renameWorkspace({
-          workspaceId: 'ws-keep-layers',
+          workspaceId: WS_KEEP_LAYERS,
           segment: 'keep-me',
           displayName: 'Keep me',
         })
-        const before = await index.resolveWorkspace('ws-keep-layers')
+        const before = await index.resolveWorkspace(WS_KEEP_LAYERS)
         // The subject has to be PRESENT for the assertion below to mean
         // anything: a row with no layers survives an overwrite unchanged.
         expect(before?.segment).toBe('keep-me')
         expect(before?.displayName).toBe('Keep me')
 
-        await index.createWorkspace({ workspaceId: 'ws-keep-layers' })
+        await index.createWorkspace({ workspaceId: WS_KEEP_LAYERS })
 
-        const after = await index.resolveWorkspace('ws-keep-layers')
+        const after = await index.resolveWorkspace(WS_KEEP_LAYERS)
         expect(after?.segment).toBe('keep-me')
         expect(after?.displayName).toBe('Keep me')
         // And the address still resolves through the layer it was given.
-        expect((await index.resolveWorkspace('keep-me'))?.workspaceId).toBe('ws-keep-layers')
+        expect((await index.resolveWorkspace('keep-me'))?.workspaceId).toBe(WS_KEEP_LAYERS)
       })
     })
 
@@ -642,11 +651,11 @@ function describeResolveWorkspace(withIndex: WithIndex): void {
      */
     async function withSegmented(body: (index: DocumentIndex) => Promise<void>): Promise<void> {
       await withIndex(async (index, seedWorkspace) => {
-        await seedWorkspace({ workspaceId: 'ws-segmented', segment: 'design' })
+        await seedWorkspace({ workspaceId: WS_SEGMENTED, segment: 'design' })
         // Assert the subject is PRESENT before asserting anything about it:
         // an implementation that silently drops `segment` would otherwise
         // make every case below pass by resolving nothing but ids.
-        const stored = (await index.listWorkspaces()).find((w) => w.workspaceId === 'ws-segmented')
+        const stored = (await index.listWorkspaces()).find((w) => w.workspaceId === WS_SEGMENTED)
         expect(stored?.segment).toBe('design')
         await body(index)
       })
@@ -654,31 +663,19 @@ function describeResolveWorkspace(withIndex: WithIndex): void {
 
     it('resolves a workspace by its segment', async () => {
       await withSegmented(async (index) => {
-        expect((await index.resolveWorkspace('design'))?.workspaceId).toBe('ws-segmented')
+        expect((await index.resolveWorkspace('design'))?.workspaceId).toBe(WS_SEGMENTED)
       })
     })
 
     it('resolves a segment-bearing workspace by its id too', async () => {
       await withSegmented(async (index) => {
-        expect((await index.resolveWorkspace('ws-segmented'))?.workspaceId).toBe('ws-segmented')
+        expect((await index.resolveWorkspace(WS_SEGMENTED))?.workspaceId).toBe(WS_SEGMENTED)
       })
     })
 
     it('resolves a workspace that has no segment by its id', async () => {
       await withIndex(async (index) => {
         expect((await index.resolveWorkspace(WS))?.workspaceId).toBe(WS)
-      })
-    })
-
-    it("prefers a segment over another workspace's id", async () => {
-      await withIndex(async (index, seedWorkspace) => {
-        // `ws-other` exists as an id in the shared fixture; giving a
-        // DIFFERENT workspace that same string as its segment is the one
-        // collision the resolution order has to decide.
-        await seedWorkspace({ workspaceId: 'ws-shadowing', segment: 'ws-other' })
-        expect((await index.resolveWorkspace('ws-other'))?.workspaceId).toBe('ws-shadowing')
-        // The shadowed workspace stays reachable as itself.
-        expect((await index.resolveWorkspace('ws-shadowing'))?.workspaceId).toBe('ws-shadowing')
       })
     })
 
@@ -715,16 +712,16 @@ function describeRenameWorkspace(withIndex: WithIndex): void {
 
     it('moves the address: the new segment resolves and the old one stops', async () => {
       await withIndex(async (index, seedWorkspace) => {
-        await seedWorkspace({ workspaceId: 'ws-moving', segment: 'before' })
+        await seedWorkspace({ workspaceId: WS_MOVING, segment: 'before' })
 
-        const renamed = await index.renameWorkspace({ workspaceId: 'ws-moving', segment: 'after' })
+        const renamed = await index.renameWorkspace({ workspaceId: WS_MOVING, segment: 'after' })
 
         expect(renamed.segment).toBe('after')
-        expect((await index.resolveWorkspace('after'))?.workspaceId).toBe('ws-moving')
+        expect((await index.resolveWorkspace('after'))?.workspaceId).toBe(WS_MOVING)
         // The whole reason ADR-0019 keeps the canonical layer resolvable:
         // the address a rename vacates stops answering, and the id does not.
         expect(await index.resolveWorkspace('before')).toBeNull()
-        expect((await index.resolveWorkspace('ws-moving'))?.workspaceId).toBe('ws-moving')
+        expect((await index.resolveWorkspace(WS_MOVING))?.workspaceId).toBe(WS_MOVING)
       })
     })
 
@@ -733,35 +730,31 @@ function describeRenameWorkspace(withIndex: WithIndex): void {
     // the address, which is the most destructive reading of the two.
     it('leaves a layer the call did not name exactly as it was', async () => {
       await withIndex(async (index, seedWorkspace) => {
-        await seedWorkspace({
-          workspaceId: 'ws-partial',
-          segment: 'keep-me',
-          displayName: 'Keep me',
-        })
+        await seedWorkspace({ workspaceId: WS_PARTIAL, segment: 'keep-me', displayName: 'Keep me' })
 
         const renamed = await index.renameWorkspace({
-          workspaceId: 'ws-partial',
+          workspaceId: WS_PARTIAL,
           displayName: 'Renamed',
         })
 
         expect(renamed.displayName).toBe('Renamed')
         expect(renamed.segment).toBe('keep-me')
-        expect((await index.resolveWorkspace('keep-me'))?.workspaceId).toBe('ws-partial')
+        expect((await index.resolveWorkspace('keep-me'))?.workspaceId).toBe(WS_PARTIAL)
       })
     })
 
     it('refuses a segment another workspace already holds', async () => {
       await withIndex(async (index, seedWorkspace) => {
-        await seedWorkspace({ workspaceId: 'ws-holder', segment: 'taken' })
-        await seedWorkspace({ workspaceId: 'ws-asking', segment: 'asking' })
+        await seedWorkspace({ workspaceId: WS_HOLDER, segment: 'taken' })
+        await seedWorkspace({ workspaceId: WS_ASKING, segment: 'asking' })
 
         await expect(
-          index.renameWorkspace({ workspaceId: 'ws-asking', segment: 'taken' }),
+          index.renameWorkspace({ workspaceId: WS_ASKING, segment: 'taken' }),
         ).rejects.toThrow(WorkspaceSegmentTakenError)
         // Refused as one operation: the workspace keeps the address it had
         // rather than ending up with neither.
-        expect((await index.resolveWorkspace('asking'))?.workspaceId).toBe('ws-asking')
-        expect((await index.resolveWorkspace('taken'))?.workspaceId).toBe('ws-holder')
+        expect((await index.resolveWorkspace('asking'))?.workspaceId).toBe(WS_ASKING)
+        expect((await index.resolveWorkspace('taken'))?.workspaceId).toBe(WS_HOLDER)
       })
     })
 
@@ -769,10 +762,10 @@ function describeRenameWorkspace(withIndex: WithIndex): void {
     // display-name edit, reporting the workspace's own address as taken.
     it('accepts the segment the workspace already holds', async () => {
       await withIndex(async (index, seedWorkspace) => {
-        await seedWorkspace({ workspaceId: 'ws-idem', segment: 'same' })
+        await seedWorkspace({ workspaceId: WS_IDEM, segment: 'same' })
 
         const renamed = await index.renameWorkspace({
-          workspaceId: 'ws-idem',
+          workspaceId: WS_IDEM,
           segment: 'same',
           displayName: 'Same address, new name',
         })

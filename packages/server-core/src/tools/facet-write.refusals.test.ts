@@ -34,7 +34,7 @@ import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetOperation } from './document-set.js'
 import { createFacetSetTool } from './facet-set.js'
 
-const WORKSPACE_ID = 'ws-1'
+const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const CANVAS_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 

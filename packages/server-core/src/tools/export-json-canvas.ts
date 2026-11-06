@@ -1,5 +1,5 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -11,7 +11,7 @@ import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
  */
 const exportJsonCanvasInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
     options: z
       .object({ strict: z.boolean().default(false) })

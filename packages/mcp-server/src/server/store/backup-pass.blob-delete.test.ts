@@ -44,10 +44,14 @@ const INDEX_SOURCES: Record<string, () => Promise<LoroWorkspaceDocumentIndex>> =
 }
 
 async function trashedDocument(index: LoroWorkspaceDocumentIndex): Promise<string> {
-  await index.createWorkspace({ workspaceId: 'ws' })
-  await index.createDocument({ workspaceId: 'ws', path: 'doomed', kind: 'markdown' })
-  await index.deleteDocument({ workspaceId: 'ws', path: 'doomed' })
-  const [entry] = await index.listTrash({ workspaceId: 'ws' })
+  await index.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
+  await index.createDocument({
+    workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+    path: 'doomed',
+    kind: 'markdown',
+  })
+  await index.deleteDocument({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'doomed' })
+  const [entry] = await index.listTrash({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
   if (entry === undefined) throw new Error('the delete left no trash row')
   return entry.documentId
 }
@@ -74,10 +78,10 @@ describe('a trash blob deleted between a backup snapshot and its mirror', () => 
     it(`is still mirrored when purged through ${source}`, async () => {
       const index = await openIndex()
       const documentId = await trashedDocument(index)
-      const [entry] = await index.listTrash({ workspaceId: 'ws' })
+      const [entry] = await index.listTrash({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
 
       const mirrored = await backupWith(() =>
-        index.purgeTrashEntry({ workspaceId: 'ws', documentId }),
+        index.purgeTrashEntry({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', documentId }),
       )
 
       // The snapshot holds the row, so the mirror must hold its bytes.
@@ -88,10 +92,10 @@ describe('a trash blob deleted between a backup snapshot and its mirror', () => 
   it('is still mirrored when the document is restored', async () => {
     const index = await INDEX_SOURCES['the container binding']!()
     const documentId = await trashedDocument(index)
-    const [entry] = await index.listTrash({ workspaceId: 'ws' })
+    const [entry] = await index.listTrash({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
 
     const mirrored = await backupWith(() =>
-      index.restoreDocument({ workspaceId: 'ws', documentId }),
+      index.restoreDocument({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', documentId }),
     )
 
     expect(mirrored).toContain(entry?.blob.digestHex)

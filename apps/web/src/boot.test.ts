@@ -186,8 +186,9 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       req.onerror = () => reject(req.error)
     })
     await expect(resolveBrowserWorkspaceId(REAL_DB_NAME)).rejects.toThrow(
-      /not keyed by a canonical/,
+      /not keyed by a canonical id: local/,
     )
+    await expectLoggedFailure('skipped a workspace registry row that does not read')
     expect(() => getBrowserWorkspaceId()).toThrow(/browser workspace unavailable/)
   })
 

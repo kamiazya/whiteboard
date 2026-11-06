@@ -8,7 +8,7 @@ import {
   OPS_PER_CALL_LIMIT_PHRASE,
   OPS_PER_CALL_MAX,
   okfActorInputSchema,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { hasDocumentFolders } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
@@ -207,7 +207,7 @@ const workspaceEditOutputSchema = z
      * a bootstrapping create was — the server picks an id,
      * files the whole batch under it, and never says which.
      */
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     applied: z
       .number()
       .int()

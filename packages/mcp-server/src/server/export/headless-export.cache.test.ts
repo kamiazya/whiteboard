@@ -39,7 +39,7 @@ const { getDb } = await import('../store/db/index.js')
 const { LibsqlDocumentStore } = await import('../store/libsql/libsql-document-store.js')
 const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
 
-const WORKSPACE = 'ws_cache'
+const WORKSPACE = '01BG3X5KBRC98CQYFKC11W5ZVP'
 const PATH = 'design'
 
 beforeEach(async () => {

@@ -35,7 +35,7 @@ export async function seedDoc(
     // The stored key is derived from the documentId alone (see ports'
     // doc-ref-key.ts), so this seed workspaceId never has to match the
     // workspaceId a test's tool input names.
-    docRef: { kind: 'document', workspaceId: 'seed-ws', documentId },
+    docRef: { kind: 'document', workspaceId: '01SS9QD781R3XXGDRPJ5F4ET0M', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,

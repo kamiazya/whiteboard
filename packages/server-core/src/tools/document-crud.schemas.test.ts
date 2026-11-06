@@ -11,7 +11,7 @@ import {
 } from './document-crud.schemas.js'
 
 const VALID_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-const VALID_WORKSPACE_ID = 'my-workspace'
+const VALID_WORKSPACE_ID = '015P9R5P18MK1N7CHNA5FKZCSR'
 
 describe('wbDocumentCreateInputSchema', () => {
   it('accepts valid input with a single-segment path', () => {
@@ -128,7 +128,7 @@ describe('wbDocumentCreateInputSchema', () => {
 describe('wbDocumentCreateOutputSchema', () => {
   it('accepts valid output', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
     })
@@ -147,7 +147,7 @@ describe('wbDocumentCreateOutputSchema', () => {
 
   it('rejects invalid documentId', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: 'not-a-ulid',
       path: 'my-doc',
     })
@@ -156,7 +156,7 @@ describe('wbDocumentCreateOutputSchema', () => {
 
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
       extra: 1,

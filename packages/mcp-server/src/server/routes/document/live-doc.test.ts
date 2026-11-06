@@ -19,7 +19,7 @@ let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
   // The document routes address a workspace that exists; none is minted from a handle.
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' })
 })
 
 vi.mock('../../config.js', () => ({
@@ -38,7 +38,7 @@ const { createLiveDocRouter } = await import('./live-doc.js')
 const { createDocumentRouter } = await import('../document.js')
 
 beforeEach(async () => {
-  await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+  await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
   clearDocCacheForTests()
 })
 afterEach(() => {
@@ -64,10 +64,10 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
     const map = list.insertContainer(0, new LoroMap())
     map.set('id', 'elem-001')
     doc.commit()
-    await saveDocument('session1', 'canvas-a', doc)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
 
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/w/session1/document/canvas-a/snapshot')
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/snapshot')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('application/octet-stream')
 
@@ -83,13 +83,15 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
 
   it('returns 400 for an invalid path', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/w/session1/document/bad.path/snapshot')
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/bad.path/snapshot')
     expect(res.status).toBe(400)
   })
 
   it('returns 404 { error, message } for a canvas that was never created', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/w/session1/document/never-created/snapshot')
+    const res = await app.request(
+      '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/never-created/snapshot',
+    )
     expect(res.status).toBe(404)
     // The same body family as the workspace refusal in front of this route;
     // a document of either kind lives at this path, so the message names none.
@@ -100,11 +102,13 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
   })
 
   it('returns 404 for a canvas that existed and was deleted', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    await app.request('/api/workspaces/session1/documents/canvas-a', { method: 'DELETE' })
+    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a', {
+      method: 'DELETE',
+    })
 
-    const res = await app.request('/api/w/session1/document/canvas-a/snapshot')
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/snapshot')
     expect(res.status).toBe(404)
   })
 })
@@ -122,7 +126,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
 
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/w/session1/document/canvas-a/update', {
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -135,7 +139,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
 
     // Clear the cache, reload, and confirm the change was persisted.
     clearDocCacheForTests()
-    const serverDoc = await loadDocument('session1', 'canvas-a')
+    const serverDoc = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as { id: string; type: string }[]
     expect(elements).toHaveLength(1)
     expect(elements[0].id).toBe('elem-from-client')
@@ -148,7 +152,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
   it('refuses bytes Loro cannot decode with 400, and leaves the document as it was', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     for (const bytes of [new Uint8Array(), new Uint8Array([1, 2, 3])]) {
-      const res = await app.request('/api/w/session1/document/canvas-a/update', {
+      const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/octet-stream' },
         body: bytes,
@@ -161,7 +165,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
   it('rejects an oversized update body with 413 payload_too_large', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const oversized = new Uint8Array(16 * 1024 * 1024 + 1)
-    const res = await app.request('/api/w/session1/document/canvas-a/update', {
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: oversized,
@@ -180,11 +184,11 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     const initialElem = initialList.insertContainer(0, new LoroMap())
     initialElem.set('id', 'persisted')
     initial.commit()
-    await saveDocument('session1', 'canvas-a', initial)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', initial)
 
     // Pull it into the doc-cache so there is a live cached doc to poison.
-    const served = await app.request('/api/w/session1/document/canvas-a/snapshot')
-    expect(peekDoc('session1', 'canvas-a')).toBeDefined()
+    const served = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/snapshot')
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')).toBeDefined()
 
     // Build a client update that adds a second element, on the snapshot the
     // route served: the cached document is a projection with an oplog of its
@@ -203,7 +207,7 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     const saveSpy = vi
       .spyOn(DocumentStoreWorkspaceDocs.prototype, 'save')
       .mockRejectedValueOnce(new Error('simulated snapshot failure'))
-    const res = await app.request('/api/w/session1/document/canvas-a/update', {
+    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
@@ -213,9 +217,9 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     expect(res.status).toBe(500)
     // The cache must be evicted: without eviction, the in-memory doc already
     // absorbed the update even though saveDocument never persisted it.
-    expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')).toBeUndefined()
 
-    const reloaded = await getDoc('session1', 'canvas-a')
+    const reloaded = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
       (el) => el.id,
     )

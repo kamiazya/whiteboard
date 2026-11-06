@@ -1,4 +1,4 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -17,11 +17,11 @@ export const docRefSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('document'),
-      workspaceId: workspaceIdSchema,
+      workspaceId: workspaceCanonicalIdSchema,
       documentId: documentIdSchema,
     })
     .strict(),
-  z.object({ kind: z.literal('workspace-tree'), workspaceId: workspaceIdSchema }).strict(),
+  z.object({ kind: z.literal('workspace-tree'), workspaceId: workspaceCanonicalIdSchema }).strict(),
 ])
 
 export type DocRef = z.infer<typeof docRefSchema>

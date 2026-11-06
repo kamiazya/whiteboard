@@ -157,13 +157,26 @@ describe('/api/v1 workspace that names nothing', () => {
 
 describe('POST /api/v1 document creating a workspace under a handle that cannot be one', () => {
   it('is refused as a 400 naming the handle, since only the caller can pick another', async () => {
-    const { status, body, reason } = await refusal('/api/v1/workspaces/not_a_segment/documents', {
+    // Address-shaped, so it reaches the mint, and still no segment: the
+    // segment grammar keeps a hyphen off either end.
+    const { status, body, reason } = await refusal('/api/v1/workspaces/trailing-/documents', {
       ...json,
       body: JSON.stringify({ path: 'a', kind: 'markdown', createWorkspace: true }),
     })
     expect(status).toBe(400)
     expect(body).toMatchObject({ error: 'workspace_segment_unusable' })
-    expect(reason).toContain('Cannot create workspace "not_a_segment"')
+    expect(reason).toContain('Cannot create workspace "trailing-"')
+  })
+
+  // `_` is in neither the id nor the segment grammar, so a handle carrying
+  // one is not an address at all and is refused before anything is minted.
+  it('refuses a handle carrying `_` as no address, before the mint', async () => {
+    const { status, body } = await refusal('/api/v1/workspaces/not_a_segment/documents', {
+      ...json,
+      body: JSON.stringify({ path: 'a', kind: 'markdown', createWorkspace: true }),
+    })
+    expect(status).toBe(400)
+    expect(body).toMatchObject({ error: 'invalid_request' })
   })
 })
 

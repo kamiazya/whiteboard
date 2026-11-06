@@ -6,7 +6,7 @@ import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetOperation } from '../tools/document-set.js'
 import type { Embedder } from './embedder.js'
 
-const WS = 'sem'
+const WS = '01T7TRWH6PEFM9YR1AQHKCTNB5'
 
 function makeDeps(): ServerDeps {
   return makeTestDeps()

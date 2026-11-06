@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('./store/document-store.js', async () => {
   const { matchesWorkspaceLookup } = await import('@kamiazya/whiteboard-ports')
-  const rows = [{ workspaceId: 'ws_canonical', segment: 'alpha' }]
+  const rows = [{ workspaceId: '01KW0R7X0REFV7TSXJ14JPBV6Z', segment: 'alpha' }]
   return {
     workspaceRegistry: () => ({
       listWorkspaces: async () => rows,
@@ -37,18 +37,18 @@ describe('parseWorkspaceHandle', () => {
     expect(await res.json()).toEqual({
       error: 'invalid_workspace_id',
       message:
-        'Invalid workspaceId "bad.handle": only ASCII letters, digits, "_" and "-" are allowed',
+        'Invalid workspaceId "bad.handle": a workspace is addressed by its canonical id or by a segment (ASCII letters, digits and interior hyphens)',
     })
   })
 
   it('resolves a segment to the canonical id', async () => {
     const res = await appOver().request('/parse/alpha')
-    expect(await res.json()).toEqual({ workspaceId: 'ws_canonical' })
+    expect(await res.json()).toEqual({ workspaceId: '01KW0R7X0REFV7TSXJ14JPBV6Z' })
   })
 
   it('passes a handle matching nothing through unchanged', async () => {
-    const res = await appOver().request('/parse/nothing_here')
-    expect(await res.json()).toEqual({ workspaceId: 'nothing_here' })
+    const res = await appOver().request('/parse/nothing-here')
+    expect(await res.json()).toEqual({ workspaceId: 'nothing-here' })
   })
 })
 

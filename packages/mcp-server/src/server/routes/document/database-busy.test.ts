@@ -38,7 +38,7 @@ async function appOverABusyIndex() {
   const deps = resolveServerDeps(
     createContainer(createSelfHostStoreLocalModule(await getDb(tmp.dir), tmp.dir)),
   )
-  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-busy' })
+  await deps.documentIndex.createWorkspace({ workspaceId: '016WCJMZ760J092YN9AJMX142M' })
   const documentIndex = new Proxy(deps.documentIndex, {
     get(target, key, receiver) {
       if (typeof key === 'string' && BUSY_METHODS.has(key))
@@ -57,24 +57,29 @@ async function appOverABusyIndex() {
 
 describe('a busy database escapes the route catch-alls to the 503 answer', () => {
   it.each([
-    ['deleting a document', 'DELETE', '/api/workspaces/ws-busy/documents/a', undefined],
+    [
+      'deleting a document',
+      'DELETE',
+      '/api/workspaces/016WCJMZ760J092YN9AJMX142M/documents/a',
+      undefined,
+    ],
     [
       'renaming a document',
       'PUT',
-      '/api/workspaces/ws-busy/documents/a/path',
+      '/api/workspaces/016WCJMZ760J092YN9AJMX142M/documents/a/path',
       JSON.stringify({ path: 'b' }),
     ],
-    ['listing the trash', 'GET', '/api/workspaces/ws-busy/trash', undefined],
+    ['listing the trash', 'GET', '/api/workspaces/016WCJMZ760J092YN9AJMX142M/trash', undefined],
     [
       'restoring from the trash',
       'POST',
-      '/api/workspaces/ws-busy/trash/01H8XJZ9K5N4M3P2Q1R0S9T8V7/restore',
+      '/api/workspaces/016WCJMZ760J092YN9AJMX142M/trash/01H8XJZ9K5N4M3P2Q1R0S9T8V7/restore',
       undefined,
     ],
     [
       'purging from the trash',
       'DELETE',
-      '/api/workspaces/ws-busy/trash/01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      '/api/workspaces/016WCJMZ760J092YN9AJMX142M/trash/01H8XJZ9K5N4M3P2Q1R0S9T8V7',
       undefined,
     ],
   ] as const)('%s', async (_name, method, path, body) => {

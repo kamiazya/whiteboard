@@ -23,7 +23,7 @@ import type { LoroDoc } from 'loro-crdt'
 import type { ZodError } from 'zod'
 import { getLogger } from '../../log.js'
 import type { CallerName } from '../../security/membership-gate.js'
-import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateWorkspaceHandle, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from '../body-limit.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
@@ -77,7 +77,7 @@ async function admittedWorkspace(
   // by the page, which speaks Problem Details (`{ title }`), where the helper
   // answers the `{ error, message }` family.
   try {
-    validateWorkspaceId(handle)
+    validateWorkspaceHandle(handle)
   } catch (err) {
     const body = validationErrorBody(err)
     if (body) return { refusal: c.json({ title: body.message }, 400) }

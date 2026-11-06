@@ -61,9 +61,9 @@ describe('wb_scene_render / export parity', () => {
   it('wraps text at the same points as the exporter, because both measure with the real font', async () => {
     const deps = resolveServerDeps(createContainer(storeMemoryModule))
     // Placed, since the tool reads only a document its named workspace holds.
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const { documentId } = await deps.documentIndex.createDocument({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'board',
       kind: 'spatial',
     })
@@ -71,14 +71,14 @@ describe('wb_scene_render / export parity', () => {
     writeSpatialCanvas(doc, canvas)
     const snapshot = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1 << 20)
     await deps.documentStore.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: 'ws-1', documentId },
+      docRef: { kind: 'document', workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', documentId },
       manifest: snapshot.manifest,
       chunks: snapshot.chunks,
       frontier: new Uint8Array(),
     })
 
     const viaTool = await createCanvasRenderSvgTool(deps).execute({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId,
       embedReferences: false,
       comments: false,

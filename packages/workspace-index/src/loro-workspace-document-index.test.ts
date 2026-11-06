@@ -278,7 +278,7 @@ describe('LoroWorkspaceDocumentIndex duplicates', () => {
 // against the port-wide suite: a row-backed index has no folder to empty or to
 // collide with.
 describe('LoroWorkspaceDocumentIndex folders', () => {
-  const WS = 'ws-folders'
+  const WS = '01BSXMXYEPZGZYHNN3KTQZ33EE'
 
   async function makeIndex(): Promise<LoroWorkspaceDocumentIndex> {
     const docs = inMemoryWorkspaceDocs()
@@ -361,7 +361,7 @@ describe('LoroWorkspaceDocumentIndex folders', () => {
 // index write now refuses that path.
 describe('LoroWorkspaceDocumentIndex, a path stored off the grammar', () => {
   it('moves to a path the grammar accepts, and lists again', async () => {
-    const WS = 'ws-off-grammar'
+    const WS = '01FTVS1AXQE5KMZQPDXHC2RAKW'
     const docs = inMemoryWorkspaceDocs()
     const index = new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
     await index.createWorkspace({ workspaceId: WS })
@@ -390,7 +390,7 @@ describe('LoroWorkspaceDocumentIndex, a path stored off the grammar', () => {
  * taking the name is compared.
  */
 describe('LoroWorkspaceDocumentIndex names that collide in a merge', () => {
-  const WS = 'ws-merge'
+  const WS = '012DEQE42WVNWWDSRRY87GHG91'
 
   async function mergedDuplicates() {
     const docs = inMemoryWorkspaceDocs()

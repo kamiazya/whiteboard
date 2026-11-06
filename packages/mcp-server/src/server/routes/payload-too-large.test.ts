@@ -23,7 +23,7 @@ const tmp = withTempDataDir('whiteboard-payload-too-large-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: 's1' })
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01CEHRD78WBHCGPXDTJQF2GNQD' })
 })
 
 vi.mock('../config.js', () => ({
@@ -54,7 +54,7 @@ const CASES: readonly {
   {
     route: 'file upload',
     method: 'PUT',
-    path: '/api/w/s1/document/canvas-a/file/img1',
+    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/file/img1',
     build: () => createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir))),
     limit: 16 * MIB,
     noun: 'Upload',
@@ -62,7 +62,7 @@ const CASES: readonly {
   {
     route: 'PNG export',
     method: 'POST',
-    path: '/api/w/s1/document/canvas-a/export',
+    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/export',
     build: () =>
       createExportRouter({
         liveDocuments: { exists: async () => true },
@@ -74,7 +74,7 @@ const CASES: readonly {
   {
     route: 'SVG export',
     method: 'POST',
-    path: '/api/w/s1/document/canvas-a/export-svg',
+    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/export-svg',
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: MIB,
     noun: 'Request body',
@@ -82,7 +82,7 @@ const CASES: readonly {
   {
     route: 'live document update',
     method: 'POST',
-    path: '/api/w/s1/document/canvas-a/update',
+    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/update',
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: 16 * MIB,
     noun: 'Update',
@@ -90,7 +90,7 @@ const CASES: readonly {
   {
     route: 'workspace document update',
     method: 'POST',
-    path: '/api/w/s1/workspace-document/update',
+    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/update',
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: 16 * MIB,
     noun: 'Update',
@@ -98,7 +98,7 @@ const CASES: readonly {
   {
     route: 'workspace promotion',
     method: 'POST',
-    path: '/api/w/s1/workspace-document/promote',
+    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/promote',
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: 24 * MIB,
     noun: 'Promotion',
@@ -128,7 +128,7 @@ describe('a content route given more than a field-sized body', () => {
   // — and a route that forgot to would refuse every real promotion at a megabyte.
   it('reads a 2 MiB promotion body instead of refusing it as too large', async () => {
     const res = await createDocumentRouter(testDocumentRouterOptions({ serverDeps })).request(
-      '/api/w/s1/workspace-document/promote',
+      '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/promote',
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

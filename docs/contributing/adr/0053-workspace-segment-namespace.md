@@ -7,6 +7,18 @@ The implementation is sliced at the end of this record; all four slices
 (model/ports, the daemon registry with its three oracle paths, the web
 app's grammar, and the MCP tool surface) are built.
 
+**2026-11-06: the legacy id is gone.** This record was written beside a
+loose workspace id, `workspaceIdSchema` (`[a-zA-Z0-9_-]+`), which a bare
+handle still fell back to. It is deleted, not aliased: a workspace id is the
+canonical ULID in every port, row and tool answer, and a bare handle names a
+segment and nothing else, so every address form is one lookup. An address
+admits `[a-zA-Z0-9-]` (no `_`, which neither form holds). A row, a record key
+or a directory still keyed by anything else is from before the re-key and is
+refused by name — `CorruptStoredDataError` on the daemon's registry read,
+`StoredWorkspaceKeyError` on a stored record key, a warning from the file
+sweep — rather than resolved. The text below keeps the old schema's name
+where it describes what was decided.
+
 Amends [ADR-0019](0019-workspace-identity.md)'s user-facing layer, which
 says a segment is "unique per keeper".
 

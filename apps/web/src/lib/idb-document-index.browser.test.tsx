@@ -29,7 +29,7 @@ describe('IdbDocumentIndex row hydration', () => {
     await clearNamedDb(DB_NAME)
     try {
       const index = new IdbDocumentIndex(DB_NAME)
-      await index.createWorkspace({ workspaceId: 'ws' })
+      await index.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
       // Plant a corrupt row through the same transaction helper the class
       // uses, bypassing its own validated write path — the shape a buggy
       // writer, a devtools edit, or a future schema drift would leave
@@ -37,14 +37,18 @@ describe('IdbDocumentIndex row hydration', () => {
       // nothing below the schema refuses it.
       await inTransaction(DB_NAME, [DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
         await request(
-          tx
-            .objectStore(DOCUMENT_INDEX_STORE)
-            .put({ workspaceId: 'ws', documentId: generateDocumentId(), path: 42 }),
+          tx.objectStore(DOCUMENT_INDEX_STORE).put({
+            workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+            documentId: generateDocumentId(),
+            path: 42,
+          }),
         )
       })
       // A cast would answer this with `path: 42` inside a DocumentEntry —
       // corrupt data wearing the contract's type. The schema names the field.
-      await expect(index.listDocuments({ workspaceId: 'ws' })).rejects.toThrow(/path/)
+      await expect(
+        index.listDocuments({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' }),
+      ).rejects.toThrow(/path/)
     } finally {
       await clearNamedDb(DB_NAME)
     }
@@ -56,22 +60,24 @@ describe('IdbDocumentIndex legacy rows', () => {
     await clearNamedDb(DB_NAME)
     try {
       for (const path of ['b', 'a-b', 'a/c', 'a']) {
-        await seedLegacyRow({ workspaceId: 'ws', path, kind: 'spatial' }, DB_NAME)
+        await seedLegacyRow(
+          { workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path, kind: 'spatial' },
+          DB_NAME,
+        )
       }
       const index = new IdbDocumentIndex(DB_NAME)
       // The port's order, segment by segment, which is not IndexedDB's key
       // order: that one puts `a-b` before `a/c`, since `-` sorts below `/`.
-      expect((await index.listDocuments({ workspaceId: 'ws' })).map((row) => row.path)).toEqual([
-        'a',
-        'a/c',
-        'a-b',
-        'b',
-      ])
+      expect(
+        (await index.listDocuments({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })).map(
+          (row) => row.path,
+        ),
+      ).toEqual(['a', 'a/c', 'a-b', 'b'])
       // An error rather than an empty list, which a real but empty workspace
       // would also answer — the fold tells the two apart by it.
-      await expect(index.listDocuments({ workspaceId: 'elsewhere' })).rejects.toBeInstanceOf(
-        WorkspaceNotFoundError,
-      )
+      await expect(
+        index.listDocuments({ workspaceId: '01Q6XFTAGST51FSC29SNCHN6FK' }),
+      ).rejects.toBeInstanceOf(WorkspaceNotFoundError)
     } finally {
       await clearNamedDb(DB_NAME)
     }
@@ -80,17 +86,31 @@ describe('IdbDocumentIndex legacy rows', () => {
   it('retires the row an id names, below-path rows included, and again without complaint', async () => {
     await clearNamedDb(DB_NAME)
     try {
-      const parent = await seedLegacyRow({ workspaceId: 'ws', path: 'a', kind: 'spatial' }, DB_NAME)
-      await seedLegacyRow({ workspaceId: 'ws', path: 'a/b', kind: 'spatial' }, DB_NAME)
+      const parent = await seedLegacyRow(
+        { workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'a', kind: 'spatial' },
+        DB_NAME,
+      )
+      await seedLegacyRow(
+        { workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'a/b', kind: 'spatial' },
+        DB_NAME,
+      )
       const index = new IdbDocumentIndex(DB_NAME)
 
-      await index.retireDocument({ workspaceId: 'ws', documentId: parent.documentId })
+      await index.retireDocument({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        documentId: parent.documentId,
+      })
       // An interrupted fold repeats its retirement, so a second one is a no-op.
-      await index.retireDocument({ workspaceId: 'ws', documentId: parent.documentId })
+      await index.retireDocument({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        documentId: parent.documentId,
+      })
 
-      expect((await index.listDocuments({ workspaceId: 'ws' })).map((row) => row.path)).toEqual([
-        'a/b',
-      ])
+      expect(
+        (await index.listDocuments({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })).map(
+          (row) => row.path,
+        ),
+      ).toEqual(['a/b'])
     } finally {
       await clearNamedDb(DB_NAME)
     }
