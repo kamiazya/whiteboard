@@ -308,6 +308,8 @@ interface FolderActionsDeps {
   /** The panel's own move: it follows the previewed document and re-reads. */
   moveDocument: (entry: WorkspaceDocumentEntry, newPath: string) => Promise<void>
   goToFolder: (folder: string) => void
+  /** The workspace's memory scope, which a pending folder name is kept under for this tab. */
+  memoryScope?: string | undefined
 }
 
 /**
@@ -328,9 +330,10 @@ export function useFolderActions({
   rootRef,
   moveDocument,
   goToFolder,
+  memoryScope,
 }: FolderActionsDeps) {
   const { announcement, announce } = useAnnouncer()
-  const folderNames = useFolderNames(source, documents)
+  const folderNames = useFolderNames(source, documents, memoryScope)
   const { busy, error, setError, moveInto, renameFolder } = useFolderMoves({
     moveDocument,
     announce,
