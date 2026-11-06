@@ -44,7 +44,8 @@ several strokes loses only the strokes you crossed. One sweep is one step, so
 one undo brings back everything it erased. A screen reader hears "Erased 2
 drawings" for the sweep and "Restored 2 drawings" for the undo.
 
-Press `Esc`, or pick another tool, to put the eraser down.
+Press `Esc`, or pick another tool, to put the eraser down. `Esc` takes you back
+to the tool you had before it, so after a correction you are still drawing.
 
 ## Move a drawing
 

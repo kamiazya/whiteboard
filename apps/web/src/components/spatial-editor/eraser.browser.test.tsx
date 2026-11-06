@@ -101,3 +101,42 @@ it('E arms the eraser and Escape puts it down', async () => {
   await userEvent.keyboard('{Escape}')
   await expect.poll(() => pressed('select-tool-button')).toBe('true')
 })
+
+it('Escape puts the eraser down into the tool used before it', async () => {
+  const { Host } = makeEditorHost({ initial: board })
+  const { container } = render(<Host />)
+  const pressed = (testId: string) =>
+    container.querySelector(`[data-testid="${testId}"]`)?.getAttribute('aria-pressed')
+  rootOf(container).focus()
+  await userEvent.keyboard('d')
+  await expect.poll(() => pressed('draw-tool-button')).toBe('true')
+  await userEvent.keyboard('e')
+  await expect.poll(() => pressed('eraser-tool-button')).toBe('true')
+  await userEvent.keyboard('{Escape}')
+  await expect.poll(() => pressed('draw-tool-button')).toBe('true')
+})
+
+it('leaves no selection behind when the eraser takes a selected drawing', async () => {
+  const { Host, latest } = makeEditorHost({ initial: board })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  // Select the first scribble on one of its stored points.
+  const on = drawing('one', 100).bends?.[0] as { x: number; y: number }
+  press(root, 'pointerdown', on.x, on.y)
+  press(root, 'pointerup', on.x, on.y)
+  await expect.element(page.getByTestId('path-more-actions')).toBeInTheDocument()
+  root.focus()
+  await userEvent.keyboard('e')
+  press(root, 'pointerdown', 40, 200)
+  press(root, 'pointermove', 150, 200)
+  press(root, 'pointerup', 150, 200)
+  await expect.poll(() => latest.canvas.lines?.map((line) => line.id)).not.toContain('one')
+  expect(container.querySelector('[data-testid="path-more-actions"]')).toBeNull()
+  await userEvent.keyboard('{Escape}')
+  // A press on empty board afterwards selects nothing and opens nothing.
+  press(root, 'pointerdown', 700, 500)
+  press(root, 'pointerup', 700, 500)
+  expect(container.querySelector('[data-testid="path-more-actions"]')).toBeNull()
+  expect(container.querySelector('[data-testid="edge-end-handle-to"]')).toBeNull()
+  expect(latest.canvas.lines).toHaveLength(3)
+})
