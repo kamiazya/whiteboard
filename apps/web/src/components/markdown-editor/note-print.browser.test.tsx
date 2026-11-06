@@ -133,10 +133,18 @@ function ThemedNote({ theme }: { theme: 'light' | 'dark' }) {
   return <EmbedNote theme={theme} value={'## The cycle\n\n![[board]]\n\nRain falls.'} />
 }
 
-function EmbedNote({ theme = 'light', value }: { theme?: 'light' | 'dark'; value: string }) {
+function EmbedNote({
+  theme = 'light',
+  value,
+  canvas = BOARD,
+}: {
+  theme?: 'light' | 'dark'
+  value: string
+  canvas?: SpatialCanvas
+}) {
   const references = useReferenceSeams({
     body: value,
-    load: async () => ({ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'board', canvas: BOARD }),
+    load: async () => ({ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'board', canvas }),
   })
   return (
     <MarkdownEditor
@@ -228,6 +236,44 @@ describe('a heading before an embed, and a block taller than a page', () => {
       (box?.height ?? 0) / (box?.width ?? 1),
       1,
     )
+  })
+})
+
+const ARROW_BOARD: SpatialCanvas = {
+  nodes: [
+    textNode({ id: 'cloud', x: 0, y: 0, width: 160, height: 60, text: 'Cloud' }),
+    textNode({ id: 'rain', x: 0, y: 200, width: 160, height: 60, text: 'Rain' }),
+  ],
+  edges: [{ id: 'falls', from: { node: 'cloud' }, to: { node: 'rain' } }],
+}
+
+describe('an embedded board with arrows, printed', () => {
+  it('draws each strip with arrowheads defined inside that strip', async () => {
+    render(
+      <EmbedNote canvas={ARROW_BOARD} value={'## The cycle\n\n![[board]]\n\n## After\n\nOk.'} />,
+    )
+    await expect.poll(drawnEmbed).toBe(true)
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(2)
+    const refs: { band: Element; id: string }[] = []
+    for (const band of document.querySelectorAll('[data-testid="note-print-band"]')) {
+      for (const path of band.querySelectorAll('[marker-end]')) {
+        const id = /^url\(#(.+)\)$/.exec(path.getAttribute('marker-end') ?? '')?.[1]
+        if (id !== undefined) refs.push({ band, id })
+      }
+    }
+    // The arrow is present, or the check below asserts nothing.
+    expect(refs.length).toBeGreaterThan(0)
+    for (const { band, id } of refs) {
+      // `url(#id)` resolves to the FIRST element with that id in the page;
+      // the on-screen preview is hidden while printing, so a marker there
+      // draws no arrowhead on paper.
+      const marker = document.getElementById(id)
+      expect(marker !== null && band.contains(marker)).toBe(true)
+      expect(getComputedStyle(band).display).not.toBe('none')
+    }
   })
 })
 
