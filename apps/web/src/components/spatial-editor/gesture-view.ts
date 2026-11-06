@@ -13,7 +13,13 @@
  * stay cheap enough to call at either cadence.
  */
 
-import type { BoundingBox, EdgeSides, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  BoundingBox,
+  EdgeAnchorOverride,
+  EdgeAnchorPair,
+  EdgeSides,
+  Scene,
+} from '@kamiazya/whiteboard-canvas-render'
 import { isFrame, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { carriedWithDrag } from './drag-preview.js'
@@ -179,6 +185,37 @@ export function frozenSidesOf(scene: Scene): ReadonlyMap<string, EdgeSides> {
       n.kind === 'edge' ? [[n.id, { fromSide: n.fromSide, toSide: n.toSide }] as const] : [],
     ),
   )
+}
+
+/**
+ * The override that holds every edge the gesture does NOT carry exactly
+ * where the committed render drew it: its frozen sides, plus the committed
+ * anchor state — the points and lane depths (a carried edge joining a
+ * bystander's (node, side) group would otherwise re-fraction it) and
+ * whether the committed search stepped it round what was in its way. A
+ * straight edge left without `around` takes its corner route instead, so a
+ * route nobody touched would jump the moment a drag starts. Carried edges
+ * are left out: they re-side through the optimizer.
+ */
+export function bystanderOverrides(
+  frozenSides: ReadonlyMap<string, EdgeSides>,
+  committedAnchors: ReadonlyMap<string, EdgeAnchorPair>,
+  carriedEdgeIds: ReadonlySet<string>,
+): Map<string, EdgeAnchorOverride> {
+  const overrides = new Map<string, EdgeAnchorOverride>()
+  for (const [id, pair] of frozenSides) {
+    if (carriedEdgeIds.has(id)) continue
+    const pin = committedAnchors.get(id)
+    overrides.set(id, {
+      ...pair,
+      from: pin?.from,
+      fromLaneDepth: pin?.fromLaneDepth,
+      to: pin?.to,
+      toLaneDepth: pin?.toLaneDepth,
+      ...(pin?.around === true ? { around: true as const } : {}),
+    })
+  }
+  return overrides
 }
 
 /**

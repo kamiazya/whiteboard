@@ -33,6 +33,7 @@ import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { computeDragPreview } from './drag-preview.js'
 import {
+  bystanderOverrides,
   type CarriedSideCache,
   canReuseCarriedSides,
   carriedByGesture,
@@ -374,22 +375,10 @@ export function useDragLayers({
         .filter((edge) => endIn(edge.from, carried) || endIn(edge.to, carried))
         .map((edge) => edge.id),
     )
-    const frozenSides = new Map(
-      [...frozenSidesOf(gestureCommitted.scene)]
-        .filter(([id]) => !carriedEdgeIds.has(id))
-        .map(([id, pair]) => {
-          const pin = dragStatic.committedAnchors.get(id)
-          return [
-            id,
-            {
-              ...pair,
-              from: pin?.from,
-              fromLaneDepth: pin?.fromLaneDepth,
-              to: pin?.to,
-              toLaneDepth: pin?.toLaneDepth,
-            },
-          ] as const
-        }),
+    const frozenSides = bystanderOverrides(
+      frozenSidesOf(gestureCommitted.scene),
+      dragStatic.committedAnchors,
+      carriedEdgeIds,
     )
     const cacheKey = carriedSideCacheKey(carriedEdgeIds)
     const cache = carriedSideCacheRef.current
