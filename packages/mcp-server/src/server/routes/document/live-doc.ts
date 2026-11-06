@@ -1,102 +1,22 @@
-import type { UpdateDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import {
-  type ApiErrorBody,
-  applyDocumentUpdate,
-  DocumentCreationRefusedError,
-  errorBody,
-  type ServerDeps,
-  syncWriteAnswer,
-} from '@kamiazya/whiteboard-server-core'
-import { type Context, Hono } from 'hono'
-import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
-import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from '../body-limit.js'
-import { type DocumentHandler, onDocumentAction } from './path-route.js'
+import type { ApiErrorBody, ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { Hono } from 'hono'
+import { onDocumentAction } from './path-route.js'
 
 export interface LiveDocRouterOptions {
-  triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
-  // The live-document seam the routes read and write through, handed down
-  // from document.ts.
+  // The live-document seam the route reads through, handed down from
+  // document.ts.
   serverDeps: ServerDeps
-  /** See `DocumentRouterOptions.mayPlaceDocuments`: an update to a path no
-   *  document holds is a create, and needs it. */
-  mayPlaceDocuments: (c: Context) => boolean
-}
-
-/**
- * Runs the update, answering a refusal the way every sync surface answers it
- * (`syncWriteAnswer`): a size limit 413, an engine abort `document_engine_trap`
- * — the operation has already dropped the doc it poisoned, so the next
- * request is served — and a create the caller's grant does not reach 403.
- * Nothing of a refused update is kept.
- */
-async function answeringWriteRefusal(
-  c: Context,
-  run: () => Promise<LoroDoc>,
-): Promise<LoroDoc | Response> {
-  try {
-    return await run()
-  } catch (err) {
-    if (err instanceof DocumentCreationRefusedError) {
-      return c.json(errorBody('auth.forbidden', 'Creating a document needs workspace:write'), 403)
-    }
-    const answer = syncWriteAnswer(err)
-    if (answer === undefined) throw err
-    return c.json(errorBody(answer.code, (err as Error).message), answer.status)
-  }
 }
 
 // GET /api/w/:workspaceId/document/*/snapshot
-// POST /api/w/:workspaceId/document/*/update
 //
-// Translation-only adapters (ADR-0018): the reads go through the
-// LiveDocuments seam, and the update path — lock bracket, import, persist,
-// evict-on-failure — lives in server-core's applyDocumentUpdate.
-//
-// No app surface writes through the per-document update: the editors sync the
-// workspace record, and a duplicate is its own route. Nor does the sync path
-// read the per-document snapshot — the SharedWorker keeps a replica only for
-// a `workspace:` key; its readers are one-off reads by path (the web app's
-// file adapter and API client). It stays as the one HTTP way to write ONE
-// document's content by path, which the packaged server-mode
-// backup smoke, the sync-update cost measure and the daemon's own route tests
-// drive. Retiring it means moving those onto the workspace-document route
-// first, together with `sync-key`'s per-document `documentRouteUrl` branch.
-function updateHandler(options: LiveDocRouterOptions): DocumentHandler {
-  const deps = options.serverDeps
-  return async (c, workspaceId, path) => {
-    const bytes = new Uint8Array(await c.req.arrayBuffer())
-    // Bytes Loro cannot decode are the client's mistake, answered the way
-    // the workspace-document route answers its own: checked before the
-    // import, so a decode failure never escapes the handler as a 500.
-    try {
-      decodeImportBlobMeta(bytes, true)
-    } catch {
-      return c.json({ error: 'invalid_body', message: 'Malformed document update' }, 400)
-    }
-    const doc = await answeringWriteRefusal(c, () =>
-      applyDocumentUpdate(deps, {
-        workspaceId,
-        path,
-        update: bytes,
-        mayCreateDocument: options.mayPlaceDocuments(c),
-      }),
-    )
-    if (doc instanceof Response) return doc
-
-    // No explicit broadcast: the save persisted through the workspace
-    // record, whose funnel already fanned the persisted bytes to every
-    // subscriber (including the sender, whose re-import is a CRDT no-op).
-
-    // Signal that the document changed. The checkpoint lands once it goes
-    // quiet, and the trigger broadcasts it from there — this call is
-    // synchronous and cannot fail the update.
-    options.triggerAutoVersion(workspaceId, path, doc)
-
-    const response: UpdateDocumentResponse = { ok: true }
-    return c.json(response)
-  }
-}
-
+// A translation-only adapter (ADR-0018) over the LiveDocuments seam: one
+// document's content, by path, as Loro snapshot bytes. Nothing writes ONE
+// document's content over HTTP — editors sync the workspace record through
+// the workspace-document routes, and a duplicate is its own route — so this
+// read is the whole of the per-document live surface. Its readers are
+// one-off reads outside sync: the web app's embed loader and thumbnail
+// source.
 export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
   const deps = options.serverDeps
@@ -120,14 +40,6 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       'Content-Type': 'application/octet-stream',
     })
   })
-
-  onDocumentAction(
-    app,
-    'post',
-    'update',
-    updateHandler(options),
-    limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Update'),
-  )
 
   return app
 }

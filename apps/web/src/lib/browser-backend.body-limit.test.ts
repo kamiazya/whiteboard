@@ -116,7 +116,7 @@ describe('a browser-kept markdown body pushed past the limit', () => {
 })
 
 /**
- * The same four edits `apply-document-update-limit.test.ts` sends through the
+ * The same four edits `sync-update-limit.test.ts` sends through the
  * daemon's sync operation, with the same verdicts: both keepers judge a write
  * by what it does to the text, so a write one keeper takes the other takes.
  */

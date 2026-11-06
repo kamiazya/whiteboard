@@ -69,7 +69,7 @@ async function openWorkspace(workspaceId: string) {
   return new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(workspaceId)
 }
 
-/** Migration 0017 dropped the documents table outright: the tree is the whole address book. */
+/** The schema has no documents table: the tree is the whole address book. */
 const documentsTableExists = (): Promise<boolean> => tableExists(handle.rawDb, 'documents')
 
 it('a save with a kind lands on the workspace tree node and writes no per-document record and no row', async () => {

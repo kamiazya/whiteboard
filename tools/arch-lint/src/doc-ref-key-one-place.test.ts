@@ -121,18 +121,4 @@ describe('the stored document key is spelled in one place', () => {
     // Two templates in `docRefKey`, one regex in `workspaceIdOfStoredDocKey`.
     expect(spellings(readFileSync(join(REPO_ROOT, DECLARATION_SITE), 'utf8'))).toBe(3)
   })
-
-  it('leaves the frozen migrations out of the scan, one of which still slices the prefix', () => {
-    // `isExcludedPath` skips the migrations directory wholesale, so this is
-    // how migration 0007's `slice('workspace-tree:'.length)` stays allowed: a
-    // migration names the key as it stood when it ran and must not follow the
-    // live spelling. Pinned on both sides so the exclusion is a claim that is
-    // true rather than a directory that happens to be skipped.
-    const migration = join(
-      REPO_ROOT,
-      'packages/mcp-server/src/server/store/db/migrations/0007-adopt-workspace-tree.ts',
-    )
-    expect(isExcludedPath(migration)).toBe(true)
-    expect(spellings(readFileSync(migration, 'utf8'))).toBeGreaterThan(0)
-  })
 })

@@ -17,23 +17,23 @@ describe('AuthDecision failure-variant contract (compile-time regression)', () =
   // contract loosens — that's the regression. The lines below must
   // each be a *type error*, otherwise the typecheck guard is gone.
 
-  it('rejects { status: 401, code: "auth.forbidden" } at the type level', () => {
+  it('rejects { status: 401, code: "auth_forbidden" } at the type level', () => {
     const bad: AuthDecision = {
       ok: false,
       status: 401,
-      // @ts-expect-error 401 must pair with code 'auth.required'
-      code: 'auth.forbidden',
+      // @ts-expect-error 401 must pair with code 'auth_required'
+      code: 'auth_forbidden',
       wwwAuthenticate: 'Bearer',
     }
     expect(bad.ok).toBe(false)
   })
 
-  it('rejects { status: 403, code: "auth.required" } at the type level', () => {
+  it('rejects { status: 403, code: "auth_required" } at the type level', () => {
     const bad: AuthDecision = {
       ok: false,
       status: 403,
-      // @ts-expect-error 403 must pair with code 'auth.forbidden'
-      code: 'auth.required',
+      // @ts-expect-error 403 must pair with code 'auth_forbidden'
+      code: 'auth_required',
     }
     expect(bad.ok).toBe(false)
   })
@@ -42,7 +42,7 @@ describe('AuthDecision failure-variant contract (compile-time regression)', () =
     const bad: AuthDecision = {
       ok: false,
       status: 403,
-      code: 'auth.forbidden',
+      code: 'auth_forbidden',
       // @ts-expect-error 403 cannot carry wwwAuthenticate (no challenge on insufficient credentials)
       wwwAuthenticate: 'Bearer',
     }
@@ -54,7 +54,7 @@ describe('AuthDecision failure-variant contract (compile-time regression)', () =
     const bad: AuthDecision = {
       ok: false,
       status: 401,
-      code: 'auth.required',
+      code: 'auth_required',
     }
     expect(bad.ok).toBe(false)
   })
@@ -63,7 +63,7 @@ describe('AuthDecision failure-variant contract (compile-time regression)', () =
     const bad: AuthDecision = {
       ok: false,
       status: 401,
-      code: 'auth.required',
+      code: 'auth_required',
       // @ts-expect-error wwwAuthenticate is a literal 'Bearer' on the 401 variant
       wwwAuthenticate: 'Bearer realm="local-daemon"',
     }

@@ -243,7 +243,7 @@ export function sseStreamSourceContract(
     // tabs, and never persisted: the failure looks exactly like success until
     // the page is reloaded.
     const h = await create()
-    const doc = nextDoc()
+    const doc = nextWorkspaceDoc()
     await subscribed(h, doc)
 
     h.source.push(doc, LORO_UPDATE)
@@ -358,7 +358,7 @@ function snapshotCases(
     // reconstructs from stream traffic alone passes every other case in this
     // file and still hands a forking tab partial truth.
     const h = await create()
-    const doc = nextDoc()
+    const doc = nextWorkspaceDoc()
     h.seedDaemonState(doc, LORO_UPDATE)
     // With no subscription: a snapshot answers a request, not a
     // subscription, and a caller may ask with no listener at all — an
@@ -378,7 +378,7 @@ function snapshotCases(
     // Loro refuses to import zero bytes. `null` stays the daemon's own
     // answer for a document it does not know.
     const h = await create()
-    const doc = nextDoc()
+    const doc = nextWorkspaceDoc()
     h.seedDaemonState(doc, LORO_UPDATE)
     h.failsNextRead(doc)
 
@@ -489,7 +489,7 @@ function pushRefusalJoinerCases(
   // joins afterwards has nothing to be told until its own push is refused.
   it('does not tell a listener joining after a refused push that it was refused', async () => {
     const h = await create()
-    const doc = nextIsolatedDoc()
+    const doc = nextWorkspaceDoc()
     h.refusePush(doc)
     const refused = { first: 0, second: 0 }
     const firstStates: boolean[] = []

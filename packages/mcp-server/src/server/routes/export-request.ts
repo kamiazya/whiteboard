@@ -207,7 +207,6 @@ export async function readExportBody<S extends z.ZodType<{ style?: SpatialRender
   schema: S,
 ): Promise<{ data: z.infer<S> } | { refusal: Response }> {
   const read = await readJsonBody(c, schema, {
-    voice: 'code',
     optional: true,
     refuseShape: invalidRequestBody,
   })

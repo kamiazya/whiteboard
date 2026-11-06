@@ -58,40 +58,30 @@ const server = setupServer(
     const body = (await request.json()) as (typeof subscribeBodies)[number]
     subscribeBodies.push(body)
     if (body.subscribe?.some((doc) => refusedDocs.has(doc))) {
-      return HttpResponse.json({ title: 'forbidden' }, { status: 403 })
+      return HttpResponse.json({ error: 'refused', message: 'forbidden' }, { status: 403 })
     }
     return HttpResponse.json({ ok: true })
-  }),
-  // The daemon's snapshot route: what the worker seeds its replica from on
-  // first touch of a document. Pre-existing content lives here.
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
-    const doc = `${String(params.workspaceId)}/${String(params.path)}`
-    if (failingReads.delete(doc)) {
-      return HttpResponse.json({ title: 'unavailable' }, { status: 503 })
-    }
-    const bytes = daemonState.get(doc)
-    if (!bytes) return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
-    return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
-      status: 200,
-      headers: { 'Content-Type': 'application/octet-stream' },
-    })
   }),
   // The workspace record's snapshot route, which a `workspace:` key's replica
   // seeds from once the stream carries it.
   http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
-    const bytes = daemonState.get(`workspace:${String(params.workspaceId)}`)
-    if (!bytes) return HttpResponse.json({ title: 'not found' }, { status: 404 })
+    const doc = `workspace:${String(params.workspaceId)}`
+    if (failingReads.delete(doc)) {
+      return HttpResponse.json({ error: 'unavailable' }, { status: 503 })
+    }
+    const bytes = daemonState.get(doc)
+    if (!bytes)
+      return HttpResponse.json({ error: 'refused', message: 'not found' }, { status: 404 })
     return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },
     })
   }),
-  // The canvas update route: where a push lands, after the worker's replica
-  // has merged it. Addressed by workspace and path, which the worker
-  // reconstructs from the document key it routes everything else by.
-  http.post(`${BASE}/api/w/:workspaceId/document/:path/update`, async ({ request, params }) => {
-    const doc = `${String(params.workspaceId)}/${String(params.path)}`
-    if (refusedPushes.has(doc)) return HttpResponse.json({ title: 'forbidden' }, { status: 403 })
+  // The workspace-document update route: where a push lands, after the
+  // worker's replica has merged it.
+  http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
+    const doc = `workspace:${String(params.workspaceId)}`
+    if (refusedPushes.has(doc)) return HttpResponse.json({ error: 'forbidden' }, { status: 403 })
     daemonWrites.push({ doc, body: new Uint8Array(await request.arrayBuffer()) })
     return HttpResponse.json({ ok: true })
   }),

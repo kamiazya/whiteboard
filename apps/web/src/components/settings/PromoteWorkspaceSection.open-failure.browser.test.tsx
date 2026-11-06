@@ -80,7 +80,10 @@ describe('PromoteWorkspaceSection preparing the move', () => {
   it('quotes a daemon that refuses the listing rather than calling it unreachable', async () => {
     const logged = expectLoggedFailures()
     const refusing = listingStub(() =>
-      Response.json({ title: 'Only members of this daemon can list it.' }, { status: 403 }),
+      Response.json(
+        { error: 'auth_forbidden', message: 'Only members of this daemon can list it.' },
+        { status: 403 },
+      ),
     )
     const notice = await openAndReadNotice(refusing)
     expect(notice.textContent).toMatch(/only members of this daemon can list it/i)

@@ -88,7 +88,7 @@ export interface DocumentRouterOptions {
   ownerChange?: OwnerChange
 }
 
-// The checkpoint trigger the live-doc and workspace-document update routes fire.
+// The checkpoint trigger the workspace-document update route fires.
 function armAutoVersionTrigger(
   options: DocumentRouterOptions,
   versionStore: VersionStore,
@@ -141,7 +141,7 @@ function refuseUnaddressable(app: Hono, serverDeps: ServerDeps): void {
 }
 
 // Entry point that composes the document API's sub-routers: workspace/document
-// CRUD, names/pin metadata, the live-doc snapshot+update path, version
+// CRUD, names/pin metadata, the per-document snapshot read, version
 // history (list/save/restore), and maintenance (compact/prune/
 // optimize). Split by concern so each is independently testable; this file
 // only wires shared dependencies (versionStore, auto-version trigger) between
@@ -162,7 +162,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     serverDeps: options.serverDeps,
     mayPlaceDocuments: options.mayPlaceDocuments,
   }
-  app.route('/', createLiveDocRouter(sync))
+  app.route('/', createLiveDocRouter({ serverDeps: options.serverDeps }))
   app.route('/', createWorkspaceDocumentRouter({ ...sync, ...whoSaved(options) }))
   app.route(
     '/',

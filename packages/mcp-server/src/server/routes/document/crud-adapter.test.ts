@@ -326,8 +326,8 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     })
 
     expect(res.status).toBe(409)
-    const body = (await res.json()) as { title?: string }
-    expect(body.title).toContain('archive/child')
+    const body = (await res.json()) as { message?: string }
+    expect(body.message).toContain('archive/child')
   })
 
   it('answers 400 for a move into the document own subtree', async () => {
@@ -378,8 +378,9 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     const res = await app.request('/api/workspaces/ws-1/documents/doomed', { method: 'DELETE' })
 
     expect(res.status).toBe(409)
-    expect((await res.json()) as { title?: string }).toMatchObject({
-      title: expect.stringContaining('doomed/child'),
+    expect((await res.json()) as { message?: string }).toMatchObject({
+      error: 'document_has_descendants',
+      message: expect.stringContaining('doomed/child'),
     })
     expect(entered).toEqual(['ws-1:doomed'])
     expect(cleaned).toEqual([])

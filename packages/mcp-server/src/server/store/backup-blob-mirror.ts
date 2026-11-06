@@ -34,8 +34,8 @@ import {
   listTenants,
   parseBlobShard,
 } from '../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 import { BACKUP_DIR_MODE, BACKUP_FILE_MODE } from './backup-modes.js'
+import { IncompatibleDatabaseError, retiredStorageMessage } from './db/incompatible-database.js'
 
 const log = getLogger('backup-blob-mirror')
 
@@ -122,13 +122,11 @@ const manifestSchema = z.object({
   mirror: mirrorLocationSchema,
 })
 
-/** What a backup taken before tenants existed recorded: one keeper, one set. */
-const legacyManifestSchema = z.object({
-  schemaVersion: z.literal(2),
-  blobs: z.array(DIGEST),
-  files: z.record(FILE_PATH, DIGEST),
-  mirror: mirrorLocationSchema,
-})
+/**
+ * Any manifest version before the current one. Only its number is read: the
+ * shape an earlier release wrote is refused, never interpreted.
+ */
+const retiredManifestSchema = z.object({ schemaVersion: z.number().int().lt(3) })
 
 /** What one backup references, in the two shapes the mirror stores. */
 interface TenantBlobReferences {
@@ -137,7 +135,7 @@ interface TenantBlobReferences {
 }
 
 export interface BackupBlobReferences {
-  /** By tenant id. A backup taken before tenants existed reads as the self-host one. */
+  /** By tenant id. */
   tenants: Readonly<Record<string, TenantBlobReferences>>
   mirror: 'self' | 'parent'
 }
@@ -343,6 +341,10 @@ async function walkFiles(
  * were the backup's blobs, and reported success over documents pointing at
  * nothing. Each caller decides what an unusable manifest costs it —
  * retention collects nothing, restore refuses.
+ *
+ * A manifest an earlier release wrote, at an older `schemaVersion`, throws
+ * `IncompatibleDatabaseError` instead, with the message boot gives the
+ * database such a backup restores.
  */
 export async function readBackupBlobManifest(
   backupDir: string,
@@ -372,16 +374,8 @@ export async function readBackupBlobManifest(
       mirror: parsed.data.mirror,
     }
   }
-  // A backup taken before tenants existed: one keeper, one set, and the
-  // tenant it belongs to is the one that keeper had.
-  const legacy = legacyManifestSchema.safeParse(json)
-  if (legacy.success) {
-    return {
-      tenants: {
-        [SELF_HOST_TENANT_ID]: { blobs: new Set(legacy.data.blobs), files: legacy.data.files },
-      },
-      mirror: legacy.data.mirror,
-    }
+  if (retiredManifestSchema.safeParse(json).success) {
+    throw new IncompatibleDatabaseError(retiredStorageMessage(`The backup ${backupDir}`))
   }
   throw new BackupManifestUnusableError(backupDir, 'does not match any manifest version', undefined)
 }

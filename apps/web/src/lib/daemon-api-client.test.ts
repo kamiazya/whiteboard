@@ -157,8 +157,10 @@ describe('listWorkspaces', () => {
     await expectLoggedFailure('/api/workspaces failed its contract')
   })
 
-  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
+  it('rejects on a non-2xx response, surfacing the daemon reason', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Not found' }, 404))
     await expect(listWorkspaces(fetchFn, DAEMON_BASE_URL)).rejects.toThrow(/not found/i)
   })
 
@@ -250,8 +252,10 @@ describe('listDocuments', () => {
     await expectLoggedFailure('/api/workspaces/w1/documents failed its contract at documents.0')
   })
 
-  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Server error' }, 500))
+  it('rejects on a non-2xx response, surfacing the daemon reason', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Server error' }, 500))
     await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/server error/i)
   })
 })
@@ -287,8 +291,10 @@ describe('createDocument', () => {
     await expectLoggedFailure('/api/v1/workspaces/w1/documents failed its contract')
   })
 
-  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Conflict' }, 409))
+  it('rejects on a non-2xx response, surfacing the daemon reason', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Conflict' }, 409))
     await expect(createDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'x', 'spatial')).rejects.toThrow(
       /conflict/i,
     )
@@ -362,8 +368,10 @@ describe('deleteDocument', () => {
     expect((init as RequestInit).method).toBe('DELETE')
   })
 
-  it('rejects on a 404, surfacing the problem-details title', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Canvas not found' }, 404))
+  it('rejects on a 404, surfacing the daemon reason', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Canvas not found' }, 404))
     await expect(deleteDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'gone')).rejects.toThrow(
       /canvas not found/i,
     )
@@ -384,8 +392,10 @@ describe('getDocumentSnapshot', () => {
     expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/w/w1/document/main/snapshot`)
   })
 
-  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Not found' }, 404))
+  it('rejects on a non-2xx response, surfacing the daemon reason', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Not found' }, 404))
     await expect(getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
       /not found/i,
     )
@@ -464,7 +474,9 @@ describe('duplicateDocument', () => {
   it("rejects on a refusal, surfacing the daemon's reason", async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ title: 'No document "gone" to duplicate' }, 404))
+      .mockResolvedValue(
+        jsonResponse({ error: 'refused', message: 'No document "gone" to duplicate' }, 404),
+      )
     await expect(duplicateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'gone')).rejects.toThrow(
       /to duplicate/,
     )
@@ -484,8 +496,10 @@ describe('setDocumentDisplayName', () => {
     expect(JSON.parse(String(initArg?.body))).toEqual({ name: 'My canvas' })
   })
 
-  it('rejects on a non-2xx response, surfacing problem+json detail', async () => {
-    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ title: 'Bad request' }, 400))
+  it('rejects on a non-2xx response, surfacing the daemon reason', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Bad request' }, 400))
     await expect(
       setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'x'),
     ).rejects.toThrow(/bad request/i)
@@ -520,7 +534,9 @@ describe('renameDocumentPath', () => {
   it('carries the server’s conflict message through, with its status', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ title: 'Path "archive/notes/a" already exists' }, 409))
+      .mockResolvedValue(
+        jsonResponse({ error: 'refused', message: 'Path "archive/notes/a" already exists' }, 409),
+      )
 
     await expect(
       renameDocumentPath(fetchFn, DAEMON_BASE_URL, 'w1', 'design/notes', 'archive/notes'),
@@ -557,7 +573,9 @@ describe('createWorkspace', () => {
   it('surfaces the daemon reason for a refused segment', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ title: 'Segment "taken" is already in use' }, 409))
+      .mockResolvedValue(
+        jsonResponse({ error: 'refused', message: 'Segment "taken" is already in use' }, 409),
+      )
     await expect(createWorkspace(fetchFn, DAEMON_BASE_URL, 'Taken')).rejects.toThrow(
       /already in use/i,
     )
@@ -591,7 +609,9 @@ describe('renameWorkspace', () => {
   it('surfaces the daemon reason for a refused rename', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(jsonResponse({ title: 'Segment "taken" is already in use' }, 409))
+      .mockResolvedValue(
+        jsonResponse({ error: 'refused', message: 'Segment "taken" is already in use' }, 409),
+      )
     await expect(
       renameWorkspace(fetchFn, DAEMON_BASE_URL, 'w1', { segment: 'taken' }),
     ).rejects.toThrow(/already in use/i)

@@ -971,6 +971,184 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:native-host
 
+  # The Cargo workspace (crates/, ADR-0054): every merge gate `pnpm
+  # rust:check` runs, the wasm release build, and the Linux leg of the release
+  # gates. Scoped by PATH (affected.mjs's PATH_JOBS): a change to no Cargo
+  # file or crate skips it, and a crates-only change runs it and not the
+  # vitest matrix.
+  #
+  # RUSTFLAGS is left unset on purpose: it silently REPLACES every other
+  # source of rustflags, and `cargo xtask dist` builds from its own
+  # CARGO_ENCODED_RUSTFLAGS so the size ledger and the reproducibility check
+  # measure the bytes that ship.
+  rust:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+    steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job rust --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
+      # The rust:* scripts are Node, and pnpm refuses to run a script over an
+      # uninstalled workspace.
+      - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      # rust-toolchain.toml pins the channel, its components and the wasm32
+      # target; a bare `toolchain install` reads it (rustup >= 1.28 no longer
+      # installs on `rustup show`).
+      - name: Rust toolchain (rust-toolchain.toml)
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          rustup toolchain install
+          rustup show
+
+      # Prebuilt binaries at the versions the scripts name; `fallback: none`
+      # so a version the action cannot provide fails here instead of quietly
+      # building from source or installing another one.
+      - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+        if: steps.scope.outputs.run == 'true'
+        with:
+          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.130,cargo-auditable@0.7.7,cargo-about@0.9.3
+          fallback: none
+
+      # Both workspaces' dependency builds, keyed on the toolchain and each
+      # Cargo.lock (crates/fuzz has its own). Saved from main only, so pull
+      # requests restore one shared entry instead of each filling the cache.
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: steps.scope.outputs.run == 'true'
+        with:
+          workspaces: |
+            . -> target
+            crates/fuzz -> target
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Rust merge gates (fmt, clippy, tests, xtask guards, cargo-deny)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm rust:check
+
+      - name: Wasm release build (cargo xtask dist wasm)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm rust:build:wasm
+
+      - name: Rust release gates (dist native, harden-check, repro-check, notices)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm rust:release:check
+
+  # The fuzz targets a change can reach, about 30 s each without a sanitizer
+  # (`pnpm rust:fuzz:pr`); rust-fuzz-nightly.yml runs every target for
+  # minutes under ASan. Same scope as `rust`. A pull request selects targets
+  # by its diff against the base tip (HEAD^1 of the merge commit); every other
+  # event runs them all, since it has no diff to select by.
+  rust-fuzz-pr:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+    steps:
+      # Two commits, so the merge commit's first parent (the base tip) is
+      # there to diff against.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      # This job's share of the change scope, computed here rather than read
+      # from the `scope` job: see that job's comment for why there is no hop.
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job rust-fuzz-pr --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        # An annotation, so the skip and its reason show on the run summary.
+        run: echo "::notice title=Not affected by this change::$REASON"
+
+      # The rust:* scripts are Node, and pnpm refuses to run a script over an
+      # uninstalled workspace.
+      - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Pinned nightly toolchain (crates/fuzz/rust-toolchain.toml)
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          channel=$(sed -n 's/^channel = "\(.*\)"/\1/p' crates/fuzz/rust-toolchain.toml)
+          rustup toolchain install "$channel" --profile minimal --component llvm-tools --component rust-src
+
+      # Restore-only, from the nightly run's entry: its corpus seeds the
+      # short run, and its cargo-fuzz install saves a source build. The path
+      # list must equal the nightly's exactly — it is part of the cache key.
+      - name: Restore the nightly corpus, fuzz build and cargo-fuzz
+        if: steps.scope.outputs.run == 'true'
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            crates/fuzz/corpus
+            crates/fuzz/target
+            ~/.cargo/bin/cargo-fuzz
+          key: rust-fuzz-corpus-
+          restore-keys: rust-fuzz-corpus-
+
+      - name: cargo-fuzz
+        if: steps.scope.outputs.run == 'true'
+        run: cargo fuzz --version || cargo install --locked cargo-fuzz --version 0.13.2
+
+      - name: Fuzz the targets this change reaches
+        if: steps.scope.outputs.run == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          RUST_FUZZ_BASE: HEAD^1
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            pnpm rust:fuzz:pr
+          else
+            pnpm rust:fuzz:pr --all
+          fi
+
+      - name: Upload fuzz findings
+        if: failure() && steps.scope.outputs.run == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rust-fuzz-pr-findings
+          path: |
+            crates/fuzz/artifacts
+            crates/fuzz/regressions
+          retention-days: 14
+
   # The change scope of this run, for ci-gate and the run summary: which
   # vitest projects and jobs a pull request reaches (tools/checks/src/
   # affected.mjs). Any event but pull_request selects everything, and so does
@@ -1030,6 +1208,8 @@ jobs:
       - extension-smokes
       - verify
       - dry-run-docker
+      - rust
+      - rust-fuzz-pr
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     # A job-level block REPLACES the workflow's `contents: read` rather than

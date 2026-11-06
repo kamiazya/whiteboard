@@ -20,13 +20,10 @@
  * declares and passes its own, and this scan is about the writers of the
  * EXISTING planes agreeing with each other, never about capping the helper.
  *
- * Four declarations are allowlisted, in three kinds, and none of them is a
- * writer that picked its own production value. A fifth is a test seed that
- * states the production size by literal, listed as the debt it is.
- *
- * One is a frozen historical value rather than debt: a migration's numbers
- * are the ones it RAN with, and reading a live constant would retroactively
- * change what an already-migrated record claims about itself. One is a
+ * Two declarations are allowlisted, in two kinds, and neither is a writer
+ * that picked its own production value. (A frozen historical value was a
+ * third kind until the daemon's migrations and the browser's upgrade ladder
+ * were squashed; nothing replays an old chunk size now.) One is a
  * deliberate INVALID value, `writeUnreadableRecord`'s `-1`, so the
  * conformance suite can put a store into the state its own reader refuses.
  * One is deliberately TINY, the conformance suite's own 4 bytes, because at
@@ -35,7 +32,7 @@
  *
  * They stay in the allowlist rather than being excluded by the pattern,
  * because an exemption is a classification: the next hardcoded manifest
- * value has to say which of these it is. One of them was found by widening
+ * value has to say which of these it is. The fourth was found by widening
  * this scan rather than by reading, which is the argument for the width.
  */
 import { readFileSync } from 'node:fs'
@@ -104,10 +101,6 @@ interface AllowedDeclaration {
 }
 
 const ALLOWLIST: Readonly<Record<string, AllowedDeclaration>> = {
-  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts': {
-    declarations: [{ text: 'IMPORT_MAX_CHUNK_BYTES = 1_000_000', times: 1 }],
-    reason: 'a migration replays with the value it originally wrote; its own comment says so',
-  },
   'packages/mcp-server/src/server/store/libsql/libsql-document-store.ts': {
     // Twice: the insert and the `doUpdateSet` that has to write the same
     // poison value, or an upsert would leave a readable record behind.
@@ -252,7 +245,7 @@ describe('the snapshot chunk size is written in one place', () => {
     }
   })
 
-  it('the allowlist holds exactly the three classified declarations', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(3)
+  it('the allowlist holds exactly the two classified declarations', () => {
+    expect(Object.keys(ALLOWLIST)).toHaveLength(2)
   })
 })

@@ -20,7 +20,6 @@ import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
-import { applyDocumentUpdate } from './apply-document-update.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { CausalGapError, syncWriteAnswer } from './sync-write-refusals.js'
 
@@ -86,32 +85,5 @@ describe('a workspace-document sync update that builds on a change the keeper la
     ).resolves.toMatchObject({ kind: 'applied' })
     stored.evict()
     expect(readMarkdownBody(documentContainers(stored.get(), DOC_ID))).toBe('gap body')
-  })
-})
-
-describe('a per-document sync update that builds on a change the keeper lacks', () => {
-  it('is refused as a causal gap, and the change it builds on is then judged alone', async () => {
-    const seed = new LoroDoc()
-    writeMarkdownBody(seed, 'body')
-    seed.commit()
-    const stored = new StoredDoc(seed)
-    const liveDocuments: LiveDocuments = {
-      ...unusedLiveDocuments(),
-      kind: async () => null,
-      withWriteLock: (_workspaceId, fn) => fn(),
-      get: async () => stored.get(),
-      save: async (_workspaceId, _path, doc) => stored.save(doc),
-      evict: () => stored.evict(),
-    }
-    const { gap, gapped } = gappedUpdates(stored.get(), (doc) => doc.getText('body'))
-    const send = (update: Uint8Array) =>
-      applyDocumentUpdate({ liveDocuments }, { workspaceId: WS, path: 'notes', update })
-
-    await expect(send(gapped)).rejects.toBeInstanceOf(CausalGapError)
-    expect(stored.saves).toBe(0)
-
-    await send(gap)
-    stored.evict()
-    expect(readMarkdownBody(stored.get())).toBe('gap body')
   })
 })

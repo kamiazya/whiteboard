@@ -1,28 +1,27 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import {
-  documentSnapshotUrl,
   documentSyncKey,
-  documentUpdateUrl,
   workspaceDocKey,
+  workspaceDocSnapshotUrl,
+  workspaceDocUpdateUrl,
   workspaceHandleOfSyncKey,
   workspaceIdOfSyncKey,
 } from './sync-key.js'
 
 describe('doc-key URL mapping', () => {
   it('maps a workspace-scope key to the workspace-document routes', () => {
-    expect(documentUpdateUrl('http://d', 'workspace:ws-1')).toBe(
+    expect(workspaceDocUpdateUrl('http://d', 'workspace:ws-1')).toBe(
       'http://d/api/w/ws-1/workspace-document/update',
     )
-    expect(documentSnapshotUrl('http://d', 'workspace:ws-1')).toBe(
+    expect(workspaceDocSnapshotUrl('http://d', 'workspace:ws-1')).toBe(
       'http://d/api/w/ws-1/workspace-document/snapshot',
     )
   })
 
-  it('still maps a per-document key to the per-document routes', () => {
-    expect(documentUpdateUrl('http://d', 'ws-1/nested/path')).toBe(
-      'http://d/api/w/ws-1/document/nested/path/update',
-    )
+  it('addresses no route for a per-document key: binary sync is the workspace record only', () => {
+    expect(workspaceDocUpdateUrl('http://d', 'ws-1/nested/path')).toBeNull()
+    expect(workspaceDocSnapshotUrl('http://d', 'ws-1/nested/path')).toBeNull()
   })
 })
 
@@ -53,9 +52,8 @@ describe('workspaceHandleOfSyncKey', () => {
     expect(workspaceHandleOfSyncKey('/leading-slash')).toBeNull()
   })
 
-  it('refuses a handle with no path behind it, and builds no snapshot URL for it', () => {
+  it('refuses a handle with no path behind it', () => {
     expect(workspaceHandleOfSyncKey('ws-1/')).toBeNull()
-    expect(documentSnapshotUrl('http://d', 'ws-1/')).toBeNull()
   })
 })
 
