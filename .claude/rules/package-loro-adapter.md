@@ -294,7 +294,7 @@ implementations live in the composition roots.
   prefers `peekText` for the same reason. Restore and promote inherit it through
   `judgeStateWithinTextLimits`; the codes are `retired_stored_shape` and
   `retired_comment_plane`, both 400 in server-core. The browser keeper's fast path
-  (`mayNameRetiredKey`) scans the key needles `x-whiteboard`, `comments`, `elements`,
+  (`mayNameJudgedKey`, one byte-needle scan for the reserved and the retired keys alike) scans the key needles `x-whiteboard`, `comments`, `elements`,
   `okf-body` and NOT `type`: a short pre-ADR-0038 kind write skips the browser's own judge by
   decision, since the daemon's judge has no fast path and the on-arrival read refusal is the
   second line. A property over generated op sequences holds accept ⇒ no newly retired pair,
