@@ -38,6 +38,7 @@ import { type GestureResult, type GestureState, reduceGesture } from './gestures
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
 import { useKeyboardWalk } from './use-keyboard-walk.js'
+import { useNudgeAnnouncement } from './use-nudge-announcement.js'
 import { useToolBeforeEraser } from './use-tool-before-eraser.js'
 
 /**
@@ -56,21 +57,22 @@ const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
 }
 
 /**
- * Escape with the eraser armed and no sweep in flight puts it down, back in
- * the tool it was picked up from. An eraser left armed turns the next press
- * on a drawing into a deletion, so the key that means "stop" must reach it
- * the way it reaches a gesture.
+ * Escape with the eraser armed and no sweep in flight puts it down, back in the
+ * tool it was picked up from; Connect, also a mode, goes back to Select. An
+ * armed eraser turns the next press on a drawing into a deletion, so the key
+ * that means "stop" must reach it the way it reaches a gesture.
  */
-function leaveEraserWithEscape(
+function leaveToolWithEscape(
   e: React.KeyboardEvent<HTMLDivElement>,
   tool: EditorTool,
   gesture: string,
   changeTool: (tool: EditorTool) => void,
   before: EditorTool,
 ): boolean {
-  if (e.key !== 'Escape' || tool !== 'erase' || gesture !== 'idle') return false
+  if (e.key !== 'Escape' || gesture !== 'idle') return false
+  if (tool !== 'erase' && tool !== 'connect') return false
   e.preventDefault()
-  changeTool(before)
+  changeTool(tool === 'erase' ? before : 'select')
   return true
 }
 
@@ -196,6 +198,7 @@ export function useEditorKeyboard({
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
   const handOffTabRef = useRef(false)
+  const settleNudge = useNudgeAnnouncement(canvasRef)
   const toolBeforeEraser = useToolBeforeEraser(tool)
   // The same fact as state, so the canvas name can say what Tab will do.
   const [handingOffTab, setHandingOffTab] = useState(false)
@@ -574,6 +577,7 @@ export function useEditorKeyboard({
       // and must undo as one step (N separate commits would only group by
       // the UndoManager's merge-timing heuristic).
       applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
+      if (selected.length > 0) settleNudge(selected, nudge.dx * step, nudge.dy * step)
       return true
     }
     return false
@@ -696,7 +700,7 @@ export function useEditorKeyboard({
       clearInkSelection(e) ||
       deleteInkSelection(e) ||
       cancelWithEscape(e) ||
-      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser.current) ||
+      leaveToolWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser.current) ||
       releaseSelectionWithEscape(e) ||
       armSpacePan(e) ||
       nudgeSelection(e) ||

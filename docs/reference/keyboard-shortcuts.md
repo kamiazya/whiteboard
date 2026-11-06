@@ -47,10 +47,10 @@ pinch zooms in every tool.
 | Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode. Both clicks must land within a few pixels of each other: two quick clicks across the canvas are two clicks |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
-| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed; with the eraser armed, put it down and go back to the tool you had before it |
+| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed; with the eraser armed, put it down and go back to the tool you had before it; with the Connect tool armed and no connection half drawn, go back to Select |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
-"Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
+"Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", one whose first node in reading order is a frame says "Tab selects the first frame", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
 nodes top to bottom, then left to right (two nodes at exactly the same spot always come in the same order),
 and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
@@ -287,7 +287,9 @@ The text fields that open over a canvas say what they edit: "Text of Review"
 for a note, "Name of frame cluster" for a frame's name, "Label of edge from A
 to B" for a relation's label. A note's text is described as "Escape discards,
 Ctrl+Enter keeps" (`Command` on a Mac); a frame's name and a connection's or
-line's label, being one line, as "Escape discards, Enter keeps". Pressing
+line's label, being one line, as "Escape discards, Enter keeps". On a touch
+screen, where the editor shows its ✓ Done and ✕ Cancel buttons instead, it is
+described as "✓ Done keeps, ✕ Cancel discards". Pressing
 `Esc` announces "Discarded" so a thrown-away draft is not silent. The one exception is a note you have just
 added: `Esc` on it keeps what you typed and says so ("Note kept: Review"),
 because a typed note lost to the key that closes the editor would have no
@@ -314,10 +316,13 @@ connection, because a line asserts no relation.
 Selecting says where you are ("Selected: Review (2 of 5)", "Selected 3 nodes"),
 including the frame a node sits in ("Selected: Web App, in Frontend (3 of 8)"),
 and what you do is said back: "Note added", "Connected Review to Ship",
-"Framed 3 nodes", "Deleted 2 nodes". Moving a node across a frame's edge, by
+"Framed 3 nodes", "Deleted 2 nodes"; a second or later frame says its number
+("Frame 3 added"), so frames added one after another are told apart. Moving a node across a frame's edge, by
 nudging or dragging, is said too ("Web App moved into Backend", "Web App left
 Frontend", "Web App moved from Frontend into Backend"); a move that stays inside
-its frame says nothing, so a run of nudges is quiet until one crosses an edge. Choosing how edges are drawn in the
+its frame says nothing at the time it happens. Once the arrow keys have rested
+for a moment, a run of nudges is summed up once: "Web App moved 64 right, 32
+down, in Backend" (or "not in a frame"). Choosing how edges are drawn in the
 Display panel is said back the same way ("Edge routing: Orthogonal", "Line
 jumps: On").
 
