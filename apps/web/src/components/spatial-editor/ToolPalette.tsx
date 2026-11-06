@@ -8,8 +8,9 @@
  *   phone overlap).
  * - Creation tools live in a "+" menu, not as one flat button per type
  *   (the tldraw/FigJam shape, user decision 2026-08-08): the dock keeps a
- *   FIXED small button set that fits any viewport in a single row, and new
- *   node types extend the menu, never the dock's width.
+ *   FIXED small button set, and new node types extend the menu, never the
+ *   dock's width. Where one row cannot hold every control whole (a phone at
+ *   the touch size), the tools fold onto a second row rather than scrolling.
  *
  * Design rule (ADR-0006, docs/contributing/adr/0006-object-oriented-ui.md):
  * what does NOT exist yet comes from the palette; what already exists is
@@ -55,6 +56,7 @@ import { ShortcutHelpSheet } from './ShortcutHelpSheet.js'
 import { shortcutAriaKeysFor, withShortcut } from './shortcut-labels.js'
 import { useReturnFocusWhenClosed } from './use-canvas-focus-return.js'
 import type { ShortcutHelpControl } from './use-shortcut-help.js'
+import { useStackWhenCramped } from './use-stack-when-cramped.js'
 
 /**
  * Drag payload for placing a creation where it is dropped: the kind travels
@@ -106,16 +108,46 @@ interface ToolPaletteProps {
 }
 
 /**
- * Vertical strip of the canvas this dock covers: its own height plus the
- * `bottom-3` offset, doubled so a revealed node clears it rather than
- * touching it. The viewport subtracts this from the visible area — see
- * ViewportOcclusion. Pinned against the real rendered height by
+ * Vertical strip of the canvas a ONE-ROW dock covers: its own height plus
+ * the `bottom-3` offset, with room so a revealed node clears it rather than
+ * touching it. The floor of `bottomChromeOcclusionPx`, which measures the
+ * rest. Pinned against the real rendered height by
  * bottom-dock.browser.test.tsx, which is what stops it drifting when the
  * dock's classes change.
  */
 export const DOCK_OCCLUSION_PX = 70
 
+/** The chrome spanning the editor's bottom edge that a placed, revealed or fitted node must clear. */
+const BOTTOM_CHROME = '[data-testid="tool-palette"]'
+
+/** Room kept between a node brought into view and the chrome along the bottom edge. */
+const BOTTOM_CHROME_GAP_PX = 12
+
+/**
+ * The strip along the bottom of `root` that chrome paints over, measured: a
+ * dock folded onto two rows on a phone stands far higher than
+ * DOCK_OCCLUSION_PX, which stays the floor — the one-row dock's strip, and
+ * the answer wherever nothing can be measured.
+ */
+export function bottomChromeOcclusionPx(root: HTMLElement | null): number {
+  if (root === null) return DOCK_OCCLUSION_PX
+  const floor = root.getBoundingClientRect().bottom
+  let covered = DOCK_OCCLUSION_PX
+  for (const chrome of root.querySelectorAll<HTMLElement>(BOTTOM_CHROME)) {
+    const its = chrome.getBoundingClientRect()
+    if (its.height === 0) continue
+    covered = Math.max(covered, floor - its.top + BOTTOM_CHROME_GAP_PX)
+  }
+  return covered
+}
+
 export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
+
+/** Whether the tools would have to scroll to share the dock's single row. */
+function toolsCramped(dock: HTMLElement): boolean {
+  const tools = dock.querySelector<HTMLElement>('[data-dock-tools]')
+  return tools !== null && tools.scrollWidth > tools.clientWidth + 0.5
+}
 
 /**
  * The entry a menu key moves focus to (Up/Down wrap, Home/End jump), or null
@@ -263,6 +295,7 @@ export function ToolPalette({
   // rather than unmounted so the dock's open menu and refs survive the edit.
   useActiveMarkdownEditor()
   const yieldsToFormattingBar = touchFormattingBarShown()
+  const stacked = useStackWhenCramped(dockRef, toolsCramped)
 
   // Menu convention: opening moves focus to the first entry, so the
   // keyboard path is + → Enter → Enter without a mouse detour.
@@ -330,8 +363,12 @@ export function ToolPalette({
         data-testid="tool-palette"
         role="toolbar"
         aria-label="Canvas tools"
+        data-stacked={stacked ? '' : undefined}
+        // `w-max` so a stacked dock is laid out against the editor's width:
+        // a box centred from `left: 50%` otherwise shrinks to the half right
+        // of that line and wraps again.
         className={cn(
-          'absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md',
+          'group absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md data-stacked:flex-wrap data-stacked:justify-center data-stacked:gap-y-1',
           yieldsToFormattingBar && 'hidden',
         )}
       >
@@ -344,13 +381,17 @@ export function ToolPalette({
         {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
           user decision 2026-08-08), so it sits leftmost where the active
           mode reads first. */}
-        {/* The TOOLS scroll, and nothing else does. The dock is capped to the
-          editor's width, so something has to give on a phone; a tool that has
-          scrolled out of view is still reachable, where a dock hanging off
-          the screen edge is not. The scroller wraps only this group so the
-          "+" menu — which opens upward, inside this same container — is not
-          clipped by an overflow it never needed. */}
-        <div className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
+        {/* When the single row cannot hold every tool (a phone), the tools
+          take a row of their own along the bottom, nearest the thumb, and the
+          history, Add and zoom controls stand above them: a tool scrolled out
+          of a strip gives no sign it is there. Scrolling stays only as the
+          last resort for an editor too narrow even for the tools' own row.
+          The scroller wraps only this group so the "+" menu — which opens
+          upward, inside this same container — is not clipped by it. */}
+        <div
+          data-dock-tools
+          className="flex min-w-0 items-center gap-0.5 overflow-x-auto group-data-stacked:order-last group-data-stacked:basis-full group-data-stacked:justify-center"
+        >
           <Tooltip>
             <TooltipTrigger asChild>
               <button
@@ -417,7 +458,7 @@ export function ToolPalette({
           </Tooltip>
           <EraserToolButton tool={tool} onToolChange={onToolChange} />
         </div>
-        <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+        <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border group-data-stacked:hidden" />
         <Tooltip>
           <TooltipTrigger asChild>
             <button

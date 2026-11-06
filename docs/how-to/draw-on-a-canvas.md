@@ -9,6 +9,10 @@ Pick **Draw** (the pencil) in the toolbar, or press `D`, and drag across the
 board. What you drew stays as a smooth stroke, with no arrowhead at either
 end. A tap that does not travel leaves nothing behind.
 
+On a phone the toolbar folds onto two rows so every tool stays in sight:
+**Hand**, **Select**, **Connect**, **Draw** and **Eraser** along the bottom,
+with undo, redo, **Add** and the zoom buttons above them.
+
 Strokes you draw one straight after another, close together, become one
 drawing: a handwritten word selects, moves and recolours as a whole.
 

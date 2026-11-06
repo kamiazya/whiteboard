@@ -19,6 +19,7 @@ import { STROKE_WIDTHS, type StrokeWidth } from '@kamiazya/whiteboard-plugin-vis
 import { useId } from 'react'
 import type { PenStyle } from '../../lib/spatial/pen-style.js'
 import { colorRow } from './context-menu-items/color-row.js'
+import { useBottomChromeClearance } from './use-bottom-chrome-clearance.js'
 
 /** What each weight is called, to a reader and in the picker's tooltip. */
 export const STROKE_WIDTH_NAMES: Readonly<Record<StrokeWidth, string>> = {
@@ -82,12 +83,19 @@ export function DrawOptions({
 }) {
   // Radio names are page-wide, and two editors can share a page.
   const group = useId()
+  // Stands above the dock as measured: a phone's dock folds onto two rows.
+  const [strip, lift] = useBottomChromeClearance<HTMLFieldSetElement>(
+    true,
+    '[data-testid="tool-palette"]',
+  )
   const color = colorRow(palette, pen.color, (next) => {
     const { color: _previous, ...rest } = pen
     onChange(next === undefined ? rest : { ...rest, color: next })
   })
   return (
     <fieldset
+      ref={strip}
+      style={{ bottom: lift }}
       data-editor-overlay
       data-testid="draw-options"
       aria-label="Draw options"
