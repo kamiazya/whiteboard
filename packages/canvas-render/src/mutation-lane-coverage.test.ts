@@ -403,9 +403,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // lane for the same reason: its two recordings and its drop are each
     // pinned by an example in `edge-straight-detour.test.ts` and mutated by
     // hand against them.
+    // 124 with `legend/legend-scene.ts`, a board's legend as scene nodes for
+    // a canvas embedded in a note. Outside the lane: a row walk with no cost
+    // model or search, pinned by `embed-legend.test.ts` (rows, unscaled
+    // size, place inside the frame, swatch colours) and mutated by hand
+    // against it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 24,
-      production: 123,
+      production: 124,
     })
   })
 

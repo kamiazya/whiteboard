@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { documentLabel } from '../../lib/document-label.js'
 import type { TrashRow } from '../../lib/files-source.js'
+import { TOAST_ACTION_CLASS, Toast } from '../ui/toast.js'
 
 /** Long enough to read the line and reach the button on a phone. */
 const UNDO_WINDOW_MS = 10_000
@@ -64,21 +65,13 @@ export function UndoDeleteToast({
   if (first === undefined) return null
   const what = arrived.length === 1 ? documentLabel(first, 'path') : `${arrived.length} documents`
   return (
-    <div className="fixed bottom-4 left-1/2 z-50 max-w-[calc(100%-2rem)] -translate-x-1/2">
-      <div
-        role="status"
-        aria-live="polite"
-        className="bg-background animate-in fade-in-0 slide-in-from-bottom-2 flex items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-lg duration-(--motion-duration-normal) ease-(--motion-ease-out)"
-      >
-        <span className="min-w-0 truncate">Deleted {what}</span>
-        <button
-          type="button"
-          onClick={onUndo}
-          className="hover:bg-accent rounded-md border px-2 py-0.5 font-medium pointer-coarse:min-h-11 pointer-coarse:px-3"
-        >
+    <Toast
+      message={`Deleted ${what}`}
+      actions={
+        <button type="button" onClick={onUndo} className={TOAST_ACTION_CLASS}>
           Undo
         </button>
-      </div>
-    </div>
+      }
+    />
   )
 }

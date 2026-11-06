@@ -114,8 +114,11 @@ What the library changes:
   miniature, a `![[board]]` embed in a note or a text node — on the
   canvas, in the note's preview, and in the document browser's cards,
   preview pane and Peek — and the cached copy you read while the daemon is
-  unreachable. Its legend stays with the
-  board itself; the miniature carries the colours only. A colour set on the
+  unreachable. A `![[board]]` embedded in a NOTE carries its legend too,
+  under the board inside the embed's frame and at the legend's own size, so
+  the note's preview, its print or PDF and its export say what the colours
+  mean. A file node's miniature and an embed in a canvas text node carry the
+  colours only; their legend stays with the board itself. A colour set on the
   box itself always wins, and a box carrying two declared colours under two keys gets
   neither. The board reads the library when it opens, and the document
   browser when it is shown; after editing the `tags` document, reopen the

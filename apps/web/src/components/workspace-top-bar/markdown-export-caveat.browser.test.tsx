@@ -119,4 +119,27 @@ describe('saving a note as Markdown says what it leaves out', () => {
   it('announces a plain confirmation for a note holding neither', async () => {
     expect(await saveMarkdown('[a link](x) and [[a note]]\n')).toBe('Saved as Markdown')
   })
+
+  it('shows the caveat on screen too, and announces it once', async () => {
+    await saveMarkdown('# Week 1\n\n![diagram](asset:b2f6)\n')
+    const toast = await screen.findByTestId('markdown-saved-toast')
+    expect(toast.textContent).toMatch(/^Saved as Markdown/)
+    expect(toast.textContent).toMatch(/Pictures and embedded diagrams are not included/)
+    const box = toast.getBoundingClientRect()
+    expect(box.width).toBeGreaterThan(0)
+    expect(box.bottom).toBeLessThanOrEqual(window.innerHeight)
+    // The menu's status region already speaks it; the toast must not be a
+    // second region, and its words must not be read again in passing.
+    expect(screen.getAllByRole('status')).toHaveLength(1)
+    expect(toast.closest('[role="status"], [aria-live]')).toBeNull()
+    expect(toast.querySelector('[role="status"], [aria-live]')).toBeNull()
+    expect(toast.closest('[aria-hidden="true"]')).not.toBeNull()
+  })
+
+  it('shows a plain confirmation for a note holding neither', async () => {
+    await saveMarkdown('Plain text.\n')
+    expect((await screen.findByTestId('markdown-saved-toast')).textContent).toBe(
+      'Saved as Markdown',
+    )
+  })
 })
