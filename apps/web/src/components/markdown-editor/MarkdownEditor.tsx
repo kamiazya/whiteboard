@@ -19,6 +19,7 @@ import {
 } from 'react'
 import { useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
+import { bodyLengthLabel } from '../../lib/body-length.js'
 import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
@@ -222,9 +223,6 @@ const LENGTH_LIMIT = markdownLengthLimit()
  * thumb reach, not screen size) the spatial canvas uses for its own ⋯.
  */
 const CATALOG_SHEET_MAX_WIDTH = 768
-function countWords(value: string): number {
-  return (value.match(/[\p{L}\p{N}]+/gu) ?? []).length
-}
 
 /**
  * A controlled markdown editor: one source-of-truth `value` string, edited
@@ -752,7 +750,7 @@ export function MarkdownEditor({
     // selection they describe is the one at THAT moment.
   }, [annotation, catalog, imageAttach.pickImage, linkTargets, value])
 
-  const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
+  const bodyLength = useMemo(() => bodyLengthLabel(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
 
   return (
@@ -764,7 +762,7 @@ export function MarkdownEditor({
         mode={effectiveMode}
         onModeChange={changeMode}
         splitAvailable={splitAvailable}
-        wordCount={wordCount}
+        bodyLength={bodyLength}
         onOpenCatalog={({ x, y }) => openCatalogAt(x, y, 'grid')}
         catalogAvailable={effectiveMode !== 'read'}
         onComment={annotation.open}

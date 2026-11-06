@@ -1,6 +1,6 @@
-// Unit coverage for tools/checks/src/vitest-projects.mjs and
-// run-shared-layer-tests.mjs — the derivation that replaces ci.yml's hand-
-// listed `--project=` flags for the shared-layer step. Cross-package import
+// Unit coverage for tools/checks/src/vitest-projects.mjs — the derivation
+// that replaces ci.yml's hand-listed `--project=` flags for the shared-layer
+// step (whose runner, `affected-cli.mjs run`, is pinned by `affected-cli.test.ts`). Cross-package import
 // of the .mjs matches the established pattern in
 // release-gate-matrix-schema.test.ts / verify-pack-contents.test.ts.
 //
@@ -26,7 +26,6 @@ import { REPO_ROOT } from './scan-roots.js'
 
 const ROOT = REPO_ROOT
 const VITEST_PROJECTS_MODULE_PATH = join(ROOT, 'tools/checks/src/vitest-projects.mjs')
-const RUN_SHARED_LAYER_TESTS_MODULE_PATH = join(ROOT, 'tools/checks/src/run-shared-layer-tests.mjs')
 const RUN_COVERAGE_MODULE_PATH = join(ROOT, 'tools/checks/src/run-coverage.mjs')
 
 interface FixtureProject {
@@ -48,20 +47,6 @@ interface VitestProjectsModule {
   PROJECTS_RUN_ELSEWHERE: Record<string, { job: string; mechanism: string; marker: string }>
   deriveSharedLayerProjectNames: (repoRoot: string) => string[]
   buildVitestArgv: (names: string[], forwarded?: string[]) => string[]
-}
-
-interface RunSharedLayerTestsModule {
-  main: (options?: {
-    repoRoot?: string
-    argv?: string[]
-    stdout?: { write: (chunk: string) => boolean }
-    stderr?: { write: (chunk: string) => boolean }
-    spawn?: (
-      cmd: string,
-      args: string[],
-      opts: Record<string, unknown>,
-    ) => { status: number | null; error?: Error }
-  }) => number
 }
 
 interface RunCoverageModule {
@@ -87,12 +72,6 @@ async function importVitestProjects(): Promise<VitestProjectsModule> {
   return (await import(
     pathToFileURL(VITEST_PROJECTS_MODULE_PATH).href
   )) as unknown as VitestProjectsModule
-}
-
-async function importRunSharedLayerTests(): Promise<RunSharedLayerTestsModule> {
-  return (await import(
-    pathToFileURL(RUN_SHARED_LAYER_TESTS_MODULE_PATH).href
-  )) as unknown as RunSharedLayerTestsModule
 }
 
 function makeSink() {
@@ -256,135 +235,6 @@ describe('vitest-projects.mjs', () => {
         entry.mechanism,
       )
     }
-  })
-})
-
-describe('run-shared-layer-tests.mjs (CLI)', () => {
-  let fixtureRoot: string
-
-  beforeEach(async () => {
-    fixtureRoot = await mkdtemp(join(tmpdir(), 'run-shared-layer-tests-fixture-'))
-  })
-
-  afterEach(async () => {
-    await rm(fixtureRoot, { recursive: true, force: true })
-  })
-
-  it('exits non-zero and never spawns vitest when the derivation is empty', async () => {
-    const { main } = await importRunSharedLayerTests()
-    await writeFixtureRepo(fixtureRoot, [
-      { configPath: 'packages/mcp-server/vitest.node.config.ts', name: 'mcp-node' },
-    ])
-    const stderr = makeSink()
-    const stdout = makeSink()
-    let spawnCalled = false
-    const exitCode = main({
-      repoRoot: fixtureRoot,
-      stdout,
-      stderr,
-      spawn: () => {
-        spawnCalled = true
-        return { status: 0 }
-      },
-    })
-
-    expect(exitCode).not.toBe(0)
-    expect(spawnCalled, 'vitest must never be spawned on an empty/failed derivation').toBe(false)
-    expect(stderr.chunks.join('')).toMatch(/derivation failed/)
-  })
-
-  it('spawns pnpm exec vitest run with the derived --project flags and forwards its exit code', async () => {
-    const { main } = await importRunSharedLayerTests()
-    await writeFixtureRepo(fixtureRoot, [
-      { configPath: 'packages/zeta/vitest.node.config.ts', name: 'zeta-node' },
-      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
-    ])
-    const stderr = makeSink()
-    const stdout = makeSink()
-    let capturedArgv: string[] | undefined
-    let capturedCmd: string | undefined
-    const exitCode = main({
-      repoRoot: fixtureRoot,
-      stdout,
-      stderr,
-      spawn: (cmd, args) => {
-        capturedCmd = cmd
-        capturedArgv = args
-        return { status: 3 }
-      },
-    })
-
-    expect(capturedCmd).toBe('pnpm')
-    expect(capturedArgv).toEqual([
-      'exec',
-      'vitest',
-      'run',
-      '--project=alpha-node',
-      '--project=zeta-node',
-    ])
-    expect(exitCode).toBe(3) // exit-code fidelity: forwards vitest's own status
-  })
-
-  it('forwards its own argv to vitest after the derived --project flags', async () => {
-    // CI shards this job, and a --shard that never reaches vitest runs the
-    // whole set on every leg while each one stays green.
-    const { main } = await importRunSharedLayerTests()
-    await writeFixtureRepo(fixtureRoot, [
-      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
-    ])
-    const spawned: string[][] = []
-    for (const shard of ['1/2', '2/2']) {
-      main({
-        repoRoot: fixtureRoot,
-        argv: ['--', `--shard=${shard}`],
-        stdout: makeSink(),
-        stderr: makeSink(),
-        spawn: (_cmd, args) => {
-          spawned.push(args)
-          return { status: 0 }
-        },
-      })
-    }
-    expect(spawned).toEqual([
-      ['exec', 'vitest', 'run', '--project=alpha-node', '--shard=1/2'],
-      ['exec', 'vitest', 'run', '--project=alpha-node', '--shard=2/2'],
-    ])
-  })
-
-  it('exits zero and writes an OK summary to stdout when the spawned vitest run passes', async () => {
-    const { main } = await importRunSharedLayerTests()
-    await writeFixtureRepo(fixtureRoot, [
-      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
-    ])
-    const stderr = makeSink()
-    const stdout = makeSink()
-    const exitCode = main({
-      repoRoot: fixtureRoot,
-      stdout,
-      stderr,
-      spawn: () => ({ status: 0 }),
-    })
-
-    expect(exitCode).toBe(0)
-    expect(stdout.chunks.join('')).toMatch(/OK: 1 project\(s\) passed/)
-  })
-
-  it('exits non-zero when pnpm itself fails to start', async () => {
-    const { main } = await importRunSharedLayerTests()
-    await writeFixtureRepo(fixtureRoot, [
-      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
-    ])
-    const stderr = makeSink()
-    const stdout = makeSink()
-    const exitCode = main({
-      repoRoot: fixtureRoot,
-      stdout,
-      stderr,
-      spawn: () => ({ status: null, error: new Error('ENOENT') }),
-    })
-
-    expect(exitCode).not.toBe(0)
-    expect(stderr.chunks.join('')).toMatch(/pnpm could not start/)
   })
 })
 

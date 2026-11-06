@@ -16,7 +16,7 @@ const DOCS_ROOT = join(REPO_ROOT, 'docs')
 
 // vitest-projects.mjs (tools/checks) is the single source of truth for the
 // browser-project inventory, shared with ci-verify-coverage.test.ts and the
-// CI-invoked run-shared-layer-tests.mjs derivation. Dynamic import + cast
+// CI-invoked affected-cli.mjs. Dynamic import + cast
 // matches the established pattern in release-gate-matrix.test.ts.
 const { readBrowserProjectNames, readVitestProjects } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href

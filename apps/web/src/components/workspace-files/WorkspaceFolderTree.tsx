@@ -1,11 +1,16 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { Folder } from 'lucide-react'
-import { useContext, useMemo } from 'react'
+import { type MouseEvent, useContext, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { folderDisplayName } from '../../lib/folder-names.js'
 import { cn } from '../../lib/utils.js'
 import { ActionsButton } from './ActionsButton.js'
-import { FolderActionsContext, useFolderProps } from './folder-actions.js'
+import {
+  type FolderActions,
+  FolderActionsContext,
+  folderKeyProps,
+  useFolderProps,
+} from './folder-actions.js'
 import { TreeItemShell } from './TreeItemShell.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { useLongPressMenu } from './use-long-press.js'
@@ -73,6 +78,22 @@ function buildFolderTree(documents: readonly WorkspaceDocumentEntry[]): FolderNo
 }
 
 /**
+ * What a folder's tree item answers to when it holds focus itself: the
+ * folder's keys and its right-click, as the button in it does.
+ */
+function folderItemProps(actions: FolderActions, folder: string) {
+  const { onKeyDown } = folderKeyProps(actions, folder)
+  return {
+    onKeyDown,
+    onContextMenu: (event: MouseEvent) => {
+      if (event.defaultPrevented) return
+      event.preventDefault()
+      actions.openFolderMenu(folder, event.clientX, event.clientY)
+    },
+  }
+}
+
+/**
  * A folder's own row: the button that opens it, and its actions on a touch
  * screen. The button fills the row, so a press beside the name still opens
  * the folder rather than landing on nothing.
@@ -105,7 +126,11 @@ function FolderRowButton({
         <span className="truncate">{shown}</span>
       </button>
       {actions !== undefined && (
-        <ActionsButton name={shown} onOpen={(x, y) => actions.openFolderMenu(node.path, x, y)} />
+        <ActionsButton
+          name={shown}
+          reveal
+          onOpen={(x, y) => actions.openFolderMenu(node.path, x, y)}
+        />
       )}
     </>
   )
@@ -121,10 +146,12 @@ function FolderItem({
   selectedFolder?: string
 }) {
   const shown = folderDisplayName(node.path, useContext(FolderNamesContext))
+  const actions = useContext(FolderActionsContext)
   return (
     <TreeItemShell
       name={shown}
       label={shown}
+      itemProps={actions === undefined ? undefined : folderItemProps(actions, node.path)}
       hasChildren={node.children.length > 0}
       row={
         <FolderRowButton
@@ -159,8 +186,13 @@ function RootFolderItem({
   return (
     // The root is a destination like any other folder, and the only one
     // reachable when every document sits at the top level.
-    <div role="treeitem" tabIndex={-1} aria-label="Workspace">
-      <div className="flex items-center gap-1">
+    <div
+      {...(actions === undefined ? {} : folderItemProps(actions, ''))}
+      role="treeitem"
+      tabIndex={-1}
+      aria-label="Workspace"
+    >
+      <div className="group/row flex items-center gap-1">
         <span className="w-[1.125rem]" aria-hidden="true" />
         <button
           type="button"
@@ -175,7 +207,11 @@ function RootFolderItem({
           <span className="truncate">Workspace</span>
         </button>
         {actions !== undefined && (
-          <ActionsButton name="Workspace" onOpen={(x, y) => actions.openFolderMenu('', x, y)} />
+          <ActionsButton
+            name="Workspace"
+            reveal
+            onOpen={(x, y) => actions.openFolderMenu('', x, y)}
+          />
         )}
       </div>
     </div>

@@ -1,0 +1,16 @@
+# zizmor (https://docs.zizmor.sh) configuration, read by
+# .github/workflows/zizmor.yml and by a local `zizmor .github/` alike.
+rules:
+  # Suggests the `$/` self-repository syntax for local actions in place of
+  # `./`. Not adopted: every workflow guard in tools/arch-lint names the
+  # local setup action by its `./.github/actions/...` path, and the two
+  # spellings run the same checked-out commit, so nothing is gained.
+  self-repository:
+    disable: true
+  # setup-pnpm installs corepack globally only on a runner whose Node no
+  # longer bundles it, exact-pinned and with --ignore-scripts (the reason is
+  # beside the line). A line-numbered ignore, so an edit that moves the
+  # install re-raises the finding rather than silently keeping the waiver.
+  adhoc-packages:
+    ignore:
+      - action.yml:67

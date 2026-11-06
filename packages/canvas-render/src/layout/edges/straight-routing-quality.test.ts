@@ -46,6 +46,7 @@ import {
 } from '../../test-utils/routing-metrics.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { routeEdge } from './edge-router.js'
+import type { RoutingBudget } from './routing-budget.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
 
 type Path = readonly MetricPoint[]
@@ -56,8 +57,8 @@ const strictlyInside = (r: MetricRect, p: MetricPoint) =>
   p.x > r.x && p.x < r.x + r.w && p.y > r.y && p.y < r.y + r.h
 
 /** Every edge routed straight, anchors assigned together, as the layout does. */
-function routeStraight(testCase: RoutingCase): Map<string, Path> {
-  const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'straight')
+function routeStraight(testCase: RoutingCase, budget?: RoutingBudget): Map<string, Path> {
+  const anchors = assignEdgeAnchors(testCase.nodes, testCase.edges, 'straight', undefined, budget)
   return new Map(
     testCase.edges.map((edge) => [
       edge.id,
@@ -218,6 +219,15 @@ function scoreEdge(
 
 const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase), titles: [] })
 
+/**
+ * The side search with nothing left in the layout's account, so it ends on
+ * whatever it was seeded with — the board a budget runs out on.
+ */
+const routedOnSpentBudget = (testCase: RoutingCase) => ({
+  paths: routeStraight(testCase, { grid: 0, pairs: 0, trials: 0, repairs: 0 }),
+  titles: [],
+})
+
 // The pins below moved when a blocked straight connection stopped going
 // round one box covering everything in its way and started taking the
 // shortest path through the corners of the boxes actually blocking it
@@ -348,6 +358,53 @@ describe('straight routing quality', () => {
       grazingEnds: 0,
       bends: 1520,
       crossings: 529,
+      borderInk: 0,
+    })
+  })
+
+  // A layout whose account runs out ends its side search on what the search
+  // was seeded with, so these two rows price that state on its own: every
+  // straight edge as the search left it with no trial affordable. The
+  // search seeds every straight edge stepping round, and drawing those seeds
+  // as they stood cost stacked frames 87 long detours, ratio 1.266, worst
+  // 1.79, 42 foreign violations (4175 interior ink), 278 crossings and 1438
+  // bends; lattice 43 long detours, ratio 1.11, worst 1.83, 1387 crossings,
+  // 2675 bends. An exhausted search now drops every seed it never priced
+  // (`aroundLedger`), so those edges take their corner routes. Paid: grazing
+  // ends 0 -> 31 on stacked frames — the glancing first or last legs some
+  // corner routes have, which the full-budget row carries 28 of as well.
+  it('reports generated stacked-frame boards on a spent routing budget', {
+    timeout: 120_000,
+  }, () => {
+    expect(score(stackedFrameLayouts(200), routedOnSpentBudget)).toEqual({
+      violations: { foreign: 0, 'own-endpoint': 0 },
+      interiorInk: 0,
+      titleCrossings: 0,
+      length: 270523,
+      direct: 235649,
+      ratio: 1.148,
+      worstRatio: 1.52,
+      longDetours: 13,
+      grazingEnds: 31,
+      bends: 1121,
+      crossings: 225,
+      borderInk: 0,
+    })
+  })
+
+  it('reports lattice boards on a spent routing budget', { timeout: 180_000 }, () => {
+    expect(score(latticeLayouts(400), routedOnSpentBudget)).toEqual({
+      violations: { foreign: 0, 'own-endpoint': 0 },
+      interiorInk: 0,
+      titleCrossings: 0,
+      length: 1163968,
+      direct: 1138042,
+      ratio: 1.023,
+      worstRatio: 1.39,
+      longDetours: 0,
+      grazingEnds: 0,
+      bends: 1526,
+      crossings: 1110,
       borderInk: 0,
     })
   })

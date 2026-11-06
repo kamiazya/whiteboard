@@ -1,0 +1,47 @@
+{
+  "@context": "https://openvex.dev/ns/v0.2.0",
+  "@id": "https://github.com/kamiazya/whiteboard/blob/main/.github/security/whiteboard.openvex.json",
+  "author": "kamiazya/whiteboard maintainers",
+  "role": "Project maintainers",
+  "timestamp": "2026-11-06T00:00:00Z",
+  "version": 1,
+  "tooling": "Hand-maintained beside pnpm-workspace.yaml's auditConfig.ignoreGhsas; tools/arch-lint/src/vex-audit-ignores.test.ts holds the two lists equal.",
+  "statements": [
+    {
+      "vulnerability": {
+        "name": "GHSA-qwww-vcr4-c8h2"
+      },
+      "products": [
+        {
+          "@id": "pkg:github/kamiazya/whiteboard",
+          "subcomponents": [
+            {
+              "@id": "pkg:npm/react-router"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_not_in_execute_path",
+      "impact_statement": "The advisory is a CSRF in react-router's RSC (React Server Components) mode. apps/web is a client-side Vite single-page app on react-router-dom 7.x and never enables RSC mode, so the vulnerable request handling is never executed. The entry is removed when react-router reaches a patched release (>=8.3.0)."
+    },
+    {
+      "vulnerability": {
+        "name": "GHSA-hp3w-g68c-fv3c"
+      },
+      "products": [
+        {
+          "@id": "pkg:npm/%40kamiazya/whiteboard-mcp",
+          "subcomponents": [
+            {
+              "@id": "pkg:npm/sprintf-js"
+            }
+          ]
+        }
+      ],
+      "status": "not_affected",
+      "justification": "vulnerable_code_cannot_be_controlled_by_adversary",
+      "impact_statement": "The advisory is a denial of service through unbounded precision specifiers in a format string. sprintf-js is reached only through the optional search runtime (@huggingface/transformers > onnxruntime-node > global-agent > roarr), whose format strings are library-internal constants, never user input. No patched sprintf-js is published; the entry is removed when one is, or when that dependency path goes away."
+    }
+  ]
+}

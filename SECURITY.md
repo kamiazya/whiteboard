@@ -13,10 +13,7 @@
 
 If you find a security issue (RCE, path traversal, SSRF, sandbox escape, secret exposure, etc.), please **do not open a public GitHub issue**.
 
-Instead:
-
-1. Use GitHub's **private vulnerability reporting** at https://github.com/kamiazya/whiteboard/security/advisories/new
-2. Or email the maintainer directly at the address listed in the npm package metadata
+Instead, use GitHub's **private vulnerability reporting** at https://github.com/kamiazya/whiteboard/security/advisories/new. The report is visible only to you and the project's maintainers (listed in [`.github/CODEOWNERS`](.github/CODEOWNERS)).
 
 Please include:
 
@@ -26,6 +23,24 @@ Please include:
 - Any suggested mitigation
 
 We aim to acknowledge within 72 hours and to ship a patch (or coordinated disclosure plan) within 14 days for high-severity issues.
+
+## Coordinated disclosure
+
+- A confirmed vulnerability is fixed in private on the advisory's temporary fork, released, and then disclosed as a [GitHub Security Advisory](https://github.com/kamiazya/whiteboard/security/advisories) for this repository, with a CVE requested through GitHub when the issue affects a published release.
+- The advisory names the affected and fixed versions, and the release notes of the fixing release ([CHANGELOG.md](CHANGELOG.md), [packages/mcp-server/CHANGELOG.md](packages/mcp-server/CHANGELOG.md)) link it.
+- We ask reporters to keep the issue private until the advisory is published, or for 90 days from the report, whichever comes first.
+
+## Remediation thresholds for dependency and static-analysis findings
+
+These are what the automated gates enforce, not a statement of intent:
+
+- **Known-vulnerable dependencies (SCA).** An advisory of **high** or **critical** severity in a runtime dependency fails the merge — `pnpm audit:prod` in CI over the whole tree, and the Dependency Review check over what a pull request adds — and fails the npm release: `release.yml` audits the lockfile and the packed tarball before publishing the package. The container image and the web deployment do not wait on that audit yet. The same audit runs daily against an unchanged tree (`.github/workflows/audit.yml`), so an advisory published after a merge is still seen. A finding below that threshold is fixed through the regular Dependabot update flow.
+- **Static analysis (SAST).** CodeQL is a required check on the default branch, so a new alert at its failing severity blocks the merge. An alert dismissed as a false positive or as not exploitable is dismissed in code scanning with its reason, where it stays on the record.
+
+## Verifying a release
+
+- **npm package.** `npm audit signatures` in a project that installed `@kamiazya/whiteboard-mcp` verifies registry signatures, and the provenance attestation of each package that has one — it passes a package with a signature and no attestation, so confirm it reports a verified attestation for `@kamiazya/whiteboard-mcp` itself, then check that the attestation's repository, workflow and ref are `kamiazya/whiteboard`, `.github/workflows/release.yml` and a release tag. The provenance names the GitHub Actions workflow (`release.yml`), commit and ref that built the tarball; `npm view @kamiazya/whiteboard-mcp@<version> dist.attestations` shows where it is published.
+- **Container image.** The cosign verification commands, with the exact certificate identity to pin, are in [docs/contributing/releasing.md](docs/contributing/releasing.md).
 
 ## Security Model
 

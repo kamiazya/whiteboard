@@ -184,7 +184,10 @@ export type EdgeSides = SidePair
  * A frozen edge's full anchor state, for overrides that must not MOVE
  * mid-gesture: sides alone leave the anchor a fraction of its (node, side)
  * group, so a carried edge joining the group re-fractions a stationary
- * edge. Point/depth fields, when present, pin the committed positions.
+ * edge. Point/depth fields, when present, pin the committed positions, and
+ * `around` (inherited from the side pair) holds a straight edge the
+ * committed search stepped round what was in its way: without it the edge
+ * takes its corner route the moment it is frozen.
  */
 export interface EdgeAnchorOverride extends EdgeSides {
   readonly from?: Point

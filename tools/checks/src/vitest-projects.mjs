@@ -9,8 +9,7 @@
 // TypeScript loader, so it cannot evaluate a .ts config.
 //
 // This is the single reader: ci-verify-coverage.test.ts, docs-contract.test.ts,
-// ci-stress-job.test.ts and run-shared-layer-tests.mjs (the CI-invoked
-// derivation) all read the same inventory instead of each holding a copy
+// ci-stress-job.test.ts and affected.mjs (the CI-invoked change scope) all read the same inventory instead of each holding a copy
 // that can drift apart.
 
 import { readFileSync } from 'node:fs'
@@ -142,8 +141,8 @@ export const PROJECTS_RUN_ELSEWHERE = {
 // exclusion set) grows this list with no ci.yml edit required — that is the
 // property this function exists to guarantee.
 //
-// Throws rather than returning a degenerate answer, because the caller
-// (run-shared-layer-tests.mjs) must never silently spawn vitest with an empty
+// Throws rather than returning a degenerate answer, because a runner must
+// never silently spawn vitest with an empty
 // --project filter set, which runs EVERY project (including the three browser
 // ones) in a job with no Playwright installed.
 /**

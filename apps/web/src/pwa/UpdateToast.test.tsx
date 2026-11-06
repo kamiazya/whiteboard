@@ -12,6 +12,12 @@ describe('UpdateToast', () => {
     expect(screen.getByRole('button', { name: 'Reload' })).toBeTruthy()
   })
 
+  it('announces the message without the action buttons run into it', () => {
+    render(<UpdateToast onReload={vi.fn()} onDismiss={vi.fn()} />)
+
+    expect(screen.getByRole('status').textContent).toBe('Update available')
+  })
+
   it('invokes onReload exactly once when Reload is clicked', () => {
     const onReload = vi.fn()
     render(<UpdateToast onReload={onReload} onDismiss={vi.fn()} />)

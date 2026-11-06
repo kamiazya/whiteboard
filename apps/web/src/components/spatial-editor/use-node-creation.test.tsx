@@ -4,7 +4,11 @@ import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import type { ContainerSize } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
-import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
+
+/** The one-row dock's strip: the floor the measured occlusion answers with when nothing is measured. */
+const DOCK_OCCLUSION_PX = bottomChromeOcclusionPx(null)
+
 import { useNodeCreation } from './use-node-creation.js'
 
 const overlaps = (a: SpatialNode, b: SpatialNode) =>

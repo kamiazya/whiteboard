@@ -12,6 +12,7 @@
  * departed workspace's path to the one now on screen.
  */
 import { messageOf } from '@kamiazya/whiteboard-model'
+import { TAG_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useRef, useState } from 'react'
 import type { DeleteDocumentsDialogProps } from '../components/document-list/DeleteDocumentsDialog.js'
 import type { DestructiveActionId } from '../lib/destructive-copy.js'
@@ -71,6 +72,10 @@ function dialogSubject(pending: PendingDelete | null): DeleteDocumentsDialogProp
     displayName: pending.displayName,
     ...(pending.kind === undefined ? {} : { kind: pending.kind }),
     ...(pending.paths.length > 1 ? { count: pending.paths.length } : {}),
+    ...(pending.paths.length === 1 && pending.paths[0] !== undefined
+      ? { path: pending.paths[0] }
+      : {}),
+    ...(pending.paths.includes(TAG_LIBRARY_PATH) ? { tagLibrary: true } : {}),
   }
 }
 

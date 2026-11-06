@@ -24,16 +24,19 @@ import {
   WITHOUT_ANNOTATIONS,
 } from '../../lib/duplicate-without-comments.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
+import { AnnouncerRegion } from '../annotations/announcer.js'
 import type { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
+import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import type { SearchState } from './use-debounced-document-search.js'
 import { FolderNamesContext } from './use-folder-names.js'
+import type { RenameDocument } from './use-rename-document.js'
 import { type SearchCombobox, usePublishSearchResults } from './use-search-combobox.js'
 import type { useWriteOutcome } from './use-write-outcome.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
@@ -550,6 +553,7 @@ export function BrowseTwoColumns({
   setSelected,
   toggleSelected,
   openCardMenu,
+  onRename,
   loadRender,
   onGridColumns,
   onCreateHere,
@@ -566,6 +570,7 @@ export function BrowseTwoColumns({
   setSelected: (entry: WorkspaceDocumentEntry) => void
   toggleSelected: (entry: WorkspaceDocumentEntry) => void
   openCardMenu: (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => void
+  onRename: (entry: WorkspaceDocumentEntry) => void
   loadRender: ComponentProps<typeof DocumentThumbnail>['loadRender']
   onGridColumns: (count: number | undefined) => void
   onCreateHere: ComponentProps<typeof FolderContentsList>['onCreateHere']
@@ -608,6 +613,7 @@ export function BrowseTwoColumns({
               ? {}
               : { onActivateDocument: openEntry })}
             onDocumentContextMenu={openCardMenu}
+            onRenameDocument={onRename}
             onColumnCount={onGridColumns}
             onCreateHere={onCreateHere}
             renderThumbnail={cardThumbnail(loadRender)}
@@ -713,5 +719,36 @@ export function SearchColumn({
         />
       </div>
     </div>
+  )
+}
+
+/**
+ * The rename dialog as the panel runs it, and the polite line that says what
+ * a saved rename did — beside the dialog rather than in it, so it is still
+ * mounted to speak once the dialog has gone.
+ */
+export function PanelRenameDialog({
+  rename,
+  workspace,
+}: {
+  rename: RenameDocument
+  workspace: string | undefined
+}) {
+  return (
+    <>
+      <AnnouncerRegion text={rename.announcement} />
+      <RenameDocumentDialog
+        document={rename.renaming}
+        workspace={workspace}
+        busy={rename.busy}
+        error={rename.error}
+        onCancel={rename.cancel}
+        onCloseAutoFocus={rename.onCloseAutoFocus}
+        onSubmit={(name, newPath) => {
+          if (rename.renaming === null) return
+          void rename.submit(rename.renaming, name, newPath)
+        }}
+      />
+    </>
   )
 }

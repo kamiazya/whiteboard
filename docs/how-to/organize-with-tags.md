@@ -114,8 +114,11 @@ What the library changes:
   miniature, a `![[board]]` embed in a note or a text node — on the
   canvas, in the note's preview, and in the document browser's cards,
   preview pane and Peek — and the cached copy you read while the daemon is
-  unreachable. Its legend stays with the
-  board itself; the miniature carries the colours only. A colour set on the
+  unreachable. A `![[board]]` embedded in a NOTE carries its legend too,
+  under the board inside the embed's frame and at the legend's own size, so
+  the note's preview, its print or PDF and its export say what the colours
+  mean. A file node's miniature and an embed in a canvas text node carry the
+  colours only; their legend stays with the board itself. A colour set on the
   box itself always wins, and a box carrying two declared colours under two keys gets
   neither. The board reads the library when it opens, and the document
   browser when it is shown; after editing the `tags` document, reopen the
@@ -135,6 +138,13 @@ tag library, so every box or edge carrying that tag and no colour of its own
 is drawn in it, and the legend lists the key — a colour you set on a box with
 a swatch stays yours and is never explained by a key, which is why it gets no
 legend.
+
+The first colour you set creates the library document at `tags` if the
+workspace has none. The document list shows it labelled **Tag library** — on
+its card and among search results — and its preview says it keeps the
+workspace's tag colours rather than that nothing is written. Deleting it is
+allowed, but the confirmation says first that every tag colour set in the
+workspace goes with it.
 
 A few things worth knowing:
 
