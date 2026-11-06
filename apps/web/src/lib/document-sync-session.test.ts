@@ -746,6 +746,27 @@ describe('createDocumentSyncSession', () => {
     expect(session.getCanvas().nodes).toEqual([])
   })
 
+  it('refuses a record holding a node in a retired stored shape, rather than opening without it', () => {
+    // No reader serves the node-kind union before ADR-0038 (owner decision
+    // 27): read as usual, the `.strict()` model would drop the node unseen.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, twoNodeCanvas())
+    doc
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    doc.commit()
+
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape')
+    expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+    expect(session.getCanvas().nodes).toEqual([])
+  })
+
   it('a thread command is published at once, before the debounced commit lands', async () => {
     // The layer is a plane beside the canvas, so no canvas value carries a
     // new pin: the session publishes the conversations the command leaves

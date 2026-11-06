@@ -103,28 +103,6 @@ describe('a node location written through a sync update', () => {
     })
   })
 
-  // A pre-resource peer writes the location in its own field, which the reader
-  // lifts into the resource, so each field is bounded where it stands.
-  it.each([
-    ['url', { type: 'link', url: urlOf(NODE_LOCATION_MAX_CHARS + 1) }],
-    ['file', { type: 'file', file: 'a'.repeat(NODE_LOCATION_MAX_CHARS + 1) }],
-    [
-      'subpath',
-      { type: 'file', file: 'notes', subpath: `#${'a'.repeat(NODE_LOCATION_MAX_CHARS)}` },
-    ],
-  ])('refuses the legacy %s field a pre-resource peer would write', (_, legacy) => {
-    const base = record()
-    const update = updateFrom(base, (board) =>
-      board.getMap('nodes').set('k', { id: 'k', x: 0, ...BOX, ...legacy }),
-    )
-    expect(judged(base, update)).toEqual({
-      shape: 'node-location',
-      chars: NODE_LOCATION_MAX_CHARS + 1,
-      nodeId: 'k',
-      container: expect.any(String),
-    })
-  })
-
   it('takes a link URL of exactly the limit', () => {
     const base = record()
     const update = updateFrom(base, (board) =>

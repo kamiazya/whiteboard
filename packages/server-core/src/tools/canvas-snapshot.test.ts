@@ -1,4 +1,5 @@
 import {
+  RetiredStoredShapeError,
   setEdgeLock,
   setNodeLock,
   writeCommentThread,
@@ -395,6 +396,24 @@ describe('wb_canvas_snapshot — layout analysis', () => {
     await expect(
       tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
     ).rejects.toMatchObject({ name: 'NotASpatialDocumentError' })
+  })
+
+  test('refuses a document holding a node in a retired stored shape, naming it', async () => {
+    // Read as usual, the `.strict()` model would drop the node and answer a
+    // canvas without it; no reader serves the union before ADR-0038.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      doc
+        .getMap('nodes')
+        .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    })
+    const tool = createCanvasSnapshotTool(await makeDeps(store))
+
+    const refusal = await tool
+      .execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+      .catch((err: unknown) => err)
+    expect(refusal).toBeInstanceOf(RetiredStoredShapeError)
+    expect(String(refusal)).toMatch(/node "old".*type "text"/)
   })
 
   test('still reads a document with no recorded kind anywhere (from wb_scene_digest)', async () => {

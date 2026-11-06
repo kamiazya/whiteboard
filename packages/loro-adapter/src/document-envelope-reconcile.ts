@@ -17,8 +17,8 @@ import {
   FACETS_KEY,
   type Fields,
 } from './containers.js'
-import { LEGACY_EXTENSION_FIELD } from './legacy-lifts.js'
 import { refuseReservedKey } from './reserved-key-write.js'
+import { refuseRetiredShape, retiredCanvasShape } from './retired-stored-shape.js'
 
 /** The canvas's own facets, one key of the canvas map so its LWW is per-key. */
 export const CANVAS_FACETS_FIELD = 'facets'
@@ -81,15 +81,15 @@ export function reconcileCoreFacets(
   reconcileBucket(doc, CORE_KEY, { ...prev }, { ...next })
 }
 
-/** The stored canvas facets bucket, from this version's key or the one before it. */
+/**
+ * The stored canvas facets bucket. Throws `RetiredStoredShapeError` for a
+ * canvas still holding them under the key before ADR-0037, which would
+ * otherwise read as a board with no theme or routing chosen.
+ */
 function storedCanvasFacets(doc: DocumentContainers): Record<string, unknown> | undefined {
   const canvasMap = doc.getMap(CANVAS_KEY)
-  // The legacy value came from another version or peer, so it is read as
-  // untrusted: an unreadable payload costs the preference, never the canvas.
-  return (
-    asRecord(canvasMap.get(CANVAS_FACETS_FIELD)) ??
-    asRecord(asRecord(canvasMap.get(LEGACY_EXTENSION_FIELD))?.facets)
-  )
+  refuseRetiredShape(retiredCanvasShape(canvasMap))
+  return asRecord(canvasMap.get(CANVAS_FACETS_FIELD))
 }
 
 /**

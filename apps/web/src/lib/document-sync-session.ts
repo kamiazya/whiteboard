@@ -19,6 +19,7 @@ import {
   readThreadMarks,
   readWorkspaceDocumentName,
   resolveWorkspaceDocumentById,
+  retiredStoredShapeIn,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -40,6 +41,9 @@ export type BackendErrorReason =
   // A record still holding comments in the plane before threads, which no
   // reader serves; refused rather than shown without them (decision 27).
   | 'retired-comment-plane'
+  // A record holding a node, edge, canvas or body shape an older version
+  // stored and no reader serves; refused rather than shown without it.
+  | 'retired-stored-shape'
 
 import type {
   CommentThread,
@@ -508,6 +512,28 @@ export function createDocumentSyncSession(
       : documentContainers(targetDoc, deps.contentDocumentId)
   }
 
+  /**
+   * Why a snapshot's bytes cannot be served, or null when they can. Reported
+   * like any other unreadable content, never thrown into the accessors (which
+   * would take React down with a doc the session cannot serve anyway).
+   */
+  function unreadableSnapshot(arrivingDoc: LoroDoc): BackendErrorReason | null {
+    // A scoped session's contract with its backend: the workspace bytes hold
+    // this document's tree node. Bytes that do not are unreadable FOR THIS
+    // DOCUMENT.
+    if (
+      deps.contentDocumentId !== undefined &&
+      resolveWorkspaceDocumentById(arrivingDoc, deps.contentDocumentId) === null
+    ) {
+      return 'corrupt-snapshot'
+    }
+    const arriving = contentOf(arrivingDoc)
+    if (arriving === null) return null
+    if (holdsRetiredCommentPlane(arriving)) return 'retired-comment-plane'
+    if (retiredStoredShapeIn(arriving) !== null) return 'retired-stored-shape'
+    return null
+  }
+
   // The held doc's content: null before the first snapshot and while removed.
   const liveContent = (): DocumentContainers | null => (doc === null ? null : contentOf(doc))
   function readContent<T>(read: (content: DocumentContainers) => T, empty: T): T {
@@ -868,22 +894,9 @@ export function createDocumentSyncSession(
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
         if (doc !== null && documentRemoved(newDoc)) return
-        // A scoped session's contract with its backend: the workspace bytes
-        // hold this document's tree node. Bytes that do not are unreadable
-        // FOR THIS DOCUMENT — reported like any other unreadable content,
-        // never thrown into the accessors (which would take React down with
-        // a doc the session cannot serve anyway).
-        if (
-          deps.contentDocumentId !== undefined &&
-          resolveWorkspaceDocumentById(newDoc, deps.contentDocumentId) === null
-        ) {
-          deps.onBackendError('corrupt-snapshot')
-          deps.onStatusChange('error')
-          return
-        }
-        const arriving = contentOf(newDoc)
-        if (arriving !== null && holdsRetiredCommentPlane(arriving)) {
-          deps.onBackendError('retired-comment-plane')
+        const unreadable = unreadableSnapshot(newDoc)
+        if (unreadable !== null) {
+          deps.onBackendError(unreadable)
           deps.onStatusChange('error')
           return
         }
