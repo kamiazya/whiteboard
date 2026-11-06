@@ -144,12 +144,16 @@ implementations live in the composition roots.
   key.** The content bridge is four modules by what they read: the spatial
   canvas and its locks (`loro-bridge.ts`), the document envelope —
   kind, core, trust and extension facets (`document-envelope.ts`) — the
-  markdown body (`markdown-body.ts`), and the read-only lifts of the two
-  shapes older writers left (`legacy-lifts.ts`). Each reaches for a key here and never
-  for a sibling's, which is what keeps them, `comment-threads` and
-  `proposals` from forming a value cycle `cycle-check.ts` would fail on;
-  `markdown-body` is the one that imports `loro-bridge`, since a body
-  written as a node is read through the canvas and writing one empties it.
+  markdown body (`markdown-body.ts`), and the recognition of shapes older
+  writers left, which are refused rather than read (`retired-stored-shape.ts`).
+  Each reaches for a key here and never for a sibling's, which is what keeps
+  them, `comment-threads` and `proposals` from forming a value cycle
+  `cycle-check.ts` would fail on.
+- **A markdown body lives in the `body` container and nowhere else.** A note
+  an older writer stored as the `okf-body` canvas text node (or, before that
+  id was stable, as its first text node) is refused by `readMarkdownBody` /
+  `readDocumentContent` with `RetiredStoredShapeError`; a body write no
+  longer touches the canvas.
 - **A comment lives in the `threads` plane (ADR-0026), and nowhere else.**
   The canvas carries no comments: `readSpatialCanvas` projects none, and no
   canvas write touches the plane. The pin a board draws is model's
@@ -244,22 +248,13 @@ implementations live in the composition roots.
 - **A record written before [ADR-0038](../../docs/contributing/adr/0038-ocif-projection.md)
   decision 3 stored what a node SHOWS as a kind plus that kind's own field**
   — `{ type: 'text', text }`, `{ type: 'file', file, subpath? }`,
-  `{ type: 'link', url }`, `{ type: 'group', label? }`. `nodeToFields` writes
-  one `resource` now, and `liftLegacyNodeKind` converts a stored node on the
-  way out; `liftStoredNode` composes it with the ADR-0037 lift below, in the
-  order the record acquired the two shapes.
-
-  Load-bearing for the same reason and by the same mechanism: the model is
-  `.strict()` and names neither `type` nor any kind's content field, so such
-  a node FAILS its schema and the read drops what fails —
-  `legacy-node-kind.test.ts` measures it, and no other test in the package
-  can, because every one of them asserts on a document this version wrote.
-
-  It costs bytes, and the scoreboard says how many: 156960 -> 184960 over
-  1000 edits (+18%, ~28B), because a text edit used to write one flat key and
-  now writes a nested `{ mimeType, content }`. Recorded rather than absorbed
-  — it is what a discriminant on the resource would have to beat if that
-  question is ever reopened.
+  `{ type: 'link', url }`, `{ type: 'group', label? }`. No reader serves it:
+  `readSpatialCanvas` throws `RetiredStoredShapeError` naming the node,
+  because the `.strict()` model would otherwise drop it unseen. Only those
+  four `type` values are old; any other is a newer writer's record and is
+  skipped and counted. `retired-stored-shape.test.ts` holds both. The byte
+  cost of the resource shape stays recorded: 156960 -> 184960 over 1000
+  edits (+18%, ~28B).
 
 - **The retired Excalidraw `elements` list is carried, never read.** `content-sync`
   copies it through as a value so a save loses nothing, but no reader consumes
@@ -268,12 +263,10 @@ implementations live in the composition roots.
   creates the root container as a side effect.
 
 - **A record written before [ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)
-  stored all of this under the FORMAT's extension key**, because the model
-  was the format. `liftLegacyExtension` converts a stored node or edge on
-  the way out and `readCanvasFacets` falls back to the old envelope, both
-  spelling the literal as it stood — the way a migration's own text always
-  does. Every write uses the model's names, so a record converges the first
-  time anything saves it.
+  stored all of this under the FORMAT's extension key** (`x-whiteboard` on a
+  node, an edge or the canvas map). No reader serves it: `readSpatialCanvas`
+  and `readCanvasFacets` throw `RetiredStoredShapeError`, and the daemon
+  answers it 409 `retired_stored_shape`.
 
 - **A document's content by kind is `readDocumentContent(doc, entryKind?)`,
   nowhere else.** The document's own recorded kind wins, then the entry's,
@@ -290,15 +283,8 @@ implementations live in the composition roots.
   `document.set` is the only wholesale replacer, and
   `spatial-canvas-write-one-place.test.ts` enforces it for the canvas.
 
-  This is load-bearing, not tidy. The model is `.strict()` now, so a stored
-  node still carrying the old key FAILS its schema and the read drops what
-  fails: measured in `legacy-extension.test.ts`, removing the lift makes
-  both nodes VANISH (`[]` where `['n1','n2']` is expected) rather than lose
-  a field. Nothing else in the suite can see that — every other test
-  asserts on a document this version wrote.
-
-- **A delete is an oplog op even when the key was never there.** Both the
-  facets write and the legacy cleanup check before deleting, and that is
+- **A delete is an oplog op even when the key was never there.** The
+  facets write checks before deleting, and that is
   not micro-optimisation: the write path used to delete the canvas envelope
   on EVERY save, including the overwhelming majority of saves on boards
   that never had one. Removing it cut delta-log growth 178660 -> 156960
