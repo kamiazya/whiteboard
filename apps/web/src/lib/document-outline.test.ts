@@ -4,7 +4,10 @@ import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { outlineFromScene, outlineFromSpatial } from './document-outline.js'
+import { outlineBlocks, outlineFromSpatial } from './document-outline.js'
+
+const outlineFromScene = (scene: Parameters<typeof outlineBlocks>[0]) =>
+  outlineBlocks(scene).map((block) => block.rect)
 
 const spatial = (nodes: SpatialCanvas['nodes']): SpatialCanvas => ({ nodes, edges: [] })
 
@@ -30,7 +33,7 @@ describe('outlineFromSpatial', () => {
   })
 })
 
-describe('outlineFromScene', () => {
+describe('outlineBlocks', () => {
   // A markdown document has no boxes of its own; its shape is the shape its
   // BLOCKS take once laid out. Reading them off the scene is what lets one
   // outline concept serve both kinds.

@@ -38,7 +38,7 @@ pinch zooms in every tool.
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
 | `Enter` / `F2` | Edit the selected node's text, a frame's label, or the selected connection's or line's label (a frame's, connection's or line's label is one line: `Enter` saves it) |
-| `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection |
+| `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection. They work the same from a control in the canvas's dock, such as Undo |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or connection: opens the comment composer, the same one **Comment on this** opens |
@@ -55,7 +55,8 @@ and does not wrap: `Tab` on the last node, or `Shift + Tab` on the first, leaves
 the canvas for the next control (the bottom dock, or the header before the
 canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
-selected makes the next `Tab` the browser's, which is the way on to the bottom dock.
+selected makes the next `Tab` the browser's, which is the way on to the bottom dock, and
+the canvas then says so ("Tab leaves the canvas").
 To leave without losing the selection, press `F6` (on to the dock) or
 `Shift + F6` (back to the header, where the Display panel shows the selected
 node) — the selection stays exactly as it was. A canvas with no nodes lets `Tab` go straight to the
@@ -266,7 +267,7 @@ editor. `Cmd` is the macOS modifier; use `Ctrl` everywhere else.
 | `Cmd/Ctrl + K` | Link: open the link picker over the selection or the word at the caret; where there is nothing to pick from it wraps in `[[ ]]` |
 | `Cmd/Ctrl + Enter` | Cycle a task checkbox on the line (in a canvas node's editor it saves instead) |
 | `Tab` / `Shift + Tab` | Indent or outdent the line, or nest a list item under the one above it; a hand-numbered list is renumbered to match |
-| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote. In a markdown document a blank line is left after the list, so the next line you type is a paragraph of its own rather than part of the last item |
+| `Enter` on an empty list item or quote line | Remove the marker and leave the list or quote. A blank line is left after the list, so the next line you type is a paragraph of its own rather than part of the last item |
 | `Backspace` on an empty list item or quote line | Remove the marker, leaving an empty line |
 | `Esc`, then `Tab` or `Shift + Tab` | Leave the editor forwards or backwards; `Tab` alone indents |
 
@@ -336,7 +337,10 @@ Whiteboard"). Where keyboard focus lands depends on the page:
   **Create a canvas**, with no click first.
 - **The document list** puts it on its heading, and coming back from a
   document you opened from the list (**Back**, or the browser's back) puts it
-  on that document's card instead, so you carry on where you were.
+  back on the row you opened it from instead — its card, its row in the folder
+  tree or in the search results, or its Recent tile — so you carry on where you
+  were. After following a link in the preview, it goes to the card of the
+  document that held the link.
 - **Settings** does not move focus, so the next Tab starts from the top of the page.
 
 The first Tab stop on every page is **Skip to content**, hidden until it is

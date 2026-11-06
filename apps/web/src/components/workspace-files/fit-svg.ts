@@ -60,3 +60,20 @@ export function fitSvgToBox(
     return `${lead}<svg${stripped} preserveAspectRatio="${aspect}">`
   })
 }
+
+const LINK_ATTRS = /\s+(?:href|xlink:href|tabindex|target|rel|role|aria-label)="[^"]*"/g
+
+/**
+ * The picture with every link drawn as plain ink: each `<a>` becomes a `<g>`
+ * keeping its presentation, and nothing carries a `tabindex`. A thumbnail is
+ * decoration inside a control that already names the document, so a link in
+ * it is a focusable, nameless stop an audit reports even where `inert` hides
+ * it — and the renderer's bare document-id href, followed, would reload the
+ * tab onto a route naming no document.
+ */
+export function withoutLinks(svg: string): string {
+  return svg
+    .replace(/<a\b([^>]*)>/g, (_whole, attrs: string) => `<g${attrs.replace(LINK_ATTRS, '')}>`)
+    .replace(/<\/a>/g, '</g>')
+    .replace(/\s+tabindex="[^"]*"/g, '')
+}

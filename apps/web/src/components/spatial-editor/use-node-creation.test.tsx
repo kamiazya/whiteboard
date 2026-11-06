@@ -59,3 +59,32 @@ describe('a new frame asked for at a point', () => {
     expect(frame.y + frame.height / 2).toBe(2000)
   })
 })
+
+describe('a new frame asked for from the dock', () => {
+  /** The strip above a frame that its name and its selection chip draw into. */
+  const strip = (frame: SpatialNode) => ({
+    x: frame.x,
+    y: frame.y - 50,
+    width: frame.width,
+    height: 50,
+  })
+  const meets = (a: { x: number; y: number; width: number; height: number }, b: SpatialNode) =>
+    a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+
+  it('keeps the strip above it, where its name and chip go, clear of a note', () => {
+    const note = textNode({ id: 'note', x: -100, y: -160, width: 200, height: 100, text: 'Idea' })
+    const { creation, createdNode } = mount({ nodes: [note], edges: [] })
+    creation.createGroupAtViewportCenter()
+    const frame = createdNode()
+    expect(overlaps(frame, note)).toBe(false)
+    expect(meets(strip(frame), note)).toBe(false)
+  })
+
+  it('keeps that strip clear when it is asked for at a point, too', () => {
+    const note = textNode({ id: 'note', x: -100, y: -160, width: 200, height: 100, text: 'Idea' })
+    const { creation, createdNode } = mount({ nodes: [note], edges: [] })
+    creation.createGroupAtViewportCenter({ x: 0, y: 0 })
+    const frame = createdNode()
+    expect(meets(strip(frame), note)).toBe(false)
+  })
+})

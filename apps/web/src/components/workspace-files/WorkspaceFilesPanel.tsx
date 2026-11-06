@@ -211,6 +211,7 @@ export function WorkspaceFilesPanel({
   const {
     tapOpens,
     openEntry,
+    openFromRecent,
     openPath,
     selectOrOpen,
     offered: offeredOpen,
@@ -796,8 +797,8 @@ export function WorkspaceFilesPanel({
                 recentIds={recentIds}
                 gridColumns={gridColumns}
                 selectedPath={selectedPath}
-                onSelect={selectOrOpen}
-                onOpen={openEntry}
+                onSelect={tapOpens ? openFromRecent : selectOrOpen}
+                onOpen={openFromRecent}
                 renderThumbnail={(entry) => (
                   <DocumentThumbnail
                     key={entry.documentId}
@@ -820,7 +821,10 @@ export function WorkspaceFilesPanel({
                   selected={selected}
                   loadRender={loadRender}
                   findDocument={findListed}
-                  onOpen={offeredOpen}
+                  onOpen={
+                    offeredOpen &&
+                    ((entry) => openPath(entry.path, entry, { path: selected?.path }))
+                  }
                   onRename={rename.open}
                   onDuplicateDocument={duplicated.duplicate}
                   onRequestDelete={onRequestDelete}

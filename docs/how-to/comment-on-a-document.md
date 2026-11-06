@@ -89,6 +89,10 @@ the only one. Pressing it shows a *Resolved · Undo* line above the list for a f
 seconds. A message you have rewritten is marked **(edited)**, and a thread on
 an edge is named by the two nodes it joins.
 
+A screen reader hears each of these as it lands, in the rail and on the
+canvas alike: "Comment posted" for a new conversation, "Reply sent",
+"Conversation resolved" and "Conversation reopened".
+
 A resolved conversation says **Resolved** on its rail row and in its card
 on the canvas. The card is muted, shows only the opening message, and keeps a
 labelled **Reopen** button in its header.
