@@ -58,3 +58,18 @@ it('asks for the second note once the first is chosen', async () => {
     .element(page.getByTestId('connect-tool-hint'))
     .toHaveTextContent('Now click the note to connect to')
 })
+
+it('Escape puts the Connect tool down and goes back to Select', async () => {
+  const { Host } = makeEditorHost({ initial: twoNotes })
+  const { container } = render(<Host />)
+  await userEvent.click(page.getByRole('button', { name: 'Connect' }))
+  await expect.element(page.getByTestId('connect-tool-hint')).toBeInTheDocument()
+
+  rootOf(container).focus()
+  await userEvent.keyboard('{Escape}')
+
+  await expect.element(page.getByTestId('connect-tool-hint')).not.toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'Select' }))
+    .toHaveAttribute('aria-pressed', 'true')
+})

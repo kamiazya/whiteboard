@@ -1,6 +1,7 @@
 import { commentCornerOf, isFrame, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import type { Box } from '../../lib/spatial/geometry.js'
+import { readingOrder } from '../../lib/spatial/reading-order.js'
 import { canvasToScreen, type Point, type Viewport } from '../../lib/spatial/viewport.js'
 import type { ContextMenuTarget } from './CanvasContextMenu.js'
 import type { CommentComposeState } from './canvas-commands.js'
@@ -135,9 +136,13 @@ function tabHint(canvas: SpatialCanvas, hasSelection: boolean, tabLeavesCanvas: 
   return `Tab selects the first ${firstStopNoun(canvas)}`
 }
 
-/** What Tab reaches first from nothing: a node when there is one, else the first line or drawing. */
+/**
+ * What Tab reaches first from nothing: the first node in reading order — a
+ * frame or a note — when there is one, else the first line or drawing.
+ */
 function firstStopNoun(canvas: SpatialCanvas): string {
-  if (canvas.nodes.length > 0) return 'note'
+  const [firstNode] = readingOrder(canvas.nodes)
+  if (firstNode !== undefined) return isFrame(firstNode) ? 'frame' : 'note'
   const [first] = canvas.lines ?? []
   return first !== undefined && isFreehandStroke(first) ? 'drawing' : 'line'
 }

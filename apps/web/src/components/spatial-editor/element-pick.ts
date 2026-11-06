@@ -352,10 +352,12 @@ export function pressProbes(inputs: PickInputs): Record<ContentKind, PointProbe 
           : hit
       if (id === undefined) return undefined
       const frame = frameBox(inputs, id)
-      // A frame's interior yields to a relation drawn across it: the relation
-      // is what a press there is aimed at, and the border band stays the
-      // frame's own.
-      if (frame !== undefined && !onFrameBorder(frame.box, at, inputs.tolerance)) {
+      // A frame's interior and its name strip yield to a relation drawn
+      // across them: the relation is what a press there is aimed at, and the
+      // border band stays the frame's own. Routing sends lines over the
+      // strip on purpose, to clear the name, so the strip is crossed often.
+      const inStrip = frame !== undefined && at.y < frame.box.y
+      if (frame !== undefined && (inStrip || !onFrameBorder(frame.box, at, inputs.tolerance))) {
         return pathUnder(inputs, at) === undefined ? id : undefined
       }
       return id

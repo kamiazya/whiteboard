@@ -78,7 +78,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { type GestureState, reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
 import type { PointerKind } from './navigation.js'
-import { DOUBLE_PRESS_WINDOW_MS } from './navigation.js'
+import { DOUBLE_PRESS_WINDOW_MS, doublePressSlopPx } from './navigation.js'
 import {
   advanceCommentDrag,
   cancelCommentPress,
@@ -152,6 +152,30 @@ function commitPendingText(
   canvas: Parameters<typeof reduceGesture>[1],
 ) {
   return reduceGesture(state, canvas, { type: 'commit-text-edit', text: state.pendingText })
+}
+
+type PressEvent = React.PointerEvent<HTMLDivElement>
+
+/**
+ * Whether `e` is the second press of a double press. Detection is OURS, not
+ * the browser's `dblclick`: the first press selects the node, which
+ * re-renders the DOM under the pointer (selection overlay, gesture state), so
+ * the second click can land on a different element instance and Chromium
+ * then never synthesises a dblclick at all. Comparing node IDS within the
+ * OS-conventional window is stable against those re-renders. The distance
+ * matters too: every empty spot shares one key, so two clicks across the
+ * board would otherwise be a double-click on it.
+ */
+function isSecondPress(
+  last: { readonly key: string; readonly at: number; readonly point: Point } | null,
+  pressKey: string,
+  e: PressEvent,
+  screenPoint: Point,
+): boolean {
+  if (last === null || last.key !== pressKey) return false
+  if (e.timeStamp - last.at > DOUBLE_PRESS_WINDOW_MS) return false
+  const distance = Math.hypot(screenPoint.x - last.point.x, screenPoint.y - last.point.y)
+  return distance <= doublePressSlopPx(e.pointerType)
 }
 
 export function useEditorPointer(inputs: EditorPointerInputs) {
@@ -265,21 +289,12 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     return false
   }
 
-  /**
-   * Double-press detection is OURS, not the browser's `dblclick`.
-   *
-   * The first press selects the node, which re-renders the DOM under the
-   * pointer (selection overlay, gesture state), so the second click can land
-   * on a different element instance and Chromium then never synthesises a
-   * dblclick at all. Comparing node IDS within the OS-conventional window is
-   * stable against those re-renders.
-   */
-  const recordDoublePress = (pressKey: string, at: number, screenPoint: Point, point: Point) => {
-    const isDoublePress =
-      lastPressRef.current !== null &&
-      lastPressRef.current.key === pressKey &&
-      at - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
-    lastPressRef.current = isDoublePress ? null : { key: pressKey, at, point: screenPoint }
+  /** Records a press, arming `doublePressRef` when it completes a double press (`isSecondPress`). */
+  const recordDoublePress = (e: PressEvent, pressKey: string, screenPoint: Point, point: Point) => {
+    const isDoublePress = isSecondPress(lastPressRef.current, pressKey, e, screenPoint)
+    lastPressRef.current = isDoublePress
+      ? null
+      : { key: pressKey, at: e.timeStamp, point: screenPoint }
     doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
   }
 
@@ -292,7 +307,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   ) => {
     if (tool !== 'hand' || e.pointerType === 'touch' || e.button !== 0) return
     if (spaceDownRef.current || commentHoldsPress(inputs)) return
-    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
+    recordDoublePress(e, pressKey, screenPoint, point)
     const armed = doublePressRef.current
     doublePressRef.current = null
     handDoublePressRef.current = armed === null ? null : { ...armed, screen: screenPoint }
@@ -454,7 +469,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (claimShiftPress(e, pick)) return
     if (lockedPress.absorb(e, pick, point, screenPoint)) return
 
-    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
+    recordDoublePress(e, pressKey, screenPoint, point)
     if (hitId === undefined) {
       pressOnEmptyBoard(point, hitPathId)
       return
