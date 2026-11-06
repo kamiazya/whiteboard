@@ -118,19 +118,23 @@ interface ToolPaletteProps {
 export const DOCK_OCCLUSION_PX = 70
 
 /**
- * The chrome spanning the editor's bottom edge that a placed, revealed or
- * fitted node must clear: the dock, and the Draw options standing above it.
+ * The chrome along the editor's bottom edge that a placed, revealed or
+ * fitted node must clear: the dock, the Draw options standing above it, and
+ * the overview's corner button on a narrow editor — a node brought into view
+ * under that button has its resize handle beneath it.
  */
-const BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"]'
+const BOTTOM_CHROME =
+  '[data-testid="tool-palette"], [data-testid="draw-options"], [data-testid="minimap-toggle-wrap"]'
 
 /** Room kept between a node brought into view and the chrome along the bottom edge. */
 const BOTTOM_CHROME_GAP_PX = 12
 
 /**
  * The strip along the bottom of `root` that chrome paints over, measured: a
- * dock folded onto two rows on a phone, or the Draw options above it, stand
- * far higher than DOCK_OCCLUSION_PX, which stays the floor — the one-row
- * dock's strip, and the answer wherever nothing can be measured.
+ * dock folded onto two rows on a phone, the Draw options and the overview's
+ * button above it, stand far higher than DOCK_OCCLUSION_PX, which stays the
+ * floor — the one-row dock's strip, and the answer wherever nothing can be
+ * measured.
  */
 export function bottomChromeOcclusionPx(root: HTMLElement | null): number {
   if (root === null) return DOCK_OCCLUSION_PX
