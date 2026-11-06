@@ -1,7 +1,7 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeDocumentKind } from './document-envelope.js'
-import { readSpatialCanvas } from './loro-bridge.js'
+import { deleteSpatialNode, readSpatialCanvas, withSpatialBatch } from './loro-bridge.js'
 import { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
 
 /**
@@ -89,6 +89,69 @@ describe('the body-node check is asked only of a document that can hold a body',
     const doc = docWith((d) => d.getMap('nodes').set('okf-body', bodyNode))
     if (kind !== undefined) writeDocumentKind(doc, kind)
     expect(retiredStoredShapeIn(doc)).toMatch(/okf-body/)
+  })
+})
+
+describe('a markdown body stored as some other canvas text node is found before the read', () => {
+  // `readDocumentContent` refuses it on a recorded markdown document; the
+  // probe a snapshot is judged by before any read has to find the same shape,
+  // or the web session opens the note empty while the daemon refuses it.
+  const proseNode = {
+    id: 'n9',
+    ...BOX,
+    resource: { mimeType: 'text/markdown', content: 'the note, as a node' },
+  }
+  it('is found on a recorded markdown document with an empty body', () => {
+    const doc = new LoroDoc()
+    doc.getMap('nodes').set('n9', proseNode)
+    writeDocumentKind(doc, 'markdown')
+    doc.commit()
+    expect(retiredStoredShapeIn(doc)).toMatch(/canvas text node/)
+  })
+  it.each([
+    'spatial',
+    undefined,
+  ] as const)('is not asked of a document whose kind is %s', (kind) => {
+    const doc = new LoroDoc()
+    doc.getMap('nodes').set('n9', proseNode)
+    if (kind !== undefined) writeDocumentKind(doc, kind)
+    doc.commit()
+    expect(retiredStoredShapeIn(doc)).toBeNull()
+  })
+})
+
+describe('a node delete refuses a retired edge before writing', () => {
+  // The cascade judges an edge by its schema and skips one it cannot parse,
+  // so a retired edge anchored on the removed node would outlive it, with
+  // its lock — the dangling endpoint the cascade exists to prevent.
+  const RETIRED_EDGE = {
+    id: 'e1',
+    from: { node: 'ok' },
+    to: { node: 'n1' },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+  }
+  function seeded(): LoroDoc {
+    return docWith((d) => {
+      d.getMap('nodes').set('n1', { ...CURRENT_NODE, id: 'n1' })
+      d.getMap('edges').set('e1', RETIRED_EDGE)
+      d.getMap('edgeLocks').set('e1', true)
+    })
+  }
+  const untouched = (doc: LoroDoc) => {
+    expect(doc.getMap('nodes').get('n1')).toBeDefined()
+    expect(doc.getMap('edges').get('e1')).toEqual(RETIRED_EDGE)
+    expect(doc.getMap('edgeLocks').get('e1')).toBe(true)
+  }
+  it('deleteSpatialNode refuses by name, writing nothing', () => {
+    const doc = seeded()
+    expect(() => deleteSpatialNode(doc, 'n1')).toThrow(RetiredStoredShapeError)
+    expect(() => deleteSpatialNode(doc, 'n1')).toThrow(/edge "e1"/)
+    untouched(doc)
+  })
+  it('a batch deleteNode refuses by name, writing nothing', () => {
+    const doc = seeded()
+    expect(() => withSpatialBatch(doc, (w) => w.deleteNode('n1'))).toThrow(RetiredStoredShapeError)
+    untouched(doc)
   })
 })
 

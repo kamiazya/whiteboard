@@ -35,7 +35,12 @@ import {
   writeCanvasFacetsField,
 } from './document-envelope-reconcile.js'
 import { refuseReservedKey } from './reserved-key-write.js'
-import { refuseRetiredShape, retiredEdgeShape, retiredNodeShape } from './retired-stored-shape.js'
+import {
+  firstRetired,
+  refuseRetiredShape,
+  retiredEdgeShape,
+  retiredNodeShape,
+} from './retired-stored-shape.js'
 
 /** The board's own tags: one value under its own key, like the facets. */
 const TAGS_FIELD = CANVAS_TAGS_FIELD
@@ -221,8 +226,21 @@ function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
 }
 
 /**
+ * Refuses a node removal while any edge is in a retired stored shape: the
+ * sweep judges an edge by its schema and skips one it cannot parse, so such
+ * an edge anchored on the removed node would outlive it, lock and all — the
+ * dangling endpoint the cascade exists to prevent, left in silence. Asked
+ * ONCE per operation, before its first removal, for the reason the sweep
+ * takes a set: it reads every edge across the wasm boundary.
+ */
+function refuseRetiredEdgesBeforeRemoval(doc: DocumentContainers): void {
+  refuseRetiredShape(firstRetired(doc.getMap(EDGES_KEY), retiredEdgeShape))
+}
+
+/**
  * Removes one node and its lock, and NOT what is anchored on it — every
- * caller follows with `sweepAnchoredInto`. Returns false (writing nothing)
+ * caller follows with `sweepAnchoredInto`, and asks
+ * `refuseRetiredEdgesBeforeRemoval` first. Returns false (writing nothing)
  * when the node id is absent.
  */
 function deleteNodeInto(doc: DocumentContainers, nodeId: string): boolean {
@@ -324,6 +342,8 @@ export function writeSpatialEdge(doc: DocumentContainers, edge: CanvasEdge): voi
  * Idempotent and a no-op (no commit) for an id absent from the doc.
  */
 export function deleteSpatialNode(doc: DocumentContainers, nodeId: string): void {
+  if (doc.getMap(NODES_KEY).get(nodeId) === undefined) return
+  refuseRetiredEdgesBeforeRemoval(doc)
   if (!deleteNodeInto(doc, nodeId)) return
   sweepAnchoredInto(doc, new Set([nodeId]))
   doc.commit()
@@ -470,6 +490,8 @@ function spatialBatchWriter(
       markWrote()
     },
     deleteNode(nodeId) {
+      if (doc.getMap(NODES_KEY).get(nodeId) === undefined) return
+      if (removedNodes.size === 0) refuseRetiredEdgesBeforeRemoval(doc)
       if (!deleteNodeInto(doc, nodeId)) return
       removedNodes.add(nodeId)
       markWrote()
