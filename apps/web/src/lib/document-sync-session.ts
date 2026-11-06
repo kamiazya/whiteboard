@@ -5,6 +5,7 @@ import type {
 import {
   type DocumentContainers,
   documentContainers,
+  holdsRetiredCommentPlane,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -36,6 +37,9 @@ const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 export type BackendErrorReason =
   | Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
   | 'document-removed'
+  // A record still holding comments in the plane before threads, which no
+  // reader serves; refused rather than shown without them (decision 27).
+  | 'retired-comment-plane'
 
 import type {
   CommentThread,
@@ -874,6 +878,12 @@ export function createDocumentSyncSession(
           resolveWorkspaceDocumentById(newDoc, deps.contentDocumentId) === null
         ) {
           deps.onBackendError('corrupt-snapshot')
+          deps.onStatusChange('error')
+          return
+        }
+        const arriving = contentOf(newDoc)
+        if (arriving !== null && holdsRetiredCommentPlane(arriving)) {
+          deps.onBackendError('retired-comment-plane')
           deps.onStatusChange('error')
           return
         }

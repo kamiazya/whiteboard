@@ -24,6 +24,12 @@ export interface DocumentContainers {
   getMap(key: string): LoroMap
   getText(key: string): LoroText
   /**
+   * The map at `key` if one is there, opening none. Only a host where opening
+   * a container is a WRITE needs it (a tree node); a document's roots are
+   * implicit, so a `LoroDoc` leaves it out and `getMap` answers the same.
+   */
+  peekMap?(key: string): LoroMap | undefined
+  /**
    * Part of the seam because the bridge decides where a write ENDS, and that
    * is not something to leave each caller to remember. A tree-node host
    * delegates to the document its node belongs to.
@@ -33,12 +39,10 @@ export interface DocumentContainers {
 
 /**
  * The comment plane as it was BEFORE threads (ADR-0024): one flat entry per
- * comment. Nothing writes here — `migrateCanvasCommentsToThreads`
- * empties it and `readSpatialCanvas` reads it only as a fallback for a
- * document no writer has touched since. Retire the key once nothing needs
- * that fallback.
+ * comment. Nothing reads or writes it; a document still holding rows there is
+ * refused (`RetiredCommentPlaneError`) rather than read as having none.
  */
-export const COMMENTS_KEY = 'comments'
+export const RETIRED_COMMENTS_KEY = 'comments'
 /**
  * The annotation layer's thread plane (ADR-0026), one level deeper than the
  * comments map above: a map of thread containers, each holding its anchor and

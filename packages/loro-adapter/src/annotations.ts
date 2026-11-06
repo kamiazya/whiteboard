@@ -6,46 +6,55 @@
  * than something inside the canvas envelope. This is the reader that says so:
  * it takes a document's containers and answers its conversations, and it
  * never mentions a canvas.
- *
- * Before it existed the union below sat inside `readSpatialCanvas`, which
- * made a markdown document's threads *unreachable* rather than absent —
- * stored correctly and readable by nothing.
  */
 
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { canvasCommentSchema, threadFromCanvasComment } from '@kamiazya/whiteboard-model'
 import { readCommentThreads } from './comment-threads.js'
-import { COMMENTS_KEY, type DocumentContainers } from './containers.js'
+import { type DocumentContainers, RETIRED_COMMENTS_KEY } from './containers.js'
 
 /**
- * Every conversation on this document: the threads plane, plus any legacy
- * comment no writer has migrated yet, lifted into the one-message thread it
- * always was.
+ * A document that still holds comments in the plane before threads
+ * (ADR-0024's flat `comments` map), which this version no longer reads.
  *
- * **Threads come first, and the legacy rows keep their map order after them.**
- * That is not presentation: `composeComments` fans a later bubble out around
- * an earlier one, so the sequence decides where a comment is drawn. Sorting
- * the union by id would read more tidily and would move bubbles on any
- * document that still holds both shapes.
- *
- * A read never migrates. Doing so would turn opening a document into a
- * commit, and a reader may not even hold the write lock — the first WRITE
- * empties the legacy map instead.
+ * Refused rather than read as empty (owner decision 27): with no reader left
+ * for the old shape, answering "no conversations" would lose every one of
+ * them with no word said. The bytes stay where they are; the caller says so.
+ */
+export class RetiredCommentPlaneError extends Error {
+  readonly code = 'retired_comment_plane'
+
+  constructor(readonly rows: number) {
+    super(
+      `this document holds ${rows} comment${rows === 1 ? '' : 's'} saved by an older version in a form this version no longer reads (the flat comments plane before threads); its data has not been changed`,
+    )
+    this.name = 'RetiredCommentPlaneError'
+  }
+}
+
+/** How many rows the retired plane holds, opening nothing to find out. */
+function retiredRows(doc: DocumentContainers): number {
+  // A tree node opens a container by WRITING it, which a read must not do;
+  // a document root is free to look at, since roots are implicit.
+  const plane =
+    doc.peekMap === undefined ? doc.getMap(RETIRED_COMMENTS_KEY) : doc.peekMap(RETIRED_COMMENTS_KEY)
+  return plane?.size ?? 0
+}
+
+/** Whether this document holds comments only the retired plane carries. */
+export function holdsRetiredCommentPlane(doc: DocumentContainers): boolean {
+  return retiredRows(doc) > 0
+}
+
+/**
+ * Every conversation on this document, in the threads plane's order (by id).
+ * Throws `RetiredCommentPlaneError` for a document the old plane still holds
+ * comments for.
  *
  * A record the schema rejects costs that record and nothing beside it, the
  * contract every reader in this package keeps.
  */
 export function readAnnotations(doc: DocumentContainers): CommentThread[] {
-  const threads = readCommentThreads(doc)
-  const known = new Set(threads.map((thread) => thread.id))
-  const legacy: CommentThread[] = []
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  for (const commentId of commentsMap.keys()) {
-    // A replica that merged an old peer's write can hold both shapes for one
-    // id. The thread is the newer one, and the one a reply was written into.
-    if (known.has(commentId)) continue
-    const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
-    if (parsed.success) legacy.push(threadFromCanvasComment(parsed.data))
-  }
-  return [...threads, ...legacy]
+  const rows = retiredRows(doc)
+  if (rows > 0) throw new RetiredCommentPlaneError(rows)
+  return readCommentThreads(doc)
 }

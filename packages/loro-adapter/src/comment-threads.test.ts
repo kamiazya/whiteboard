@@ -2,18 +2,11 @@ import { CANVAS_MAX_NODES, type CommentThread } from '@kamiazya/whiteboard-model
 import { LoroDoc, type LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import {
-  migrateCanvasCommentsToThreads,
   readCommentThreads,
   setCommentThreadStatus,
   writeCommentThread,
   writeThreadMessage,
 } from './comment-threads.js'
-
-/** Seeds the legacy `comments` map the way the pre-threads writer did. */
-function seedLegacy(doc: LoroDoc, comment: Record<string, unknown>): void {
-  doc.getMap('comments').set(String(comment.id), comment)
-  doc.commit()
-}
 
 const THREAD: CommentThread = {
   id: 't1',
@@ -137,55 +130,5 @@ describe('comment threads storage', () => {
       writeCommentThread(doc, anchored({ width: 3, height: 4 }))
       expect(readCommentThreads(doc)).toHaveLength(1)
     })
-  })
-})
-
-describe('migrateCanvasCommentsToThreads', () => {
-  it('turns each stored comment into a one-message thread', () => {
-    const doc = new LoroDoc()
-    seedLegacy(doc, {
-      id: 'c1',
-      x: 1,
-      y: 2,
-      text: 'tighten this',
-      targetNodeId: 'n1',
-      resolved: true,
-    })
-    expect(migrateCanvasCommentsToThreads(doc)).toBe(1)
-    expect(readCommentThreads(doc)).toEqual([
-      {
-        id: 'c1',
-        anchor: { kind: 'spatial', nodeId: 'n1', x: 1, y: 2 },
-        status: 'resolved',
-        messages: [{ id: 'c1', body: 'tighten this' }],
-      },
-    ])
-  })
-
-  it('empties the legacy plane, so a row cannot outlive the thread it became', () => {
-    // A legacy row left behind would come back through `readSpatialCanvas`'s
-    // fallback after the thread was closed or deleted.
-    const doc = new LoroDoc()
-    seedLegacy(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
-    migrateCanvasCommentsToThreads(doc)
-    expect(doc.getMap('comments').keys()).toEqual([])
-  })
-
-  it('is idempotent, and a second pass does not clobber a reply added since', () => {
-    const doc = new LoroDoc()
-    seedLegacy(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
-    migrateCanvasCommentsToThreads(doc)
-    writeThreadMessage(doc, 'c1', { id: 'm2', body: 'reply' })
-    expect(migrateCanvasCommentsToThreads(doc)).toBe(0)
-    expect(readCommentThreads(doc)[0]?.messages).toHaveLength(2)
-  })
-
-  it('skips a comment the schema rejects rather than failing the whole pass', () => {
-    const doc = new LoroDoc()
-    seedLegacy(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
-    doc.getMap('comments').set('bad', { id: 'bad', x: 0, y: 0 })
-    doc.commit()
-    expect(migrateCanvasCommentsToThreads(doc)).toBe(1)
-    expect(readCommentThreads(doc).map((t) => t.id)).toEqual(['c1'])
   })
 })

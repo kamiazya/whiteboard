@@ -99,9 +99,14 @@ describe('workspace-record growth scoreboard', () => {
     // down), and asking the document whether it held the root first made the
     // undo test go red instead. The trade this list already records is the
     // one that survives both.
-    expect(build(1, 0).afterCreateBytes).toBe(974)
-    expect(build(10, 0).afterCreateBytes).toBe(3662)
-    expect(build(50, 0).afterCreateBytes).toBe(16810)
+    //
+    // Then the first step DOWN: the retired `comments` plane left the set when
+    // nothing read it any more (a document still holding rows there is refused
+    // instead, and the probe opens nothing): 974 -> 945 at one document, 16810
+    // -> 16047 at fifty.
+    expect(build(1, 0).afterCreateBytes).toBe(945)
+    expect(build(10, 0).afterCreateBytes).toBe(3473)
+    expect(build(50, 0).afterCreateBytes).toBe(16047)
   })
 
   it('pins oplog growth per edit and the shallow reclaim', () => {
@@ -130,8 +135,10 @@ describe('workspace-record growth scoreboard', () => {
     // the delta log shrank: 1000 fewer no-op deletes in the history; 11040 ->
     // 11136 when the ink plane joined the pre-attached set, which is the
     // create-time price of one more container across ten documents and not a
-    // per-edit cost — `updateBytes` above did not move.
-    expect(n.fullBytes).toBe(11313)
+    // per-edit cost — `updateBytes` above did not move. 11313 -> 11164 when
+    // the retired comments plane left the set, the same create-time price
+    // paid back.
+    expect(n.fullBytes).toBe(11164)
     // The reclaim: a shallow cut at the current frontier collapses the whole
     // edit history. It is no longer byte-IDENTICAL to the create-time record:
     // since the comments container (ADR-0024) joined the pre-attached set, a
@@ -144,8 +151,9 @@ describe('workspace-record growth scoreboard', () => {
     // the edits added") is the invariant, byte identity was only its
     // strongest available form.
     // 3456 -> 3550: a node stored as a resource is one nested object rather
-    // than two flat keys, and the cut keeps the CURRENT state.
-    expect(n.shallowBytes).toBe(3550)
+    // than two flat keys, and the cut keeps the CURRENT state. 3550 -> 3388
+    // when the retired comments plane left the pre-attached set.
+    expect(n.shallowBytes).toBe(3388)
     expect(n.shallowBytes).toBeLessThanOrEqual(build(10, 0).afterCreateBytes)
     // A CEILING sized on a measurement, not a delay: `build(10, 100)` is 1000
     // synchronous edits, each with a commit and an `export({ mode: 'update' })`,

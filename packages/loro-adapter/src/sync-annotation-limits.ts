@@ -2,8 +2,7 @@
 // threads and proposed changes it leaves open, and how many messages one
 // thread holds — judged with the text bounds in `sync-text-limits.ts`, by the
 // same keepers on the same bytes. Kept apart because none of it reads text:
-// it counts entries of the threads, legacy comments, proposals and messages
-// maps.
+// it counts entries of the threads, proposals and messages maps.
 import {
   DOCUMENT_MAX_OPEN_CHANGES,
   DOCUMENT_MAX_OPEN_THREADS,
@@ -12,7 +11,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { type ContainerID, type LoroDoc, LoroMap } from 'loro-crdt'
 import { MESSAGES_KEY, openThreadCount } from './comment-threads.js'
-import { COMMENTS_KEY, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
+import { PROPOSALS_KEY, THREADS_KEY } from './containers.js'
 import { openProposedChangeCount } from './proposals.js'
 import { WORKSPACE_TREE_KEY } from './workspace-tree.js'
 
@@ -28,18 +27,6 @@ export type AnnotationCountBreach<S extends AnnotationBound['shape'] = Annotatio
   readonly container: ContainerID
 }
 
-/** How many legacy comment rows in `commentsMap` are open: a reader still draws each as a thread. */
-function openLegacyCommentCount(commentsMap: LoroMap): number {
-  let open = 0
-  for (const commentId of commentsMap.keys()) {
-    const value = commentsMap.get(commentId)
-    if (value !== null && typeof value === 'object' && !('resolved' in value && value.resolved)) {
-      open += 1
-    }
-  }
-  return open
-}
-
 /** How many messages the most-replied thread in `threadsMap` holds. */
 function longestThread(threadsMap: LoroMap): number {
   let longest = 0
@@ -53,9 +40,8 @@ function longestThread(threadsMap: LoroMap): number {
 
 /**
  * Each annotation bound: the maps whose entries it counts, and how an entry
- * counts. A `document` bound counts at the document's own maps, and the
- * thread bound counts the legacy comment rows beside the threads, since
- * `readAnnotations` lifts each into one. Neither a thread nor a change is
+ * counts. A `document` bound counts at the document's own maps. Neither a
+ * thread nor a change is
  * ever deleted, so only open ones are held to it (`DOCUMENT_MAX_OPEN_THREADS`).
  *
  * The `thread` bound counts at ONE thread's messages map, every entry
@@ -66,11 +52,10 @@ function longestThread(threadsMap: LoroMap): number {
 const ANNOTATION_BOUNDS = [
   {
     scope: 'document',
-    keys: [THREADS_KEY, COMMENTS_KEY],
+    keys: [THREADS_KEY],
     shape: 'open-threads',
     max: DOCUMENT_MAX_OPEN_THREADS,
-    walk: (key: string, map: LoroMap) =>
-      key === THREADS_KEY ? openThreadCount(map) : openLegacyCommentCount(map),
+    walk: (_key: string, map: LoroMap) => openThreadCount(map),
   },
   {
     scope: 'document',
@@ -120,7 +105,7 @@ function annotationMaps(doc: LoroDoc, map: LoroMap, bound: AnnotationBound): [st
 /**
  * How deep below its root a write can still open an annotation: a proposal's
  * changes sit two maps under the proposals map, a thread one under the
- * threads map, and a legacy comment is the comments map itself.
+ * threads map.
  */
 function deepestAnnotationDepth(key: unknown): number {
   if (key === PROPOSALS_KEY) return 3
@@ -142,7 +127,7 @@ function reaches(bound: AnnotationBound, relative: readonly unknown[]): boolean 
 
 /**
  * The annotation bound a write to the map `container` can move, when it is
- * one: a threads, legacy comments or proposals map itself (one added), one
+ * one: a threads or proposals map itself (one added), one
  * thread's or proposal's own map (a status set), a proposal's changes (a
  * change added or decided), or one thread's messages (a reply, counted
  * toward that thread alone). `undefined` too for a container the doc's

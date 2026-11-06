@@ -15,6 +15,8 @@ const IS_READ_FAILURE: Record<BackendErrorReason, boolean> = {
   'corrupt-snapshot': true,
   'corrupt-delta': true,
   'read-unavailable': true,
+  // Refused on read: no reader serves the plane before threads.
+  'retired-comment-plane': true,
   'storage-failure': false,
   'document-removed': false,
 }

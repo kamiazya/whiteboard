@@ -1,6 +1,7 @@
 import type { CommentThread, Proposal } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { holdsRetiredCommentPlane } from './annotations.js'
 import { readCommentThreads, writeCommentThread } from './comment-threads.js'
 import { readMarkdownBody, writeMarkdownBody } from './markdown-body.js'
 import { readProposals, writeProposal } from './proposals.js'
@@ -173,9 +174,10 @@ describe('duplicateWorkspaceDocument and the annotation layer', () => {
     expect(readProposals(source).map((proposal) => proposal.id)).toEqual(['p1'])
   })
 
-  // The pre-threads plane is still read as a fallback, so a copy carrying it
-  // would show the conversation it was meant to leave behind.
-  it('leaves a legacy comments plane behind too', () => {
+  // The plane before threads is refused on read rather than read as empty, so
+  // a copy must carry it too: left behind, the copy would read as a document
+  // nobody had commented on, and the comments would be gone without a word.
+  it('carries a retired comments plane along, so the copy is refused like its source', () => {
     const doc = workspaceWithRoadmap()
     documentContainers(doc, SOURCE)
       .getMap('comments')
@@ -184,6 +186,6 @@ describe('duplicateWorkspaceDocument and the annotation layer', () => {
 
     duplicateWorkspaceDocument(doc, { ...COPY_INPUT, withoutAnnotations: true })
 
-    expect(documentContainers(doc, COPY).getMap('comments').size).toBe(0)
+    expect(holdsRetiredCommentPlane(documentContainers(doc, COPY))).toBe(true)
   })
 })

@@ -12,7 +12,6 @@ import {
 import {
   CANVAS_KEY,
   CANVAS_TAGS_FIELD,
-  COMMENTS_KEY,
   CORE_KEY,
   DOCUMENT_KEY,
   type DocumentContainers,
@@ -680,7 +679,6 @@ export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 
   { key: EDGES_KEY, kind: 'map' },
   { key: LINES_KEY, kind: 'map' },
   { key: CANVAS_KEY, kind: 'map' },
-  { key: COMMENTS_KEY, kind: 'map' },
   { key: THREADS_KEY, kind: 'map' },
   { key: PROPOSALS_KEY, kind: 'map' },
   { key: FACETS_KEY, kind: 'map' },
