@@ -8,16 +8,14 @@ import {
 import { EditorSelection, EditorState } from '@codemirror/state'
 import { GFM } from '@lezer/markdown'
 import { describe, expect, it } from 'vitest'
-import {
-  backspaceEmptyMarkup,
-  endListOnEmptyItem,
-  exitEmptyListItem,
-} from './exit-empty-list-item.js'
+import { backspaceEmptyMarkup, endListOnEmptyItem } from './exit-empty-list-item.js'
 
 function apply(doc: string, caret: number): string | null {
   const state = EditorState.create({ doc, selection: EditorSelection.single(caret) })
   let next: string | null = null
-  const handled = exitEmptyListItem({
+  // Backspace's verb: the spent-markup clearing every verb here shares,
+  // without the blank line Enter adds after a list.
+  const handled = backspaceEmptyMarkup({
     state,
     dispatch: (tr) => {
       next = tr.state.doc.toString()
@@ -26,7 +24,7 @@ function apply(doc: string, caret: number): string | null {
   return handled ? next : null
 }
 
-describe('exitEmptyListItem', () => {
+describe('clearing spent markup', () => {
   it('deletes a bare unordered marker at the caret line end', () => {
     expect(apply('- one\n- ', 8)).toBe('- one\n')
   })
@@ -75,7 +73,7 @@ describe('Enter on a quote through the editor chain', () => {
       },
     }
     // The order SourcePane installs: the exit verb, the language's Enter, then the default one.
-    exitEmptyListItem(target) ||
+    endListOnEmptyItem(target) ||
       insertNewlineContinueMarkup(target) ||
       insertNewlineAndIndent(target)
     return state.doc.toString()

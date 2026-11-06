@@ -11,7 +11,7 @@
  * a second navigation problem, and the rail exists to remove one.
  */
 
-/** A block's box in document coordinates — what `outlineFromScene` emits. */
+/** A block's box in document coordinates — what `outlineBlocks` emits. */
 export interface RailBlock {
   readonly x: number
   readonly y: number

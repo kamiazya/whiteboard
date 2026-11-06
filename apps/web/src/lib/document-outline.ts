@@ -63,12 +63,9 @@ function isDrawable(bbox: { x: number; y: number; w: number; h: number }): boole
  * Top-level blocks only. A run's box sits INSIDE its block's, so keeping both
  * draws the same ink twice — and lets a long paragraph's individual words
  * outvote the heading above it once `projectRectsToBoard` caps by area.
+ * Each says whether its block is a heading: a printed note keeps one with
+ * what follows it.
  */
-export function outlineFromScene(scene: Scene): FaviconRect[] {
-  return outlineBlocks(scene).map((block) => block.rect)
-}
-
-/** {@link outlineFromScene}'s rects, each with whether its block is a heading. */
 export function outlineBlocks(
   scene: Scene,
 ): { readonly rect: FaviconRect; readonly heading: boolean }[] {

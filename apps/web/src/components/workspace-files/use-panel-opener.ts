@@ -5,6 +5,16 @@ import { openOnSingleActivation } from '../../lib/open-on-single-activation.js'
 import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
 
 /**
+ * The row Back returns to when it is not the opened document's own card: a
+ * link followed in the preview leaves from the card holding it, a Recent
+ * open from its tile.
+ */
+interface DepartureOrigin {
+  readonly path?: string | undefined
+  readonly surface?: ListSurface
+}
+
+/**
  * Every open from the panel, so each one lands in this device's Recent lane
  * and seen baseline. Nothing is remembered where the host offers no open:
  * selecting a document is looking at it, not opening it. `openPath` takes a
@@ -34,16 +44,8 @@ export function usePanelOpener(
   // the create callback that calls one, on every render of the page above.
   const openRef = useRef(onOpenDocument)
   openRef.current = onOpenDocument
-  /**
-   * `from` is the row Back returns to when it is not the opened document's
-   * own: a link followed in the preview leaves from the card holding it.
-   */
   const openPath = useCallback(
-    (
-      path: string,
-      entry: WorkspaceDocumentEntry | null,
-      from?: { readonly path?: string | undefined; readonly surface?: ListSurface },
-    ) => {
+    (path: string, entry: WorkspaceDocumentEntry | null, from?: DepartureOrigin) => {
       const open = openRef.current
       if (open === undefined) return
       if (entry !== null) remember(entry)
