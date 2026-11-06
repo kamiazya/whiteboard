@@ -6,6 +6,7 @@ mod harden;
 mod inputs;
 mod metadata;
 mod notices;
+mod poison_recover;
 mod repro;
 mod size;
 mod unsafe_ledger;
@@ -31,6 +32,7 @@ tasks:
   repro-check [native|wasm]...
                     two release builds, from two source paths, are byte-equal
   notices           THIRD-PARTY-NOTICES for the wasm and native artifacts
+  poison-recover    the wasm panic-recovery scenario (fails: not yet runnable)
   unsafe-ledger [--update]
                     dependency `unsafe` fits crates/unsafe-ledger.json";
 
@@ -49,6 +51,7 @@ fn main() -> ExitCode {
         ["dist", rest @ ..] => dist::run_task(rest),
         ["repro-check", rest @ ..] => repro::run(rest),
         ["notices"] => notices::run(),
+        ["poison-recover"] => poison_recover::run(),
         ["unsafe-ledger"] => unsafe_ledger::run(unsafe_ledger::Mode::Check),
         ["unsafe-ledger", "--update"] => unsafe_ledger::run(unsafe_ledger::Mode::Update),
         _ => Err(vec![USAGE.to_owned()]),
