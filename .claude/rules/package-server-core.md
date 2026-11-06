@@ -57,7 +57,7 @@ paths:
   (`packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts`): `arbitraryForSchema` over
   `tool.inputSchema` for each entry of `createServer(deps).tools`, run
   against a seeded in-memory workspace (a spatial document with two text
-  nodes, a group, an edge and a comment; a markdown document with
+  nodes, a group, an edge and a thread in the annotation layer; a markdown document with
   frontmatter and a body; one saved version). Each call must ANSWER or
   REFUSE — a domain error naming what was wrong — never crash (a
   `TypeError` / `RangeError` / `ReferenceError`, a non-Error thrown, or a
@@ -74,7 +74,8 @@ paths:
   `wb_canvas_edit` answered with 7 of its 13 op kinds (16 since the LINE ops
   — `line.add`, `line.patch`, `line.remove`, which is what lets anything but
   the editor author ink, ADR-0038 decision 2), and `node.patch`,
-  `node.splice`, `edge.remove`, `comment.resolve` and `region.set` never
+  `node.splice`, `edge.remove`, `comment.resolve` (since left the tool; ADR-0026
+  decision 6) and `region.set` never
   reached the answering path. `OP_REACH` is the ledger over those arms in
   the repo's sense (`coverage-ledger.md`): read off the schema in both
   directions, `answers` checked against the run at a tenth of the arm's draws

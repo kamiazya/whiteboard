@@ -141,9 +141,8 @@ implementations live in the composition roots.
   `proposals.durability.test.ts` cross that reopen; a new plane whose
   entries are containers gets a test of the same shape.
 - **`containers.ts` holds the `DocumentContainers` seam and every container
-  key.** The content bridge is five modules by what they read: the spatial
-  canvas and its locks (`loro-bridge.ts`), the flat canvas comment it writes
-  into the thread plane (`canvas-comment-write.ts`), the document envelope —
+  key.** The content bridge is four modules by what they read: the spatial
+  canvas and its locks (`loro-bridge.ts`), the document envelope —
   kind, core, trust and extension facets (`document-envelope.ts`) — the
   markdown body (`markdown-body.ts`), and the read-only lifts of the two
   shapes older writers left (`legacy-lifts.ts`). Each reaches for a key here and never
@@ -151,28 +150,24 @@ implementations live in the composition roots.
   `proposals` from forming a value cycle `cycle-check.ts` would fail on;
   `markdown-body` is the one that imports `loro-bridge`, since a body
   written as a node is read through the canvas and writing one empties it.
-- **A comment lives in the `threads` plane (ADR-0026), and `readSpatialCanvas`
-  PROJECTS one back.** Every writer — `writeCanvasComment`, the resync inside
-  `writeSpatialCanvas`, `withSpatialBatch` — goes through the thread plane, so
-  the canvas API every consumer speaks is unchanged while the storage under it
-  moved once rather than twice. The projection is lossy by construction (a
-  thread's replies have nowhere to go in a `CanvasComment`, and a text anchor
-  has no canvas position), which is why the panel that shows a conversation
-  reads threads directly instead.
-
-  The legacy `comments` map is read as a FALLBACK, for a document no writer has
-  touched since. `migrateCanvasCommentsToThreads` empties it at every write
-  seam, and it does not commit — the seam that calls it owns the commit
-  boundary, because an extra commit inside `withSpatialBatch` splits one user
-  action into two undo steps. Retire the fallback (and `COMMENTS_KEY`) once
-  nothing needs it; the condition is a keeper whose documents have all been
-  written since.
+- **A comment lives in the `threads` plane (ADR-0026), and nowhere else.**
+  The canvas carries no comments: `readSpatialCanvas` projects none, and no
+  canvas write touches the plane. The pin a board draws is model's
+  `canvasCommentsOf(threads, nodes)`, a render-time view. The plane before
+  threads, a root `comments` map (`RETIRED_COMMENTS_KEY`), has no reader:
+  `readAnnotations` throws `RetiredCommentPlaneError` for a document still
+  holding rows there, rather than reading it as having no conversation, and
+  each keeper surfaces that (409 on `/api/v1`; a read-failure screen in the
+  web app). The probe (`holdsRetiredCommentPlane`) goes through the optional
+  `DocumentContainers.peekMap`, because opening a container on a tree node
+  is a WRITE and would clear the undo manager's redo stack.
+  `annotations.test.ts` holds all three.
 - **A nested container is the right shape only when the thing inside it must
   merge per ENTRY**, and it buys that at a price worth naming. The annotation
   layer's `threads` map (`comment-threads.ts`, ADR-0026) is the one that
   qualifies: a thread's messages are a set two peers append to concurrently,
   and stored as one value the second reply would erase the first, silently.
-  Nodes, edges and comments are each ONE value with one meaning, so a plain
+  Nodes and edges are each ONE value with one meaning, so a plain
   object is right for them and a container would only add the hazard below.
 
   The price, measured on loro-crdt 1.13.6: when two replicas create a
@@ -182,9 +177,8 @@ implementations live in the composition roots.
 
   A thread's key does NOT protect against that, and the claim here that it
   did ("its id is minted, and cannot collide") was wrong: the key is the
-  CALLER's comment id, which `writeCommentInto` passes straight through and
-  `deleteCommentInto` looks the thread up by. Two keepers migrating the same
-  legacy comment, or each applying one `comment.add`, reach the same key
+  CALLER's thread id, which `writeCommentThread` passes straight through. Two
+  keepers each applying one `thread.add` with the same id reach the same key
   having never seen the other's. `openMergeableMap`
   (`mergeable-containers.ts`) is what closes it — a deterministic child id,
   so the two were editing one container all along — and

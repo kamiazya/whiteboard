@@ -110,9 +110,11 @@ rather than in a string, so joining its runs yields `tightenthis`.
 - **A document becomes a JSON Canvas document in ONE place.** `serializeSpatial` and
   `parseSpatial` both go through `spatial/projection.ts`, so `JSON_CANVAS_PROJECTION` is the
   single account of what crossing costs. The projection RELOCATES rather than copies now: the
-  canvas's `comments` and `facets`, a node's `embed` and `facets`, and an edge's `facets` and
+  canvas's `facets`, a node's `embed` and `facets`, and an edge's `facets` and
   `bends` become the extension key on the way out, and the node's two independent fields fold
-  back into the format's single union arm. An edge's extension is therefore its OWN declaration
+  back into the format's single union arm. A file carrying the retired `x-whiteboard.comments`
+  (or OCIF `@whiteboard/comments`) is refused on parse, naming the key, rather than read with
+  its conversations dropped. An edge's extension is therefore its OWN declaration
   (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0037 slice 4 an edge
   carries something the format cannot state, and it is geometry rather than content. One canonicalisation goes with it — an extension object with
   nothing in it is not emitted, because absence says the same thing — and it is pinned by
