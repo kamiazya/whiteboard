@@ -78,7 +78,7 @@ import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { type GestureState, reduceGesture } from './gestures.js'
 import { withGroupMates } from './ink-hit.js'
 import type { PointerKind } from './navigation.js'
-import { DOUBLE_PRESS_WINDOW_MS } from './navigation.js'
+import { DOUBLE_PRESS_WINDOW_MS, doublePressSlopPx } from './navigation.js'
 import {
   advanceCommentDrag,
   cancelCommentPress,
@@ -272,13 +272,24 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
    * pointer (selection overlay, gesture state), so the second click can land
    * on a different element instance and Chromium then never synthesises a
    * dblclick at all. Comparing node IDS within the OS-conventional window is
-   * stable against those re-renders.
+   * stable against those re-renders. The distance matters too: every empty
+   * spot shares one key, so two clicks across the board would otherwise be a
+   * double-click on it.
    */
-  const recordDoublePress = (pressKey: string, at: number, screenPoint: Point, point: Point) => {
+  const recordDoublePress = (
+    e: React.PointerEvent<HTMLDivElement>,
+    pressKey: string,
+    screenPoint: Point,
+    point: Point,
+  ) => {
+    const at = e.timeStamp
+    const last = lastPressRef.current
     const isDoublePress =
-      lastPressRef.current !== null &&
-      lastPressRef.current.key === pressKey &&
-      at - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
+      last !== null &&
+      last.key === pressKey &&
+      at - last.at <= DOUBLE_PRESS_WINDOW_MS &&
+      Math.hypot(screenPoint.x - last.point.x, screenPoint.y - last.point.y) <=
+        doublePressSlopPx(e.pointerType)
     lastPressRef.current = isDoublePress ? null : { key: pressKey, at, point: screenPoint }
     doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
   }
@@ -292,7 +303,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
   ) => {
     if (tool !== 'hand' || e.pointerType === 'touch' || e.button !== 0) return
     if (spaceDownRef.current || commentHoldsPress(inputs)) return
-    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
+    recordDoublePress(e, pressKey, screenPoint, point)
     const armed = doublePressRef.current
     doublePressRef.current = null
     handDoublePressRef.current = armed === null ? null : { ...armed, screen: screenPoint }
@@ -454,7 +465,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (claimShiftPress(e, pick)) return
     if (lockedPress.absorb(e, pick, point, screenPoint)) return
 
-    recordDoublePress(pressKey, e.timeStamp, screenPoint, point)
+    recordDoublePress(e, pressKey, screenPoint, point)
     if (hitId === undefined) {
       pressOnEmptyBoard(point, hitPathId)
       return
