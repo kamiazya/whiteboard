@@ -96,7 +96,8 @@ async function routeAfter(latencyMs: number, docs: readonly string[]): Promise<v
 
 const server = setupServer(
   http.get(`${BASE}/api/sync/stream`, () => {
-    if (refuseStreams) return HttpResponse.json({ title: 'unauthorized' }, { status: 401 })
+    if (refuseStreams)
+      return HttpResponse.json({ error: 'refused', message: 'unauthorized' }, { status: 401 })
     const enc = new TextEncoder()
     routed.clear()
     const stream = new ReadableStream<Uint8Array>({
@@ -145,10 +146,11 @@ const server = setupServer(
     const failing = failingSnapshots.get(workspaceId) ?? 0
     if (failing > 0) {
       failingSnapshots.set(workspaceId, failing - 1)
-      return HttpResponse.json({ title: 'unavailable' }, { status: 503 })
+      return HttpResponse.json({ error: 'refused', message: 'unavailable' }, { status: 503 })
     }
     const keeper = keepers.get(workspaceId)
-    if (!keeper) return HttpResponse.json({ title: 'not found' }, { status: 404 })
+    if (!keeper)
+      return HttpResponse.json({ error: 'refused', message: 'not found' }, { status: 404 })
     const snapshot = keeper.export({ mode: 'snapshot' })
     if (writeAfterSnapshot.delete(workspaceId)) keeperBroadcasts.get(workspaceId)?.(true)
     return new HttpResponse(snapshot.slice().buffer as ArrayBuffer, {

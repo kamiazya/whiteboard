@@ -1,0 +1,7 @@
+# Pinned like `.node-version`: CI and every checkout build with this exact
+# compiler, so a clippy or rustfmt release cannot turn a green tree red.
+[toolchain]
+channel = "1.97.0"
+profile = "minimal"
+components = ["clippy", "rustfmt", "llvm-tools"]
+targets = ["wasm32-unknown-unknown"]

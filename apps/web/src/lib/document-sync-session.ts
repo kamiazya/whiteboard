@@ -68,7 +68,7 @@ import type { EditorCommand } from './spatial/commands.js'
 import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
-import { unreadableSnapshot } from './unreadable-snapshot.js'
+import { unreadableContent, unreadableSnapshot } from './unreadable-snapshot.js'
 
 const log = getAppLogger('document-sync')
 
@@ -598,6 +598,15 @@ export function createDocumentSyncSession(
     deps.generations.nextApplyGeneration()
     const content = isStale() ? null : contentOf(targetDoc)
     if (content === null) return
+    // The same refusal the snapshot gets: an update from an older peer can
+    // bring the retired plane in after load, and a throw here would escape
+    // the import subscription unhandled while the stale canvas stays up.
+    const unreadable = unreadableContent(content)
+    if (unreadable !== null) {
+      deps.onBackendError(unreadable)
+      deps.onStatusChange('error')
+      return
+    }
     const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
     // Read from the same doc read that produced the canvas, so the two

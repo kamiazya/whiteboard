@@ -44,7 +44,10 @@ export const SELECTS_EVERYTHING = [
     // Every root-level file but the documents and metadata READ_ROOT_FILES
     // names: the lockfile, the root manifest, the vitest, tsconfig and biome
     // configs, .node-version, .npmrc, the Dockerfile.
-    pattern: { test: (path) => /^[^/]+$/.test(path) && !READ_ROOT_FILES.includes(path) },
+    pattern: {
+      test: (path) =>
+        /^[^/]+$/.test(path) && !READ_ROOT_FILES.includes(path) && pathJobsOf(path).length === 0,
+    },
     why: 'a root-level build, install or test config reaches every package',
   },
   {
@@ -171,8 +174,58 @@ export const PACKAGE_JOBS = {
 }
 
 /**
+ * The Cargo workspace's files at the root and the trees under it. A change
+ * here builds and tests no pnpm package, so it is attributed to the Rust jobs
+ * instead of selecting everything. The Rust CI scripts
+ * (tools/checks/src/rust-*.mjs) are not listed: tools/checks selects
+ * everything, the Rust jobs with it.
+ */
+const RUST_SCOPE = {
+  files: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rustfmt.toml', 'deny.toml'],
+  trees: ['.cargo', 'crates'],
+}
+
+/**
+ * ci.yml jobs scoped by PATH rather than by the workspace graph: each runs
+ * when a changed path is one of its scope's root files or lies under one of
+ * its trees. The Cargo workspace is not a pnpm node, and modelling its crates
+ * as graph nodes would buy nothing yet — both jobs build the whole workspace.
+ * A TS package whose source names one of these paths still runs, through
+ * scanTreeReaders, as for any READ_TREES entry.
+ * @type {Record<string, { scope: { files: string[], trees: string[] }, why: string }>}
+ */
+export const PATH_JOBS = {
+  rust: { scope: RUST_SCOPE, why: 'pnpm rust:check, the wasm build and the release gates' },
+  'rust-fuzz-pr': {
+    scope: RUST_SCOPE,
+    why: 'the fuzz targets whose crates changed, for tens of seconds each',
+  },
+}
+
+/**
+ * The PATH_JOBS whose scope holds `path`.
+ * @param {string} path
+ * @returns {string[]}
+ */
+function pathJobsOf(path) {
+  return Object.entries(PATH_JOBS)
+    .filter(
+      ([, { scope }]) =>
+        scope.files.includes(path) || scope.trees.some((tree) => path.startsWith(`${tree}/`)),
+    )
+    .map(([id]) => id)
+}
+
+/** The root files and trees every PATH_JOBS scope names, for the reader scan. */
+function pathJobTrees() {
+  const scopes = Object.values(PATH_JOBS).map(({ scope }) => scope)
+  return [...new Set(scopes.flatMap(({ files, trees }) => [...files, ...trees]))]
+}
+
+/**
  * ci.yml jobs that run on every event whatever the change, each with why.
- * Every job in ci.yml is in exactly one of PROJECT_JOBS, PACKAGE_JOBS and this.
+ * Every job in ci.yml is in exactly one of PROJECT_JOBS, PACKAGE_JOBS,
+ * PATH_JOBS and this.
  * @type {Record<string, string>}
  */
 export const UNSCOPED_JOBS = {
@@ -366,7 +419,7 @@ export function scanTreeReaders({
   files,
   nodes,
   read,
-  trees = [...READ_TREES, ...READ_ROOT_FILES],
+  trees = [...READ_TREES, ...READ_ROOT_FILES, ...pathJobTrees()],
 }) {
   /** @type {Record<string, { test: Set<string>, source: Set<string> }>} */
   const found = Object.fromEntries(
@@ -470,6 +523,12 @@ function attributeChange({ path, status }, nodes, readers) {
       changed: node.id,
     }
   }
+  if (pathJobsOf(path).length > 0) {
+    // Scheduled by pathHitsOf; here only the TS packages that read the path.
+    const tree = pathJobTrees().find((name) => path === name || path.startsWith(`${name}/`))
+    const read = (tree && readers[tree]) || { sourceReaders: [], testReaders: [] }
+    return { touch: read.sourceReaders, own: read.testReaders }
+  }
   const tree = READ_ROOT_FILES.includes(path)
     ? path
     : READ_TREES.find((name) => path.startsWith(`${name}/`))
@@ -496,10 +555,10 @@ function jobReason(everything, hit, universe, verb) {
 }
 
 /**
- * @param {{ everything: boolean, projects: Project[], selected: Set<string>, affected: Set<string> }} input
+ * @param {{ everything: boolean, projects: Project[], selected: Set<string>, affected: Set<string>, pathHits: Map<string, string[]> }} input
  * @returns {Record<string, JobPlan>}
  */
-function planJobs({ everything, projects, selected, affected }) {
+function planJobs({ everything, projects, selected, affected, pathHits }) {
   /** @type {Record<string, JobPlan>} */
   const jobs = {}
   for (const jobId of PROJECT_JOBS) {
@@ -519,7 +578,54 @@ function planJobs({ everything, projects, selected, affected }) {
       reason: jobReason(everything, hit, packages, 'affected'),
     }
   }
-  return jobs
+  return { ...jobs, ...planPathJobs(everything, pathHits) }
+}
+
+/**
+ * @param {boolean} everything
+ * @param {Map<string, string[]>} pathHits changed paths per PATH_JOBS id
+ * @returns {Record<string, JobPlan>}
+ */
+function planPathJobs(everything, pathHits) {
+  return Object.fromEntries(
+    Object.entries(PATH_JOBS).map(([jobId, { scope }]) => {
+      const hit = pathHits.get(jobId) ?? []
+      return [
+        jobId,
+        {
+          run: everything || hit.length > 0,
+          projects: null,
+          reason: pathJobReason(everything, hit, scope),
+        },
+      ]
+    }),
+  )
+}
+
+/**
+ * @param {boolean} everything
+ * @param {string[]} hit
+ * @param {{ files: string[], trees: string[] }} scope
+ */
+function pathJobReason(everything, hit, scope) {
+  if (everything) return 'everything selected'
+  if (hit.length > 5) return `changed: ${hit.slice(0, 5).join(', ')} and ${hit.length - 5} more`
+  if (hit.length > 0) return `changed: ${hit.join(', ')}`
+  return `none of ${[...scope.files, ...scope.trees.map((tree) => `${tree}/`)].join(', ')} changed`
+}
+
+/**
+ * The changed paths each PATH_JOBS job is scoped to.
+ * @param {Change[]} changes
+ * @returns {Map<string, string[]>}
+ */
+function pathHitsOf(changes) {
+  /** @type {Map<string, string[]>} */
+  const hits = new Map()
+  for (const { path } of changes) {
+    for (const id of pathJobsOf(path)) hits.set(id, [...(hits.get(id) ?? []), path])
+  }
+  return hits
 }
 
 /**
@@ -588,7 +694,13 @@ export function planScope({ changes, event, nodes, projects, readers }) {
     touched: [...touched].sort(),
     affected,
     projects: selected,
-    jobs: planJobs({ everything, projects, selected: new Set(selected), affected: affectedSet }),
+    jobs: planJobs({
+      everything,
+      projects,
+      selected: new Set(selected),
+      affected: affectedSet,
+      pathHits: pathHitsOf(changes),
+    }),
   }
 }
 

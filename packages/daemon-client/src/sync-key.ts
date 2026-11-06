@@ -6,7 +6,7 @@
  * lives in a module of its own rather than inside either side's machinery.
  */
 
-import { documentApiUrl, workspaceDocumentApiUrl } from './api-contracts/document-url.js'
+import { workspaceDocumentApiUrl } from './api-contracts/document-url.js'
 
 /**
  * The workspace-granularity doc key: one subscription for the whole
@@ -49,8 +49,7 @@ export function workspaceIdOfSyncKey(doc: string): string | null {
  * directly; a per-document key is `${handle}/${path}`, split on the first
  * slash (a path may contain more, a handle never does). What comes back is
  * the HANDLE the client wrote, which a daemon resolves to an id before it
- * keys anything by it. `null` for a malformed key — `documentRouteUrl` refuses
- * through this same split.
+ * keys anything by it. `null` for a malformed key.
  */
 export function workspaceHandleOfSyncKey(doc: string): string | null {
   if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) return workspaceIdOfSyncKey(doc)
@@ -60,33 +59,26 @@ export function workspaceHandleOfSyncKey(doc: string): string | null {
 }
 
 /**
- * The daemon's update route for a doc key.
- *
- * A per-document key IS `${handle}/${path}`, which is the only reason
- * anything holding just the key can address this route (first slash only: a
- * path may contain more, a handle never does). A `workspace:` key addresses
- * the workspace-document routes instead.
+ * The daemon's update route for a doc key: the workspace-document route for a
+ * `workspace:` key, and `null` for anything else. Binary sync is the
+ * workspace record's alone — a per-document key carries text messages
+ * (version, viewport, restore events) and addresses no route.
  */
-export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
-  return documentRouteUrl(baseUrl, doc, 'update')
+export function workspaceDocUpdateUrl(baseUrl: string, doc: string): string | null {
+  return workspaceDocRouteUrl(baseUrl, doc, 'update')
 }
 
-/** The snapshot twin of `documentUpdateUrl`, splitting on the same first slash. */
-export function documentSnapshotUrl(baseUrl: string, doc: string): string | null {
-  return documentRouteUrl(baseUrl, doc, 'snapshot')
+/** The snapshot twin of `workspaceDocUpdateUrl`. */
+export function workspaceDocSnapshotUrl(baseUrl: string, doc: string): string | null {
+  return workspaceDocRouteUrl(baseUrl, doc, 'snapshot')
 }
 
-function documentRouteUrl(
+function workspaceDocRouteUrl(
   baseUrl: string,
   doc: string,
   action: 'update' | 'snapshot',
 ): string | null {
-  const base = baseUrl.replace(/\/$/, '')
-  const handle = workspaceHandleOfSyncKey(doc)
-  if (handle === null) return null
-  if (workspaceIdOfSyncKey(doc) !== null) {
-    return `${base}${workspaceDocumentApiUrl(handle, action)}`
-  }
-  // Raw halves: documentApiUrl encodes per segment itself.
-  return `${base}${documentApiUrl(handle, doc.slice(handle.length + 1), action)}`
+  const workspaceId = workspaceIdOfSyncKey(doc)
+  if (workspaceId === null) return null
+  return `${baseUrl.replace(/\/$/, '')}${workspaceDocumentApiUrl(workspaceId, action)}`
 }

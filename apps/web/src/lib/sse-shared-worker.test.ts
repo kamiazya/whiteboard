@@ -74,7 +74,7 @@ const server = setupServer(
     })
   }),
   http.get(`${REFUSING_BASE}/api/sync/stream`, () =>
-    HttpResponse.json({ title: 'unauthorized' }, { status: 401 }),
+    HttpResponse.json({ error: 'refused', message: 'unauthorized' }, { status: 401 }),
   ),
   http.post(`${BASE}/api/sync/subscribe`, async ({ request }) => {
     subscribeBodies.push(await request.text())
@@ -100,7 +100,7 @@ const server = setupServer(
   // Answered (with "unknown") rather than left unhandled: `bypass` would let
   // the request escape to whatever real daemon is listening on this port.
   http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, () =>
-    HttpResponse.json({ title: 'Canvas not found' }, { status: 404 }),
+    HttpResponse.json({ error: 'refused', message: 'Canvas not found' }, { status: 404 }),
   ),
 )
 

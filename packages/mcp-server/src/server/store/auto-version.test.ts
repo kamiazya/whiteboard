@@ -1,9 +1,17 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../routes/_test-helpers.js'
+import {
+  createTestDocument,
+  postDocumentEdit,
+  resolveTestServerDeps,
+  testStoreScope,
+  withTempDataDir,
+} from '../routes/_test-helpers.js'
 import { versionStoreMock } from './test-utils/version-store-mock.js'
 
 const tmp = withTempDataDir('whiteboard-auto-version-test-')
@@ -32,6 +40,8 @@ const { loadDocument } = await import('./document-store.js')
 const { createDocumentRouter } = await import('../routes/document.js')
 const wsModule = await import('../sync-audience.js')
 const { FileVersionStore } = await import('./version-store.js')
+
+const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })
 
 describe('auto-version', () => {
   it('createAutoVersionTrigger is a function', () => {
@@ -124,14 +134,7 @@ describe('auto-version corruption handling', () => {
         .mockRejectedValue(corruptStoredData('/tmp/versions/v1.json', 'broken metadata')),
     })
 
-    const clientDoc = new LoroDoc()
-    const prevVV = clientDoc.version()
-    const list = clientDoc.getMovableList('elements')
-    const map = list.insertContainer(0, new LoroMap())
-    map.set('id', 'e1')
-    map.set('type', 'rectangle')
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'canvas-a' })
 
     // Quiet immediately: the checkpoint fires on the next tick rather than
     // five minutes out, so the route's own behaviour is what this observes.
@@ -142,11 +145,9 @@ describe('auto-version corruption handling', () => {
       autoVersionQuietMs: 0,
       versionStore,
     })
-    const res = await app.request('/api/w/session1/document/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
+    const res = await postDocumentEdit(app, 'session1', 'canvas-a', (containers) =>
+      writeSpatialCanvas(containers, { nodes: [box('e1')], edges: [] }),
+    )
 
     expect(res.status).toBe(200)
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -155,8 +156,7 @@ describe('auto-version corruption handling', () => {
 
     clearDocCacheForTests()
     const serverDoc = await loadDocument('session1', 'canvas-a')
-    const elements = serverDoc.getMovableList('elements').toJSON() as Array<{ id: string }>
-    expect(elements.map((entry) => entry.id)).toEqual(['e1'])
+    expect(readSpatialCanvas(serverDoc).nodes.map((node) => node.id)).toEqual(['e1'])
   })
 })
 
@@ -169,7 +169,7 @@ describe('auto-version corruption handling', () => {
  * way that memory can be empty or stale while the ROWS say otherwise gives a
  * checkpoint over a document nothing changed in, and a reconnect is the
  * cheapest of them: a client re-sending ops the server already has is a CRDT
- * no-op, and the update route signals the trigger on every POST regardless.
+ * no-op, and the update route signals the trigger for every document it edits.
  */
 describe('an unchanged document', () => {
   beforeEach(async () => {
@@ -193,20 +193,7 @@ describe('an unchanged document', () => {
       asked += 1
       return askedInner(workspaceId, path)
     }
-    const clientDoc = new LoroDoc()
-    const prevVV = clientDoc.version()
-    const map = clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
-    map.set('id', 'e1')
-    map.set('type', 'rectangle')
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
-
-    const post = (app: ReturnType<typeof createDocumentRouter>) =>
-      app.request('/api/w/session1/document/canvas-a/update', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/octet-stream' },
-        body: update,
-      })
+    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'canvas-a' })
 
     const first = createDocumentRouter({
       scope: testStoreScope(),
@@ -215,23 +202,30 @@ describe('an unchanged document', () => {
       autoVersionQuietMs: 0,
       versionStore: store,
     })
-    expect((await post(first)).status).toBe(200)
+    const edited = await postDocumentEdit(first, 'session1', 'canvas-a', (containers) =>
+      writeSpatialCanvas(containers, { nodes: [box('e1')], edges: [] }),
+    )
+    expect(edited.status).toBe(200)
     await vi.waitFor(async () => {
       expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
     })
 
     // A FRESH router, so a fresh trigger with an empty diff check — which is
-    // what a daemon restart leaves behind. The same bytes again: a
-    // reconnecting client replaying ops the record already carries.
+    // what a daemon restart leaves behind — signalled for the state the
+    // newest version already holds.
     const askedBefore = asked
-    const second = createDocumentRouter({
+    let restarted: ((workspaceId: string, path: string, doc: LoroDoc) => void) | undefined
+    createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,
       mayPlaceDocuments: () => true,
       autoVersionQuietMs: 0,
       versionStore: store,
+      onAutoVersionTrigger: (trigger) => {
+        restarted = trigger
+      },
     })
-    expect((await post(second)).status).toBe(200)
+    restarted?.('session1', 'canvas-a', await serverDeps.liveDocuments.get('session1', 'canvas-a'))
     await vi.waitFor(() => {
       expect(asked).toBeGreaterThan(askedBefore)
     })

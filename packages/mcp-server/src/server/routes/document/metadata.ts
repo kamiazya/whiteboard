@@ -54,7 +54,6 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
     if ('refusal' in address) return address.refusal
     const { workspaceId } = address
     const parsed = await readJsonBody(c, setNameRequestSchema, {
-      voice: 'code',
       refuseShape: (error) => invalidBodyRefusal(error, 'name must be a string'),
     })
     if ('refusal' in parsed) return parsed.refusal
@@ -70,7 +69,6 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
 
   onDocumentsRoute(app, 'put', ['name'], async (c, workspaceId, path) => {
     const parsed = await readJsonBody(c, setNameRequestSchema, {
-      voice: 'code',
       refuseShape: (error) => invalidBodyRefusal(error, 'name must be a string'),
     })
     if ('refusal' in parsed) return parsed.refusal
@@ -87,7 +85,6 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
   // Idempotently set pin on/off and return the full updated WorkspaceNames payload.
   onDocumentsRoute(app, 'put', ['pin'], async (c, workspaceId, path) => {
     const parsed = await readJsonBody(c, setPinnedRequestSchema, {
-      voice: 'code',
       refuseShape: (error) => invalidBodyRefusal(error, 'pinned must be boolean'),
     })
     if ('refusal' in parsed) return parsed.refusal

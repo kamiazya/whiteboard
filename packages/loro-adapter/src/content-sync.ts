@@ -319,7 +319,7 @@ export function projectedKind(value: unknown): 'text' | 'list' | 'map' | null {
 }
 
 /** A stored container's kind as the JSON projection spells it (`projectedKind`). */
-export const PROJECTED_KIND_OF: Readonly<Record<string, 'text' | 'list' | 'map'>> = {
+const PROJECTED_KIND_OF: Readonly<Record<string, 'text' | 'list' | 'map'>> = {
   Text: 'text',
   Map: 'map',
   List: 'list',

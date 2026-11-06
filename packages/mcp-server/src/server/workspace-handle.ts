@@ -102,9 +102,8 @@ export async function workspaceIdFromHandle(c: Context, handle: string): Promise
  * other checks — calls this half alone; every other route calls
  * `parseWorkspaceHandle`.
  *
- * The body is `{ error, message }`, the family every route here speaks except
- * the page-facing `workspace-document` surface (Problem Details) and
- * replica-key's typed `MembershipRefusal`; those validate for themselves.
+ * The body is `{ error, message }`, the family every route here speaks;
+ * replica-key's typed `MembershipRefusal` validates for itself.
  */
 export function refuseMalformedHandle(c: Context, handle: string): Response | null {
   try {

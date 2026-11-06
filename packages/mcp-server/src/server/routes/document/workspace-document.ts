@@ -73,14 +73,11 @@ async function admittedWorkspace(
   // and an empty handle refuses through the same validator as any other
   // unusable one rather than through a second path.
   const handle = c.req.param('workspaceId') ?? ''
-  // Validated here, not through `parseWorkspaceHandle`: this surface is read
-  // by the page, which speaks Problem Details (`{ title }`), where the helper
-  // answers the `{ error, message }` family.
   try {
     validateWorkspaceId(handle)
   } catch (err) {
     const body = validationErrorBody(err)
-    if (body) return { refusal: c.json({ title: body.message }, 400) }
+    if (body) return { refusal: c.json(body, 400) }
     throw err
   }
   const workspaceId = await workspaceIdFromHandle(c, handle)
@@ -141,7 +138,6 @@ function judgedBudgetBody(limit: number): PromoteJudgedBudgetRefusal {
 // The contract's ceiling, which the sender fits its body to — derived there
 // from the same file ceiling CONTENT_BODY_LIMIT_BYTES is.
 const PROMOTE_BODY: ReadJsonBodyOptions = {
-  voice: 'code',
   maxBytes: PROMOTE_REQUEST_LIMIT_BYTES,
   refuseShape: (error) => {
     const overfull = overfullPlane(error)
@@ -324,7 +320,7 @@ function updateHandler(options: WorkspaceDocumentRouterOptions) {
     }
     if (result.kind === 'placement-refused') {
       return c.json(
-        errorBody('auth.forbidden', 'Adding, removing or moving a document needs workspace:write'),
+        errorBody('auth_forbidden', 'Adding, removing or moving a document needs workspace:write'),
         403,
       )
     }

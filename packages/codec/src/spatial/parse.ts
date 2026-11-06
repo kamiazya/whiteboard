@@ -46,5 +46,10 @@ export function parseSpatial(text: string): CodecParseResult<SpatialCanvas> {
 function carriesConversation(raw: unknown): boolean {
   if (raw === null || typeof raw !== 'object' || !('x-whiteboard' in raw)) return false
   const extension = raw['x-whiteboard']
-  return extension !== null && typeof extension === 'object' && 'comments' in extension
+  if (extension === null || typeof extension !== 'object' || !('comments' in extension))
+    return false
+  // An empty list holds nothing to lose; the wire schema drops the key as it
+  // drops any other it does not name.
+  const comments = extension.comments
+  return Array.isArray(comments) && comments.length > 0
 }

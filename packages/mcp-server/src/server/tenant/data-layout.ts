@@ -1,11 +1,9 @@
-import { mkdir, readdir, rename, stat } from 'node:fs/promises'
-import { dirname, join, relative, sep } from 'node:path'
+import { readdir, stat } from 'node:fs/promises'
+import { join, relative, sep } from 'node:path'
+import { isMissingFileError } from '../../shared/errno.js'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
-import { getLogger } from '../log.js'
 import { SEARCH_MODELS_DIRNAME } from '../search/model-cache-dir.js'
 import type { DataLayout } from './data-layout-seam.js'
-
-const log = getLogger('data-layout')
 
 /**
  * Where a tenant's bytes live on disk, in ONE place. A tenant owns its images
@@ -198,60 +196,48 @@ export function storeAreaOf(dataDir: string, path: string): StoreArea | null {
 const KEEPER_OWNED = new Set([TENANTS_DIRNAME, PENDING_WRITES_DIRNAME, SEARCH_MODELS_DIRNAME])
 
 /**
- * Moves a data directory written before tenants existed under `tenantId`:
- * `<dataDir>/blobs` and every `<dataDir>/<workspaceId>/files` become the
- * tenant's. Idempotent — with nothing legacy left it reports nothing moved, so
- * a restart cannot drag a live tenant's directory back out.
- *
- * A legacy directory whose destination already exists is LEFT where it is and
- * reported, rather than merged: two directories holding the same workspace's
- * files is a state somebody has to look at, and a blind merge would decide
- * which copy wins.
+ * The top-level files a retired web-origin trust store wrote. Nothing reads
+ * them; their presence says an earlier release ran here.
  */
-export async function moveLegacyDataDirUnderTenant(
-  dataDir: string,
-  tenantId: string,
-): Promise<{ blobs: boolean; workspaces: string[] }> {
-  return moveTenantDirectories(dataDir, tenantId)
-}
+const RETIRED_TRUST_STORE = new Set(['trusted-web-origins.json', 'trusted-web-origins.lock'])
 
-async function moveTenantDirectories(
-  dataDir: string,
-  tenantId: string,
-): Promise<{ blobs: boolean; workspaces: string[] }> {
-  let blobs = false
-  const workspaces: string[] = []
-  for (const entry of await readdir(dataDir, { withFileTypes: true })) {
-    if (!entry.isDirectory() || KEEPER_OWNED.has(entry.name)) continue
-    const from = join(dataDir, entry.name)
-    if (entry.name === BLOBS_DIRNAME) {
-      if (await moveDir(from, blobsRoot(dataDir, tenantId))) blobs = true
-    } else if (await isWorkspaceDir(from)) {
-      if (await moveDir(from, workspaceDir(dataDir, tenantId, entry.name))) {
-        workspaces.push(entry.name)
-      }
+/**
+ * What in `dataDir` is in a layout an earlier release wrote and this build no
+ * longer reads, relative to `dataDir` and sorted: the flat blob store
+ * (`blobs/<shard>/…`, from before tenants), a flat workspace files directory
+ * (`<workspaceId>/files`, likewise), and the retired trust store's files.
+ *
+ * Found, never moved: the caller refuses the whole directory, because an old
+ * layout comes with an old database and nothing upgrades either. A directory
+ * that does not exist yet holds nothing.
+ */
+export async function retiredLayoutEntries(dataDir: string): Promise<string[]> {
+  const entries = await readdir(dataDir, { withFileTypes: true }).catch((err: unknown) => {
+    if (isMissingFileError(err)) return []
+    throw err
+  })
+  const found: string[] = []
+  for (const entry of entries) {
+    if (RETIRED_TRUST_STORE.has(entry.name)) {
+      found.push(entry.name)
+      continue
     }
+    if (!entry.isDirectory() || KEEPER_OWNED.has(entry.name)) continue
+    const dir = join(dataDir, entry.name)
+    if (entry.name === BLOBS_DIRNAME && (await holdsBlobShard(dir))) found.push(entry.name)
+    if (await isDirectory(join(dir, FILES_DIRNAME))) found.push(join(entry.name, FILES_DIRNAME))
   }
-  return { blobs, workspaces }
+  return found.sort()
 }
 
-/** A workspace directory is one with a `files/` child; anything else at the top of a data directory is not this layout's. */
-async function isWorkspaceDir(dir: string): Promise<boolean> {
-  return await isDirectory(join(dir, FILES_DIRNAME))
+async function holdsBlobShard(dir: string): Promise<boolean> {
+  return (await readdir(dir, { withFileTypes: true })).some(
+    (child) => child.isDirectory() && isBlobShardName(child.name),
+  )
 }
 
 async function isDirectory(path: string): Promise<boolean> {
   return await stat(path)
     .then((s) => s.isDirectory())
     .catch(() => false)
-}
-
-async function moveDir(from: string, to: string): Promise<boolean> {
-  if (await isDirectory(to)) {
-    log.warning({ from, to }, 'left a legacy directory in place: the tenant already holds one')
-    return false
-  }
-  await mkdir(dirname(to), { recursive: true })
-  await rename(from, to)
-  return true
 }

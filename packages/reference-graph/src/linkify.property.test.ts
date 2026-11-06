@@ -87,7 +87,23 @@ describe('linkMarkupFor, read back by the scanner', () => {
 // Mentions packed next to each other, inside references the rewrite must
 // step over, and beside brackets that open or close nothing — drawn as whole
 // tokens, since a character alphabet almost never spells a closed reference.
-const MENTION_TOKEN = fc.constantFrom('N', 'N', 'o', ' ', '[[N]]', '[[n|N]]', '[[', ']]', '[', '|')
+// The bare mention is weighted four times: at two, a text with several
+// links was drawn in 11% of runs, and 200 runs drew under the 5% floor once
+// in three hundred; at four it is 16%, and the same draw is one in 10^5.
+const MENTION_TOKEN = fc.constantFrom(
+  'N',
+  'N',
+  'N',
+  'N',
+  'o',
+  ' ',
+  '[[N]]',
+  '[[n|N]]',
+  '[[',
+  ']]',
+  '[',
+  '|',
+)
 const mentionTextArbitrary = fc
   .array(MENTION_TOKEN, { minLength: 1, maxLength: 24 })
   .map((tokens) => tokens.join(''))
@@ -98,7 +114,7 @@ describe('linkifyMentionsIn, a canvas node against a markdown body', () => {
   afterAllFloor(['writes the same text and counts the same links'], () => {
     // Where splice order matters: two or more links in one text, and a
     // mention inside an existing reference that the rewrite must step over.
-    // Measured at 12-16% and 18-23% of runs; the floors sit well below.
+    // Measured at 16-17% of runs each over 6,000 draws; the floors sit well below.
     expect(reached.severalLinks / reached.runs).toBeGreaterThan(0.05)
     expect(reached.aMentionLeftLinked / reached.runs).toBeGreaterThan(0.08)
   })

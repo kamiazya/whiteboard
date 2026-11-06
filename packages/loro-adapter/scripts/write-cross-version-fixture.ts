@@ -14,7 +14,7 @@
  * Peer ids and timestamps are fixed and Loro records no wall clock by
  * default, so a re-run under the same version writes the same bytes.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -68,7 +68,10 @@ writeSpatialCanvas(documentContainers(a, CANVAS), {
     textNode({ id: 'n1', x: 0, y: 0, width: 160, height: 80, text: 'Collect numbers' }),
     textNode({ id: 'n2', x: 240, y: 0, width: 160, height: 80, text: 'Write the draft' }),
   ],
-  edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+  // The model's edge end is `{ node }`; the 1.13.6 entry was written with a
+  // shape writeSpatialCanvas does not read, so its edge has null endpoints
+  // and that entry cannot see a lost endpoint. Later entries can.
+  edges: [{ id: 'e1', from: { node: 'n1' }, to: { node: 'n2' } }],
 })
 a.commit()
 
@@ -112,6 +115,11 @@ if (JSON.stringify(a.toJSON()) !== JSON.stringify(b.toJSON())) {
 }
 
 const out = join(here, '..', 'fixtures', 'cross-version', `loro-${loroVersion}`)
+// An entry is the oracle for the version that wrote it; re-running after a
+// writer changed would silently replace the old bytes with new ones.
+if (existsSync(join(out, 'expected.json')) && !process.argv.includes('--force')) {
+  throw new Error(`fixture for loro-${loroVersion} exists; pass --force to overwrite it`)
+}
 mkdirSync(out, { recursive: true })
 writeFileSync(join(out, 'snapshot.bin'), a.export({ mode: 'snapshot' }))
 writeFileSync(join(out, 'updates.bin'), a.export({ mode: 'update' }))

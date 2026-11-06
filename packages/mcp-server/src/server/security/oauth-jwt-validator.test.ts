@@ -672,17 +672,17 @@ describe('createOAuthResourceServerAuthStrategy + createOAuthJwtValidator — in
     expect(res.status).toBe(200)
   })
 
-  it('valid token missing required scope → 403 auth.forbidden', async () => {
+  it('valid token missing required scope → 403 auth_forbidden', async () => {
     const token = await buildToken({ scope: 'canvas:read' })
     const app = makeApp(['canvas:write'])
     const res = await app.request('/api/x', {
       headers: { authorization: `Bearer ${token}` },
     })
     expect(res.status).toBe(403)
-    expect(await res.json()).toEqual({ error: 'auth.forbidden' })
+    expect(await res.json()).toEqual({ error: 'auth_forbidden' })
   })
 
-  it('invalid signature → 401 auth.required', async () => {
+  it('invalid signature → 401 auth_required', async () => {
     const token = await buildToken({ scope: 'canvas:read' })
     const parts = token.split('.')
     parts[2] = `${parts[2].slice(0, -4)}XXXX`
@@ -694,7 +694,7 @@ describe('createOAuthResourceServerAuthStrategy + createOAuthJwtValidator — in
     })
     expect(res.status).toBe(401)
     const body = await res.text()
-    expect(body).toBe('{"error":"auth.required"}')
+    expect(body).toBe('{"error":"auth_required"}')
   })
 
   it('failure response body does not contain the raw JWT token', async () => {

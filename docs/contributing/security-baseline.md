@@ -17,7 +17,7 @@ Statuses:
 | **met** | satisfied today; the evidence column says where |
 | **gap-technical** | not satisfied, and closable by a change to this repository |
 | **gap-owner** | not satisfied, and closable only by the owner (a setting, an account, an application or a project decision) |
-| **planned** | arrives with the Rust core (ADR-0054; requirements QR-27 to QR-29 in the development quality requirements) |
+| **planned** | arrives with the Rust core ([ADR-0054](adr/0054-rust-core.md); requirements QR-27 to QR-29 in the [development quality requirements](quality-requirements.md)) |
 | **n/a** | does not apply, with the reason |
 
 ## Sources
@@ -57,7 +57,7 @@ and are judged from the REST API and the workflows instead.
 | Contributors | API only | n/a | counts contributors from distinct organisations; nothing in the repository can change it |
 | Dangerous-Workflow | 10 | met | no `pull_request_target` checkout of PR code; untrusted values read through `env:`; held by `preview-pr-deploy-label.test.ts` and `workflow-credentials.test.ts`, and by zizmor on every PR (below) |
 | Dependency-Update-Tool | 10 | met | `.github/dependabot.yml` (npm and GitHub Actions, with cooldowns) |
-| Fuzzing | 10 | met, partly | Scorecard credits the fast-check property suites; there is no coverage-guided fuzzer yet. Planned: cargo-fuzz targets for every untrusted-input entry (QR-29a to QR-29e), which Scorecard also detects |
+| Fuzzing | 10 | met, partly | Scorecard credits the fast-check property suites. A coverage-guided fuzzer exists — cargo-fuzz in `crates/fuzz`, run on pull requests and nightly — with one template target so far; every untrusted-input entry gets a target as it is ported (QR-29a to QR-29e) |
 | License | 9 | met | `LICENSE` is Apache-2.0, which the GitHub API reports. The local 9 is an artefact of local mode, which cannot ask the API for the licence identifier |
 | Maintained | API only | met | commits weekly; the repository is older than the 90 days the check requires |
 | Packaging | 10 | met | `release.yml` publishes to npm and GHCR |
@@ -210,7 +210,7 @@ point it at.
 | vulnerabilities_fixed_60_days, vulnerabilities_critical_fixed | met | no open advisory; audits gate merges and releases |
 | no_leaked_credentials | met | `secretlint` pre-commit; publishing uses OIDC with no stored npm token |
 | static_analysis, static_analysis_common_vulnerabilities, static_analysis_fixed, static_analysis_often | met | CodeQL on every PR, Biome |
-| dynamic_analysis, dynamic_analysis_unsafe, dynamic_analysis_enable_assertions, dynamic_analysis_fixed | met | property-based tests with fast-check, browser and end-to-end suites; the memory-unsafe half is n/a for TypeScript and planned for Rust (sanitisers with the fuzzers, QR-28f) |
+| dynamic_analysis, dynamic_analysis_unsafe, dynamic_analysis_enable_assertions, dynamic_analysis_fixed | met | property-based tests with fast-check, browser and end-to-end suites; the memory-unsafe half is n/a for TypeScript, and for Rust is the nightly fuzz run under AddressSanitizer with `--careful` (QR-28f) |
 
 Nothing at the passing level is a technical gap; the only remaining step is
 the application itself.
@@ -269,7 +269,7 @@ show "unknown".
 
 ### Planned evidence for the native binaries
 
-ADR-0054 ships the core as per-OS native binaries on npm. What those releases
+[ADR-0054](adr/0054-rust-core.md) ships the core as per-OS native binaries on npm. What those releases
 will carry, so this matrix does not have to be re-derived when they land:
 
 - **npm trusted publishing (OIDC) per package.** Each per-platform package and
@@ -294,7 +294,7 @@ stands. Rev. 1 (v1.2) is a draft and changes none of these mappings.
 
 | practice | status | evidence |
 |---|---|---|
-| PO.1 — security requirements defined | met | the development quality requirements, this page |
+| PO.1 — security requirements defined | met | the [development quality requirements](quality-requirements.md), this page |
 | PO.3 — supporting toolchains | met | CI, `tools/arch-lint`, `tools/checks` |
 | PO.5 — secure build environments | met | least-privilege tokens, SHA-pinned actions, OIDC publishing |
 | PS.1 — code protected from unauthorised change | gap-owner | the branch rules in Branch-Protection |
@@ -314,7 +314,7 @@ Read for an open-source project with a single maintainer, the seven goals map
 as follows: **MFA** is OSPS-AC-01.01 (gap-owner). **Default passwords** do not
 exist: the daemon is reached over an owner-only socket and server mode defers
 to the operator's identity provider. **Reducing classes of vulnerability** is
-the move to a memory-safe Rust core (ADR-0054) with
+the move to a memory-safe Rust core ([ADR-0054](adr/0054-rust-core.md)) with
 `unsafe` forbidden. **Security patches** reach users through the npm `latest`
 tag and the image's `latest`. **A vulnerability disclosure policy** is
 `SECURITY.md`. **CVE transparency** is the advisory process, with a CWE in each
@@ -329,7 +329,7 @@ requirements: a stable pinned toolchain with rustfmt and clippy at deny level
 (QR-1), dependency auditing with cargo-deny and an `unsafe` ledger for
 dependencies (QR-27a, QR-28c), no `unsafe` in project code, explicit overflow
 behaviour and panic discipline (QR-28 group), bounded parsing of untrusted
-input (QR-28b), and FFI and wasm boundaries kept narrow (ADR-0054 decisions 1
+input (QR-28b), and FFI and wasm boundaries kept narrow ([ADR-0054](adr/0054-rust-core.md) decisions 1
 and 6).
 
 ## Dependencies: how they are selected, obtained and tracked
