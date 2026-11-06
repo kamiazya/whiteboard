@@ -1,6 +1,6 @@
 # ADR-0001: apps/web as the canonical frontend
 
-**Status:** Implemented — Stage 5 (deleting `packages/mcp-server/src/app` and its build pipeline) shipped; server-mode serves a minimal static placeholder at its root instead of `apps/web` (see Consequences).
+**Status:** Accepted, implemented — Stage 5 (deleting `packages/mcp-server/src/app` and its build pipeline) shipped; server-mode serves a minimal static placeholder at its root instead of `apps/web` (see Consequences).
 
 ## Context
 
