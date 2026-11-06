@@ -12,7 +12,7 @@ import {
   type SpatialPresetKey,
   withDeclaredColours,
 } from '@kamiazya/whiteboard-canvas-render'
-import { isFiniteRect, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { endNode, isFiniteRect, type LineEnd, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveNodeSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import type { NodeBox } from './geometry.js'
@@ -148,6 +148,13 @@ export function unprojectPoint(
   return { x: point.x / fit.scale + fit.originX, y: point.y / fit.scale + fit.originY }
 }
 
+/** An authored colour as the accent the scene draws it in: a hex as itself, a preset by the palette. */
+function accentOf(color: string | undefined, palette: SpatialPalette): string | undefined {
+  if (color === undefined) return undefined
+  if (color.startsWith('#')) return color
+  return palette.presets[color as SpatialPresetKey]?.stroke
+}
+
 /**
  * Node boxes for the minimap overview, with each authored colour resolved to
  * the accent the scene already uses for it. A preset key resolves through
@@ -163,7 +170,7 @@ export function unprojectPoint(
  * node id uniqueness is a schema invariant (spatial.ts's `superRefine`
  * rejects a duplicate node id before a canvas is ever constructed).
  */
-export function buildMinimapNodes(
+function buildMinimapNodes(
   nodes: SpatialCanvas['nodes'],
   boxes: readonly NodeBox[],
   palette: SpatialPalette,
@@ -171,12 +178,7 @@ export function buildMinimapNodes(
 ): readonly (MinimapBox & { readonly color?: string; readonly symbol?: VisualSymbolFacet })[] {
   const drawn = withDeclaredColours({ nodes: [...nodes], edges: [] }, tagLibrary).nodes
   const byId = new Map(drawn.map((node) => [node.id, node]))
-  const colorOf = (id: string): string | undefined => {
-    const color = byId.get(id)?.color
-    if (color === undefined) return undefined
-    if (color.startsWith('#')) return color
-    return palette.presets[color as SpatialPresetKey]?.stroke
-  }
+  const colorOf = (id: string): string | undefined => accentOf(byId.get(id)?.color, palette)
   // Resolved HERE, beside the colour, for the same reason the colour is: the
   // overview component knows nothing about palettes or facets, and an
   // overview is exactly where a node is too small to read — which is what
@@ -190,4 +192,113 @@ export function buildMinimapNodes(
       ...(symbol === undefined ? {} : { symbol }),
     }
   })
+}
+
+/** A drawn line in the overview: the points it passes through, in canvas space. */
+export interface MinimapStroke {
+  readonly points: readonly { readonly x: number; readonly y: number }[]
+  readonly color?: string
+}
+
+/**
+ * Lines with at least one free end — ink, which is what the pen draws — as
+ * polylines for the overview. A line tied to nodes at BOTH ends is a
+ * connector between boxes the overview already shows; ink is often the only
+ * content a board has, and an overview that drew boxes alone showed such a
+ * board as empty.
+ *
+ * An end on a node stands at that node's centre: at overview scale a box is
+ * a few pixels, so the side it leaves from is below what the eye resolves.
+ * An end whose node has no box (a dangling reference) drops the line rather
+ * than inventing a position for it.
+ */
+function buildMinimapStrokes(
+  lines: SpatialCanvas['lines'],
+  boxes: readonly NodeBox[],
+  palette: SpatialPalette,
+): readonly MinimapStroke[] {
+  const boxOf = new Map(boxes.map((entry) => [entry.id, entry.box]))
+  const at = (end: LineEnd): { x: number; y: number } | undefined => {
+    if (end.kind === 'point') return end.point
+    const box = boxOf.get(end.node)
+    return box === undefined ? undefined : { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+  }
+  return (lines ?? []).flatMap((line) => {
+    if (endNode(line.from) !== undefined && endNode(line.to) !== undefined) return []
+    const from = at(line.from)
+    const to = at(line.to)
+    if (from === undefined || to === undefined) return []
+    const color = accentOf(line.color, palette)
+    return [
+      { points: [from, ...(line.bends ?? []), to], ...(color === undefined ? {} : { color }) },
+    ]
+  })
+}
+
+/** The canvas-space box a stroke covers, so the overview's fit includes it. */
+export function strokeBounds(stroke: MinimapStroke): MinimapBox {
+  const xs = stroke.points.map((p) => p.x)
+  const ys = stroke.points.map((p) => p.y)
+  const x = Math.min(...xs)
+  const y = Math.min(...ys)
+  return { x, y, width: Math.max(...xs) - x, height: Math.max(...ys) - y }
+}
+
+/**
+ * The stroke's straight runs in minimap space, each as where it starts, how
+ * long it is and which way it points — what a rotated hairline needs.
+ *
+ * Thinned at the overview's own scale first: a stroke stores up to
+ * `MAX_BENDS` samples, and at a few pixels across most of them sit closer
+ * together than a hairline is wide, each of which would otherwise be an
+ * element. The last point is always kept, so the stroke still ends where it
+ * ends.
+ */
+export function projectStrokeSegments(
+  stroke: MinimapStroke,
+  fit: MinimapFit,
+): { readonly x: number; readonly y: number; readonly length: number; readonly angle: number }[] {
+  const projected = stroke.points.map((p) => ({
+    x: (p.x - fit.originX) * fit.scale,
+    y: (p.y - fit.originY) * fit.scale,
+  }))
+  const kept: { x: number; y: number }[] = []
+  for (const [i, point] of projected.entries()) {
+    const last = kept[kept.length - 1]
+    const far =
+      last === undefined || Math.hypot(point.x - last.x, point.y - last.y) >= MINIMAP_STROKE_STEP_PX
+    if (far || i === projected.length - 1) kept.push(point)
+  }
+  return kept.slice(1).map((b, i) => {
+    const a = kept[i] as { x: number; y: number }
+    return {
+      x: a.x,
+      y: a.y,
+      length: Math.hypot(b.x - a.x, b.y - a.y),
+      angle: Math.atan2(b.y - a.y, b.x - a.x),
+    }
+  })
+}
+
+/** The shortest run, in overview pixels, worth an element of its own. */
+const MINIMAP_STROKE_STEP_PX = 2
+
+/**
+ * Everything the overview draws, colour resolved: the node boxes and the ink.
+ * One builder, so the overview's two layers are derived from one canvas in
+ * one place rather than threaded through the editor separately.
+ */
+export function buildMinimap(
+  canvas: SpatialCanvas,
+  boxes: readonly NodeBox[],
+  palette: SpatialPalette,
+  tagLibrary?: TagLibrary,
+): {
+  readonly boxes: ReturnType<typeof buildMinimapNodes>
+  readonly strokes: readonly MinimapStroke[]
+} {
+  return {
+    boxes: buildMinimapNodes(canvas.nodes, boxes, palette, tagLibrary),
+    strokes: buildMinimapStrokes(canvas.lines, boxes, palette),
+  }
 }

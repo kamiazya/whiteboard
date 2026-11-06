@@ -289,3 +289,52 @@ it('leaves the box it marks still visible around the mark', () => {
   const shortSide = Math.min(box.getBoundingClientRect().width, box.getBoundingClientRect().height)
   expect(mark.getBoundingClientRect().width).toBeLessThan(shortSide * 0.5)
 })
+
+// A board drawn with the pen is lines, not nodes. An overview that fits and
+// paints boxes alone shows such a board as empty, which is exactly the case
+// where someone reaches for it to find their sketch again.
+const drawn = (color?: string): SpatialCanvas => ({
+  nodes: [],
+  edges: [],
+  lines: [
+    {
+      id: 'ink',
+      from: { kind: 'point', point: { x: 0, y: 0 }, end: 'none' },
+      to: { kind: 'point', point: { x: 1200, y: 0 }, end: 'none' },
+      bends: [{ x: 600, y: 800 }],
+      ...(color === undefined ? {} : { color }),
+      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    },
+  ],
+})
+const strokesOf = (c: HTMLElement) => [
+  ...(minimapOf(c)?.querySelectorAll<HTMLElement>('[data-testid="minimap-stroke"]') ?? []),
+]
+
+it('shows the overview for a board holding only a drawing', () => {
+  const { Host } = makeEditorHost({ initial: drawn() })
+  const { container } = render(<Host />)
+  expect(minimapOf(container)).toBeTruthy()
+  expect(strokesOf(container).length).toBe(1)
+})
+
+it("draws a stroke in the overview across the drawing's own extent", () => {
+  const { Host } = makeEditorHost({ initial: drawn('#123456') })
+  const { container } = render(<Host />)
+  const minimap = minimapOf(container)!.getBoundingClientRect()
+  const [stroke] = strokesOf(container)
+  const segments = [...(stroke?.children ?? [])] as HTMLElement[]
+  expect(segments.length).toBeGreaterThanOrEqual(2)
+  for (const segment of segments) {
+    expect(segment.style.background).toBe('rgb(18, 52, 86)')
+    expect(segment.offsetHeight).toBeLessThanOrEqual(2)
+  }
+  // The fit covers the ink, so the stroke spans most of the overview's width
+  // rather than collapsing to a dot in one corner.
+  const rects = segments.map((s) => s.getBoundingClientRect())
+  const left = Math.min(...rects.map((r) => r.left))
+  const right = Math.max(...rects.map((r) => r.right))
+  expect(right - left).toBeGreaterThan(minimap.width * 0.6)
+  expect(left).toBeGreaterThanOrEqual(minimap.left)
+  expect(right).toBeLessThanOrEqual(minimap.right + 0.5)
+})

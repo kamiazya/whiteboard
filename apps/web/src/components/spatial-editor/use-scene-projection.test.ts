@@ -48,10 +48,12 @@ describe('useSceneProjection minimap colour', () => {
     // Non-vacuous: the theme's preset-1 accent is a different hue from the
     // bundled one, so reading the wrong palette is visible here.
     expect(themed.presets['1'].stroke).not.toBe(SPATIAL_LIGHT_PALETTE.presets['1'].stroke)
-    expect(projection(neon).minimapNodes[0]?.color).toBe(themed.presets['1'].stroke)
+    expect(projection(neon).minimap.boxes[0]?.color).toBe(themed.presets['1'].stroke)
   })
 
   it('falls back to the bundled accent on a board that names no theme', () => {
-    expect(projection(plain).minimapNodes[0]?.color).toBe(SPATIAL_LIGHT_PALETTE.presets['1'].stroke)
+    expect(projection(plain).minimap.boxes[0]?.color).toBe(
+      SPATIAL_LIGHT_PALETTE.presets['1'].stroke,
+    )
   })
 })

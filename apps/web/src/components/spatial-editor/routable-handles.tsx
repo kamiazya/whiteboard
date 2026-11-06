@@ -24,7 +24,7 @@ export interface RoutableHandlesProps {
   /** Where the selection's more-actions chip opens its menu, and how wide the editor is. */
   readonly menu?: {
     readonly open: (target: ContextMenuTarget) => void
-    readonly rootWidth: number
+    readonly root: { readonly width: number; readonly height: number }
   }
 }
 
@@ -64,20 +64,49 @@ export function RoutableHandles(props: RoutableHandlesProps) {
 function MoreActionsChip({
   gesture,
   selectedInkIds,
+  selectedRoutable,
   edgePaths,
+  edgePathOf,
   menu,
 }: RoutableHandlesProps & { readonly menu: NonNullable<RoutableHandlesProps['menu']> }) {
   const [lead] = selectedInkIds
   if (lead === undefined) return null
   const paths = edgePaths.filter((entry) => selectedInkIds.includes(entry.id))
+  const { viewport } = gesture
   return (
     <PathMoreActions
       paths={paths.map((entry) => entry.path)}
-      zoom={gesture.viewport.zoom}
+      handles={handlesOf(selectedRoutable, edgePathOf)}
+      visible={{
+        x: viewport.x,
+        y: viewport.y,
+        width: menu.root.width / viewport.zoom,
+        height: menu.root.height / viewport.zoom,
+      }}
+      zoom={viewport.zoom}
       subject={pathSubject(gesture.canvas, selectedInkIds)}
-      onOpen={(anchor) => menu.open(pathMenuTarget(lead, anchor, gesture.viewport, menu.rootWidth))}
+      onOpen={(anchor) => menu.open(pathMenuTarget(lead, anchor, viewport, menu.root.width))}
     />
   )
+}
+
+/**
+ * Where `PathHandles` draws a grab point for this element: its two ends,
+ * and — unless it is a drawing, which offers no bends — its stored bends.
+ * The ghost points a new bend is pulled from sit mid-run, away from the
+ * corners the chip is placed at.
+ */
+function handlesOf(
+  element: CanvasEdge | CanvasLine | undefined,
+  edgePathOf: RoutableHandlesProps['edgePathOf'],
+): readonly Point[] {
+  if (element === undefined) return []
+  const path = edgePathOf(element.id) ?? []
+  const first = path[0]
+  const last = path[path.length - 1]
+  if (first === undefined || last === undefined) return []
+  if (isFreehandStroke(element)) return [first, last]
+  return [first, last, ...(element.bends ?? [])]
 }
 
 /**

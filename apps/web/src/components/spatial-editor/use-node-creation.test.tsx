@@ -2,13 +2,15 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import type { ContainerSize } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
+import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 import { useNodeCreation } from './use-node-creation.js'
 
 const overlaps = (a: SpatialNode, b: SpatialNode) =>
   a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 
-function mount(canvas: SpatialCanvas) {
+function mount(canvas: SpatialCanvas, container: ContainerSize | null = null) {
   const results: GestureResult[] = []
   const { result } = renderHook(() =>
     useNodeCreation({
@@ -20,7 +22,7 @@ function mount(canvas: SpatialCanvas) {
       fileRefOptions: undefined,
       applyResult: (r) => results.push(r),
       collapseExtras: () => {},
-      containerSizeOf: () => null,
+      containerSizeOf: () => container,
       openGroupLabel: vi.fn(),
     }),
   )
@@ -86,5 +88,50 @@ describe('a new frame asked for from the dock', () => {
     creation.createGroupAtViewportCenter({ x: 0, y: 0 })
     const frame = createdNode()
     expect(meets(strip(frame), note)).toBe(false)
+  })
+})
+
+describe('a new frame beside other boxes', () => {
+  /** The empty space between two boxes along whichever axis separates them. */
+  const gapBetween = (a: SpatialNode, b: SpatialNode) =>
+    Math.max(
+      b.x - (a.x + a.width),
+      a.x - (b.x + b.width),
+      b.y - (a.y + a.height),
+      a.y - (b.y + b.height),
+    )
+
+  // A frame asked for just right of a note: its left edge would sit 5px from it.
+  const note = textNode({ id: 'note', x: -200, y: -50, width: 200, height: 100, text: 'Idea' })
+
+  it('keeps the clearance boxes keep from a note it would sit next to', () => {
+    const { creation, createdNode } = mount({ nodes: [note], edges: [] })
+    creation.createGroupAtViewportCenter({ x: 165, y: 0 })
+    expect(gapBetween(createdNode(), note)).toBeGreaterThanOrEqual(32)
+  })
+
+  it('stays at the point asked for when it is already that far from everything', () => {
+    const { creation, createdNode } = mount({ nodes: [note], edges: [] })
+    creation.createGroupAtViewportCenter({ x: 200, y: 0 })
+    const frame = createdNode()
+    expect(frame.x + frame.width / 2).toBe(200)
+    expect(frame.y + frame.height / 2).toBe(0)
+  })
+
+  it('gives the clearance up before it gives up staying on screen', () => {
+    // A view 410 wide and 260 tall over a tall note at its left edge: a
+    // 320-wide frame fits beside the note only closer than the gap.
+    const tall = textNode({ id: 'tall', x: 0, y: 0, width: 60, height: 200, text: 'Idea' })
+    const { creation, createdNode } = mount(
+      { nodes: [tall], edges: [] },
+      { width: 410, height: 260 + DOCK_OCCLUSION_PX },
+    )
+    creation.createGroupAtViewportCenter({ x: 195, y: 130 })
+    const frame = createdNode()
+    expect(overlaps(frame, tall)).toBe(false)
+    expect(frame.x).toBeGreaterThanOrEqual(0)
+    expect(frame.y).toBeGreaterThanOrEqual(0)
+    expect(frame.x + frame.width).toBeLessThanOrEqual(410)
+    expect(frame.y + frame.height).toBeLessThanOrEqual(260)
   })
 })

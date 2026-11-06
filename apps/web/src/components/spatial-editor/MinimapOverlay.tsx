@@ -20,7 +20,11 @@ import { readMinimapOpen, writeMinimapOpen } from '../../lib/minimap-visibility.
 import {
   fitMinimap,
   type MinimapBox,
+  type MinimapFit,
+  type MinimapStroke,
   projectBox,
+  projectStrokeSegments,
+  strokeBounds,
   unprojectPoint,
 } from '../../lib/spatial/minimap.js'
 import { cn } from '../../lib/utils.js'
@@ -76,6 +80,8 @@ export interface MinimapOverlayProps {
    * same way the fitting geometry knows nothing about the DOM.
    */
   readonly boxes: readonly MinimapNode[]
+  /** Drawn ink, in canvas space, colour already resolved like the boxes'. */
+  readonly strokes?: readonly MinimapStroke[]
   /** The canvas-space rect currently visible in the editor. */
   readonly viewportRect: MinimapBox
   readonly width: number
@@ -232,13 +238,15 @@ function navigateFrom(
 
 function MinimapSurface({
   boxes,
+  strokes = [],
   viewportRect,
   width,
   height,
   onNavigate,
   raised = false,
 }: Omit<MinimapOverlayProps, 'collapsible'> & { readonly raised?: boolean }) {
-  const fit = fitMinimap(boxes, viewportRect, { width, height }, PADDING_PX)
+  const content = [...boxes, ...strokes.map(strokeBounds)]
+  const fit = fitMinimap(content, viewportRect, { width, height }, PADDING_PX)
   const marker = projectBox(viewportRect, fit)
   const [surface, lift] = useBottomChromeClearance(!raised)
   const navigateTo = (event: React.PointerEvent<HTMLDivElement>) =>
@@ -313,22 +321,11 @@ function MinimapSurface({
               height,
             }}
           >
-            {marked && box.symbol !== undefined ? (
-              <span
-                data-testid="minimap-symbol"
-                className="leading-none"
-                // The span is the glyph's own size rather than a fraction of
-                // it: an emoji is text at `fontSize` and a vendored icon is an
-                // SVG with no intrinsic size that fills its box, so the two
-                // only land at the same size when the box and the font agree.
-                style={{ fontSize: SYMBOL_PX, width: SYMBOL_PX, height: SYMBOL_PX }}
-              >
-                <SymbolMark symbol={box.symbol} />
-              </span>
-            ) : null}
+            {marked && box.symbol !== undefined ? <MinimapMark symbol={box.symbol} /> : null}
           </div>
         )
       })}
+      <MinimapStrokes strokes={strokes} fit={fit} />
       <div
         data-testid="minimap-viewport"
         className="absolute border border-primary"
@@ -340,5 +337,62 @@ function MinimapSurface({
         }}
       />
     </div>
+  )
+}
+
+/** Drawn ink, as hairlines over the boxes. */
+function MinimapStrokes({
+  strokes,
+  fit,
+}: {
+  readonly strokes: readonly MinimapStroke[]
+  readonly fit: MinimapFit
+}) {
+  return (
+    <>
+      {strokes.map((stroke, index) => (
+        // Hairlines rather than an <svg> polyline, for the reason the header
+        // gives: a second SVG in the editor would answer for the scene.
+        // Drawn over the boxes, as ink sits over what it was drawn on.
+        <div key={`stroke:${index}`} data-testid="minimap-stroke">
+          {projectStrokeSegments(stroke, fit).map((segment, i) => (
+            <div
+              // Runs carry no id; their order along the stroke does.
+              key={`${i}:${segment.x},${segment.y}`}
+              className={cn(
+                'absolute h-px origin-left',
+                stroke.color === undefined && 'bg-foreground/70',
+              )}
+              style={{
+                background: stroke.color,
+                left: segment.x,
+                top: segment.y,
+                // At least a pixel, so a dot of ink still shows the way a
+                // sub-pixel box does.
+                width: Math.max(1, segment.length),
+                transform: `rotate(${segment.angle}rad)`,
+              }}
+            />
+          ))}
+        </div>
+      ))}
+    </>
+  )
+}
+
+/** A node's symbol at the one size the overview draws every mark at. */
+function MinimapMark({ symbol }: { readonly symbol: VisualSymbolFacet }) {
+  return (
+    <span
+      data-testid="minimap-symbol"
+      className="leading-none"
+      // The span is the glyph's own size rather than a fraction of
+      // it: an emoji is text at `fontSize` and a vendored icon is an
+      // SVG with no intrinsic size that fills its box, so the two
+      // only land at the same size when the box and the font agree.
+      style={{ fontSize: SYMBOL_PX, width: SYMBOL_PX, height: SYMBOL_PX }}
+    >
+      <SymbolMark symbol={symbol} />
+    </span>
   )
 }

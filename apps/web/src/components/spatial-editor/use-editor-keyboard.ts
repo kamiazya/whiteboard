@@ -38,6 +38,7 @@ import { type GestureResult, type GestureState, reduceGesture } from './gestures
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
 import { useKeyboardWalk } from './use-keyboard-walk.js'
+import { useToolBeforeEraser } from './use-tool-before-eraser.js'
 
 /**
  * One keyboard step of zoom — finer than the double press, which jumps. The
@@ -55,19 +56,21 @@ const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
 }
 
 /**
- * Escape with the eraser armed and no sweep in flight puts it down. An
- * eraser left armed turns the next press on a drawing into a deletion, so
- * the key that means "stop" must reach it the way it reaches a gesture.
+ * Escape with the eraser armed and no sweep in flight puts it down, back in
+ * the tool it was picked up from. An eraser left armed turns the next press
+ * on a drawing into a deletion, so the key that means "stop" must reach it
+ * the way it reaches a gesture.
  */
 function leaveEraserWithEscape(
   e: React.KeyboardEvent<HTMLDivElement>,
   tool: EditorTool,
   gesture: string,
   changeTool: (tool: EditorTool) => void,
+  before: EditorTool,
 ): boolean {
   if (e.key !== 'Escape' || tool !== 'erase' || gesture !== 'idle') return false
   e.preventDefault()
-  changeTool('select')
+  changeTool(before)
   return true
 }
 
@@ -193,6 +196,7 @@ export function useEditorKeyboard({
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
   const handOffTabRef = useRef(false)
+  const toolBeforeEraser = useToolBeforeEraser(tool)
   // The same fact as state, so the canvas name can say what Tab will do.
   const [handingOffTab, setHandingOffTab] = useState(false)
   const handOffTab = (next: boolean): void => {
@@ -482,9 +486,8 @@ export function useEditorKeyboard({
     if (selectedInkIds.length === 0 || gestureState.kind === 'editing-text') return false
     if (typingInText(e)) return false
     e.preventDefault()
-    // Each selected id may be an EDGE or a LINE — the scene hands both
-    // out as `kind: 'edge'` nodes, so the selection never knew which.
-    // `deleteInkCommand` is the one place that looks.
+    // Each selected id may be an EDGE or a LINE — the scene hands both out as `kind: 'edge'`
+    // nodes, so the selection never knew which. `deleteInkCommand` is the one place that looks.
     const removals = selectedInkIds
       .map((id) => deleteInkCommand(canvas, id))
       .filter((command) => command !== undefined)
@@ -693,7 +696,7 @@ export function useEditorKeyboard({
       clearInkSelection(e) ||
       deleteInkSelection(e) ||
       cancelWithEscape(e) ||
-      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool) ||
+      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser) ||
       releaseSelectionWithEscape(e) ||
       armSpacePan(e) ||
       nudgeSelection(e) ||

@@ -1,8 +1,8 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { frameHolds, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject, RefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { creationObstacles } from '../../lib/spatial/frame-interior.js'
+import { creationObstacles, PLACEMENT_GAP_PX } from '../../lib/spatial/frame-interior.js'
 import { type Box, boxesIntersect, findFreeSpot } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
@@ -35,12 +35,23 @@ const GROUP_FRAME_SIZE = { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT 
  */
 const FRAME_TOP_CLEARANCE_PX = 50
 
-/** What a new frame must keep clear of: each obstacle, reaching down over the frame's top strip. */
-function frameObstacles(canvas: SpatialCanvas): readonly Box[] {
+/**
+ * What a new frame must keep clear of: each obstacle grown by `gap` on every
+ * side, and reaching down over the frame's top strip.
+ */
+function frameObstacles(canvas: SpatialCanvas, gap: number): readonly Box[] {
   return creationObstacles(canvas).map((box) => ({
-    ...box,
-    height: box.height + FRAME_TOP_CLEARANCE_PX,
+    x: box.x - gap,
+    y: box.y - gap,
+    width: box.width + gap * 2,
+    height: box.height + gap + Math.max(gap, FRAME_TOP_CLEARANCE_PX),
   }))
+}
+
+/** The box a frame centred on `at` covers. */
+function frameBoxAt(at: Point): Box {
+  const { width, height } = GROUP_FRAME_SIZE
+  return { x: at.x - width / 2, y: at.y - height / 2, width, height }
 }
 
 /**
@@ -50,10 +61,34 @@ function frameObstacles(canvas: SpatialCanvas): readonly Box[] {
  * its name.
  */
 function frameSpawnPoint(at: Point, obstacles: readonly Box[], visible: Box | undefined): Point {
-  const { width, height } = GROUP_FRAME_SIZE
-  const box = { x: at.x - width / 2, y: at.y - height / 2, width, height }
-  if (!obstacles.some((other) => boxesIntersect(box, other))) return at
+  if (!obstacles.some((other) => boxesIntersect(frameBoxAt(at), other))) return at
   return findFreeSpot(at, GROUP_FRAME_SIZE, obstacles, visible)
+}
+
+/**
+ * A new frame keeps the gap boxes keep from each other — under it, a frame
+ * beside a note reads as part of it — where there is room for that. The gap
+ * gives way before the frame's other promises do: a spaced spot off screen
+ * loses to an unspaced one on it, since chasing a frame off the view is
+ * worse than a tight fit, and a canvas too full for the gap anywhere places
+ * the frame the way it did without one.
+ */
+function placeFrame(at: Point, canvas: SpatialCanvas, visible: Box | undefined): Point {
+  const attempt = (gap: number) => {
+    const obstacles = frameObstacles(canvas, gap)
+    const point = frameSpawnPoint(at, obstacles, visible)
+    const box = frameBoxAt(point)
+    return {
+      point,
+      free: !obstacles.some((other) => boxesIntersect(box, other)),
+      seen: visible === undefined || frameHolds(visible, box),
+    }
+  }
+  const spaced = attempt(PLACEMENT_GAP_PX)
+  const tight = attempt(0)
+  if (spaced.free && spaced.seen) return spaced.point
+  if (tight.free && tight.seen) return tight.point
+  return spaced.free ? spaced.point : tight.point
 }
 
 export interface NodeCreationInputs {
@@ -206,11 +241,7 @@ export function useNodeCreation({
    * selected one left its name unasked and the typing landing on the canvas.
    */
   const createGroupAtViewportCenter = (at?: Point) => {
-    const point = frameSpawnPoint(
-      at ?? viewCenter(),
-      frameObstacles(canvasRef.current),
-      visibleCanvasRect(),
-    )
+    const point = placeFrame(at ?? viewCenter(), canvasRef.current, visibleCanvasRect())
     const id = newId()
     const node = groupNodeDefaults(id, point)
     applyResult({

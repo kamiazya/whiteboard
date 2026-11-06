@@ -46,7 +46,7 @@ export function creationObstacles(canvas: SpatialCanvas): Box[] {
  * edges: under about this two boxes read as one shape, and it is the gap
  * tidy keeps.
  */
-const PLACEMENT_GAP_PX = 32
+export const PLACEMENT_GAP_PX = 32
 
 /**
  * Where the next box of `size` goes INSIDE `frame`: the first cell, reading

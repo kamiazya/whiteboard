@@ -47,7 +47,7 @@ pinch zooms in every tool.
 | Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
-| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed; with the eraser armed, put it down and go back to Select |
+| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed; with the eraser armed, put it down and go back to the tool you had before it |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
 "Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
@@ -209,7 +209,8 @@ to see everything, or to get closer to something, and the magnification
 between those two is not a number you have to manage.
 
 A corner **overview** of the whole canvas shows whenever the editor is wide
-enough to hold it beside the dock. In a narrower editor, such as a phone held
+enough to hold it beside the dock. It draws every box and every pen drawing,
+each in its own colour, so a board that holds only a sketch still has one. In a narrower editor, such as a phone held
 upright, it sits behind a map button just above the dock, hidden until you tap
 it and hidden again on a second tap; the choice lasts for the browser session.
 While you type into a note, label or comment the overview steps aside, so it
