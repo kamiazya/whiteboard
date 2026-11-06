@@ -153,11 +153,12 @@ pnpm --filter @kamiazya/whiteboard-mcp exec tsx \
   ../loro-adapter/scripts/write-cross-version-fixture.ts
 ```
 
-That writes `packages/loro-adapter/fixtures/cross-version/loro-<version>/`
-(snapshot, full update, shallow snapshot, and that version's own reading of
+That writes one directory per installed version under
+`packages/loro-adapter/fixtures/cross-version/` (`loro-1.13.6`, `loro-1.17.1`:
+snapshot, full update, shallow snapshot, and that version's own reading of
 them); `cross-version-corpus.test.ts` reads every entry under whatever is
-installed. Never regenerate an existing entry — its value is that the
-version under test had no part in writing it.
+installed. The writer refuses an existing entry unless `--force` is passed —
+an entry's value is that the version under test had no part in writing it.
 
 Measurements that say "on 1.13.6" were taken there. Two were re-measured on
 1.17.1 by hand and still hold: `getOrCreateContainer` loses one side
