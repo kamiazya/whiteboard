@@ -15,7 +15,6 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   readWorkspaceDocuments,
-  UnjudgedImportError,
   WORKSPACE_TREE_KEY,
   writeMarkdownBody,
   writeSpatialNode,
@@ -31,10 +30,10 @@ import { describe, expect, it } from 'vitest'
 import { DocumentEngineTrapError } from '../document-io.js'
 import type { LiveDocuments, WorkspaceDocuments } from '../server-deps.js'
 import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
+import { contentOf, recordHolding, sendRecordEdit } from '../test-utils/record-sync.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
-import { applyDocumentUpdate } from './apply-document-update.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 import { promoteWorkspace } from './promote-workspace.js'
 import { OffGrammarPathError, textBreachRefusal } from './sync-write-refusals.js'
@@ -49,12 +48,6 @@ function workspaceSeed(body: string): LoroDoc {
   createWorkspaceDocumentAtPath(doc, { path: PATH, documentId: DOC_ID, kind: 'markdown' })
   writeMarkdownBody(documentContainers(doc, DOC_ID), body)
   doc.commit()
-  return doc
-}
-
-function liveSeed(body: string): LoroDoc {
-  const doc = new LoroDoc()
-  writeMarkdownBody(doc, body)
   return doc
 }
 
@@ -85,18 +78,6 @@ function workspaceDeps(store: StoredDoc) {
     versions: new FakeVersionHistory(),
     blobStore: {} as never,
   }
-}
-
-function liveDeps(store: StoredDoc) {
-  const liveDocuments: LiveDocuments = {
-    ...unusedLiveDocuments(),
-    kind: async () => null,
-    ...lock,
-    get: async () => store.get(),
-    save: async (_workspaceId, _path, doc) => store.save(doc),
-    evict: () => store.evict(),
-  }
-  return { liveDocuments }
 }
 
 /** What a client holding `base` would send after `edit`. */
@@ -218,49 +199,6 @@ describe('a workspace-document sync update', () => {
   })
 })
 
-describe('a per-document sync update', () => {
-  it('that grows the body past the limit is refused and nothing is imported', async () => {
-    const body = 'y'.repeat(MARKDOWN_MAX_CHARS)
-    const store = new StoredDoc(liveSeed(body))
-    const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(0, '!'))
-
-    await expect(
-      applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
-    ).rejects.toMatchObject({ name: 'MarkdownBodyTooLargeError' })
-
-    expect(store.saves).toBe(0)
-    expect(readMarkdownBody(store.get())).toBe(body)
-  })
-
-  it('that inserts one run past the limit is refused before the import is applied', async () => {
-    const store = new StoredDoc(liveSeed('short'))
-    const update = updateFrom(store.get(), (doc) =>
-      doc.getText('body').insert(0, 'x'.repeat(MARKDOWN_MAX_CHARS + 1)),
-    )
-
-    await expect(
-      applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
-    ).rejects.toMatchObject({ breach: { shape: 'run' } })
-
-    expect(store.evictions).toBe(1)
-    expect(readMarkdownBody(store.get())).toBe('short')
-  })
-
-  it('within the limit is applied', async () => {
-    const store = new StoredDoc(liveSeed('short'))
-    const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(5, ' note'))
-
-    await applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update })
-
-    expect(readMarkdownBody(store.get())).toBe('short note')
-  })
-})
-
-/**
- * The same four edits `browser-backend.body-limit.test.ts` pushes to the
- * browser keeper, with the same verdicts: both keepers judge a write by what
- * it does to the text, so a write one keeper takes the other takes.
- */
 describe.each([
   {
     edit: 'a select-all replace that shrinks the body',
@@ -300,18 +238,6 @@ describe.each([
       await expect(applied).rejects.toMatchObject({ name: 'MarkdownBodyTooLargeError' })
     else await expect(applied).resolves.toMatchObject({ kind: 'applied' })
     expect(storedWorkspaceBody(store)).toHaveLength(after ?? before)
-  })
-
-  it(`as a per-document update ${after === null ? 'is refused' : 'is applied'}`, async () => {
-    const store = new StoredDoc(liveSeed('y'.repeat(before)))
-    const update = updateFrom(store.get(), (doc) => change(doc.getText('body')))
-
-    const applied = applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update })
-
-    if (after === null)
-      await expect(applied).rejects.toMatchObject({ name: 'MarkdownBodyTooLargeError' })
-    else await expect(applied).resolves.toBeDefined()
-    expect(readMarkdownBody(store.get())).toHaveLength(after ?? before)
   })
 })
 
@@ -565,39 +491,6 @@ describe('an engine trap while a sync update is brought into the state', () => {
     expect(store.evictions).toBe(1)
     expect(storedPathsOf(store)).toEqual(['Meeting notes', 'other'])
   })
-
-  it('drops the cached doc when an attach failure that is not a trap leaves the update unjudged', async () => {
-    const store = new StoredDoc(liveSeed('short'))
-    const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(5, ' note'))
-    const cached = store.get()
-    cached.attach = () => {
-      throw new Error('refused')
-    }
-
-    const thrown = await applyDocumentUpdate(liveDeps(store), {
-      workspaceId: WS,
-      path: PATH,
-      update,
-    }).catch((err: unknown) => err)
-
-    // The import landed before the attach, so the instance holds the update.
-    expect(thrown).toBeInstanceOf(UnjudgedImportError)
-    expect(thrown).toMatchObject({ cause: { message: 'refused' } })
-    expect(store.evictions).toBe(1)
-    expect(store.saves).toBe(0)
-  })
-
-  it('drops a per-document cached doc too', async () => {
-    const store = new StoredDoc(liveSeed('short'))
-    const update = updateFrom(store.get(), (doc) => doc.getText('body').insert(5, ' note'))
-    trapOnAttach(store.get(), 1)
-
-    await expect(
-      applyDocumentUpdate(liveDeps(store), { workspaceId: WS, path: PATH, update }),
-    ).rejects.toBeInstanceOf(DocumentEngineTrapError)
-    expect(store.evictions).toBe(1)
-    expect(readMarkdownBody(store.get())).toBe('short')
-  })
 })
 
 describe('a markdown body refusal', () => {
@@ -624,33 +517,26 @@ describe('a sync update that writes a node', () => {
     width: 200,
     height: 100,
   })
-  const spatialSeed = (text?: string) => {
-    const doc = new LoroDoc()
-    if (text !== undefined) writeSpatialNode(doc, textNode(text))
-    return doc
-  }
+  const spatialSeed = (text?: string) =>
+    recordHolding((doc) => {
+      if (text !== undefined) writeSpatialNode(doc, textNode(text))
+    })
   const storedText = (store: StoredDoc) => {
-    const node = readSpatialCanvas(store.get()).nodes[0]
+    const node = readSpatialCanvas(contentOf(store.get())).nodes[0]
     return node?.resource?.content
   }
-  const send = (store: StoredDoc, edit: (doc: LoroDoc) => void) =>
-    applyDocumentUpdate(liveDeps(store), {
-      workspaceId: WS,
-      path: PATH,
-      update: updateFrom(store.get(), edit),
-    })
 
   it('adding text past the node limit is refused and nothing is kept', async () => {
     const store = new StoredDoc(spatialSeed())
 
-    const refusal = await send(store, (doc) =>
+    const refusal = await sendRecordEdit(store, (doc) =>
       writeSpatialNode(doc, textNode('x'.repeat(NODE_TEXT_MAX_CHARS + 1))),
     ).catch((err: unknown) => err)
 
     expect(refusal).toMatchObject({ name: 'NodeTextTooLargeError' })
     expect(refusal).toMatchObject({ breach: { nodeId: 'n1', chars: NODE_TEXT_MAX_CHARS + 1 } })
     expect(store.saves).toBe(0)
-    expect(readSpatialCanvas(store.get()).nodes).toEqual([])
+    expect(readSpatialCanvas(contentOf(store.get())).nodes).toEqual([])
   })
 
   it('growing a node already past the limit is refused', async () => {
@@ -658,7 +544,7 @@ describe('a sync update that writes a node', () => {
     const store = new StoredDoc(spatialSeed(stored))
 
     await expect(
-      send(store, (doc) => writeSpatialNode(doc, textNode(`${stored}!`))),
+      sendRecordEdit(store, (doc) => writeSpatialNode(doc, textNode(`${stored}!`))),
     ).rejects.toMatchObject({ name: 'NodeTextTooLargeError' })
     expect(storedText(store)).toBe(stored)
   })
@@ -667,8 +553,8 @@ describe('a sync update that writes a node', () => {
     const stored = 'y'.repeat(NODE_TEXT_MAX_CHARS + 10)
     const store = new StoredDoc(spatialSeed(stored))
 
-    await send(store, (doc) => writeSpatialNode(doc, textNode(stored, 40)))
-    await send(store, (doc) => writeSpatialNode(doc, textNode(stored.slice(5), 40)))
+    await sendRecordEdit(store, (doc) => writeSpatialNode(doc, textNode(stored, 40)))
+    await sendRecordEdit(store, (doc) => writeSpatialNode(doc, textNode(stored.slice(5), 40)))
 
     expect(storedText(store)).toHaveLength(NODE_TEXT_MAX_CHARS + 5)
   })
@@ -677,7 +563,7 @@ describe('a sync update that writes a node', () => {
     const store = new StoredDoc(spatialSeed())
 
     await expect(
-      send(store, (doc) =>
+      sendRecordEdit(store, (doc) =>
         doc.getMap('nodes').set('n1', {
           id: 'n1',
           type: 'text',
@@ -709,7 +595,7 @@ describe('a sync update that writes a node', () => {
   it('a map value elsewhere, past the node limit, is not node text', async () => {
     const store = new StoredDoc(spatialSeed())
 
-    await send(store, (doc) =>
+    await sendRecordEdit(store, (doc) =>
       doc
         .getMap('canvas')
         .set('note', { resource: { content: 'x'.repeat(NODE_TEXT_MAX_CHARS + 1) } }),

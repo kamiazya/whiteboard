@@ -439,9 +439,9 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('POST /api/w/:wid/document/:path/update → 403 with canvas:read only (requires canvas:write)', async () => {
+    it('POST /api/w/:wid/workspace-document/update → 403 with canvas:read only (requires canvas:write)', async () => {
       const app = createApp(makeServerModeOptions(['canvas:read']))
-      const res = await app.request('/api/w/w1/document/canvas-a/update', {
+      const res = await app.request('/api/w/w1/workspace-document/update', {
         method: 'POST',
         headers: { authorization: BEARER },
       })

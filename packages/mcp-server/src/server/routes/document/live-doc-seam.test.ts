@@ -26,7 +26,7 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { resolveTestServerDeps } = await import('../_test-helpers.js')
+const { resolveTestServerDeps, writeDocumentUpdate } = await import('../_test-helpers.js')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
@@ -43,20 +43,21 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
 }
 
 describe('live-doc routes and the deps they were handed', () => {
-  it('POST /update reads and writes through the INJECTED liveDocuments', async () => {
+  it('GET /snapshot reads through the INJECTED liveDocuments', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
     await deps.documentIndex.createWorkspace({ workspaceId: 'seam-ws' })
-    const recorded: string[] = []
     const real = deps.liveDocuments
+    await writeDocumentUpdate(deps, 'seam-ws', 'canvas-a', updateBytes(['n1']))
+    const recorded: string[] = []
     deps.liveDocuments = {
       ...real,
+      exists: async (workspaceId, path) => {
+        recorded.push(`exists ${workspaceId}/${path}`)
+        return real.exists(workspaceId, path)
+      },
       get: async (workspaceId, path) => {
         recorded.push(`get ${workspaceId}/${path}`)
         return real.get(workspaceId, path)
-      },
-      save: async (workspaceId, path, doc, options) => {
-        recorded.push(`save ${workspaceId}/${path}`)
-        return real.save(workspaceId, path, doc, options)
       },
     }
 
@@ -66,16 +67,12 @@ describe('live-doc routes and the deps they were handed', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/w/seam-ws/document/canvas-a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: updateBytes(['n1']),
-    })
+    const res = await app.request('/api/w/seam-ws/document/canvas-a/snapshot')
 
     expect(res.status).toBe(200)
     // The recorder on the injected deps is the discriminator: a route that
-    // went around the seam to module-level stores persists the same bytes
+    // went around the seam to module-level stores answers the same bytes
     // and leaves this empty.
-    expect(recorded).toEqual(['get seam-ws/canvas-a', 'save seam-ws/canvas-a'])
+    expect(recorded).toEqual(['exists seam-ws/canvas-a', 'get seam-ws/canvas-a'])
   })
 })

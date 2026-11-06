@@ -193,7 +193,7 @@ const saveVersionRefusalSchema = z.object({
 })
 export type SaveVersionRefusal = z.infer<typeof saveVersionRefusalSchema>
 
-// POST /api/w/:workspaceId/document/<path>/update — success body.
+// POST /api/w/:workspaceId/workspace-document/update — success body.
 export const updateDocumentResponseSchema = z.object({
   ok: z.literal(true),
 })

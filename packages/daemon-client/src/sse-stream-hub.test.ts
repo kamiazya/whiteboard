@@ -550,12 +550,16 @@ describe('SseStreamHub', () => {
     const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
     const refused = vi.fn()
     const other = vi.fn()
-    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: refused })
-    hub.subscribe('w/b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: other })
+    hub.subscribe('workspace:a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onAuthRefused: refused,
+    })
+    hub.subscribe('workspace:b', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: other })
     await vi.waitFor(() => expect(fake.streamOpens()).toBe(1))
 
     fake.refuse({ update: 403 })
-    await expect(hub.push('w/a', new Uint8Array([1]))).rejects.toThrow('403')
+    await expect(hub.push('workspace:a', new Uint8Array([1]))).rejects.toThrow('403')
 
     expect(refused).toHaveBeenCalledTimes(1)
     expect(other).not.toHaveBeenCalled()
@@ -568,11 +572,16 @@ describe('SseStreamHub', () => {
     // refused push must not stop the document being followed.
     const fake = createFake()
     const hub = new SseStreamHub({ fetch: fake.fetch, baseUrl: 'http://d', retryDelayMs: noDelay })
-    hub.subscribe('w/a', { onUpdate: () => {}, onMessage: () => {}, onAuthRefused: () => {} })
-    const asks = () => fake.subscribeBodies().filter((b) => b.includes('"subscribe":["w/a"]'))
+    hub.subscribe('workspace:a', {
+      onUpdate: () => {},
+      onMessage: () => {},
+      onAuthRefused: () => {},
+    })
+    const asks = () =>
+      fake.subscribeBodies().filter((b) => b.includes('"subscribe":["workspace:a"]'))
     await vi.waitFor(() => expect(asks()).toHaveLength(1))
     fake.refuse({ update: 403 })
-    await expect(hub.push('w/a', new Uint8Array([1]))).rejects.toThrow('403')
+    await expect(hub.push('workspace:a', new Uint8Array([1]))).rejects.toThrow('403')
 
     fake.endStream()
     await vi.waitFor(() => expect(asks()).toHaveLength(2))

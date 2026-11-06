@@ -21,7 +21,6 @@ import { StoredDoc } from '../test-utils/stored-doc.js'
 import { unusedBlobStore } from '../test-utils/unused-blob-store.js'
 import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
 import { unusedWorkspaceDocuments } from '../test-utils/unused-workspace-documents.js'
-import { applyDocumentUpdate } from './apply-document-update.js'
 import { applyWorkspaceDocumentUpdate } from './apply-workspace-document-update.js'
 
 const WS = 'ws-1'
@@ -193,38 +192,5 @@ describe('a workspace-document sync update whose save fails', () => {
     })
 
     expect(storedBody(store)).toBe('body')
-  })
-})
-
-describe('a per-document sync update whose judgement throws after the import', () => {
-  it('leaves nothing of the update in the cached document', async () => {
-    const seed = new LoroDoc()
-    writeMarkdownBody(seed, 'body')
-    seed.commit()
-    const store = new StoredDoc(seed)
-    failNextJudgement(store.get())
-    const liveDocuments: LiveDocuments = {
-      ...unusedLiveDocuments(),
-      withWriteLock: (_workspaceId, fn) => fn(),
-      get: async () => store.get(),
-      save: async (_workspaceId, _path, doc) => store.save(doc),
-      evict: () => store.evict(),
-    }
-
-    await expect(
-      applyDocumentUpdate(
-        { liveDocuments },
-        {
-          workspaceId: WS,
-          path: 'notes',
-          update: updateFrom(seed, (doc) => doc.getText('body').insert(0, 'unjudged ')),
-        },
-      ),
-    ).rejects.toThrow()
-
-    expect(store.saves).toBe(0)
-    // What the next writer would diff against and save: its oplog, which a
-    // detached import fills while the state still reads as before.
-    expect(store.get().oplogVersion().compare(seed.oplogVersion())).toBe(0)
   })
 })

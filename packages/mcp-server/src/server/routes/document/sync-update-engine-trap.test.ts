@@ -9,12 +9,8 @@
  * that trapped answers `document_engine_trap`, and the next request is served
  * by a fresh instance.
  */
-import {
-  createWorkspaceDocumentAtPath,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
+import { createWorkspaceDocumentAtPath } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
@@ -57,16 +53,6 @@ function workspaceRecord(path: string, mode: 'update' | 'snapshot'): Uint8Array<
   return (
     mode === 'update' ? doc.export({ mode, from: vv0 }) : doc.export({ mode })
   ) as Uint8Array<ArrayBuffer>
-}
-
-function documentUpdate(nodeId: string): Uint8Array<ArrayBuffer> {
-  const doc = new LoroDoc()
-  const vv0 = doc.version()
-  writeSpatialCanvas(doc, {
-    nodes: [textNode({ id: nodeId, text: nodeId, x: 0, y: 0, width: 10, height: 10 })],
-    edges: [],
-  })
-  return doc.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>
 }
 
 async function setup() {
@@ -121,19 +107,5 @@ describe('a sync write the CRDT engine traps on', () => {
     expect(await trapped.json()).toMatchObject({ error: 'document_engine_trap' })
 
     expect((await promote('b')).status).toBe(200)
-  })
-
-  it('per-document update answers document_engine_trap and the next request is served', async () => {
-    const { deps, app, post } = await setup()
-    const url = `/api/w/${WS}/document/canvas-a`
-    expect((await post(`${url}/update`, documentUpdate('n1'))).status).toBe(200)
-    poison(await deps.liveDocuments.get(WS, 'canvas-a'))
-
-    const trapped = await post(`${url}/update`, documentUpdate('n2'))
-    expect(trapped.status).toBe(500)
-    expect(await trapped.json()).toMatchObject({ error: 'document_engine_trap' })
-
-    expect((await app.request(`${url}/snapshot`)).status).toBe(200)
-    expect((await post(`${url}/update`, documentUpdate('n3'))).status).toBe(200)
   })
 })

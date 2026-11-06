@@ -8,6 +8,7 @@
  * was kept" is observable as what the next read finds.
  */
 import {
+  type DocumentContainers,
   readCommentThreads,
   readSpatialCanvas,
   writeCommentThread,
@@ -21,12 +22,10 @@ import {
   LABEL_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
+import type { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LiveDocuments } from '../server-deps.js'
+import { contentOf, recordHolding, sendRecordEdit as send } from '../test-utils/record-sync.js'
 import { StoredDoc } from '../test-utils/stored-doc.js'
-import { unusedLiveDocuments } from '../test-utils/unused-live-documents.js'
-import { applyDocumentUpdate } from './apply-document-update.js'
 import { syncWriteAnswer } from './sync-write-refusals.js'
 
 const edge = (label: string): CanvasEdge => ({
@@ -37,7 +36,10 @@ const edge = (label: string): CanvasEdge => ({
 })
 
 function boardSeed(label: string): LoroDoc {
-  const doc = new LoroDoc()
+  return recordHolding((doc) => seedBoard(doc, label))
+}
+
+function seedBoard(doc: DocumentContainers, label: string): void {
   writeSpatialCanvas(doc, {
     nodes: [
       textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' }),
@@ -51,29 +53,9 @@ function boardSeed(label: string): LoroDoc {
     status: 'open',
     messages: [{ id: 'm1', body: 'looks off' }],
   })
-  return doc
 }
 
-function send(store: StoredDoc, edit: (doc: LoroDoc) => void) {
-  const liveDocuments: LiveDocuments = {
-    ...unusedLiveDocuments(),
-    kind: async () => null,
-    withWriteLock: (_workspaceId, fn) => fn(),
-    get: async () => store.get(),
-    save: async (_workspaceId, _path, doc) => store.save(doc),
-    evict: () => store.evict(),
-  }
-  const client = store.get().fork()
-  const from = client.oplogVersion()
-  edit(client)
-  client.commit()
-  return applyDocumentUpdate(
-    { liveDocuments },
-    { workspaceId: 'ws-1', path: 'board', update: client.export({ mode: 'update', from }) },
-  )
-}
-
-describe('a document sync update', () => {
+describe('a workspace-record sync update', () => {
   it('giving an edge a label past the label limit is refused, 413, and nothing is kept', async () => {
     const store = new StoredDoc(boardSeed('calls'))
 
@@ -85,7 +67,7 @@ describe('a document sync update', () => {
     expect(refusal).toMatchObject({ breach: { elementId: 'e1', chars: LABEL_MAX_CHARS + 1 } })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'label_too_large', status: 413 })
     expect(store.saves).toBe(0)
-    expect(readSpatialCanvas(store.get()).edges[0]?.label).toBe('calls')
+    expect(readSpatialCanvas(contentOf(store.get())).edges[0]?.label).toBe('calls')
   })
 
   it('shortening a label stored past the limit is applied', async () => {
@@ -94,7 +76,9 @@ describe('a document sync update', () => {
 
     await send(store, (doc) => writeSpatialEdge(doc, edge(stored.slice(4))))
 
-    expect(readSpatialCanvas(store.get()).edges[0]?.label).toHaveLength(LABEL_MAX_CHARS + 6)
+    expect(readSpatialCanvas(contentOf(store.get())).edges[0]?.label).toHaveLength(
+      LABEL_MAX_CHARS + 6,
+    )
   })
 
   it('a reply past the message limit is refused, 413, and nothing is kept', async () => {
@@ -110,6 +94,6 @@ describe('a document sync update', () => {
     })
     expect(syncWriteAnswer(refusal)).toEqual({ code: 'comment_too_large', status: 413 })
     expect(store.saves).toBe(0)
-    expect(readCommentThreads(store.get())[0]?.messages).toHaveLength(1)
+    expect(readCommentThreads(contentOf(store.get()))[0]?.messages).toHaveLength(1)
   })
 })

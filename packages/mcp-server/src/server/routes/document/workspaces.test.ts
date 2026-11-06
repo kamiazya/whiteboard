@@ -17,6 +17,7 @@ import {
   seedWorkspaceRow,
   testDocumentRouterOptions,
   withTempDataDir,
+  writeDocumentUpdate,
 } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspaces-test-')
@@ -37,21 +38,8 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// Mock the store so `getDoc` can be gated to control interleaving against a
-// concurrent rename/delete. It must be THIS module: `getDoc` is the store's
-// cached read, and doc-cache.js (which holds the LRU it reads through) never
-// exports it. Mocking the wrong module is silent — a factory spreading
-// `...actual` just adds a property nobody imports, and the race never stages.
-vi.mock('../../store/document-store.js', async () => {
-  const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-    '../../store/document-store.js',
-  )
-  return { ...actual, getDoc: vi.fn(actual.getDoc) }
-})
-
 const { clearDocCacheForTests, peekDoc } = await import('../../store/doc-cache.js')
 
-const { getDoc } = await import('../../store/document-store.js')
 const documentStore = await import('../../store/document-store.js')
 const { saveDocument } = documentStore
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
@@ -362,11 +350,7 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
     // Warm the doc-cache via the update path, matching real client traffic.
-    await app.request('/api/w/session1/document/cached/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
+    await writeDocumentUpdate(serverDeps, 'session1', 'cached', update)
     expect(peekDoc('session1', 'cached')).toBeDefined()
 
     const delRes = await app.request('/api/workspaces/session1/documents/cached', {
@@ -484,69 +468,6 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(listJson.documents.map((c) => c.path).sort()).toEqual(['a', 'b'])
   })
 
-  it('does not fork a phantom duplicate canvas when a rename races an in-flight /update that already resolved a doc reference through the old path', async () => {
-    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const baseDoc = new LoroDoc()
-    baseDoc.getText('content').insert(0, 'original')
-    baseDoc.commit()
-    await saveDocument('session1', 'a', baseDoc)
-
-    // A client update built against the pre-rename base.
-    const clientDoc = LoroDoc.fromSnapshot(baseDoc.export({ mode: 'snapshot' }))
-    const fromVV = clientDoc.version()
-    clientDoc.getText('content').insert('original'.length, ' + edit')
-    clientDoc.commit()
-    const update = clientDoc.export({ mode: 'update', from: fromVV }) as Uint8Array<ArrayBuffer>
-
-    // Stall the /update route's getDoc() call so a rename can be fired
-    // while the request is paused mid-flight, matching the real race: the
-    // read resolves before the rename runs, the write happens after.
-    let releaseGetDoc: () => void = () => undefined
-    const getDocGate = new Promise<void>((resolve) => {
-      releaseGetDoc = resolve
-    })
-    let signalGetDocCalled: () => void = () => undefined
-    const getDocCalled = new Promise<void>((resolve) => {
-      signalGetDocCalled = resolve
-    })
-    const actual = await vi.importActual<typeof import('../../store/document-store.js')>(
-      '../../store/document-store.js',
-    )
-    vi.mocked(getDoc).mockImplementationOnce(async (workspaceId, path) => {
-      signalGetDocCalled()
-      await getDocGate
-      return actual.getDoc(workspaceId, path)
-    })
-
-    const updatePromise = app.request('/api/w/session1/document/a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
-
-    await getDocCalled
-
-    // Fire the rename while the update is stalled mid-flight.
-    const renamePromise = app.request('/api/workspaces/session1/documents/a/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'b' }),
-    })
-    // Give the rename a chance to run before letting the stalled read continue.
-    await new Promise((r) => setTimeout(r, 20))
-    releaseGetDoc()
-
-    const [updateRes, renameRes] = await Promise.all([updatePromise, renamePromise])
-    expect(renameRes.status).toBe(200)
-    expect(updateRes.status).toBe(409) // nothing at the old path holds what it builds on
-
-    // Exactly one canvas must survive -- the update must not have silently
-    // inserted a phantom duplicate back at the old path.
-    const listRes = await app.request('/api/workspaces/session1/documents')
-    const listJson = (await listRes.json()) as { documents: { path: string }[] }
-    expect(listJson.documents.map((c) => c.path)).toEqual(['b'])
-  })
-
   it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
@@ -608,11 +529,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array<ArrayBuffer>
     // Warm the doc-cache via the update path, matching real client traffic.
-    await app.request('/api/w/session1/document/a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: update,
-    })
+    await writeDocumentUpdate(serverDeps, 'session1', 'a', update)
     expect(peekDoc('session1', 'a')).toBeDefined()
 
     const renameRes = await app.request('/api/workspaces/session1/documents/a/path', {
@@ -643,11 +560,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       mode: 'update',
       from: anotherPrevVV,
     }) as Uint8Array<ArrayBuffer>
-    await app.request('/api/w/session1/document/a/update', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/octet-stream' },
-      body: anotherUpdate,
-    })
+    await writeDocumentUpdate(serverDeps, 'session1', 'a', anotherUpdate)
 
     const freshSnapshotRes = await app.request('/api/w/session1/document/a/snapshot')
     expect(freshSnapshotRes.status).toBe(200)
