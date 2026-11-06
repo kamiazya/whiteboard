@@ -27,7 +27,7 @@ Open the document, then **More actions → Export…**:
   picture export. The file is text only: an image in the note is saved as its
   `![alt](asset:…)` line, not as pixels ([add an image to a note](add-an-image-to-a-note.md)),
   and an embedded document as its `![[…]]` line. The entry says so under its name. After the
-  save, a toast at the bottom of the screen reads **Saved as Markdown**, and when the note
+  save, a toast at the bottom of the screen reads "Saved as Markdown", and when the note
   has a picture or an embedded document it adds a second line: the pictures and embedded
   diagrams are not included, and Print / Save as PDF makes a handout with them. A screen
   reader hears the same words once. For a handout, print the note instead (below).

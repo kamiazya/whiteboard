@@ -144,14 +144,6 @@ export function setListMarker(kind: 'bullet' | 'ordered'): StateCommand {
 }
 
 /**
- * The task button: the checkbox cycles none -> open -> done -> none on each
- * target line, the way the heading slot walks its levels and comes back. A
- * line with no marker gets a bullet along with its first checkbox; the
- * marker stays when the checkbox comes off, so the line remains an item.
- * A heading gives way to the checkbox: GFM reads `[ ] # x` as text, so a
- * task item cannot be a heading, and the button the user pressed wins.
- */
-/**
  * The user event a task cycle is dispatched under, so a host can say what it
  * did. A sub-event of `input`, so history still groups it with typing.
  */
@@ -170,6 +162,14 @@ export function taskCycleAnnouncement(state: EditorState): string {
   }
 }
 
+/**
+ * The task button: the checkbox cycles none -> open -> done -> none on each
+ * target line, the way the heading slot walks its levels and comes back. A
+ * line with no marker gets a bullet along with its first checkbox; the
+ * marker stays when the checkbox comes off, so the line remains an item.
+ * A heading gives way to the checkbox: GFM reads `[ ] # x` as text, so a
+ * task item cannot be a heading, and the button the user pressed wins.
+ */
 export const cycleTaskCheckbox: StateCommand = rewritePrefixes((line) => {
   switch (line.checkbox) {
     case 'none':

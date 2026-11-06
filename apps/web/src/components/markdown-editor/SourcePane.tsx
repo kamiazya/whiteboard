@@ -16,7 +16,6 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import { externalValue } from '../../lib/text-length-limit.js'
 import { type ActiveMarkdownEditor, clearActiveMarkdownEditor } from './active-markdown-editor.js'
 import { endListOnEmptyItem } from './exit-empty-list-item.js'
-import { TASK_CYCLE_EVENT, taskCycleAnnouncement } from './line-prefix.js'
 import {
   activeMarkdownEditorFor,
   followCaret,
@@ -282,10 +281,6 @@ export function SourcePane({
   // press shows a keyboard is attached. The description link stays constant;
   // only its words come and go.
   const [keyboardInUse, setKeyboardInUse] = useState(() => !hasCoarsePointer())
-  // `repeat` appends a no-break space to an identical message, because a
-  // live region speaks a CHANGE of text: ticking two tasks in a row would
-  // otherwise announce only the first.
-  const [taskSaid, setTaskSaid] = useState({ text: '', repeat: false })
 
   useEffect(() => {
     const host = hostRef.current
@@ -361,12 +356,6 @@ export function SourcePane({
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString())
-          }
-          // A task ticked from the keyboard is otherwise silent: the source
-          // changes by one character, which nothing reads out.
-          if (update.transactions.some((tr) => tr.isUserEvent(TASK_CYCLE_EVENT))) {
-            const text = taskCycleAnnouncement(update.state)
-            setTaskSaid((prev) => ({ text, repeat: prev.text === text && !prev.repeat }))
           }
         }),
         followCaret(activeRef),
@@ -519,14 +508,6 @@ export function SourcePane({
       />
       <span id={leaveHintId} className="sr-only">
         {keyboardInUse ? 'Press Escape, then Tab or Shift+Tab, to leave the editor.' : ''}
-      </span>
-      <span
-        role="status"
-        aria-live="polite"
-        data-testid="source-task-announcement"
-        className="sr-only"
-      >
-        {taskSaid.repeat ? `${taskSaid.text}\u00a0` : taskSaid.text}
       </span>
     </>
   )
