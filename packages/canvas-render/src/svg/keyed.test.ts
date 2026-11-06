@@ -1,10 +1,9 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { sceneEntries } from '../scene-entry-keys.js'
+import { type CommentBoard, layoutBoard } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { renderSceneToSvg } from './backend.js'
@@ -134,12 +133,12 @@ describe('renderSceneToKeyedSvg over a comment scene', () => {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
     })
-    const canvas: SpatialCanvas = {
+    const canvas: CommentBoard = {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
       edges: [],
       comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
     }
-    const laidOut = layoutSpatialCanvas(canvas, {
+    const laidOut = layoutBoard(canvas, {
       measure: createFakeMeasure(),
       parseBody,
       appearance,
@@ -198,12 +197,12 @@ describe('the keyed projection marks the annotation layer', () => {
     type: 'root',
     children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
   })
-  const canvas: SpatialCanvas = {
+  const canvas: CommentBoard = {
     nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
     edges: [],
     comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
   }
-  const laidOut = layoutSpatialCanvas(canvas, {
+  const laidOut = layoutBoard(canvas, {
     measure: createFakeMeasure(),
     parseBody,
     appearance,

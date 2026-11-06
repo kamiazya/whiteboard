@@ -1,9 +1,9 @@
 // @vitest-environment node
 
 import type {
-  CanvasComment,
   CanvasEdge,
   CanvasLine,
+  CommentThread,
   ProposedChange,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
@@ -548,60 +548,30 @@ describe('create-edge', () => {
   })
 })
 
-// The comment annotation layer (ADR-0024). These commands ride the same
-// x-whiteboard.comments envelope loro-adapter's writeCanvasComment/
-// deleteCanvasComment split out into their own per-comment CRDT keys — see
-// commands.ts's withComments doc comment for the canonicality rules pinned
-// below.
-describe('comment commands', () => {
-  const COMMENT: CanvasComment = { id: 'c1', x: 10, y: 20, text: 'looks off' }
-  const OTHER: CanvasComment = { id: 'c2', x: -5, y: 0, text: 'nice', resolved: false }
+// The annotation layer is a plane beside the canvas (ADR-0026 decision 1), so
+// no thread command has a canvas effect: `threadsAfterCommand` is its effect.
+describe('thread commands', () => {
+  const thread: CommentThread = {
+    id: 't1',
+    anchor: { kind: 'spatial', x: 10, y: 20 },
+    status: 'open',
+    messages: [{ id: 't1-m1', body: 'looks off' }],
+  }
 
-  const withComment = (canvas: SpatialCanvas, comment: CanvasComment): SpatialCanvas => ({
-    ...canvas,
-    comments: [comment],
-  })
-
-  it('create-comment appends under x-whiteboard.comments, preserving other envelope fields', () => {
-    const canvas: SpatialCanvas = {
-      ...baseCanvas(),
-      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
-      comments: [OTHER],
-    }
-    const next = applyCommand(canvas, { kind: 'create-comment', comment: COMMENT })
-    expect(next.comments?.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
-    expect(next.facets).toEqual({ 'visual.theme/v0': { theme: 'visual.neon' } })
-    expect(next.nodes).toBe(canvas.nodes)
-  })
-
-  it('create-comment with a colliding id is a no-op returning the input canvas reference', () => {
-    const canvas = withComment(baseCanvas(), COMMENT)
-    expect(applyCommand(canvas, { kind: 'create-comment', comment: { ...COMMENT, x: 99 } })).toBe(
-      canvas,
-    )
-  })
-
-  it('set-comment-resolved flips only the target comment; a missing id is a no-op', () => {
-    const canvas: SpatialCanvas = {
-      ...baseCanvas(),
-      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
-      comments: [COMMENT, OTHER],
-    }
-    const next = applyCommand(canvas, {
-      kind: 'set-comment-resolved',
-      id: 'c1',
-      resolved: true,
-    })
-    expect(next.comments?.find((c) => c.id === 'c1')).toEqual({
-      ...COMMENT,
-      resolved: true,
-    })
-    expect(next.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
-    expect(next.facets).toEqual({ 'visual.theme/v0': { theme: 'visual.neon' } })
-
-    expect(
-      applyCommand(canvas, { kind: 'set-comment-resolved', id: 'ghost', resolved: true }),
-    ).toBe(canvas)
+  it.each<EditorCommand>([
+    { kind: 'create-thread', thread },
+    { kind: 'reply-to-thread', threadId: 't1', message: { id: 'm2', body: 'reply' } },
+    { kind: 'set-thread-status', threadId: 't1', status: 'resolved' },
+    {
+      kind: 'edit-thread-message',
+      threadId: 't1',
+      message: { id: 't1-m1', body: 'x' },
+      opening: true,
+    },
+    { kind: 'move-thread', threadId: 't1', x: 1, y: 2 },
+  ])('$kind returns the input canvas reference', (command) => {
+    const canvas = baseCanvas()
+    expect(applyCommand(canvas, command)).toBe(canvas)
   })
 
   it('there is no delete-comment verb: resolving is the only way to close a comment', () => {
@@ -611,25 +581,6 @@ describe('comment commands', () => {
     // @ts-expect-error — 'delete-comment' is not an EditorCommand kind
     const notAKind: EditorCommand['kind'] = 'delete-comment'
     expect(notAKind).toBe('delete-comment')
-  })
-
-  it('move-comment rewrites only the target anchor; a missing id is a no-op', () => {
-    const canvas: SpatialCanvas = {
-      ...baseCanvas(),
-      facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
-      comments: [COMMENT, OTHER],
-    }
-    const next = applyCommand(canvas, { kind: 'move-comment', id: 'c1', x: 300, y: -40 })
-    expect(next.comments?.find((c) => c.id === 'c1')).toEqual({
-      ...COMMENT,
-      x: 300,
-      y: -40,
-    })
-    expect(next.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
-    expect(next.facets).toEqual({ 'visual.theme/v0': { theme: 'visual.neon' } })
-    expect(next.nodes).toBe(canvas.nodes)
-
-    expect(applyCommand(canvas, { kind: 'move-comment', id: 'ghost', x: 1, y: 1 })).toBe(canvas)
   })
 })
 

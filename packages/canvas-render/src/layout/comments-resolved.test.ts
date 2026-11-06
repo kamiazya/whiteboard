@@ -1,14 +1,15 @@
 // A resolved thread's bubble on the canvas: collapsed to its first line and
 // labelled, so an open conversation is the only one that shows its whole text.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { type CommentBoard, layoutBoard } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
-import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
+import type { SpatialLayoutOptions } from './spatial-canvas.js'
 
 const appearance: SpatialAppearanceResolver = {
   resolveNode: () => ({ radius: 4 }),
@@ -40,12 +41,11 @@ function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayo
   }
 }
 
-const canvasWith = (comments: SpatialCanvas['comments']) =>
-  ({
-    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'content' })],
-    edges: [],
-    comments,
-  }) satisfies SpatialCanvas
+const canvasWith = (comments: readonly CanvasComment[]): CommentBoard => ({
+  nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 200, height: 100, text: 'content' })],
+  edges: [],
+  comments,
+})
 
 const bubbleOf = (nodes: readonly SceneNode[], id: string): ShapeSceneNode | undefined =>
   nodes.find((n): n is ShapeSceneNode => n.kind === 'shape' && n.id === `${id}/bubble`)
@@ -62,7 +62,7 @@ describe('comment layer', () => {
   describe('a resolved bubble', () => {
     const LONG = 'first line of the thread that is long enough to wrap onto a second line here'
     const resolvedScene = (text: string) =>
-      layoutSpatialCanvas(
+      layoutBoard(
         canvasWith([{ id: 'c2', x: 400, y: 60, text, resolved: true }]),
         baseOptions({ showResolved: true }),
       )
@@ -85,10 +85,7 @@ describe('comment layer', () => {
     })
 
     it('is shorter than the same text open, and the label sits inside the bubble', () => {
-      const open = layoutSpatialCanvas(
-        canvasWith([{ id: 'c2', x: 400, y: 60, text: LONG }]),
-        baseOptions(),
-      )
+      const open = layoutBoard(canvasWith([{ id: 'c2', x: 400, y: 60, text: LONG }]), baseOptions())
       const bubble = bubbleOf(resolvedScene(LONG).nodes, 'c2')
       const openBubble = bubbleOf(open.nodes, 'c2')
       const label = runsOf(resolvedScene(LONG).nodes).find((run) => run.text === 'Resolved')
@@ -99,7 +96,7 @@ describe('comment layer', () => {
     })
 
     it('leaves an open thread with no label and its full text unpainted by the overlay', () => {
-      const open = layoutSpatialCanvas(
+      const open = layoutBoard(
         canvasWith([{ id: 'c1', x: 400, y: 60, text: LONG }]),
         baseOptions({ showResolved: true }),
       )
@@ -107,7 +104,7 @@ describe('comment layer', () => {
       expect(runs.some((run) => run.text === 'Resolved')).toBe(false)
       expect(runs.some((run) => run.appearance?.fill === '#6b7280')).toBe(false)
       expect(open).toEqual(
-        layoutSpatialCanvas(canvasWith([{ id: 'c1', x: 400, y: 60, text: LONG }]), baseOptions()),
+        layoutBoard(canvasWith([{ id: 'c1', x: 400, y: 60, text: LONG }]), baseOptions()),
       )
     })
   })

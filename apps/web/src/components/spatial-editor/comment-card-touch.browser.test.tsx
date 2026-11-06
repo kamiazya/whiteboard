@@ -4,11 +4,11 @@
 // control the root does not recognise as an overlay is therefore dead to a
 // finger while working under a mouse, which is how the card's Close button
 // shipped unreachable on the one device where Escape does not exist.
-import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -26,7 +26,7 @@ const THREAD: CommentThread = {
   status: 'open',
   messages: [{ id: 'm1', body: 'free note', createdAt: '2026-09-02T00:00:00.000Z' }],
 }
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [],
   edges: [],
   comments: [FREE],

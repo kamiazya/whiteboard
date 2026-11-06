@@ -101,7 +101,10 @@ export const OCIF_TYPE = {
   bends: '@whiteboard/bends',
   /** An edge's on-canvas label, which OCIF models as a separate node. */
   edgeLabel: '@whiteboard/edge-label',
-  /** The annotation layer (ADR-0024), canvas-level. */
+  /**
+   * The annotation layer an older export wrote, canvas-level. Never written
+   * now (ADR-0026 decision 1b); named so a reader refuses a file carrying it.
+   */
   comments: '@whiteboard/comments',
   /**
    * What a board, a box or a relation is CLASSIFIED as

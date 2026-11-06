@@ -11,6 +11,7 @@ import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
@@ -116,7 +117,7 @@ function coveredLabelArea(entry: LabelCase): number {
       type: 'root',
       children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
     }),
-    comments: entry.comments,
+    threads: threadsOf(entry.comments),
   })
   const labels = labelBoxes(scene)
   const bubbles = bubblesOf(scene)

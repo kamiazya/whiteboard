@@ -1,5 +1,4 @@
 import type {
-  CanvasComment,
   CanvasEdge,
   CanvasLine,
   ExtensionFacets,
@@ -19,7 +18,6 @@ import {
   writeFacets,
 } from './document-envelope.js'
 import {
-  deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
   readEdgeLocks,
@@ -29,7 +27,6 @@ import {
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,
-  writeCanvasComment,
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
@@ -1009,235 +1006,6 @@ describe('canvas-level extension', () => {
   })
 })
 
-// The annotation layer (ADR-0024). The one property everything below exists
-// for: two peers commenting CONCURRENTLY must both survive a merge, which is
-// why each comment lives under its own key in a dedicated map rather than
-// inside the canvas envelope value (whole-value LWW) or a facet payload
-// (replace-whole-payload).
-describe('canvas comments bridge', () => {
-  const COMMENT: CanvasComment = { id: 'c1', x: 10, y: 20, text: 'this box overlaps' }
-  const OTHER: CanvasComment = {
-    id: 'c2',
-    x: -40,
-    y: 5,
-    text: 'rename this',
-    author: 'human:reviewer',
-    createdAt: '2026-09-01T10:00:00+09:00',
-    targetNodeId: 'node-1',
-    // `true` rather than `false` so the fixture exercises every optional
-    // field through the round trip: a thread's status has two values, so the
-    // projection emits `resolved: true` or no field at all, and `false` would
-    // come back as the canonical spelling of the same state.
-    // `comment-source-of-truth.test.ts` pins that canonicalisation.
-    resolved: true,
-  }
-
-  test('round-trips comments beside the rendering preferences', () => {
-    const doc = makeDoc()
-    writeSpatialCanvas(doc, {
-      nodes: [],
-      edges: [],
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-      comments: [COMMENT, OTHER],
-    })
-
-    const result = readSpatialCanvas(doc)
-    expect(result.facets?.['visual.edges/v0']).toEqual({ routing: 'orthogonal' })
-    expect((result.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
-    expect(result.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
-  })
-
-  test('stores each comment under its own key, never inside the envelope value', () => {
-    const doc = makeDoc()
-    writeSpatialCanvas(doc, {
-      nodes: [],
-      edges: [],
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-      comments: [COMMENT],
-    })
-
-    // The canvas's facets are their own key — per-key LWW rather than one
-    // envelope value — and must not carry the comments, which is what would
-    // reintroduce the concurrent-loss this layout removes.
-    expect(doc.getMap('canvas').get('facets')).toEqual({
-      'visual.edges/v0': { routing: 'orthogonal' },
-    })
-    expect(doc.getMap('canvas').get('x-whiteboard')).toBeUndefined()
-    // In the threads plane (ADR-0026), keyed per thread — the legacy
-    // `comments` map is not written any more.
-    expect(doc.getMap('threads').keys()).toEqual(['c1'])
-    expect(doc.getMap('comments').keys()).toEqual([])
-  })
-
-  test('CRDT merge: two peers comment concurrently and both survive', () => {
-    const base = makeDoc()
-    writeSpatialCanvas(base, { nodes: [TEXT_NODE], edges: [] })
-    const peer = makeDoc()
-    peer.import(base.export({ mode: 'snapshot' }))
-
-    writeCanvasComment(base, COMMENT)
-    writeCanvasComment(peer, OTHER)
-    base.import(peer.export({ mode: 'snapshot' }))
-
-    const merged = readSpatialCanvas(base).comments ?? []
-    expect(merged.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
-  })
-
-  test('a full resync deletes the comments the canvas no longer carries', () => {
-    const doc = makeDoc()
-    writeSpatialCanvas(doc, {
-      nodes: [],
-      edges: [],
-      comments: [COMMENT, OTHER],
-    })
-    writeSpatialCanvas(doc, { nodes: [], edges: [], comments: [OTHER] })
-
-    expect(readSpatialCanvas(doc).comments).toEqual([OTHER])
-  })
-
-  test('writeCanvasComment leaves every other comment untouched; delete removes exactly one', () => {
-    const doc = makeDoc()
-    writeSpatialCanvas(doc, { nodes: [], edges: [], comments: [COMMENT] })
-
-    writeCanvasComment(doc, OTHER)
-    expect(readSpatialCanvas(doc).comments).toHaveLength(2)
-
-    deleteCanvasComment(doc, 'c1')
-    expect(readSpatialCanvas(doc).comments).toEqual([OTHER])
-
-    // Absent id: a no-op, no commit — matching the bridge convention.
-    deleteCanvasComment(doc, 'never-existed')
-    expect(readSpatialCanvas(doc).comments).toEqual([OTHER])
-  })
-
-  test('a corrupt stored comment is dropped on read, never the whole layer', () => {
-    const doc = makeDoc()
-    writeCanvasComment(doc, COMMENT)
-    // Written straight into the thread plane, since that is what a read
-    // parses now; the legacy map's own corrupt row is covered by the
-    // migration's test.
-    doc.getMap('threads').set('bad', { nope: true })
-    doc.commit()
-
-    expect(readSpatialCanvas(doc).comments).toEqual([COMMENT])
-  })
-
-  test('refuses a non-finite anchor loudly, matching the node geometry guard', () => {
-    const doc = makeDoc()
-    expect(() => writeCanvasComment(doc, { ...COMMENT, x: Number.NaN })).toThrow(TypeError)
-  })
-
-  test('refuses a comment naming both a node and an edge loudly, for the same reason', () => {
-    // The thread this comment becomes carries both references on one
-    // spatial anchor, which the anchor schema refuses — so the reader would
-    // drop the comment for everyone. Found by a property drawing comments
-    // from the schema: two peers wrote different comments, and one vanished.
-    const doc = makeDoc()
-    expect(() =>
-      writeCanvasComment(doc, { ...COMMENT, targetNodeId: 'n1', targetEdgeId: 'e1' }),
-    ).toThrow(TypeError)
-    expect(readSpatialCanvas(doc).comments ?? []).toEqual([])
-  })
-
-  test('the non-finite-anchor refusal also propagates through withSpatialBatch, and the batch commits NOTHING (no undo step)', () => {
-    const doc = makeDoc()
-    writeCanvasComment(doc, COMMENT)
-    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
-    expect(undoManager.canUndo()).toBe(false)
-
-    // A batch that swallowed this would let a NaN anchor delete the comment
-    // for every reader — the same failure assertWritableComment's loud refusal
-    // exists to prevent on the committing path. The throw happens before
-    // the poisoned comment is ever written, so it never reaches the doc at
-    // all — only OTHER (written before the throw) is pending, uncommitted.
-    expect(() =>
-      withSpatialBatch(doc, (writer) => {
-        writer.writeComment(OTHER)
-        writer.writeComment({ ...COMMENT, x: Number.NaN })
-      }),
-    ).toThrow(TypeError)
-    // No undo step — commit is an undo/sync boundary, not a visibility
-    // boundary, matching the node/edge error-contract test above.
-    expect(undoManager.canUndo()).toBe(false)
-    expect(
-      readSpatialCanvas(doc)
-        .comments?.map((c) => c.id)
-        .sort(),
-    ).toEqual(['c1', 'c2'])
-    // The session-layer fallback converges exactly as it does for a
-    // node/edge batch throw: one committing writeCanvasComment absorbs the
-    // pending op into a single undo step.
-    writeCanvasComment(doc, COMMENT)
-    expect(undoManager.canUndo()).toBe(true)
-  })
-
-  test('comments alone produce an extension; no comments and no envelope produce none', () => {
-    const doc = makeDoc()
-    writeCanvasComment(doc, COMMENT)
-    expect(readSpatialCanvas(doc).comments).toEqual([COMMENT])
-
-    deleteCanvasComment(doc, 'c1')
-    expect(readSpatialCanvas(doc)).not.toHaveProperty('x-whiteboard')
-  })
-
-  describe('withSpatialBatch writeComment/deleteComment', () => {
-    test('a batch of one writeComment is byte-identical to writeCanvasComment', () => {
-      const a = new LoroDoc()
-      a.setPeerId(1n)
-      const b = new LoroDoc()
-      b.setPeerId(1n)
-      writeCanvasComment(a, COMMENT)
-      withSpatialBatch(b, (w) => w.writeComment(COMMENT))
-      expect(b.export({ mode: 'update' })).toEqual(a.export({ mode: 'update' }))
-    })
-
-    test('a batch of one deleteComment is byte-identical to deleteCanvasComment; an absent id is a no-op', () => {
-      const base = new LoroDoc()
-      base.setPeerId(9n)
-      writeCanvasComment(base, COMMENT)
-      writeCanvasComment(base, OTHER)
-      const snapshot = base.export({ mode: 'snapshot' })
-
-      const a = new LoroDoc()
-      a.import(snapshot)
-      a.setPeerId(1n)
-      const b = new LoroDoc()
-      b.import(snapshot)
-      b.setPeerId(1n)
-      deleteCanvasComment(a, COMMENT.id)
-      withSpatialBatch(b, (w) => w.deleteComment(COMMENT.id))
-      expect(b.export({ mode: 'update' })).toEqual(a.export({ mode: 'update' }))
-
-      const undoManager = new UndoManager(b, { mergeInterval: 0 })
-      expect(undoManager.canUndo()).toBe(false)
-      withSpatialBatch(b, (w) => w.deleteComment('never-existed'))
-      expect(undoManager.canUndo()).toBe(false)
-      expect(readSpatialCanvas(b).comments).toEqual([OTHER])
-    })
-
-    test('one batch of a comment write + a node write is exactly one undo step', () => {
-      const doc = makeDoc()
-      writeCanvasComment(doc, COMMENT)
-      const undoManager = new UndoManager(doc, { mergeInterval: 0 })
-      expect(undoManager.canUndo()).toBe(false)
-      withSpatialBatch(doc, (w) => {
-        w.writeComment(OTHER)
-        w.writeNode(TEXT_NODE)
-      })
-      expect(
-        readSpatialCanvas(doc)
-          .comments?.map((c) => c.id)
-          .sort(),
-      ).toEqual(['c1', 'c2'])
-      expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toContain(TEXT_NODE.id)
-      undoManager.undo()
-      expect(readSpatialCanvas(doc).comments).toEqual([COMMENT])
-      expect(readSpatialCanvas(doc).nodes).toEqual([])
-      expect(undoManager.canUndo()).toBe(false)
-    })
-  })
-})
-
 describe('reconcileSpatialCanvas', () => {
   const A: SpatialNode = textNode({ id: 'a', text: 'alpha', x: 0, y: 0, width: 10, height: 10 })
   const B: SpatialNode = textNode({ id: 'b', text: 'beta', x: 5, y: 5, width: 10, height: 10 })
@@ -1276,7 +1044,7 @@ describe('reconcileSpatialCanvas', () => {
     expect(doc.oplogVersion().compare(before)).toBe(0)
   })
 
-  test('reconciles edges and comments by the same visible-diff rule', () => {
+  test('reconciles edges by the same visible-diff rule', () => {
     const doc = makeDoc()
     writeSpatialCanvas(doc, {
       nodes: [A, B],
@@ -1287,7 +1055,6 @@ describe('reconcileSpatialCanvas', () => {
           to: { node: 'b' },
         },
       ],
-      comments: [{ id: 'c1', x: 1, y: 1, text: 'keep' }],
     })
     const prev = readSpatialCanvas(doc)
     reconcileSpatialCanvas(doc, prev, {
@@ -1299,15 +1066,10 @@ describe('reconcileSpatialCanvas', () => {
           to: { node: 'a' },
         },
       ],
-      comments: [
-        { id: 'c1', x: 1, y: 1, text: 'keep' },
-        { id: 'c2', x: 2, y: 2, text: 'new' },
-      ],
     })
 
     const after = readSpatialCanvas(doc)
     expect(after.edges.map((e) => e.id)).toEqual(['e2'])
-    expect((after.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
   })
 
   test('an unchanged canvas writes nothing at all', () => {

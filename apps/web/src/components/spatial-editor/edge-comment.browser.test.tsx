@@ -3,12 +3,12 @@
 // it commits names the edge — so the pin rides the edge through a reroute
 // rather than standing where the line used to be.
 
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { createdComments, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -53,16 +53,13 @@ it('an edge’s menu opens a comment about the edge, pinned on its line', async 
   await userEvent.keyboard('is this link right?')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
-  await vi.waitFor(() =>
-    expect(latest.commands.some((c) => c.kind === 'create-comment')).toBe(true),
-  )
-  const created = latest.commands.find((c) => c.kind === 'create-comment')
-  const comment = (created as { comment: CanvasComment }).comment
+  await vi.waitFor(() => expect(createdComments(latest.commands)).toHaveLength(1))
+  const [comment] = createdComments(latest.commands)
   expect(comment).toMatchObject({ id: 'c-edge', targetEdgeId: 'e1', text: 'is this link right?' })
-  expect(comment.targetNodeId).toBeUndefined()
+  expect(comment?.targetNodeId).toBeUndefined()
 
   // The stored point is below the line; where the pin is DRAWN (on the
   // line) is canvas-render's contract, pinned in its comments.test.ts. What
   // the editor owns is that the comment names the edge, above.
-  await vi.waitFor(() => expect(latest.canvas.comments?.[0]).toMatchObject({ targetEdgeId: 'e1' }))
+  await vi.waitFor(() => expect(latest.comments?.[0]).toMatchObject({ targetEdgeId: 'e1' }))
 })

@@ -53,8 +53,6 @@ const ELEMENT_VERBS = [
   'resize',
   'reorder',
   'ungroup',
-  'reply',
-  'edit-message',
   'set-text',
   'set-label',
   'set-ends',
@@ -65,7 +63,6 @@ const ELEMENT_VERBS = [
   'set-tags',
   'set-background',
   'set-resource',
-  'set-status',
 ] as const
 
 type ElementVerb = (typeof ELEMENT_VERBS)[number]
@@ -84,6 +81,9 @@ type CommandFacts =
       readonly note?: string
     }
   | `n/a: ${string}`
+
+const THREAD_COMMAND =
+  'n/a: a thread is the annotation layer beside the canvas, not an element of it (ADR-0026 decision 1); annotation-surface-parity.test.ts holds its verbs across surfaces' as const
 
 const COMMAND_FACTS = {
   'create-node': { verb: 'create', target: 'nodes' },
@@ -131,13 +131,11 @@ const COMMAND_FACTS = {
   'set-line-color': { verb: 'set-color', target: 'lines' },
   'ungroup-ink': { verb: 'ungroup', target: 'lines' },
 
-  'create-comment': { verb: 'create', target: 'comments' },
-  'create-thread': { verb: 'create', target: 'comments' },
-  'move-comment': { verb: 'move', target: 'comments' },
-  'reply-to-thread': { verb: 'reply', target: 'comments' },
-  'edit-thread-message': { verb: 'edit-message', target: 'comments' },
-  'set-comment-resolved': { verb: 'set-status', target: 'comments' },
-  'set-thread-status': { verb: 'set-status', target: 'comments' },
+  'create-thread': THREAD_COMMAND,
+  'move-thread': THREAD_COMMAND,
+  'reply-to-thread': THREAD_COMMAND,
+  'edit-thread-message': THREAD_COMMAND,
+  'set-thread-status': THREAD_COMMAND,
 
   'set-canvas-facet':
     'n/a: the board itself carries the facet, so there is no element column for it to sit in',
@@ -166,28 +164,23 @@ type Cell = 'command' | `command, gap: ${string}` | `gap: ${string}` | `n/a: ${s
  * hole it names.
  */
 const VERB_PARITY = {
-  create: { nodes: 'command', edges: 'command', lines: 'command', comments: 'command' },
+  create: { nodes: 'command', edges: 'command', lines: 'command' },
   delete: {
     nodes: 'command',
     edges: 'command',
     lines: 'command',
-    comments:
-      'n/a: a thread is RESOLVED rather than deleted — the annotation layer is never tidied (.claude/rules/vocabulary.md), and the verb that ends one is set-status',
   },
   move: {
     nodes: 'command',
     edges:
       'n/a: an edge is a relation whose path is ROUTED from the boxes it joins, so there is nothing to translate — moving one means moving an end (set-ends) or placing a bend (set-bends)',
     lines: 'command',
-    comments: 'command',
   },
   resize: {
     nodes: 'command',
     edges: 'n/a: an edge has no box — its extent is wherever the router took it',
     lines:
       "n/a: a stroke's shape IS its points, so changing its size is redrawing it rather than resizing a box. A transform box over a selection would be a new affordance, not this verb",
-    comments:
-      'n/a: a pin has no size a person sets, and the bubble beside it is laid out from its text',
   },
   reorder: {
     nodes: 'command',
@@ -195,106 +188,69 @@ const VERB_PARITY = {
       'n/a: paint order is the scene composer’s fixed rule (every node, then every edge and stroke in stored order, then the annotation layer), so there is no z on an edge to write',
     lines:
       'n/a: the same fixed rule — a stroke carries no z either, and giving one a z is a model change before it is an editor one',
-    comments:
-      'n/a: the annotation layer is painted above everything by construction, which is what makes a pin reachable',
   },
   ungroup: {
     nodes:
       'n/a: a frame holds whatever its rectangle holds — JSON Canvas membership is geometric, so there is no group binding to dissolve',
     edges: 'n/a: edges are never grouped; each one stands for one relation',
     lines: 'command',
-    comments: 'n/a: a thread already groups its own messages, and nothing nests threads',
-  },
-  reply: {
-    nodes: 'n/a: only a thread carries messages to reply to',
-    edges: 'n/a: only a thread carries messages to reply to',
-    lines: 'n/a: only a thread carries messages to reply to',
-    comments: 'command',
-  },
-  'edit-message': {
-    nodes: 'n/a: only a thread carries messages to edit',
-    edges: 'n/a: only a thread carries messages to edit',
-    lines: 'n/a: only a thread carries messages to edit',
-    comments: 'command',
   },
   'set-text': {
     nodes: 'command',
     edges: "n/a: an edge's words are its LABEL, which is set-label",
     lines: 'n/a: ink says nothing (ADR-0038) — a stroke carrying prose would be a node',
-    comments:
-      'n/a: a message is rewritten through edit-message, which keeps the thread it belongs to',
   },
   'set-label': {
     nodes: 'command',
     edges: 'command',
     lines: 'command',
-    comments: 'n/a: a thread is titled by its first message rather than by a label',
   },
   attach: {
     nodes:
       'n/a: a node is ON nothing — where it sits is its own geometry, which is move. Frame membership is geometric (ADR-0038), so there is no binding to re-point either',
     edges: 'command',
     lines: 'command',
-    comments:
-      "gap: a thread's anchor MAY name a node (annotationAnchorSchema's spatial arm carries nodeId) and move-comment writes only x/y, so a pin can be dragged anywhere on the board and never from one box onto another. Its own increment, because what a re-anchor should do to the offset within the box is the annotation layer's question rather than the canvas's",
   },
   'set-ends': {
     nodes: 'n/a: an end is a property of the thing drawn BETWEEN nodes, not of a node',
     edges: 'command',
     lines: 'command',
-    comments:
-      'n/a: a thread is anchored rather than attached at two ends, and its anchor moves with move-comment',
   },
   'set-side': {
     nodes: 'n/a: a side belongs to the end that meets the box, not to the box',
     edges: 'command',
     lines: 'command',
-    comments: 'n/a: a pin meets nothing at a side',
   },
   'set-bends': {
     nodes: 'n/a: a bend is a point on a drawn path',
     edges: 'command',
     lines: 'command',
-    comments: 'n/a: nothing draws a path for a thread',
   },
   'set-color': {
     nodes: 'command',
     edges: 'command',
     lines: 'command',
-    comments:
-      'n/a: the annotation layer is chrome and is painted by the editor, never by the document',
   },
   'set-facet': {
     nodes: 'command',
     edges: 'command',
     lines: 'command',
-    comments:
-      'n/a: the annotation layer is not a facet target (ADR-0013 names canvas, node, edge and document)',
   },
   'set-tags': {
     nodes: 'command',
     edges: 'command',
     lines:
       'n/a: ink classifies nothing, so a line has no tags to write (ADR-0040 decision 2) — and `canvasLineSchema` has no `tags` field for one to live in',
-    comments: 'n/a: a thread is not classified; its state is its status',
   },
   'set-background': {
     nodes: 'command',
     edges: 'n/a: a line has no interior to fill',
     lines: 'n/a: a stroke has no interior to fill',
-    comments: 'n/a: the bubble is chrome the editor paints',
   },
   'set-resource': {
     nodes: 'command',
     edges: 'n/a: only a BOX shows something (ADR-0038 decision 3)',
     lines: 'n/a: only a BOX shows something (ADR-0038 decision 3)',
-    comments: 'n/a: a message is markdown carried by the thread, not a resource',
-  },
-  'set-status': {
-    nodes: 'n/a: a node has no open/closed state of its own',
-    edges: 'n/a: an edge has no open/closed state of its own',
-    lines: 'n/a: a stroke has no open/closed state of its own',
-    comments: 'command',
   },
 } satisfies Record<ElementVerb, Record<ElementCollection, Cell>>
 
@@ -311,8 +267,6 @@ const FRAGMENT_CARRIES = {
   nodes: 'carried',
   edges: 'carried',
   lines: 'carried',
-  comments:
-    'n/a: a thread is anchored feedback ABOUT a spot rather than content (ADR-0024), so copying a box must not carry somebody’s conversation to another board',
 } satisfies Record<ElementCollection, 'carried' | `gap: ${string}` | `n/a: ${string}`>
 
 const NOUNS: Record<string, ElementCollection> = {
@@ -322,8 +276,6 @@ const NOUNS: Record<string, ElementCollection> = {
   edges: 'edges',
   line: 'lines',
   lines: 'lines',
-  comment: 'comments',
-  comments: 'comments',
 }
 
 const REASON_MIN = 24
@@ -355,8 +307,10 @@ describe('every command kind says which verb it is and what it acts on', () => {
     // the table matches the union, and nothing else here would notice the
     // union having quietly become five entries.
     // 45 -> 47 with `set-edge-end` and `set-line-end`, the two writes behind
-    // the `attach` verb.
-    expect(commandFacts).toHaveLength(47)
+    // the `attach` verb; 47 -> 45 when the flat comment commands
+    // (`create-comment`, `move-comment`, `set-comment-resolved`) gave way to
+    // `move-thread` beside the thread commands already here.
+    expect(commandFacts).toHaveLength(45)
     expect(elementCommands.length).toBeGreaterThan(30)
   })
 
@@ -458,13 +412,12 @@ describe('what each kind of element can have done to it', () => {
     // after that it was fixed. Nothing was red about that before this line.
     // All seven closed, and the count reached zero.
     //
-    // It is back at one, and that is the matrix widening rather than the
-    // editor narrowing: `attach` is a new ROW, added with the verb that moves
-    // an end onto a different object. Two of its cells arrived as `command`
-    // and the comments cell arrived as a gap nobody had a name for before
-    // there was a row to put it in — which is what a derived axis buys that a
-    // hand-kept one cannot.
-    expect(Object.fromEntries(byCollection)).toEqual({ comments: 1 })
+    // It went back to one when `attach` arrived as a new ROW — a comments
+    // cell naming the pin that cannot be dragged onto another box — and to
+    // zero when comments left the canvas's collections: a thread is the
+    // annotation layer beside the canvas (ADR-0026 decision 1), so its verbs
+    // are held across surfaces by annotation-surface-parity.test.ts instead.
+    expect(Object.fromEntries(byCollection)).toEqual({})
   })
 })
 
@@ -492,7 +445,7 @@ describe('what a copy carries', () => {
       ).toBe(cell === 'carried')
       if (cell !== 'carried') {
         expect(
-          cell.slice(cell.indexOf(':') + 1).trim().length,
+          (cell as string).slice((cell as string).indexOf(':') + 1).trim().length,
           `${collection}: "${cell}" — a bare exemption is the omission with a word in front of it.`,
         ).toBeGreaterThanOrEqual(REASON_MIN)
       }

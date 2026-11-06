@@ -11,6 +11,7 @@ import {
   annotationAnchorSchema,
   type CommentThread,
   canvasCommentFromThread,
+  canvasCommentsOf,
   commentCornerOf,
   commentMessageSchema,
   commentThreadSchema,
@@ -512,5 +513,47 @@ describe('commentCornerOf', () => {
       (id) => (id === 'n' ? node : undefined),
     )
     expect(projected && { x: projected.x, y: projected.y }).toEqual(commentCornerOf(node))
+  })
+})
+
+describe('canvasCommentsOf', () => {
+  const node = { id: 'n1', x: 10, y: 20, width: 100, height: 40 }
+  const thread = (id: string, anchor: CommentThread['anchor']): CommentThread => ({
+    id,
+    anchor,
+    status: 'open',
+    messages: [{ id: `${id}-m1`, body: id }],
+  })
+
+  it('draws a pin for every thread with a place on the board, in the order given', () => {
+    const threads = [
+      thread('b', { kind: 'spatial', x: 1, y: 2 }),
+      thread('whole', { kind: 'document' }),
+      thread('a', { kind: 'spatial', x: 0, y: 0, nodeId: 'n1' }),
+      thread('passage', { kind: 'text', nodeId: 'n1', quote: { exact: 'x' }, start: 0, end: 1 }),
+      thread('gone', { kind: 'text', nodeId: 'ghost', quote: { exact: 'x' }, start: 0, end: 1 }),
+    ]
+    expect(canvasCommentsOf(threads, [node]).map((comment) => comment.id)).toEqual([
+      'b',
+      'a',
+      'passage',
+    ])
+    expect(canvasCommentsOf(threads, [node])[2]).toMatchObject({
+      x: 110,
+      y: 20,
+      targetNodeId: 'n1',
+    })
+  })
+
+  it('answers the first node holding an id, as a scan from the front would', () => {
+    const passage = thread('p', {
+      kind: 'text',
+      nodeId: 'n1',
+      quote: { exact: 'x' },
+      start: 0,
+      end: 1,
+    })
+    const [comment] = canvasCommentsOf([passage], [node, { ...node, x: 900 }])
+    expect(comment?.x).toBe(110)
   })
 })

@@ -15,7 +15,14 @@ import { useCommentState } from './use-comment-state.js'
 type ChromeBox = { commentId: string; part: string; bbox: BoundingBox }
 
 function commentState(canvas: SpatialCanvas, commentChromeBoxes: readonly ChromeBox[]) {
-  return renderHook(() => useCommentState({ canvasRef: { current: canvas }, commentChromeBoxes }))
+  return renderHook(() =>
+    useCommentState({
+      canvasRef: { current: canvas },
+      canvas,
+      threads: [],
+      commentChromeBoxes,
+    }),
+  )
 }
 
 const EMPTY: SpatialCanvas = { nodes: [], edges: [] }

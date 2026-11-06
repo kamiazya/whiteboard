@@ -204,3 +204,18 @@ describe('parseOcif reads foreign OCIF text', () => {
     }
   })
 })
+
+describe('an OCIF file carrying the conversation it no longer may (ADR-0026 decision 1b)', () => {
+  it('refuses a @whiteboard/comments entry by name rather than dropping it unread', () => {
+    const result = parseOcif(
+      JSON.stringify({
+        ocif: 'https://spec.canvasprotocol.org/v0.7.0/core.json',
+        nodes: [],
+        data: [{ type: '@whiteboard/comments', comments: [{ id: 'c1', x: 0, y: 0, text: 'old' }] }],
+      }),
+    )
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected failure')
+    expect(result.error.message).toMatch(/@whiteboard\/comments/)
+  })
+})

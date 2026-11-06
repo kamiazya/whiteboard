@@ -12,7 +12,7 @@ const baseGeometry = { id: 'n1', x: 0, y: 0, width: 100, height: 100 }
  * the extension here: what they exercise is the FORMAT's behaviour — the
  * escape hatch that costs the extension rather than the document, a retired
  * key dropped like any foreign field, an embed refused on an edge — and none
- * of it is true of the model any more, which now carries `comments`, `facets`
+ * of it is true of the model any more, which now carries `facets`
  * and `embed` as ordinary fields with no key to be unreadable.
  */
 
@@ -114,14 +114,11 @@ describe('canvas-level x-whiteboard', () => {
     expect(parsed['x-whiteboard']).not.toHaveProperty('edgeRouting')
   })
 
-  it('a malformed facet key costs the facets bucket only, never the sibling comments', () => {
+  it('a malformed facet key costs the facets bucket only, never the sibling tags', () => {
     const parsed = jsonCanvasDocumentSchema.parse(
-      canvasWith({
-        comments: [{ id: 'c1', x: 1, y: 2, text: 'kept' }],
-        facets: { 'not a key': {} },
-      }),
+      canvasWith({ tags: ['kept'], facets: { 'not a key': {} } }),
     )
-    expect(parsed['x-whiteboard']).toEqual({ comments: [{ id: 'c1', x: 1, y: 2, text: 'kept' }] })
+    expect(parsed['x-whiteboard']).toEqual({ tags: ['kept'] })
     expect(parsed.nodes).toEqual([])
   })
 
@@ -140,55 +137,6 @@ describe('canvas-level x-whiteboard', () => {
       'x-whiteboard': 'not an object',
     })
     expect(parsed.nodes).toHaveLength(1)
-  })
-})
-
-// The annotation layer (ADR-0024): a comment is pinned AT an anchor point but
-// is not content — it must never cost the canvas, and a reader that cannot
-
-describe('canvas comments on the canvas-level extension', () => {
-  const comment = { id: 'c1', x: 10, y: 20, text: 'shrink this' }
-
-  it('carries comments beside the canvas facets', () => {
-    const parsed = jsonCanvasDocumentSchema.parse({
-      nodes: [],
-      edges: [],
-      'x-whiteboard': {
-        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-        comments: [comment],
-      },
-    })
-    expect(parsed['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-      comments: [comment],
-    })
-  })
-
-  it('a malformed comment costs the comments bucket only, never the sibling facets', () => {
-    const parsed = jsonCanvasDocumentSchema.parse({
-      nodes: [],
-      edges: [],
-      'x-whiteboard': {
-        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-        comments: [{ id: 'c1', x: 10, y: 20, text: '' }],
-      },
-    })
-    expect(parsed['x-whiteboard']).toEqual({
-      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
-    })
-  })
-
-  // Deliberately UNLIKE an edge's endpoints: a comment may outlive the node it
-  // was left on (or arrive about one a concurrent peer deleted), and a
-  // renderer falls back to the anchor point. Rejecting would let the
-  // annotation layer make the document unreadable.
-  it('accepts a targetNodeId that names no existing node', () => {
-    const parsed = jsonCanvasDocumentSchema.safeParse({
-      nodes: [],
-      edges: [],
-      'x-whiteboard': { comments: [{ ...comment, targetNodeId: 'gone' }] },
-    })
-    expect(parsed.success).toBe(true)
   })
 })
 

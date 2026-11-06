@@ -20,7 +20,6 @@ import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { namespacedIdSchema, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type {
   AnchorRect,
-  CanvasComment,
   CommentThread,
   Proposal,
   SpatialCanvas,
@@ -305,7 +304,7 @@ export interface SpatialLayoutOptions {
    * region outlines and passage highlights. Absent/true draws it, which is
    * what every surface a person edits on needs. A caller producing a
    * picture to hand someone else switches it off and gets the board
-   * alone, the envelope's own comments included.
+   * alone.
    */
   readonly commentLayer?: boolean
   /**
@@ -316,33 +315,13 @@ export interface SpatialLayoutOptions {
    */
   readonly commentObstacles?: readonly BoundingBox[]
   /**
-   * This document's annotation layer, handed over beside the canvas rather
-   * than read out of its envelope.
-   *
-   * ADR-0026 decision 1b makes the layer keeper-side: it is stored one level
-   * above content, so it does not ride inside `x-whiteboard`. A markdown
-   * document has no envelope at all, which is the argument that decides it —
-   * there is nowhere in a canvas key to put a markdown document's comments.
-   *
-   * When present it REPLACES the envelope's copy rather than adding to it,
-   * and an empty array is an answer ("no conversations") rather than a
-   * missing one. Both matter while call sites migrate one at a time: the
-   * union would draw two pins on one comment, and a fallback would hand a
-   * caller that read the layer and found it empty the stale copy back.
-   *
-   * Absent, the envelope is read as before. That is what keeps every
-   * unmigrated caller byte-identical, and it goes once none is left.
-   */
-  readonly comments?: readonly CanvasComment[]
-  /**
-   * The document's conversations, for what the flat `comments` cannot
-   * carry: a thread about a PASSAGE of a text node's text (the text arm
-   * naming a node, ADR-0026 §3) is drawn as a highlight behind the words it
-   * quotes, re-found in the node's laid-out runs by its quote. Pins and
-   * bubbles still come from `comments` / the envelope — the projection a
-   * caller's optimistic state already holds — so a caller passes both.
-   * Absent, no passage is highlighted; the pin at the node's corner still
-   * says the conversation exists.
+   * This document's annotation layer, handed over beside the canvas: the
+   * layer is keeper-side (ADR-0026 decision 1b), stored one level above
+   * content, so a canvas never carries it. Every pin and bubble is drawn from
+   * these threads (`canvasCommentsOf`, in the order given), and a thread
+   * about a PASSAGE of a text node's text (the text arm naming a node, §3)
+   * is also drawn as a highlight behind the words it quotes, re-found in the
+   * node's laid-out runs by its quote. Absent or empty, nothing is drawn.
    */
   readonly threads?: readonly CommentThread[]
   /**
@@ -385,9 +364,7 @@ export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly regionsByThread: ReadonlyMap<string, RegionChrome>
   /**
    * How many messages each conversation holds, by thread id — the fact the
-   * pin draws. From `threads`, because the flat `comments` projection
-   * carries one text and cannot know; absent for a caller that passes none,
-   * which then gets the pin it always got.
+   * pin draws, read off `threads`.
    */
   readonly messagesByThread: ReadonlyMap<string, number>
   /** The contribution set actually in force, defaulted once at the entry

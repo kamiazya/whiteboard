@@ -8,6 +8,7 @@ import {
   commentThreadSchema,
   compareCodeUnit,
   compareMessages,
+  movedAnchor,
   threadFromCanvasComment,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
@@ -130,6 +131,28 @@ export function setCommentThreadStatus(
 }
 
 /**
+ * A thread's pin dragged to `point` (`movedAnchor` decides what moves). One
+ * key, last-writer-wins, like the status: the messages beneath are untouched.
+ * Answers whether it wrote — nothing for a thread this replica does not hold
+ * (for `writeThreadMessage`'s reason), or one whose anchor stays put.
+ */
+export function moveCommentThread(
+  doc: DocumentContainers,
+  threadId: string,
+  point: { readonly x: number; readonly y: number },
+): boolean {
+  const held = readCommentThread(doc, threadId)
+  const container = threadContainer(doc, threadId)
+  if (held === undefined || container === undefined) return false
+  const anchor = movedAnchor(held.anchor, point)
+  if (anchor === held.anchor) return false
+  assertFiniteAnchor({ ...held, anchor })
+  container.set(ANCHOR_FIELD, anchor)
+  doc.commit()
+  return true
+}
+
+/**
  * Every thread the document holds, ordered by id and with each thread's
  * messages in `compareMessages` order, so two replicas that merged the same
  * writes render the same conversation.
@@ -151,10 +174,7 @@ export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
  * writer that rewrites one thread and must not pay for the whole plane.
  * Absent, or rejected by the schema, it is `undefined`.
  */
-export function readCommentThread(
-  doc: DocumentContainers,
-  threadId: string,
-): CommentThread | undefined {
+function readCommentThread(doc: DocumentContainers, threadId: string): CommentThread | undefined {
   const container = threadContainer(doc, threadId)
   if (container === undefined) return undefined
   const messagesContainer = container.get(MESSAGES_KEY)

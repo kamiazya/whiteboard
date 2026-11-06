@@ -4,7 +4,7 @@
 // surface wiring. Placement floats near the anchor; nothing here is stored.
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, CommentThread, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
@@ -15,6 +15,7 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { type CommentBoard, layoutBoard, threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
@@ -81,12 +82,8 @@ const TEXT_NODE: SpatialNode = textNode({
   text: 'content',
 })
 
-function canvasWith(comments: SpatialCanvas['comments']) {
-  return {
-    nodes: [TEXT_NODE],
-    edges: [],
-    comments,
-  } satisfies SpatialCanvas
+function canvasWith(comments: readonly CanvasComment[]): CommentBoard {
+  return { nodes: [TEXT_NODE], edges: [], comments }
 }
 
 function shapesOf(nodes: readonly SceneNode[]): ShapeSceneNode[] {
@@ -114,16 +111,15 @@ function runsOf(nodes: readonly SceneNode[]): TextRunNode[] {
   })
 }
 
-describe('the comments option', () => {
-  // ADR-0026 decision 1b: the annotation layer is keeper-side, so it stops
-  // riding inside the canvas envelope and travels beside it. These pin the
-  // seam that lets a caller hand comments over directly — the step that
-  // makes a markdown document's threads renderable at all, since it has no
-  // envelope to put them in.
-  it('draws comments passed as an option, on a canvas whose envelope has none', () => {
+describe('the annotation layer handed over beside the canvas', () => {
+  // ADR-0026 decision 1b: the layer is keeper-side, so a canvas never carries
+  // it and every pin is drawn from the threads a caller passes.
+  it('draws a pin and a bubble for a thread passed beside the canvas', () => {
     const scene = layoutSpatialCanvas(
       { nodes: [TEXT_NODE], edges: [] },
-      baseOptions({ comments: [{ id: 'c1', x: 400, y: 60, text: 'from beside the canvas' }] }),
+      baseOptions({
+        threads: threadsOf([{ id: 'c1', x: 400, y: 60, text: 'from beside the canvas' }]),
+      }),
     )
 
     expect(pinOf(scene.nodes, 'c1')).toBeDefined()
@@ -136,35 +132,15 @@ describe('the comments option', () => {
     ).toContain('from beside the canvas')
   })
 
-  it('lets the option win over the envelope, so a migrating caller is never doubled', () => {
-    // Both populated is what a half-migrated call site looks like. Drawing
-    // the union would put two pins on one comment; preferring the argument
-    // makes the migration one call site at a time.
-    const scene = layoutSpatialCanvas(
-      canvasWith([{ id: 'stale', x: 10, y: 10, text: 'from the envelope' }]),
-      baseOptions({ comments: [{ id: 'fresh', x: 400, y: 60, text: 'from the option' }] }),
-    )
-
-    expect(pinOf(scene.nodes, 'fresh')).toBeDefined()
-    expect(pinOf(scene.nodes, 'stale')).toBeUndefined()
-  })
-
-  it('draws nothing for an empty option, rather than falling back to the envelope', () => {
-    // An empty array is an ANSWER — "this document has no conversations" —
-    // and a caller that has read the layer and found it empty must not get
-    // the envelope's stale copy back.
-    const scene = layoutSpatialCanvas(
-      canvasWith([{ id: 'stale', x: 10, y: 10, text: 'from the envelope' }]),
-      baseOptions({ comments: [] }),
-    )
-
-    expect(pinOf(scene.nodes, 'stale')).toBeUndefined()
+  it('draws no comment chrome without threads', () => {
+    const scene = layoutSpatialCanvas({ nodes: [TEXT_NODE], edges: [] }, baseOptions())
+    expect(scene.nodes.some((node) => 'commentChrome' in node && node.commentChrome)).toBe(false)
   })
 })
 
 describe('comment layer', () => {
   it('draws a pin centered on the anchor and a bubble holding the text, after all content', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 400, y: 60, text: 'move this left' }]),
       baseOptions(),
     )
@@ -197,7 +173,7 @@ describe('comment layer', () => {
   })
 
   it('ties pin to bubble with a dashed leader line drawn under both', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 400, y: 60, text: 'move this left' }]),
       baseOptions(),
     )
@@ -237,7 +213,7 @@ describe('comment layer', () => {
       resolveEdge: () => undefined,
       resolveLabel: () => ({}),
     }
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still tied' }]),
       baseOptions({ appearance: bare }),
     )
@@ -249,7 +225,7 @@ describe('comment layer', () => {
   })
 
   it('follows the target node when it resolves, and falls back to the anchor when it is gone', () => {
-    const followed = layoutSpatialCanvas(
+    const followed = layoutBoard(
       canvasWith([{ id: 'c1', x: 999, y: 999, text: 'about n1', targetNodeId: 'n1' }]),
       baseOptions(),
     )
@@ -258,7 +234,7 @@ describe('comment layer', () => {
     expect(followedPin?.bbox.x).toBe(200 - COMMENT_PIN_SIZE_PX / 2)
     expect(followedPin?.bbox.y).toBe(0 - COMMENT_PIN_SIZE_PX / 2)
 
-    const dangling = layoutSpatialCanvas(
+    const dangling = layoutBoard(
       canvasWith([{ id: 'c1', x: 50, y: 70, text: 'about a deleted node', targetNodeId: 'gone' }]),
       baseOptions(),
     )
@@ -279,7 +255,7 @@ describe('comment layer', () => {
       height: 100,
       text: 'b',
     })
-    const canvas: SpatialCanvas = {
+    const canvas: CommentBoard = {
       nodes: [left, right],
       edges: [
         {
@@ -290,7 +266,7 @@ describe('comment layer', () => {
       ],
       comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],
     }
-    const scene = layoutSpatialCanvas(canvas, baseOptions())
+    const scene = layoutBoard(canvas, baseOptions())
     const edge = scene.nodes.find(
       (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'e1',
     )
@@ -303,13 +279,13 @@ describe('comment layer', () => {
 
     // The edge gone, the comment stands where it was stored — orphaned in
     // the panel, never dropped from the canvas.
-    const dangling = layoutSpatialCanvas({ ...canvas, edges: [] }, baseOptions())
+    const dangling = layoutBoard({ ...canvas, edges: [] }, baseOptions())
     expect(pinOf(dangling.nodes, 'c1')?.bbox.y).toBe(130 - COMMENT_PIN_SIZE_PX / 2)
   })
 
   it('does not draw a resolved comment — the record stays in the document, not on the canvas', () => {
-    const withoutComments = layoutSpatialCanvas({ nodes: [TEXT_NODE], edges: [] }, baseOptions())
-    const withResolved = layoutSpatialCanvas(
+    const withoutComments = layoutBoard({ nodes: [TEXT_NODE], edges: [] }, baseOptions())
+    const withResolved = layoutBoard(
       canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
       baseOptions(),
     )
@@ -317,8 +293,8 @@ describe('comment layer', () => {
   })
 
   it('a canvas without comments lays out exactly as before the layer existed', () => {
-    const plain = layoutSpatialCanvas({ nodes: [TEXT_NODE], edges: [] }, baseOptions())
-    const explicitEmpty = layoutSpatialCanvas(canvasWith([]), baseOptions())
+    const plain = layoutBoard({ nodes: [TEXT_NODE], edges: [] }, baseOptions())
+    const explicitEmpty = layoutBoard(canvasWith([]), baseOptions())
     expect(explicitEmpty).toEqual(plain)
   })
 
@@ -331,7 +307,7 @@ describe('comment layer', () => {
       resolveEdge: () => undefined,
       resolveLabel: () => ({}),
     }
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still drawn' }]),
       baseOptions({ appearance: bare }),
     )
@@ -343,7 +319,7 @@ describe('comment layer', () => {
   })
 
   it('draws a resolved comment muted, with ids, when showResolved is on — unresolved stays base', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([
         { id: 'c1', x: 10, y: 10, text: 'still open' },
         { id: 'c2', x: 400, y: 60, text: 'done already', resolved: true },
@@ -382,11 +358,11 @@ describe('comment layer', () => {
   })
 
   it('showResolved absent/false is byte-identical to before it existed — a resolved comment stays hidden', () => {
-    const withoutFlag = layoutSpatialCanvas(
+    const withoutFlag = layoutBoard(
       canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
       baseOptions(),
     )
-    const withFlagOff = layoutSpatialCanvas(
+    const withFlagOff = layoutBoard(
       canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
       baseOptions({ showResolved: false }),
     )
@@ -399,7 +375,7 @@ describe('comment layer', () => {
       resolveEdge: () => undefined,
       resolveLabel: () => ({}),
     }
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 5, y: 5, text: 'done, no theme', resolved: true }]),
       baseOptions({ appearance: bare, showResolved: true }),
     )
@@ -413,7 +389,7 @@ describe('comment layer', () => {
   })
 
   it('wraps long comment text within the bubble width instead of one endless line', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([
         {
           id: 'c1',
@@ -444,7 +420,7 @@ describe('comment layer', () => {
     }
 
     it('a node-anchored bubble does not cover the node to its right', () => {
-      const scene = layoutSpatialCanvas(
+      const scene = layoutBoard(
         {
           nodes: [TEXT_NODE, NEIGHBOUR],
           edges: [],
@@ -469,7 +445,7 @@ describe('comment layer', () => {
     })
 
     it('a later comment fans out around an earlier bubble instead of stacking on it', () => {
-      const scene = layoutSpatialCanvas(
+      const scene = layoutBoard(
         canvasWith([
           { id: 'c1', x: 400, y: 300, text: 'first' },
           { id: 'c2', x: 406, y: 304, text: 'second' },
@@ -486,7 +462,7 @@ describe('comment layer', () => {
 
     it('a bubble pushed to the left is led to by its right-hand corner', () => {
       // A wall to the right of the anchor takes both right-hand quadrants.
-      const scene = layoutSpatialCanvas(
+      const scene = layoutBoard(
         {
           nodes: [textNode({ id: 'wall', x: 405, y: -500, width: 400, height: 1000, text: 'w' })],
           edges: [],
@@ -508,7 +484,7 @@ describe('comment layer', () => {
     })
 
     it('a group frame is not an obstacle, so a comment inside a group stays inside it', () => {
-      const scene = layoutSpatialCanvas(
+      const scene = layoutBoard(
         {
           nodes: [groupNode({ id: 'g', x: 0, y: 0, width: 800, height: 800 })],
           edges: [],
@@ -526,16 +502,14 @@ describe('comment layer', () => {
         nodes: [],
         edges: [],
         comments: [{ id: 'c1', x: 100, y: 100, text: 'x' }],
-      } satisfies SpatialCanvas
+      } satisfies CommentBoard
       const withoutObstacle = bubbleOf(
-        layoutSpatialCanvas(alone, baseOptions()).nodes,
+        layoutBoard(alone, baseOptions()).nodes,
         'c1',
       ) as ShapeSceneNode
       const withObstacle = bubbleOf(
-        layoutSpatialCanvas(
-          alone,
-          baseOptions({ commentObstacles: [{ x: 110, y: 110, w: 300, h: 300 }] }),
-        ).nodes,
+        layoutBoard(alone, baseOptions({ commentObstacles: [{ x: 110, y: 110, w: 300, h: 300 }] }))
+          .nodes,
         'c1',
       ) as ShapeSceneNode
       expect(withoutObstacle.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
@@ -563,7 +537,7 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
     shapesOf(nodes).filter((shape) => shape.id?.startsWith('t1/passage-'))
 
   it('highlights exactly the quoted words, measured with the run’s own font, behind the run', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       { nodes: [NOTE], edges: [] },
       baseOptions({ threads: [passage('plan')] }),
     )
@@ -592,7 +566,7 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
 
   it('follows a passage across a wrap with one box per line', () => {
     // Narrow enough that "plan by" breaks: the second box starts at its line's start.
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       { nodes: [{ ...NOTE, width: 110 }], edges: [] },
       baseOptions({ threads: [passage('plan by friday')] }),
     )
@@ -603,17 +577,17 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
   })
 
   it('draws nothing for a quote the rendered text does not hold, or a resolved passage by default', () => {
-    const gone = layoutSpatialCanvas(
+    const gone = layoutBoard(
       { nodes: [NOTE], edges: [] },
       baseOptions({ threads: [passage('monday')] }),
     )
     expect(highlightsOf(gone.nodes)).toEqual([])
-    const resolved = layoutSpatialCanvas(
+    const resolved = layoutBoard(
       { nodes: [NOTE], edges: [] },
       baseOptions({ threads: [passage('plan', 'resolved')] }),
     )
     expect(highlightsOf(resolved.nodes)).toEqual([])
-    const shown = layoutSpatialCanvas(
+    const shown = layoutBoard(
       { nodes: [NOTE], edges: [] },
       baseOptions({ threads: [passage('plan', 'resolved')], showResolved: true }),
     )
@@ -640,7 +614,7 @@ describe('node sets and regions (the spatial arm with nodeIds or a rect)', () =>
     const thread = setThread()
     // The flat projection carries a STALE corner (the nodes have moved
     // since it was taken); the pin follows the live box, not the memory.
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       { nodes: [C, A, B], edges: [], comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }] },
       baseOptions({ threads: [thread] }),
     )
@@ -663,17 +637,14 @@ describe('node sets and regions (the spatial arm with nodeIds or a rect)', () =>
   })
 
   it('falls back to the stored rect once every node is gone, and hides a resolved one unless asked', () => {
-    const orphan = layoutSpatialCanvas(
-      { nodes: [], edges: [] },
-      baseOptions({ threads: [setThread()] }),
-    )
+    const orphan = layoutBoard({ nodes: [], edges: [] }, baseOptions({ threads: [setThread()] }))
     expect(outlineOf(orphan.nodes)?.bbox).toEqual({ x: 0, y: 0, w: 10, h: 10 })
-    const resolved = layoutSpatialCanvas(
+    const resolved = layoutBoard(
       { nodes: [A, B], edges: [] },
       baseOptions({ threads: [setThread('resolved')] }),
     )
     expect(outlineOf(resolved.nodes)).toBeUndefined()
-    const shown = layoutSpatialCanvas(
+    const shown = layoutBoard(
       { nodes: [A, B], edges: [] },
       baseOptions({ threads: [setThread('resolved')], showResolved: true }),
     )
@@ -681,7 +652,7 @@ describe('node sets and regions (the spatial arm with nodeIds or a rect)', () =>
   })
 
   it('draws no outline for a point, node or edge anchor', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       { nodes: [A], edges: [] },
       baseOptions({
         threads: [
@@ -741,7 +712,7 @@ function threadOf(id: string, messages: number, status: 'open' | 'resolved' = 'o
 
 describe('the count a pin carries', () => {
   it('draws how many messages the conversation holds, once there is more than one', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
       baseOptions({ threads: [threadOf('c1', 3)] }),
     )
@@ -749,7 +720,7 @@ describe('the count a pin carries', () => {
   })
 
   it('draws none for a lone remark, where a digit beside prose is noise', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
       baseOptions({ threads: [threadOf('c1', 1)] }),
     )
@@ -757,20 +728,8 @@ describe('the count a pin carries', () => {
     expect(pinOf(scene.nodes, 'c1')).toBeDefined()
   })
 
-  it('draws none for a comment no thread was handed for, rather than inventing one', () => {
-    // The flat projection carries one text and no conversation. A host that
-    // passes no `threads` — an old export, a caller that has not wired them
-    // — gets the pin it always got.
-    const scene = layoutSpatialCanvas(
-      canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
-      baseOptions(),
-    )
-    expect(pinCountOf(scene.nodes, 'c1')).toBeUndefined()
-    expect(pinOf(scene.nodes, 'c1')).toBeDefined()
-  })
-
   it('sits on the pin, not beside it', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
       baseOptions({ threads: [threadOf('c1', 12)] }),
     )
@@ -782,7 +741,7 @@ describe('the count a pin carries', () => {
   })
 
   it('is muted with its pin once the conversation is resolved', () => {
-    const scene = layoutSpatialCanvas(
+    const scene = layoutBoard(
       canvasWith([{ id: 'c1', x: 40, y: 40, text: 'settled', resolved: true }]),
       baseOptions({ threads: [threadOf('c1', 4, 'resolved')], showResolved: true }),
     )
@@ -808,7 +767,7 @@ describe('the count a pin carries', () => {
  * paragraph would pass under either.
  */
 it('draws a comment body as markdown at the bubble metrics, through the shared producer', () => {
-  const scene = layoutSpatialCanvas(
+  const scene = layoutBoard(
     canvasWith([{ id: 'c1', x: 400, y: 40, text: '# Heading' }]),
     // codec's real parser, not the fixture's paragraph-wrapping stub: the
     // claim is about what markdown MEANS here.

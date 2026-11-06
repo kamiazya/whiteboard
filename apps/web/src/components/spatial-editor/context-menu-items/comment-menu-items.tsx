@@ -39,7 +39,7 @@ export function commentMenuItems({
             applyResult({
               state: { kind: 'idle' },
               commands: [
-                { kind: 'set-comment-resolved', id: comment.id, resolved: false } as const,
+                { kind: 'set-thread-status', threadId: comment.id, status: 'open' } as const,
               ],
             })
             announceOnCanvas(COMMENT_ANNOUNCEMENTS.reopened)
@@ -51,7 +51,9 @@ export function commentMenuItems({
           onSelect: () => {
             applyResult({
               state: { kind: 'idle' },
-              commands: [{ kind: 'set-comment-resolved', id: comment.id, resolved: true } as const],
+              commands: [
+                { kind: 'set-thread-status', threadId: comment.id, status: 'resolved' } as const,
+              ],
             })
             announceOnCanvas(COMMENT_ANNOUNCEMENTS.resolved)
           },

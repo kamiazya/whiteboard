@@ -2,7 +2,7 @@ import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { FileRefOption } from '../../lib/link-entries.js'
@@ -59,6 +59,8 @@ export interface CanvasContextMenuProps {
   readonly setContextMenu: (target: ContextMenuTarget | null) => void
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
+  /** The pins the canvas draws: what a right-click on a comment is about. */
+  readonly comments: readonly CanvasComment[]
   readonly theme: ResolvedTheme
   readonly gestureState: GestureState
   readonly isEdgeLocked: (edgeId: string) => boolean
@@ -89,7 +91,7 @@ export interface CanvasContextMenuProps {
 function menuSubject(
   contextMenu: { nodeId?: string; edgeId?: string; commentId?: string },
   canvas: SpatialCanvas,
-  live: SpatialCanvas,
+  comments: readonly CanvasComment[],
 ) {
   const node =
     contextMenu.nodeId === undefined
@@ -106,7 +108,7 @@ function menuSubject(
   const comment =
     contextMenu.commentId === undefined
       ? undefined
-      : live.comments?.find((entry) => entry.id === contextMenu.commentId)
+      : comments.find((entry) => entry.id === contextMenu.commentId)
   return { node, edge, line, comment }
 }
 
@@ -116,6 +118,7 @@ export function CanvasContextMenu({
   setContextMenu,
   canvas,
   canvasRef,
+  comments,
   theme,
   gestureState,
   isEdgeLocked,
@@ -163,7 +166,7 @@ export function CanvasContextMenu({
   // hidden rather than offering a lock that can never be released.
   const lockEnabled = onToggleNodeLock !== undefined
   const edgeLockEnabled = onToggleEdgeLock !== undefined
-  const subject = menuSubject(contextMenu, canvas, canvasRef.current)
+  const subject = menuSubject(contextMenu, canvas, comments)
   const { node, edge, line, comment } = subject
 
   const activeEditor = contextMenu.editor ?? null

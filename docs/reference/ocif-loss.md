@@ -12,8 +12,8 @@ This is the codec library’s projection (`toOcif` / `parseOcif`); no MCP tool, 
 produces an OCIF document yet, so read it as what the projection costs, not as an export you
 can run today.
 
-The model can hold **59** field positions. **27** of them are something OCIF can
-state in its own vocabulary; the remaining **32** ride an extension of ours.
+The model can hold **50** field positions. **27** of them are something OCIF can
+state in its own vocabulary; the remaining **23** ride an extension of ours.
 
 **Nothing is dropped**, and that is the difference worth knowing before choosing a format.
 OCIF’s conformance rules require a reader to preserve an extension it does not understand, so a
@@ -64,21 +64,12 @@ The format has somewhere to put the value and not the same shape for it. What a 
 | `lines[].from.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
 | `lines[].to.kind` | crosses as an @ocif/arrow's coordinates — the shape carries where the line runs and not what it was attached to, so a node end arrives as that node's centre |
 
-## Carried on a `@whiteboard/*` extension — 32
+## Carried on a `@whiteboard/*` extension — 23
 
 A conforming reader must PRESERVE an extension it does not understand, so a round trip through a foreign tool deletes none of these. What is lost is comprehension, not data: the tool carries the bytes and cannot act on them. There is no second mode here that drops the key — that is JSON Canvas’s `strict`, and OCIF has no equivalent.
 
 | field | what a reader gets |
 | --- | --- |
-| `comments[].author` | preserved, not understood |
-| `comments[].createdAt` | preserved, not understood |
-| `comments[].id` | preserved, not understood |
-| `comments[].resolved` | preserved, not understood |
-| `comments[].targetEdgeId` | preserved, not understood |
-| `comments[].targetNodeId` | preserved, not understood |
-| `comments[].text` | preserved, not understood |
-| `comments[].x` | preserved, not understood |
-| `comments[].y` | preserved, not understood |
 | `edges[].bends[].x` | preserved, not understood |
 | `edges[].bends[].y` | preserved, not understood |
 | `edges[].color` | preserved, not understood |
@@ -119,5 +110,9 @@ _None today._
   inheritance and pages are all in the specification and have no position here to lose. A
   document arriving with them keeps them as unread extension data.
 - **OKF Markdown.** This is the spatial side only.
+- **The comments.** A conversation is the document’s annotation layer, kept beside its content
+  rather than in it ([ADR-0026](../contributing/adr/0026-annotation-layer.md) decision 1b), so
+  the projection does not carry it. A file an older version wrote with a `@whiteboard/comments`
+  entry is refused on import, naming the entry.
 
 ← Back to [reference](README.md)

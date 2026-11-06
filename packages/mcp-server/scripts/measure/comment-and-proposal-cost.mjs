@@ -22,6 +22,7 @@
  * and a few large proposals the cheap one.
  */
 import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import { threadFromCanvasComment } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { createExportTextMeasurer } from '../../src/server/export/measure-text.ts'
 
@@ -49,6 +50,9 @@ function board(count) {
     edges: [],
   }
 }
+
+/** The comments as the threads a layout is handed beside the canvas. */
+const threadsOf = (canvas, count) => comments(canvas, count).map(threadFromCanvasComment)
 
 function comments(canvas, count) {
   return Array.from({ length: count }, (_, i) => {
@@ -94,15 +98,15 @@ const layOut = (canvas, options = {}) =>
   cpuMs(() => layoutSpatialCanvas(canvas, { measure, appearance, ...options }))
 
 const warm = board(24)
-layOut({ ...warm, comments: comments(warm, 10) }, { proposals: proposals(warm, 10) })
+layOut(warm, { threads: threadsOf(warm, 10), proposals: proposals(warm, 10) })
 
 const canvas = board(nodeCount)
 console.log(' nodes threads changes  layout ms')
 for (const [threads, changes] of rows) {
-  const ms = layOut(
-    { ...canvas, comments: comments(canvas, threads) },
-    { proposals: proposals(canvas, changes) },
-  )
+  const ms = layOut(canvas, {
+    threads: threadsOf(canvas, threads),
+    proposals: proposals(canvas, changes),
+  })
   console.log(
     `${String(nodeCount).padStart(6)} ${String(threads).padStart(7)} ${String(changes).padStart(7)} ${ms.toFixed(0).padStart(10)}`,
   )

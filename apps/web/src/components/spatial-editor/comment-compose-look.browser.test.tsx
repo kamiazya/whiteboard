@@ -4,17 +4,16 @@
 // the theme's comment chrome, read from the same palette the renderer
 // paints from. Real browser: computed styles are what a person sees.
 
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [

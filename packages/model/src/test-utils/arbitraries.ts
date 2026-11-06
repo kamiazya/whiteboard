@@ -40,7 +40,6 @@ import {
 import {
   type CanvasEdge,
   type CanvasLine,
-  canvasCommentSchema,
   canvasEdgeSchema,
   canvasLineSchema,
   type SpatialCanvas,
@@ -312,16 +311,6 @@ export const mdastTableRowArbitrary = mdastArbitrary(mdastTableRowSchema)
 export const mdastRootArbitrary = mdastArbitrary(mdastRootSchema)
 
 /**
- * A canvas comment as the schema accepts it. `targetNodeId` is free-standing
- * on purpose — a dangling target is VALID (a comment may outlive its
- * subject), so the canvas arbitrary does not need to correlate it with node
- * ids the way edges must be.
- */
-export const canvasCommentArbitrary = arbitraryForSchema(canvasCommentSchema, {
-  override: sharedOverrides,
-})
-
-/**
  * The annotation layer's generators (ADR-0026), drawn from the schemas. The
  * anchor's three refinements — one reference at most, a node set naming
  * each node once, a region with both sides — are honoured by the schema
@@ -458,22 +447,14 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
     (canvas): fc.Arbitrary<SpatialCanvas> =>
       fc
         .tuple(
-          // Comments get unique ids for the same reason a thread's messages
-          // do: the id is any non-empty string, drawn short, so collisions are
-          // rare enough to pass hundreds of runs and fail on someone else's seed.
-          fc.option(
-            fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id }),
-            { nil: undefined },
-          ),
           fc.option(extensionFacetsArbitrary, { nil: undefined }),
           // The board's own tags (ADR-0040). Drawn here rather than by the
           // schema walk because the canvas is composed by hand above; a node's
           // and an edge's come from their schemas.
           fc.option(tagsArbitrary, { nil: undefined }),
         )
-        .map(([comments, facets, tags]) => ({
+        .map(([facets, tags]) => ({
           ...canvas,
-          ...(comments !== undefined && { comments }),
           ...(facets !== undefined && { facets }),
           ...(tags !== undefined && { tags }),
         })),

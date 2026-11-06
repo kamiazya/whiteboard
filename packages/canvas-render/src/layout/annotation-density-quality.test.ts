@@ -26,6 +26,7 @@ import {
   scoreCommentDensity,
   scoreProposalDensity,
 } from '../test-utils/annotation-density-metrics.js'
+import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
@@ -52,7 +53,7 @@ function sceneOf(entry: AnnotationDensityCase) {
       children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
     }),
     proposals: entry.proposals,
-    comments: entry.comments,
+    threads: threadsOf(entry.comments),
   })
 }
 

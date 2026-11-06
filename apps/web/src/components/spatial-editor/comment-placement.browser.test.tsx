@@ -5,19 +5,18 @@
 // browser, because the compose box is DOM geometry over a rendered scene.
 
 import { placeCommentBubble } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
 // A node immediately down-right of the spot a comment is left on: the
 // fixed-offset draft used to open right over it.
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 320, y: 320, width: 220, height: 120, text: 'covered' })],
   edges: [],
   comments: [

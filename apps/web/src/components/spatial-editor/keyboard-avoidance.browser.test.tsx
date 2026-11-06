@@ -6,7 +6,7 @@
 // keyboard. Chromium cannot raise a real keyboard, so these tests install a
 // fake visualViewport and shrink it the way a keyboard does.
 
-import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -218,13 +218,6 @@ it('the comment compose bubble rises above the keyboard too', async () => {
   )
 })
 
-const COMMENT: CanvasComment = {
-  id: 'thread-1',
-  x: 600,
-  y: 450,
-  text: 'free note',
-  createdAt: '2026-09-02T00:00:00.000Z',
-}
 const THREAD: CommentThread = {
   id: 'thread-1',
   anchor: { kind: 'spatial', x: 600, y: 450 },
@@ -234,9 +227,7 @@ const THREAD: CommentThread = {
 
 it("the thread card's reply box rises above the keyboard, card and all", async () => {
   const fake = installFakeVisualViewport()
-  const { container } = render(
-    <Host start={{ nodes: [], edges: [], comments: [COMMENT] }} threads={[THREAD]} />,
-  )
+  const { container } = render(<Host start={{ nodes: [], edges: [] }} threads={[THREAD]} />)
   const root = rootOf(container)
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
@@ -273,13 +264,11 @@ it('focusing a reply box that overhangs the root never scrolls the root under th
     })),
   }
   installFakeVisualViewport()
-  const { container } = render(
-    <Host start={{ nodes: [], edges: [], comments: [COMMENT] }} threads={[long]} />,
-  )
+  const { container } = render(<Host start={{ nodes: [], edges: [] }} threads={[long]} />)
   const root = rootOf(container)
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
-      'free note',
+      'reply number 0',
     ),
   )
   const r = root.getBoundingClientRect()
@@ -311,9 +300,7 @@ it('focusing a reply box that overhangs the root never scrolls the root under th
 
 it('a focused button raises no keyboard, so it moves nothing', async () => {
   const fake = installFakeVisualViewport()
-  const { container } = render(
-    <Host start={{ nodes: [], edges: [], comments: [COMMENT] }} threads={[THREAD]} />,
-  )
+  const { container } = render(<Host start={{ nodes: [], edges: [] }} threads={[THREAD]} />)
   const root = rootOf(container)
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(

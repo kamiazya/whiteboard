@@ -4,13 +4,13 @@
 // and a reply box already open — no menu, and no second gesture to reach the
 // thing a reader came to do.
 
-import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, CommentThread } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -50,7 +50,7 @@ const OTHER_THREAD: CommentThread = {
   status: 'open',
   messages: [{ id: 'm3', body: 'another note', createdAt: '2026-09-02T00:00:00.000Z' }],
 }
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE, OTHER],
@@ -131,7 +131,7 @@ it('the card commits a reply from its own box', async () => {
   expect(reply).toMatchObject({ kind: 'reply-to-thread', threadId: 'thread-free' })
   expect(reply?.kind === 'reply-to-thread' ? reply.message.body : undefined).toBe('on it')
   // The opening message is untouched — a reply appends beside it.
-  expect(latest.canvas.comments?.[0]?.text).toBe('free note')
+  expect(latest.comments?.[0]?.text).toBe('free note')
 })
 
 it('Resolve sits on the card itself, not only in a menu', async () => {
@@ -147,11 +147,11 @@ it('Resolve sits on the card itself, not only in a menu', async () => {
   await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
   await userEvent.click(page.getByRole('button', { name: 'Resolve' }))
 
-  await vi.waitFor(() => expect(of(latest.commands, 'set-comment-resolved')).toHaveLength(1))
-  expect(of(latest.commands, 'set-comment-resolved')[0]).toEqual({
-    kind: 'set-comment-resolved',
-    id: 'thread-free',
-    resolved: true,
+  await vi.waitFor(() => expect(of(latest.commands, 'set-thread-status')).toHaveLength(1))
+  expect(of(latest.commands, 'set-thread-status')[0]).toEqual({
+    kind: 'set-thread-status',
+    threadId: 'thread-free',
+    status: 'resolved',
   })
 })
 
@@ -323,7 +323,12 @@ it('the card draws its conversation as markdown and answers it in a markdown edi
   })
   const { container } = render(<Host />)
   const root = rootOf(container)
-  await waitForComment(container)
+  // The pin draws the opening message, which here is the markdown one.
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+      'tighten',
+    ),
+  )
 
   pressBubble(root, 20)
   await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()

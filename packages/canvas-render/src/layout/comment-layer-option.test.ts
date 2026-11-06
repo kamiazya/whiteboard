@@ -3,6 +3,7 @@ import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
@@ -29,8 +30,7 @@ const threads: readonly CommentThread[] = [
     messages: [{ id: 'm2', body: 'region' }],
   },
 ] as unknown as readonly CommentThread[]
-const comments = [{ id: 'c1', x: 500, y: 60, text: 'a card' }]
-const withComments: SpatialCanvas = { nodes: [NOTE], edges: [], comments }
+const card = threadsOf([{ id: 'c1', x: 500, y: 60, text: 'a card' }])
 const without: SpatialCanvas = { nodes: [NOTE], edges: [] }
 
 const chromeIds = (nodes: readonly SceneNode[]) =>
@@ -38,12 +38,16 @@ const chromeIds = (nodes: readonly SceneNode[]) =>
 
 describe('the commentLayer option', () => {
   it('draws pins, cards, outlines and highlights by default', () => {
-    const scene = layoutSpatialCanvas(withComments, { ...base, threads })
+    const scene = layoutSpatialCanvas(without, { ...base, threads: [...threads, ...card] })
     expect(chromeIds(scene.nodes).length).toBeGreaterThan(0)
   })
 
-  it('draws none of the comment chrome when switched off, envelope comments included', () => {
-    const scene = layoutSpatialCanvas(withComments, { ...base, threads, commentLayer: false })
+  it('draws none of the comment chrome when switched off, cards included', () => {
+    const scene = layoutSpatialCanvas(without, {
+      ...base,
+      threads: [...threads, ...card],
+      commentLayer: false,
+    })
     expect(chromeIds(scene.nodes)).toEqual([])
   })
 
@@ -54,7 +58,11 @@ describe('the commentLayer option', () => {
   })
 
   it('leaves the content of a commented board as the uncommented board lays it out', () => {
-    const off = layoutSpatialCanvas(withComments, { ...base, threads, commentLayer: false })
+    const off = layoutSpatialCanvas(without, {
+      ...base,
+      threads: [...threads, ...card],
+      commentLayer: false,
+    })
     const plain = layoutSpatialCanvas(without, base)
     expect(JSON.stringify(off)).toBe(JSON.stringify(plain))
   })

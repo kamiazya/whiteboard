@@ -9,17 +9,18 @@
  * of those tests green over a canvas that still cuts.
  */
 
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { type CommentBoard, splitBoard } from '../../test-utils/spatial-editor-host.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
 const COMMENT: CanvasComment = { id: 'thread-1', x: 420, y: 120, text: 'is Friday still right?' }
 
-function canvasWith(resolved: boolean): SpatialCanvas {
+function canvasWith(resolved: boolean): CommentBoard {
   return {
     nodes: [textNode({ id: 'n1', x: 40, y: 40, width: 200, height: 90, text: 'The plan' })],
     edges: [],
@@ -32,7 +33,7 @@ function mount(resolved: boolean) {
     <div style={{ width: 700, height: 400 }}>
       <SpatialEditor
         defaultTool="select"
-        canvas={canvasWith(resolved)}
+        {...splitBoard(canvasWith(resolved))}
         createId={() => 'id-1'}
         onChange={vi.fn()}
         theme="light"
@@ -52,7 +53,7 @@ it('holds the pin on screen ramping out when a conversation resolves, then lets 
     <div style={{ width: 700, height: 400 }}>
       <SpatialEditor
         defaultTool="select"
-        canvas={canvasWith(true)}
+        {...splitBoard(canvasWith(true))}
         createId={() => 'id-1'}
         onChange={vi.fn()}
         theme="light"
@@ -91,7 +92,7 @@ it('holds the pin on screen ramping out when a conversation resolves, then lets 
  * scene content is ever outside it. A ghost is the only thing that can be.
  */
 it('keeps a conversation on the outer edge painting while it ramps, past the re-fitted viewport', async () => {
-  const outer: SpatialCanvas = {
+  const outer: CommentBoard = {
     nodes: [textNode({ id: 'n1', x: 40, y: 150, width: 200, height: 80, text: 'The plan' })],
     edges: [],
     comments: [{ ...COMMENT, x: 300, y: 70, resolved: false }],
@@ -100,10 +101,7 @@ it('keeps a conversation on the outer edge painting while it ramps, past the re-
     <div style={{ width: 520, height: 300 }}>
       <SpatialEditor
         defaultTool="select"
-        canvas={{
-          ...outer,
-          comments: [{ ...COMMENT, x: 300, y: 70, resolved }],
-        }}
+        {...splitBoard({ ...outer, comments: [{ ...COMMENT, x: 300, y: 70, resolved }] })}
         createId={() => 'id-1'}
         onChange={vi.fn()}
         theme="light"

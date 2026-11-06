@@ -5,7 +5,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { createdComments, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rightClick } from '../../test-utils/spatial-editor-pointer.js'
 import { edgeMidpoint, rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -37,11 +37,8 @@ it('Cmd/Ctrl+Alt+M opens the composer on the selected node', async () => {
   await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
   await userEvent.keyboard('check this')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
-  await vi.waitFor(() =>
-    expect(latest.commands.some((c) => c.kind === 'create-comment')).toBe(true),
-  )
-  const created = latest.commands.find((c) => c.kind === 'create-comment')
-  expect(created?.kind === 'create-comment' && created.comment).toMatchObject({
+  await vi.waitFor(() => expect(createdComments(latest.commands)).toHaveLength(1))
+  expect(createdComments(latest.commands)[0]).toMatchObject({
     targetNodeId: 'a',
     text: 'check this',
   })
@@ -66,11 +63,8 @@ it('on a selected edge the composer opens for the edge', async () => {
   await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
   await userEvent.keyboard('edge note')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
-  await vi.waitFor(() =>
-    expect(latest.commands.some((c) => c.kind === 'create-comment')).toBe(true),
-  )
-  const created = latest.commands.find((c) => c.kind === 'create-comment')
-  expect(created?.kind === 'create-comment' && created.comment.targetEdgeId).toBe('e1')
+  await vi.waitFor(() => expect(createdComments(latest.commands)).toHaveLength(1))
+  expect(createdComments(latest.commands)[0]?.targetEdgeId).toBe('e1')
 })
 
 it('with nothing selected the shortcut opens no composer', async () => {

@@ -12,13 +12,8 @@
  * stored correctly and readable by nothing.
  */
 
-import type { CommentTargetNode, CommentThread } from '@kamiazya/whiteboard-model'
-import {
-  type CanvasComment,
-  canvasCommentFromThread,
-  canvasCommentSchema,
-  threadFromCanvasComment,
-} from '@kamiazya/whiteboard-model'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { canvasCommentSchema, threadFromCanvasComment } from '@kamiazya/whiteboard-model'
 import { readCommentThreads } from './comment-threads.js'
 import { COMMENTS_KEY, type DocumentContainers } from './containers.js'
 
@@ -53,24 +48,4 @@ export function readAnnotations(doc: DocumentContainers): CommentThread[] {
     if (parsed.success) legacy.push(threadFromCanvasComment(parsed.data))
   }
   return [...threads, ...legacy]
-}
-
-/**
- * The same layer as the flat comments the canvas renderer still takes.
- *
- * Lossy by construction — a thread's replies have nowhere to go in a shape
- * that holds one `text` — which is why it is a projection with a name rather
- * than something a caller does inline. It goes when the renderer takes
- * threads (ADR-0026 step 3).
- */
-export function readCanvasComments(
-  doc: DocumentContainers,
-  nodeById?: (id: string) => CommentTargetNode | undefined,
-): CanvasComment[] {
-  const comments: CanvasComment[] = []
-  for (const thread of readAnnotations(doc)) {
-    const projected = canvasCommentFromThread(thread, nodeById)
-    if (projected !== undefined) comments.push(projected)
-  }
-  return comments
 }

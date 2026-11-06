@@ -47,7 +47,7 @@ export function xWhiteboardJsonSchema(): Record<string, unknown> {
     description:
       'Definitions for the single extension key ("x-whiteboard") that extended ' +
       'JSON Canvas documents produced by whiteboard may carry, at three sites: ' +
-      'the document root (canvas facets, tags, lines and comments; #/$defs/canvasExtension), ' +
+      'the document root (canvas facets, tags and lines; #/$defs/canvasExtension), ' +
       'a node (canvas embed, node facets and tags; #/$defs/nodeExtension) and an edge ' +
       '(edge facets, tags and bends; #/$defs/edgeExtension). Documents contain no non-standard ' +
       'fields beyond these three sites. Consumers that drop the key still read ' +
