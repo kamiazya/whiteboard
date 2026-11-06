@@ -16,6 +16,7 @@ import { cn } from '../../lib/utils.js'
 import { ActionsButton } from './ActionsButton.js'
 import { FolderActionsContext, useDocumentDragProps, useFolderProps } from './folder-actions.js'
 import { folderContents } from './folder-contents.js'
+import { isTagLibrary, TagLibraryBadge } from './tag-library-document.js'
 import { FolderNamesContext } from './use-folder-names.js'
 import { useGridColumnCount } from './use-grid-column-count.js'
 import { useLongPressMenu } from './use-long-press.js'
@@ -174,6 +175,7 @@ function cardDescription(
     changed: `${uid}-changed`,
     conflict: `${uid}-conflict`,
     pin: `${uid}-pin`,
+    library: `${uid}-library`,
     age: `${uid}-age`,
     tags: `${uid}-tags`,
   }
@@ -181,6 +183,7 @@ function cardDescription(
     changed?.has(entry.documentId) ? ids.changed : undefined,
     entry.shadowed ? ids.conflict : undefined,
     entry.pinOrder !== undefined ? ids.pin : undefined,
+    isTagLibrary(entry) ? ids.library : undefined,
     entry.updatedAt !== undefined ? ids.age : undefined,
     (entry.tags?.length ?? 0) > 0 ? ids.tags : undefined,
   ]
@@ -236,6 +239,7 @@ function CardHeading({
       <span data-testid="card-title" className="truncate text-sm">
         {documentLabel(entry, 'leaf')}
       </span>
+      {isTagLibrary(entry) && <TagLibraryBadge id={ids.library} />}
       {entry.shadowed && (
         <span
           id={ids.conflict}

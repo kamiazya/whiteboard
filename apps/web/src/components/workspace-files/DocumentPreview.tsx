@@ -27,6 +27,7 @@ import { sceneLinkTarget } from '../../lib/scene-link.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
 import { EMPTY_DOCUMENT, type RowRender } from './load-row-render.js'
+import { isTagLibrary, TAG_LIBRARY_KEEPS } from './tag-library-document.js'
 
 export interface DocumentPreviewProps {
   /** `null` is the honest empty state: nothing is selected. */
@@ -71,6 +72,7 @@ function undrawnText(document: WorkspaceDocumentEntry, state: State['kind']): st
   if (state === 'loading') return 'Drawing…'
   // Could not be drawn: nothing is known about what it holds.
   if (state === 'undrawn') return 'No preview.'
+  if (isTagLibrary(document)) return TAG_LIBRARY_KEEPS
   return (document.kind ?? 'markdown') === 'markdown'
     ? 'Nothing written yet.'
     : 'Nothing to draw yet.'
