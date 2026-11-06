@@ -17,7 +17,7 @@ import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { SHARED_LAYER_PACKAGES } from './scan-packages.js'
 import { REPO_ROOT } from './scan-roots.js'
-import { isTestPath, walkSourceFiles } from './source-scan.js'
+import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
 const LOCALE_DEFAULTING: readonly { readonly name: string; readonly pattern: RegExp }[] = [
   {
@@ -27,8 +27,6 @@ const LOCALE_DEFAULTING: readonly { readonly name: string; readonly pattern: Reg
   },
   { name: 'toLocale*Case() without a locale', pattern: /\.toLocale(?:Lower|Upper)Case\(\s*\)/ },
 ]
-
-const isCommentLine = (line: string): boolean => /^\s*(?:\*|\/\/|\/\*)/.test(line)
 
 const files = SHARED_LAYER_PACKAGES.flatMap((pkg) => walkSourceFiles(join(REPO_ROOT, pkg, 'src')))
   .map((path) => relative(REPO_ROOT, path))
@@ -41,17 +39,19 @@ describe('the shared layer builds no Intl service under the default locale', () 
   })
 
   it('names a locale wherever production source constructs one', () => {
-    const hits = files.flatMap((path) =>
-      readFileSync(join(REPO_ROOT, path), 'utf8')
-        .split('\n')
-        .flatMap((line, index) =>
-          isCommentLine(line)
-            ? []
-            : LOCALE_DEFAULTING.filter(({ pattern }) => pattern.test(line)).map(
-                ({ name }) => `${path}:${index + 1} ${name}`,
-              ),
-        ),
-    )
+    // The whole file at once, not a line at a time: the formatter breaks a
+    // long constructor call after `(`, which puts `undefined` on the next
+    // line and out of a per-line pattern's sight. Comments and strings are
+    // stripped first, so a sentence about the ban cannot trip it.
+    const hits = files.flatMap((path) => {
+      const source = stripCommentsAndStrings(readFileSync(join(REPO_ROOT, path), 'utf8'), path)
+      return LOCALE_DEFAULTING.flatMap(({ name, pattern }) => {
+        const at = pattern.exec(source)
+        if (at === null) return []
+        const line = source.slice(0, at.index).split('\n').length
+        return [`${path}:${line} ${name}`]
+      })
+    })
     expect(hits).toEqual([])
   })
 
@@ -60,6 +60,7 @@ describe('the shared layer builds no Intl service under the default locale', () 
     // leave it matching nothing.
     const samples = [
       "new Intl.Segmenter(undefined, { granularity: 'grapheme' })",
+      "new Intl.Segmenter(\n  undefined,\n  { granularity: 'grapheme' },\n)",
       'new Intl.Collator()',
       's.toLocaleLowerCase()',
     ]

@@ -38,20 +38,25 @@ const fileStatus = new Map(
   }),
 )
 
-const indexStatus = new Map(
-  readFileSync(join(ADR_DIR, 'README.md'), 'utf8')
-    .split('\n')
-    .flatMap((row): [string, string][] => {
-      const match = /^\| \[ADR-\d{4}\]\(([^)]+)\) \|[^|]*\| (.*) \|$/.exec(row)
-      return match === null ? [] : [[match[1] as string, statusHead(match[2] as string)]]
-    }),
-)
+const indexRows = readFileSync(join(ADR_DIR, 'README.md'), 'utf8')
+  .split('\n')
+  .flatMap((row): [string, string][] => {
+    const match = /^\| \[ADR-\d{4}\]\(([^)]+)\) \|[^|]*\| (.*) \|$/.exec(row)
+    return match === null ? [] : [[match[1] as string, statusHead(match[2] as string)]]
+  })
+
+// Kept beside the rows rather than built alone: a Map keeps the LAST row per
+// name, so a record listed twice with two statuses would be judged on the one
+// that happened to come later.
+const indexStatus = new Map(indexRows)
 
 describe('the ADR index agrees with each record about its status', () => {
   it('reads every record and every index row', () => {
     // A parse that matched nothing would agree with everything below.
     expect(files.length).toBeGreaterThan(50)
-    expect([...indexStatus.keys()].sort()).toEqual([...files].sort())
+    const names = indexRows.map(([name]) => name)
+    expect(names.length, 'a record is listed once').toBe(new Set(names).size)
+    expect([...names].sort()).toEqual([...files].sort())
   })
 
   it('opens every status with a lifecycle word, in the file and in the index', () => {

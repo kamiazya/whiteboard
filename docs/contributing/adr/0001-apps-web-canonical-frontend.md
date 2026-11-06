@@ -1,6 +1,6 @@
 # ADR-0001: apps/web as the canonical frontend
 
-**Status:** Accepted, implemented — Stage 5 (deleting `packages/mcp-server/src/app` and its build pipeline) shipped; server-mode serves a minimal static placeholder at its root instead of `apps/web` (see Consequences).
+**Status:** Accepted, implemented — Stage 5 (deleting `packages/mcp-server/src/app` and its build pipeline) shipped; server-mode serves the bundled `apps/web` build at its root, with a static placeholder only when the build is absent (ADR-0047; see the dated note under Consequences).
 
 ## Context
 
@@ -28,6 +28,7 @@ The migration proceeds in stages so each stage ships as a working increment:
 - `apps/web` can be deployed as a static site (Cloudflare Pages, any CDN) and works offline via `BrowserLocalBackend`.
 - The daemon is simplified to backend-only concerns; its `src/app` UI is deleted.
 - Server-mode (OAuth/JWT auth) serves a minimal static placeholder at its root rather than `apps/web`: apps/web's provider model only knows browser-local and local-daemon-bearer-token auth, and injecting it without a real token would 401 on every request. A server-mode-aware `apps/web` auth flow is a separate follow-up.
+  - 2026-11-06 correction: that follow-up shipped as ADR-0047. Server-mode now mounts the bundled `apps/web` build (`server-mode-web-app.ts`) with its own sign-in, and answers the placeholder only when the build is not on disk. The sentence above is kept as the state at the time of the decision.
 - The `CanvasBackend` interface is an intentionally hand-written behavioral seam (methods and callbacks) for in-process use; it is not a JSON shape that crosses a process boundary. The payload field types it references are derived from `z.infer<>` in `sync-frames.ts` per the Zod-schema discipline, so there is no parallel re-declaration of those shapes.
 - Excalidraw enters the `apps/web` bundle; the bundle size must stay within the project's performance budget.
 

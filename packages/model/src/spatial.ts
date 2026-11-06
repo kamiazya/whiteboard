@@ -648,12 +648,16 @@ export const spatialCanvasSchema = z
      * reviews.
      *
      * The rule that makes optional safe: EMPTY IS SPELLED ABSENT. Every reader
-     * treats an absent `lines` and `[]` alike, and every producer omits an
-     * empty one — the Loro bridge's read, the cascade, the OCIF lift and
-     * `wb_canvas_edit`'s write all drop it. They must, because the JSON
-     * Canvas projection writes `x-whiteboard.lines` whenever the field is
-     * PRESENT: `lines: []` would project to `"x-whiteboard": { "lines": [] }`,
-     * bytes its absence does not produce.
+     * treats an absent `lines` and `[]` alike, and every producer of a stored
+     * canvas omits an empty one — the Loro bridge's read, the cascade, the
+     * OCIF lift and `wb_canvas_edit`'s write all drop it. They must, because
+     * the JSON Canvas projection writes `x-whiteboard.lines` whenever the
+     * field is PRESENT: `lines: []` would project to
+     * `"x-whiteboard": { "lines": [] }`, bytes its absence does not produce.
+     * The one reader that keeps a present `[]` is that projection's own
+     * import (`fromJsonCanvas`), so a document carrying it round-trips to the
+     * same bytes rather than to a different spelling; once stored, the
+     * bridge's read answers absent for the empty collection like any other.
      */
     lines: z.array(canvasLineSchema).optional(),
     /**

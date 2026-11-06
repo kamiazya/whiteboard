@@ -16,19 +16,6 @@ paths:
   `ShapeContribution`/`ShapeTable`, `DecorationContext`/`NodeDecoration`, and
   `RenderContribution` itself.
 
-A contribution SELECTS its router the way it selects a silhouette:
-`routers` by bare name plus `readRouting` answering one, with the renderer
-composing `${namespace}.${name}`. That is not ceremony — it is what stops a
-document naming another plugin's algorithm, and it means a plugin stores
-the choice in its OWN facet.
-
-Measured, and the reason it is a reader: widening `visual.edges/v0`'s
-`routing` to accept a namespaced id instead put the payload outside the
-vocabulary `deriveFacetForm` can read, so the facet silently produced no
-derived form — which is the routing control the inspector renders, and the
-payload samples the layout's own property test draws from. The engine's
-`facetPayloadSamples` caught it by answering with an empty list.
-
 ## Why the package exists
 
 For its POSITION, not its contents. It sits below the renderer AND below
