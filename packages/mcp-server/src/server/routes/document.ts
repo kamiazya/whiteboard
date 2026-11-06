@@ -16,7 +16,7 @@ import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
 import { createDocumentMetadataRouter } from './document/metadata.js'
-import { DOCUMENT_WILDCARD } from './document/path-route.js'
+import { DOCUMENT_WILDCARD, resolveDocumentAddress } from './document/path-route.js'
 import { type CallerScopes, createRestoreRouter } from './document/restore.js'
 import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
@@ -136,6 +136,10 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
  */
 function refuseUnaddressable(app: Hono, serverDeps: ServerDeps): void {
   app.use('/api/workspaces/:workspaceId/*', refuseUnknownWorkspace(serverDeps))
+  app.use(
+    '/api/workspaces/:workspaceId/documents/:documentId/*',
+    resolveDocumentAddress(serverDeps),
+  )
   app.use(DOCUMENT_WILDCARD, refuseUnknownWorkspace(serverDeps))
   app.use(DOCUMENT_WILDCARD, refuseTrashedDocument(serverDeps))
 }

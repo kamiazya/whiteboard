@@ -459,7 +459,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/mcp-server/src/server/store/file-gc.test.ts': 804,
   // A workspace directory named by no canonical id is skipped and reported,
   // and its case sets up the directory, the file and the captured warning.
-  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 810,
+  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 847, // +37: the sweep skips a legacy-keyed registry row per row instead of aborting every workspace (SD-IDS fallout found by PR-A's review)
   // One test pins that saves to two documents of one workspace collapse into one
   // compaction, since compaction is workspace-keyed.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,

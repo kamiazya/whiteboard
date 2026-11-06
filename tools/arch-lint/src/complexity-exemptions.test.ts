@@ -2,9 +2,15 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 import { toolCommand } from './tool-bin.js'
+
+// Wraps rather than replaces, so every other case still spawns the real biome.
+vi.mock('node:child_process', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:child_process')>()
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync) }
+})
 
 /**
  * `noExcessiveCognitiveComplexity` is ON for this repository, and the files
@@ -122,6 +128,12 @@ describe('the cognitive-complexity exemption list', () => {
     expect(paths.filter((path) => !over.has(path))).toEqual([])
   })
 
+  it('spawns no biome for an empty list', () => {
+    vi.mocked(execFileSync).mockClear()
+    expect(filesOverThreshold([]).size).toBe(0)
+    expect(execFileSync).not.toHaveBeenCalled()
+  })
+
   it('names each file once', () => {
     const named = exemptions()
     expect(new Set(named).size).toBe(named.length)
@@ -150,6 +162,12 @@ describe('the cognitive-complexity exemption list', () => {
  * Measured: 0.55s for 117 files.
  */
 function filesOverThreshold(paths: readonly string[]): Set<string> {
+  // biome given no path arguments lints its cwd, i.e. the whole checkout, and
+  // the temp config consults no .gitignore so nested `.claude/worktrees/*`
+  // are walked too: 4978 files in 4s in a clean worktree, 58.7s from a main
+  // checkout holding 11 worktrees. Every diagnostic it would print is for a
+  // file nobody listed, so for an empty list the answer is empty without it.
+  if (paths.length === 0) return new Set()
   const threshold = /"maxAllowedComplexity"\s*:\s*(\d+)/.exec(
     readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8'),
   )?.[1]
