@@ -52,7 +52,9 @@
         // own: it is also reached by a dynamically-built path
         // (`join(ROOT, 'tools/checks/src/...')`) from arch-lint's tests, which
         // the GitHub Actions plugin has no way to see.
-        "src/vitest-projects.mjs"
+        "src/vitest-projects.mjs",
+        "src/affected.mjs",
+        "src/affected-cli.mjs"
       ],
       "project": ["src/**/*.mjs"]
     },
