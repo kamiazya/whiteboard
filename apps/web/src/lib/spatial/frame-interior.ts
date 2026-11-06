@@ -163,8 +163,9 @@ function grownSpot(room: FrameRoom): FrameSpot {
   const rightX = Math.max(frame.x, ...content.map((b) => b.x + b.width)) + gap
   const rightY = firstRow(rightX)
   const width = rightX + size.width + gap - frame.x
+  const beside = frame.x + frame.width
   const rightStrip = {
-    x: frame.x + frame.width,
+    x: beside,
     y: frame.y,
     width: width - frame.width + gap,
     height: frame.height,
