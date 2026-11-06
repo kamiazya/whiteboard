@@ -893,6 +893,31 @@ describe('DaemonIndexPage', () => {
     await waitFor(() => expect(asked).toEqual([['alpha', { withoutAnnotations: true }]]))
   })
 
+  it('duplicates without comments from the preview pane, with the menu’s notice', async () => {
+    const asked: unknown[] = []
+    let rows = [{ path: 'alpha', name: 'Alpha', updatedAt: new Date().toISOString() }]
+    installFakeDaemonFetch({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: { 'ws-a': () => rows },
+      // Answered by the fake's own duplicate route, which confirms
+      // `withoutAnnotations` as a current daemon does.
+      onDuplicateDocument: (_workspaceId, path, request) => {
+        asked.push([path, request])
+        const copy = { path: 'alpha-copy', name: 'Alpha (copy)', updatedAt: rows[0]!.updatedAt }
+        queueMicrotask(() => {
+          rows = [...rows, copy]
+        })
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await selectCard('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate without comments' }))
+
+    await waitFor(() => expect(asked).toEqual([['alpha', { withoutAnnotations: true }]]))
+    expect(await screen.findByText('Duplicated Alpha without comments')).toBeTruthy()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
   it('a second Duplicate press while one is in flight starts no second copy', async () => {
     let release: ((res: Response) => void) | undefined
     let calls = 0

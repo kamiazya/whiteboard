@@ -90,8 +90,8 @@ so a copy of a document listed as "Untitled 3" is "Untitled 3 (copy)". The copy 
 "Duplicated _name_" notice offers **Open** for it.
 
 **Duplicate** copies the whole document, its comments and open proposals
-included. **Duplicate without comments**, next to it in a document's menu and
-in an open document's **More actions**, copies only what the document says:
+included. **Duplicate without comments**, next to it in a document's menu, in the
+preview beside the list, and in an open document's **More actions**, copies only what the document says:
 the copy starts with no comment threads and no proposals, and the original
 keeps every one of its own. The copy is named and placed the same way, and
 the notice reads "Duplicated _name_ without comments". Both
