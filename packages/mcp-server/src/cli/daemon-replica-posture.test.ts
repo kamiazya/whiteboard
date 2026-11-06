@@ -19,6 +19,11 @@ const record = {
   token: 'the-daemon-token',
 }
 const running = validParse(record)
+// The record's writer, pinned: alive, and started when the record says. Without
+// `processStartMs` the real /proc/<pid> start time decides, and a runner where
+// pid 4242 happens to be alive reads the writer as a later process, asks the
+// socket nobody serves, and every test here fails at once (measured on CI).
+const writer = { isPidAlive: () => true, processStartMs: () => Date.parse(record.startedAt) }
 
 /**
  * A daemon that answers one canned response, recording what it was asked. The
@@ -52,7 +57,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
       dataDir: '/data',
       workspaceId: 'ws-1',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(exitCode).toBe(0)
@@ -77,7 +82,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
       dataDir: '/data',
       workspaceId: 'ws-1',
       parseRecord: async () => ({ kind: 'missing' }),
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(exitCode).toBe(1)
@@ -174,7 +179,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
       dataDir: '/data',
       workspaceId: 'nope',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(exitCode).toBe(1)
@@ -197,7 +202,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
       dataDir: '/data',
       workspaceId: 'nope',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(result).toMatchObject({
@@ -212,7 +217,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
       dataDir: '/data',
       workspaceId: 'ws-1',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(exitCode).toBe(1)
@@ -229,7 +234,7 @@ describe('a workspace addressed by its segment', () => {
       dataDir: '/data',
       workspaceId: 'default',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(exitCode).toBe(0)
@@ -246,7 +251,7 @@ describe('a workspace addressed by its segment', () => {
       workspaceId: 'default',
       tier: 'bounded',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(result).toMatchObject({ ok: true, workspaceId: ULID, tier: 'bounded' })
@@ -259,7 +264,7 @@ describe('a workspace addressed by its segment', () => {
       dataDir: '/data',
       workspaceId: 'me/default',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(result).toMatchObject({ ok: true, workspaceId: ULID })
@@ -275,7 +280,7 @@ describe('a workspace addressed by its segment', () => {
       dataDir: '/data',
       workspaceId: 'nope',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(result).toMatchObject({ ok: false, reason: 'refused', status: 404, workspaceId: 'nope' })
@@ -291,7 +296,7 @@ describe('whiteboard daemon set-replica-tier', () => {
       workspaceId: 'ws-1',
       tier: 'bounded',
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(exitCode).toBe(0)
@@ -319,7 +324,7 @@ describe('whiteboard daemon set-replica-tier', () => {
       workspaceId: 'ws-1',
       tier: null,
       parseRecord: running,
-      isPidAlive: () => true,
+      ...writer,
       request: daemon.request,
     })
     expect(result).toMatchObject({ ok: true, tier: null, effectiveTier: 'offline' })
