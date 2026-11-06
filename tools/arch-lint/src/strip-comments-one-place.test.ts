@@ -18,7 +18,7 @@
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { isExcludedPath, REPO_ROOT, relativeToRepo, SCAN_ROOTS, walk } from './scan-roots.js'
 import { stripComments as parserStripComments } from './strip-comments.js'
 
@@ -48,17 +48,49 @@ function sourceFiles(): string[] {
   )
 }
 
+/** Walked once; both describes only read it. */
+const FILES = sourceFiles()
+
+/**
+ * The whole-source comparison is split into this many disjoint slices so no
+ * single test carries the whole parse: its cost is ~10s quiet and several times
+ * that under parallel lanes, against a per-test budget.
+ */
+const SLICES = 8
+/** What SLICES may not fall below: the bound the partition test holds each slice to. */
+const MIN_SLICES = 8
+const sliceOf = (k: number): string[] => FILES.filter((_, i) => i % SLICES === k)
+
 describe('the two dependency-free copies are one definition', () => {
+  let tokenWalk: Stripper
+
+  beforeAll(async () => {
+    tokenWalk = await loadTokenWalk()
+    // TypeScript's program and scanner cold start is paid here, by the hook,
+    // rather than by whichever slice a shuffled run happens to start with.
+    parserStripComments('const warm = 1', FILES[0])
+  }, 120_000)
+
   it('are byte-identical', () => {
     expect(read(MCP_COPY)).toBe(read(WEB_COPY))
   })
 
-  it('answer what the parser answers, on every source file in the repo', async () => {
-    const tokenWalk = await loadTokenWalk()
-    const files = sourceFiles()
+  it('splits the source files into disjoint slices that lose none', () => {
+    const slices = Array.from({ length: SLICES }, (_, k) => sliceOf(k))
     // A tree that stopped resolving would agree with everything.
-    expect(files.length).toBeGreaterThan(1500)
-    const disagreeing = files
+    expect(FILES.length).toBeGreaterThan(1500)
+    expect(slices.reduce((sum, slice) => sum + slice.length, 0)).toBe(FILES.length)
+    expect(new Set(slices.flat()).size).toBe(FILES.length)
+    // No test covers more than 1/MIN_SLICES of the set.
+    expect(Math.max(...slices.map((slice) => slice.length))).toBeLessThanOrEqual(
+      Math.ceil(FILES.length / MIN_SLICES),
+    )
+  })
+
+  it.each(
+    Array.from({ length: SLICES }, (_, k) => [k]),
+  )('answer what the parser answers on source slice %i', (k) => {
+    const disagreeing = sliceOf(k)
       .filter((path) => {
         const raw = readFileSync(path, 'utf8')
         return tokenWalk(raw) !== parserStripComments(raw, path)
@@ -91,9 +123,9 @@ const BLOCK_COMMENT_REGEX = String.raw`\/\*[\s\S]*?\*\/`
 const REGEX_STRIPPERS: Readonly<Record<string, string>> = {}
 
 describe('no scan strips comments with a regex of its own', () => {
-  const scanned = sourceFiles()
-    .map((path) => relativeToRepo(path))
-    .filter((rel) => rel !== relativeToRepo(import.meta.filename))
+  const scanned = FILES.map((path) => relativeToRepo(path)).filter(
+    (rel) => rel !== relativeToRepo(import.meta.filename),
+  )
   const holders = scanned.filter((rel) => read(rel).includes(BLOCK_COMMENT_REGEX))
 
   it('is looking at the tree', () => {
