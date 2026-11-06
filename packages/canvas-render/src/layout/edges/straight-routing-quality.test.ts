@@ -271,6 +271,14 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 // style (escaped by its strict interior), as the side search's cost model
 // already treated it. Synthetic foreign 22 -> 7, interior ink 2898 ->
 // 1765; crossings 161 -> 166, long detours 152 -> 157, worst 7.67 -> 8.4.
+//
+// Then every straight shape got its glancing end squared, not only the one
+// with neither end sideways; an end slid along its side to meet a corridor
+// stays put when that corridor detours anyway; and an escaped obstacle is
+// tested by its OPEN interior rather than a half-pixel inset. grazingEnds
+// 1/89/114/3 -> 0/28/111/0 (persona, generated, synthetic, lattice),
+// synthetic foreign 7 -> 2 and interior ink 1765 -> 1382, worst generated
+// 2.37 -> 2.03; crossings generated 70 -> 72, synthetic 166 -> 170.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
@@ -278,13 +286,13 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // 2618/1860 (1.408), worst 1.69 before the corner detours.
-      length: 2304,
+      length: 2323,
       direct: 1673,
-      ratio: 1.377,
+      ratio: 1.388,
       worstRatio: 1.59,
       longDetours: 1,
-      grazingEnds: 1,
-      bends: 11,
+      grazingEnds: 0,
+      bends: 12,
       crossings: 1,
       borderInk: 0,
     })
@@ -296,33 +304,33 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.194, worst 1.91, 66 long detours before.
-      length: 290941,
-      direct: 251277,
-      ratio: 1.158,
-      worstRatio: 2.37,
-      longDetours: 37,
-      grazingEnds: 89,
-      bends: 1029,
-      crossings: 70,
+      length: 289633,
+      direct: 250787,
+      ratio: 1.155,
+      worstRatio: 2.03,
+      longDetours: 38,
+      grazingEnds: 28,
+      bends: 1054,
+      crossings: 72,
       borderInk: 0,
     })
   })
 
   it('reports the synthetic corpus', { timeout: 180_000 }, () => {
     expect(score(syntheticLayouts(2000), routedOnly)).toEqual({
-      violations: { foreign: 7, 'own-endpoint': 20 },
-      interiorInk: 1765,
+      violations: { foreign: 2, 'own-endpoint': 20 },
+      interiorInk: 1382,
       titleCrossings: 0,
       // ratio 1.116, worst 11.63, 245 long detours before.
-      length: 867182,
-      direct: 800079,
-      ratio: 1.084,
-      worstRatio: 8.4,
-      longDetours: 157,
-      grazingEnds: 114,
-      bends: 2081,
-      crossings: 166,
-      borderInk: 994,
+      length: 867660,
+      direct: 800853,
+      ratio: 1.083,
+      worstRatio: 7.67,
+      longDetours: 160,
+      grazingEnds: 111,
+      bends: 2082,
+      crossings: 170,
+      borderInk: 941,
     })
   })
 
@@ -332,14 +340,14 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.068, worst 2.01, 26 long detours before.
-      length: 1188758,
-      direct: 1147569,
+      length: 1188783,
+      direct: 1147648,
       ratio: 1.036,
       worstRatio: 2.04,
-      longDetours: 17,
-      grazingEnds: 3,
-      bends: 1518,
-      crossings: 531,
+      longDetours: 16,
+      grazingEnds: 0,
+      bends: 1520,
+      crossings: 529,
       borderInk: 0,
     })
   })

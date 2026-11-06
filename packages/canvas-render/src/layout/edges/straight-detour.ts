@@ -127,16 +127,42 @@ function firstBlocker(
       ) {
         continue
       }
-      // Escaped by the strict interior, so a leg may leave a point on the
-      // body's own border: an anchor can touch a box it does not connect.
-      const rect =
-        o.escapable && (containsPoint(o.block, a) || containsPoint(o.block, b))
-          ? strictInterior(o.body)
-          : o.block
-      if (segmentCrossesRect(a, b, rect)) return i
+      // Escaped by the body's OPEN interior, so a leg may leave a point on
+      // the body's own border: an anchor can touch a box it does not connect.
+      const escaping = o.escapable && (containsPoint(o.block, a) || containsPoint(o.block, b))
+      if (escaping ? entersInterior(a, b, o.body) : segmentCrossesRect(a, b, o.block)) return i
     }
     return undefined
   }
+}
+
+/**
+ * Whether `a`->`b` runs through the open inside of `r` for some length — a
+ * Liang-Barsky clip. Touching the border, at a point or along a side, is not
+ * entering it.
+ */
+function entersInterior(a: Point, b: Point, r: Rect): boolean {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  let enter = 0
+  let leave = 1
+  const clips: readonly (readonly [number, number])[] = [
+    [-dx, a.x - r.x],
+    [dx, r.x + r.w - a.x],
+    [-dy, a.y - r.y],
+    [dy, r.y + r.h - a.y],
+  ]
+  for (const [p, q] of clips) {
+    if (p === 0) {
+      if (q <= 0) return false
+      continue
+    }
+    const t = q / p
+    if (p < 0) enter = Math.max(enter, t)
+    else leave = Math.min(leave, t)
+    if (enter >= leave) return false
+  }
+  return true
 }
 
 /** The corners a route may turn at: a body grown by `clearance`, minus any inside a block. */

@@ -204,9 +204,47 @@ function slideAlongSide(
  * facing-pair canvas keeps its two-point segment. When exactly one end is
  * sideways, the clean end's anchor slides along its own side to meet the
  * stub corridor squarely — one long axis-aligned run plus one right-angle
- * turn, instead of a diagonal into the stub.
+ * turn, instead of a diagonal into the stub. Only when that run is clear: a
+ * slid anchor that still has to detour buys no straight run, and moving it
+ * can land it on another edge's anchor on the same side, which the anchor
+ * pass spread apart and the router cannot see.
  */
 function routeStraightWithApproach(
+  ends: RouteEnds,
+  { inflated, raw }: RouteObstacles,
+  around: boolean,
+): Point[] {
+  const {
+    start,
+    end,
+    from: { side: fromSide, rect: fromRect, depth: fromDepth },
+    to: { side: toSide, rect: toRect, depth: toDepth },
+  } = ends
+  const own = [fromRect, toRect]
+  // Stepping round leaves and arrives along the sides' normals: from the
+  // anchor itself its first leg runs along the box's own border whenever
+  // the lane it heads for is above or below it.
+  if (around && blockingRegion(start, end, inflated) !== undefined) {
+    const exit = stubFrom(start, fromSide, fromDepth)
+    const entry = stubFrom(end, toSide, toDepth)
+    return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own, true), end])
+  }
+  // Every shape below can bend at a corner beside one of its boxes and meet
+  // that box edge-on, whichever end already took a stub: an end that did
+  // leaves along its normal, so squaring touches only the other.
+  return squareEnds(approachedPath(ends, { inflated, raw }, around), {
+    exit: stubFrom(start, fromSide, fromDepth),
+    entry: stubFrom(end, toSide, toDepth),
+    fromSide,
+    toSide,
+    clear: (a, b) =>
+      blockingRegion(a, b, inflated) === undefined &&
+      !own.some((rect) => segmentCrossesRect(a, b, strictInterior(rect))),
+  })
+}
+
+/** `routeStraightWithApproach`'s path before its glancing ends are squared. */
+function approachedPath(
   {
     start,
     end,
@@ -217,40 +255,22 @@ function routeStraightWithApproach(
   around: boolean,
 ): Point[] {
   const own = [fromRect, toRect]
-  // Stepping round leaves and arrives along the sides' normals: from the
-  // anchor itself its first leg runs along the box's own border whenever
-  // the lane it heads for is above or below it.
-  if (around && blockingRegion(start, end, inflated) !== undefined) {
-    const exit = stubFrom(start, fromSide, fromDepth)
-    const entry = stubFrom(end, toSide, toDepth)
-    return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own, true), end])
-  }
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
-  if (!fromSideways && !toSideways) {
-    return squareEnds(routeStraight(start, end, inflated, raw, own, around), {
-      exit: stubFrom(start, fromSide, fromDepth),
-      entry: stubFrom(end, toSide, toDepth),
-      fromSide,
-      toSide,
-      clear: (a, b) =>
-        blockingRegion(a, b, inflated) === undefined &&
-        !own.some((rect) => segmentCrossesRect(a, b, strictInterior(rect))),
-    })
-  }
+  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw, own, around)
   if (toSideways && !fromSideways) {
     const entry = stubFrom(end, toSide, toDepth)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
-    if (slid !== undefined) {
-      return withoutRepeats([...routeStraight(slid, entry, inflated, raw, own, around), end])
-    }
+    const run =
+      slid === undefined ? undefined : routeStraight(slid, entry, inflated, raw, own, around)
+    if (run !== undefined && run.length === 2) return withoutRepeats([...run, end])
   }
   if (fromSideways && !toSideways) {
     const exit = stubFrom(start, fromSide, fromDepth)
     const slid = slideAlongSide(end, toRect, toSide, exit)
-    if (slid !== undefined) {
-      return withoutRepeats([start, ...routeStraight(exit, slid, inflated, raw, own, around)])
-    }
+    const run =
+      slid === undefined ? undefined : routeStraight(exit, slid, inflated, raw, own, around)
+    if (run !== undefined && run.length === 2) return withoutRepeats([start, ...run])
   }
   const exit = fromSideways ? stubFrom(start, fromSide, fromDepth) : start
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
