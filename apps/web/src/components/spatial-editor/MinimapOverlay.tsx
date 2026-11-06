@@ -247,7 +247,7 @@ function MinimapSurface({
       // fullscreen this corner is the screen corner, under the home
       // indicator and — rotated — under the display cutout.
       className={cn(
-        'absolute right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm',
+        'absolute right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background shadow-sm',
         raised ? RAISED_BOTTOM : 'bottom-[calc(1rem+env(safe-area-inset-bottom))]',
       )}
       onPointerDown={navigateTo}
