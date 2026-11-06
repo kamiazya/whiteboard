@@ -217,6 +217,12 @@ callers still default to `'clean'`, and the editor still defaults to
 `DocumentPage` → `SpatialEditorPane` → `SpatialEditor` → `useWorkerScene`
 and the drag layers, which existed for nothing else.
 
+(2026-11-06) The argument has since left `apps/web` too: with no caller
+asking for anything else, the app's one render composition fixes
+`'document'`, and the layout request and the worker's body-memo store lost
+their `style` axis. `style` survives where a caller still sets it —
+canvas-render's layout options and `wb_scene_render`'s parameter.
+
 The reason is the one this ADR cannot see from the render side: the row was
 the Display panel's widest and the only one that could not be DRAWN. Every
 other row picks a value a glyph can show; `Preview neon` and `neon` differ

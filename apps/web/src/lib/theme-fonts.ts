@@ -16,10 +16,7 @@
  * bundled family until the answer changes, and `themeFontsGeneration` is
  * what tells a scene to lay out again when it does.
  */
-import {
-  SPATIAL_THEME_FONT_FAMILY,
-  type SpatialRenderStyle,
-} from '@kamiazya/whiteboard-canvas-render'
+import { SPATIAL_THEME_FONT_FAMILY } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace, registerFontBytes } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import {
   fontCatalogueEntryByFamily,
@@ -66,9 +63,8 @@ export function loadedThemeFaces(): readonly ThemeFace[] {
  * landed.
  *
  * A picture of a themed board was drawn with whatever faces were measurable
- * at the time, so this is part of what identifies it. Unlike the session's
- * look override, it reaches every surface: a row, a preview pane and the
- * editor all draw the bundled family before a face lands and the theme's
+ * at the time, so this is part of what identifies it. It reaches every
+ * surface: a row, a preview pane and the editor all draw the bundled family before a face lands and the theme's
  * after, so a key without this axis answers a later ask with the earlier
  * picture — from the memo, and from the worker's own store behind it, for
  * as long as the file lives.
@@ -184,20 +180,16 @@ export async function loadThemeFontFromSource(
 }
 
 /**
- * The family a canvas is drawn in under a style, or undefined when the look
- * names none: `'clean'` never does, a theme id names that theme's, and the
- * document look names the canvas's own theme's. What a surface asks
- * `loadThemeFontFromSource` for — resolved here so the editor names no
- * facet domain and reads the same registry the layout does.
+ * The family a canvas is drawn in — its own theme's — or undefined when that
+ * theme names none. What a surface asks `loadThemeFontFromSource` for —
+ * resolved here so the editor names no facet domain and reads the same
+ * registry the layout does.
  */
 export function themeFamilyFor(
   canvas: SpatialCanvas,
-  style: SpatialRenderStyle | undefined,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string | undefined {
-  if (style === 'clean') return undefined
-  const themeId =
-    style === undefined || style === 'document' ? resolveCanvasTheme(canvas, registry) : style
+  const themeId = resolveCanvasTheme(canvas, registry)
   return themeId === undefined ? undefined : registry.themeAsset(themeId)?.fontFamily
 }
 
@@ -210,10 +202,9 @@ export function themeFamilyFor(
  */
 export function editingFontFamilyFor(
   canvas: SpatialCanvas,
-  style: SpatialRenderStyle | undefined,
   registry: FacetRegistry = bundledFacetRegistry,
 ): string {
-  const family = themeFamilyFor(canvas, style, registry)
+  const family = themeFamilyFor(canvas, registry)
   return family !== undefined && hasLoadedFace(family) ? family : SPATIAL_THEME_FONT_FAMILY
 }
 

@@ -10,7 +10,6 @@ import type {
   MeasureText,
   ReferenceSeams,
   ResolvedReference,
-  SpatialRenderStyle,
   SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
 import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
@@ -31,8 +30,6 @@ export interface RenderCanvasOptions {
   readonly measure: MeasureText
   /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
   readonly theme?: SpatialThemeMode
-  /** See RenderCanvasCoreOptions: `'document'` unless a session overrides it. */
-  readonly style?: SpatialRenderStyle
   /** Passed through to layout: the reference bundle text-node bodies read. */
   readonly references?: ReferenceSeams
   /** Passed through to layout: what the host resolved for one reference. */

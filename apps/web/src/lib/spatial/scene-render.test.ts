@@ -109,11 +109,6 @@ describe('the editor draws the theme the document names (ADR-0030 decision 6)', 
     // The neon dark palette, since the paper follows the UI mode.
     expect(svg).toContain('#7dd3fc')
   })
-
-  it("style: 'clean' is the session override that draws the bundled look instead", () => {
-    const { svg } = renderCanvasToSvg(themed, { measure: fakeMeasure, style: 'clean' })
-    expect(svg).not.toContain('wb-glow')
-  })
 })
 
 // ADR-0040 decision 6: the editor's string is the keyed projection's bytes
