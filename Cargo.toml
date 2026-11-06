@@ -10,6 +10,9 @@ members = [
   "crates/bindings/wasm",
   "crates/xtask",
 ]
+# A workspace of its own: it builds only on the pinned nightly (see its
+# Cargo.toml).
+exclude = ["crates/fuzz"]
 
 [workspace.package]
 version = "0.0.0"

@@ -33,6 +33,8 @@
     "typecheck": "pnpm -r typecheck",
     "rust:check": "node tools/checks/src/rust-check.mjs",
     "rust:build:wasm": "node tools/checks/src/rust-build-wasm.mjs",
+    "rust:fuzz:pr": "node tools/checks/src/rust-fuzz.mjs pr",
+    "rust:fuzz:nightly": "node tools/checks/src/rust-fuzz.mjs nightly",
     "dev": "concurrently --kill-others-on-fail -n web,mcp -c blue,green \"pnpm --filter @kamiazya/whiteboard-web dev\" \"pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev\"",
     "dev:connected": "node apps/extension/scripts/dev-connected.mjs",
     "mcp": "pnpm --filter @kamiazya/whiteboard-mcp mcp",

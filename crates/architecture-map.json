@@ -422,8 +422,8 @@
     "whiteboard-fuzz": {
       "path": "crates/fuzz",
       "layer": "tooling",
-      "status": "planned",
-      "description": "cargo-fuzz targets, one per untrusted-input entry (OKF/JSON Canvas/OCIF parsers, sync frames, HTTP and MCP JSON-RPC, loro import, wasm-boundary JSON, font files). Nightly toolchain only (libFuzzer, sanitizers), so it is excluded from the stable workspace build",
+      "status": "present",
+      "description": "cargo-fuzz targets, one per untrusted-input entry (OKF/JSON Canvas/OCIF parsers, sync frames, HTTP and MCP JSON-RPC, loro import, wasm-boundary JSON, font files). Nightly toolchain only (libFuzzer, sanitizers), so it is a workspace of its own, excluded from the root one; its library half builds on stable to replay committed regressions",
       "targets": ["native"],
       "allowedInternalDeps": [
         "whiteboard-det",
@@ -444,7 +444,9 @@
         "whiteboard-http",
         "whiteboard-mcp"
       ],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "libfuzzer-sys": "the libFuzzer driver cargo-fuzz links each target against; optional, so the target bodies build on stable"
+      },
       "absorbs": []
     }
   }

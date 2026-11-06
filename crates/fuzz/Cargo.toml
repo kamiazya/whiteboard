@@ -1,0 +1,68 @@
+# cargo-fuzz targets, one per entry of crates/input-caps.json (the entry
+# registry): `cargo xtask inputs` fails when an entry has no target here or a
+# target here names no entry.
+#
+# A workspace of its own, excluded from the root one: libFuzzer instrumentation
+# and the sanitizers need the nightly pinned in this directory's
+# rust-toolchain.toml, and the stable gates must not need it. The library
+# half (the target bodies) builds on stable without the `libfuzzer` feature,
+# which is how `tests/regressions.rs` replays every committed crash input in
+# `pnpm rust:check`.
+[package]
+name = "whiteboard-fuzz"
+description = "cargo-fuzz targets over the untrusted-input entries of crates/input-caps.json."
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+[features]
+default = ["libfuzzer"]
+libfuzzer = ["dep:libfuzzer-sys"]
+
+[dependencies]
+libfuzzer-sys = { version = "0.4.10", optional = true }
+whiteboard-det = { path = "../core/det" }
+
+[[bin]]
+name = "det_utf16_len"
+path = "fuzz_targets/det_utf16_len.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[workspace]
+members = ["."]
+
+# The root's `[workspace.lints]`, which a separate workspace cannot inherit.
+# `cargo xtask inputs` fails when this table and the root's differ.
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+[lints]
+workspace = true
+
+# What the libFuzzer build is compiled under: release code generation, as
+# cargo-fuzz uses, with overflow checks on so a wrapped integer is a finding
+# rather than a value.
+[profile.release]
+debug = 1
+overflow-checks = true

@@ -1,8 +1,13 @@
 #!/usr/bin/env node
 // `pnpm rust:check`: every gate the Rust workspace has, in the order a
 // failure is cheapest to read — formatting, lints, tests, then the xtask
-// guards (architecture map, input caps, wasm import scan, size ledger) and
-// the supply-chain check. Stops at the first failing step.
+// guards (architecture map, input caps and the fuzz registry, wasm import
+// scan, size ledger) and the supply-chain check. Stops at the first failing
+// step.
+//
+// crates/fuzz is a workspace of its own (its targets need nightly), so its
+// formatting, lints and the stable replay of every committed fuzz regression
+// are separate steps over its manifest, built without the libFuzzer driver.
 //
 // cargo-deny is a separate install, not part of the toolchain. When it is
 // absent this FAILS and says how to install it, rather than skipping: a
@@ -11,10 +16,16 @@
 
 import { spawnSync } from 'node:child_process'
 
+const FUZZ = ['--manifest-path', 'crates/fuzz/Cargo.toml']
+const FUZZ_STABLE = [...FUZZ, '--no-default-features', '--locked']
+
 const STEPS = [
   ['cargo', ['fmt', '--all', '--check']],
+  ['cargo', ['fmt', ...FUZZ, '--check']],
   ['cargo', ['clippy', '--workspace', '--all-targets', '--locked', '--', '-D', 'warnings']],
+  ['cargo', ['clippy', ...FUZZ_STABLE, '--all-targets', '--', '-D', 'warnings']],
   ['cargo', ['test', '--workspace', '--locked']],
+  ['cargo', ['test', ...FUZZ_STABLE]],
   ['cargo', ['xtask', 'codegen', '--check']],
   ['cargo', ['xtask', 'arch-map']],
   ['cargo', ['xtask', 'inputs']],
