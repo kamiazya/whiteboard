@@ -122,8 +122,6 @@ const DELIBERATE: Record<string, string> = {
     'ADR-0029 retired the branch and the comment says the route no longer exists — debt paid by deletion, recorded',
   'tools/arch-lint/src/architecture-map.ts#routes/document/thumbnails.ts':
     'same sentence: the route went with the version row thumbnail',
-  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#sweep-imported-fs-blobs.ts':
-    "a migration's own text is history and is never rewritten (.claude/rules/vocabulary.md); the sweeper existed when this was written (#858)",
 
   // Bare names in comments (the scan that reads a name without backticks).
   'apps/web/src/hooks/use-document-file-seams.ts#index.md':

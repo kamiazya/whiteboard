@@ -11,8 +11,7 @@ interface WorkspacesTable {
   displayName: string | null
   // ADR-0019's user-facing handle: unique per namespace (ADR-0053; the
   // `workspaces_namespace_segment_unique` index on tenantId, namespace and
-  // segment, migration 0046), nullable because a workspace minted before
-  // migration 0018 may have none.
+  // segment). Nullable: a workspace registered with no handle has none.
   segment: string | null
   // The handle of the namespace holding this workspace (ADR-0053): its
   // creator's on server mode, `me` on a single-person keeper. Defaults to
@@ -21,14 +20,13 @@ interface WorkspacesTable {
   createdAt: Timestamp
   updatedAt: Timestamp
   // The read plane's per-workspace tier override (ADR-0042 decisions 1/3/5).
-  // null means "use the process's WHITEBOARD_REPLICA_TIER default" — see
-  // migration 0029.
+  // null means "use the process's WHITEBOARD_REPLICA_TIER default".
   replicaTier: string | null
 }
 
 interface VersionsTable {
   id: string
-  // No FK since migration 0016 — the rows are swept explicitly, by the trash
+  // No FK — the rows are swept explicitly, by the trash
   // purge for a document a delete evacuated (a restore rejoins them until
   // then) and by documentTeardown's bracket for one it did not. Reads key on
   // workspaceId, whose oplog the frontiers point into.
@@ -51,8 +49,6 @@ interface VersionsTable {
   // workspace is edited.
   //
   // Never empty on a row this store wrote — `contentDigestOf` always answers.
-  // The column's `''` default exists only because sqlite requires one to add
-  // a NOT NULL column, and 0026 deleted every row that would have taken it.
   contentDigest: string
   createdAt: Timestamp
   // Set only on the point a restore produced; see `versionEntrySchema`.
@@ -83,8 +79,8 @@ interface DocumentSnapshotsTable {
   frontier: Uint8Array
   // ADR-0020's fencing token: advanced by every write that replaces this row,
   // read with the manifest, and presented back on a fold to make the replace
-  // conditional. A first write may omit it: migration 0020 defaults the column
-  // to 1, which is what a row with no predecessor holds.
+  // conditional. A first write may omit it: the column defaults to 1, which is
+  // what a row with no predecessor holds.
   generation: Generated<number>
 }
 
@@ -153,7 +149,7 @@ interface AccountsTable {
 }
 
 // What resolves to an account: which authenticator vouched, and the subject
-// it vouched for (ADR-0045 decision 15). No FK — house style since 0016/0017.
+// it vouched for (ADR-0045 decision 15). No FK — house style (`0001-baseline`).
 interface AccountBindingsTable {
   authenticator: string
   subject: string
@@ -168,7 +164,7 @@ interface WorkspaceMembershipsTable {
   workspaceId: string
   profileId: string
   createdAt: Timestamp
-  // ADR-0049 decision 1. Written on every insert; nullable only at the column.
+  // ADR-0049 decision 1.
   role: WorkspaceRole
 }
 

@@ -44,8 +44,6 @@ const LEDGER: Readonly<Record<string, string>> = {
     'probe: reads /proc to tell a reused pid from the process that wrote a record, and an unreadable entry only means it cannot tell, so the live pid is trusted — a lock holder waited on, a daemon not restarted over',
   'packages/mcp-server/src/server/store/db/migration-lock.ts#release':
     'fails-safe: a lock it cannot read is left in place, and the next start judges its holder like any other',
-  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts#importOneBlob':
-    'deliberate: logs a warning and skips the one blob, leaving its source file in place, and nothing deletes it afterwards',
 }
 
 function scan(): {

@@ -35,8 +35,6 @@ const FS_MODULES: ReadonlySet<string> = new Set([
 ])
 const RENAMES: ReadonlySet<string> = new Set(['rename', 'renameSync'])
 
-const MIGRATION_HISTORY =
-  "a migration's text is what it ran with, and a step already recorded as applied is not edited after the fact"
 /** Relative path -> how many fs renames the file holds, and why. Both-sided. */
 const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
   [HELPER]: {
@@ -58,18 +56,6 @@ const ALLOWLIST: Readonly<Record<string, { calls: number; why: string }>> = {
   'packages/mcp-server/src/server/store/db/migration-lock.ts': {
     calls: 1,
     why: 'moves a stale lock aside so only one of two racing replacers wins; no file data is staged',
-  },
-  'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts': {
-    calls: 2,
-    why: MIGRATION_HISTORY,
-  },
-  'packages/mcp-server/src/server/store/db/migrations/0012-ulid-remaining-document-ids.ts': {
-    calls: 2,
-    why: MIGRATION_HISTORY,
-  },
-  'packages/mcp-server/src/server/store/db/migrations/0019-workspace-canonical-id.ts': {
-    calls: 2,
-    why: MIGRATION_HISTORY,
   },
 }
 
@@ -176,6 +162,6 @@ describe('a file is renamed into place in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(8)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(5)
   })
 })

@@ -157,11 +157,28 @@ Log format: the daemon logger writes one JSON line per record to `stderr` (never
 ## Database Migration Errors
 
 If the daemon fails to start because the database's migration history does not
-match the build, the message says which of two situations it is, and the
-remedies are opposite. Both messages name the database path the daemon actually
+match the build, the message says which of three situations it is, and the
+remedies differ. Both messages name the database path the daemon actually
 opened: the file under the data directory, or the one `WHITEBOARD_DATABASE_URL`
 points at (credentials removed), never an assumed `~/.whiteboard`.
 
+- **The database was written before the schema reset.** Before 1.0 the
+  daemon's forty-seven migrations were folded into one baseline,
+  `0001-baseline`, equal to the current schema, and nothing upgrades a
+  database from the old history. A database whose log names any of those
+  steps (`RETIRED_MIGRATION_NAMES` in `published-migration-names.ts`) is
+  refused with `IncompatibleDatabaseError` before anything runs on it, and the
+  message carries the way across. To keep its documents: start the earlier
+  release on that data directory and save each document from the web app
+  (**More actions → Export… → Save as Markdown** for a note, **Save as JSON
+  Canvas** for a canvas); start this release on a fresh data directory (an
+  empty `WHITEBOARD_DATA_DIR`, or the old one moved aside); then bring the
+  files in with **New → Import file…**
+  ([export and import a document](../how-to/export-and-import-a-document.md)).
+  Versions, comments and uploaded images do not travel in those files. With
+  nothing to keep, move the data directory aside and restart. A backup taken
+  by the earlier release (`whiteboard server backup`) restores the old
+  database and is refused the same way, so it is not a way across.
 - **The database was migrated by a newer release.** It recorded a migration
   after the last one this build publishes, so this build is the older side.
   Upgrade `@kamiazya/whiteboard-mcp` (or rebuild a current checkout) and keep
@@ -192,7 +209,7 @@ seconds, after which the error names it and the lock file. On a build older than
 failed process** — the winner's database is intact. Do not delete `.dev-data`:
 it holds this checkout's ticket documents.
 
-**Pre-1.0 policy**: the data dir's databases are **disposable**. For a renamed or missing migration, re-create the database. `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
+**Pre-1.0 policy**: the data dir's databases are **disposable**. For a renamed or missing migration, re-create the database; for one written before the schema reset, export what you want to keep first (above). `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
 
 ```bash
 # 1. Stop any running daemon first
@@ -214,20 +231,6 @@ A fresh `WHITEBOARD_DATA_DIR` always works as a quick sanity check:
 ```bash
 WHITEBOARD_DATA_DIR=/tmp/wb-test WHITEBOARD_DEV=1 pnpm mcp:http:dev
 ```
-
-If instead the daemon fails to start with:
-
-```
-Database migration failed: permission denied reading the data directory. Check filesystem
-permissions on the blob directories under <data dir>/tenants/<tenant>/blobs (or
-<data dir>/blobs on a data directory this daemon has not started yet) and restart.
-```
-
-a migration hit a permission error walking the data dir's filesystem tree (not the SQLite file
-itself) — typically an externally-changed owner/mode under a tenant's blob directory
-(`<data dir>/tenants/<tenant>/blobs`, or the pre-tenant `<data dir>/blobs` a first start moves),
-or a restrictive umask. Fix the directory's permissions (or ownership) and restart; this is not a
-disposable-database case, so do not delete `whiteboard.db`.
 
 ## MCP Tools Not Visible After Starting Daemon
 
