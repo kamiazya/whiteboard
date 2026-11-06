@@ -137,9 +137,6 @@ it('previews a route round a frame title, as the drop routes it', async () => {
     clientY: rootRect.top + 510,
     buttons: 1,
   })
-  await new Promise((r) => requestAnimationFrame(r))
-
   // A straight drop is two points; the committed route steps round.
-  const points = previewPoints(container)
-  expect(points.length).toBeGreaterThan(2)
+  await expect.poll(() => previewPoints(container).length).toBeGreaterThan(2)
 })

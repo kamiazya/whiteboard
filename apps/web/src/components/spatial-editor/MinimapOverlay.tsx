@@ -15,7 +15,7 @@
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { Map as MapIcon } from 'lucide-react'
-import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { type RefObject, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { readMinimapOpen, writeMinimapOpen } from '../../lib/minimap-visibility.js'
 import {
   fitMinimap,
@@ -348,6 +348,14 @@ function MinimapStrokes({
   readonly strokes: readonly MinimapStroke[]
   readonly fit: MinimapFit
 }) {
+  // Keyed on the fit's numbers, not the object: the surface re-renders on
+  // every pan frame with a fresh fit, while the strokes' geometry only moves
+  // when the board or the fitted scale does.
+  const { scale, originX, originY } = fit
+  const projected = useMemo(
+    () => strokes.map((stroke) => projectStrokeSegments(stroke, { scale, originX, originY })),
+    [strokes, scale, originX, originY],
+  )
   return (
     <>
       {strokes.map((stroke, index) => (
@@ -355,7 +363,7 @@ function MinimapStrokes({
         // gives: a second SVG in the editor would answer for the scene.
         // Drawn over the boxes, as ink sits over what it was drawn on.
         <div key={`stroke:${index}`} data-testid="minimap-stroke">
-          {projectStrokeSegments(stroke, fit).map((segment, i) => (
+          {(projected[index] ?? []).map((segment, i) => (
             <div
               // Runs carry no id; their order along the stroke does.
               key={`${i}:${segment.x},${segment.y}`}
