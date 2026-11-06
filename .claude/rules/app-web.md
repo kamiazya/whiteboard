@@ -345,24 +345,24 @@ than truncating a paste.
 
 ### The settings migrations are total, and say so under a property
 
-`lib/user-settings-store.property.test.ts` draws whole v1, v2 and v3
-payloads from the legacy schemas (URL fields overridden to real http(s)
-URLs, since a random string is never one) and requires each chain to the
-live shape (`migrateV3(migrateV2(migrateV1(v1)))`, and so on) to parse under
-the live `.strict()` schema while carrying each field across by name — or,
-for what v4 retired, provably dropping it — then reads each through the real
-store from `localStorage` and round-trips a live payload through
-`save`/`load`. The class it closes is the one `vocabulary.md` records: the
-loader falls back to defaults on ANY parse failure, so a migration emitting
-one key the live schema does not admit discards a user's whole payload
-silently. The schemas and the migrations are exported for it and for nothing
-else.
+`lib/user-settings-store.property.test.ts` draws whole v4 payloads from
+`legacyV4SettingsSchema` (URL strings overridden to real http(s) URLs, since
+a random string is never one) and requires `migrateV4` to parse under the
+live `.strict()` schema, carrying each field by name and provably dropping
+the two retired stamps, then reads it through the real store from
+`localStorage` and round-trips a live payload through `save`/`load`. v4 is
+the only step left: a v1, v2 or v3 payload is not read at all and the store
+starts from the defaults (no compatibility, 0.0.x). The class it closes is
+unchanged: the loader falls back to defaults on ANY parse failure, so a
+migration emitting one key the live schema does not admit discards a whole
+payload silently. The schema and the migration are exported for it and for
+nothing else.
 
 The URL override matches a STRING only. It first matched by path, which also
-caught the `knownDaemonBaseUrls` ARRAY: a string drawn for an array is
+caught an ARRAY field the v1 shape had: a string drawn for an array is
 refused by its own schema, so the field was never generated and every
 property passed over it — found by a mutation that kept a retired field and
-left all seven properties green.
+left every property green.
 
 ### The SharedWorker protocol is posted through its own type
 
@@ -384,9 +384,9 @@ back; until then the worker writes nothing for that document.
 `lib/idb-stored-shapes.property.browser.test.tsx` writes through each
 production writer and reads through its reader, against the real
 IndexedDB: the blob store, the document-file store (its v2 record and the
-v1 record it rewrites on read), the document index's workspace rows
-and the legacy document rows it reads (written by `test-utils/seed-legacy-row.ts`,
-since no build writes one any more), the document store's snapshot and delta log, and the
+v1 record it rewrites on read), the document index's workspace rows (a
+per-document row is not read: a workspace holding one is refused,
+`holdsPreTreeRecords`), the document store's snapshot and delta log, and the
 version store's rows. Inputs are drawn from the writer's input space, or
 from the port's schema where the writer takes one; a `z.custom` /
 `z.instanceof` field is overridden by path, since the walk cannot know

@@ -197,9 +197,10 @@ word decays, so prose is what the guard reads.
 is the one place that has to spell the retired words in order to retire them.
 
 Nothing is left unclaimed. The last increment was the persisted settings key
-`localDaemonBaseUrl`, which became `daemonBaseUrl` under a real migration
-rather than a sweep — the store reads `whiteboard:user-settings:v2` and falls
-back to migrating the `:v1` key exactly once when v2 is absent.
+`localDaemonBaseUrl`, renamed `daemonBaseUrl` under a real migration rather
+than a sweep. That migration has since been deleted with the v1–v3 chain
+(no compatibility): a payload under those keys is not read, and the store
+starts from the defaults.
 
 Why it could not be a sweep, measured rather than argued: the schema is
 `.strict()` and the loader falls back to defaults on ANY parse failure, so
@@ -214,10 +215,8 @@ dropped: a field nobody reads does not need a better name. `lastBrowserCanvasId`
 was also the last `canvas`-as-container-noun in a stored shape, retired by
 deletion instead of a rename.
 
-`user-settings-store.ts` and its tests (the example file and the migration
-property) are therefore exempt from the daemon guard, for the reason a
-migration always is: spelling the old key is how they read a payload written
-under it.
+No file is exempt from the daemon guard any more: nothing spells the old
+key, the migration that read it being gone.
 
 `slug` is the one word retired outright, and `vocabulary-check.test.ts` in
 `tools/arch-lint` keeps it retired — the only part of this rule that is not
