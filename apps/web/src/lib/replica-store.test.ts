@@ -7,6 +7,7 @@
 import 'fake-indexeddb/auto'
 import { replicaKeyApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -24,7 +25,7 @@ let counter = 0
 // `markReplica`'s mark is module state with no reset, so each test mints its own id.
 function freshWorkspaceId(): string {
   counter += 1
-  return `routingtest${counter}`
+  return workspaceIdFor(`routingtest${counter}`)
 }
 
 /** Every string and byte run held by any object store, decoded as text. */

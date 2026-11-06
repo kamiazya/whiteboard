@@ -9,7 +9,7 @@ import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSetOperation } from '../tools/document-set.js'
 import { followReferencesAfterRename } from './follow-rename.js'
 
-const WS = 'ws-follow'
+const WS = '01RAZ9RNDPVKYWSQEWJ2PKYRZJ'
 
 async function seed(deps: ServerDeps) {
   await deps.documentIndex.createWorkspace({ workspaceId: WS })

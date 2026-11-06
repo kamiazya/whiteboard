@@ -38,7 +38,7 @@ const { createFilesRouter } = await import('./files.js')
 const MALFORMED = 'bad.handle'
 const REFUSAL = {
   error: 'invalid_workspace_id',
-  message: `Invalid workspaceId "${MALFORMED}": only ASCII letters, digits, "_" and "-" are allowed`,
+  message: `Invalid workspaceId "${MALFORMED}": a workspace is addressed by its canonical id or by a segment (ASCII letters, digits and interior hyphens)`,
 }
 
 const versionStore = { pruneSandwichedAutoVersions: vi.fn() } as never

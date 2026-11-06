@@ -55,7 +55,7 @@ const { createDocumentRouter } = await import('../document.js')
 // workaround for document.ts's dynamic import.
 await import('../../sync-audience.js')
 
-const WS = 'limit-ws'
+const WS = '01562K76HK6JG6GNYVZ25D3JY8'
 const DOC_ID = '01BRWAAAAAAAAAAAAAAAAAAAA0'
 
 /**

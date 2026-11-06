@@ -5,6 +5,9 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const MISSING_SESSION = '01P80R726QF4H4MFCCQ4BQVGRW'
+const SESSION1 = '01M8BBN7JS60N0ZAR13NP8SXBF'
+
 // Swap DATA_DIR to a temp directory through vi.mock.
 let tempDir: string
 
@@ -54,16 +57,14 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
     const doc = new LoroDoc()
     doc.getText('content').insert(0, 'written via saveDocument')
     doc.commit()
-    await saveDocument('session1', 'write-through', doc)
+    await saveDocument(SESSION1, 'write-through', doc)
 
     const db = await getDb(getDataDir())
-    const documentId = await resolveDocumentIdAtPath('session1', 'write-through')
+    const documentId = await resolveDocumentIdAtPath(SESSION1, 'write-through')
     expect(documentId).not.toBeNull()
     // A FRESH open of the stored record — not the live cache — so this
     // proves durability, not memory.
-    const stored = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
-      'session1',
-    )
+    const stored = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(SESSION1)
     expect(stored).not.toBeNull()
     expect(documentContainers(stored!, documentId!).getText('content').toString()).toBe(
       'written via saveDocument',
@@ -104,10 +105,10 @@ describe('route saves and tool writes serialize on the workspace document', () =
   ): Promise<void> {
     const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
-    const docRef = { kind: 'document' as const, workspaceId: 'session1', documentId }
+    const docRef = { kind: 'document' as const, workspaceId: SESSION1, documentId }
     // The tools hold the WORKSPACE lock around their load-modify-save (the
     // seam's `withWriteLock`), the same lock the route flow below holds.
-    await withWorkspaceWriteLock('session1', async () => {
+    await withWorkspaceWriteLock(SESSION1, async () => {
       const existing = await routed.loadSnapshot({ docRef })
       const doc = new LoroDoc()
       if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
@@ -131,11 +132,11 @@ describe('route saves and tool writes serialize on the workspace document', () =
   async function routeWrite(path: string, marker: string): Promise<void> {
     const { getDoc } = await import('./document-store.js')
     const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
-    await withWorkspaceWriteLock('session1', async () => {
-      const doc = await getDoc('session1', path)
+    await withWorkspaceWriteLock(SESSION1, async () => {
+      const doc = await getDoc(SESSION1, path)
       doc.getMap('nodes').set(marker, { id: marker })
       doc.commit()
-      await saveDocument('session1', path, doc, { overwrite: true })
+      await saveDocument(SESSION1, path, doc, { overwrite: true })
     })
   }
 
@@ -144,13 +145,13 @@ describe('route saves and tool writes serialize on the workspace document', () =
     const seed = new LoroDoc()
     seed.getMap('nodes').set('base', { id: 'base' })
     seed.commit()
-    await saveDocument('session1', 'race', seed)
+    await saveDocument(SESSION1, 'race', seed)
     const { routed } = await toolStores()
-    const documentId = (await resolveDocumentIdAtPath('session1', 'race'))!
+    const documentId = (await resolveDocumentIdAtPath(SESSION1, 'race'))!
 
     await Promise.all([toolWrite(routed, documentId, 'agent'), routeWrite('race', 'web')])
 
-    const reloaded = await loadDocument('session1', 'race')
+    const reloaded = await loadDocument(SESSION1, 'race')
     expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])
   })
 
@@ -166,23 +167,23 @@ describe('route saves and tool writes serialize on the workspace document', () =
     const seed = new LoroDoc()
     seed.getMap('nodes').set('base', { id: 'base' })
     seed.commit()
-    await saveDocument('session1', 'merge-race', seed, { overwrite: true })
+    await saveDocument(SESSION1, 'merge-race', seed, { overwrite: true })
     // Warm the projection cache the way a WS session would.
-    await getDoc('session1', 'merge-race')
-    expect(peekDoc('session1', 'merge-race')).toBeDefined()
+    await getDoc(SESSION1, 'merge-race')
+    expect(peekDoc(SESSION1, 'merge-race')).toBeDefined()
 
     const { routed } = await toolStores()
-    const documentId = (await resolveDocumentIdAtPath('session1', 'merge-race'))!
+    const documentId = (await resolveDocumentIdAtPath(SESSION1, 'merge-race'))!
     await toolWrite(routed, documentId, 'agent')
 
     // The cached projection STAYS, and already carries the tool's op —
     // a WS session holding it keeps its lineage and sees the edit.
-    const cached = peekDoc('session1', 'merge-race')
+    const cached = peekDoc(SESSION1, 'merge-race')
     expect(cached).toBeDefined()
     expect(cached!.getMap('nodes').keys().sort()).toEqual(['agent', 'base'])
     // The route flow writes through the same instance and both ops survive.
     await routeWrite('merge-race', 'web')
-    const reloaded = await loadDocument('session1', 'merge-race')
+    const reloaded = await loadDocument(SESSION1, 'merge-race')
     expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])
   })
 })
@@ -193,7 +194,7 @@ describe('saveDocument / loadDocument', () => {
     await setupIsolatedDb()
     // Create the session directory.
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
   })
 
   afterEach(async () => {
@@ -203,9 +204,9 @@ describe('saveDocument / loadDocument', () => {
 
   it('saves and restores an empty LoroDoc', async () => {
     const doc = new LoroDoc()
-    await saveDocument('session1', 'test', doc)
+    await saveDocument(SESSION1, 'test', doc)
 
-    const loaded = await loadDocument('session1', 'test')
+    const loaded = await loadDocument(SESSION1, 'test')
     // An empty doc should have an empty elements list.
     expect(loaded.getMovableList('elements').length).toBe(0)
   })
@@ -217,14 +218,14 @@ describe('saveDocument / loadDocument', () => {
     const doc = new LoroDoc()
     doc.getMovableList('elements').insert(0, 'x')
     doc.commit()
-    await saveDocument('session1', 'frontier-check', doc)
+    await saveDocument(SESSION1, 'frontier-check', doc)
 
     const db = await getDb(tempDir)
     const store = new LibsqlDocumentStore(db)
     const result = await store.readFrontier({
-      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
+      docRef: { kind: 'workspace-tree', workspaceId: SESSION1 },
     })
-    const workspaceDoc = await getWorkspaceDoc('session1')
+    const workspaceDoc = await getWorkspaceDoc(SESSION1)
     expect(result?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
@@ -239,17 +240,17 @@ describe('saveDocument / loadDocument', () => {
     const nodes = doc.getMap('nodes')
     for (let i = 0; i < 4000; i += 1) nodes.set(`n${i}`, { type: 'text', x: i, text: `node ${i}` })
     doc.commit()
-    await saveDocument('session1', 'incremental', doc)
+    await saveDocument(SESSION1, 'incremental', doc)
 
     const db = await getDb(tempDir)
-    const docRef = { kind: 'workspace-tree' as const, workspaceId: 'session1' }
+    const docRef = { kind: 'workspace-tree' as const, workspaceId: SESSION1 }
     const store = new LibsqlDocumentStore(db)
     const baseline = await store.readSnapshotManifest({ docRef })
     expect(baseline).not.toBeNull()
 
     nodes.set('n0', { type: 'text', x: 999, text: 'edited' })
     doc.commit()
-    await saveDocument('session1', 'incremental', doc, { overwrite: true })
+    await saveDocument(SESSION1, 'incremental', doc, { overwrite: true })
 
     // The workspace record's snapshot is untouched — byte-for-byte the one
     // the first save wrote.
@@ -267,18 +268,18 @@ describe('saveDocument / loadDocument', () => {
     const doc = new LoroDoc()
     doc.getMap('nodes').set('a', { text: 'only edit' })
     doc.commit()
-    await saveDocument('session1', 'idle', doc)
+    await saveDocument(SESSION1, 'idle', doc)
 
     // Saves with nothing between them. An autosave loop and a WS heartbeat
     // both produce exactly this, so a log that grows here grows without a
     // bound on an untouched document.
     for (let i = 0; i < 5; i += 1) {
-      await saveDocument('session1', 'idle', doc, { overwrite: true })
+      await saveDocument(SESSION1, 'idle', doc, { overwrite: true })
     }
 
     const db = await getDb(tempDir)
     const store = new LibsqlDocumentStore(db)
-    const docRef = { kind: 'workspace-tree' as const, workspaceId: 'session1' }
+    const docRef = { kind: 'workspace-tree' as const, workspaceId: SESSION1 }
     const { updates } = await store.loadDeltas({ docRef, afterSeq: null })
     // Exactly what the CONTENT-BEARING save appended (the record is minted
     // empty at workspace creation, so the first content arrives as one
@@ -292,16 +293,16 @@ describe('saveDocument / loadDocument', () => {
     const doc = new LoroDoc()
     doc.getMap('nodes').set('a', { text: 'first' })
     doc.commit()
-    await saveDocument('session1', 'roundtrip', doc)
+    await saveDocument(SESSION1, 'roundtrip', doc)
 
     doc.getMap('nodes').set('b', { text: 'second' })
     doc.commit()
-    await saveDocument('session1', 'roundtrip', doc, { overwrite: true })
+    await saveDocument(SESSION1, 'roundtrip', doc, { overwrite: true })
 
     // The whole point of appending rather than rewriting is that a reader
     // still sees one document. A load that returned only the snapshot would
     // silently drop every edit since it.
-    const loaded = await loadDocument('session1', 'roundtrip')
+    const loaded = await loadDocument(SESSION1, 'roundtrip')
     expect(loaded?.getMap('nodes').toJSON()).toEqual({
       a: { text: 'first' },
       b: { text: 'second' },
@@ -314,12 +315,12 @@ describe('saveDocument / loadDocument', () => {
     // while saveDocument minted nanoids — so every document created through the
     // web UI became a row the agent surface must skip. Two writers, one
     // table, one id policy.
-    await saveDocument('session1', 'ulid-mint', new LoroDoc())
+    await saveDocument(SESSION1, 'ulid-mint', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
     const _db = await getDb(getDataDir())
     const rowId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
-      'session1',
+      SESSION1,
       'ulid-mint',
     )
     const row = rowId === null ? undefined : { id: rowId }
@@ -336,8 +337,8 @@ describe('saveDocument / loadDocument', () => {
     map.set('y', 200)
     doc.commit()
 
-    await saveDocument('session1', 'canvas-with-elem', doc)
-    const loaded = await loadDocument('session1', 'canvas-with-elem')
+    await saveDocument(SESSION1, 'canvas-with-elem', doc)
+    const loaded = await loadDocument(SESSION1, 'canvas-with-elem')
 
     const elements = loaded.getMovableList('elements').toJSON() as {
       id: string
@@ -376,15 +377,15 @@ describe('saveDocument / loadDocument', () => {
     setNodeLock(doc, 'n1', true)
     setEdgeLock(doc, 'e1', true)
 
-    await saveDocument('session1', 'locked', doc)
-    const loaded = await loadDocument('session1', 'locked')
+    await saveDocument(SESSION1, 'locked', doc)
+    const loaded = await loadDocument(SESSION1, 'locked')
 
     expect(readNodeLocks(loaded)).toEqual(new Set(['n1']))
     expect(readEdgeLocks(loaded)).toEqual(new Set(['e1']))
   })
 
   it('returns an empty LoroDoc for a missing canvas', async () => {
-    const doc = await loadDocument('session1', 'nonexistent')
+    const doc = await loadDocument(SESSION1, 'nonexistent')
     expect(doc.getMovableList('elements').length).toBe(0)
   })
 
@@ -393,7 +394,7 @@ describe('saveDocument / loadDocument', () => {
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
-    await saveDocument('session1', 'broken', new LoroDoc())
+    await saveDocument(SESSION1, 'broken', new LoroDoc())
     const db = await getDb(tempDir)
     // Overwrite the workspace record's snapshot rows directly with bytes
     // that are not a valid Loro snapshot — the corruption a Libsql-backed
@@ -401,7 +402,7 @@ describe('saveDocument / loadDocument', () => {
     const store = new LibsqlDocumentStore(db)
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
+      docRef: { kind: 'workspace-tree', workspaceId: SESSION1 },
       manifest,
       chunks,
       frontier: new Uint8Array(),
@@ -410,7 +411,7 @@ describe('saveDocument / loadDocument', () => {
     // actually exercises the stored bytes.
     _clearWorkspaceDocCacheForTests()
 
-    await expect(loadDocument('session1', 'broken')).rejects.toThrow()
+    await expect(loadDocument(SESSION1, 'broken')).rejects.toThrow()
   })
 
   it('saves and loads separate paths independently', async () => {
@@ -425,11 +426,11 @@ describe('saveDocument / loadDocument', () => {
     m.set('id', 'elem-in-canvas2')
     doc2.commit()
 
-    await saveDocument('session1', 'canvas-a', doc1)
-    await saveDocument('session1', 'canvas-b', doc2)
+    await saveDocument(SESSION1, 'canvas-a', doc1)
+    await saveDocument(SESSION1, 'canvas-b', doc2)
 
-    const loadedA = await loadDocument('session1', 'canvas-a')
-    const loadedB = await loadDocument('session1', 'canvas-b')
+    const loadedA = await loadDocument(SESSION1, 'canvas-a')
+    const loadedB = await loadDocument(SESSION1, 'canvas-b')
 
     expect(loadedA.getMovableList('elements').length).toBe(0)
     expect(loadedB.getMovableList('elements').length).toBe(1)
@@ -443,7 +444,7 @@ describe('saveDocument - overwrite handling', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
   })
 
   afterEach(async () => {
@@ -452,15 +453,15 @@ describe('saveDocument - overwrite handling', () => {
   })
 
   it('throws ConflictError when overwrite: false targets an existing file', async () => {
-    await saveDocument('session1', 'existing', new LoroDoc())
+    await saveDocument(SESSION1, 'existing', new LoroDoc())
     await expect(
-      saveDocument('session1', 'existing', new LoroDoc(), { overwrite: false }),
+      saveDocument(SESSION1, 'existing', new LoroDoc(), { overwrite: false }),
     ).rejects.toThrow(/already exists/)
   })
 
   it('defaults to the same behavior as overwrite: false', async () => {
-    await saveDocument('session1', 'existing', new LoroDoc())
-    await expect(saveDocument('session1', 'existing', new LoroDoc())).rejects.toThrow(
+    await saveDocument(SESSION1, 'existing', new LoroDoc())
+    await expect(saveDocument(SESSION1, 'existing', new LoroDoc())).rejects.toThrow(
       /already exists/,
     )
   })
@@ -469,7 +470,7 @@ describe('saveDocument - overwrite handling', () => {
     const docA = new LoroDoc()
     docA.getMovableList('elements')
     docA.commit()
-    await saveDocument('session1', 'existing', docA)
+    await saveDocument(SESSION1, 'existing', docA)
 
     const docB = new LoroDoc()
     const list = docB.getMovableList('elements')
@@ -479,10 +480,10 @@ describe('saveDocument - overwrite handling', () => {
     docB.commit()
 
     await expect(
-      saveDocument('session1', 'existing', docB, { overwrite: true }),
+      saveDocument(SESSION1, 'existing', docB, { overwrite: true }),
     ).resolves.toBeUndefined()
 
-    const loaded = await loadDocument('session1', 'existing')
+    const loaded = await loadDocument(SESSION1, 'existing')
     const elements = loaded.getMovableList('elements').toJSON() as { id: string }[]
     expect(elements).toHaveLength(1)
     expect(elements[0].id).toBe('overwritten')
@@ -490,14 +491,14 @@ describe('saveDocument - overwrite handling', () => {
 
   it('succeeds with overwrite: false when the file does not exist yet', async () => {
     await expect(
-      saveDocument('session1', 'fresh', new LoroDoc(), { overwrite: false }),
+      saveDocument(SESSION1, 'fresh', new LoroDoc(), { overwrite: false }),
     ).resolves.toBeUndefined()
   })
 
   it('sets name="ConflictError" for caller-side discrimination', async () => {
-    await saveDocument('session1', 'existing', new LoroDoc())
+    await saveDocument(SESSION1, 'existing', new LoroDoc())
     await expect(
-      saveDocument('session1', 'existing', new LoroDoc(), { overwrite: false }),
+      saveDocument(SESSION1, 'existing', new LoroDoc(), { overwrite: false }),
     ).rejects.toMatchObject({ name: 'ConflictError' })
   })
 
@@ -514,13 +515,13 @@ describe('saveDocument - overwrite handling', () => {
       throw new Error('snapshot serialization failed')
     })
 
-    await expect(saveDocument('session1', 'orphan-prone', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'orphan-prone', new LoroDoc())).rejects.toThrow(
       /snapshot serialization failed/,
     )
 
     exportSpy.mockRestore()
 
-    await expect(saveDocument('session1', 'orphan-prone', new LoroDoc())).resolves.toBeUndefined()
+    await expect(saveDocument(SESSION1, 'orphan-prone', new LoroDoc())).resolves.toBeUndefined()
   })
 })
 
@@ -529,7 +530,7 @@ describe('listDocuments', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
   })
 
   afterEach(async () => {
@@ -538,14 +539,14 @@ describe('listDocuments', () => {
   })
 
   it('returns only .loro files as paths without extensions', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    await saveDocument('session1', 'canvas-b', new LoroDoc())
+    await saveDocument(SESSION1, 'canvas-a', new LoroDoc())
+    await saveDocument(SESSION1, 'canvas-b', new LoroDoc())
 
     // Create a .port file and confirm it is excluded.
     const { writeFile } = await import('node:fs/promises')
-    await writeFile(join(tempDir, 'session1', '.port'), '3099')
+    await writeFile(join(tempDir, SESSION1, '.port'), '3099')
 
-    const list = await listDocuments('session1')
+    const list = await listDocuments(SESSION1)
     const paths = list.map((c) => c.path)
 
     expect(paths).toContain('canvas-a')
@@ -555,8 +556,8 @@ describe('listDocuments', () => {
   })
 
   it('reports a recorded kind unchanged', async () => {
-    await saveDocument('session1', 'a-note', new LoroDoc(), { kind: 'markdown' })
-    const [entry] = await listDocuments('session1')
+    await saveDocument(SESSION1, 'a-note', new LoroDoc(), { kind: 'markdown' })
+    const [entry] = await listDocuments(SESSION1)
     expect(entry?.kind).toBe('markdown')
   })
 
@@ -566,53 +567,53 @@ describe('listDocuments', () => {
   // to read the name from the SAME list it renders — fetching it separately
   // is what let the two disagree.
   it('carries the name when one is recorded', async () => {
-    await saveDocument('session1', 'untitled-2', new LoroDoc())
+    await saveDocument(SESSION1, 'untitled-2', new LoroDoc())
     const { setDocumentDisplayName } = await import('./names-store.js')
-    await setDocumentDisplayName('session1', 'untitled-2', '週次レビュー')
+    await setDocumentDisplayName(SESSION1, 'untitled-2', '週次レビュー')
 
-    const [entry] = await listDocuments('session1')
+    const [entry] = await listDocuments(SESSION1)
 
     expect(entry?.path).toBe('untitled-2')
     expect(entry?.name).toBe('週次レビュー')
   })
 
   it('omits the name for a document that was never renamed', async () => {
-    await saveDocument('session1', 'untitled', new LoroDoc())
-    const [entry] = await listDocuments('session1')
+    await saveDocument(SESSION1, 'untitled', new LoroDoc())
+    const [entry] = await listDocuments(SESSION1)
     expect(entry?.name).toBeUndefined()
   })
 
   it('returns an empty array for an empty session', async () => {
-    const list = await listDocuments('session1')
+    const list = await listDocuments(SESSION1)
     expect(list).toHaveLength(0)
   })
 
   it('returns an empty array only when the session directory is missing', async () => {
-    const list = await listDocuments('missing-session')
+    const list = await listDocuments(MISSING_SESSION)
     expect(list).toEqual([])
   })
 
   it('includes updatedAt on each entry', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const list = await listDocuments('session1')
+    await saveDocument(SESSION1, 'canvas-a', new LoroDoc())
+    const list = await listDocuments(SESSION1)
     expect(list[0].updatedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 
   it('includes the immutable document id on each entry, stable across a path rename', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const before = await listDocuments('session1')
+    await saveDocument(SESSION1, 'canvas-a', new LoroDoc())
+    const before = await listDocuments(SESSION1)
     expect(before[0].documentId).toBeTruthy()
 
-    await renameDocumentPath('session1', 'canvas-a', 'canvas-renamed')
-    const after = await listDocuments('session1')
+    await renameDocumentPath(SESSION1, 'canvas-a', 'canvas-renamed')
+    const after = await listDocuments(SESSION1)
     expect(after[0].path).toBe('canvas-renamed')
     // The id is what stored references key on; a rename must not move it.
     expect(after[0].documentId).toBe(before[0].documentId)
   })
 
   it('persists kind: markdown and lists it back', async () => {
-    await saveDocument('session1', 'note', new LoroDoc(), { kind: 'markdown' })
-    const list = await listDocuments('session1')
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'markdown' })
+    const list = await listDocuments(SESSION1)
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
@@ -622,22 +623,22 @@ describe('listDocuments', () => {
     // and pre-kind rows no longer exist (the startup fold deletes them), so
     // this is a default about OUR OWN lazy-create, not a guess about
     // someone else's data.
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const list = await listDocuments('session1')
+    await saveDocument(SESSION1, 'canvas-a', new LoroDoc())
+    const list = await listDocuments(SESSION1)
     expect(list.find((c) => c.path === 'canvas-a')?.kind).toBe('spatial')
   })
 
   it('does not reset kind on an overwrite:true re-save', async () => {
-    await saveDocument('session1', 'note', new LoroDoc(), { kind: 'markdown' })
-    await saveDocument('session1', 'note', new LoroDoc(), { overwrite: true })
-    const list = await listDocuments('session1')
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'markdown' })
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { overwrite: true })
+    const list = await listDocuments(SESSION1)
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
   it('syncs kind on an overwrite:true re-save when kind is explicitly passed', async () => {
-    await saveDocument('session1', 'note', new LoroDoc(), { kind: 'spatial' })
-    await saveDocument('session1', 'note', new LoroDoc(), { overwrite: true, kind: 'markdown' })
-    const list = await listDocuments('session1')
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { overwrite: true, kind: 'markdown' })
+    const list = await listDocuments(SESSION1)
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
@@ -648,40 +649,40 @@ describe('listDocuments', () => {
   it('an explicit-kind re-save updates the TREE node kind, not only the row', async () => {
     const { openWorkspaceDocIfStored } = await import('./document-store.js')
     const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
-    await saveDocument('session1', 'note', new LoroDoc(), { kind: 'markdown' })
-    await saveDocument('session1', 'note', new LoroDoc(), { overwrite: true, kind: 'spatial' })
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'markdown' })
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { overwrite: true, kind: 'spatial' })
 
-    const workspaceDoc = await openWorkspaceDocIfStored('session1')
+    const workspaceDoc = await openWorkspaceDocIfStored(SESSION1)
     expect(workspaceDoc).not.toBeNull()
     if (workspaceDoc === null) throw new Error('unreachable')
     expect(resolveWorkspaceDocument(workspaceDoc, 'note')?.kind).toBe('spatial')
   })
 
   it('recursively lists nested paths as session-relative paths', async () => {
-    await saveDocument('session1', 'top-level', new LoroDoc())
-    await saveDocument('session1', '621/header', new LoroDoc())
-    await saveDocument('session1', '621/footer', new LoroDoc())
-    await saveDocument('session1', '622/a/b', new LoroDoc())
+    await saveDocument(SESSION1, 'top-level', new LoroDoc())
+    await saveDocument(SESSION1, '621/header', new LoroDoc())
+    await saveDocument(SESSION1, '621/footer', new LoroDoc())
+    await saveDocument(SESSION1, '622/a/b', new LoroDoc())
 
-    const list = await listDocuments('session1')
+    const list = await listDocuments(SESSION1)
     const paths = list.map((c) => c.path).sort()
     expect(paths).toEqual(['621/footer', '621/header', '622/a/b', 'top-level'])
   })
 
   it('excludes exports/, files/, and versions/ from listing', async () => {
     const { mkdir, writeFile } = await import('node:fs/promises')
-    await saveDocument('session1', 'real-canvas', new LoroDoc())
+    await saveDocument(SESSION1, 'real-canvas', new LoroDoc())
     // Files that only look like .loro files inside exports/, files/, or versions/
     // must still be excluded. versions/ also contains .loro files for the version store.
-    await mkdir(join(tempDir, 'session1', 'exports'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'exports', 'fake.loro'), '')
-    await mkdir(join(tempDir, 'session1', 'files'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'files', 'another.loro'), '')
-    await mkdir(join(tempDir, 'session1', 'versions'), { recursive: true })
-    await writeFile(join(tempDir, 'session1', 'versions', 'snap-001.loro'), '')
-    await writeFile(join(tempDir, 'session1', 'versions', 'snap-002.loro'), '')
+    await mkdir(join(tempDir, SESSION1, 'exports'), { recursive: true })
+    await writeFile(join(tempDir, SESSION1, 'exports', 'fake.loro'), '')
+    await mkdir(join(tempDir, SESSION1, 'files'), { recursive: true })
+    await writeFile(join(tempDir, SESSION1, 'files', 'another.loro'), '')
+    await mkdir(join(tempDir, SESSION1, 'versions'), { recursive: true })
+    await writeFile(join(tempDir, SESSION1, 'versions', 'snap-001.loro'), '')
+    await writeFile(join(tempDir, SESSION1, 'versions', 'snap-002.loro'), '')
 
-    const list = await listDocuments('session1')
+    const list = await listDocuments(SESSION1)
     expect(list.map((c) => c.path)).toEqual(['real-canvas'])
   })
 
@@ -696,7 +697,7 @@ describe('getDocumentKind', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, SESSION1), { recursive: true })
   })
 
   afterEach(async () => {
@@ -705,12 +706,12 @@ describe('getDocumentKind', () => {
   })
 
   it('returns null when the canvas does not exist', async () => {
-    expect(await getDocumentKind('session1', 'missing')).toBeNull()
+    expect(await getDocumentKind(SESSION1, 'missing')).toBeNull()
   })
 
   it('returns the persisted kind for an existing canvas', async () => {
-    await saveDocument('session1', 'note', new LoroDoc(), { kind: 'markdown' })
-    expect(await getDocumentKind('session1', 'note')).toBe('markdown')
+    await saveDocument(SESSION1, 'note', new LoroDoc(), { kind: 'markdown' })
+    expect(await getDocumentKind(SESSION1, 'note')).toBe('markdown')
   })
 })
 
@@ -727,52 +728,48 @@ describe('saveDocument / loadDocument - path validation', () => {
 
   it('accepts valid kebab-case paths', async () => {
     // Verify that saveDocument does not throw.
-    await expect(saveDocument('session1', 'my-canvas', new LoroDoc())).resolves.toBeUndefined()
-    await expect(saveDocument('session1', '123-design', new LoroDoc())).resolves.toBeUndefined()
-    await expect(saveDocument('session1', 'abc', new LoroDoc())).resolves.toBeUndefined()
+    await expect(saveDocument(SESSION1, 'my-canvas', new LoroDoc())).resolves.toBeUndefined()
+    await expect(saveDocument(SESSION1, '123-design', new LoroDoc())).resolves.toBeUndefined()
+    await expect(saveDocument(SESSION1, 'abc', new LoroDoc())).resolves.toBeUndefined()
   })
 
   it('accepts slash-separated nested paths when each segment is kebab-case', async () => {
-    await expect(saveDocument('session1', '621/header', new LoroDoc())).resolves.toBeUndefined()
+    await expect(saveDocument(SESSION1, '621/header', new LoroDoc())).resolves.toBeUndefined()
     await expect(
-      saveDocument('session1', '621/header-v2/layout', new LoroDoc()),
+      saveDocument(SESSION1, '621/header-v2/layout', new LoroDoc()),
     ).resolves.toBeUndefined()
   })
 
   it('rejects leading, trailing, and consecutive slashes', async () => {
-    await expect(saveDocument('session1', '/foo', new LoroDoc())).rejects.toThrow('Invalid path')
-    await expect(saveDocument('session1', 'foo/', new LoroDoc())).rejects.toThrow('Invalid path')
-    await expect(saveDocument('session1', 'a//b', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, '/foo', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, 'foo/', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, 'a//b', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
   it('rejects paths that contain ".."', async () => {
-    await expect(saveDocument('session1', '../escape', new LoroDoc())).rejects.toThrow(
-      'Invalid path',
-    )
-    await expect(loadDocument('session1', '../../etc/passwd')).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, '../escape', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(loadDocument(SESSION1, '../../etc/passwd')).rejects.toThrow('Invalid path')
     // DOCUMENT_PATH_SEGMENT_PATTERN also rejects dots inside a segment such as `foo.bar/baz`.
-    await expect(saveDocument('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'foo/.hidden', new LoroDoc())).rejects.toThrow(
       'Invalid path',
     )
   })
 
   it('rejects paths that contain dots', async () => {
-    await expect(saveDocument('session1', 'foo.bar', new LoroDoc())).rejects.toThrow('Invalid path')
-    await expect(saveDocument('session1', '.hidden', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, 'foo.bar', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, '.hidden', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
   it('rejects paths that contain spaces', async () => {
-    await expect(saveDocument('session1', 'my canvas', new LoroDoc())).rejects.toThrow(
-      'Invalid path',
-    )
+    await expect(saveDocument(SESSION1, 'my canvas', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
   it('rejects empty paths', async () => {
-    await expect(saveDocument('session1', '', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, '', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
   it('rejects paths that end with a hyphen', async () => {
-    await expect(saveDocument('session1', 'canvas-', new LoroDoc())).rejects.toThrow('Invalid path')
+    await expect(saveDocument(SESSION1, 'canvas-', new LoroDoc())).rejects.toThrow('Invalid path')
   })
 
   it('rejects path-traversal workspaceIds', async () => {
@@ -804,59 +801,59 @@ describe('path validation - self-describing error messages', () => {
 
   it('identifies the offending segment and reason for dots', async () => {
     // The failing segment is ".hidden" and the reason is "contains '.'".
-    await expect(saveDocument('session1', 'foo/.hidden', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'foo/.hidden', new LoroDoc())).rejects.toThrow(
       /segment "\.hidden".*contains '\.'/,
     )
   })
 
   it('reports whitespace as the reason for segments with spaces', async () => {
-    await expect(saveDocument('session1', 'my canvas', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'my canvas', new LoroDoc())).rejects.toThrow(
       /segment "my canvas".*whitespace/,
     )
   })
 
   it('describes a leading slash as an empty segment with slash guidance', async () => {
-    await expect(saveDocument('session1', '/foo', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, '/foo', new LoroDoc())).rejects.toThrow(
       /empty segment.*leading\/trailing\/consecutive.*\//,
     )
   })
 
   it('uses the same empty-segment message for consecutive slashes', async () => {
-    await expect(saveDocument('session1', 'a//b', new LoroDoc())).rejects.toThrow(/empty segment/)
+    await expect(saveDocument(SESSION1, 'a//b', new LoroDoc())).rejects.toThrow(/empty segment/)
   })
 
   it('reports "path is empty" for an empty path', async () => {
-    await expect(saveDocument('session1', '', new LoroDoc())).rejects.toThrow(/path is empty/)
+    await expect(saveDocument(SESSION1, '', new LoroDoc())).rejects.toThrow(/path is empty/)
   })
 
   it('reports "leading hyphen" for segments that start with a hyphen', async () => {
-    await expect(saveDocument('session1', '-canvas', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, '-canvas', new LoroDoc())).rejects.toThrow(
       /segment "-canvas".*leading hyphen/,
     )
   })
 
   it('reports "trailing hyphen" for segments that end with a hyphen', async () => {
-    await expect(saveDocument('session1', 'canvas-', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'canvas-', new LoroDoc())).rejects.toThrow(
       /segment "canvas-".*trailing hyphen/,
     )
   })
 
   it('applies the generic dot rule to ".." segments', async () => {
     // ".." is caught by the normal dot rule, so no special-case message is needed.
-    await expect(saveDocument('session1', '../escape', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, '../escape', new LoroDoc())).rejects.toThrow(
       /segment "\.\.".*contains '\.'/,
     )
   })
 
   it('reports "invalid character" for non-ASCII characters', async () => {
     // Normal spaces map to the whitespace case, but non-ASCII characters need a separate message.
-    await expect(saveDocument('session1', 'café', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'café', new LoroDoc())).rejects.toThrow(
       /segment "café".*invalid character/,
     )
   })
 
   it('includes the full path in the error message for context', async () => {
-    await expect(saveDocument('session1', 'valid-top/.bad', new LoroDoc())).rejects.toThrow(
+    await expect(saveDocument(SESSION1, 'valid-top/.bad', new LoroDoc())).rejects.toThrow(
       /"valid-top\/\.bad"/,
     )
   })

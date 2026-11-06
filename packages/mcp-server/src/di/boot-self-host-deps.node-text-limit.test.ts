@@ -75,9 +75,9 @@ describe('a text node of exactly the declared limit, over the real store', () =>
     'as %s is added within the CPU budget',
     async (_shape, textOfLength) => {
       const { serverDeps: deps } = await bootSelfHostDeps(served)
-      await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+      await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
       const { documentId } = await wbDocumentCreate(deps, {
-        workspaceId: 'ws-1',
+        workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
         path: 'board',
         kind: 'spatial',
       })
@@ -86,7 +86,7 @@ describe('a text node of exactly the declared limit, over the real store', () =>
 
       const before = process.cpuUsage()
       const result = await createCanvasEditTool(deps).execute({
-        workspaceId: 'ws-1',
+        workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
         documentId,
         mode: 'apply',
         ops: [{ op: 'node.add', node: { type: 'text', text, width: 200 } }],

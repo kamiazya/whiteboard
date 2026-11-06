@@ -55,14 +55,14 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
     versionStoreMock({ workspaceVersionFrontiers: vi.fn().mockResolvedValue([[]]) })
 
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
   })
 
   it('returns structured 500 for a broken snapshot', async () => {
     const { LibsqlDocumentStore } = await import('../../store/libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
 
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
     // Corrupt the WORKSPACE record's snapshot rows directly — that is where
     // content lives — and drop the live cache so the compact actually reads
@@ -70,7 +70,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
     const libsqlStore = new LibsqlDocumentStore(db)
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await libsqlStore.saveSnapshot({
-      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
+      docRef: { kind: 'workspace-tree', workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' },
       manifest,
       chunks,
       frontier: new Uint8Array(),
@@ -84,14 +84,17 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all (corrupt reco
       versionStore: createVersionStoreMock(),
       mayPlaceDocuments: () => true,
     })
-    const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
-      method: 'POST',
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/optimize-all',
+      {
+        method: 'POST',
+      },
+    )
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
       error: 'corrupt_stored_data',
-      message: expect.stringContaining('workspace-tree:session1'),
+      message: expect.stringContaining('workspace-tree:01M8BBN7JS60N0ZAR13NP8SXBF'),
     })
   })
 })
@@ -106,8 +109,8 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
   // compacted the same record N times, the first for real and the rest to
   // find out there was no gain.
   it('compacts the workspace record once, however many documents it holds', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    await saveDocument('session1', 'canvas-b', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', new LoroDoc())
 
     const versionStore = createVersionStoreMock()
     const app = createDocumentRouter({
@@ -116,9 +119,12 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       versionStore,
       mayPlaceDocuments: () => true,
     })
-    const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
-      method: 'POST',
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/optimize-all',
+      {
+        method: 'POST',
+      },
+    )
 
     expect(res.status).toBe(200)
     const json = compactWorkspaceResultSchema.parse(await res.json())
@@ -136,7 +142,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
     await (await getDb(tmp.dir))
       .insertInto('workspaces')
       .values({
-        id: 'session1',
+        id: '01M8BBN7JS60N0ZAR13NP8SXBF',
         displayName: null,
         segment: null,
         createdAt: 0,
@@ -150,9 +156,12 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       versionStore: createVersionStoreMock(),
       mayPlaceDocuments: () => true,
     })
-    const res = await app.request('/api/workspaces/session1/documents/optimize-all', {
-      method: 'POST',
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/optimize-all',
+      {
+        method: 'POST',
+      },
+    )
     expect(res.status).toBe(200)
     expect(compactWorkspaceResultSchema.parse(await res.json())).toEqual({
       compacted: false,
@@ -163,8 +172,8 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
   })
 
   it('prune-sandwiched delegates to versionStore.pruneSandwichedAutoVersions for every canvas', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    await saveDocument('session1', 'canvas-b', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', new LoroDoc())
 
     const versionStore = createVersionStoreMock()
     versionStore.pruneSandwichedAutoVersions = vi
@@ -180,9 +189,12 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       versionStore,
       mayPlaceDocuments: () => true,
     })
-    const res = await app.request('/api/workspaces/session1/versions/prune-sandwiched', {
-      method: 'POST',
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/versions/prune-sandwiched',
+      {
+        method: 'POST',
+      },
+    )
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as {

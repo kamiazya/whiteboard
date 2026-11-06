@@ -9,7 +9,7 @@ import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { documentSetInputSchema } from './document-set.js'
 import { createWorkspaceEditTool, workspaceEditInputSchema } from './workspace-edit.js'
 
-const WS = 'ws-limit'
+const WS = '01T5G5CRDPMA5RS79ZGHAY2THA'
 const DOC = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const overLimit = 'x'.repeat(MARKDOWN_MAX_CHARS + 1)
 const atLimit = 'x'.repeat(MARKDOWN_MAX_CHARS)

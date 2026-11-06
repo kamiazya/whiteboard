@@ -51,19 +51,20 @@ import { invalidRequestBody } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import type { WorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
-import { validateWorkspaceId, validationErrorBody } from '../validators.js'
+import { validateWorkspaceHandle, validationErrorBody } from '../validators.js'
 import { readJsonBody } from './read-json-body.js'
 
 const log = getLogger('replica-key')
 
-/** A malformed workspaceId (path-traversal-shaped, non-ASCII, etc.) is a 400,
- *  not the uncaught ValidationError `workspaceExists` throws underneath.
- *  Kept apart from `refuseMalformedHandle`: the body is the typed
- *  `MembershipRefusal` the client parses, which `satisfies` holds, and this
- *  route addresses a canonical id rather than a handle. */
+/** A workspaceId no address can spell (path-traversal-shaped, non-ASCII,
+ *  etc.) is a 400; an address-shaped one that keys no workspace falls through
+ *  to the 404 every other route answers. Kept apart from
+ *  `refuseMalformedHandle`: the body is the typed `MembershipRefusal` the
+ *  client parses, which `satisfies` holds, and this route addresses a
+ *  canonical id rather than resolving a handle. */
 function badWorkspaceIdBody(workspaceId: string): MembershipRefusal | null {
   try {
-    validateWorkspaceId(workspaceId)
+    validateWorkspaceHandle(workspaceId)
     return null
   } catch (err) {
     const body = validationErrorBody(err)

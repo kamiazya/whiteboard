@@ -12,6 +12,12 @@ import {
 } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
 
+const WS_A = '01TYGJP26XH16QHBBVNW85QCE0'
+const WS_BAD = '01NK15681QNN3WK3T2B06PGH11'
+const WS_GOOD = '01RK3FMVYBCBH3M0KCPABBT5J8'
+const WS_SLOW = '01NHVKAT1RPHCHW3V99K7599ZJ'
+const WS_V = '011NS8H5QYXT03TKXY3CSNQBWB'
+
 let tempDir: string
 
 // This file names a lot of paths; the layout itself is `data-layout.ts`'s.
@@ -135,7 +141,7 @@ describe('createFileGcSweeper scheduling', () => {
     ] as const
     let passIndex = 0
     const purge = vi.fn((_workspaceId: string) => gates[Math.min(passIndex++, 1)].promise)
-    const listWorkspaces = vi.fn(async () => [{ workspaceId: 'ws_a' }])
+    const listWorkspaces = vi.fn(async () => [{ workspaceId: WS_A }])
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
       listWorkspaces,
@@ -152,7 +158,7 @@ describe('createFileGcSweeper scheduling', () => {
       purge,
       `listWs=${listWorkspaces.mock.calls.length} purge=${purge.mock.calls.length}`,
     ).toHaveBeenCalledTimes(1)
-    expect(purge).toHaveBeenCalledWith('ws_a')
+    expect(purge).toHaveBeenCalledWith(WS_A)
 
     // Releasing gate 1 lets the pass settle, which is what arms the next
     // interval — the reschedule under test.
@@ -169,7 +175,7 @@ describe('createFileGcSweeper scheduling', () => {
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
       intervalMs: 0,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -204,7 +210,7 @@ describe('createFileGcSweeper single-flight', () => {
     const purge = vi.fn(() => gates[Math.min(purgeCalls++, 1)].promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -243,7 +249,7 @@ describe('createFileGcSweeper single-flight', () => {
     })
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -269,7 +275,7 @@ describe('createFileGcSweeper stop()', () => {
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -284,7 +290,7 @@ describe('createFileGcSweeper stop()', () => {
     const purge = vi.fn(async () => d.promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -311,7 +317,7 @@ describe('createFileGcSweeper stop()', () => {
     const purge = vi.fn(async () => d.promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -339,7 +345,7 @@ describe('createFileGcSweeper stop()', () => {
     const purge = vi.fn(async () => d.promise)
     const sweeper = createFileGcSweeper({
       intervalMs: 1000,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -409,7 +415,7 @@ describe('createFileGcSweeper env parsing', () => {
     process.env[ENV_KEY] = raw
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -426,7 +432,7 @@ describe('createFileGcSweeper env parsing', () => {
     process.env[ENV_KEY] = '2000'
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -441,7 +447,7 @@ describe('createFileGcSweeper env parsing', () => {
     process.env[ENV_KEY] = '0'
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -456,7 +462,7 @@ describe('createFileGcSweeper env parsing', () => {
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
       intervalMs: 500,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -477,7 +483,7 @@ describe('createFileGcSweeper env parsing', () => {
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
       intervalMs: overflowMs,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -499,7 +505,7 @@ describe('createFileGcSweeper env parsing', () => {
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
       intervalMs: Number.NaN,
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -517,7 +523,7 @@ describe('createFileGcSweeper env parsing', () => {
     process.env[ENV_KEY] = String(3_000_000_000)
     const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
     const sweeper = createFileGcSweeper({
-      listWorkspaces: async () => [{ workspaceId: 'ws_a' }],
+      listWorkspaces: async () => [{ workspaceId: WS_A }],
       discoverFsWorkspaces: async () => [],
       purge,
     })
@@ -536,23 +542,23 @@ describe('createFileGcSweeper per-workspace isolation', () => {
     const cap = captureLogsForTests('debug')
     try {
       const purge = vi.fn(async (workspaceId: string) => {
-        if (workspaceId === 'ws_bad') throw new Error('boom')
+        if (workspaceId === WS_BAD) throw new Error('boom')
         return { purgedCount: 0, purgedBytes: 0 }
       })
       const sweeper = createFileGcSweeper({
         intervalMs: 1000,
-        listWorkspaces: async () => [{ workspaceId: 'ws_bad' }, { workspaceId: 'ws_good' }],
+        listWorkspaces: async () => [{ workspaceId: WS_BAD }, { workspaceId: WS_GOOD }],
         discoverFsWorkspaces: async () => [],
         purge,
       })
       await sweeper.tick()
-      expect(purge).toHaveBeenCalledWith('ws_bad')
-      expect(purge).toHaveBeenCalledWith('ws_good')
+      expect(purge).toHaveBeenCalledWith(WS_BAD)
+      expect(purge).toHaveBeenCalledWith(WS_GOOD)
 
       const errRecords = cap.records.filter(
         (r) => r.scope === 'file-gc-sweeper' && r.level === 'error',
       )
-      expect(errRecords.some((r) => r.data?.workspaceId === 'ws_bad')).toBe(true)
+      expect(errRecords.some((r) => r.data?.workspaceId === WS_BAD)).toBe(true)
       await sweeper.stop()
     } finally {
       cap.restore()
@@ -568,7 +574,7 @@ describe('createFileGcSweeper per-workspace isolation', () => {
         intervalMs: 1000,
         listWorkspaces: async () => {
           if (shouldFail) throw new Error('db unavailable')
-          return [{ workspaceId: 'ws_a' }]
+          return [{ workspaceId: WS_A }]
         },
         discoverFsWorkspaces: async () => [],
         purge,
@@ -612,7 +618,7 @@ describe('advanceUntilCalls vs the interval boundary', () => {
         for (let i = 0; i < 3; i++) {
           await new Promise<void>((resolve) => realSetImmediate(resolve))
         }
-        return [{ workspaceId: 'ws_slow' }]
+        return [{ workspaceId: WS_SLOW }]
       },
       discoverFsWorkspaces: async () => [],
       purge,
@@ -633,16 +639,16 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
     // Uses the REAL default purge fn (no `purge` override) to prove
     // createFileGcSweeper wires its internally-constructed FileVersionStore
     // into purgeDanglingFiles, not just that a caller-supplied stub works.
-    await saveDocument('ws_v', 'evolving', makeSpatialDocWithImage('version-only'))
+    await saveDocument(WS_V, 'evolving', makeSpatialDocWithImage('version-only'))
     const store = new FileVersionStore()
-    await store.save('ws_v', 'evolving', await loadDocument('ws_v', 'evolving'), { auto: false })
+    await store.save(WS_V, 'evolving', await loadDocument(WS_V, 'evolving'), { auto: false })
 
-    const live = await loadDocument('ws_v', 'evolving')
+    const live = await loadDocument(WS_V, 'evolving')
     writeSpatialCanvas(live, { nodes: [], edges: [] })
     live.commit()
-    await saveDocument('ws_v', 'evolving', live, { overwrite: true })
+    await saveDocument(WS_V, 'evolving', live, { overwrite: true })
 
-    const filesDir = wsFiles('ws_v')
+    const filesDir = wsFiles(WS_V)
     await mkdir(filesDir, { recursive: true })
     await writeFile(join(filesDir, 'version-only.png'), Buffer.alloc(10, 1))
     // Age the file past the default grace window so this test isolates the
@@ -655,7 +661,7 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
     )
 
     const sweeper = createFileGcSweeper({
-      listWorkspaces: async () => [{ workspaceId: 'ws_v' }],
+      listWorkspaces: async () => [{ workspaceId: WS_V }],
       discoverFsWorkspaces: async () => [],
     })
     await sweeper.tick()
@@ -671,7 +677,7 @@ describe('createFileGcSweeper default purge / versionStore wiring', () => {
 
 describe('discoverFsWorkspaces (default, via real filesystem)', () => {
   it('finds an upload-only workspace dir with no DB row and purges its dangling file after grace elapses', async () => {
-    const filesDir = wsFiles('ws_upload_only')
+    const filesDir = wsFiles('01ARZ3NDEKTSV4RRFFQ69G5FAT')
     await mkdir(filesDir, { recursive: true })
     await writeFile(join(filesDir, 'orphan.png'), Buffer.alloc(10, 2))
     // Age the file past the default grace window.
@@ -729,26 +735,35 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
     expect(purge).not.toHaveBeenCalledWith('blobs')
   })
 
-  it('sweeps an upload-only workspace literally named "blobs" that has a files/ dir', async () => {
-    // 'blobs' is a valid workspace id and the upload route can write to
-    // <dataDir>/blobs/files before any document ever creates a DB row for it
-    // -- this is exactly the upload-only-workspace case the sweeper exists
-    // to cover, and it must not be excluded just because the name is
-    // 'blobs'.
-    const filesDir = wsFiles('blobs')
-    await mkdir(filesDir, { recursive: true })
-    await writeFile(join(filesDir, 'orphan.png'), Buffer.alloc(10, 6))
-    const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
-    await import('node:fs/promises').then((m) => m.utimes(join(filesDir, 'orphan.png'), past, past))
+  // A directory carrying files/ under a name that is no canonical id is a
+  // workspace stored before the re-key onto ULIDs. Sweeping it would decide
+  // what its documents reference without being able to read them.
+  it('skips and reports a workspace directory not named by a canonical id', async () => {
+    const cap = captureLogsForTests('warning')
+    try {
+      const filesDir = wsFiles('default')
+      await mkdir(filesDir, { recursive: true })
+      await writeFile(join(filesDir, 'orphan.png'), Buffer.alloc(10, 6))
+      const past = new Date(Date.now() - 2 * 60 * 60 * 1000)
+      await import('node:fs/promises').then((m) =>
+        m.utimes(join(filesDir, 'orphan.png'), past, past),
+      )
 
-    const sweeper = createFileGcSweeper({
-      listWorkspaces: async () => [],
-    })
-    await sweeper.tick()
-    await sweeper.stop()
+      const sweeper = createFileGcSweeper({ listWorkspaces: async () => [] })
+      await sweeper.tick()
+      await sweeper.stop()
 
-    const remaining = await import('node:fs/promises').then((m) => m.readdir(filesDir))
-    expect(remaining).toEqual([])
+      const remaining = await import('node:fs/promises').then((m) => m.readdir(filesDir))
+      expect(remaining).toEqual(['orphan.png'])
+      expect(cap.records).toContainEqual(
+        expect.objectContaining({
+          data: { name: 'default' },
+          msg: expect.stringContaining('canonical ULID'),
+        }),
+      )
+    } finally {
+      cap.restore()
+    }
   })
 })
 

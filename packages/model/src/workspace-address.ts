@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { deriveWorkspaceSegment } from './derive-workspace-segment.js'
-import { workspaceCanonicalIdSchema, workspaceIdSchema, workspaceSegmentSchema } from './ids.js'
+import { workspaceCanonicalIdSchema, workspaceSegmentSchema } from './ids.js'
 
 /**
  * The namespace a single-person keeper (the browser, the local daemon) holds
@@ -58,16 +58,6 @@ export function deriveUserHandle(displayName: string): string {
 }
 
 /**
- * A one-component address that is not a canonical id: a segment in the
- * caller's own namespace, or a legacy daemon id (`default`, nanoid strings
- * carrying `_`), which resolution still has to reach.
- */
-const bareHandleSchema = workspaceIdSchema.refine(
-  (handle) => !workspaceCanonicalIdSchema.safeParse(handle).success,
-  'a canonical ULID is the id form, not a bare handle',
-)
-
-/**
  * The three forms a workspace address takes (ADR-0053): the canonical id, a
  * segment qualified by the namespace that holds it, and a bare segment that
  * means the CALLER's own namespace. Parsing decides only the form; which
@@ -82,7 +72,9 @@ export const workspaceAddressSchema = z.discriminatedUnion('form', [
       segment: workspaceSegmentSchema,
     })
     .strict(),
-  z.object({ form: z.literal('bare'), handle: bareHandleSchema }).strict(),
+  // A segment in the caller's own namespace. The segment grammar is never
+  // ULID-shaped, so a bare handle cannot read back as the id form.
+  z.object({ form: z.literal('bare'), handle: workspaceSegmentSchema }).strict(),
 ])
 export type WorkspaceAddress = z.infer<typeof workspaceAddressSchema>
 
@@ -90,17 +82,17 @@ export type WorkspaceAddress = z.infer<typeof workspaceAddressSchema>
  * An address as a caller TYPES it, before `parseWorkspaceAddress` decides its
  * form: one handle, or a namespace handle and a segment joined by one `/`. A
  * pattern rather than a refinement, so a published JSON Schema states the
- * grammar too; which workspace it names stays the registry's answer. `\w` is
- * `WORKSPACE_ID_PATTERN`'s `[a-zA-Z0-9_]` exactly (no `u` flag), spelled
- * short because every tool's schema publishes it.
+ * grammar too; which workspace it names stays the registry's answer. The
+ * class is the union of the ULID's and the segment's characters, so `_` —
+ * which neither form holds — is refused at the boundary rather than looked up.
  */
-const WORKSPACE_ADDRESS_PATTERN = /^[\w-]+(\/[\w-]+)?$/
+const WORKSPACE_ADDRESS_PATTERN = /^[a-zA-Z0-9-]+(\/[a-zA-Z0-9-]+)?$/
 
 export const workspaceAddressInputSchema = z
   .string()
   .regex(
     WORKSPACE_ADDRESS_PATTERN,
-    'a workspace address is an id, <handle>/<segment>, or a segment ([a-zA-Z0-9_-], at most one "/")',
+    'a workspace address is an id, <handle>/<segment>, or a segment ([a-zA-Z0-9-], at most one "/")',
   )
 
 /** The address an input string spells, or null when it spells none of the three forms. */

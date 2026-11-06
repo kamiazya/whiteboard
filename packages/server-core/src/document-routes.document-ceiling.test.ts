@@ -5,7 +5,7 @@ import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.
 
 /** Written out rather than imported, so the test is not judged by the constant it judges. */
 const CEILING = 2000
-const WS = 'crowded'
+const WS = '01STG6S4Q49QC1B42TQ6P6HWJK'
 
 describe('POST /api/v1/workspaces/:ws/documents at the document ceiling', () => {
   it('answers 413 too_many_documents, in the code the sync routes use', async () => {

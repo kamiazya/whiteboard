@@ -42,9 +42,9 @@ describe('documentWritten', () => {
   // observer returning: "it did not throw" is exactly the proxy indicator
   // that let the original gap survive.
   it('schedules a compaction for the document an agent write names', async () => {
-    await saveDocument('ws-1', 'agent-written', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-written', new LoroDoc())
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
-    const documentId = await resolveDocumentIdAtPath('ws-1', 'agent-written')
+    const documentId = await resolveDocumentIdAtPath('01ZVM89A4A1V9FS03Z9J64KEK1', 'agent-written')
     expect(documentId).not.toBeNull()
     if (documentId === null) throw new Error('unreachable')
 
@@ -56,7 +56,11 @@ describe('documentWritten', () => {
     // is what keeps it that way.
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
-    await documentWritten({ workspaceId: 'ws-1', documentId, doc: new LoroDoc() })
+    await documentWritten({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      documentId,
+      doc: new LoroDoc(),
+    })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
@@ -78,11 +82,11 @@ describe('documentWritten', () => {
     const db = await getDb(tempDir)
     const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
     // Registered explicitly: `createWorkspace: true` is ADR-0019's MINT
-    // boundary, and a mint would key the workspace by a fresh ULID with
-    // `ws-1` as its segment — leaving the store reads below naming nothing.
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    // boundary, and a mint would key the workspace by a fresh ULID,
+    // never by the id the store reads below address.
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'agent-edited',
       kind: 'spatial',
     })
@@ -95,7 +99,7 @@ describe('documentWritten', () => {
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
     await createCanvasEditTool(deps).execute({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: created.documentId,
       ops: [
         {
@@ -114,13 +118,13 @@ describe('documentWritten', () => {
   // here opens the workspace doc to find out, which is the lookup this
   // observer used to make on every agent write.
   it('schedules for the workspace without resolving the id to a placement', async () => {
-    await saveDocument('ws-1', 'seeded', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'seeded', new LoroDoc())
     uninstallAutoCompact()
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
     await expect(
       documentWritten({
-        workspaceId: 'ws-1',
+        workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         doc: new LoroDoc(),
       }),
@@ -149,13 +153,15 @@ describe('documentWritten', () => {
     const doc = new LoroDoc()
 
     await documentWritten({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       path: 'agent-written',
       doc,
     })
 
-    expect(signalled).toEqual([{ workspaceId: 'ws-1', path: 'agent-written', doc }])
+    expect(signalled).toEqual([
+      { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', path: 'agent-written', doc },
+    ])
   })
 
   // A document the index does not place has no path to checkpoint under;
@@ -172,7 +178,7 @@ describe('documentWritten', () => {
     )
 
     await documentWritten({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       doc: new LoroDoc(),
     })

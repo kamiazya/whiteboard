@@ -6,12 +6,18 @@
  * the operation's own graph coming with them. See that file for why the split
  * exists rather than being a matter of taste.
  */
-import { documentIdSchema, tagInUseSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  tagInUseSchema,
+  workspaceCanonicalIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { visualStencilsFacetSchema } from '@kamiazya/whiteboard-plugin-visual/stencil-library'
 import { tagLibrarySchema } from '@kamiazya/whiteboard-plugin-visual/tag-library'
 import { z } from 'zod'
 
-export const documentTagsInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
+export const documentTagsInputSchema = z
+  .object({ workspaceId: workspaceCanonicalIdSchema })
+  .strict()
 export type DocumentTagsInput = z.infer<typeof documentTagsInputSchema>
 
 export const documentTagsOutputSchema = z

@@ -18,13 +18,18 @@ import {
 import { exportOkf } from './export-okf.js'
 import { createFacetSetTool } from './facet-set.js'
 
-const WS = 'ws-1'
+const GHOST = '0181H8QNHND8K9909DSVTYQH2N'
+const MAIN = '015GDWCEB7J85499C9H0Q31MR1'
+const NOPE = '01EEFVQS0NDF5MQH1YR1A8DSTT'
+const WS_2 = '01KW278Z7YCXF37PRQZGG0SYV7'
+
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 /**
  * The workspace exists because this fixture says so. It used to appear as a
  * side effect of the first `createWorkspace: true` — which is ADR-0019's MINT
- * boundary, and now keys the workspace by a fresh ULID, leaving the `ws-1`
- * every case below addresses naming nothing.
+ * boundary, and keys the workspace by a fresh ULID, never by the `WS` every
+ * case below addresses.
  *
  * The three cases that are ABOUT creating a workspace keep saying so
  * explicitly; everything else just needs one to exist.
@@ -47,14 +52,14 @@ describe('wbDocumentCreate', () => {
   it('treats a blank name as no name rather than storing one the port forbids', async () => {
     const deps = await makeDeps()
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'blank',
       kind: 'spatial',
       name: '   ',
     })
 
     const entry = await deps.documentIndex.resolveDocumentById({
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: created.documentId,
     })
     expect(entry?.name).toBeUndefined()
@@ -62,24 +67,16 @@ describe('wbDocumentCreate', () => {
 
   it('creates a document and returns documentId + path', async () => {
     const deps = await makeDeps()
-    const result = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'doc-a',
-      kind: 'spatial',
-    })
+    const result = await wbDocumentCreate(deps, { workspaceId: WS, path: 'doc-a', kind: 'spatial' })
     expect(result.path).toBe('doc-a')
     expect(() => documentIdSchema.parse(result.documentId)).not.toThrow()
   })
 
   it('nests by path, with no parent id involved', async () => {
     const deps = await makeDeps()
-    await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'parent',
-      kind: 'spatial',
-    })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'parent', kind: 'spatial' })
     const child = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'parent/child',
       kind: 'spatial',
     })
@@ -87,28 +84,24 @@ describe('wbDocumentCreate', () => {
 
     // The hierarchy is readable from the listing without resolving anything:
     // a path sorts before every path it prefixes.
-    const { documents } = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const { documents } = await wbDocumentList(deps, { workspaceId: WS })
     expect(documents.map((c) => c.path)).toEqual(['parent', 'parent/child'])
   })
 
   it('refuses a path that is already taken', async () => {
     const deps = await makeDeps()
-    await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'doc-a',
-      kind: 'spatial',
-    })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'doc-a', kind: 'spatial' })
     await expect(
-      wbDocumentCreate(deps, { workspaceId: 'ws-1', path: 'doc-a', kind: 'markdown' }),
+      wbDocumentCreate(deps, { workspaceId: WS, path: 'doc-a', kind: 'markdown' }),
     ).rejects.toThrow(DocumentPathTakenError)
   })
 
   it('throws WorkspaceNotFoundForCallerError for an unknown workspaceId, and list agrees', async () => {
     const deps = await makeDeps()
     await expect(
-      wbDocumentCreate(deps, { workspaceId: 'nope', path: 'doc-a', kind: 'spatial' }),
+      wbDocumentCreate(deps, { workspaceId: NOPE, path: 'doc-a', kind: 'spatial' }),
     ).rejects.toThrow(WorkspaceNotFoundForCallerError)
-    await expect(wbDocumentList(deps, { workspaceId: 'nope' })).rejects.toThrow(
+    await expect(wbDocumentList(deps, { workspaceId: NOPE })).rejects.toThrow(
       WorkspaceNotFoundForCallerError,
     )
   })
@@ -120,22 +113,22 @@ describe('wbDocumentCreate', () => {
   it('names the workspaces the deployment says may be named, on create and on read', async () => {
     const deps: ServerDeps = {
       ...(await makeDeps()),
-      knownWorkspaceHandles: async () => ['default', 'ws-1'],
+      knownWorkspaceHandles: async () => ['default', WS],
     }
     await expect(
-      wbDocumentCreate(deps, { workspaceId: 'main', path: 'a', kind: 'spatial' }),
-    ).rejects.toThrow(/Workspaces here: "default", "ws-1"/)
-    await expect(wbDocumentList(deps, { workspaceId: 'main' })).rejects.toThrow(
-      /Workspaces here: "default", "ws-1"/,
+      wbDocumentCreate(deps, { workspaceId: MAIN, path: 'a', kind: 'spatial' }),
+    ).rejects.toThrow(/Workspaces here: "default", "01ZVM89A4A1V9FS03Z9J64KEK1"/)
+    await expect(wbDocumentList(deps, { workspaceId: MAIN })).rejects.toThrow(
+      /Workspaces here: "default", "01ZVM89A4A1V9FS03Z9J64KEK1"/,
     )
   })
 
   it('names no workspace when the deployment supplies no way to', async () => {
     const deps = await makeDeps()
-    const refusal = await wbDocumentList(deps, { workspaceId: 'main' }).catch((err: Error) => err)
+    const refusal = await wbDocumentList(deps, { workspaceId: MAIN }).catch((err: Error) => err)
     expect(refusal).toBeInstanceOf(WorkspaceNotFoundForCallerError)
     expect((refusal as Error).message).not.toContain('Workspaces here')
-    expect((refusal as Error).message).not.toContain('ws-1')
+    expect((refusal as Error).message).not.toContain(WS)
   })
 
   // The refusal is what a model reads to repair its next call, so it names
@@ -146,7 +139,7 @@ describe('wbDocumentCreate', () => {
   it('the create refusal says which call takes createWorkspace, and the read refusal does not ask for it', async () => {
     const deps = await makeDeps()
     const create = await wbDocumentCreate(deps, {
-      workspaceId: 'nope',
+      workspaceId: NOPE,
       path: 'doc-a',
       kind: 'spatial',
     }).catch((err: Error) => err.message)
@@ -154,7 +147,7 @@ describe('wbDocumentCreate', () => {
     expect(create).toContain('wb_workspace_edit')
     expect(create).not.toContain('canvas')
 
-    const list = await wbDocumentList(deps, { workspaceId: 'nope' }).catch(
+    const list = await wbDocumentList(deps, { workspaceId: NOPE }).catch(
       (err: Error) => err.message,
     )
     expect(list).toContain('wb_workspace_edit')
@@ -181,13 +174,9 @@ describe('wbDocumentCreate', () => {
 
   it('succeeds without the flag once the workspace exists', async () => {
     const deps = await makeDeps()
-    await wbDocumentCreate(deps, {
-      workspaceId: WS,
-      path: 'first',
-      kind: 'spatial',
-    })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'first', kind: 'spatial' })
     const second = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'second',
       kind: 'spatial',
     })
@@ -198,16 +187,16 @@ describe('wbDocumentCreate', () => {
 describe('wbDocumentList shadowed threading', () => {
   it('carries a shadowed marker through — the collision signal must survive the tool boundary', async () => {
     const deps = await makeDeps()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
     ;(deps.documentIndex as InMemoryDocumentIndex).seed({
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       path: 'a',
       kind: 'spatial',
       shadowed: true,
     })
 
-    const out = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const out = await wbDocumentList(deps, { workspaceId: WS })
 
     expect(out.documents).toEqual([
       {
@@ -227,9 +216,9 @@ describe('wbDocumentResolve', () => {
   // runtime did.
   it('carries kind and updatedAt through, like the list does', async () => {
     const deps = await makeDeps()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
     ;(deps.documentIndex as InMemoryDocumentIndex).seed({
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       path: 'a',
       kind: 'markdown',
@@ -237,7 +226,7 @@ describe('wbDocumentResolve', () => {
     })
 
     const out = await wbDocumentResolve(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     })
 
@@ -252,14 +241,11 @@ describe('wbDocumentResolve', () => {
   it('returns the document with its path', async () => {
     const deps = await makeDeps()
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'parent/child',
       kind: 'spatial',
     })
-    const got = await wbDocumentResolve(deps, {
-      workspaceId: 'ws-1',
-      documentId: created.documentId,
-    })
+    const got = await wbDocumentResolve(deps, { workspaceId: WS, documentId: created.documentId })
     // `kind` is reported now that resolve emits what its schema declares. The
     // in-memory index records no timestamp, which is why `updatedAt` is absent
     // here and present in the case below that seeds one.
@@ -272,34 +258,22 @@ describe('wbDocumentResolve', () => {
 
   it('throws WorkspaceDocumentNotFoundError for a documentId that does not exist', async () => {
     const deps = await makeDeps()
-    await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'doc-a',
-      kind: 'spatial',
-    })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'doc-a', kind: 'spatial' })
     await expect(
-      wbDocumentResolve(deps, { workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+      wbDocumentResolve(deps, { workspaceId: WS, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   it('does not resolve a document from another workspace', async () => {
     const deps = await makeDeps()
     // A SECOND workspace, which makeDeps does not provide.
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-2' })
-    const mine = await wbDocumentCreate(deps, {
-      workspaceId: WS,
-      path: 'doc-a',
-      kind: 'spatial',
-    })
-    await wbDocumentCreate(deps, {
-      workspaceId: 'ws-2',
-      path: 'doc-a',
-      kind: 'spatial',
-    })
+    await deps.documentIndex.createWorkspace({ workspaceId: WS_2 })
+    const mine = await wbDocumentCreate(deps, { workspaceId: WS, path: 'doc-a', kind: 'spatial' })
+    await wbDocumentCreate(deps, { workspaceId: WS_2, path: 'doc-a', kind: 'spatial' })
     // An id is a handle within a workspace, not a capability that reaches
     // across them.
     await expect(
-      wbDocumentResolve(deps, { workspaceId: 'ws-2', documentId: mine.documentId }),
+      wbDocumentResolve(deps, { workspaceId: WS_2, documentId: mine.documentId }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 })
@@ -313,16 +287,16 @@ describe('wbDocumentList', () => {
   // pass-through, not that every index supplies one.
   it('carries kind and updatedAt through rather than dropping them', async () => {
     const deps = await makeDeps()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
     ;(deps.documentIndex as InMemoryDocumentIndex).seed({
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       path: 'a',
       kind: 'markdown',
       updatedAt: '2026-08-01T00:00:00.000Z',
     })
 
-    const out = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const out = await wbDocumentList(deps, { workspaceId: WS })
 
     expect(out.documents).toEqual([
       {
@@ -337,35 +311,27 @@ describe('wbDocumentList', () => {
 
   it('throws WorkspaceNotFoundForCallerError for a workspace that was never created', async () => {
     const deps = await makeDeps()
-    await expect(wbDocumentList(deps, { workspaceId: 'ghost' })).rejects.toThrow(
+    await expect(wbDocumentList(deps, { workspaceId: GHOST })).rejects.toThrow(
       WorkspaceNotFoundForCallerError,
     )
   })
 
   it('returns an empty list for a workspace that exists and holds nothing', async () => {
     const deps = await makeDeps()
-    await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'only',
-      kind: 'spatial',
-    })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'only', kind: 'spatial' })
     await wbDocumentDelete(deps, {
-      workspaceId: 'ws-1',
-      documentId: (await wbDocumentList(deps, { workspaceId: 'ws-1' })).documents[0]!.documentId,
+      workspaceId: WS,
+      documentId: (await wbDocumentList(deps, { workspaceId: WS })).documents[0]!.documentId,
     })
-    expect((await wbDocumentList(deps, { workspaceId: 'ws-1' })).documents).toEqual([])
+    expect((await wbDocumentList(deps, { workspaceId: WS })).documents).toEqual([])
   })
 
   it('returns every document, ordered so each subtree stays together', async () => {
     const deps = await makeDeps()
     for (const path of ['b-side', 'a', 'a/deep', 'a-sibling']) {
-      await wbDocumentCreate(deps, {
-        workspaceId: 'ws-1',
-        path,
-        kind: 'spatial',
-      })
+      await wbDocumentCreate(deps, { workspaceId: WS, path, kind: 'spatial' })
     }
-    const { documents } = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const { documents } = await wbDocumentList(deps, { workspaceId: WS })
     // `a-sibling` after `a/deep`, because comparing whole strings would put
     // it between `a` and its own child and split the subtree apart.
     expect(documents.map((c) => c.path)).toEqual(['a', 'a/deep', 'a-sibling', 'b-side'])
@@ -373,19 +339,11 @@ describe('wbDocumentList', () => {
 
   it('excludes a deleted document', async () => {
     const deps = await makeDeps()
-    const keep = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'keep',
-      kind: 'spatial',
-    })
-    const drop = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'drop',
-      kind: 'spatial',
-    })
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: drop.documentId })
+    const keep = await wbDocumentCreate(deps, { workspaceId: WS, path: 'keep', kind: 'spatial' })
+    const drop = await wbDocumentCreate(deps, { workspaceId: WS, path: 'drop', kind: 'spatial' })
+    await wbDocumentDelete(deps, { workspaceId: WS, documentId: drop.documentId })
 
-    const { documents } = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const { documents } = await wbDocumentList(deps, { workspaceId: WS })
     expect(documents.map((c) => c.documentId)).toEqual([keep.documentId])
   })
 })
@@ -394,60 +352,56 @@ describe('wbDocumentDelete', () => {
   it('deletes a document so a later get throws WorkspaceDocumentNotFoundError', async () => {
     const deps = await makeDeps()
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'doc-a',
       kind: 'spatial',
     })
     expect(
-      await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId }),
+      await wbDocumentDelete(deps, { workspaceId: WS, documentId: created.documentId }),
     ).toEqual({
       deleted: true,
     })
     await expect(
-      wbDocumentResolve(deps, { workspaceId: 'ws-1', documentId: created.documentId }),
+      wbDocumentResolve(deps, { workspaceId: WS, documentId: created.documentId }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   it('deletes the stored document, not only its placement', async () => {
     const deps = await makeDeps()
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'doc-a',
       kind: 'spatial',
     })
     const docRef = {
       kind: 'document',
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: created.documentId,
     } as const
     expect(await deps.documentStore.loadSnapshot({ docRef })).not.toBeNull()
 
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
+    await wbDocumentDelete(deps, { workspaceId: WS, documentId: created.documentId })
 
     expect(await deps.documentStore.loadSnapshot({ docRef })).toBeNull()
   })
 
   it('throws WorkspaceDocumentNotFoundError when deleting a documentId that does not exist', async () => {
     const deps = await makeDeps()
-    await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
-      path: 'doc-a',
-      kind: 'spatial',
-    })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'doc-a', kind: 'spatial' })
     await expect(
-      wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+      wbDocumentDelete(deps, { workspaceId: WS, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
   it('refuses to delete a document that still has documents below it', async () => {
     const deps = await makeDeps()
     const parent = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'parent',
       kind: 'spatial',
     })
     const child = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'parent/child',
       kind: 'spatial',
     })
@@ -455,22 +409,22 @@ describe('wbDocumentDelete', () => {
     // Deleting the parent used to orphan the child silently. Deletion has
     // nothing to undo it, so the caller has to name what it destroys.
     await expect(
-      wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: parent.documentId }),
+      wbDocumentDelete(deps, { workspaceId: WS, documentId: parent.documentId }),
     ).rejects.toThrow(DocumentHasDescendantsError)
     expect(
-      await wbDocumentResolve(deps, { workspaceId: 'ws-1', documentId: parent.documentId }),
+      await wbDocumentResolve(deps, { workspaceId: WS, documentId: parent.documentId }),
     ).toBeTruthy()
 
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: child.documentId })
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: parent.documentId })
-    expect((await wbDocumentList(deps, { workspaceId: 'ws-1' })).documents).toEqual([])
+    await wbDocumentDelete(deps, { workspaceId: WS, documentId: child.documentId })
+    await wbDocumentDelete(deps, { workspaceId: WS, documentId: parent.documentId })
+    expect((await wbDocumentList(deps, { workspaceId: WS })).documents).toEqual([])
   })
 })
 
 describe('document name', () => {
   async function createNamed(deps: ServerDeps, name?: string) {
     return wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'doc-a',
       kind: 'spatial',
       ...(name === undefined ? {} : { name }),
@@ -480,14 +434,14 @@ describe('document name', () => {
   it('creation accepts a name and the listing returns it', async () => {
     const deps = await makeDeps()
     await createNamed(deps, 'Quarterly plan')
-    const { documents } = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const { documents } = await wbDocumentList(deps, { workspaceId: WS })
     expect(documents[0]?.name).toBe('Quarterly plan')
   })
 
   it('omits the name entirely when none was given, rather than echoing the path', async () => {
     const deps = await makeDeps()
     await createNamed(deps)
-    const { documents } = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+    const { documents } = await wbDocumentList(deps, { workspaceId: WS })
     expect(documents[0]).toBeDefined()
     expect('name' in (documents[0] as object)).toBe(false)
   })
@@ -495,10 +449,7 @@ describe('document name', () => {
   it('a name is free text, not a second path', async () => {
     const deps = await makeDeps()
     const created = await createNamed(deps, 'Q3 / plan — draft')
-    const got = await wbDocumentResolve(deps, {
-      workspaceId: 'ws-1',
-      documentId: created.documentId,
-    })
+    const got = await wbDocumentResolve(deps, { workspaceId: WS, documentId: created.documentId })
     expect(got.name).toBe('Q3 / plan — draft')
     // The name never becomes placement: the path is still what was asked for.
     expect(got.path).toBe('doc-a')
@@ -507,10 +458,7 @@ describe('document name', () => {
   it('wbDocumentResolve returns the name too', async () => {
     const deps = await makeDeps()
     const created = await createNamed(deps, 'Named')
-    const got = await wbDocumentResolve(deps, {
-      workspaceId: 'ws-1',
-      documentId: created.documentId,
-    })
+    const got = await wbDocumentResolve(deps, { workspaceId: WS, documentId: created.documentId })
     expect(got.name).toBe('Named')
   })
 })
@@ -543,13 +491,13 @@ describe('wbDocumentDelete document teardown seam', () => {
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'doc-a',
       kind: 'spatial',
     })
     const docRef = {
       kind: 'document',
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       documentId: created.documentId,
     } as const
 
@@ -579,7 +527,7 @@ describe('wbDocumentDelete document teardown seam', () => {
       },
     }
 
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
+    await wbDocumentDelete(deps, { workspaceId: WS, documentId: created.documentId })
 
     expect(events).toEqual([
       'enter:indexed=true',
@@ -593,14 +541,14 @@ describe('wbDocumentDelete document teardown seam', () => {
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'nested/doc-a',
       kind: 'spatial',
     })
 
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
+    await wbDocumentDelete(deps, { workspaceId: WS, documentId: created.documentId })
 
-    expect(events).toEqual([`enter:ws-1:nested/doc-a:${created.documentId}`, 'cleanup'])
+    expect(events).toEqual([`enter:${WS}:nested/doc-a:${created.documentId}`, 'cleanup'])
   })
 
   // A refused delete must not destroy anything. The index refuses while
@@ -611,14 +559,14 @@ describe('wbDocumentDelete document teardown seam', () => {
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
     const parent = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: WS,
       path: 'parent',
       kind: 'spatial',
     })
-    await wbDocumentCreate(deps, { workspaceId: 'ws-1', path: 'parent/child', kind: 'spatial' })
+    await wbDocumentCreate(deps, { workspaceId: WS, path: 'parent/child', kind: 'spatial' })
 
     await expect(
-      wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: parent.documentId }),
+      wbDocumentDelete(deps, { workspaceId: WS, documentId: parent.documentId }),
     ).rejects.toThrow(DocumentHasDescendantsError)
 
     expect(events).not.toContain('cleanup')
@@ -630,7 +578,7 @@ describe('wbDocumentDelete document teardown seam', () => {
     deps.documentTeardown = teardown
 
     await expect(
-      wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+      wbDocumentDelete(deps, { workspaceId: WS, documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).rejects.toThrow()
 
     expect(events).toEqual([])
@@ -723,10 +671,7 @@ describe('wb_document_create accepts a body without frontmatter', () => {
       markdown: BODY,
     })
 
-    const exported = await exportOkf(deps, {
-      workspaceId: WS,
-      documentId: created.documentId,
-    })
+    const exported = await exportOkf(deps, { workspaceId: WS, documentId: created.documentId })
     expect(exported.markdown).toContain(BODY)
     // `note` rather than nothing: the schema requires a `type`, this tool has
     // no parameter for one, and a caller who wants another sends full OKF.
@@ -767,10 +712,7 @@ describe('wb_document_create accepts a body without frontmatter', () => {
       markdown: '---\ntype: issue\ntitle: Declared\n---\n\nThe body.',
     })
 
-    const exported = await exportOkf(deps, {
-      workspaceId: WS,
-      documentId: created.documentId,
-    })
+    const exported = await exportOkf(deps, { workspaceId: WS, documentId: created.documentId })
     // The caller's own type survives — the bare-body path must not reach a
     // string that already declares one.
     expect(exported.markdown).toContain('type: issue')

@@ -53,7 +53,11 @@ describe('metadata router', () => {
 
 describe('metadata writers on a document that is not there', () => {
   beforeEach(async () => {
-    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'real', kind: 'markdown' })
+    await createTestDocument(serverDeps, {
+      workspaceId: '011K0CCH776JA60YJHJTYXASRK',
+      path: 'real',
+      kind: 'markdown',
+    })
   })
 
   it.each([
@@ -61,29 +65,35 @@ describe('metadata writers on a document that is not there', () => {
     ['pin', { pinned: true }],
   ])('answers 404 not_found instead of minting a row for %s', async (action, body) => {
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
-    const res = await put(app, `/api/workspaces/ws1/documents/ghost/${action}`, body)
+    const res = await put(
+      app,
+      `/api/workspaces/011K0CCH776JA60YJHJTYXASRK/documents/ghost/${action}`,
+      body,
+    )
     expect(res.status).toBe(404)
     await expect(res.json()).resolves.toMatchObject({ error: 'not_found' })
   })
 
   it('lets the document that exists through', async () => {
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
-    const res = await put(app, '/api/workspaces/ws1/documents/real/name', { name: 'Renamed' })
+    const res = await put(app, '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/documents/real/name', {
+      name: 'Renamed',
+    })
     expect(res.status).toBe(200)
   })
 })
 
 describe('metadata routes over a workspace record this server cannot read', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'ws1'), { recursive: true })
+    await mkdir(join(tmp.dir, '011K0CCH776JA60YJHJTYXASRK'), { recursive: true })
     const { getDb } = await import('../../store/db/index.js')
     const { LibsqlDocumentStore } = await import('../../store/libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { saveDocument } = await import('../../store/document-store.js')
-    await saveDocument('ws1', 'real', new LoroDoc())
+    await saveDocument('011K0CCH776JA60YJHJTYXASRK', 'real', new LoroDoc())
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await new LibsqlDocumentStore(await getDb(tmp.dir)).saveSnapshot({
-      docRef: { kind: 'workspace-tree', workspaceId: 'ws1' },
+      docRef: { kind: 'workspace-tree', workspaceId: '011K0CCH776JA60YJHJTYXASRK' },
       manifest,
       chunks,
       frontier: new Uint8Array(),
@@ -93,10 +103,25 @@ describe('metadata routes over a workspace record this server cannot read', () =
   })
 
   it.each([
-    ['read names', 'GET', '/api/workspaces/ws1/names', undefined],
-    ['set the workspace name', 'PUT', '/api/workspaces/ws1/name', { name: 'N' }],
-    ['set a document name', 'PUT', '/api/workspaces/ws1/documents/real/name', { name: 'N' }],
-    ['pin a document', 'PUT', '/api/workspaces/ws1/documents/real/pin', { pinned: true }],
+    ['read names', 'GET', '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/names', undefined],
+    [
+      'set the workspace name',
+      'PUT',
+      '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/name',
+      { name: 'N' },
+    ],
+    [
+      'set a document name',
+      'PUT',
+      '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/documents/real/name',
+      { name: 'N' },
+    ],
+    [
+      'pin a document',
+      'PUT',
+      '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/documents/real/pin',
+      { pinned: true },
+    ],
   ] as const)('answers a structured 500 to %s', async (_label, method, url, body) => {
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
     const res =
@@ -114,25 +139,45 @@ describe('metadata routes over a workspace record this server cannot read', () =
 
 describe('PUT …/documents/:path/name with a name a sibling already shows', () => {
   beforeEach(async () => {
-    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'week/plan', name: 'Plan' })
-    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'week/other' })
-    await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'month/plan' })
+    await createTestDocument(serverDeps, {
+      workspaceId: '011K0CCH776JA60YJHJTYXASRK',
+      path: 'week/plan',
+      name: 'Plan',
+    })
+    await createTestDocument(serverDeps, {
+      workspaceId: '011K0CCH776JA60YJHJTYXASRK',
+      path: 'week/other',
+    })
+    await createTestDocument(serverDeps, {
+      workspaceId: '011K0CCH776JA60YJHJTYXASRK',
+      path: 'month/plan',
+    })
   })
 
   it('answers 409 display_name_taken and leaves the name as it was', async () => {
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
 
-    const res = await put(app, '/api/workspaces/ws1/documents/week/other/name', { name: 'plan' })
+    const res = await put(
+      app,
+      '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/documents/week/other/name',
+      { name: 'plan' },
+    )
 
     expect(res.status).toBe(409)
     await expect(res.json()).resolves.toMatchObject({ error: 'display_name_taken' })
-    const names = await (await app.request('/api/workspaces/ws1/names')).json()
+    const names = await (
+      await app.request('/api/workspaces/011K0CCH776JA60YJHJTYXASRK/names')
+    ).json()
     expect(Object.values(names.documents)).toEqual(['Plan'])
   })
 
   it('lets the same name through in another folder', async () => {
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
-    const res = await put(app, '/api/workspaces/ws1/documents/month/plan/name', { name: 'Plan' })
+    const res = await put(
+      app,
+      '/api/workspaces/011K0CCH776JA60YJHJTYXASRK/documents/month/plan/name',
+      { name: 'Plan' },
+    )
     expect(res.status).toBe(200)
   })
 })

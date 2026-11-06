@@ -47,10 +47,12 @@ paths:
 - `DocumentStore` and `BlobStore` are not workspace-scoped per-instance —
   a document's scope travels inside its `DocRef`, and blobs are
   deliberately global/content-addressed.
-- `workspaceIdSchema` (in `model`) is a path-safe id
-  (`/^[a-zA-Z0-9_-]+$/`, non-empty) — NOT a ULID. `model`'s
-  `WORKSPACE_ID_PATTERN` is the one definition; mcp-server's `validators.ts`
-  imports it. Do not conflate it with a document id.
+- A workspace id in every port contract is `workspaceCanonicalIdSchema` (a ULID, the same
+  shape as a document id under a distinct schema — do not conflate them).
+  `storedWorkspaceEntrySchema` refuses a row keyed otherwise, by its `workspaceId` field, and
+  `workspaceIdOfStoredDocKey` throws `stored_workspace_key_refused` for a `workspace-tree:`
+  key whose id is not one. A bare handle resolves as a segment only, so every address form is
+  one lookup.
 - `reassembleSnapshot` is order-independent (chunks are sorted by `index`
   before validation) — an out-of-order but otherwise well-formed chunk set
   is a success, never a `SnapshotReassemblyError`.

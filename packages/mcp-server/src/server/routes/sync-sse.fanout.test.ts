@@ -150,7 +150,10 @@ async function unreadStreamOf(app: Router, user: string, keys: readonly string[]
 describe('one workspace followed under two spellings on one stream', () => {
   it('queues the update once for both spellings', async () => {
     const deps = await resolveTestServerDeps(dataDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-two-spellings', segment: 'twice' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '01GW3R36VNY4M1T65RD9XSCHPJ',
+      segment: 'twice',
+    })
     // Room for three copies of the payload, not for five: three broadcasts
     // left unread queue two once the first is taken into the response's
     // buffer, or five when each spelling's frame is queued apart.
@@ -159,12 +162,12 @@ describe('one workspace followed under two spellings on one stream', () => {
       queueBudget: { perUser: 3 * UPDATE_CHARS, total: 1_000 * UPDATE_CHARS },
     })
     const { streamId, reader } = await unreadStreamOf(app, 'bob', [
-      'workspace:ws-two-spellings',
+      'workspace:01GW3R36VNY4M1T65RD9XSCHPJ',
       'workspace:twice',
     ])
 
     for (let i = 0; i < 3; i++) {
-      sseBroadcastWorkspaceUpdate('ws-two-spellings', UPDATE)
+      sseBroadcastWorkspaceUpdate('01GW3R36VNY4M1T65RD9XSCHPJ', UPDATE)
       await new Promise((resolve) => setImmediate(resolve))
     }
 
@@ -184,7 +187,7 @@ describe('one workspace followed under two spellings on one stream', () => {
       text += decoder.decode(value, { stream: true })
     }
     const docs = updates().map((frame) => JSON.parse(frame.split('\ndata: ')[1] ?? '{}').doc)
-    expect(docs.filter((doc) => doc === 'workspace:ws-two-spellings')).toHaveLength(3)
+    expect(docs.filter((doc) => doc === 'workspace:01GW3R36VNY4M1T65RD9XSCHPJ')).toHaveLength(3)
     expect(docs.filter((doc) => doc === 'workspace:twice')).toHaveLength(3)
     await reader.cancel().catch(() => {})
   })

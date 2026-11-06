@@ -24,7 +24,7 @@ import { FakeVersionHistory } from './fake-version-history.js'
 import { makeTestDeps } from './make-test-deps.js'
 import { inMemoryDocumentTeardown } from './unused-document-teardown.js'
 
-export const SEEDED_WORKSPACE_ID = 'ws-1'
+export const SEEDED_WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 export const SEEDED_SPATIAL_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 export const SEEDED_MARKDOWN_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 /** A well-formed id that names nothing. */

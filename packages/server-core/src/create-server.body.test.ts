@@ -17,10 +17,10 @@ async function server() {
   })
   // The workspace exists: a URL naming one that does not is refused before any
   // body is read, which would leave the refusals below unreached.
-  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+  await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
   const { app } = createServer(deps)
   return (path: string, body: string | undefined) =>
-    app.request(`/api/v1/workspaces/ws-1/${path}`, {
+    app.request(`/api/v1/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/${path}`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body,

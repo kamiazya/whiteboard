@@ -61,10 +61,14 @@ describe('a pending automatic checkpoint when its document moves or is deleted',
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-    const created = await wbDocumentCreate(deps, { workspaceId: 'ws-1', path, kind: 'spatial' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path,
+      kind: 'spatial',
+    })
     await createCanvasEditTool(deps).execute({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: created.documentId,
       ops: [
         {
@@ -78,7 +82,11 @@ describe('a pending automatic checkpoint when its document moves or is deleted',
 
   it('takes the checkpoint under the new path after a move through the tool', async () => {
     const { deps, documentId } = await editedDocument('before')
-    await wbDocumentMove(deps, { workspaceId: 'ws-1', documentId, path: 'after' })
+    await wbDocumentMove(deps, {
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      documentId,
+      path: 'after',
+    })
     await scheduler.flush()
     expect(saved).toEqual(['after'])
     expect(failed).toEqual([])
@@ -86,7 +94,7 @@ describe('a pending automatic checkpoint when its document moves or is deleted',
 
   it('takes the checkpoint under the new path after the daemon rename path', async () => {
     await editedDocument('before')
-    await renameDocumentPath('ws-1', 'before', 'after')
+    await renameDocumentPath('01ZVM89A4A1V9FS03Z9J64KEK1', 'before', 'after')
     await scheduler.flush()
     expect(saved).toEqual(['after'])
     expect(failed).toEqual([])
@@ -94,7 +102,7 @@ describe('a pending automatic checkpoint when its document moves or is deleted',
 
   it('drops the checkpoint of a document deleted through the tool, without reporting a failure', async () => {
     const { deps, documentId } = await editedDocument('doomed')
-    await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId })
+    await wbDocumentDelete(deps, { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', documentId })
     await scheduler.flush()
     expect(saved).toEqual([])
     expect(failed).toEqual([])
@@ -102,7 +110,7 @@ describe('a pending automatic checkpoint when its document moves or is deleted',
 
   it('drops the checkpoint of a document deleted through the daemon path', async () => {
     await editedDocument('doomed')
-    await deleteDocument('ws-1', 'doomed')
+    await deleteDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed')
     await scheduler.flush()
     expect(saved).toEqual([])
     expect(failed).toEqual([])

@@ -25,7 +25,7 @@
  *   surfaced, not remembered forever, because closing the offending tab or
  *   freeing quota is a normal recovery a reload should not be required for.
  */
-import { describeThrown, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
+import { describeThrown } from '@kamiazya/whiteboard-model'
 import { storedWorkspaceEntrySchema, type WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
 import { WORKSPACES_STORE } from './browser-idb.js'
@@ -164,11 +164,25 @@ function identityOf(key: string, row: unknown): BrowserWorkspaceIdentity[] {
   return [{ workspaceId, ...(segment === undefined ? {} : { segment }) }]
 }
 
+async function refuseUnreadableRegistry(dbName: string | undefined): Promise<void> {
+  const keys = await inTransaction(dbName, [WORKSPACES_STORE], 'readonly', (tx) =>
+    request(tx.objectStore(WORKSPACES_STORE).getAllKeys()),
+  )
+  if (keys.length > 0) {
+    throw new Error(
+      `browser workspace is not keyed by a canonical id: ${keys.map(String).join(', ')}`,
+    )
+  }
+}
+
 async function readWorkspaceIdentity(
   dbName: string | undefined,
   handle: string | undefined,
 ): Promise<BrowserWorkspaceIdentity> {
   const entries = await readRegistryEntries(dbName)
+  // Every row refused, and at least one there: a registry from before the
+  // re-key onto ULIDs. Named, rather than reported as no workspace at all.
+  if (entries.length === 0) await refuseUnreadableRegistry(dbName)
   // The address decides which workspace is ACTIVE (ADR-0019), through the
   // one definition of what a URL address names. A handle naming nothing falls
   // back rather than refusing: a stale bookmark should still open the app,
@@ -178,9 +192,6 @@ async function readWorkspaceIdentity(
   const chosen =
     (handle === undefined ? null : resolveWorkspaceAddress(entries, handle)) ?? entries[0]
   if (chosen === undefined) throw new Error('no browser workspace exists')
-  if (!workspaceCanonicalIdSchema.safeParse(chosen.workspaceId).success) {
-    throw new Error(`browser workspace is not keyed by a canonical id: ${chosen.workspaceId}`)
-  }
   return chosen
 }
 

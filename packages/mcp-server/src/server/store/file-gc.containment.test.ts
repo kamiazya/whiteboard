@@ -92,7 +92,7 @@ describe('file-GC containment gate: a symlink out of the data dir', () => {
   it('refuses when the workspaces root itself points outside the data dir', async () => {
     const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-gc-root-outside-'))
     try {
-      const outsideFiles = join(outsideDir, 'ws_root_link', 'files')
+      const outsideFiles = join(outsideDir, '01WN90N8VTSGHKJJ1T928ZSS28', 'files')
       await seedAgedImage(outsideFiles, 'secret.png')
       // An ANCESTOR of the workspace dir is the symlink, so the workspace dir
       // itself lstat()s as a plain directory with a real files/ child: only
@@ -100,7 +100,9 @@ describe('file-GC containment gate: a symlink out of the data dir', () => {
       await mkdir(join(wsRoot(), '..'), { recursive: true })
       await symlink(outsideDir, wsRoot(), 'dir')
 
-      await expect(purge('ws_root_link')).rejects.toMatchObject(refusal('ws_root_link'))
+      await expect(purge('01WN90N8VTSGHKJJ1T928ZSS28')).rejects.toMatchObject(
+        refusal('01WN90N8VTSGHKJJ1T928ZSS28'),
+      )
       expect(await readdir(outsideFiles)).toEqual(['secret.png'])
     } finally {
       await rm(outsideDir, { recursive: true, force: true })
@@ -112,9 +114,11 @@ describe('file-GC containment gate: a symlink out of the data dir', () => {
     try {
       await seedAgedImage(join(outsideDir, 'files'), 'secret.png')
       await mkdir(wsRoot(), { recursive: true })
-      await symlink(outsideDir, wsDir('ws_dir_link'), 'dir')
+      await symlink(outsideDir, wsDir('01CJN7B36KYG3GW3Y5HQ34PSND'), 'dir')
 
-      await expect(purge('ws_dir_link')).rejects.toMatchObject(refusal('ws_dir_link'))
+      await expect(purge('01CJN7B36KYG3GW3Y5HQ34PSND')).rejects.toMatchObject(
+        refusal('01CJN7B36KYG3GW3Y5HQ34PSND'),
+      )
       expect(await readdir(join(outsideDir, 'files'))).toEqual(['secret.png'])
     } finally {
       await rm(outsideDir, { recursive: true, force: true })
@@ -126,12 +130,14 @@ describe('file-GC containment gate: a symlink out of the data dir', () => {
     // without the separator would read it as inside.
     const sibling = `${tempDir}-old`
     try {
-      const siblingFiles = join(sibling, 'ws_prefix', 'files')
+      const siblingFiles = join(sibling, '015E6389CGYFJCDBG0ZBPKKTC6', 'files')
       await seedAgedImage(siblingFiles, 'secret.png')
       await mkdir(join(wsRoot(), '..'), { recursive: true })
       await symlink(sibling, wsRoot(), 'dir')
 
-      await expect(purge('ws_prefix')).rejects.toMatchObject(refusal('ws_prefix'))
+      await expect(purge('015E6389CGYFJCDBG0ZBPKKTC6')).rejects.toMatchObject(
+        refusal('015E6389CGYFJCDBG0ZBPKKTC6'),
+      )
       expect(await readdir(siblingFiles)).toEqual(['secret.png'])
     } finally {
       await rm(sibling, { recursive: true, force: true })
@@ -139,10 +145,13 @@ describe('file-GC containment gate: a symlink out of the data dir', () => {
   })
 
   it('still purges a contained workspace beside a refused one', async () => {
-    const filesDir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_plain')
+    const filesDir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, '011S9E3T39BCZQ1V287J9H2F9V')
     await seedAgedImage(filesDir, 'orphan.png')
 
-    await expect(purge('ws_plain')).resolves.toEqual({ purgedCount: 1, purgedBytes: 10 })
+    await expect(purge('011S9E3T39BCZQ1V287J9H2F9V')).resolves.toEqual({
+      purgedCount: 1,
+      purgedBytes: 10,
+    })
     expect(await readdir(filesDir)).toEqual([])
   })
 })
@@ -151,8 +160,8 @@ describe('file-GC containment gate: a files dir re-pointed during the reference 
   it('refuses to unlink through a files/ swapped for an outside symlink mid-scan', async () => {
     const outsideDir = await mkdtemp(join(tmpdir(), 'whiteboard-gc-midscan-outside-'))
     try {
-      const filesDir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_swap')
-      await saveDocument('ws_swap', 'page', makeSpatialDocWithImage('kept-ref'))
+      const filesDir = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, '019E5XSRRM0WA2FYT5NMQVGSRN')
+      await saveDocument('019E5XSRRM0WA2FYT5NMQVGSRN', 'page', makeSpatialDocWithImage('kept-ref'))
       await seedAgedImage(filesDir, 'orphan.png')
       await seedAgedImage(outsideDir, 'orphan.png')
       let swapped = false
@@ -174,9 +183,9 @@ describe('file-GC containment gate: a files dir re-pointed during the reference 
         }),
       }
 
-      await expect(purgeDanglingFiles('ws_swap', { versionStore })).rejects.toMatchObject(
-        refusal('ws_swap'),
-      )
+      await expect(
+        purgeDanglingFiles('019E5XSRRM0WA2FYT5NMQVGSRN', { versionStore }),
+      ).rejects.toMatchObject(refusal('019E5XSRRM0WA2FYT5NMQVGSRN'))
       expect(swapped).toBe(true)
       expect(await readdir(outsideDir)).toEqual(['orphan.png'])
     } finally {
@@ -189,16 +198,21 @@ describe('file-GC containment gate: a check that cannot complete fails closed', 
   it('refuses and logs the error when lstat rejects with a permission error', async () => {
     const cap = captureLogsForTests('debug')
     try {
-      await seedAgedImage(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_locked'), 'a.png')
+      await seedAgedImage(
+        workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, '014JSD6Q5F9ERBE7DV1Z5YQF86'),
+        'a.png',
+      )
       const boom = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
-      fsFailureOverrides.lstat = { path: wsDir('ws_locked'), err: boom }
+      fsFailureOverrides.lstat = { path: wsDir('014JSD6Q5F9ERBE7DV1Z5YQF86'), err: boom }
 
-      await expect(purge('ws_locked')).rejects.toMatchObject(refusal('ws_locked'))
+      await expect(purge('014JSD6Q5F9ERBE7DV1Z5YQF86')).rejects.toMatchObject(
+        refusal('014JSD6Q5F9ERBE7DV1Z5YQF86'),
+      )
       const warned = cap.records.filter((r) => r.scope === 'file-gc' && r.level === 'warning')
       expect(
         warned.some(
           (r) =>
-            r.data?.workspaceId === 'ws_locked' &&
+            r.data?.workspaceId === '014JSD6Q5F9ERBE7DV1Z5YQF86' &&
             String((r.data?.err as Error | undefined)?.message).includes('EACCES'),
         ),
       ).toBe(true)
@@ -210,16 +224,21 @@ describe('file-GC containment gate: a check that cannot complete fails closed', 
   it('refuses and logs the error when realpath rejects with a non-ENOENT error', async () => {
     const cap = captureLogsForTests('debug')
     try {
-      await seedAgedImage(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_eio'), 'a.png')
+      await seedAgedImage(
+        workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, '012B4NQ51JB25BXVBZTZ2KWQBS'),
+        'a.png',
+      )
       const boom = Object.assign(new Error('EIO: i/o error'), { code: 'EIO' })
-      fsFailureOverrides.realpath = { path: wsDir('ws_eio'), err: boom }
+      fsFailureOverrides.realpath = { path: wsDir('012B4NQ51JB25BXVBZTZ2KWQBS'), err: boom }
 
-      await expect(purge('ws_eio')).rejects.toMatchObject(refusal('ws_eio'))
+      await expect(purge('012B4NQ51JB25BXVBZTZ2KWQBS')).rejects.toMatchObject(
+        refusal('012B4NQ51JB25BXVBZTZ2KWQBS'),
+      )
       const warned = cap.records.filter((r) => r.scope === 'file-gc' && r.level === 'warning')
       expect(
         warned.some(
           (r) =>
-            r.data?.workspaceId === 'ws_eio' &&
+            r.data?.workspaceId === '012B4NQ51JB25BXVBZTZ2KWQBS' &&
             String((r.data?.err as Error | undefined)?.message).includes('EIO'),
         ),
       ).toBe(true)
@@ -236,20 +255,29 @@ describe('file-GC containment gate: what the sweeper does with a refusal', () =>
     try {
       await seedAgedImage(join(outsideDir, 'files'), 'secret.png')
       await mkdir(wsRoot(), { recursive: true })
-      await symlink(outsideDir, wsDir('ws_refused'), 'dir')
-      const plainFiles = workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'ws_after')
+      await symlink(outsideDir, wsDir('010917NDNNN70DT22A8Y4134C1'), 'dir')
+      const plainFiles = workspaceFilesDir(
+        tempDir,
+        SELF_HOST_TENANT_ID,
+        '01QWEG7Q1FN2AXC8SSS2T6J0F7',
+      )
       await seedAgedImage(plainFiles, 'orphan.png')
 
       const sweeper = createFileGcSweeper({
         listWorkspaces: async () => [],
-        discoverFsWorkspaces: async () => ['ws_refused', 'ws_after'],
+        discoverFsWorkspaces: async () => [
+          '010917NDNNN70DT22A8Y4134C1',
+          '01QWEG7Q1FN2AXC8SSS2T6J0F7',
+        ],
       })
       await sweeper.tick()
       await sweeper.stop()
 
       expect(await readdir(join(outsideDir, 'files'))).toEqual(['secret.png'])
       expect(await readdir(plainFiles)).toEqual([])
-      const forRefused = cap.records.filter((r) => r.data?.workspaceId === 'ws_refused')
+      const forRefused = cap.records.filter(
+        (r) => r.data?.workspaceId === '010917NDNNN70DT22A8Y4134C1',
+      )
       expect(forRefused.some((r) => r.scope === 'file-gc' && r.level === 'warning')).toBe(true)
       expect(forRefused.filter((r) => r.level === 'error')).toEqual([])
     } finally {

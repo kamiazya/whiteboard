@@ -15,6 +15,7 @@ import {
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -210,7 +211,7 @@ describe('rotate, refresh and read in any order', () => {
   let counter = 0
   const freshWorkspaceId = () => {
     counter += 1
-    return `01JD0ROTATION${String(counter).padStart(13, '0')}`
+    return workspaceIdFor(`rotation-${counter}`)
   }
 
   beforeEach(() => {

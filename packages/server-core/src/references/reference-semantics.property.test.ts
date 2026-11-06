@@ -40,7 +40,7 @@ import { computeDocumentTags } from '../tools/document-tags.js'
 import { factsCacheFor } from './content-source.js'
 import { followReferencesAfterRename } from './follow-rename.js'
 
-const WS = 'ws-pbt'
+const WS = '01GXKQWVREQNKBMCVC60R38C1J'
 const PATHS = ['alpha', 'alpha/leaf', 'beta', 'beta/leaf', 'gamma'] as const
 // 'beta/leaf' as a NAME collides with a path in the pool — and must change
 // nothing anywhere, because display names are retired from resolution.

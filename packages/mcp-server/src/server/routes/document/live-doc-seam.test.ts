@@ -45,9 +45,9 @@ function updateBytes(nodeIds: readonly string[]): Uint8Array<ArrayBuffer> {
 describe('live-doc routes and the deps they were handed', () => {
   it('GET /snapshot reads through the INJECTED liveDocuments', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'seam-ws' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01FCF6YZ7AZ4K20T4QCA9JJ9QM' })
     const real = deps.liveDocuments
-    await writeDocumentUpdate(deps, 'seam-ws', 'canvas-a', updateBytes(['n1']))
+    await writeDocumentUpdate(deps, '01FCF6YZ7AZ4K20T4QCA9JJ9QM', 'canvas-a', updateBytes(['n1']))
     const recorded: string[] = []
     deps.liveDocuments = {
       ...real,
@@ -67,12 +67,15 @@ describe('live-doc routes and the deps they were handed', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/w/seam-ws/document/canvas-a/snapshot')
+    const res = await app.request('/api/w/01FCF6YZ7AZ4K20T4QCA9JJ9QM/document/canvas-a/snapshot')
 
     expect(res.status).toBe(200)
     // The recorder on the injected deps is the discriminator: a route that
     // went around the seam to module-level stores answers the same bytes
     // and leaves this empty.
-    expect(recorded).toEqual(['exists seam-ws/canvas-a', 'get seam-ws/canvas-a'])
+    expect(recorded).toEqual([
+      'exists 01FCF6YZ7AZ4K20T4QCA9JJ9QM/canvas-a',
+      'get 01FCF6YZ7AZ4K20T4QCA9JJ9QM/canvas-a',
+    ])
   })
 })

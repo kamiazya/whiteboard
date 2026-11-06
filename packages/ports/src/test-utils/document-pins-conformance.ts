@@ -9,7 +9,7 @@ type MakePinningIndex = () => Promise<{
   dispose: () => Promise<void>
 }>
 
-const WS = 'ws-pins'
+const WS = '01KK475MFF9ZAS58DVETEP5DKM'
 // A well-formed id the index never assigned.
 const ABSENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -43,7 +43,7 @@ export function describeDocumentPinsConformance(makeIndex: MakePinningIndex): vo
     const { index, dispose } = await makeIndex()
     try {
       await index.createWorkspace({ workspaceId: WS })
-      await index.createWorkspace({ workspaceId: 'ws-other' })
+      await index.createWorkspace({ workspaceId: '0175T8F2WH2MX756J1T7SHKGB8' })
       await body(index)
     } finally {
       await dispose()
@@ -131,10 +131,10 @@ function describePinIdentity(withIndex: WithIndex): void {
   it('keeps one workspace pins out of another', async () => {
     await withIndex(async (index) => {
       const a = await create(index, 'a')
-      await create(index, 'a', 'ws-other')
+      await create(index, 'a', '0175T8F2WH2MX756J1T7SHKGB8')
       await pin(index, a, true)
 
-      await expect(pinned(index, 'ws-other')).resolves.toEqual([])
+      await expect(pinned(index, '0175T8F2WH2MX756J1T7SHKGB8')).resolves.toEqual([])
     })
   })
 }
@@ -142,7 +142,7 @@ function describePinIdentity(withIndex: WithIndex): void {
 function describePinRefusals(withIndex: WithIndex): void {
   it('refuses to pin a document that is not in the workspace', async () => {
     await withIndex(async (index) => {
-      const elsewhere = await create(index, 'a', 'ws-other')
+      const elsewhere = await create(index, 'a', '0175T8F2WH2MX756J1T7SHKGB8')
 
       await expect(pin(index, ABSENT_ID, true)).rejects.toThrow(DocumentNotFoundError)
       await expect(pin(index, elsewhere, true)).rejects.toThrow(DocumentNotFoundError)

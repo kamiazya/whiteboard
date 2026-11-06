@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createWorkspaceEditTool } from './workspace-edit.js'
 
-const WS = 'ws-move-name'
+const WS = '01YCET6QF891JPFBD21Y9DPHK0'
 
 describe('wb_workspace_edit document.move onto a sibling name', () => {
   it('stops the batch saying which name is taken, and leaves the document where it was', async () => {

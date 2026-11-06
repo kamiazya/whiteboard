@@ -49,7 +49,15 @@ describe('names-store', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'names-test-'))
     handle = await createIsolatedDb({ dataDir: tempDir })
-    await seedDocuments('sess-1', ['a', 'b', 'c1', 'c2', 'path', 'notes/meeting', 'arch/overview'])
+    await seedDocuments('01WWQTBYFRHW3XPWFX2J1XKH6P', [
+      'a',
+      'b',
+      'c1',
+      'c2',
+      'path',
+      'notes/meeting',
+      'arch/overview',
+    ])
   })
 
   afterEach(async () => {
@@ -58,7 +66,7 @@ describe('names-store', () => {
   })
 
   it('returns empty WorkspaceNames for an uninitialized session', async () => {
-    const names = await loadWorkspaceNames('sess-1')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names).toEqual({ documents: {}, pinned: [] })
   })
 
@@ -67,13 +75,15 @@ describe('names-store', () => {
   // the listing contract rejects. Creating documents is saveDocument /
   // createDocument's job alone.
   it('setDocumentDisplayName refuses a path with no document instead of minting a phantom row', async () => {
-    await expect(setDocumentDisplayName('sess-1', 'never-created', 'Name')).rejects.toThrow(
-      /no document/i,
-    )
+    await expect(
+      setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'never-created', 'Name'),
+    ).rejects.toThrow(/no document/i)
   })
 
   it('setDocumentPinned refuses a path with no document instead of minting a phantom row', async () => {
-    await expect(setDocumentPinned('sess-1', 'never-created', true)).rejects.toThrow(/no document/i)
+    await expect(
+      setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'never-created', true),
+    ).rejects.toThrow(/no document/i)
   })
 
   // Pin state is shared CRDT state (dual-plane collapse): the row write
@@ -85,25 +95,25 @@ describe('names-store', () => {
     )
     const { readPinnedDocumentIds } = await import('@kamiazya/whiteboard-loro-adapter')
     const idOf = async (path: string) => {
-      const id = await resolveDocumentIdAtPath('sess-1', path)
+      const id = await resolveDocumentIdAtPath('01WWQTBYFRHW3XPWFX2J1XKH6P', path)
       if (id === null) throw new Error(`no document at ${path}`)
       return id
     }
 
-    await setDocumentPinned('sess-1', 'b', true)
-    await setDocumentPinned('sess-1', 'a', true)
-    const doc = await openWorkspaceDocIfStored('sess-1')
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', true)
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', true)
+    const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(doc).not.toBeNull()
     if (doc === null) throw new Error('unreachable')
     expect(readPinnedDocumentIds(doc)).toEqual([await idOf('b'), await idOf('a')])
 
-    await setDocumentPinned('sess-1', 'b', false)
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', false)
     expect(readPinnedDocumentIds(doc)).toEqual([await idOf('a')])
   })
 
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
-    await setWorkspaceName('sess-1', 'My Workspace')
-    const names = await loadWorkspaceNames('sess-1')
+    await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'My Workspace')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.workspace).toBe('My Workspace')
     expect(names.documents).toEqual({})
   })
@@ -113,47 +123,55 @@ describe('names-store', () => {
   // (workspaceRegistry().listWorkspaces()) serves — one column, two routes.
   it('setWorkspaceName writes the column workspaceRegistry().listWorkspaces() serves', async () => {
     const { workspaceRegistry } = await import('./document-store.js')
-    await setWorkspaceName('sess-1', 'My Workspace')
+    await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'My Workspace')
     const rows = await workspaceRegistry().listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'sess-1')).toEqual({
-      workspaceId: 'sess-1',
+    expect(rows.find((r) => r.workspaceId === '01WWQTBYFRHW3XPWFX2J1XKH6P')).toEqual({
+      workspaceId: '01WWQTBYFRHW3XPWFX2J1XKH6P',
       displayName: 'My Workspace',
     })
   })
 
   it('setDocumentDisplayName stores names per path', async () => {
-    await setDocumentDisplayName('sess-1', 'arch/overview', 'Architecture Overview')
-    await setDocumentDisplayName('sess-1', 'notes/meeting', 'Team meeting notes')
-    const names = await loadWorkspaceNames('sess-1')
+    await setDocumentDisplayName(
+      '01WWQTBYFRHW3XPWFX2J1XKH6P',
+      'arch/overview',
+      'Architecture Overview',
+    )
+    await setDocumentDisplayName(
+      '01WWQTBYFRHW3XPWFX2J1XKH6P',
+      'notes/meeting',
+      'Team meeting notes',
+    )
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.documents['arch/overview']).toBe('Architecture Overview')
     expect(names.documents['notes/meeting']).toBe('Team meeting notes')
   })
 
   it('setWorkspaceName deletes workspace on empty string input', async () => {
-    await setWorkspaceName('sess-1', 'Keep it')
-    await setWorkspaceName('sess-1', '')
-    const names = await loadWorkspaceNames('sess-1')
+    await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'Keep it')
+    await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', '')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.workspace).toBeUndefined()
   })
 
   it('setDocumentDisplayName deletes the path entry on empty string input', async () => {
-    await setDocumentDisplayName('sess-1', 'a', 'Alpha')
-    await setDocumentDisplayName('sess-1', 'b', 'Beta')
-    await setDocumentDisplayName('sess-1', 'a', '')
-    const names = await loadWorkspaceNames('sess-1')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', 'Alpha')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', 'Beta')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', '')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.documents).toEqual({ b: 'Beta' })
   })
 
   it('trims leading and trailing whitespace', async () => {
-    await setDocumentDisplayName('sess-1', 'path', '   spaced   ')
-    const names = await loadWorkspaceNames('sess-1')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', '   spaced   ')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.documents.path).toBe('spaced')
   })
 
   it('treats all-whitespace values as empty and deletes them', async () => {
-    await setDocumentDisplayName('sess-1', 'path', 'Initial')
-    await setDocumentDisplayName('sess-1', 'path', '   \t  \n ')
-    const names = await loadWorkspaceNames('sess-1')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', 'Initial')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', '   \t  \n ')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.documents.path).toBeUndefined()
   })
 
@@ -165,7 +183,7 @@ describe('names-store', () => {
         await handle.db
           .selectFrom('workspaces')
           .select('displayName')
-          .where('id', '=', 'sess-1')
+          .where('id', '=', '01WWQTBYFRHW3XPWFX2J1XKH6P')
           .executeTakeFirst()
       )?.displayName
 
@@ -173,7 +191,7 @@ describe('names-store', () => {
       ['  Padded name \t', 'Padded name'],
       ['Plain', 'Plain'],
     ])('stores %j as %j', async (input, stored) => {
-      await setWorkspaceName('sess-1', input)
+      await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', input)
       expect(await storedName()).toBe(stored)
     })
 
@@ -182,8 +200,8 @@ describe('names-store', () => {
       ['   '],
       ['\t\n '],
     ])('stores %j as null, not as a blank string', async (blank) => {
-      await setWorkspaceName('sess-1', 'Keep it')
-      await setWorkspaceName('sess-1', blank)
+      await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'Keep it')
+      await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', blank)
       expect(await storedName()).toBeNull()
     })
   })
@@ -192,7 +210,7 @@ describe('names-store', () => {
     async function nodeName(path: string): Promise<string | undefined> {
       const { openWorkspaceDocIfStored } = await import('./document-store.js')
       const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
-      const doc = await openWorkspaceDocIfStored('sess-1')
+      const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
       if (doc === null) throw new Error('no workspace record')
       const entry = resolveWorkspaceDocument(doc, path)
       if (entry === null) throw new Error(`no document at ${path}`)
@@ -204,8 +222,8 @@ describe('names-store', () => {
       ['   '],
       ['\t\n '],
     ])('clears the stored name for %j and leaves the document in place', async (blank) => {
-      await setDocumentDisplayName('sess-1', 'path', 'Initial')
-      await setDocumentDisplayName('sess-1', 'path', blank)
+      await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', 'Initial')
+      await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', blank)
       expect(await nodeName('path')).toBeUndefined()
     })
 
@@ -217,7 +235,7 @@ describe('names-store', () => {
       )
       const { deleteWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
       const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
-      const documentId = await resolveDocumentIdAtPath('sess-1', 'path')
+      const documentId = await resolveDocumentIdAtPath('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path')
       if (documentId === null) throw new Error('no document at path')
 
       let releaseHolder: () => void = () => {}
@@ -230,14 +248,14 @@ describe('names-store', () => {
       })
       afterPathCheck = pathChecked
       try {
-        const holder = withWorkspaceWriteLock('sess-1', async () => {
+        const holder = withWorkspaceWriteLock('01WWQTBYFRHW3XPWFX2J1XKH6P', async () => {
           await holderMayFinish
-          const doc = await openWorkspaceDocIfStored('sess-1')
+          const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
           if (doc === null) throw new Error('no workspace record')
           deleteWorkspaceDocument(doc, { documentId })
-          await saveWorkspaceDoc('sess-1', doc)
+          await saveWorkspaceDoc('01WWQTBYFRHW3XPWFX2J1XKH6P', doc)
         })
-        const rename = setDocumentDisplayName('sess-1', 'path', 'Too late')
+        const rename = setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', 'Too late')
         await pathCheckedSignal
         releaseHolder()
         await holder
@@ -249,7 +267,7 @@ describe('names-store', () => {
     })
 
     it('stores the trimmed name', async () => {
-      await setDocumentDisplayName('sess-1', 'path', '  Padded \t')
+      await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'path', '  Padded \t')
       expect(await nodeName('path')).toBe('Padded')
     })
   })
@@ -261,53 +279,55 @@ describe('names-store', () => {
       './document-store.js'
     )
     const { deleteWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
-    await setDocumentPinned('sess-1', 'a', true)
-    await setDocumentPinned('sess-1', 'b', true)
-    await setDocumentPinned('sess-1', 'c1', true)
-    const gone = await resolveDocumentIdAtPath('sess-1', 'b')
-    const doc = await openWorkspaceDocIfStored('sess-1')
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'a', true)
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b', true)
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', true)
+    const gone = await resolveDocumentIdAtPath('01WWQTBYFRHW3XPWFX2J1XKH6P', 'b')
+    const doc = await openWorkspaceDocIfStored('01WWQTBYFRHW3XPWFX2J1XKH6P')
     if (doc === null || gone === null) throw new Error('fixture missing')
     deleteWorkspaceDocument(doc, { documentId: gone })
-    await saveWorkspaceDoc('sess-1', doc)
+    await saveWorkspaceDoc('01WWQTBYFRHW3XPWFX2J1XKH6P', doc)
 
-    expect((await loadWorkspaceNames('sess-1')).pinned).toEqual(['a', 'c1'])
+    expect((await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')).pinned).toEqual(['a', 'c1'])
   })
 
   it('updates workspace and documents independently without overwriting each other', async () => {
-    await setDocumentDisplayName('sess-1', 'c1', 'Canvas 1')
-    await setWorkspaceName('sess-1', 'My WS')
-    await setDocumentDisplayName('sess-1', 'c2', 'Canvas 2')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', 'Canvas 1')
+    await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'My WS')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c2', 'Canvas 2')
 
-    const names = await loadWorkspaceNames('sess-1')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.workspace).toBe('My WS')
     expect(names.documents).toEqual({ c1: 'Canvas 1', c2: 'Canvas 2' })
   })
 
   it('setDocumentPinned(true) appends to pinned and is idempotent', async () => {
-    let names = await setDocumentPinned('sess-1', 'c1', true)
+    let names = await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', true)
     expect(names.pinned).toEqual(['c1'])
-    names = await setDocumentPinned('sess-1', 'c2', true)
+    names = await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c2', true)
     expect(names.pinned).toEqual(['c1', 'c2'])
     // Re-pinning is a no-op and preserves order.
-    names = await setDocumentPinned('sess-1', 'c1', true)
+    names = await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', true)
     expect(names.pinned).toEqual(['c1', 'c2'])
   })
 
   it('setDocumentPinned(false) removes from the array and is a no-op for missing paths', async () => {
-    await setDocumentPinned('sess-1', 'c1', true)
-    await setDocumentPinned('sess-1', 'c2', true)
-    const names = await setDocumentPinned('sess-1', 'c1', false)
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', true)
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c2', true)
+    const names = await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', false)
     expect(names.pinned).toEqual(['c2'])
     // Unpinning a path with no document is the caller naming a document
     // that does not exist — refused like every other metadata write.
-    await expect(setDocumentPinned('sess-1', 'nope', false)).rejects.toThrow(/no document/i)
+    await expect(setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'nope', false)).rejects.toThrow(
+      /no document/i,
+    )
   })
 
   it('keeps pinned independent from name and workspace changes', async () => {
-    await setDocumentPinned('sess-1', 'c1', true)
-    await setWorkspaceName('sess-1', 'WS')
-    await setDocumentDisplayName('sess-1', 'c1', 'Canvas 1')
-    const names = await loadWorkspaceNames('sess-1')
+    await setDocumentPinned('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', true)
+    await setWorkspaceName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'WS')
+    await setDocumentDisplayName('01WWQTBYFRHW3XPWFX2J1XKH6P', 'c1', 'Canvas 1')
+    const names = await loadWorkspaceNames('01WWQTBYFRHW3XPWFX2J1XKH6P')
     expect(names.pinned).toEqual(['c1'])
     expect(names.workspace).toBe('WS')
     expect(names.documents).toEqual({ c1: 'Canvas 1' })

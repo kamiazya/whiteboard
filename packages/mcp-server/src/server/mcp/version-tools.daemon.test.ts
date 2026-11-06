@@ -26,7 +26,7 @@ const { clearDocCacheForTests } = await import('../store/doc-cache.js')
 const { _clearWorkspaceDocCacheForTests } = await import('../store/document-store.js')
 const { FileVersionStore } = await import('../store/version-store.js')
 
-const WS = 'session1'
+const WS = '01M8BBN7JS60N0ZAR13NP8SXBF'
 
 async function load(deps: ServerDeps, documentId: string): Promise<LoroDoc> {
   const snapshot = await deps.documentStore.loadSnapshot({

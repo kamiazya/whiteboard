@@ -9,7 +9,7 @@ paths:
 
 - The `/api` Zod contracts apps/web parses (`api-contracts/`): documents,
   fonts, runtime, membership, promotion, replica keys, people, sign-in, the
-  `did:key` helpers and the URL builders. The barrel
+  the `did:key` encoder and the URL builders. The barrel
   (`api-contracts/index.ts`) is deliberately NARROW — it is the whole
   contract surface apps/web reads (`api-contracts-barrel.test.ts` pins it).
 - Which hostnames name this machine (`./loopback-host`'s

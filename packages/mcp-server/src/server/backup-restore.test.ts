@@ -55,7 +55,9 @@ async function seedDataDir(dir: string): Promise<{
   // Seed via the real store APIs so the backup/restore drill exercises
   // the actual on-disk layout (DB + blobs + per-workspace files dir).
   dataDir = dir
-  await mkdir(workspaceFilesDir(dir, SELF_HOST_TENANT_ID, 'session1'), { recursive: true })
+  await mkdir(workspaceFilesDir(dir, SELF_HOST_TENANT_ID, '01M8BBN7JS60N0ZAR13NP8SXBF'), {
+    recursive: true,
+  })
 
   // Canvas with a deterministic element.
   const doc = new LoroDoc()
@@ -64,18 +66,18 @@ async function seedDataDir(dir: string): Promise<{
   map.set('id', 'elem-001')
   map.set('type', 'rectangle')
   doc.commit()
-  await saveDocument('session1', 'canvas-a', doc)
+  await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
 
   // File blob (image attachment) at <ws>/files/<fileId>.<ext>.
   const fileBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
   await writeFile(
-    join(workspaceFilesDir(dir, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+    join(workspaceFilesDir(dir, SELF_HOST_TENANT_ID, '01M8BBN7JS60N0ZAR13NP8SXBF'), 'file-001.png'),
     fileBytes,
   )
 
   // Version metadata.
   const versions = new FileVersionStore()
-  const created = await versions.save('session1', 'canvas-a', doc, {
+  const created = await versions.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc, {
     auto: false,
     label: 'drill-seed',
   })
@@ -112,10 +114,10 @@ describe('backup-restore drill', () => {
 
       // Re-point DATA_DIR at the restored copy and verify.
       dataDir = roots.target
-      const documents = await listDocuments('session1')
+      const documents = await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')
       expect(documents.map((c) => c.path)).toContain('canvas-a')
 
-      const restoredDoc = await loadDocument('session1', 'canvas-a')
+      const restoredDoc = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
       const restoredElements = restoredDoc.getMovableList('elements').toJSON() as {
         id: string
         type: string
@@ -123,12 +125,15 @@ describe('backup-restore drill', () => {
       expect(restoredElements).toEqual(seeded.canvasElements)
 
       const restoredBlob = await readFile(
-        join(workspaceFilesDir(roots.target, SELF_HOST_TENANT_ID, 'session1'), 'file-001.png'),
+        join(
+          workspaceFilesDir(roots.target, SELF_HOST_TENANT_ID, '01M8BBN7JS60N0ZAR13NP8SXBF'),
+          'file-001.png',
+        ),
       )
       expect(new Uint8Array(restoredBlob)).toEqual(seeded.fileBytes)
 
       const versions = new FileVersionStore()
-      const list = await versions.list('session1', 'canvas-a')
+      const list = await versions.list('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
       expect(list.find((v) => v.id === seeded.versionId)?.label).toBe('drill-seed')
     } finally {
       await rm(roots.root, { recursive: true, force: true })
@@ -144,7 +149,7 @@ describe('backup-restore drill', () => {
 
       // Source canvas blob must still be present.
       dataDir = roots.src
-      const srcList = await listDocuments('session1')
+      const srcList = await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')
       expect(srcList.map((c) => c.path)).toContain('canvas-a')
 
       // Canary outside src/backup/target is preserved.
@@ -213,7 +218,7 @@ describe('backup-restore drill', () => {
       await restoreDataDir(roots.backup, roots.target, { allowedRoots: [roots.root] })
 
       dataDir = roots.target
-      const restored = await listDocuments('session1')
+      const restored = await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')
       expect(restored.map((c) => c.path)).toContain('canvas-a')
     } finally {
       await rm(roots.root, { recursive: true, force: true })
@@ -245,7 +250,10 @@ describe('backup-restore drill', () => {
       await writeFile(join(outside, 'attacker-secret.txt'), 'attacker-content')
       await symlink(
         join(outside, 'attacker-secret.txt'),
-        join(workspaceFilesDir(roots.src, SELF_HOST_TENANT_ID, 'session1'), 'evil-link.png'),
+        join(
+          workspaceFilesDir(roots.src, SELF_HOST_TENANT_ID, '01M8BBN7JS60N0ZAR13NP8SXBF'),
+          'evil-link.png',
+        ),
       )
 
       let caught: unknown
@@ -279,14 +287,20 @@ describe('backup-restore drill', () => {
       // backupDataDir, which would already reject the symlink).
       // Simulates a backup produced by another tool that the user
       // hands us at restore time.
-      await mkdir(workspaceFilesDir(roots.backup, SELF_HOST_TENANT_ID, 'session1'), {
-        recursive: true,
-      })
+      await mkdir(
+        workspaceFilesDir(roots.backup, SELF_HOST_TENANT_ID, '01M8BBN7JS60N0ZAR13NP8SXBF'),
+        {
+          recursive: true,
+        },
+      )
       await writeFile(join(roots.backup, 'whiteboard.db'), 'fake-db')
       await writeFile(join(outside, 'attacker-secret.txt'), 'attacker-content')
       await symlink(
         join(outside, 'attacker-secret.txt'),
-        join(workspaceFilesDir(roots.backup, SELF_HOST_TENANT_ID, 'session1'), 'evil-link.png'),
+        join(
+          workspaceFilesDir(roots.backup, SELF_HOST_TENANT_ID, '01M8BBN7JS60N0ZAR13NP8SXBF'),
+          'evil-link.png',
+        ),
       )
 
       let caught: unknown

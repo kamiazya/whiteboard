@@ -804,7 +804,7 @@ wrong one. A pass also stands down for the duration of a backup.
 
 The image configures a Docker healthcheck that polls
 `/api/runtime/ping` every 30 s. This endpoint is public (no auth required)
-and returns `{"ok":true,"instanceId":"<uuid>","identity":{"alg":…,"publicKey":…,"did":…}}`:
+and returns `{"ok":true,"instanceId":"<uuid>","identity":{"alg":…,"publicKey":…}}`:
 the instance id, and the public half of the daemon's signing identity. `instanceId` is a random
 identifier generated fresh on every process start (not the OS pid — an OS
 pid can be reused by an unrelated process, which would let a stale

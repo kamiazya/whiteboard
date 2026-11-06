@@ -261,8 +261,9 @@ describe('listDocuments', () => {
 })
 
 describe('createDocument', () => {
+  // Requested by the address `w1`, answered by the workspace's canonical id.
   const created = {
-    workspaceId: 'w1',
+    workspaceId: '01J9ZC8XK4PQRS7TVWXY0ABCDF',
     documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
     path: 'new-canvas',
   }
@@ -331,14 +332,16 @@ describe('createDocument', () => {
 
 describe('createDocument — with content', () => {
   it('sends a markdown document its OKF text in the same create', async () => {
-    const fetchFn = vi
-      .fn()
-      .mockResolvedValue(
-        jsonResponse(
-          { workspaceId: 'w1', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'x' },
-          201,
-        ),
-      )
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse(
+        {
+          workspaceId: '01J9ZC8XK4PQRS7TVWXY0ABCDF',
+          documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
+          path: 'x',
+        },
+        201,
+      ),
+    )
     await createDocument(
       fetchFn,
       DAEMON_BASE_URL,

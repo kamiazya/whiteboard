@@ -8,7 +8,7 @@ import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetOperation } from './document-set.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 function makeDeps(): ServerDeps {
   return makeTestDeps()

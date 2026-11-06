@@ -26,7 +26,7 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 describe('getDoc', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-cache-test-'))
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     handle = await createIsolatedDb({ dataDir: tempDir })
     clearDocCacheForTests()
   })
@@ -38,46 +38,46 @@ describe('getDoc', () => {
   })
 
   it('returns an empty LoroDoc on cache miss when the file does not exist', async () => {
-    const doc = await getDoc('session1', 'nonexistent')
+    const doc = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'nonexistent')
     expect(doc.getMovableList('elements').length).toBe(0)
   })
 
   it('returns the same instance on cache hit for the same key', async () => {
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const doc1 = await getDoc('session1', 'canvas-a')
-    const doc2 = await getDoc('session1', 'canvas-a')
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc())
+    const doc1 = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
+    const doc2 = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     expect(doc1).toBe(doc2)
   })
 
   it('keeps nothing for a path nothing is placed at', async () => {
-    const first = await getDoc('session1', 'nowhere')
+    const first = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'nowhere')
 
-    expect(peekDoc('session1', 'nowhere')).toBeUndefined()
-    expect(await getDoc('session1', 'nowhere')).not.toBe(first)
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'nowhere')).toBeUndefined()
+    expect(await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'nowhere')).not.toBe(first)
   })
 
   // The writer that placed it goes on sending deltas built on its own
   // history, which a projection reloaded from the tree does not share.
   it('caches the empty document a save placed at its path as the instance it serves', async () => {
-    const standIn = await getDoc('session1', 'fresh')
+    const standIn = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'fresh')
     standIn.getText('content').insert(0, 'first edit')
 
-    await saveDocument('session1', 'fresh', standIn)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'fresh', standIn)
 
-    expect(await getDoc('session1', 'fresh')).toBe(standIn)
+    expect(await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'fresh')).toBe(standIn)
   })
 
   it('does not cache an empty document saved at a path other than its own', async () => {
-    const standIn = await getDoc('session1', 'asked')
+    const standIn = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'asked')
 
-    await saveDocument('session1', 'elsewhere', standIn)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'elsewhere', standIn)
 
-    expect(peekDoc('session1', 'elsewhere')).toBeUndefined()
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'elsewhere')).toBeUndefined()
   })
 
   it('returns different instances for different documents', async () => {
-    const docA = await getDoc('session1', 'canvas-a')
-    const docB = await getDoc('session1', 'canvas-b')
+    const docA = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
+    const docB = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b')
     expect(docA).not.toBe(docB)
   })
 })

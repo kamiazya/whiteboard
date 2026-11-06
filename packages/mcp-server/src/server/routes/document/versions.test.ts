@@ -71,13 +71,13 @@ describe('versions router', () => {
 // Version API coverage: auto-save on update, list, manual save, and operator stamping.
 describe('versions API', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
     // Version save refuses a path with no document; seed the canvases the
     // routes below checkpoint — the shape production always has.
-    await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
-    await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
   afterEach(() => {
     clearDocCacheForTests()
@@ -90,18 +90,24 @@ describe('versions API', () => {
         autoVersionQuietMs: 0,
       }),
     )
-    const resUpdate = await postDocumentEdit(app, 'session1', 'canvas-a', (containers) =>
-      writeSpatialCanvas(containers, {
-        nodes: [textNode({ id: 'e1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
-        edges: [],
-      }),
+    const resUpdate = await postDocumentEdit(
+      app,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) =>
+        writeSpatialCanvas(containers, {
+          nodes: [textNode({ id: 'e1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
+          edges: [],
+        }),
     )
     expect(resUpdate.status).toBe(200)
 
     // Auto-version saving is best-effort and async, so wait briefly.
     await new Promise((r) => setTimeout(r, 50))
 
-    const resList = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
+    const resList = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+    )
     expect(resList.status).toBe(200)
     const body = (await resList.json()) as {
       versions: Array<{ auto: boolean; elementCount: number }>
@@ -118,11 +124,14 @@ describe('versions API', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'before refactor' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'before refactor' }),
+      },
+    )
     expect(res.status).toBe(200)
     const body = (await res.json()) as { version: { auto: boolean; label?: string } }
     expect(body.version.auto).toBe(false)
@@ -136,9 +145,12 @@ describe('versions API', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+      },
+    )
     expect(res.status).toBe(200)
     const body = (await res.json()) as { version: { auto: boolean; label?: string } }
     expect(body.version.auto).toBe(false)
@@ -153,14 +165,17 @@ describe('versions API', () => {
         daemonActor: TEST_DAEMON_ACTOR,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        label: 'ai save',
-        operator: { kind: 'ai', displayName: 'Assistant', agentId: 'agent-1' },
-      }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          label: 'ai save',
+          operator: { kind: 'ai', displayName: 'Assistant', agentId: 'agent-1' },
+        }),
+      },
+    )
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -176,7 +191,9 @@ describe('versions API', () => {
       actor: TEST_DAEMON_ACTOR,
     })
 
-    const listRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
+    const listRes = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+    )
     const listBody = (await listRes.json()) as {
       versions: Array<{
         operator?: { kind: string; actor?: string; displayName?: string; agentId?: string }
@@ -192,11 +209,14 @@ describe('versions API', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'manual save' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'manual save' }),
+      },
+    )
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -226,11 +246,14 @@ describe('versions API', () => {
       }),
     )
     const save = async () => {
-      const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({}),
-      })
+      const res = await app.request(
+        '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        },
+      )
       const body = (await res.json()) as { version: { operator?: { actor?: string } } }
       return body.version.operator
     }
@@ -259,13 +282,16 @@ describe('versions API', () => {
         daemonActor: TEST_DAEMON_ACTOR,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        operator: { kind: 'human', actor: SOMEONE_ELSES_ACTOR, displayName: 'Mallory' },
-      }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operator: { kind: 'human', actor: SOMEONE_ELSES_ACTOR, displayName: 'Mallory' },
+        }),
+      },
+    )
 
     expect(res.status).toBe(400)
     const body = (await res.json()) as { error: string; message: string }
@@ -284,11 +310,14 @@ describe('versions API', () => {
         daemonActor: TEST_DAEMON_ACTOR,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ operator: { kind: 'ai', displayName: 'Assistant' } }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operator: { kind: 'ai', displayName: 'Assistant' } }),
+      },
+    )
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as {
@@ -314,13 +343,21 @@ describe('versions API', () => {
         callerName: async () => 'Ada',
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        operator: { kind: 'ai', displayName: 'Eve', agentId: 'agent-9', workspaceId: 'other' },
-      }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          operator: {
+            kind: 'ai',
+            displayName: 'Eve',
+            agentId: 'agent-9',
+            workspaceId: '01TZKZJDX7FSKAT9NBY39FJQK7',
+          },
+        }),
+      },
+    )
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { version: { operator?: Record<string, unknown> } }
@@ -339,11 +376,14 @@ describe('versions API', () => {
         callerName: async () => null,
       }),
     )
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'unnamed' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'unnamed' }),
+      },
+    )
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { version: { operator?: Record<string, unknown> } }
@@ -357,17 +397,23 @@ describe('versions API', () => {
         autoVersionQuietMs: 0,
       }),
     )
-    const resUpdate = await postDocumentEdit(app, 'session1', 'canvas-a', (containers) =>
-      writeSpatialCanvas(containers, {
-        nodes: [textNode({ id: 'e-auto', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
-        edges: [],
-      }),
+    const resUpdate = await postDocumentEdit(
+      app,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) =>
+        writeSpatialCanvas(containers, {
+          nodes: [textNode({ id: 'e-auto', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
+          edges: [],
+        }),
     )
     expect(resUpdate.status).toBe(200)
 
     await new Promise((r) => setTimeout(r, 50))
 
-    const resList = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
+    const resList = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+    )
     const body = (await resList.json()) as {
       versions: Array<{ operator?: { kind: string; actor?: string; displayName?: string } }>
     }
@@ -385,22 +431,26 @@ describe('versions API', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'a1' }),
       headers: { 'Content-Type': 'application/json' },
     })
-    await app.request('/api/workspaces/session1/documents/canvas-b/versions', {
+    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'b1' }),
       headers: { 'Content-Type': 'application/json' },
     })
 
-    const resA = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
+    const resA = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+    )
     const bodyA = (await resA.json()) as { versions: Array<{ label?: string }> }
     expect(bodyA.versions.map((v) => v.label)).toEqual(['a1'])
 
-    const resB = await app.request('/api/workspaces/session1/documents/canvas-b/versions')
+    const resB = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b/versions',
+    )
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
   })
@@ -410,13 +460,13 @@ describe('versions API', () => {
       testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
     )
     for (const label of ['one', 'two', 'three']) {
-      await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions', {
         method: 'POST',
         body: JSON.stringify({ label }),
         headers: { 'Content-Type': 'application/json' },
       })
     }
-    const url = '/api/workspaces/session1/documents/canvas-a/versions'
+    const url = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions'
     const first = listVersionsResponseSchema.parse(
       await (await app.request(`${url}?limit=2`)).json(),
     )
@@ -435,7 +485,9 @@ describe('versions API', () => {
       testDocumentRouterOptions({ serverDeps, versionStore, autoVersionQuietMs: 60_000 }),
     )
     await carryManualRows(versionStore, 'canvas-a', VERSIONS_PAGE_MAX + 1)
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions')
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+    )
     const body = listVersionsResponseSchema.parse(await res.json())
     expect(body.versions).toHaveLength(VERSIONS_PAGE_MAX)
     expect(body.nextCursor).toBeDefined()
@@ -445,7 +497,7 @@ describe('versions API', () => {
     const app = createDocumentRouter(
       testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
     )
-    const url = '/api/workspaces/session1/documents/canvas-a/versions'
+    const url = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions'
     for (const query of [`limit=${VERSIONS_PAGE_MAX + 1}`, 'limit=0', 'cursor=x', 'after=1']) {
       const res = await app.request(`${url}?${query}`)
       expect(res.status, query).toBe(400)
@@ -459,11 +511,14 @@ describe('versions API', () => {
       testDocumentRouterOptions({ serverDeps, versionStore, autoVersionQuietMs: 60_000 }),
     )
     await carryManualRows(versionStore, 'canvas-a', MAX_MANUAL_PER_DOCUMENT)
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      body: JSON.stringify({ label: 'one too many' }),
-      headers: { 'Content-Type': 'application/json' },
-    })
+    const res = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        body: JSON.stringify({ label: 'one too many' }),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
     expect(res.status).toBe(413)
     const body = (await res.json()) as SaveVersionRefusal
     expect(body).toEqual({
@@ -479,7 +534,9 @@ async function carryManualRows(
   path: string,
   count: number,
 ): Promise<void> {
-  const { id } = await versionStore.save('session1', path, new LoroDoc(), { auto: true })
+  const { id } = await versionStore.save('01M8BBN7JS60N0ZAR13NP8SXBF', path, new LoroDoc(), {
+    auto: true,
+  })
   const db = await testStoreScope().db()
   const { documentId } = await db
     .selectFrom('versions')
@@ -487,7 +544,7 @@ async function carryManualRows(
     .where('id', '=', id)
     .executeTakeFirstOrThrow()
   await versionStore.adopt(
-    'session1',
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
     Array.from({ length: count }, (_, i) => ({
       id: `carried-${String(i).padStart(4, '0')}`,
       documentId,
@@ -505,11 +562,11 @@ async function carryManualRows(
 // what a version held: apply it and look.
 describe('GET /versions/:id/document', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
-    await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
-    await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
   afterEach(() => {
     clearDocCacheForTests()
@@ -529,13 +586,19 @@ describe('GET /versions/:id/document', () => {
       edges: [],
     })
     first.commit()
-    await saveDocument('session1', 'canvas-a', first, { kind: 'spatial', overwrite: true })
-
-    const saved = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'before' }),
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', first, {
+      kind: 'spatial',
+      overwrite: true,
     })
+
+    const saved = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'before' }),
+      },
+    )
     expect(saved.status).toBe(200)
     const { version } = (await saved.json()) as { version: { id: string } }
 
@@ -550,10 +613,13 @@ describe('GET /versions/:id/document', () => {
       edges: [],
     })
     second.commit()
-    await saveDocument('session1', 'canvas-a', second, { kind: 'spatial', overwrite: true })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', second, {
+      kind: 'spatial',
+      overwrite: true,
+    })
 
     const res = await app.request(
-      `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/document`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${version.id}/document`,
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as { kind: string; canvas: { nodes: { id: string }[] } }
@@ -571,16 +637,19 @@ describe('GET /versions/:id/document', () => {
     const note = new LoroDoc()
     writeMarkdownBody(note, '# the plan')
     note.commit()
-    await saveDocument('session1', 'note', note, { kind: 'markdown' })
-    const saved = await app.request('/api/workspaces/session1/documents/note/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'before' }),
-    })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'note', note, { kind: 'markdown' })
+    const saved = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/note/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'before' }),
+      },
+    )
     const { version } = (await saved.json()) as { version: { id: string } }
 
     const res = await app.request(
-      `/api/workspaces/session1/documents/note/versions/${version.id}/document`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/note/versions/${version.id}/document`,
     )
     expect(await res.json()).toEqual({ kind: 'markdown', body: '# the plan' })
   })
@@ -592,17 +661,20 @@ describe('GET /versions/:id/document', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const saved = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'a' }),
-    })
+    const saved = await app.request(
+      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'a' }),
+      },
+    )
     const { version } = (await saved.json()) as { version: { id: string } }
 
     // The id alone would otherwise read one document's history through
     // another's path.
     const res = await app.request(
-      `/api/workspaces/session1/documents/canvas-b/versions/${version.id}/document`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b/versions/${version.id}/document`,
     )
     expect(res.status).toBe(404)
   })

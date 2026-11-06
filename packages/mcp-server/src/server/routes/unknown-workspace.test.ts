@@ -40,7 +40,7 @@ const { createApp } = await import('../app.js')
 
 const TOKEN = 'unknown-workspace-token'
 const GONE = 'nowhere'
-const KNOWN = 'ws-known'
+const KNOWN = '01TFTP6SMY23MTM63TK63WD2YX'
 const KNOWN_SEGMENT = 'my-segment'
 
 let handle: IsolatedDbHandle | undefined

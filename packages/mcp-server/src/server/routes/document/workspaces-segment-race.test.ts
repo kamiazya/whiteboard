@@ -29,7 +29,10 @@ const { createWorkspacesRouter } = await import('./workspaces.js')
 describe('POST /api/workspaces losing a segment race', () => {
   it('answers 409 with the registry refusal and creates no second row', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-first', segment: 'notes' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '015J4D4NQT6WSFQJWK6AJR47RG',
+      segment: 'notes',
+    })
     const before = await deps.documentIndex.listWorkspaces()
     const inner = deps.documentIndex
     let insertRefused = false

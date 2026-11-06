@@ -55,9 +55,9 @@ beforeEach(async () => {
   // The workspace exists because this fixture says so, not because the first
   // POST created it: that route passes `createWorkspace: true`, which is
   // ADR-0019's MINT boundary — a mint keys the workspace by a fresh ULID and
-  // files `session1` as its segment, leaving the direct store reads in these
-  // cases naming nothing.
-  await seedWorkspaceRow(tempDir, 'session1')
+  // never by an id the caller sent, so the one these cases address is keyed
+  // here.
+  await seedWorkspaceRow(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
@@ -75,11 +75,11 @@ function canvasUpdate(doc: LoroDoc, ids: string[]): Uint8Array<ArrayBuffer> {
 }
 
 async function push(_app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc, ids: string[]) {
-  await writeDocumentUpdate(serverDeps, 'session1', 'c', canvasUpdate(doc, ids))
+  await writeDocumentUpdate(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'c', canvasUpdate(doc, ids))
 }
 
 async function saveVersion(app: ReturnType<typeof createDocumentRouter>): Promise<string> {
-  const res = await app.request('/api/workspaces/session1/documents/c/versions', {
+  const res = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ label: 'v1' }),
@@ -101,12 +101,12 @@ it('in-place restore makes the document equal the past state — a later-added n
   await push(app, client, ['n-a', 'n-b'])
 
   const res = await app.request(
-    `/api/workspaces/session1/documents/c/versions/${versionId}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions/${versionId}/restore`,
     { method: 'POST' },
   )
   expect(res.status).toBe(200)
 
-  const after = await loadDocument('session1', 'c')
+  const after = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c')
   expect(readSpatialCanvas(after).nodes.map((n) => n.id)).toEqual(['n-a'])
 })
 
@@ -128,17 +128,17 @@ it('a version of a tree-served document restores correctly after a simulated res
   _clearWorkspaceDocCacheForTests()
 
   const res = await app.request(
-    `/api/workspaces/session1/documents/c/versions/${versionId}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions/${versionId}/restore`,
     { method: 'POST' },
   )
   expect(res.status).toBe(200)
 
-  const after = await loadDocument('session1', 'c')
+  const after = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c')
   expect(readSpatialCanvas(after).nodes.map((n) => n.id)).toEqual(['n-a'])
 })
 
 async function createDoc(path: string) {
-  await createTestDocument(serverDeps, { workspaceId: 'session1', path })
+  await createTestDocument(serverDeps, { workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF', path })
 }
 
 it('subtree rollback reverts the document AND its descendants, and evacuates documents created after the version', async () => {
@@ -156,19 +156,34 @@ it('subtree rollback reverts the document AND its descendants, and evacuates doc
   await createDoc('c')
   await createDoc('c/child')
   await push(app, parent, ['p-1'])
-  await writeDocumentUpdate(serverDeps, 'session1', 'c/child', canvasUpdate(child, ['c-1']))
+  await writeDocumentUpdate(
+    serverDeps,
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
+    'c/child',
+    canvasUpdate(child, ['c-1']),
+  )
   const versionId = await saveVersion(app)
 
   // After the version: parent and child both edited, and a NEW descendant
   // appears.
   await push(app, parent, ['p-1', 'p-2'])
-  await writeDocumentUpdate(serverDeps, 'session1', 'c/child', canvasUpdate(child, ['c-1', 'c-2']))
+  await writeDocumentUpdate(
+    serverDeps,
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
+    'c/child',
+    canvasUpdate(child, ['c-1', 'c-2']),
+  )
   const late = new LoroDoc()
   await createDoc('c/late')
-  await writeDocumentUpdate(serverDeps, 'session1', 'c/late', canvasUpdate(late, ['x-1']))
+  await writeDocumentUpdate(
+    serverDeps,
+    '01M8BBN7JS60N0ZAR13NP8SXBF',
+    'c/late',
+    canvasUpdate(late, ['x-1']),
+  )
 
   const res = await app.request(
-    `/api/workspaces/session1/documents/c/versions/${versionId}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions/${versionId}/restore`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -177,15 +192,17 @@ it('subtree rollback reverts the document AND its descendants, and evacuates doc
   )
   expect(res.status).toBe(200)
 
-  expect(readSpatialCanvas(await loadDocument('session1', 'c')).nodes.map((n) => n.id)).toEqual([
-    'p-1',
-  ])
   expect(
-    readSpatialCanvas(await loadDocument('session1', 'c/child')).nodes.map((n) => n.id),
+    readSpatialCanvas(await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c')).nodes.map((n) => n.id),
+  ).toEqual(['p-1'])
+  expect(
+    readSpatialCanvas(await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c/child')).nodes.map(
+      (n) => n.id,
+    ),
   ).toEqual(['c-1'])
   // The late-born descendant is gone from the listing (evacuated, not
   // destroyed — the tree delete goes through the trash).
-  const paths = (await listDocuments('session1')).map((row) => row.path)
+  const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((row) => row.path)
   expect(paths).not.toContain('c/late')
   expect(paths.sort()).toEqual(['c', 'c/child'])
 })

@@ -1,10 +1,10 @@
-import { documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentPathSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { DocumentEntry, DocumentIndex } from './document-index.js'
 
 export const duplicateDocumentInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     path: documentPathSchema,
     /**
      * Copy the content alone: the copy starts with no comment threads and no

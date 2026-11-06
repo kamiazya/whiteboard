@@ -1,6 +1,6 @@
 /**
- * The daemon's durable identity keypair, which is the daemon's DID: its public
- * key is published by the ping route as a `did:key`, and that `did:key` names
+ * The daemon's durable identity keypair, which is the daemon's DID: the ping
+ * route advertises its raw public key, and the same key as a `did:key` names
  * the daemon as the actor on the versions it saves (ADR-0035 decisions 1-2).
  * Nothing signs with the private key today. It is kept, in this data dir and
  * readable by the owning OS user only, because it is the key ADR-0035 decision

@@ -447,7 +447,19 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // router it builds is handed the test wiring, since routers compose nothing of
   // their own. Raised by 10 for the move route's folder-ceiling answer, which
   // needs this file's failing-index router.
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1034,
+  // +12: its workspaces keyed by canonical ULIDs, which every keeper now
+  // requires of a stored id, each named once at the top.
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1046,
+  // Its workspaces are keyed by canonical ULIDs, as every keeper now refuses
+  // any other id; the 26-character literals, named once at the top, cost the
+  // lines below over the budget.
+  // Its workspaces are keyed by canonical ULIDs, as every keeper now refuses
+  // any other id; the 26-character literals, named once at the top, cost the
+  // lines below over the budget.
+  'packages/mcp-server/src/server/store/file-gc.test.ts': 804,
+  // A workspace directory named by no canonical id is skipped and reported,
+  // and its case sets up the directory, the file and the captured warning.
+  'packages/mcp-server/src/server/store/file-gc-sweeper.test.ts': 810,
   // One test pins that saves to two documents of one workspace collapse into one
   // compaction, since compaction is workspace-keyed.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 901,
@@ -535,7 +547,8 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by 2 for the folder.rename step's import and call; the step is
   // packages/mcp-server/scripts/smoke/lib/folder-rename.mjs.
   // +8: the retired comment.add refused, and canvas_view's threads checked whole now that its scene carries none.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2731,
+  // +3: wb_workspace_edit and canvas_view checked to answer the canonical id; the check is smoke/lib/canonical-workspace-id.mjs.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2734,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

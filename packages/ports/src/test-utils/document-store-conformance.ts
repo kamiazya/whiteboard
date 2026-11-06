@@ -6,6 +6,9 @@ import {
   isStoredDocumentUnreadableError,
 } from '../index.js'
 
+const CONFORMANCE_WS = '019J9VPNC5PRR4T9XSZWZJSECZ'
+const GUARDED_WORKSPACE_ID = '010K1FT87XM2ZAJS1P6NKFZ2B9'
+
 /**
  * The arrays a caller passes in stay theirs, and the ones they get back are
  * theirs too. A store that shares either reference lets one caller's edit
@@ -41,7 +44,7 @@ async function expectBuffersAreIndependent(store: DocumentStore, docRef: DocRef)
   expect([...((await store.readFrontier({ docRef }))?.frontier ?? [])]).toEqual([8])
 }
 
-const GUARDED: DocRef = { kind: 'workspace-tree', workspaceId: '01JD0GUARDEDAPPEND00000001' }
+const GUARDED: DocRef = { kind: 'workspace-tree', workspaceId: GUARDED_WORKSPACE_ID }
 const guardedBytes = (value: number): Uint8Array<ArrayBuffer> => new Uint8Array([value])
 const guardedSnapshot = (value: number) => ({
   ...chunkSnapshot(guardedBytes(value), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES),
@@ -169,10 +172,10 @@ export function describeDocumentStoreConformance(
   }
 
   const DOC_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-  const DOC: DocRef = { kind: 'document', workspaceId: 'conformance-ws', documentId: DOC_ID }
+  const DOC: DocRef = { kind: 'document', workspaceId: CONFORMANCE_WS, documentId: DOC_ID }
   const OTHER: DocRef = {
     kind: 'document',
-    workspaceId: 'conformance-ws',
+    workspaceId: CONFORMANCE_WS,
     documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
   }
   // The SAME identifier string as DOC, so a store that keys on the id alone

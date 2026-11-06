@@ -21,7 +21,7 @@ const tmp = withTempDataDir('whiteboard-auto-version-test-')
 let serverDeps: ServerDeps
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'session1' })
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF' })
 })
 
 vi.mock('../config.js', () => ({
@@ -74,14 +74,20 @@ describe('createAutoVersionTrigger', () => {
     // A failed checkpoint must leave the key looking uncovered, or the next
     // edit would be skipped by the diff check and the failure would be
     // permanent for as long as nothing else changed.
-    trigger('session1', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
     await trigger.flush()
     doc.getMap('m').set('k', 1)
     doc.commit()
-    trigger('session1', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
     await trigger.flush()
     expect(save).toHaveBeenCalledTimes(2)
-    expect(save).toHaveBeenNthCalledWith(2, 'session1', 'canvas-a', doc, expect.anything())
+    expect(save).toHaveBeenNthCalledWith(
+      2,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      doc,
+      expect.anything(),
+    )
     trigger.stop()
   })
 
@@ -103,21 +109,27 @@ describe('createAutoVersionTrigger', () => {
     // A failed checkpoint must leave the key looking uncovered, or the next
     // edit would be skipped by the diff check and the failure would be
     // permanent for as long as nothing else changed.
-    trigger('session1', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
     await trigger.flush()
     doc.getMap('m').set('k', 1)
     doc.commit()
-    trigger('session1', 'canvas-a', doc)
+    trigger('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
     await trigger.flush()
     expect(save).toHaveBeenCalledTimes(2)
-    expect(save).toHaveBeenNthCalledWith(2, 'session1', 'canvas-a', doc, expect.anything())
+    expect(save).toHaveBeenNthCalledWith(
+      2,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      doc,
+      expect.anything(),
+    )
     trigger.stop()
   })
 })
 
 describe('auto-version corruption handling', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     clearDocCacheForTests()
   })
   afterEach(() => {
@@ -134,7 +146,10 @@ describe('auto-version corruption handling', () => {
         .mockRejectedValue(corruptStoredData('/tmp/versions/v1.json', 'broken metadata')),
     })
 
-    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'canvas-a' })
+    await createTestDocument(serverDeps, {
+      workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+      path: 'canvas-a',
+    })
 
     // Quiet immediately: the checkpoint fires on the next tick rather than
     // five minutes out, so the route's own behaviour is what this observes.
@@ -145,8 +160,11 @@ describe('auto-version corruption handling', () => {
       autoVersionQuietMs: 0,
       versionStore,
     })
-    const res = await postDocumentEdit(app, 'session1', 'canvas-a', (containers) =>
-      writeSpatialCanvas(containers, { nodes: [box('e1')], edges: [] }),
+    const res = await postDocumentEdit(
+      app,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) => writeSpatialCanvas(containers, { nodes: [box('e1')], edges: [] }),
     )
 
     expect(res.status).toBe(200)
@@ -155,7 +173,7 @@ describe('auto-version corruption handling', () => {
     expect(sendVersionCreated).not.toHaveBeenCalled()
 
     clearDocCacheForTests()
-    const serverDoc = await loadDocument('session1', 'canvas-a')
+    const serverDoc = await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     expect(readSpatialCanvas(serverDoc).nodes.map((node) => node.id)).toEqual(['e1'])
   })
 })
@@ -173,7 +191,7 @@ describe('auto-version corruption handling', () => {
  */
 describe('an unchanged document', () => {
   beforeEach(async () => {
-    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     clearDocCacheForTests()
   })
   afterEach(() => {
@@ -193,7 +211,10 @@ describe('an unchanged document', () => {
       asked += 1
       return askedInner(workspaceId, path)
     }
-    await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'canvas-a' })
+    await createTestDocument(serverDeps, {
+      workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
+      path: 'canvas-a',
+    })
 
     const first = createDocumentRouter({
       scope: testStoreScope(),
@@ -202,12 +223,15 @@ describe('an unchanged document', () => {
       autoVersionQuietMs: 0,
       versionStore: store,
     })
-    const edited = await postDocumentEdit(first, 'session1', 'canvas-a', (containers) =>
-      writeSpatialCanvas(containers, { nodes: [box('e1')], edges: [] }),
+    const edited = await postDocumentEdit(
+      first,
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      (containers) => writeSpatialCanvas(containers, { nodes: [box('e1')], edges: [] }),
     )
     expect(edited.status).toBe(200)
     await vi.waitFor(async () => {
-      expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
+      expect(await store.list('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')).toHaveLength(1)
     })
 
     // A FRESH router, so a fresh trigger with an empty diff check — which is
@@ -225,11 +249,15 @@ describe('an unchanged document', () => {
         restarted = trigger
       },
     })
-    restarted?.('session1', 'canvas-a', await serverDeps.liveDocuments.get('session1', 'canvas-a'))
+    restarted?.(
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+      'canvas-a',
+      await serverDeps.liveDocuments.get('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a'),
+    )
     await vi.waitFor(() => {
       expect(asked).toBeGreaterThan(askedBefore)
     })
 
-    expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
+    expect(await store.list('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')).toHaveLength(1)
   })
 })

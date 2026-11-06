@@ -151,7 +151,7 @@ describe('what the tool table costs to read', () => {
       // and relations, so it states the field. Visible bytes unmoved — the
       // tool's INPUT is what a model reads, and nothing was added to it.
       canvas_view: {
-        visibleBytes: 801, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 813, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // -850 when `ExtensionFacets` joined the registry. The facets record
         // is description-free, so naming it deletes nothing a model reads,
         // and a scene repeats it on every node and every edge — which is why
@@ -162,7 +162,7 @@ describe('what the tool table costs to read', () => {
         // `ExtensionFacets` registration meets a scene that now echoes a tag
         // list too, and the registration pays for itself on every node and
         // every edge the answer repeats. +28: the bends cap's `maxItems`, twice.
-        wireBytes: 19688, // -1,070: the scene's `x-whiteboard` stopped carrying `comments` (ADR-0026 decision 1b); the widget draws every pin from `threads` beside it, so nothing a reader needs left the output; +16: a node-set anchor's `maxItems` 2000 on the threads it returns; -4 a subpath's anchored `^#` pattern, 2 bytes shorter than `.startsWith`'s (2 sites in the scene's output)
+        wireBytes: 19699, // -1,070: the scene's `x-whiteboard` stopped carrying `comments` (ADR-0026 decision 1b); the widget draws every pin from `threads` beside it, so nothing a reader needs left the output; +16: a node-set anchor's `maxItems` 2000 on the threads it returns; -4 a subpath's anchored `^#` pattern, 2 bytes shorter than `.startsWith`'s (2 sites in the scene's output); +12 the address pattern, as visible; -1 the output's `workspaceId` is the canonical ULID's pattern where it was the loose id's pattern and `minLength`
         descriptionWords: 39,
         parameters: 3,
         undescribed: 2,
@@ -182,7 +182,7 @@ describe('what the tool table costs to read', () => {
         // +202 on both and +1 parameter: `author`, who is proposing, shared with
         // wb_canvas_edit's propose path. A proposal stored no author, so a person
         // deciding on one could not tell which agent asked.
-        visibleBytes: 3062, // +17 both: a text anchor's `exact` at its 1024 `maxLength`; +51 both: `maxLength` 256 on `proposalId` and a change's `id` (+16 each), `assumed` at the 262144 body bound (+19); +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +16 both: `author`'s 256 `maxLength`; +15 both: `ops`' 200 `maxItems`, the op ceiling shared with wb_canvas_edit; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 3074, // +17 both: a text anchor's `exact` at its 1024 `maxLength`; +51 both: `maxLength` 256 on `proposalId` and a change's `id` (+16 each), `assumed` at the 262144 body bound (+19); +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +16 both: `author`'s 256 `maxLength`; +15 both: `ops`' 200 `maxItems`, the op ceiling shared with wb_canvas_edit; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +1,396 wire, and it is the registration's PRICE rather than its
         // saving: a named subschema costs a `$defs` entry plus a `$ref`
         // wherever it is used, so a tool that uses one ONCE pays more than
@@ -221,7 +221,7 @@ describe('what the tool table costs to read', () => {
         // unmoved, which is what makes both safe on a table a model reads.
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 18085, // -8: a subpath's anchored `^#` pattern, 2 bytes shorter than `.startsWith`'s (4 sites in the output)
+        wireBytes: 18097, // -8: a subpath's anchored `^#` pattern, 2 bytes shorter than `.startsWith`'s (4 sites in the output); +12 the address pattern, as visible
         descriptionWords: 112,
         parameters: 19,
         undescribed: 6,
@@ -423,7 +423,7 @@ describe('what the tool table costs to read', () => {
         // for the four sites the retired composite left inline.
         // +58, wire too: a node's `embed` and a comment draft publish `additionalProperties: false` (C10, one level down).
         // +55 wire too, +9 words: explicit propose refuses comments/locks/tidy/region.set, not "whatever the mode".
-        visibleBytes: 14882, // -899 the comment arms (see above); -4 a subpath's anchored `^#` pattern (node.add, node.patch); +48 both: `maxItems` at the per-canvas ceiling on tidy's scope and region.set's nodes and edges, +16 each; +162 both: `maxLength` 256 on every id a batch creates (node.add's four arms, edge.add, line.add, comment.add) and `proposalId`, +16 each; a group's `background` at the 8192 location bound on node.add and node.patch, +17 each; +51 node text's `maxLength` (3 ops); +119 a label's (6) and a comment's (1); +102 a url's, file's and subpath's (node.add, node.patch); +16 `author`'s 256, +16 again for comment.add's; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 14894, // -899 the comment arms (see above); -4 a subpath's anchored `^#` pattern (node.add, node.patch); +48 both: `maxItems` at the per-canvas ceiling on tidy's scope and region.set's nodes and edges, +16 each; +162 both: `maxLength` 256 on every id a batch creates (node.add's four arms, edge.add, line.add, comment.add) and `proposalId`, +16 each; a group's `background` at the 8192 location bound on node.add and node.patch, +17 each; +51 node text's `maxLength` (3 ops); +119 a label's (6) and a comment's (1); +102 a url's, file's and subpath's (node.add, node.patch); +16 `author`'s 256, +16 again for comment.add's; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +500 wire, 0 visible, when the model gained `tags` (ADR-0040
         // increment 1): the OUTPUT echoes stored nodes and edges and states
         // the field; the node drafts and the edge draft/patch deliberately
@@ -437,7 +437,7 @@ describe('what the tool table costs to read', () => {
         // here through the echo this tool's output carries.
         // +221 wire: its answer is the board it produced, and the snapshot now
         // carries facets, tags and bends (see wb_canvas_snapshot). Output only.
-        wireBytes: 33361, // -546 the snapshot it answers with dropped `comments` (see wb_canvas_snapshot); -978 the comment arms and `touched.comments` (see above); +28 zod 4.6's emitter: a tuple (the layout's overlap pairs) now emitted as `minItems`/`maxItems` 2 with `items: false` (+40), and a subpath's anchored `^#` pattern (-12, 6 sites); +48 the per-canvas ceiling on tidy and region.set, as visible; +162: the id and background bounds, as visible; +119: the label and comment message bounds, as visible; +102 the location bounds, as visible; +32 the proposal and comment author bounds, as visible
+        wireBytes: 33373, // -546 the snapshot it answers with dropped `comments` (see wb_canvas_snapshot); -978 the comment arms and `touched.comments` (see above); +28 zod 4.6's emitter: a tuple (the layout's overlap pairs) now emitted as `minItems`/`maxItems` 2 with `items: false` (+40), and a subpath's anchored `^#` pattern (-12, 6 sites); +48 the per-canvas ceiling on tidy and region.set, as visible; +162: the id and background bounds, as visible; +119: the label and comment message bounds, as visible; +102 the location bounds, as visible; +32 the proposal and comment author bounds, as visible; +12 the address pattern, as visible
         descriptionWords: 177,
         // -4 each: `x-whiteboard`'s four flattened members (`kind`,
         // `documentId`, `versionRef`, `facets`) become two the model already
@@ -473,12 +473,12 @@ describe('what the tool table costs to read', () => {
         // all left no trace in the snapshot, so "read the board instead" of
         // looking at the render was a promise the payload did not keep.
         // +521 wire from the same output fields.
-        visibleBytes: 940, // -87 the comments sentence (see above); +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 952, // -87 the comments sentence (see above); +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +1,303 wire: the snapshot answers with `lines` now. It did not,
         // which meant a model could write ink through `wb_canvas_edit` and
         // had no way to read it back — a write with no read is half a
         // capability, and the wire is where that costs.
-        wireBytes: 5828, // -633 `comments` (see above); +40: zod 4.6 emits the layout's overlap pair tuple as `minItems`/`maxItems` 2 with `items: false`
+        wireBytes: 5840, // -633 `comments` (see above); +40: zod 4.6 emits the layout's overlap pair tuple as `minItems`/`maxItems` 2 with `items: false`; +12 the address pattern, as visible
         descriptionWords: 78,
         parameters: 3,
         undescribed: 2,
@@ -498,14 +498,14 @@ describe('what the tool table costs to read', () => {
         // was still open. The wire is the stored proposal schema's change
         // union in the OUTPUT, which the model never reads; the model-visible
         // cost is the one description sentence.
-        visibleBytes: 1372, // +96 visible, +322 wire: the sentence saying a too-large lone read is trimmed, so "in full" stays true, and the `annotationsTruncated` output flag (+226 wire); +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 1384, // +96 visible, +322 wire: the sentence saying a too-large lone read is trimmed, so "in full" stays true, and the `annotationsTruncated` output flag (+226 wire); +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +63: the `ExtensionFacets` registration is a NET COST here, and
         // saying so is the point of an exact pin. A `$defs` entry plus a
         // `$ref` is dearer than one inlined copy, so a tool holding the
         // record once pays for the dedup the repeat-heavy tools collect. The
         // table-wide figure is what the registration is judged on (-1,408
         // wire, -16 visible); this row is where it is paid. +174: facetsRaw described.
-        wireBytes: 20520, // +16: a node-set anchor's `maxItems` 2000 on the threads it returns; -8 a subpath's anchored `^#` pattern (4 sites in the output)
+        wireBytes: 20532, // +16: a node-set anchor's `maxItems` 2000 on the threads it returns; -8 a subpath's anchored `^#` pattern (4 sites in the output); +12 the address pattern, as visible
         descriptionWords: 115,
         parameters: 4,
         undescribed: 2,
@@ -515,8 +515,8 @@ describe('what the tool table costs to read', () => {
       wb_document_list: {
         // +153 wire, 0 visible: each row says whether the workspace pins it (an
         // output field; omitted when the keeper keeps no pins).
-        visibleBytes: 541, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
-        wireBytes: 1662, // +294: the output lists named folders as {path, name}; 0 visible, 0 undescribed. Earlier +17: the output's `path` states its 1024-character bound
+        visibleBytes: 553, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
+        wireBytes: 1674, // +294: the output lists named folders as {path, name}; 0 visible, 0 undescribed. Earlier +17: the output's `path` states its 1024-character bound; +12 the address pattern, as visible
         descriptionWords: 32,
         parameters: 1,
         undescribed: 0,
@@ -530,8 +530,8 @@ describe('what the tool table costs to read', () => {
       // trials: 3 calls each before (a search that answered nothing, then
       // a list and a read of every document), 1 after.
       wb_document_search: {
-        visibleBytes: 1470, // +33: `query`'s 1024 `maxLength` and `tags`' 1024 `maxItems`; +27 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms
-        wireBytes: 2317, // +17: the output's `path` states its 1024-character bound; +33 the query and tag bounds, as visible
+        visibleBytes: 1482, // +33: `query`'s 1024 `maxLength` and `tags`' 1024 `maxItems`; +27 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
+        wireBytes: 2329, // +17: the output's `path` states its 1024-character bound; +33 the query and tag bounds, as visible; +12 the address pattern, as visible
         descriptionWords: 68,
         parameters: 5,
         undescribed: 0,
@@ -682,11 +682,11 @@ describe('what the tool table costs to read', () => {
         // trade the registration made still holds — it is bought by -79 on
         // `wb_canvas_edit` — and the sentence is what a model needs to read
         // the vocabulary before being refused by it.
-        visibleBytes: 3459, // +34 maxLength 1024 on tags.remove's items and tags.rename's `from` (+17, +17); +50 the tag bounds: maxItems on tags.add (+16), maxLength on its tags and rename.to (+17, +17); +32 the same 1024 `maxItems` on tags.remove and tags.rename (+16, +16); +13 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms
+        visibleBytes: 3471, // +34 maxLength 1024 on tags.remove's items and tags.rename's `from` (+17, +17); +50 the tag bounds: maxItems on tags.add (+16), maxLength on its tags and rename.to (+17, +17); +32 the same 1024 `maxItems` on tags.remove and tags.rename (+16, +16); +13 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
         // +14 wire more: the title names tags and every object a facet reaches.
-        wireBytes: 4405, // +34 the remove-item and rename-from bounds, as visible; +50 the tag bounds, as visible; +32 the remove and rename bounds, as visible
+        wireBytes: 4417, // +34 the remove-item and rename-from bounds, as visible; +50 the tag bounds, as visible; +32 the remove and rename bounds, as visible; +12 the address pattern, as visible
         descriptionWords: 176,
         parameters: 12,
         undescribed: 1,
@@ -694,8 +694,8 @@ describe('what the tool table costs to read', () => {
         names: ['wb_facet_list'],
       },
       wb_scene_render: {
-        visibleBytes: 2703, // +17 `fragment`'s 1024-character bound; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +397 `comments` (described, default false) and the description sentence saying so: the picture used to carry the review conversation unasked
-        wireBytes: 3050, // +397 likewise
+        visibleBytes: 2715, // +17 `fragment`'s 1024-character bound; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +397 `comments` (described, default false) and the description sentence saying so: the picture used to carry the review conversation unasked; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
+        wireBytes: 3062, // +397 likewise; +12 the address pattern, as visible
         descriptionWords: 59,
         parameters: 6,
         undescribed: 1,
@@ -707,10 +707,10 @@ describe('what the tool table costs to read', () => {
         // status, every message with author and time) where it was a count,
         // so "Returns every thread the document holds" is true. The
         // description now names the read that writes nothing.
-        visibleBytes: 3717, // +17 both: a text anchor's `exact` at its 1024 `maxLength`; +16 both: a node-set anchor's `maxItems` 2000 at thread.add; +16 both: thread.add's `threadId` at the id bound's `maxLength` 256; +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
+        visibleBytes: 3729, // +17 both: a text anchor's `exact` at its 1024 `maxLength`; +16 both: a node-set anchor's `maxItems` 2000 at thread.add; +16 both: thread.add's `threadId` at the id bound's `maxLength` 256; +34 both: a message's 4096 `maxLength` at thread.add and message.add; +30 both: a text anchor's 32 `maxLength` on prefix and suffix; +32 both: `author`'s 256 at thread.add and message.add; +15 both: `ops`' 200 `maxItems`; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 6412, // +16 more: the node-set `maxItems` again, on the threads it returns
+        wireBytes: 6424, // +16 more: the node-set `maxItems` again, on the threads it returns; +12 the address pattern, as visible
         descriptionWords: 138,
         parameters: 32,
         undescribed: 24,
@@ -720,8 +720,8 @@ describe('what the tool table costs to read', () => {
       // The version tools and wb_facet_set are the ones whose every
       // parameter is described. They are the shape to copy.
       wb_version_list: {
-        visibleBytes: 621, // +17 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms
-        wireBytes: 1552,
+        visibleBytes: 633, // +17 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
+        wireBytes: 1564, // +12 the address pattern, as visible
         descriptionWords: 20,
         parameters: 2,
         undescribed: 0,
@@ -731,11 +731,11 @@ describe('what the tool table costs to read', () => {
       wb_version_restore: {
         // +43 on both: `targetPath` must be the same kind as the saved state, since
         // restoring across kinds converted the target and is now refused.
-        visibleBytes: 1594, // +16 `versionId`'s 256-character id bound; +17: `targetPath` states the 1024-character path bound; +14 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms
+        visibleBytes: 1606, // +16 `versionId`'s 256-character id bound; +17: `targetPath` states the 1024-character path bound; +14 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +23 wire: `destructiveHint: true` stated — its `subtree` mode deletes the
         // documents created since the version. Client-side only; visible bytes unmoved.
         // +182: the output's documentId is the written document's ULID, schema'd as one.
-        wireBytes: 2451, // +16 the versionId bound, as visible; +17 likewise
+        wireBytes: 2463, // +16 the versionId bound, as visible; +17 likewise; +12 the address pattern, as visible
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
@@ -743,10 +743,10 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_version_save: {
-        visibleBytes: 998, // +16 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms
+        visibleBytes: 1010, // +16 both: `workspaceId`'s own sentence replaced by ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
-        wireBytes: 2092,
+        wireBytes: 2104, // +12 the address pattern, as visible
         descriptionWords: 54,
         parameters: 3,
         undescribed: 0,
@@ -763,11 +763,11 @@ describe('what the tool table costs to read', () => {
         // told delivered:true. +162 and -1 undescribed: `zoom` bounded by the
         // editor's range and described (1 is actual size, not a percentage),
         // and `delivered` says a browser was TOLD, not that it confirmed.
-        visibleBytes: 1463, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +16 both: `elementIds` bounded by the per-canvas node ceiling
+        visibleBytes: 1475, // +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +16 both: `elementIds` bounded by the per-canvas node ceiling; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
         // +24 wire: `destructiveHint: false` stated (the annotation schema reads a
         // missing one on a write as TRUE). Client-side only; visible bytes unmoved.
         // Then +258: the +162 above plus `zoom`'s min/max.
-        wireBytes: 1981,
+        wireBytes: 1993, // +12 the address pattern, as visible
         descriptionWords: 62,
         parameters: 7,
         undescribed: 2,
@@ -796,8 +796,8 @@ describe('what the tool table costs to read', () => {
         // `title`, so a rename of one had no tool at any price (C5); the web
         // app renames both kinds.
         // +103 both: markdown `maxLength` on two arms (+38); `document.create` says facets go under `facets:` (+65). +48 both: a name's 200 `maxLength` on both creates and the move.
-        visibleBytes: 3764, // +316 both, +3 parameters (+1 undescribed, the arm's `op`), +3 words: `folder.rename`, a folder name having had no tool (C5), its refusals saying the rest when they fire; +51: three input paths state the 1024-character bound; +16 `actor`'s 256 `maxLength`; +15 `ops` states the 200-op ceiling every batch tool shares; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms
-        wireBytes: 5325, // +316 the folder.rename arm, as visible; +68: the same, and the output's path; +16 the actor bound; +15 the op ceiling, as visible; +68 the address forms, as visible
+        visibleBytes: 3776, // +316 both, +3 parameters (+1 undescribed, the arm's `op`), +3 words: `folder.rename`, a folder name having had no tool (C5), its refusals saying the rest when they fire; +51: three input paths state the 1024-character bound; +16 `actor`'s 256 `maxLength`; +15 `ops` states the 200-op ceiling every batch tool shares; +68 both, -1 undescribed: `workspaceId` described with ADR-0053's three address forms; +12 both: the address pattern spells its class `[a-zA-Z0-9-]` where it spelled `[\w-]`, so `_` — in neither an id nor a segment — is refused at the boundary instead of looked up
+        wireBytes: 5336, // +316 the folder.rename arm, as visible; +68: the same, and the output's path; +16 the actor bound; +15 the op ceiling, as visible; +68 the address forms, as visible; +12 the address pattern, as visible; -1 the output's `workspaceId` is the canonical ULID's pattern where it was the loose id's pattern and `minLength`
         descriptionWords: 50,
         parameters: 25,
         undescribed: 14,
@@ -998,7 +998,7 @@ describe('what the tool table costs to read', () => {
       // Then -29 and +183 on wb_viewport_set (see that row), then +162 there.
       // Then +1,114 for this wave's seven rows (see each).
       // Then +158: `wb_canvas_edit` (+55), `wb_workspace_edit` (+103). Then +99: text and name bounds (+51, +48).
-      visibleBytes: 42595, // -87 wb_canvas_snapshot's comments sentence (see that row); -899 wb_canvas_edit's retired comment arms (see that row); +316 wb_workspace_edit's `folder.rename` arm (see that row); -4 a subpath's anchored `^#` pattern on wb_canvas_edit (see its row); +397 wb_scene_render's `comments` (see its row); +67 the lookup bounds: wb_facet_set's tags.remove items and rename.from (+34), wb_scene_render's fragment (+17), wb_version_restore's versionId (+16); +34 the text anchor quote bound on wb_body_edit and wb_thread_edit (+17, +17); +16 the node-set anchor ceiling on wb_thread_edit's thread.add; +96 wb_document_get's trim sentence (see that row); +16 the per-canvas ceiling on wb_viewport_set's elementIds; +48 the per-canvas ceiling on wb_canvas_edit's tidy and region.set lists; +15 the op ceiling on wb_workspace_edit; +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32); +767 ADR-0053's three address forms on every `workspaceId` (-10 undescribed: C3, and a model cannot otherwise learn a bare segment is its OWN namespace's)
+      visibleBytes: 42775, // -87 wb_canvas_snapshot's comments sentence (see that row); -899 wb_canvas_edit's retired comment arms (see that row); +316 wb_workspace_edit's `folder.rename` arm (see that row); -4 a subpath's anchored `^#` pattern on wb_canvas_edit (see its row); +397 wb_scene_render's `comments` (see its row); +67 the lookup bounds: wb_facet_set's tags.remove items and rename.from (+34), wb_scene_render's fragment (+17), wb_version_restore's versionId (+16); +34 the text anchor quote bound on wb_body_edit and wb_thread_edit (+17, +17); +16 the node-set anchor ceiling on wb_thread_edit's thread.add; +96 wb_document_get's trim sentence (see that row); +16 the per-canvas ceiling on wb_viewport_set's elementIds; +48 the per-canvas ceiling on wb_canvas_edit's tidy and region.set lists; +15 the op ceiling on wb_workspace_edit; +229 the id, background and prior-passage bounds (+162, +51, +16); +68 the document path bound; +153 the label and message bounds (+119, +34); +102 the node location bounds; +60 the text anchor context bound (+30, +30); +50 the tag bounds; +96 the actor and author bound (6 fields); +33 the search query and tag-filter bounds; +62 the op ceiling on wb_body_edit and wb_thread_edit (+15, +15) and the tag remove/rename bounds (+32); +767 ADR-0053's three address forms on every `workspaceId` (-10 undescribed: C3, and a model cannot otherwise learn a bare segment is its OWN namespace's); +180 the address pattern's `[a-zA-Z0-9-]` on every `workspaceId` (15 tools, +12 each), which no longer publishes `_` as part of an address
       // +2,000 wire and 0 visible when the model gained `tags` at three sites
       // (ADR-0040 increment 1): three OUTPUT schemas echo stored elements
       // and state the field; no input gained a parameter.
@@ -1024,7 +1024,7 @@ describe('what the tool table costs to read', () => {
       // Then +1,585, the same rows' visible bytes plus their output fields.
       // Then +356, wb_document_get's and wb_version_restore's rows; +28, canvas_view's.
       // Then +158, then +99, then +767, each the same bytes as visible.
-      wireBytes: 132320, // -1,070 canvas_view's scene no longer carries `comments` (see that row); -1,179 the snapshot's `comments`, in wb_canvas_snapshot and in the board wb_canvas_edit answers with; -978 wb_canvas_edit's retired comment arms and `touched.comments`; +316 the folder.rename arm, as visible; +48 zod 4.6's emitter, none of it a lost bound or description: the overlap pair tuple's `minItems`/`maxItems`/`items` (+80) and a subpath's anchored `^#` pattern (-32), as the rows say; +397 wb_scene_render `comments`, as visible; +67 the lookup bounds, as visible; +34 the text anchor quote bound, as visible; +64 the node-set anchor ceiling: thread.add's input, and the threads wb_canvas_view, wb_document_get and wb_thread_edit return; +322 wb_document_get's trim sentence and `annotationsTruncated` (see that row); +16 the elementIds ceiling, as visible; +48 the per-canvas ceiling, as visible; +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible; +294 wb_document_list folderNames, wire only
+      wireBytes: 132498, // -1,070 canvas_view's scene no longer carries `comments` (see that row); -1,179 the snapshot's `comments`, in wb_canvas_snapshot and in the board wb_canvas_edit answers with; -978 wb_canvas_edit's retired comment arms and `touched.comments`; +316 the folder.rename arm, as visible; +48 zod 4.6's emitter, none of it a lost bound or description: the overlap pair tuple's `minItems`/`maxItems`/`items` (+80) and a subpath's anchored `^#` pattern (-32), as the rows say; +397 wb_scene_render `comments`, as visible; +67 the lookup bounds, as visible; +34 the text anchor quote bound, as visible; +64 the node-set anchor ceiling: thread.add's input, and the threads wb_canvas_view, wb_document_get and wb_thread_edit return; +322 wb_document_get's trim sentence and `annotationsTruncated` (see that row); +16 the elementIds ceiling, as visible; +48 the per-canvas ceiling, as visible; +15 the op ceiling on wb_workspace_edit, as visible; +229 the id, background and prior-passage bounds, as visible; +119 the document path bound; +153 the label and message bounds, as visible; +102 the node location bounds; +60 the text anchor context bound, as visible; +50 the tag bounds, as visible; +129 the actor, author and search bounds, as visible; +62 the op ceiling and tag list bounds, as visible; +294 wb_document_list folderNames, wire only; +180 the address pattern, as visible; -2 the canonical ULID on canvas_view's and wb_workspace_edit's output `workspaceId`
       // -12 and -12 for `embed` (three undescribed fields at four arms).
       // Then -1 and -2 on wb_viewport_set (`animate`, `mode`), then -1 (`zoom`).
       // Then +2 for `author` on the two propose tools.

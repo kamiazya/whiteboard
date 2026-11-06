@@ -30,7 +30,7 @@ const { getLogger } = await import('../log.js')
 
 const MODERN = '2026-07-28'
 const LOG_LEVEL_META = { 'io.modelcontextprotocol/logLevel': 'debug' }
-const WORKSPACE = 'log-forwarding'
+const WORKSPACE = '01Q3B8R27QWVSEXNHKKCQDQ22B'
 
 /**
  * Deps whose `listDocuments` — reached by `wb_document_list` — holds each call
@@ -56,7 +56,7 @@ async function gatedDeps() {
           const marker = `in-call-${held}`
           for (const w of waiters) if (held >= w.n) w.resolve()
           await released
-          getLogger('log-forwarding').warning({ marker }, marker)
+          getLogger('01Q3B8R27QWVSEXNHKKCQDQ22B').warning({ marker }, marker)
           return target.listDocuments(input)
         }
       }
@@ -100,7 +100,7 @@ async function httpClient(deps: ServerDeps, pin?: string) {
     getStatus: () => ({ ok: true }),
   } as never)
   const client = new Client(
-    { name: 'log-forwarding', version: '1' },
+    { name: '01Q3B8R27QWVSEXNHKKCQDQ22B', version: '1' },
     pin === undefined ? undefined : ({ versionNegotiation: { mode: { pin } } } as never),
   )
   const got = collect(client)
@@ -123,7 +123,7 @@ async function stdioClient(deps: ServerDeps, pin?: string) {
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   const handle = serveStdio(() => createMcpServer(deps), { transport: serverSide })
   const client = new Client(
-    { name: 'log-forwarding', version: '1' },
+    { name: '01Q3B8R27QWVSEXNHKKCQDQ22B', version: '1' },
     pin === undefined ? undefined : ({ versionNegotiation: { mode: { pin } } } as never),
   )
   const got = collect(client)
@@ -151,7 +151,7 @@ describe('MCP log forwarding over HTTP /mcp, modern era', () => {
         b.client.callTool(listCall(LOG_LEVEL_META)),
       ]
       await entered(2)
-      getLogger('log-forwarding').warning('outside every request')
+      getLogger('01Q3B8R27QWVSEXNHKKCQDQ22B').warning('outside every request')
       release()
       await Promise.all(calls)
       expect(markers(a.got)).toHaveLength(1)
@@ -188,7 +188,7 @@ describe('MCP log forwarding over HTTP /mcp, 2025 era', () => {
       await a.client.setLoggingLevel('debug')
       const call = a.client.callTool(listCall())
       await entered(1)
-      getLogger('log-forwarding').warning('outside every request')
+      getLogger('01Q3B8R27QWVSEXNHKKCQDQ22B').warning('outside every request')
       release()
       await call
       // Round trips after the emission, so a record on any open stream has
@@ -225,7 +225,7 @@ async function timerDeps() {
         return async (input: Parameters<typeof index.listDocuments>[0]) => {
           setTimeout(async () => {
             await returned
-            getLogger('log-forwarding').warning('after-the-call')
+            getLogger('01Q3B8R27QWVSEXNHKKCQDQ22B').warning('after-the-call')
             markFired()
           }, 0)
           return target.listDocuments(input)
@@ -247,7 +247,7 @@ describe('MCP log forwarding over stdio', () => {
       await a.client.setLoggingLevel('error')
       const quiet = a.client.callTool(listCall())
       await entered(1)
-      getLogger('log-forwarding').error('outside every request')
+      getLogger('01Q3B8R27QWVSEXNHKKCQDQ22B').error('outside every request')
       release()
       await quiet
       expect(a.got).toEqual([])

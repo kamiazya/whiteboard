@@ -19,8 +19,8 @@ import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 import { exportOkf } from './export-okf.js'
 
-const OWNER = 'ws-owner'
-const STRANGER = 'ws-stranger'
+const OWNER = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
+const STRANGER = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 const SPATIAL_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const MARKDOWN_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 

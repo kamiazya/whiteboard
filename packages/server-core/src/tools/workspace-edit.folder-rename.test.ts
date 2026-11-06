@@ -5,7 +5,7 @@ import { describe, expect, it } from 'vitest'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createWorkspaceEditTool, workspaceEditInputSchema } from './workspace-edit.js'
 
-const WS = 'ws-folders'
+const WS = '01BSXMXYEPZGZYHNN3KTQZ33EE'
 
 /** An index that names folders and records what it was asked, refusing one taken name. */
 function namingIndex() {

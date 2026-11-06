@@ -42,10 +42,10 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
 
   beforeEach(async () => {
     tmpRoot = await mkdtemp(join(tmpdir(), 'whiteboard-autoversion-flush-'))
-    await mkdir(join(tmpRoot, 'session1'), { recursive: true })
+    await mkdir(join(tmpRoot, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
-    await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
   })
 
   afterEach(async () => {
@@ -61,7 +61,7 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
 
     const res = await postDocumentEdit(
       { request: socketFetch(socketPath) },
-      'session1',
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
       'canvas-a',
       (containers) =>
         writeSpatialCanvas(containers, {
@@ -74,12 +74,12 @@ describe('startHttpServer takes the pending checkpoint on the way out', () => {
     const store = new FileVersionStore()
     // Nothing yet — the pause has not elapsed, which is what makes the flush
     // the only thing that can produce the row below.
-    expect(await store.list('session1', 'canvas-a')).toEqual([])
+    expect(await store.list('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')).toEqual([])
 
     await running.close()
     running = undefined
 
-    const versions = await store.list('session1', 'canvas-a')
+    const versions = await store.list('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     expect(versions.length).toBe(1)
     expect(versions[0]?.auto).toBe(true)
   })

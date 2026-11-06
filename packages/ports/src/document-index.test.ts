@@ -96,9 +96,10 @@ describe('a document name past the bound', () => {
   // or one such row would make the whole workspace's listing unreadable.
   it('is refused on the write, and still read from a stored row', () => {
     const { documentId: _minted, ...create } = entry
-    expect(createDocumentInputSchema.safeParse({ workspaceId: 'ws', ...create }).success).toBe(
-      false,
-    )
+    expect(
+      createDocumentInputSchema.safeParse({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', ...create })
+        .success,
+    ).toBe(false)
     expect(documentEntrySchema.safeParse(entry).success).toBe(true)
   })
 })
@@ -108,14 +109,14 @@ describe('a document name past the bound', () => {
 // field: workspaceId already IS the canonical layer.
 describe('createWorkspaceInputSchema (ADR-0019 segment/displayName widening)', () => {
   it('accepts a bare legacy workspaceId with neither field, as before', () => {
-    expect(createWorkspaceInputSchema.safeParse({ workspaceId: 'ws-conformance' }).success).toBe(
-      true,
-    )
+    expect(
+      createWorkspaceInputSchema.safeParse({ workspaceId: '01C2Y0SCYA3GZY1H2DQQVR4KX1' }).success,
+    ).toBe(true)
   })
 
   it('accepts a workspaceId carrying a valid segment and displayName', () => {
     const parsed = createWorkspaceInputSchema.safeParse({
-      workspaceId: 'ws-conformance',
+      workspaceId: '01C2Y0SCYA3GZY1H2DQQVR4KX1',
       segment: 'team-notes',
       displayName: 'Team notes',
     })
@@ -125,13 +126,13 @@ describe('createWorkspaceInputSchema (ADR-0019 segment/displayName widening)', (
   it('rejects a ULID-shaped segment, case-insensitively', () => {
     expect(
       createWorkspaceInputSchema.safeParse({
-        workspaceId: 'ws',
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
         segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       }).success,
     ).toBe(false)
     expect(
       createWorkspaceInputSchema.safeParse({
-        workspaceId: 'ws',
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
         segment: '01arz3ndektsv4rrffq69g5fav',
       }).success,
     ).toBe(false)
@@ -139,34 +140,48 @@ describe('createWorkspaceInputSchema (ADR-0019 segment/displayName widening)', (
 
   it('rejects a segment containing a path separator', () => {
     expect(
-      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', segment: 'a/b' }).success,
+      createWorkspaceInputSchema.safeParse({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        segment: 'a/b',
+      }).success,
     ).toBe(false)
   })
 
   it('rejects an untrimmed or empty displayName', () => {
     expect(
-      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', displayName: ' x ' }).success,
+      createWorkspaceInputSchema.safeParse({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        displayName: ' x ',
+      }).success,
     ).toBe(false)
     expect(
-      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', displayName: '' }).success,
+      createWorkspaceInputSchema.safeParse({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        displayName: '',
+      }).success,
     ).toBe(false)
   })
 
   it('rejects an unknown key', () => {
     expect(
-      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', displayname: 'typo' }).success,
+      createWorkspaceInputSchema.safeParse({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        displayname: 'typo',
+      }).success,
     ).toBe(false)
   })
 })
 
 describe('workspaceEntrySchema', () => {
   it('accepts a bare legacy row (Wave-2-unminted rows carry neither field)', () => {
-    expect(workspaceEntrySchema.safeParse({ workspaceId: 'ws-conformance' }).success).toBe(true)
+    expect(
+      workspaceEntrySchema.safeParse({ workspaceId: '01C2Y0SCYA3GZY1H2DQQVR4KX1' }).success,
+    ).toBe(true)
   })
 
   it('accepts a row carrying a valid segment and displayName', () => {
     const parsed = workspaceEntrySchema.safeParse({
-      workspaceId: 'ws-conformance',
+      workspaceId: '01C2Y0SCYA3GZY1H2DQQVR4KX1',
       segment: 'team-notes',
       displayName: 'Team notes',
     })
@@ -176,16 +191,19 @@ describe('workspaceEntrySchema', () => {
   it('rejects a ULID-shaped segment', () => {
     expect(
       workspaceEntrySchema.safeParse({
-        workspaceId: 'ws',
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
         segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       }).success,
     ).toBe(false)
   })
 
   it('rejects an unknown key', () => {
-    expect(workspaceEntrySchema.safeParse({ workspaceId: 'ws', displayname: 'typo' }).success).toBe(
-      false,
-    )
+    expect(
+      workspaceEntrySchema.safeParse({
+        workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+        displayname: 'typo',
+      }).success,
+    ).toBe(false)
   })
 })
 

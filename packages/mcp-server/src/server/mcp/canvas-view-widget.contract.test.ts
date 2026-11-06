@@ -20,7 +20,7 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode, textNode, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import {
@@ -51,7 +51,7 @@ const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 // by workspace, so a repeat that reused the id would read the previous run's
 // record and resolve none of this run's references.
 let workspaceSeq = 0
-const freshWorkspaceId = (): string => `contract-${workspaceSeq++}`
+const freshWorkspaceId = (): string => workspaceIdFor(`contract-${workspaceSeq++}`)
 
 async function save(
   deps: ServerDeps,

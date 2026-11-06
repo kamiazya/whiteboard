@@ -215,6 +215,9 @@ function listDocuments(routes: FakeDaemonRoutes, workspaceId: string): Promise<R
   return Promise.resolve(respond())
 }
 
+/** The canonical id the fake answers a create with. */
+const FAKE_WORKSPACE_ID = '01J9ZC8XK4PQRS7TVWXY0ABCDF'
+
 function createDocument(
   routes: FakeDaemonRoutes,
   workspaceId: string,
@@ -229,7 +232,9 @@ function createDocument(
       // body said only `path`, and a fake answering that reads as a create
       // the client refused.
       createDocumentV1ResponseSchema.parse({
-        workspaceId: 'ws-a',
+        // An answer names the workspace by its canonical id, whatever
+        // address the request reached it by.
+        workspaceId: FAKE_WORKSPACE_ID,
         documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE',
         path: body.path,
       }),

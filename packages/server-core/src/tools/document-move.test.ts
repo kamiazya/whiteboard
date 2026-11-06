@@ -8,7 +8,7 @@ import { wbDocumentCreate } from './document-crud.js'
 import { wbDocumentMove } from './document-move.js'
 import { createDocumentSetOperation } from './document-set.js'
 
-const WS = 'ws-move'
+const WS = '01YNV8WCKCKXAYS46WC400REZE'
 
 async function seed(deps: ServerDeps) {
   await deps.documentIndex.createWorkspace({ workspaceId: WS })

@@ -18,7 +18,7 @@ import { liveDocuments } from './live-documents.js'
 import { _resetWorkspaceLocksForTests } from './workspace-lock.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
-const WORKSPACE_ID = 'ws-1'
+const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 const CANVAS: SpatialCanvas = {
   nodes: [

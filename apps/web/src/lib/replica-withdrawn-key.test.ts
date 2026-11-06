@@ -10,6 +10,7 @@
  */
 
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { replicaKeyBody, replicaKeyRefusalFetch } from '../test-utils/replica-key-fetch.js'
@@ -24,7 +25,7 @@ let counter = 0
 // `markReplica`'s mark is module state with no reset, so each test mints its own id.
 function freshWorkspaceId(): string {
   counter += 1
-  return `withdrawntest${counter}`
+  return workspaceIdFor(`withdrawntest${counter}`)
 }
 
 /** A copy made readable offline, as Settings' opt-in leaves it. */

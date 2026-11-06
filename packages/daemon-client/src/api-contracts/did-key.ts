@@ -6,22 +6,19 @@
  * `publicKey` stays the raw base64url key it has always been, the daemon's
  * keypair is untouched, and nothing about pinning or verification changes —
  * see ADR-0035 decision 1, which fixes the key to the device and gives it a
- * portable name rather than moving it.
- *
- * Why it sits beside the wire contract rather than in `model`: today its only
- * subject is the value `runtime.ts` carries. ADR-0035 decision 2 anticipates
- * device DIDs reaching documents, and when that happens this belongs one
- * layer down — a move inside the monorepo, not a break.
+ * portable name rather than moving it. The name is how the versions the daemon
+ * saves name it as their actor (ADR-0035 decision 2); the ping advertises the
+ * raw key alone, so nothing decodes a `did:key` back and no decoder is kept.
  *
  * The encodings are deliberately NOT hand-rolled. A `did:key` IS multibase
  * plus multicodec, and `multiformats` is their reference implementation:
- * `base58btc` carries the `z` prefix itself (and rejects any other multibase),
- * `varint` reads the codec header. The argument is not cryptographic — base58
+ * `base58btc` carries the `z` prefix itself and `varint` writes the codec
+ * header. The argument is not cryptographic — base58
  * holds no secret and has no timing property — it is coverage: a hand-written
  * base58's leading-zero branches are unreachable from this call site, so no
  * test here can ever exercise them.
  */
-import { base64UrlToBytes, bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { base64UrlToBytes } from '@kamiazya/whiteboard-model'
 import { varint } from 'multiformats'
 import { base58btc } from 'multiformats/bases/base58'
 
@@ -46,28 +43,4 @@ export function ed25519PublicKeyToDidKey(publicKeyBase64Url: string): string | n
   varint.encodeTo(ED25519_PUB_CODE, bytes)
   bytes.set(key, headerLength)
   return `${DID_KEY_PREFIX}${base58btc.encode(bytes)}`
-}
-
-/**
- * Back to the raw base64url key, so a verifier can hand it to
- * `crypto.subtle.importKey` without learning multicodec.
- *
- * Null for any DID that is not an Ed25519 `did:key` — including a well-formed
- * one carrying a different multicodec, which would otherwise name a key of
- * the wrong KIND with a string that looks right.
- */
-export function didKeyToEd25519PublicKey(did: string): string | null {
-  if (!did.startsWith(DID_KEY_PREFIX)) return null
-  // Both throw on input they cannot read (a non-`z` multibase, a character
-  // outside the alphabet, a truncated codec header); this seam answers null.
-  try {
-    const bytes = base58btc.decode(did.slice(DID_KEY_PREFIX.length))
-    const [code, headerLength] = varint.decode(bytes)
-    if (code !== ED25519_PUB_CODE) return null
-    const key = bytes.subarray(headerLength)
-    if (key.length !== ED25519_PUBLIC_KEY_BYTES) return null
-    return bytesToBase64Url(key)
-  } catch {
-    return null
-  }
 }

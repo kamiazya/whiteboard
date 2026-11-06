@@ -27,10 +27,13 @@ describe('IdbDocumentIndex.holdsPreTreeRecords', () => {
   it('answers for the workspace holding a row, and for no other', async () => {
     await clearNamedDb(DB_NAME)
     try {
-      await seedLegacyRow({ workspaceId: 'ws', path: 'a', kind: 'spatial' }, DB_NAME)
+      await seedLegacyRow(
+        { workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN', path: 'a', kind: 'spatial' },
+        DB_NAME,
+      )
       const index = new IdbDocumentIndex(DB_NAME)
-      expect(await index.holdsPreTreeRecords('ws')).toBe(true)
-      expect(await index.holdsPreTreeRecords('elsewhere')).toBe(false)
+      expect(await index.holdsPreTreeRecords('0104Y7DY19FTA30KQYKDRRMNBN')).toBe(true)
+      expect(await index.holdsPreTreeRecords('01Q6XFTAGST51FSC29SNCHN6FK')).toBe(false)
     } finally {
       await clearNamedDb(DB_NAME)
     }
@@ -40,18 +43,20 @@ describe('IdbDocumentIndex.holdsPreTreeRecords', () => {
     await clearNamedDb(DB_NAME)
     try {
       const index = new IdbDocumentIndex(DB_NAME)
-      await index.createWorkspace({ workspaceId: 'ws' })
-      expect(await index.holdsPreTreeRecords('ws')).toBe(false)
+      await index.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
+      expect(await index.holdsPreTreeRecords('0104Y7DY19FTA30KQYKDRRMNBN')).toBe(false)
       // `path` as a number is still a valid IndexedDB key, so nothing below
       // a schema would refuse it — and nothing here reads it through one.
       await inTransaction(DB_NAME, [DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
         await request(
-          tx
-            .objectStore(DOCUMENT_INDEX_STORE)
-            .put({ workspaceId: 'ws', documentId: generateDocumentId(), path: 42 }),
+          tx.objectStore(DOCUMENT_INDEX_STORE).put({
+            workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN',
+            documentId: generateDocumentId(),
+            path: 42,
+          }),
         )
       })
-      expect(await index.holdsPreTreeRecords('ws')).toBe(true)
+      expect(await index.holdsPreTreeRecords('0104Y7DY19FTA30KQYKDRRMNBN')).toBe(true)
     } finally {
       await clearNamedDb(DB_NAME)
     }

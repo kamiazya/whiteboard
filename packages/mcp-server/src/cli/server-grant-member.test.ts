@@ -31,7 +31,7 @@ const CORP = {
   admission: { bearerClients: ['ops'] },
 } as const
 
-const WS = 'ws-plans'
+const WS = '01GJWZ7W1H6HT0Z9S85MYRJNM8'
 
 let root: string
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -76,21 +76,27 @@ describe('grantMember', () => {
 
   // What an operator sees is the address in the URL, which is the segment.
   it('finds the workspace by its segment, the handle in its URL', async () => {
-    await upsertWorkspaceRow(handle.db, 'ws-01HX', { segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, '01G780PXT3AZAK7HYKN2PW65HW', { segment: 'plans' })
     const ada = await userNamed('Ada', 'ada-1')
     const outcome = await grantMember(handle.db, {
       workspaceId: 'plans',
       user: { kind: 'id', id: ada.id },
     })
-    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-01HX')
-    expect(await members.isWorkspaceMember('ws-01HX', ada.id)).toBe('member')
+    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('01G780PXT3AZAK7HYKN2PW65HW')
+    expect(await members.isWorkspaceMember('01G780PXT3AZAK7HYKN2PW65HW', ada.id)).toBe('member')
   })
 
   // ADR-0053: one segment may sit in several namespaces, and the operator
   // has none of their own to mean by a bare one.
   it('finds a segment held in a namespace only when the address names it', async () => {
-    await upsertWorkspaceRow(handle.db, 'ws-ada', { namespace: 'ada', segment: 'plans' })
-    await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, '01WVND54BJH9201XJX4AC0BA87', {
+      namespace: 'ada',
+      segment: 'plans',
+    })
+    await upsertWorkspaceRow(handle.db, '01H6VZ1Z09FWAJF5ZABNCADQCY', {
+      namespace: 'bob',
+      segment: 'plans',
+    })
     const ada = await userNamed('Ada', 'ada-1')
 
     const bare = await grantMember(handle.db, {
@@ -103,15 +109,21 @@ describe('grantMember', () => {
     })
 
     expect(bare.kind).toBe('unknown-workspace')
-    expect(qualified.kind === 'ok' && qualified.workspaceId).toBe('ws-bob')
+    expect(qualified.kind === 'ok' && qualified.workspaceId).toBe('01H6VZ1Z09FWAJF5ZABNCADQCY')
   })
 
   // A workspace a single-person keeper made, restored onto server mode, sits
   // in `me`, which no server-mode user holds: its first owner's own bare
   // segment has to reach it once the operator grants them.
   it("moves a workspace no namespace holds into its first owner's", async () => {
-    await upsertWorkspaceRow(handle.db, 'ws-restored', { namespace: 'me', segment: 'plans' })
-    await upsertWorkspaceRow(handle.db, 'ws-ada-own', { namespace: 'ada', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, '01EG5S3FSKWE00AVQFSPZP5GYQ', {
+      namespace: 'me',
+      segment: 'plans',
+    })
+    await upsertWorkspaceRow(handle.db, '01HE04ZGVRF7Z8V91ZWMT3QH9P', {
+      namespace: 'ada',
+      segment: 'plans',
+    })
     const ada = await userNamed('Ada', 'ada-1')
 
     const outcome = await grantMember(handle.db, {
@@ -119,11 +131,11 @@ describe('grantMember', () => {
       user: { kind: 'id', id: ada.id },
     })
 
-    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('ws-restored')
+    expect(outcome.kind === 'ok' && outcome.workspaceId).toBe('01EG5S3FSKWE00AVQFSPZP5GYQ')
     const row = await handle.db
       .selectFrom('workspaces')
       .select(['namespace', 'segment'])
-      .where('id', '=', 'ws-restored')
+      .where('id', '=', '01EG5S3FSKWE00AVQFSPZP5GYQ')
       .executeTakeFirstOrThrow()
     expect(row).toEqual({ namespace: ada.handle, segment: 'plans-2' })
   })
@@ -174,15 +186,21 @@ describe('grantMember', () => {
   })
 
   it('moves only a workspace held in `me`, never one another namespace holds', async () => {
-    await upsertWorkspaceRow(handle.db, 'ws-bob', { namespace: 'bob', segment: 'plans' })
+    await upsertWorkspaceRow(handle.db, '01H6VZ1Z09FWAJF5ZABNCADQCY', {
+      namespace: 'bob',
+      segment: 'plans',
+    })
     const ada = await userNamed('Ada', 'ada-1')
 
-    await grantMember(handle.db, { workspaceId: 'ws-bob', user: { kind: 'id', id: ada.id } })
+    await grantMember(handle.db, {
+      workspaceId: '01H6VZ1Z09FWAJF5ZABNCADQCY',
+      user: { kind: 'id', id: ada.id },
+    })
 
     const row = await handle.db
       .selectFrom('workspaces')
       .select(['namespace', 'segment'])
-      .where('id', '=', 'ws-bob')
+      .where('id', '=', '01H6VZ1Z09FWAJF5ZABNCADQCY')
       .executeTakeFirstOrThrow()
     expect(row).toEqual({ namespace: 'bob', segment: 'plans' })
   })

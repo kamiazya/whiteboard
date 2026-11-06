@@ -16,7 +16,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { textNode, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { blobsRoot } from '../tenant/data-layout.js'
@@ -109,7 +109,7 @@ async function raceAgainstHeldLock(
 }
 
 it('index.setDocumentName waits for the workspace write lock', async () => {
-  const WS = 'ws-lock-name'
+  const WS = '01442ZQ3CK8H4YTTKVW4N1MBRV'
   await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
   const index = treeIndex()
   await expect(
@@ -120,7 +120,7 @@ it('index.setDocumentName waits for the workspace write lock', async () => {
 })
 
 it('index.createDocument waits for the workspace write lock', async () => {
-  const WS = 'ws-lock-create'
+  const WS = '010A86NXVS6XQA89017VCE9BTA'
   await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
   const index = treeIndex()
   await expect(
@@ -131,7 +131,7 @@ it('index.createDocument waits for the workspace write lock', async () => {
 })
 
 it('index.createWorkspace waits for the workspace write lock', async () => {
-  const WS = 'ws-lock-create-ws'
+  const WS = '01SFQFNTGS6XBEJXK1890B52SG'
   const index = treeIndex()
   await expect(
     raceAgainstHeldLock(WS, () => index.createWorkspace({ workspaceId: WS })),
@@ -139,7 +139,7 @@ it('index.createWorkspace waits for the workspace write lock', async () => {
 })
 
 it('names-store setDocumentDisplayName waits for the workspace write lock', async () => {
-  const WS = 'ws-lock-display'
+  const WS = '01644QE2HDPPRXQEVQR7KHEW61'
   await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
   await expect(
     raceAgainstHeldLock(WS, () => setDocumentDisplayName(WS, 'doc', 'Display')),
@@ -147,7 +147,7 @@ it('names-store setDocumentDisplayName waits for the workspace write lock', asyn
 })
 
 it('names-store setDocumentPinned waits for the workspace write lock', async () => {
-  const WS = 'ws-lock-pin'
+  const WS = '019VQJYHRTBJCBDRZ62TXAZ6KA'
   await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
   await expect(raceAgainstHeldLock(WS, () => setDocumentPinned(WS, 'doc', true))).resolves.toBe(
     'blocked',
@@ -203,7 +203,7 @@ describe('every override of the tree index holds the workspace write lock', () =
   })
 
   it.each(Object.entries(WRITER_CASES))('index.%s waits for the lock', async (name, write) => {
-    const WS = `ws-lock-each-${name}`
+    const WS = workspaceIdFor(`ws-lock-each-${name}`)
     await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
     const index = treeIndex()
     await expect(raceAgainstHeldLock(WS, () => write(index, WS))).resolves.toBe('blocked')

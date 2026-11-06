@@ -48,7 +48,7 @@ beforeEach(async () => {
   handle = await createIsolatedDb({ dataDir: tempDir })
   clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
-  await seedWorkspaceRow(tempDir, 'session1')
+  await seedWorkspaceRow(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF')
   serverDeps = await resolveTestServerDeps(tempDir)
 })
 afterEach(async () => {
@@ -93,7 +93,7 @@ it('hands the loop back between judgements of the carried versions', async () =>
   const body = JSON.stringify(browserRecordWithManyVersions())
   const { result: res, availability } = await measureLoopAvailability(
     async () =>
-      await app.request('/api/w/session1/workspace-document/promote', {
+      await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/workspace-document/promote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body,

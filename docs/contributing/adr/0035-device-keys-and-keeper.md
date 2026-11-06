@@ -1,11 +1,13 @@
 # ADR-0035: A key belongs to a device, and a server keeps rather than vouches
 
 **Status:** Accepted (2026-09-12). Decisions 1 and 2 are implemented for the
-DAEMON: it derives a `did:key` from the keypair it already had, advertises it
-on `/api/runtime/ping` beside the raw key it is bound to, and stamps it as the
-`actor` on every version row it saves — manual, automatic and agent alike, the
+DAEMON: it derives a `did:key` from the keypair it already had and stamps it
+as the `actor` on every version row it saves — manual, automatic and agent alike, the
 last threaded from every composition root. The three "who" vocabularies now
-share one notation, OKF §7's actor.
+share one notation, OKF §7's actor. `/api/runtime/ping` advertises the raw
+key alone (2026-11-06): it once carried the `did:key` beside it, which no
+reader ever read, and was withdrawn rather than kept as a second name for the
+key a verifier might trust.
 
 Not implemented, and each says below what triggers it: a **browser profile's
 own keypair** (until then a browser records its operator kind and no actor),

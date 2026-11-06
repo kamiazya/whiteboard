@@ -23,7 +23,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { textNode, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import {
   chunkSnapshot,
   DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES,
@@ -141,7 +141,7 @@ const STALE_TAB_CALLS = {
 }
 
 async function trashBehindAStaleTab(staleCall: keyof typeof STALE_TAB_CALLS) {
-  const WS = `ws-trash-stale-${staleCall.replaceAll(' ', '-')}`
+  const WS = workspaceIdFor(`ws-trash-stale-${staleCall}`)
   await saveDocument(WS, 'doomed', canvasDoc('precious'), { kind: 'spatial' })
   const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
   const deps = await realDeps()
@@ -163,7 +163,7 @@ async function trashBehindAStaleTab(staleCall: keyof typeof STALE_TAB_CALLS) {
 
 describe('trash routes', () => {
   it('a deleted document is listed in the trash and restore brings it back under the SAME documentId', async () => {
-    const WS = 'ws-trash'
+    const WS = '01NA8GJR52H92D8CBCA44CWA9E'
     await saveDocument(WS, 'keep', canvasDoc('kept'), { kind: 'spatial' })
     await saveDocument(WS, 'doomed', canvasDoc('to delete'), { kind: 'spatial' })
     const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
@@ -198,7 +198,7 @@ describe('trash routes', () => {
   })
 
   it('lists the display name a deleted document had, whichever way it was deleted', async () => {
-    const WS = 'ws-trash-names'
+    const WS = '01BAH04E82ZYGRMM9C3XWY4PX6'
     await saveDocument(WS, 'untitled-1', canvasDoc('a'), { kind: 'spatial' })
     await saveDocument(WS, 'untitled-2', canvasDoc('b'), { kind: 'spatial' })
     await setDocumentDisplayName(WS, 'untitled-1', 'Team Charter')
@@ -226,7 +226,7 @@ describe('trash routes', () => {
   })
 
   it('lists the names of the folders a deleted document stood in', async () => {
-    const WS = 'ws-trash-folder-names'
+    const WS = '01YFKHT13BVH840GP2BPGF1BDC'
     await saveDocument(WS, 'field-trips/trip-log', canvasDoc('a'), { kind: 'spatial' })
     const app = await appWithRealDeps()
     const named = await app.request(`/api/workspaces/${WS}/folders/name`, {
@@ -245,7 +245,7 @@ describe('trash routes', () => {
   })
 
   it('a document a live-sync update removes is restorable, its content and versions with it', async () => {
-    const WS = 'ws-trash-sync-delete'
+    const WS = '01KY8J3RQXS8Y24HKSE3PE58X3'
     await saveDocument(WS, 'doomed', canvasDoc('precious'), { kind: 'spatial' })
     const documentId = (await resolveDocumentIdAtPath(WS, 'doomed')) as string
     const app = await appWithRealDeps()
@@ -304,7 +304,7 @@ describe('trash routes', () => {
   })
 
   it('purging a trashed document removes it from the trash for good, and it cannot be restored', async () => {
-    const WS = 'ws-trash-purge'
+    const WS = '01EP2PQSSNY3DFDKZZP8EK0FZJ'
     await saveDocument(WS, 'doomed', canvasDoc('to destroy'), { kind: 'spatial' })
     await saveDocument(WS, 'kept', canvasDoc('stays'), { kind: 'spatial' })
     const doomedId = await resolveDocumentIdAtPath(WS, 'doomed')
@@ -341,7 +341,7 @@ describe('trash routes', () => {
   })
 
   it('answers 409, not 404, for a trash entry whose documentId the workspace already places', async () => {
-    const WS = 'ws-trash-restore-placed'
+    const WS = '01NRWSSNRKXP1F8FZFXWPQ60NH'
     await saveDocument(WS, 'twice', canvasDoc('live copy'), { kind: 'spatial' })
     const documentId = (await resolveDocumentIdAtPath(WS, 'twice')) as string
     const deps = await realDeps()
@@ -369,7 +369,7 @@ describe('trash routes', () => {
   })
 
   it('a restore from the trash brings the saved versions back with the document', async () => {
-    const WS = 'ws-trash-versions-restore'
+    const WS = '0181FB47PPKP8VXA0XHV4248NG'
     await saveDocument(WS, 'doomed', canvasDoc('versioned'), { kind: 'spatial' })
     const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
     const app = await appWithRealDeps()
@@ -391,7 +391,7 @@ describe('trash routes', () => {
   })
 
   it("purging a trashed document drops its saved versions, and only that document's", async () => {
-    const WS = 'ws-trash-versions-purge'
+    const WS = '013RYMYXJ3VV39S3GDE53QTDN5'
     await saveDocument(WS, 'doomed', canvasDoc('to destroy'), { kind: 'spatial' })
     await saveDocument(WS, 'kept', canvasDoc('stays'), { kind: 'spatial' })
     const doomedId = await resolveDocumentIdAtPath(WS, 'doomed')
@@ -412,7 +412,7 @@ describe('trash routes', () => {
   })
 
   it('refuses to purge a live document, or an entry already purged, with a 404', async () => {
-    const WS = 'ws-trash-purge-refused'
+    const WS = '01VTT2AY55CM7094KA3TZYJ3GP'
     await saveDocument(WS, 'live', canvasDoc('still here'), { kind: 'spatial' })
     const liveId = await resolveDocumentIdAtPath(WS, 'live')
     const app = await appWithRealDeps()
@@ -460,22 +460,28 @@ describe('trash routes', () => {
     expect(hasDocumentTrash(deps.documentIndex)).toBe(false)
     // The workspace exists: an unknown one is refused before the capability
     // is consulted, so it would hide the 501 this case is about.
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
 
-    expect((await app.request('/api/workspaces/ws/trash')).status).toBe(501)
+    expect((await app.request('/api/workspaces/0104Y7DY19FTA30KQYKDRRMNBN/trash')).status).toBe(501)
     expect(
       (
-        await app.request('/api/workspaces/ws/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV/restore', {
-          method: 'POST',
-        })
+        await app.request(
+          '/api/workspaces/0104Y7DY19FTA30KQYKDRRMNBN/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV/restore',
+          {
+            method: 'POST',
+          },
+        )
       ).status,
     ).toBe(501)
     expect(
       (
-        await app.request('/api/workspaces/ws/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV', {
-          method: 'DELETE',
-        })
+        await app.request(
+          '/api/workspaces/0104Y7DY19FTA30KQYKDRRMNBN/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          {
+            method: 'DELETE',
+          },
+        )
       ).status,
     ).toBe(501)
   })
@@ -499,7 +505,7 @@ describe('trash routes', () => {
   })
 
   it('unknown workspace answers 404 on list and purge; unknown documentId answers 404 on restore', async () => {
-    const WS = 'ws-trash-missing'
+    const WS = '01RFGGT1KJTMQB8E0936QN5WR3'
     await saveDocument(WS, 'doc', canvasDoc('content'), { kind: 'spatial' })
     const app = await appWithRealDeps()
 

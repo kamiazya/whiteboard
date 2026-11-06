@@ -32,7 +32,7 @@ const { createDocumentRouter } = await import('../document.js')
 // workaround for document.ts's dynamic import.
 await import('../../sync-audience.js')
 
-const WS = 'trap-ws'
+const WS = '01HDYDF5NZW9QRR8GZG7FRY13R'
 
 afterEach(() => {
   vi.restoreAllMocks()

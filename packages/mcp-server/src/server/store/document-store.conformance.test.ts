@@ -172,7 +172,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   it('serves a copy as its content even after its path was read while empty', async () => {
     const { index, dispose } = await makeProductionIndex()
     try {
-      const workspaceId = 'ws-duplicate-phantom'
+      const workspaceId = '01KSMADF7Z4E0W6H0SXDB1A4G2'
       await index.createWorkspace({ workspaceId })
       await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
       await liveMarkdownContent.write(workspaceId, 'note', 'the source')
@@ -192,7 +192,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   it('serves a restored document as its content even after its path was read while trashed', async () => {
     const { index, dispose } = await makeProductionIndex()
     try {
-      const workspaceId = 'ws-restore-phantom'
+      const workspaceId = '01N0JH1WQEX3GSWJPJ9JP3RF8P'
       await index.createWorkspace({ workspaceId })
       const created = await index.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
       await liveMarkdownContent.write(workspaceId, 'note', 'the source')
@@ -215,7 +215,7 @@ describe('CacheCoherentDocumentIndex (the daemon production index)', () => {
   it('serves a document recreated at a deleted path as itself, not as the one deleted', async () => {
     const { index, dispose } = await makeProductionIndex()
     try {
-      const workspaceId = 'ws-recreate'
+      const workspaceId = '018YDDV83NF6VNCWWE6SRWJ308'
       await index.createWorkspace({ workspaceId })
       const first = new LoroDoc()
       writeDocumentKind(first, 'markdown')

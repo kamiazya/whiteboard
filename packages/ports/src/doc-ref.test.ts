@@ -6,14 +6,17 @@ describe('docRefSchema', () => {
   it('accepts a document ref carrying its workspace', () => {
     const result = docRefSchema.safeParse({
       kind: 'document',
-      workspaceId: 'workspace-a',
+      workspaceId: '018MGSNTFWTEJHYF648G2FKPBY',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     })
     expect(result.success).toBe(true)
   })
 
   it('accepts a workspace-tree doc ref', () => {
-    const result = docRefSchema.safeParse({ kind: 'workspace-tree', workspaceId: 'workspace-a' })
+    const result = docRefSchema.safeParse({
+      kind: 'workspace-tree',
+      workspaceId: '018MGSNTFWTEJHYF648G2FKPBY',
+    })
     expect(result.success).toBe(true)
   })
 
@@ -32,17 +35,18 @@ describe('docRefSchema', () => {
   })
 
   it('rejects a document ref missing documentId', () => {
-    expect(docRefSchema.safeParse({ kind: 'document', workspaceId: 'workspace-a' }).success).toBe(
-      false,
-    )
+    expect(
+      docRefSchema.safeParse({ kind: 'document', workspaceId: '018MGSNTFWTEJHYF648G2FKPBY' })
+        .success,
+    ).toBe(false)
   })
 
   it('rejects a document ref whose documentId is not a ULID', () => {
     expect(
       docRefSchema.safeParse({
         kind: 'document',
-        workspaceId: 'workspace-a',
-        documentId: 'workspace-a',
+        workspaceId: '018MGSNTFWTEJHYF648G2FKPBY',
+        documentId: 'not-a-ulid',
       }).success,
     ).toBe(false)
   })
@@ -57,7 +61,7 @@ describe('docRefSchema', () => {
     expect(
       docRefSchema.safeParse({
         kind: 'document',
-        workspaceId: 'workspace-a',
+        workspaceId: '018MGSNTFWTEJHYF648G2FKPBY',
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         extra: 1,
       }).success,
@@ -75,15 +79,15 @@ describe('docRefKey', () => {
     expect(
       docRefKey({
         kind: 'document',
-        workspaceId: 'workspace-a',
+        workspaceId: '018MGSNTFWTEJHYF648G2FKPBY',
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       }),
     ).toBe('document:01ARZ3NDEKTSV4RRFFQ69G5FAV')
   })
 
   it('keys a workspace-tree ref by workspaceId', () => {
-    expect(docRefKey({ kind: 'workspace-tree', workspaceId: 'workspace-a' })).toBe(
-      'workspace-tree:workspace-a',
+    expect(docRefKey({ kind: 'workspace-tree', workspaceId: '018MGSNTFWTEJHYF648G2FKPBY' })).toBe(
+      'workspace-tree:018MGSNTFWTEJHYF648G2FKPBY',
     )
   })
 })

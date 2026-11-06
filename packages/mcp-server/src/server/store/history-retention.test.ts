@@ -84,7 +84,7 @@ async function seedAgedFile(workspaceId: string, fileId: string, bytes: number):
 }
 
 it('compaction folds to the earliest version alone, with nothing holding it back', async () => {
-  const WS = 'ws-unpinned'
+  const WS = '01Q8Z3ZK6XEBNZS4F9771SCSJJ'
   await saveDocument(WS, 'doc', canvasDoc('early content'), { kind: 'spatial' })
   // The number of later edits is what makes the fold a real gain rather than
   // a rounding error, and it is the count the measurement above was taken at.
@@ -110,7 +110,7 @@ it('compaction folds to the earliest version alone, with nothing holding it back
 })
 
 it('reclaims a file that only a past state of the document references', async () => {
-  const WS = 'ws-files'
+  const WS = '01164BRH3FBV8QWPKB3SGPMDH8'
   await seedAgedFile(WS, 'no-longer-drawn', 4096)
   await saveDocument(WS, 'doc', makeSpatialDocWithImage('no-longer-drawn'), { kind: 'spatial' })
 

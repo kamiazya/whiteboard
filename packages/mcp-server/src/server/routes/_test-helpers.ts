@@ -6,6 +6,7 @@ import {
   documentContainers,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach } from 'vitest'
@@ -101,6 +102,12 @@ export async function createTestDocument(
   deps: ServerDeps,
   input: { workspaceId: string; path: string; kind?: 'spatial' | 'markdown'; name?: string },
 ): Promise<void> {
+  // A fixture naming its workspace by a canonical id means THAT workspace, so
+  // it is keyed by it; anything else is a segment, and the create mints one.
+  const keyed = workspaceCanonicalIdSchema.safeParse(input.workspaceId).success
+  if (keyed && (await deps.documentIndex.resolveWorkspace(input.workspaceId)) === null) {
+    await deps.documentIndex.createWorkspace({ workspaceId: input.workspaceId })
+  }
   await wbDocumentCreate(deps, {
     workspaceId: input.workspaceId,
     path: input.path,

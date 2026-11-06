@@ -42,7 +42,7 @@ vi.mock('../config.js', () => ({
 const { createApp } = await import('../app.js')
 
 const TOKEN = 'json-body-ceiling-token'
-const WORKSPACE = 'ws-known'
+const WORKSPACE = '01TFTP6SMY23MTM63TK63WD2YX'
 const MIB = 1024 * 1024
 /** Spelled here, not imported: the ceiling under test cannot also be the oracle for it. */
 const A_MEGABYTE_AND_ONE = MIB + 1

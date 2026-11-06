@@ -78,28 +78,14 @@ export const CONTAINER_NAME_MAX_CHARS = 1024
 export const CONTAINER_NAME_LIMIT_PHRASE = `the ${CONTAINER_NAME_MAX_CHARS}-character limit for the name of one container; a thread or a proposal is named by its id`
 
 /**
- * Legacy workspace identifier shape, retained for the live ids the daemon
- * still holds in its `workspaces.id` column (`'default'` and nanoid-minted
- * strings). The browser keeper no longer needs it: its IndexedDB upgrade
- * re-keys the old hard-coded `'local'` onto a canonical ULID. This codifies the contract already
- * enforced at runtime by mcp-server's `validateWorkspaceId`, which imports
- * `WORKSPACE_ID_PATTERN` from here (`/^[a-zA-Z0-9_-]+$/`, non-empty): workspace ids are used directly as
- * path segments and cache/index keys, so `.`/`/`/whitespace/non-ASCII must
- * stay rejected to prevent path traversal and key collisions.
- *
- * ADR-0019 replaces this single string's three overloaded roles with three
- * separate schemas below (`workspaceCanonicalIdSchema` / `workspaceSegmentSchema`
- * / `workspaceDisplayNameSchema`), mirroring the document layer's id / path /
- * displayName split. This schema's shape is untouched by that decision —
- * it can tighten only once the daemon's live ids are re-keyed onto the
- * canonical-id shape, as the browser's already are.
+ * The character class a VERSION id or a FILE id is held to: both are minted
+ * as nanoids and used directly as path segments and cache keys, so `.`, `/`,
+ * whitespace and non-ASCII stay refused against traversal and key collisions.
+ * Not a workspace id's grammar — a workspace id is a ULID
+ * (`workspaceCanonicalIdSchema`). Shared so the daemon's validator and the
+ * promotion contract that carries a version id cannot disagree.
  */
-export const WORKSPACE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
-
-export const workspaceIdSchema = z
-  .string()
-  .min(1)
-  .regex(WORKSPACE_ID_PATTERN, 'workspace id must be a path-safe path ([a-zA-Z0-9_-]+)')
+export const PATH_SAFE_ID_PATTERN = /^[a-zA-Z0-9_-]+$/
 
 /**
  * One segment of a document path: ASCII letters and digits, hyphens only in
@@ -143,6 +129,12 @@ export const documentPathSchema = utf16Max(z.string().min(1), DOCUMENT_PATH_MAX_
  * from `documentIdSchema` despite sharing a pattern) and tests, not string
  * shape. This is the only key references, versions, storage rows,
  * and sync ever use — never shown as chrome, never typed by a human.
+ *
+ * It is also the only workspace id there is. What a caller TYPES is an
+ * address (`workspaceAddressInputSchema`: this id, or a segment), and what
+ * anything ANSWERS or stores is this. An id in any other shape — `default`,
+ * a nanoid carrying `_` — is a row from before the re-key onto ULIDs and is
+ * refused where it is read, never resolved.
  */
 export const workspaceCanonicalIdSchema = z.string().regex(ULID_PATTERN, 'must be a canonical ULID')
 
@@ -223,4 +215,4 @@ export const documentNameSchema = utf16Max(
 
 export type DocumentId = z.infer<typeof documentIdSchema>
 export type NodeId = z.infer<typeof nodeIdSchema>
-export type WorkspaceId = z.infer<typeof workspaceIdSchema>
+export type WorkspaceId = z.infer<typeof workspaceCanonicalIdSchema>

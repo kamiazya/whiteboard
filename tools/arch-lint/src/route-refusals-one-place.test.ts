@@ -9,7 +9,8 @@
  * malformed address, so the next route copied whichever was nearest — the
  * drift ADR-0018 records, one layer down from the operations it is about.
  *
- * A route may still call `validateWorkspaceId` itself where its 400 is a
+ * A route may still call `validateWorkspaceHandle` (or, for a canonical id,
+ * `validateWorkspaceId`) itself where its 400 is a
  * deliberately DIFFERENT contract; each such file is named below with the
  * reason, and the length is pinned so an addition is a decision in the diff.
  *
@@ -26,12 +27,12 @@ import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-s
 
 const ROUTES_DIR = 'packages/mcp-server/src/server/routes'
 
-const HANDLE_VALIDATOR_NAMES = ['validateWorkspaceId']
+const HANDLE_VALIDATOR_NAMES = ['validateWorkspaceHandle', 'validateWorkspaceId']
 
 /** Files under routes/ that validate a handle by hand, each with why. */
 const HANDLE_VALIDATION_ALLOWLIST: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/routes/document/path-route.ts':
-    'validates the workspace id and the document path in ONE try, and picks the 400 shape (legacy or Problem Details) per route; it does not resolve the handle',
+    'validates the workspace handle and the document path in ONE try, and picks the 400 shape (legacy or Problem Details) per route; it does not resolve the handle',
   'packages/mcp-server/src/server/routes/document/workspace-document.ts':
     'a page-facing surface: its 400 is Problem Details `{ title }`, not `{ error, message }`',
   'packages/mcp-server/src/server/routes/replica-key.ts':
@@ -61,6 +62,7 @@ describe('route refusals are written in one place', () => {
     const fixtures: readonly { readonly source: string; readonly hit: boolean }[] = [
       { source: 'try { validateWorkspaceId(handle) } catch (err) {}', hit: true },
       { source: 'refusedBy(() => validateWorkspaceId(handle))', hit: true },
+      { source: 'try { validateWorkspaceHandle(handle) } catch (err) {}', hit: true },
       {
         source: "import { validateWorkspaceId as check } from '../validators.js'\ncheck(handle)",
         hit: true,

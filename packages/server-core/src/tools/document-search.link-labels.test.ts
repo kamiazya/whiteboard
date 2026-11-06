@@ -4,7 +4,7 @@ import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSearchTool, documentSearchOutputSchema } from './document-search.js'
 import { createDocumentSetOperation } from './document-set.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 describe('wb_document_search excerpts', () => {
   it('quote a [[link]] by the display name of what it points at', async () => {

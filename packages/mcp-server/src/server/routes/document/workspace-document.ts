@@ -23,7 +23,7 @@ import type { LoroDoc } from 'loro-crdt'
 import type { ZodError } from 'zod'
 import { getLogger } from '../../log.js'
 import type { CallerName } from '../../security/membership-gate.js'
-import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { validateWorkspaceHandle, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { CONTENT_BODY_LIMIT_BYTES, limitContentBody } from '../body-limit.js'
 import { type ReadJsonBodyOptions, readJsonBody } from '../read-json-body.js'
@@ -74,7 +74,7 @@ async function admittedWorkspace(
   // unusable one rather than through a second path.
   const handle = c.req.param('workspaceId') ?? ''
   try {
-    validateWorkspaceId(handle)
+    validateWorkspaceHandle(handle)
   } catch (err) {
     const body = validationErrorBody(err)
     if (body) return { refusal: c.json(body, 400) }

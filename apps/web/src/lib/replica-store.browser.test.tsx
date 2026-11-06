@@ -6,6 +6,7 @@
 
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
 import { bytesToBase64Url } from '@kamiazya/whiteboard-model'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
@@ -40,7 +41,7 @@ const OTHER_DAEMON = 'http://127.0.0.1:3100'
 let workspaceCounter = 0
 function freshWorkspaceId(): string {
   workspaceCounter += 1
-  return `01JD0REPLICASTORE${String(workspaceCounter).padStart(8, '0')}`
+  return workspaceIdFor(`replica-store-${workspaceCounter}`)
 }
 
 async function getAllRaw(dbName: string): Promise<{ store: string; records: unknown[] }[]> {

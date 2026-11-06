@@ -150,35 +150,45 @@ const REFUSED_LAYERS: ReadonlyArray<{ segment?: string; displayName?: string }> 
   { displayName: ' padded ' },
 ]
 
+/** A canonical id per refused layer, so only the layer can be what refuses the create. */
+function refusedWorkspaceId(n: number): string {
+  return `01ARZ3NDEKTSV4RRFFQ69G5FA${n}`
+}
+
 function describeRefusedWorkspaceIdentity(withIndex: WithIndex): void {
   describe('a workspace identity the model refuses', () => {
     it('is refused on create, and no workspace appears', async () => {
       await withIndex(async (index) => {
         for (const [n, layers] of REFUSED_LAYERS.entries()) {
           await expect(
-            index.createWorkspace({ workspaceId: `ws-refused-${n}`, ...layers }),
+            index.createWorkspace({ workspaceId: refusedWorkspaceId(n), ...layers }),
           ).rejects.toMatchObject({ name: 'ZodError' })
         }
         const rows = await index.listWorkspaces()
-        expect(rows.some((row) => row.workspaceId.startsWith('ws-refused-'))).toBe(false)
+        const refused = new Set(REFUSED_LAYERS.map((_, n) => refusedWorkspaceId(n)))
+        expect(rows.some((row) => refused.has(row.workspaceId))).toBe(false)
         for (const row of rows) expect(workspaceEntrySchema.safeParse(row).success).toBe(true)
       })
     })
 
     it('is refused on rename, and the workspace and its siblings stay as they were', async () => {
       await withIndex(async (index, seedWorkspace) => {
-        await seedWorkspace({ workspaceId: 'ws-named', segment: 'named', displayName: 'Named' })
+        await seedWorkspace({
+          workspaceId: '01W968V4H3K149VMAVD6W15TEG',
+          segment: 'named',
+          displayName: 'Named',
+        })
         for (const layers of REFUSED_LAYERS) {
           await expect(
-            index.renameWorkspace({ workspaceId: 'ws-named', ...layers }),
+            index.renameWorkspace({ workspaceId: '01W968V4H3K149VMAVD6W15TEG', ...layers }),
           ).rejects.toMatchObject({ name: 'ZodError' })
         }
         expect(await index.resolveWorkspace('named')).toMatchObject({
-          workspaceId: 'ws-named',
+          workspaceId: '01W968V4H3K149VMAVD6W15TEG',
           displayName: 'Named',
         })
         const rows = await index.listWorkspaces()
-        expect(rows.map((row) => row.workspaceId)).toContain('ws-other')
+        expect(rows.map((row) => row.workspaceId)).toContain('0175T8F2WH2MX756J1T7SHKGB8')
         for (const row of rows) expect(workspaceEntrySchema.safeParse(row).success).toBe(true)
       })
     })
@@ -199,26 +209,28 @@ function describePreBoundWorkspaceRow(withIndex: WithIndex): void {
     it('still lists, with its refused layers read as absent, and can be renamed', async () => {
       await withIndex(async (index, seedWorkspace) => {
         await seedWorkspace({
-          workspaceId: 'ws-pre-bound',
+          workspaceId: '015TAGD8CN1TY1PFFPMS8WVDEY',
           segment: 'my team',
           displayName: 'n'.repeat(201),
         })
 
         const rows = await index.listWorkspaces()
         for (const row of rows) expect(workspaceEntrySchema.safeParse(row).success).toBe(true)
-        expect(rows.find((row) => row.workspaceId === 'ws-pre-bound')).toEqual({
-          workspaceId: 'ws-pre-bound',
+        expect(rows.find((row) => row.workspaceId === '015TAGD8CN1TY1PFFPMS8WVDEY')).toEqual({
+          workspaceId: '015TAGD8CN1TY1PFFPMS8WVDEY',
         })
-        expect((await index.resolveWorkspace('ws-other'))?.workspaceId).toBe('ws-other')
+        expect((await index.resolveWorkspace('0175T8F2WH2MX756J1T7SHKGB8'))?.workspaceId).toBe(
+          '0175T8F2WH2MX756J1T7SHKGB8',
+        )
         expect(await index.resolveWorkspace('my team')).toBeNull()
 
         await index.renameWorkspace({
-          workspaceId: 'ws-pre-bound',
+          workspaceId: '015TAGD8CN1TY1PFFPMS8WVDEY',
           segment: 'my-team',
           displayName: 'My team',
         })
         expect(await index.resolveWorkspace('my-team')).toEqual({
-          workspaceId: 'ws-pre-bound',
+          workspaceId: '015TAGD8CN1TY1PFFPMS8WVDEY',
           segment: 'my-team',
           displayName: 'My team',
         })

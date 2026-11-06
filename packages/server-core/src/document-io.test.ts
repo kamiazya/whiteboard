@@ -11,7 +11,7 @@ import { FakeDocumentStore, seedDoc } from './test-utils/fake-document-store.js'
 import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
 
-const WORKSPACE_ID = 'ws-1'
+const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
 const EMPTY: SpatialCanvas = { nodes: [], edges: [] }

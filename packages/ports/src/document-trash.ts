@@ -1,9 +1,9 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { DocumentIndex } from './document-index.js'
 
 const trashEntryInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
+  .object({ workspaceId: workspaceCanonicalIdSchema, documentId: documentIdSchema })
   .strict()
 export type TrashEntryInput = z.infer<typeof trashEntryInputSchema>
 

@@ -1107,7 +1107,7 @@ describe('DaemonIndexPage', () => {
         created.push(JSON.parse(String(init.body)).path as string)
         return Promise.resolve(
           jsonResponse(
-            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
+            { workspaceId: WS_ULID, documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
             201,
           ),
         )
@@ -1168,7 +1168,7 @@ describe('DaemonIndexPage', () => {
 
     resolveCreate?.(
       jsonResponse(
-        { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
+        { workspaceId: WS_ULID, documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path: 'untitled' },
         201,
       ),
     )
@@ -1198,7 +1198,7 @@ describe('DaemonIndexPage', () => {
         serverPaths = [...serverPaths, path]
         return Promise.resolve(
           jsonResponse(
-            { workspaceId: 'ws-a', documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path },
+            { workspaceId: WS_ULID, documentId: '01J9ZC8XK4PQRS7TVWXY0ABCDE', path },
             201,
           ),
         )

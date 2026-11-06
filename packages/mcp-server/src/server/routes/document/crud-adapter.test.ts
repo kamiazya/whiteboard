@@ -85,7 +85,7 @@ async function depsRecordingList(): Promise<{
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
-  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+  await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
   const listed: string[] = []
   const inner = deps.documentIndex
   const index = spyIndex(inner, {
@@ -100,7 +100,7 @@ async function depsRecordingList(): Promise<{
 describe('GET /api/workspaces', () => {
   it('lists through the injected index rather than the module store', async () => {
     const { deps } = await depsRecordingList()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-2' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01KW278Z7YCXF37PRQZGG0SYV7' })
     const listed: string[] = []
     const inner = deps.documentIndex
     const index = spyIndex(inner, {
@@ -118,23 +118,30 @@ describe('GET /api/workspaces', () => {
     // the injected one from the module-level store.
     expect(listed).toEqual(['called'])
     const body = (await res.json()) as { workspaces: { workspaceId: string }[] }
-    expect(body.workspaces.map((w) => w.workspaceId).sort()).toEqual(['ws-1', 'ws-2'])
+    expect(body.workspaces.map((w) => w.workspaceId).sort()).toEqual([
+      '01KW278Z7YCXF37PRQZGG0SYV7',
+      '01ZVM89A4A1V9FS03Z9J64KEK1',
+    ])
   })
 })
 
 describe('GET /api/workspaces/:workspaceId/documents', () => {
   it('lists through the injected operation, carrying kind and updatedAt', async () => {
     const { deps, listed } = await depsRecordingList()
-    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    await deps.documentIndex.createDocument({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'a',
+      kind: 'markdown',
+    })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents')
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents')
 
     expect(res.status).toBe(200)
     // Reaching the same database is not the same as reaching the injected
     // index: the module-level store reads these very rows, so without this the
     // case passes either way.
-    expect(listed).toEqual(['ws-1'])
+    expect(listed).toEqual(['01ZVM89A4A1V9FS03Z9J64KEK1'])
     const body = (await res.json()) as { documents: Record<string, unknown>[] }
     expect(body.documents).toHaveLength(1)
     expect(body.documents[0]).toMatchObject({ path: 'a', kind: 'markdown' })
@@ -147,14 +154,14 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   it('answers the document as documentId and name, the spelling every other document surface uses', async () => {
     const { deps } = await depsRecordingList()
     await deps.documentIndex.createDocument({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'a',
       kind: 'markdown',
       name: 'Weekly review',
     })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents')
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents')
 
     const body = (await res.json()) as { documents: Record<string, unknown>[] }
     const parsed = listDocumentsResponseSchema.parse(body)
@@ -182,7 +189,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
       },
     })
 
-    const res = await app.request('/api/workspaces/ws-1/documents')
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents')
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { documents: Record<string, unknown>[] }
@@ -191,18 +198,28 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
 
   it('says per document whether it is pinned, the way the list tool and /api/v1 do', async () => {
     const { deps } = await depsRecordingList()
-    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
-    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'b', kind: 'markdown' })
-    const listed = await deps.documentIndex.listDocuments({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createDocument({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'a',
+      kind: 'markdown',
+    })
+    await deps.documentIndex.createDocument({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'b',
+      kind: 'markdown',
+    })
+    const listed = await deps.documentIndex.listDocuments({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+    })
     const pinnedId = listed.find((entry) => entry.path === 'b')?.documentId as string
     await (deps.documentIndex as unknown as DocumentPins).setDocumentPinned({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: pinnedId,
       pinned: true,
     })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents')
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents')
 
     const parsed = listDocumentsResponseSchema.parse(await res.json())
     expect(parsed.documents.map((d) => [d.path, d.pinned])).toEqual([
@@ -215,7 +232,11 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   // which is not the same as saying none are pinned.
   it('omits pinned when the keeper keeps no pins', async () => {
     const { deps } = await depsRecordingList()
-    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    await deps.documentIndex.createDocument({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'a',
+      kind: 'markdown',
+    })
     const inner = deps.documentIndex
     const pinless = new Proxy(inner, {
       has: (target, key) => key !== 'listPinnedDocuments' && key in target,
@@ -226,7 +247,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     })
     const app = createWorkspacesRouter({ serverDeps: { ...deps, documentIndex: pinless } })
 
-    const res = await app.request('/api/workspaces/ws-1/documents')
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents')
 
     const body = (await res.json()) as { documents: Record<string, unknown>[] }
     expect(body.documents).toHaveLength(1)
@@ -273,15 +294,22 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('renames through the injected operation rather than its own sequence', async () => {
     const { deps, moved } = await depsRecordingMove()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'plan', kind: 'spatial' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
+    await deps.documentIndex.createDocument({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'plan',
+      kind: 'spatial',
+    })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/plan/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'archive' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/plan/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'archive' }),
+      },
+    )
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ path: 'archive' })
@@ -290,14 +318,17 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('answers 404 for a path that names nothing', async () => {
     const { deps, moved } = await depsRecordingMove()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/absent/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'elsewhere' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/absent/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'elsewhere' }),
+      },
+    )
 
     expect(res.status).toBe(404)
     // The address is translated BEFORE the operation runs — path to id, and
@@ -313,17 +344,24 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   // the operation raised is forwarded rather than rebuilt.
   it('forwards the produced colliding path in the 409, not the requested one', async () => {
     const { deps } = await depsRecordingMove()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     for (const path of ['plan', 'plan/child', 'archive/child']) {
-      await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path, kind: 'spatial' })
+      await deps.documentIndex.createDocument({
+        workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+        path,
+        kind: 'spatial',
+      })
     }
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/plan/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'archive' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/plan/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'archive' }),
+      },
+    )
 
     expect(res.status).toBe(409)
     const body = (await res.json()) as { message?: string }
@@ -332,15 +370,22 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('answers 400 for a move into the document own subtree', async () => {
     const { deps } = await depsRecordingMove()
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
-    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'plan', kind: 'spatial' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
+    await deps.documentIndex.createDocument({
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
+      path: 'plan',
+      kind: 'spatial',
+    })
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/plan/path', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path: 'plan/inside' }),
-    })
+    const res = await app.request(
+      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/plan/path',
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: 'plan/inside' }),
+      },
+    )
 
     expect(res.status).toBe(400)
   })
@@ -348,7 +393,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
 describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   beforeEach(async () => {
-    await saveDocument('ws-1', 'doomed', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed', new LoroDoc())
   })
 
   afterEach(() => {
@@ -359,11 +404,13 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     const { deps, entered, cleaned } = await depsRecordingTeardown()
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/doomed', { method: 'DELETE' })
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/doomed', {
+      method: 'DELETE',
+    })
 
     expect(res.status).toBe(200)
-    expect(entered).toEqual(['ws-1:doomed'])
-    expect(cleaned).toEqual(['ws-1:doomed'])
+    expect(entered).toEqual(['01ZVM89A4A1V9FS03Z9J64KEK1:doomed'])
+    expect(cleaned).toEqual(['01ZVM89A4A1V9FS03Z9J64KEK1:doomed'])
   })
 
   // The refusal has to travel OUT of the operation and past the bracket's
@@ -371,18 +418,20 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   // than only through the default wiring, because the seam is the only place
   // "the cleanup did not run" is observable at all.
   it('surfaces the descendant refusal as 409 without entering cleanup', async () => {
-    await saveDocument('ws-1', 'doomed/child', new LoroDoc())
+    await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed/child', new LoroDoc())
     const { deps, entered, cleaned } = await depsRecordingTeardown()
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/doomed', { method: 'DELETE' })
+    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/doomed', {
+      method: 'DELETE',
+    })
 
     expect(res.status).toBe(409)
     expect((await res.json()) as { message?: string }).toMatchObject({
       error: 'document_has_descendants',
       message: expect.stringContaining('doomed/child'),
     })
-    expect(entered).toEqual(['ws-1:doomed'])
+    expect(entered).toEqual(['01ZVM89A4A1V9FS03Z9J64KEK1:doomed'])
     expect(cleaned).toEqual([])
   })
 
@@ -390,9 +439,12 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     const { deps, entered } = await depsRecordingTeardown()
     const app = createWorkspacesRouter({ serverDeps: deps })
 
-    const res = await app.request('/api/workspaces/ws-1/documents/never-existed', {
-      method: 'DELETE',
-    })
+    const res = await app.request(
+      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/never-existed',
+      {
+        method: 'DELETE',
+      },
+    )
 
     expect(res.status).toBe(404)
     // A delete that found nothing must not enter teardown: the cleanup would

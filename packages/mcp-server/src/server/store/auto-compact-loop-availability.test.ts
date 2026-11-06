@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { textNode, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -152,7 +152,7 @@ async function readAt(
 ): Promise<Reading[]> {
   const readings: Reading[] = []
   while (readings.length < count) {
-    const workspaceId = `compact-${edits}-${workspaceSeq++}`
+    const workspaceId = workspaceIdFor(`compact-${edits}-${workspaceSeq++}`)
     await seedWorkspace(workspaceId, store, edits)
     const { result, availability } = await measureLoopAvailability(
       () => compactWorkspace(workspaceId, store),

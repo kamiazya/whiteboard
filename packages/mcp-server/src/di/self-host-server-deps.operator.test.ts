@@ -34,14 +34,19 @@ describe('the self-host ServerDeps', () => {
   it('stamps an unnamed agent save with this daemon’s did:key', async () => {
     clearDocCacheForTests()
     _clearWorkspaceDocCacheForTests()
-    await mkdir(join(tmp.dir, 'ws1'), { recursive: true })
-    await saveDocument('ws1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+    await mkdir(join(tmp.dir, '011K0CCH776JA60YJHJTYXASRK'), { recursive: true })
+    await saveDocument('011K0CCH776JA60YJHJTYXASRK', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
 
     const deps = await resolveTestServerDeps(tmp.dir)
-    const entry = await deps.versions.save('ws1', 'canvas-a', await getDoc('ws1', 'canvas-a'), {
-      auto: false,
-      label: 'by an agent',
-    })
+    const entry = await deps.versions.save(
+      '011K0CCH776JA60YJHJTYXASRK',
+      'canvas-a',
+      await getDoc('011K0CCH776JA60YJHJTYXASRK', 'canvas-a'),
+      {
+        auto: false,
+        label: 'by an agent',
+      },
+    )
 
     // Read back off the identity file rather than pinned: what matters is
     // that the row names the key the daemon proves itself with, not any

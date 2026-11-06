@@ -12,6 +12,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -34,7 +35,7 @@ vi.mock('../config.js', () => ({
 const { createApp } = await import('../app.js')
 
 const TOKEN = 'retired-routes-token'
-const WS = 'ws-retired'
+const WS = workspaceIdFor('retired')
 
 let handle: IsolatedDbHandle | undefined
 beforeEach(async () => {

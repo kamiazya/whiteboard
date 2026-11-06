@@ -29,7 +29,7 @@ type WithIndex = (
   body: (index: DuplicatingIndex, content: ContentSeam) => Promise<void>,
 ) => Promise<void>
 
-const WS = 'ws-duplicate-conformance'
+const WS = '0125N7S4EZ454VDY5K57JYHE8S'
 
 async function roadmap(index: DuplicatingIndex, content: ContentSeam): Promise<string> {
   const { documentId } = await index.createDocument({
@@ -240,7 +240,10 @@ function describeRefusals(withIndex: WithIndex): void {
   it('refuses a workspace the index does not hold', async () => {
     await withIndex(async (index) => {
       await expect(
-        index.duplicateDocument({ workspaceId: 'ws-nobody', path: 'notes/roadmap' }),
+        index.duplicateDocument({
+          workspaceId: '01YBPQM6R23CTD6BQ2KFA2FG70',
+          path: 'notes/roadmap',
+        }),
       ).rejects.toThrow(WorkspaceNotFoundError)
     })
   })

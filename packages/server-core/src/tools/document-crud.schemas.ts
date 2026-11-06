@@ -6,7 +6,7 @@ import {
   markdownInputSchema,
   okfActorInputSchema,
   workspaceAddressInputSchema,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { workspaceAddressArgSchema } from './workspace-address-arg.js'
@@ -92,7 +92,7 @@ export const wbDocumentCreateOutputSchema = z
      * minted. Without it a create is unusable — the server picks an id,
      * files the document under it, and never says which.
      */
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
     path: documentPathSchema,
   })
@@ -100,7 +100,7 @@ export const wbDocumentCreateOutputSchema = z
 
 export const wbDocumentResolveInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
   })
   .strict()
@@ -162,7 +162,7 @@ export const wbDocumentListOutputSchema = z
 
 export const wbDocumentDeleteInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
+    workspaceId: workspaceCanonicalIdSchema,
     documentId: documentIdSchema,
   })
   .strict()

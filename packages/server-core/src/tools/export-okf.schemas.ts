@@ -6,11 +6,11 @@
  * exists rather than being a matter of taste.
  */
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec/okf-schema'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 export const exportOkfInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
+  .object({ workspaceId: workspaceCanonicalIdSchema, documentId: documentIdSchema })
   .strict()
 export type ExportOkfInput = z.infer<typeof exportOkfInputSchema>
 

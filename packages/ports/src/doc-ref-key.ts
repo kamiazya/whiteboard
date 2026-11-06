@@ -1,4 +1,4 @@
-import { workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import type { DocRef } from './doc-ref.js'
 
 /**
@@ -32,13 +32,31 @@ export function docRefKey(docRef: DocRef): string {
   }
 }
 
-const WORKSPACE_TREE_DOC_KEY = /^workspace-tree:(.+)$/
+const WORKSPACE_TREE_DOC_KEY = /^workspace-tree:(.*)$/
+
+/**
+ * A stored record key in the `workspace-tree` shape whose id is not a
+ * canonical ULID: a record keyed before every keeper re-keyed its workspaces
+ * onto ULIDs, or one no keeper wrote. Thrown rather than read as "not a
+ * workspace record", because that answer is what decides whether a record is
+ * sealed and whose files it names — a reader guessing at an old key would be
+ * deciding both for a record it cannot identify.
+ */
+class StoredWorkspaceKeyError extends Error {
+  readonly code = 'stored_workspace_key_refused'
+  constructor(readonly key: string) {
+    super(
+      `Stored record key "${key}" names a workspace by an id that is not a canonical ULID; a record from before the re-key onto ULIDs is not read.`,
+    )
+    this.name = 'StoredWorkspaceKeyError'
+  }
+}
 
 /**
  * The exact inverse of `docRefKey` for a `workspace-tree` ref: the workspace id
- * whose record this key addresses, or `null` for any key `docRefKey` could not
- * have written for one (a `document:*` key, another shape, or an id the
- * workspace-id schema refuses).
+ * whose record this key addresses, or `null` for a key of any other shape (a
+ * `document:*` key, an unrelated one). A `workspace-tree:` key whose id is not
+ * a canonical ULID throws `StoredWorkspaceKeyError`.
  *
  * A reader that decides something from the key — which keeper owns the row,
  * whether to seal it — asks here rather than parsing the prefix itself, so the
@@ -48,5 +66,8 @@ const WORKSPACE_TREE_DOC_KEY = /^workspace-tree:(.+)$/
 export function workspaceIdOfStoredDocKey(key: string): string | null {
   const workspaceId = WORKSPACE_TREE_DOC_KEY.exec(key)?.[1]
   if (workspaceId === undefined) return null
-  return workspaceIdSchema.safeParse(workspaceId).success ? workspaceId : null
+  if (!workspaceCanonicalIdSchema.safeParse(workspaceId).success) {
+    throw new StoredWorkspaceKeyError(key)
+  }
+  return workspaceId
 }

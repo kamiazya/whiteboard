@@ -30,7 +30,7 @@ const TOKEN = 'uploadable-token'
 
 async function app() {
   const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: 'ws-up' })
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01WHWFM81C4RQEK51GAD4T6ATY' })
   return createApp({
     authMode: 'local-daemon' as const,
     token: TOKEN,
@@ -47,7 +47,7 @@ function put(
   type: string,
   body: Uint8Array<ArrayBuffer>,
 ) {
-  return target.request(`/api/w/ws-up/document/board/file/${fileId}`, {
+  return target.request(`/api/w/01WHWFM81C4RQEK51GAD4T6ATY/document/board/file/${fileId}`, {
     method: 'PUT',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': type },
     body,
@@ -70,9 +70,12 @@ describe('the daemon file route against the declared upload contract', () => {
     const id = `up-${type.replace(/\W/g, '')}`
     const stored = await put(target, id, type, new Uint8Array([1, 2, 3]))
     expect(stored.status).toBe(204)
-    const read = await target.request(`/api/w/ws-up/document/board/file/${id}`, {
-      headers: { Authorization: `Bearer ${TOKEN}` },
-    })
+    const read = await target.request(
+      `/api/w/01WHWFM81C4RQEK51GAD4T6ATY/document/board/file/${id}`,
+      {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      },
+    )
     expect(read.status).toBe(200)
     expect(read.headers.get('Content-Type')).toBe(type)
   })

@@ -68,7 +68,7 @@ describe('deleting a document', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-delete-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
   })
 
   afterEach(async () => {
@@ -81,22 +81,26 @@ describe('deleting a document', () => {
   // it is destroying. The HTTP surface deleting the same document silently
   // strands every child under a prefix nothing owns.
   it('refuses to delete a document that still has descendants', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'a/child', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child', new LoroDoc())
 
-    await expect(deleteDocument('session1', 'a')).rejects.toThrow(DocumentHasDescendantsError)
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).rejects.toThrow(
+      DocumentHasDescendantsError,
+    )
 
-    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path).sort()
     expect(paths).toEqual(['a', 'a/child'])
   })
 
   it('deletes a document whose name merely prefixes a sibling', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'a-sibling', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a-sibling', new LoroDoc())
 
-    await expect(deleteDocument('session1', 'a')).resolves.toBe(true)
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).resolves.toBe(true)
 
-    expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
+    expect((await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path)).toEqual([
+      'a-sibling',
+    ])
   })
 
   it('moves the tree entry to the trash with its version rows kept, leaving the workspace row and a sibling canvas untouched', async () => {
@@ -104,18 +108,18 @@ describe('deleting a document', () => {
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
     const doc = new LoroDoc()
-    await saveDocument('session1', 'canvas-a', doc)
-    await saveDocument('session1', 'canvas-b', doc)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b', doc)
     const store = new FileVersionStore()
-    await store.save('session1', 'canvas-a', doc, { auto: true })
+    await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc, { auto: true })
 
     const db = await getDb(tempDir)
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
-    const documentId = await resolveDocumentIdAtPath('session1', 'canvas-a')
+    const documentId = await resolveDocumentIdAtPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
     if (documentId === null) throw new Error('document missing from the tree')
     const libsqlStore = new LibsqlDocumentStore(db)
 
-    await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')).resolves.toBe(true)
 
     // Kept for a restore, which rejoins them under the same documentId; the
     // trash purge is what removes them (routes/document/trash.test.ts).
@@ -132,7 +136,9 @@ describe('deleting a document', () => {
     const { resolveWorkspaceDocumentById, readTrashEntries } = await import(
       '@kamiazya/whiteboard-loro-adapter'
     )
-    const stored = await new DocumentStoreWorkspaceDocs(libsqlStore).open('session1')
+    const stored = await new DocumentStoreWorkspaceDocs(libsqlStore).open(
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
+    )
     expect(stored).not.toBeNull()
     expect(resolveWorkspaceDocumentById(stored!, documentId)).toBeNull()
     expect(readTrashEntries(stored!).map((t) => t.documentId)).toContain(documentId)
@@ -140,12 +146,14 @@ describe('deleting a document', () => {
     const wsRow = await db
       .selectFrom('workspaces')
       .select(['id'])
-      .where('id', '=', 'session1')
+      .where('id', '=', '01M8BBN7JS60N0ZAR13NP8SXBF')
       .executeTakeFirst()
     expect(wsRow).toBeDefined()
     // The sibling lives in the tree (documents rows retired with the
     // dual-plane collapse), so "untouched" is a listing fact.
-    expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['canvas-b'])
+    expect((await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path)).toEqual([
+      'canvas-b',
+    ])
   })
 
   // wbDocumentDelete once removed the index row and the Libsql bytes and
@@ -159,23 +167,25 @@ describe('deleting a document', () => {
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
 
     const doc = new LoroDoc()
-    await saveDocument('session1', 'agent-deleted', doc)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted', doc)
     const store = new FileVersionStore()
-    const version = await store.save('session1', 'agent-deleted', doc, { auto: true })
+    const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted', doc, {
+      auto: true,
+    })
     // Populate the doc cache the way a read would, so eviction has something
     // to evict — otherwise this half of the assertion passes vacuously.
     // getDoc, not loadDocument: only the former goes through the LRU.
     const { getDoc } = await import('./document-store.js')
-    await getDoc('session1', 'agent-deleted')
-    expect(peekDoc('session1', 'agent-deleted')).toBeDefined()
+    await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')).toBeDefined()
 
     const db = await getDb(tempDir)
-    const documentId = await resolveDocumentIdAtPath('session1', 'agent-deleted')
+    const documentId = await resolveDocumentIdAtPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')
     expect(documentId).not.toBeNull()
     if (documentId === null) throw new Error('unreachable')
     // The production wiring, so the teardown the assertion is about is the real one.
     await wbDocumentDelete(await resolveTestServerDeps(tempDir), {
-      workspaceId: 'session1',
+      workspaceId: '01M8BBN7JS60N0ZAR13NP8SXBF',
       documentId,
     })
 
@@ -185,26 +195,29 @@ describe('deleting a document', () => {
       .where('id', '=', version.id)
       .execute()
     expect(survivors).toEqual([{ id: version.id }])
-    expect(peekDoc('session1', 'agent-deleted')).toBeUndefined()
-    expect(await resolveDocumentIdAtPath('session1', 'agent-deleted')).toBeNull()
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')).toBeUndefined()
+    expect(await resolveDocumentIdAtPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'agent-deleted')).toBeNull()
   })
 
   it('returns false for a missing canvas without throwing; deleting the same canvas twice returns true then false', async () => {
-    await expect(deleteDocument('session1', 'ghost')).resolves.toBe(false)
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'ghost')).resolves.toBe(false)
 
-    await saveDocument('session1', 'once', new LoroDoc())
-    await expect(deleteDocument('session1', 'once')).resolves.toBe(true)
-    await expect(deleteDocument('session1', 'once')).resolves.toBe(false)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'once', new LoroDoc())
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'once')).resolves.toBe(true)
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'once')).resolves.toBe(false)
   })
 
   it('deletes a canvas that never had an FS blob (nothing writes one post-collapse)', async () => {
     // saveDocument never writes an FS blob — content lives entirely in the
     // workspace record's Libsql-backed bytes.
-    await saveDocument('session1', 'row-only', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'row-only', new LoroDoc())
 
-    await expect(deleteDocument('session1', 'row-only')).resolves.toBe(true)
+    await expect(deleteDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'row-only')).resolves.toBe(true)
     expect(
-      await (await import('./document-store.js')).resolveDocumentIdAtPath('session1', 'row-only'),
+      await (await import('./document-store.js')).resolveDocumentIdAtPath(
+        '01M8BBN7JS60N0ZAR13NP8SXBF',
+        'row-only',
+      ),
     ).toBeNull()
   })
 })
@@ -214,7 +227,7 @@ describe('renameDocumentPath', () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-rename-test-'))
     await setupIsolatedDb()
     const { mkdir } = await import('node:fs/promises')
-    await mkdir(join(tempDir, 'session1'), { recursive: true })
+    await mkdir(join(tempDir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
   })
 
   afterEach(async () => {
@@ -226,27 +239,29 @@ describe('renameDocumentPath', () => {
     const { getDb } = await import('./db/index.js')
 
     const doc = new LoroDoc()
-    await saveDocument('session1', 'a', doc)
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', doc)
     const store = new FileVersionStore()
-    const version = await store.save('session1', 'a', doc, { auto: true })
+    const version = await store.save('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', doc, { auto: true })
 
     const db = await getDb(tempDir)
     const beforeId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
-      'session1',
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
       'a',
     )
     if (beforeId === null) throw new Error('document missing from the tree')
     const before = { id: beforeId }
     const documentId = before.id
-    const contentBefore = (await loadDocument('session1', 'a')).toJSON()
+    const contentBefore = (await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).toJSON()
 
-    await expect(renameDocumentPath('session1', 'a', 'b')).resolves.toEqual({ documentId })
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')).resolves.toEqual({
+      documentId,
+    })
 
-    const list = await listDocuments('session1')
+    const list = await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')
     expect(list.map((c) => c.path)).toEqual(['b'])
 
     const afterId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
-      'session1',
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
       'b',
     )
     if (afterId === null) throw new Error('document missing from the tree')
@@ -261,44 +276,48 @@ describe('renameDocumentPath', () => {
     expect(versionsAfter.map((v) => v.id)).toEqual([version.id])
 
     // Content is untouched by the move — same documentId, same value.
-    expect((await loadDocument('session1', 'b')).toJSON()).toEqual(contentBefore)
+    expect((await loadDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')).toJSON()).toEqual(contentBefore)
   })
 
   it('returns null (never throws) for a missing source canvas', async () => {
-    await expect(renameDocumentPath('session1', 'ghost', 'somewhere')).resolves.toBeNull()
+    await expect(
+      renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'ghost', 'somewhere'),
+    ).resolves.toBeNull()
   })
 
   it('throws ConflictError for an already-taken target path and mutates neither canvas', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'b', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'b', new LoroDoc())
 
-    await expect(renameDocumentPath('session1', 'a', 'b')).rejects.toThrow(ConflictError)
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')).rejects.toThrow(
+      ConflictError,
+    )
 
-    const list = await listDocuments('session1')
+    const list = await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')
     expect(list.map((c) => c.path).sort()).toEqual(['a', 'b'])
   })
 
   it('throws the path validator error for an invalid target path', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await expect(renameDocumentPath('session1', 'a', '../evil')).rejects.toThrow()
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', '../evil')).rejects.toThrow()
   })
 
   it('rename to the SAME path is a no-op success, returning the existing documentId', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const _db = await getDb(tempDir)
     const beforeId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
-      'session1',
+      '01M8BBN7JS60N0ZAR13NP8SXBF',
       'a',
     )
     if (beforeId === null) throw new Error('document missing from the tree')
     const before = { id: beforeId }
 
-    await expect(renameDocumentPath('session1', 'a', 'a')).resolves.toEqual({
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'a')).resolves.toEqual({
       documentId: before.id,
     })
 
-    const list = await listDocuments('session1')
+    const list = await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')
     expect(list.map((c) => c.path)).toEqual(['a'])
   })
 
@@ -307,26 +326,26 @@ describe('renameDocumentPath', () => {
   // no document owns — reachable by nothing the UI can show, and produced by
   // the ordinary act of renaming a group.
   it('carries every descendant with the renamed path', async () => {
-    await saveDocument('session1', 'design', new LoroDoc())
-    await saveDocument('session1', 'design/login', new LoroDoc())
-    await saveDocument('session1', 'design/deep/notes', new LoroDoc())
-    await saveDocument('session1', 'designs-elsewhere', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'design', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'design/login', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'design/deep/notes', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'designs-elsewhere', new LoroDoc())
 
-    await renameDocumentPath('session1', 'design', 'product')
+    await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'design', 'product')
 
-    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path).sort()
     expect(paths).toEqual(['designs-elsewhere', 'product', 'product/deep/notes', 'product/login'])
   })
 
   // The prefix test above would pass with a blind string replace; this one
   // fails unless the rewrite is anchored at a segment boundary.
   it('does not carry a sibling that merely shares the name as a prefix', async () => {
-    await saveDocument('session1', 'design', new LoroDoc())
-    await saveDocument('session1', 'design-system', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'design', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'design-system', new LoroDoc())
 
-    await renameDocumentPath('session1', 'design', 'product')
+    await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'design', 'product')
 
-    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path).sort()
     expect(paths).toEqual(['design-system', 'product'])
   })
 
@@ -335,39 +354,41 @@ describe('renameDocumentPath', () => {
   // upward move it was written for — is inverted, and the shallow row lands
   // on a path its own descendant has not vacated yet.
   it('refuses to move a document inside itself rather than raising a raw constraint error', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'a/x', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/x', new LoroDoc())
 
-    await expect(renameDocumentPath('session1', 'a', 'a/x')).rejects.toThrow(
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'a/x')).rejects.toThrow(
       DocumentMoveIntoSelfError,
     )
 
-    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path).sort()
     expect(paths).toEqual(['a', 'a/x'])
   })
 
   it('refuses to nest a document inside itself even when the destination is free', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'a/b', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/b', new LoroDoc())
 
-    await expect(renameDocumentPath('session1', 'a', 'a/nested')).rejects.toThrow(
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'a/nested')).rejects.toThrow(
       DocumentMoveIntoSelfError,
     )
 
-    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path).sort()
     expect(paths).toEqual(['a', 'a/b'])
   })
 
   it('rejects a rename that would collide with an existing descendant path', async () => {
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'a/x', new LoroDoc())
-    await saveDocument('session1', 'c/x', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/x', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'c/x', new LoroDoc())
 
     // `a` -> `c` is free at the top, and still collides: `a/x` would land on
     // the occupied `c/x`.
-    await expect(renameDocumentPath('session1', 'a', 'c')).rejects.toThrow(ConflictError)
+    await expect(renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'c')).rejects.toThrow(
+      ConflictError,
+    )
 
-    const paths = (await listDocuments('session1')).map((c) => c.path).sort()
+    const paths = (await listDocuments('01M8BBN7JS60N0ZAR13NP8SXBF')).map((c) => c.path).sort()
     expect(paths).toEqual(['a', 'a/x', 'c/x'])
   })
 
@@ -375,16 +396,16 @@ describe('renameDocumentPath', () => {
     const { peekDoc, clearDocCacheForTests } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
     clearDocCacheForTests()
-    await saveDocument('session1', 'a', new LoroDoc())
-    await saveDocument('session1', 'a/child', new LoroDoc())
-    await getDoc('session1', 'a/child')
-    expect(peekDoc('session1', 'a/child')).not.toBeUndefined()
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child', new LoroDoc())
+    await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child')
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child')).not.toBeUndefined()
 
-    await renameDocumentPath('session1', 'a', 'b')
+    await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')
 
     // A stale instance cached under the old child path would be resurrected
     // by the next read through it, shadowing the moved document.
-    expect(peekDoc('session1', 'a/child')).toBeUndefined()
+    expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a/child')).toBeUndefined()
   })
 
   it('evicts the old cache key so a subsequent getDoc under the old path misses the cache', async () => {
@@ -392,12 +413,12 @@ describe('renameDocumentPath', () => {
     const { getDoc } = await import('./document-store.js')
     clearDocCacheForTests()
     try {
-      await saveDocument('session1', 'a', new LoroDoc())
-      await getDoc('session1', 'a')
-      expect(peekDoc('session1', 'a')).toBeDefined()
+      await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', new LoroDoc())
+      await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')
+      expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).toBeDefined()
 
-      await renameDocumentPath('session1', 'a', 'b')
-      expect(peekDoc('session1', 'a')).toBeUndefined()
+      await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')
+      expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'a')).toBeUndefined()
     } finally {
       clearDocCacheForTests()
     }
@@ -412,16 +433,16 @@ describe('renameDocumentPath', () => {
       const doc = new LoroDoc()
       doc.getText('content').insert(0, 'real content')
       doc.commit()
-      await saveDocument('session1', 'a', doc)
+      await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', doc)
 
       // A read of the not-yet-placed path 'b' is answered empty, and must
       // leave nothing behind to shadow the document renamed onto it.
-      await getDoc('session1', 'b')
-      expect(peekDoc('session1', 'b')).toBeUndefined()
+      await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')
+      expect(peekDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')).toBeUndefined()
 
-      await renameDocumentPath('session1', 'a', 'b')
+      await renameDocumentPath('01M8BBN7JS60N0ZAR13NP8SXBF', 'a', 'b')
 
-      const reloaded = await getDoc('session1', 'b')
+      const reloaded = await getDoc('01M8BBN7JS60N0ZAR13NP8SXBF', 'b')
       expect(reloaded.getText('content').toString()).toBe('real content')
     } finally {
       clearDocCacheForTests()

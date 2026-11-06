@@ -26,7 +26,7 @@ import { TAG_LIBRARY_PATH } from './tag-library.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
-const WORKSPACE_ID = 'ws-1'
+const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 /** Places the document under test, since every read tool refuses one its workspace does not hold. */
 async function makeDeps(documentStore: FakeDocumentStore): Promise<ServerDeps> {
@@ -69,6 +69,18 @@ async function seedWorkspace(
     writeMarkdownBody(doc, '# Weekly notes\n\nShipped it.')
   })
 }
+
+describe('canvas_view output', () => {
+  // The widget re-invokes tools with the id it was answered, so the answer
+  // is the canonical id the address resolved to, never a legacy one.
+  test('names the workspace by its canonical ULID and refuses any other id', () => {
+    const shape = canvasViewOutputSchema.shape.workspaceId
+    expect(shape.safeParse('01ARZ3NDEKTSV4RRFFQ69G5FAV').success).toBe(true)
+    for (const workspaceId of ['default', 'V1StGXR8_Z5jdHi6B-myT', 'plans']) {
+      expect(shape.safeParse(workspaceId).success, workspaceId).toBe(false)
+    }
+  })
+})
 
 describe('canvas_view tool', () => {
   test('returns the scene the widget lays out, plus the id it refreshes with', async () => {

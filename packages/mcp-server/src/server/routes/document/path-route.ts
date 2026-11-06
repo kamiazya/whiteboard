@@ -6,7 +6,11 @@ import {
   parseDocumentApiPath,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
-import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import {
+  validateDocumentPath,
+  validateWorkspaceHandle,
+  validationErrorBody,
+} from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
 export const DOCUMENT_WILDCARD = '/api/w/:workspaceId/document/*'
@@ -40,7 +44,7 @@ type DocumentFileHandler = (
 // one try, and the handle is resolved only after both pass.
 function validated(c: Context, workspaceId: string, path: string): Response | null {
   try {
-    validateWorkspaceId(workspaceId)
+    validateWorkspaceHandle(workspaceId)
     validateDocumentPath(path)
   } catch (err) {
     const body = validationErrorBody(err)

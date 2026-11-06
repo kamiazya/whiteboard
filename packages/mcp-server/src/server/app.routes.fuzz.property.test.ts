@@ -27,7 +27,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
+import { afterAllFloor, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
@@ -120,7 +120,7 @@ async function seededApp(): Promise<Seeded> {
   dataDir = await mkdtemp(join(tempDir, 'data-'))
   clearDocCacheForTests()
   _clearWorkspaceDocCacheForTests()
-  const workspace = `ws-${++seq}`
+  const workspace = workspaceIdFor(`ws-${++seq}`)
   await seedWorkspaceRow(dataDir, workspace)
   // The same SQLite store under `/api/v1` (serverDeps) and the legacy routes
   // (the module-level document store), as production composes it — the

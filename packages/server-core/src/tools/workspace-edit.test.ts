@@ -8,7 +8,7 @@ import { createDocumentGetTool } from './document-get.js'
 import { exportOkf } from './export-okf.js'
 import { createWorkspaceEditTool, workspaceEditInputSchema } from './workspace-edit.js'
 
-const WS = 'batch'
+const WS = '01EX2GH4PSABFHXDRTCP42JPR0'
 
 /**
  * The workspace exists because this fixture says so. It used to appear as a
@@ -23,6 +23,19 @@ async function makeDeps() {
   return deps
 }
 const body = (text: string) => `---\ntype: note\n---\n${text}`
+
+// What a tool ANSWERS is the canonical id, never the address that reached
+// it: a caller keeps the id, and an id in any other shape is a legacy row.
+describe('wb_workspace_edit output', () => {
+  it('publishes the workspace as a canonical ULID and refuses any other id', () => {
+    const { outputSchema } = createWorkspaceEditTool(makeTestDeps())
+    const answer = { applied: 0, results: [] }
+    expect(outputSchema.safeParse({ ...answer, workspaceId: WS }).success).toBe(true)
+    for (const workspaceId of ['default', 'V1StGXR8_Z5jdHi6B-myT', 'me/plans', 'plans']) {
+      expect(outputSchema.safeParse({ ...answer, workspaceId }).success, workspaceId).toBe(false)
+    }
+  })
+})
 
 describe('wb_workspace_edit', () => {
   it('creates several documents in one call and reports the ids it minted', async () => {
@@ -401,7 +414,7 @@ describe('wb_workspace_edit', () => {
     })
 
     const out = await createWorkspaceEditTool(deps).execute({
-      workspaceId: WS,
+      workspaceId: 'batch',
       createWorkspace: true,
       ops: [
         { op: 'document.create', path: 'first', kind: 'markdown', markdown: body('one') },
@@ -411,14 +424,14 @@ describe('wb_workspace_edit', () => {
 
     expect(out.applied).toBe(2)
     expect(out.workspaceId).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
-    expect(out.workspaceId).not.toBe(WS)
+    expect(out.workspaceId).not.toBe('batch')
 
     // BOTH documents in ONE workspace — the id op 0 minted, which is also
     // the one reported. Two workspaces, or a second op that failed, is the
     // shape this guards.
     const workspaces = await deps.documentIndex.listWorkspaces()
     expect(workspaces).toHaveLength(1)
-    expect(workspaces[0]?.segment).toBe(WS)
+    expect(workspaces[0]?.segment).toBe('batch')
     const listed = await deps.documentIndex.listDocuments({ workspaceId: out.workspaceId })
     expect(listed.map((d) => d.path).sort()).toEqual(['first', 'second'])
   })

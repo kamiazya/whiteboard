@@ -8,7 +8,7 @@ import { createDocumentSetOperation } from '../tools/document-set.js'
 import { DocumentVectorCache } from './document-vector-cache.js'
 import type { Embedder } from './embedder.js'
 
-const WS = 'identity'
+const WS = '014DTSGDSMDQ96AMFHD8KVSFFF'
 
 function makeDeps(): ServerDeps {
   return makeTestDeps()

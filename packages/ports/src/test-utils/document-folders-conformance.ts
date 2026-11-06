@@ -12,7 +12,7 @@ type MakeFolderIndex = () => Promise<{
 
 type WithIndex = (body: (index: FolderIndex) => Promise<void>) => Promise<void>
 
-const WS = 'ws-folders'
+const WS = '01BSXMXYEPZGZYHNN3KTQZ33EE'
 
 async function create(index: FolderIndex, path: string, workspaceId = WS): Promise<void> {
   await index.createDocument({ workspaceId, path, kind: 'markdown' })
@@ -34,7 +34,7 @@ export function describeDocumentFoldersConformance(makeIndex: MakeFolderIndex): 
     const { index, dispose } = await makeIndex()
     try {
       await index.createWorkspace({ workspaceId: WS })
-      await index.createWorkspace({ workspaceId: 'ws-other' })
+      await index.createWorkspace({ workspaceId: '0175T8F2WH2MX756J1T7SHKGB8' })
       await body(index)
     } finally {
       await dispose()
@@ -111,9 +111,9 @@ function describeFolderNameLifetime(withIndex: WithIndex): void {
   it('keeps one workspace folder names out of another', async () => {
     await withIndex(async (index) => {
       await create(index, 'a/x')
-      await create(index, 'a/x', 'ws-other')
+      await create(index, 'a/x', '0175T8F2WH2MX756J1T7SHKGB8')
       await rename(index, 'a', 'Archive')
-      await expect(names(index, 'ws-other')).resolves.toEqual([])
+      await expect(names(index, '0175T8F2WH2MX756J1T7SHKGB8')).resolves.toEqual([])
     })
   })
 }

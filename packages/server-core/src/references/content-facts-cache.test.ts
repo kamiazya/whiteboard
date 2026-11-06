@@ -6,7 +6,7 @@ import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSetOperation } from '../tools/document-set.js'
 import { factsCacheFor } from './content-source.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 function makeDeps(): ServerDeps {
   return makeTestDeps()
@@ -38,7 +38,7 @@ describe('ContentFactsCache', () => {
   it('alternating workspaces never evict each other (regression: cross-workspace thrash)', async () => {
     const deps = makeDeps()
     await seedTwo(deps) // ws-1
-    const OTHER = 'ws-2'
+    const OTHER = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
     await deps.documentIndex.createWorkspace({ workspaceId: OTHER })
     const c = await wbDocumentCreate(deps, {
       workspaceId: OTHER,

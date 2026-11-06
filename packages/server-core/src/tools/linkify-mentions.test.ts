@@ -12,7 +12,7 @@ import { createDocumentSetOperation } from './document-set.js'
 import { createFacetSetTool } from './facet-set.js'
 import { linkifyMentionsOutputSchema } from './linkify-mentions.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
 function makeDeps(): ServerDeps {
   return makeTestDeps()

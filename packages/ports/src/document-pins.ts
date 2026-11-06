@@ -1,9 +1,13 @@
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { DocumentIndex, ListDocumentsInput } from './document-index.js'
 
 const setDocumentPinnedInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema, pinned: z.boolean() })
+  .object({
+    workspaceId: workspaceCanonicalIdSchema,
+    documentId: documentIdSchema,
+    pinned: z.boolean(),
+  })
   .strict()
 export type SetDocumentPinnedInput = z.infer<typeof setDocumentPinnedInputSchema>
 

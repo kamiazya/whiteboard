@@ -612,7 +612,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/ports/src/test-utils/document-index-conformance.ts#describeDocumentIndexConformance': 362,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeListWorkspaces': 117,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeRenameWorkspace': 96,
-  'packages/ports/src/test-utils/document-index-conformance.ts#describeResolveWorkspace': 57,
   'packages/ports/src/test-utils/document-index-conformance.ts#describeSetDocumentName': 60,
   // +16: `appendDeltas` takes a required `requireSnapshot`, so each append
   // case names whether it may create a log-only record — one line per call —
@@ -671,7 +670,8 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // The hand-built deps carry the daemon's lock seam, which every mutating tool
   // takes itself, and the harness hands the tools the bundled registry, since
   // the seam is required and the tools fall back to nothing.
-  'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 80,
+  // +1: the workspace the errands address, seeded under its canonical id.
+  'packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts#harness': 81,
   'packages/mcp-server/src/server/security/server-mode-env-config.differential.test.ts#parseOld': 157,
   'packages/server-core/src/tools/tool-inputs.fuzz.property.test.ts#fitCanvasOp': 89,
 }

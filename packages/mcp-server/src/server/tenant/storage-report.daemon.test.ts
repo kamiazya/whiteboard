@@ -25,7 +25,7 @@ import { clearDocCacheForTests } from '../store/doc-cache.js'
 import { _clearWorkspaceDocCacheForTests } from '../store/workspace-doc-cache.js'
 import { computeStorageReport } from './storage-report.js'
 
-const WS = 'ws-1'
+const WS = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const IMAGE = new Uint8Array(4096).fill(0x89)
 
 let dataDir: string

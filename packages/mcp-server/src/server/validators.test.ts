@@ -1,7 +1,8 @@
 import {
   DOCUMENT_PATH_MAX_LENGTH,
   documentPathSchema,
-  workspaceIdSchema,
+  workspaceCanonicalIdSchema,
+  workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest } from '../shared/test-utils/fast-check.js'
@@ -10,6 +11,7 @@ import {
   validateDocumentPath,
   validateFileId,
   validateVersionId,
+  validateWorkspaceHandle,
   validateWorkspaceId,
 } from './validators.js'
 
@@ -23,9 +25,13 @@ function rejection(run: () => unknown): ValidationError {
   throw new Error('expected a ValidationError, but nothing was thrown')
 }
 
+const WORKSPACE_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
 describe('shared validators', () => {
-  it('accepts valid session ids, paths, and ids', () => {
-    expect(validateWorkspaceId('sess_1-abc')).toBe('sess_1-abc')
+  it('accepts valid workspace ids and handles, paths, and ids', () => {
+    expect(validateWorkspaceId(WORKSPACE_ULID)).toBe(WORKSPACE_ULID)
+    expect(validateWorkspaceHandle(WORKSPACE_ULID)).toBe(WORKSPACE_ULID)
+    expect(validateWorkspaceHandle('team-plans')).toBe('team-plans')
     expect(validateDocumentPath('621/header-v2')).toBe('621/header-v2')
     expect(validateVersionId('ver-1')).toBe('ver-1')
     expect(validateFileId('file_1-abc')).toBe('file_1-abc')
@@ -33,27 +39,29 @@ describe('shared validators', () => {
 
   it('rejects invalid route/store identifiers', () => {
     expect(() => validateWorkspaceId('../escape')).toThrow(/Invalid workspaceId/)
+    expect(() => validateWorkspaceHandle('../escape')).toThrow(/Invalid workspaceId/)
     expect(() => validateDocumentPath('../escape')).toThrow(/Invalid path/)
     expect(() => validateVersionId('bad.id')).toThrow(/Invalid version id/)
     expect(() => validateFileId('bad/id')).toThrow(/Invalid file id/)
   })
 })
 
-describe('validateWorkspaceId / workspaceIdSchema conformance', () => {
-  // The schema is what the shared layer parses with, validateWorkspaceId is
-  // what explains a rejection. They share WORKSPACE_ID_PATTERN, and this keeps
-  // the empty-string case and any future extra rule from drifting apart.
-  const accepts = (id: string): boolean => {
+describe('workspace validators / model schema conformance', () => {
+  // The schemas are what the shared layer parses with, the validators are what
+  // explain a rejection. This keeps the two from drifting apart: an id is the
+  // canonical ULID and nothing else, a handle is that id or a segment.
+  const accepts = (validate: (value: string) => string, value: string): boolean => {
     try {
-      validateWorkspaceId(id)
+      validate(value)
       return true
     } catch {
       return false
     }
   }
 
-  // A safe id with one hostile character spliced in is the arrangement a
-  // generic string arbitrary would almost never produce.
+  // A safe string with one hostile character spliced in is the arrangement a
+  // generic string arbitrary would almost never produce; `_` is there because
+  // a nanoid-minted legacy id carries it and neither grammar admits one.
   const hostile = fc.constantFrom(
     '.',
     '/',
@@ -65,25 +73,50 @@ describe('validateWorkspaceId / workspaceIdSchema conformance', () => {
     '\u3042',
     '%',
     '\u200b',
+    '_',
   )
   const spliced = fc
     .tuple(
-      fc.stringMatching(/^[a-zA-Z0-9_-]{0,6}$/),
+      fc.stringMatching(/^[a-zA-Z0-9-]{0,6}$/),
       hostile,
-      fc.stringMatching(/^[a-zA-Z0-9_-]{0,6}$/),
+      fc.stringMatching(/^[a-zA-Z0-9-]{0,6}$/),
     )
     .map(([head, bad, tail]) => `${head}${bad}${tail}`)
+  const ulid = fc.stringMatching(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+  const candidates = fc.oneof(
+    fc.string(),
+    fc.stringMatching(/^[a-zA-Z0-9_-]{0,12}$/),
+    spliced,
+    ulid,
+    ulid.map((id) => id.toLowerCase()),
+  )
 
-  fcTest.prop([fc.oneof(fc.string(), fc.stringMatching(/^[a-zA-Z0-9_-]{0,12}$/), spliced)])(
-    'accept exactly the same strings',
-    (id) => {
-      expect(workspaceIdSchema.safeParse(id).success).toBe(accepts(id))
+  fcTest.prop([candidates])('validateWorkspaceId accepts exactly the canonical ids', (id) => {
+    expect(workspaceCanonicalIdSchema.safeParse(id).success).toBe(accepts(validateWorkspaceId, id))
+  })
+
+  fcTest.prop([candidates])(
+    'validateWorkspaceHandle accepts exactly a canonical id or a segment',
+    (handle) => {
+      const either =
+        workspaceCanonicalIdSchema.safeParse(handle).success ||
+        workspaceSegmentSchema.safeParse(handle).success
+      expect(either).toBe(accepts(validateWorkspaceHandle, handle))
     },
   )
 
+  it('refuses a legacy id the daemon held before the re-key onto ULIDs', () => {
+    for (const legacy of ['default', 'V1StGXR8_Z5jdHi6B-myT']) {
+      expect(rejection(() => validateWorkspaceId(legacy)).error).toBe('invalid_workspace_id')
+    }
+    expect(rejection(() => validateWorkspaceHandle('V1StGXR8_Z5jdHi6B-myT')).error).toBe(
+      'invalid_workspace_id',
+    )
+  })
+
   it('both refuse the empty string', () => {
-    expect(accepts('')).toBe(false)
-    expect(workspaceIdSchema.safeParse('').success).toBe(false)
+    expect(accepts(validateWorkspaceId, '')).toBe(false)
+    expect(accepts(validateWorkspaceHandle, '')).toBe(false)
   })
 })
 
@@ -155,8 +188,8 @@ describe('validator rejection reasons', () => {
 
   it.each([
     ['', /workspaceId is empty/],
-    ['a b', /only ASCII letters, digits, "_" and "-" are allowed/],
-    ['a.b', /only ASCII letters, digits, "_" and "-" are allowed/],
+    ['a b', /a workspace id is a canonical ULID/],
+    ['default', /a workspace id is a canonical ULID/],
   ])('validateWorkspaceId(%j) says why', (id, message) => {
     const error = rejection(() => validateWorkspaceId(id))
     expect(error.error).toBe('invalid_workspace_id')

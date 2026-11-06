@@ -39,15 +39,17 @@ async function setUp() {
   await prepareDataDir(tempDir)
   const db = await getDb(tempDir)
   const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
-  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-a' })
-  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-b' })
+  await deps.documentIndex.createWorkspace({ workspaceId: '01PAW75F73PVC402Y3V151KT6R' })
+  await deps.documentIndex.createWorkspace({ workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR' })
   const created = await wbDocumentCreate(deps, {
-    workspaceId: 'ws-a',
+    workspaceId: '01PAW75F73PVC402Y3V151KT6R',
     path: 'doomed',
     kind: 'spatial',
   })
   const versions = new FileVersionStore()
-  const own = await versions.save('ws-a', 'doomed', new LoroDoc(), { auto: false })
+  const own = await versions.save('01PAW75F73PVC402Y3V151KT6R', 'doomed', new LoroDoc(), {
+    auto: false,
+  })
   const ownRow = await db
     .selectFrom('versions')
     .selectAll()
@@ -55,7 +57,7 @@ async function setUp() {
     .executeTakeFirstOrThrow()
   await db
     .insertInto('versions')
-    .values({ ...ownRow, id: 'neighbour-version', workspaceId: 'ws-b' })
+    .values({ ...ownRow, id: 'neighbour-version', workspaceId: '01ECWTM29HBA5A9MXS76EM7JHR' })
     .execute()
   const rowsOf = async (workspaceId: string) =>
     (
@@ -67,8 +69,8 @@ async function setUp() {
         .execute()
     ).map((row) => row.id)
   // The fixture reaches the subject: both workspaces hold a row under the id.
-  expect(await rowsOf('ws-a')).toEqual([own.id])
-  expect(await rowsOf('ws-b')).toEqual(['neighbour-version'])
+  expect(await rowsOf('01PAW75F73PVC402Y3V151KT6R')).toEqual([own.id])
+  expect(await rowsOf('01ECWTM29HBA5A9MXS76EM7JHR')).toEqual(['neighbour-version'])
   return { deps, documentId: created.documentId, rowsOf }
 }
 
@@ -83,24 +85,29 @@ describe('sweeping a deleted document’s versions', () => {
 
   it('a purge leaves a neighbour workspace’s versions under the same document id', async () => {
     const { deps, documentId, rowsOf } = await setUp()
-    await wbDocumentDelete(deps, { workspaceId: 'ws-a', documentId })
+    await wbDocumentDelete(deps, { workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId })
     if (!hasDocumentTrash(deps.documentIndex)) throw new Error('store-local index has a trash')
-    expect(await deps.documentIndex.purgeTrashEntry({ workspaceId: 'ws-a', documentId })).toBe(true)
-    expect(await rowsOf('ws-a')).toEqual([])
-    expect(await rowsOf('ws-b')).toEqual(['neighbour-version'])
+    expect(
+      await deps.documentIndex.purgeTrashEntry({
+        workspaceId: '01PAW75F73PVC402Y3V151KT6R',
+        documentId,
+      }),
+    ).toBe(true)
+    expect(await rowsOf('01PAW75F73PVC402Y3V151KT6R')).toEqual([])
+    expect(await rowsOf('01ECWTM29HBA5A9MXS76EM7JHR')).toEqual(['neighbour-version'])
   })
 
   it('a trash-less teardown leaves a neighbour workspace’s versions under the same document id', async () => {
     const { deps, documentId, rowsOf } = await setUp()
     await deps.documentTeardown.around(
-      { workspaceId: 'ws-a', documentId, path: 'doomed' },
+      { workspaceId: '01PAW75F73PVC402Y3V151KT6R', documentId, path: 'doomed' },
       async () => {
-        const record = await deps.workspaceDocuments.get('ws-a')
+        const record = await deps.workspaceDocuments.get('01PAW75F73PVC402Y3V151KT6R')
         expect(deleteWorkspaceNodeAtPath(record, 'doomed')).toBe(true)
-        await deps.workspaceDocuments.save('ws-a', record)
+        await deps.workspaceDocuments.save('01PAW75F73PVC402Y3V151KT6R', record)
       },
     )
-    expect(await rowsOf('ws-a')).toEqual([])
-    expect(await rowsOf('ws-b')).toEqual(['neighbour-version'])
+    expect(await rowsOf('01PAW75F73PVC402Y3V151KT6R')).toEqual([])
+    expect(await rowsOf('01ECWTM29HBA5A9MXS76EM7JHR')).toEqual(['neighbour-version'])
   })
 })

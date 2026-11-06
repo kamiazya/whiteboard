@@ -9,6 +9,9 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 
+const SESSION_1 = '01BCAFBEAWV8ZEYX5P6MX718ZF'
+const SESS_1 = '01WWQTBYFRHW3XPWFX2J1XKH6P'
+
 // Tests for the native Loro version store backed by the sqlite metadata DB.
 // Frontiers and metadata live in the versions table; nothing this store owns
 // touches the filesystem any more (the version thumbnails did, and are gone).
@@ -80,7 +83,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const { createIsolatedDb } = await import('./db/test-helpers.js')
     handle = await createIsolatedDb({ dataDir: tempDir })
     store = new FileVersionStore()
-    await seedDocuments('sess-1', [
+    await seedDocuments(SESS_1, [
       'canvas-a',
       'canvas-b',
       'canvas-x',
@@ -97,7 +100,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   it('save records elementCount and returns a VersionEntry', async () => {
     const doc = nodesDoc(3)
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     expect(entry.id).toMatch(/^[A-Za-z0-9_-]+$/)
     expect(entry.path).toBe('canvas-a')
     expect(entry.elementCount).toBe(3)
@@ -119,16 +122,16 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
 
-    const merge = await store.save('sess-1', 'canvas-a', doc, {
+    const merge = await store.save(SESS_1, 'canvas-a', doc, {
       auto: true,
       restoredFrom: 'v-earlier',
     })
     expect(merge.restoredFrom).toBe('v-earlier')
 
-    const plain = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const plain = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     expect(plain.restoredFrom).toBeUndefined()
 
-    const listed = await store.list('sess-1', 'canvas-a')
+    const listed = await store.list(SESS_1, 'canvas-a')
     expect(listed.find((v) => v.id === merge.id)?.restoredFrom).toBe('v-earlier')
     expect(listed.find((v) => v.id === plain.id)?.restoredFrom).toBeUndefined()
   })
@@ -151,18 +154,15 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
 
-    const source = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    const merge = await store.save('sess-1', 'canvas-a', doc, {
-      auto: true,
-      restoredFrom: source.id,
-    })
+    const source = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    const merge = await store.save(SESS_1, 'canvas-a', doc, { auto: true, restoredFrom: source.id })
     // Ordinary checkpoints on top: 53 rows against a cap of 50, so THREE are
     // over it — the lineage pair and one ordinary checkpoint.
     for (let i = 0; i < 51; i++) {
-      await store.save('sess-1', 'canvas-a', doc, { auto: true })
+      await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     }
 
-    const ids = new Set((await store.list('sess-1', 'canvas-a')).map((v) => v.id))
+    const ids = new Set((await store.list(SESS_1, 'canvas-a')).map((v) => v.id))
     expect(ids.has(merge.id)).toBe(true)
     expect(ids.has(source.id)).toBe(true)
     // 52 is the whole claim in one number, and it is why the count is
@@ -189,9 +189,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         },
       ],
     })
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     expect(entry.elementCount).toBe(3)
-    const [listed] = await store.list('sess-1', 'canvas-a')
+    const [listed] = await store.list(SESS_1, 'canvas-a')
     expect(listed?.elementCount).toBe(3)
   })
 
@@ -200,7 +200,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     appendElement(doc, 'e1')
     appendElement(doc, 'e2')
 
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     expect(entry.elementCount).toBe(0)
   })
 
@@ -210,14 +210,14 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     vi.spyOn(doc, 'getMap').mockImplementation(() => {
       throw new Error('boom')
     })
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     expect(entry.elementCount).toBe(0)
   })
 
   it('round-trips save({ operator }) through list()', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
-    const entry = await store.save('sess-1', 'canvas-a', doc, {
+    const entry = await store.save(SESS_1, 'canvas-a', doc, {
       auto: false,
       label: 'manual',
       operator: {
@@ -225,7 +225,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         actor: 'process:peer-ai',
         displayName: 'Assistant',
         agentId: 'agent-1',
-        workspaceId: 'session-1',
+        workspaceId: SESSION_1,
       },
     })
 
@@ -234,9 +234,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       actor: 'process:peer-ai',
       displayName: 'Assistant',
       agentId: 'agent-1',
-      workspaceId: 'session-1',
+      workspaceId: SESSION_1,
     })
-    const listed = await store.list('sess-1', 'canvas-a')
+    const listed = await store.list(SESS_1, 'canvas-a')
     expect(listed[0]?.operator).toEqual(entry.operator)
   })
 
@@ -250,12 +250,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       clientDataJSON: 'Y2xpZW50',
       signature: 'c2ln',
     }
-    const attested = await store.save('sess-1', 'canvas-a', doc, {
+    const attested = await store.save(SESS_1, 'canvas-a', doc, {
       auto: false,
       operator: { kind: 'human', displayName: 'Yuki' },
     })
     expect(attested.attestation).toBeUndefined()
-    const plain = await store.save('sess-1', 'canvas-a', doc, { auto: false })
+    const plain = await store.save(SESS_1, 'canvas-a', doc, { auto: false })
     const stored = await handle.db
       .selectFrom('versions')
       .select('attestation')
@@ -270,15 +270,15 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       .where('id', '=', attested.id)
       .execute()
 
-    const listed = await store.list('sess-1', 'canvas-a')
+    const listed = await store.list(SESS_1, 'canvas-a')
     expect(listed.map((entry) => entry.attestation)).toEqual([undefined, attestation])
   })
 
   it('list returns operator=undefined for entries saved without an operator', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
-    await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    const listed = await store.list('sess-1', 'canvas-a')
+    await store.save(SESS_1, 'canvas-a', doc, { auto: true })
+    const listed = await store.list(SESS_1, 'canvas-a')
     expect(listed).toHaveLength(1)
     expect(listed[0]?.operator).toBeUndefined()
   })
@@ -289,15 +289,15 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     // that never went through saveDocument are invisible to a version.
     const live = new LoroDoc()
     appendElement(live, 'a')
-    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
-    const entry = await store.save('sess-1', 'canvas-a', live, { auto: true, label: 'v1' })
+    await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
+    const entry = await store.save(SESS_1, 'canvas-a', live, { auto: true, label: 'v1' })
 
     appendElement(live, 'b')
     appendElement(live, 'c')
-    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
+    await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
     expect(countElements(live)).toBe(3)
 
-    const past = await store.load('sess-1', entry.id)
+    const past = await store.load(SESS_1, entry.id)
     expect(past).not.toBeNull()
     expect(countElements(past!)).toBe(1)
     const pastIds = (past!.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
@@ -309,12 +309,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   it('load does not mutate the live doc', async () => {
     const live = new LoroDoc()
     appendElement(live, 'x1')
-    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
-    const entry = await store.save('sess-1', 'canvas-a', live, { auto: true })
+    await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
+    const entry = await store.save(SESS_1, 'canvas-a', live, { auto: true })
     appendElement(live, 'x2')
     const liveCountBefore = countElements(live)
 
-    await store.load('sess-1', entry.id)
+    await store.load(SESS_1, entry.id)
 
     expect(countElements(live)).toBe(liveCountBefore)
     appendElement(live, 'x3')
@@ -324,66 +324,63 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   it('points a version at persisted ops even while the cached record is ahead of the store', async () => {
     const live = new LoroDoc()
     appendElement(live, 'kept')
-    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
+    await saveDocument(SESS_1, 'canvas-a', live, { kind: 'spatial', overwrite: true })
     // An op in the cached record nothing has persisted: what a writer inside
     // the workspace barrier holds between its edit and its save.
-    const cached = await getWorkspaceDoc('sess-1')
+    const cached = await getWorkspaceDoc(SESS_1)
     cached.getMap('unpersisted').set('op', 1)
     cached.commit()
 
-    const entry = await store.save('sess-1', 'canvas-a', live, { auto: false })
+    const entry = await store.save(SESS_1, 'canvas-a', live, { auto: false })
 
     // A restart: only what the store holds is left to check the version out on.
     _clearWorkspaceDocCacheForTests()
     clearDocCacheForTests()
-    const past = await store.load('sess-1', entry.id)
+    const past = await store.load(SESS_1, entry.id)
     expect(past).not.toBeNull()
     expect(countElements(past as LoroDoc)).toBe(1)
   })
 
   it('returns null for an unknown version id', async () => {
-    const past = await store.load('sess-1', 'nope')
+    const past = await store.load(SESS_1, 'nope')
     expect(past).toBeNull()
   })
 
   it('filters list by path and returns newest first', async () => {
     const a = nodesDoc(1)
-    await store.save('sess-1', 'canvas-a', a, { auto: true })
+    await store.save(SESS_1, 'canvas-a', a, { auto: true })
 
     const b = nodesDoc(2)
-    await store.save('sess-1', 'canvas-b', b, { auto: true })
+    await store.save(SESS_1, 'canvas-b', b, { auto: true })
 
-    await store.save('sess-1', 'canvas-a', a, { auto: false, label: 'v2' })
+    await store.save(SESS_1, 'canvas-a', a, { auto: false, label: 'v2' })
 
-    const listA = await store.list('sess-1', 'canvas-a')
+    const listA = await store.list(SESS_1, 'canvas-a')
     expect(listA).toHaveLength(2)
     expect(listA[0].label).toBe('v2') // Newest first.
 
-    const listB = await store.list('sess-1', 'canvas-b')
+    const listB = await store.list(SESS_1, 'canvas-b')
     expect(listB).toHaveLength(1)
     expect(listB[0].elementCount).toBe(2)
   })
 
   it('rejects invalid ids during validation', async () => {
-    await expect(store.load('sess-1', '../escape')).rejects.toThrow(/Invalid version id/i)
-    await expect(store.load('sess-1', 'a.b')).rejects.toThrow(/Invalid version id/i)
-    await expect(store.load('sess-1', '')).rejects.toThrow(/Invalid version id/i)
+    await expect(store.load(SESS_1, '../escape')).rejects.toThrow(/Invalid version id/i)
+    await expect(store.load(SESS_1, 'a.b')).rejects.toThrow(/Invalid version id/i)
+    await expect(store.load(SESS_1, '')).rejects.toThrow(/Invalid version id/i)
   })
 
   it('keeps auto versions capped at 50 per canvas while preserving manual versions', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
-    const manualEntry = await store.save('sess-1', 'canvas-a', doc, {
-      auto: false,
-      label: 'keep me',
-    })
+    const manualEntry = await store.save(SESS_1, 'canvas-a', doc, { auto: false, label: 'keep me' })
 
     for (let i = 0; i < 52; i++) {
       appendElement(doc, `auto-${i}`)
-      await store.save('sess-1', 'canvas-a', doc, { auto: true })
+      await store.save(SESS_1, 'canvas-a', doc, { auto: true })
     }
 
-    const list = await store.list('sess-1', 'canvas-a')
+    const list = await store.list(SESS_1, 'canvas-a')
     const autos = list.filter((v) => v.auto)
     const manuals = list.filter((v) => !v.auto)
     expect(autos.length).toBeLessThanOrEqual(50)
@@ -394,16 +391,16 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     it('is neither answered by save nor by list', async () => {
       const doc = new LoroDoc()
       appendElement(doc, 'e1')
-      const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+      const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
       expect(entry).not.toHaveProperty('branchName')
-      const [listed] = await store.list('sess-1', 'canvas-a')
+      const [listed] = await store.list(SESS_1, 'canvas-a')
       expect(listed).not.toHaveProperty('branchName')
     })
 
     it('is not on the stored row', async () => {
       const doc = new LoroDoc()
       appendElement(doc, 'e1')
-      const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+      const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
       const { getDb } = await import('./db/index.js')
       const db = await getDb(tempDir)
       const row = await db
@@ -412,7 +409,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
         .where('id', '=', entry.id)
         .executeTakeFirstOrThrow()
       expect(row).not.toHaveProperty('branchName')
-      expect(row.workspaceId).toBe('sess-1')
+      expect(row.workspaceId).toBe(SESS_1)
     })
   })
 
@@ -424,7 +421,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   it('save refuses a path with no document instead of minting a phantom row', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
-    await expect(store.save('sess-1', 'never-created', doc, { auto: true })).rejects.toThrow(
+    await expect(store.save(SESS_1, 'never-created', doc, { auto: true })).rejects.toThrow(
       /no document/i,
     )
   })
@@ -436,7 +433,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   it('save records the workspaceId on the version row', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const entry = await store.save(SESS_1, 'canvas-a', doc, { auto: true })
 
     const { getDb } = await import('./db/index.js')
     const db = await getDb(tempDir)
@@ -445,7 +442,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       .select(['workspaceId'])
       .where('id', '=', entry.id)
       .executeTakeFirst()
-    expect(row).toEqual({ workspaceId: 'sess-1' })
+    expect(row).toEqual({ workspaceId: SESS_1 })
   })
 
   it('lists two saves from the same millisecond newest-first by insertion order', async () => {
@@ -457,12 +454,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       for (const label of ['first', 'second', 'third']) {
         const doc = new LoroDoc()
         appendElement(doc, label)
-        await store.save('sess-1', 'canvas-z', doc, { auto: false, label })
+        await store.save(SESS_1, 'canvas-z', doc, { auto: false, label })
       }
     } finally {
       nowSpy.mockRestore()
     }
-    const listed = await store.list('sess-1', 'canvas-z')
+    const listed = await store.list(SESS_1, 'canvas-z')
     expect(listed.map((entry) => entry.label)).toEqual(['third', 'second', 'first'])
   })
 
@@ -482,7 +479,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       // into later assertions instead of restoring the original.
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => tMs)
       try {
-        const entry = await store.save('sess-1', path, doc, {
+        const entry = await store.save(SESS_1, path, doc, {
           auto: kind === 'auto',
           label: kind === 'manual' ? `manual-${tMs}` : undefined,
         })
@@ -505,11 +502,11 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const m3 = await saveAt('canvas-x', 'manual', 6_000)
       const a4 = await saveAt('canvas-x', 'auto', 7_000)
 
-      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-x')
+      const result = await store.pruneSandwichedAutoVersions(SESS_1, 'canvas-x')
       expect(result.deletedIds.sort()).toEqual([a1.id, a2.id, a3.id].sort())
       expect(result.deletedCount).toBe(3)
 
-      const remaining = (await store.list('sess-1', 'canvas-x')).map((v) => v.id).sort()
+      const remaining = (await store.list(SESS_1, 'canvas-x')).map((v) => v.id).sort()
       expect(remaining).toEqual([m1.id, m2.id, m3.id, a4.id].sort())
     })
 
@@ -522,17 +519,17 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 4_000)
       let merge: { id: string }
       try {
-        merge = await store.save('sess-1', 'canvas-r', doc, restorePointOptions(named.id))
+        merge = await store.save(SESS_1, 'canvas-r', doc, restorePointOptions(named.id))
       } finally {
         nowSpy.mockRestore()
       }
       const plain = await saveAt('canvas-r', 'auto', 5_000)
       const m3 = await saveAt('canvas-r', 'manual', 6_000)
 
-      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-r')
+      const result = await store.pruneSandwichedAutoVersions(SESS_1, 'canvas-r')
 
       expect(result.deletedIds).toEqual([plain.id])
-      const remaining = (await store.list('sess-1', 'canvas-r')).map((v) => v.id).sort()
+      const remaining = (await store.list(SESS_1, 'canvas-r')).map((v) => v.id).sort()
       expect(remaining).toEqual([m1.id, named.id, m2.id, merge.id, m3.id].sort())
     })
 
@@ -541,9 +538,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const m1 = await saveAt('canvas-y', 'manual', 2_000)
       const a2 = await saveAt('canvas-y', 'auto', 3_000)
 
-      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-y')
+      const result = await store.pruneSandwichedAutoVersions(SESS_1, 'canvas-y')
       expect(result.deletedCount).toBe(0)
-      const remaining = (await store.list('sess-1', 'canvas-y')).map((v) => v.id).sort()
+      const remaining = (await store.list(SESS_1, 'canvas-y')).map((v) => v.id).sort()
       expect(remaining).toEqual([a1.id, m1.id, a2.id].sort())
     })
   })
@@ -561,19 +558,19 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
    */
   describe('isUnchangedSinceLastVersion', () => {
     it('stays true while only a sibling document is edited', async () => {
-      await saveDocument('sess-1', 'canvas-a', makeSpatialDoc(textCanvas('a', 'mine')), {
+      await saveDocument(SESS_1, 'canvas-a', makeSpatialDoc(textCanvas('a', 'mine')), {
         kind: 'spatial',
         overwrite: true,
       })
-      await store.save('sess-1', 'canvas-a', new LoroDoc(), { auto: true })
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-a')).toBe(true)
+      await store.save(SESS_1, 'canvas-a', new LoroDoc(), { auto: true })
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-a')).toBe(true)
 
       for (const text of ['one', 'two', 'three', 'four', 'five']) {
-        await saveDocument('sess-1', 'canvas-b', makeSpatialDoc(textCanvas('b', text)), {
+        await saveDocument(SESS_1, 'canvas-b', makeSpatialDoc(textCanvas('b', text)), {
           kind: 'spatial',
           overwrite: true,
         })
-        expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-a')).toBe(true)
+        expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-a')).toBe(true)
       }
     })
 
@@ -583,18 +580,18 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
      * there. This is the half that makes the answer mean something.
      */
     it('turns false once the document itself changes', async () => {
-      await saveDocument('sess-1', 'canvas-x', makeSpatialDoc(textCanvas('x', 'before')), {
+      await saveDocument(SESS_1, 'canvas-x', makeSpatialDoc(textCanvas('x', 'before')), {
         kind: 'spatial',
         overwrite: true,
       })
-      await store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: true })
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-x')).toBe(true)
+      await store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: true })
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-x')).toBe(true)
 
-      await saveDocument('sess-1', 'canvas-x', makeSpatialDoc(textCanvas('x', 'after')), {
+      await saveDocument(SESS_1, 'canvas-x', makeSpatialDoc(textCanvas('x', 'after')), {
         kind: 'spatial',
         overwrite: true,
       })
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-x')).toBe(false)
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-x')).toBe(false)
     })
 
     /**
@@ -606,26 +603,26 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
      * requirement for a NOT NULL column, not a state this store can write.
      */
     it('answers changed for a row holding no digest, rather than reading the blank as a match', async () => {
-      await saveDocument('sess-1', 'canvas-y', makeSpatialDoc(textCanvas('y', 'mine')), {
+      await saveDocument(SESS_1, 'canvas-y', makeSpatialDoc(textCanvas('y', 'mine')), {
         kind: 'spatial',
         overwrite: true,
       })
-      await store.save('sess-1', 'canvas-y', new LoroDoc(), { auto: true })
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-y')).toBe(true)
+      await store.save(SESS_1, 'canvas-y', new LoroDoc(), { auto: true })
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-y')).toBe(true)
 
       await handle.db.updateTable('versions').set({ contentDigest: '' }).execute()
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-y')).toBe(false)
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-y')).toBe(false)
     })
 
     it('answers false where the document has no checkpoint, and where it does not exist', async () => {
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'canvas-z')).toBe(false)
-      expect(await store.isUnchangedSinceLastVersion('sess-1', 'no-such-document')).toBe(false)
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'canvas-z')).toBe(false)
+      expect(await store.isUnchangedSinceLastVersion(SESS_1, 'no-such-document')).toBe(false)
     })
   })
 
   /** The document id `path` resolves to, read off the row a save writes. */
   async function documentIdOf(path: string): Promise<string> {
-    const { id } = await store.save('sess-1', path, new LoroDoc(), { auto: true })
+    const { id } = await store.save(SESS_1, path, new LoroDoc(), { auto: true })
     const row = await handle.db
       .selectFrom('versions')
       .select('documentId')
@@ -637,7 +634,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   /** `count` manual rows for `documentId`, carried in as a promote would. */
   async function carryManualRows(documentId: string, count: number): Promise<void> {
     await store.adopt(
-      'sess-1',
+      SESS_1,
       Array.from({ length: count }, (_, i) => ({
         id: `carried-${String(i).padStart(4, '0')}`,
         documentId,
@@ -679,7 +676,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
     it('takes every row in and names every one it holds', async () => {
       const documentId = await documentIdOf('canvas-x')
-      const kept = await store.adopt('sess-1', carried(documentId, ROWS))
+      const kept = await store.adopt(SESS_1, carried(documentId, ROWS))
       expect(kept).toHaveLength(ROWS)
       expect(new Set(kept).size).toBe(ROWS)
       expect(await heldRows(documentId)).toBe(ROWS)
@@ -690,7 +687,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const rows = carried(documentId, 5_000)
       const last = rows.length - 1
       rows[last] = { ...rows[last], createdAt: null as unknown as number } as (typeof rows)[number]
-      await expect(store.adopt('sess-1', rows)).rejects.toThrow(/NOT NULL/)
+      await expect(store.adopt(SESS_1, rows)).rejects.toThrow(/NOT NULL/)
       expect(await heldRows(documentId)).toBe(0)
     }, 120_000)
   })
@@ -701,9 +698,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       await carryManualRows(documentId, MAX_MANUAL_PER_DOCUMENT - 1)
 
       // The ceiling itself is taken.
-      await store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: false, label: 'last' })
+      await store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: false, label: 'last' })
       // One past it is refused, and writes nothing.
-      const refused = store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: false })
+      const refused = store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: false })
       await expect(refused).rejects.toBeInstanceOf(TooManyVersionsError)
       await expect(refused).rejects.toMatchObject({ code: 'too_many_versions', status: 413 })
       const manual = await handle.db
@@ -716,14 +713,14 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
       // Checkpoints are capped by retention, not refused.
       await expect(
-        store.save('sess-1', 'canvas-x', new LoroDoc(), { auto: true }),
+        store.save(SESS_1, 'canvas-x', new LoroDoc(), { auto: true }),
       ).resolves.toMatchObject({ auto: true })
     })
 
     it('counts per document, so a sibling at the ceiling leaves this one free', async () => {
       await carryManualRows(await documentIdOf('canvas-x'), MAX_MANUAL_PER_DOCUMENT)
       await expect(
-        store.save('sess-1', 'canvas-y', new LoroDoc(), { auto: false }),
+        store.save(SESS_1, 'canvas-y', new LoroDoc(), { auto: false }),
       ).resolves.toMatchObject({ auto: false })
     })
   })
@@ -733,19 +730,19 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       const now = vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000)
       const labels = ['one', 'two', 'three', 'four', 'five']
       for (const label of labels) {
-        await store.save('sess-1', 'canvas-r', new LoroDoc(), { auto: false, label })
+        await store.save(SESS_1, 'canvas-r', new LoroDoc(), { auto: false, label })
       }
       now.mockRestore()
 
-      const first = await store.listPage('sess-1', 'canvas-r', { limit: 2 })
+      const first = await store.listPage(SESS_1, 'canvas-r', { limit: 2 })
       expect(first.versions.map((v) => v.label)).toEqual(['five', 'four'])
       expect(first.nextCursor).toBeDefined()
-      const second = await store.listPage('sess-1', 'canvas-r', {
+      const second = await store.listPage(SESS_1, 'canvas-r', {
         limit: 2,
         cursor: first.nextCursor,
       })
       expect(second.versions.map((v) => v.label)).toEqual(['three', 'two'])
-      const third = await store.listPage('sess-1', 'canvas-r', {
+      const third = await store.listPage(SESS_1, 'canvas-r', {
         limit: 2,
         cursor: second.nextCursor,
       })
@@ -754,15 +751,15 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     })
 
     it('answers a page that exactly ends the history with no cursor', async () => {
-      await store.save('sess-1', 'canvas-r', new LoroDoc(), { auto: false, label: 'a' })
-      await store.save('sess-1', 'canvas-r', new LoroDoc(), { auto: false, label: 'b' })
-      const page = await store.listPage('sess-1', 'canvas-r', { limit: 2 })
+      await store.save(SESS_1, 'canvas-r', new LoroDoc(), { auto: false, label: 'a' })
+      await store.save(SESS_1, 'canvas-r', new LoroDoc(), { auto: false, label: 'b' })
+      const page = await store.listPage(SESS_1, 'canvas-r', { limit: 2 })
       expect(page.versions).toHaveLength(2)
       expect(page.nextCursor).toBeUndefined()
     })
 
     it('answers an empty page for a path with no document', async () => {
-      expect(await store.listPage('sess-1', 'no-such-document', { limit: 5 })).toEqual({
+      expect(await store.listPage(SESS_1, 'no-such-document', { limit: 5 })).toEqual({
         versions: [],
       })
     })
@@ -770,11 +767,11 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   describe('belongsTo', () => {
     it('answers whether a version is one of the document at that path', async () => {
-      const mine = await store.save('sess-1', 'canvas-a', new LoroDoc(), { auto: false })
-      expect(await store.belongsTo('sess-1', 'canvas-a', mine.id)).toBe(true)
-      expect(await store.belongsTo('sess-1', 'canvas-b', mine.id)).toBe(false)
-      expect(await store.belongsTo('sess-1', 'no-such-document', mine.id)).toBe(false)
-      expect(await store.belongsTo('sess-1', 'canvas-a', 'unknown-id')).toBe(false)
+      const mine = await store.save(SESS_1, 'canvas-a', new LoroDoc(), { auto: false })
+      expect(await store.belongsTo(SESS_1, 'canvas-a', mine.id)).toBe(true)
+      expect(await store.belongsTo(SESS_1, 'canvas-b', mine.id)).toBe(false)
+      expect(await store.belongsTo(SESS_1, 'no-such-document', mine.id)).toBe(false)
+      expect(await store.belongsTo(SESS_1, 'canvas-a', 'unknown-id')).toBe(false)
     })
   })
 })

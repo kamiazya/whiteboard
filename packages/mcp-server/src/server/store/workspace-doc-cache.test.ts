@@ -17,7 +17,7 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { nodeText } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { textNode, workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -50,7 +50,7 @@ const { withWorkspaceWriteLock, workspaceWriteLockInUse, _resetWorkspaceLocksFor
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
-const ws = (i: number) => `ws-lru-${i}`
+const ws = (i: number) => workspaceIdFor(`ws-lru-${i}`)
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-lru-'))

@@ -8,7 +8,7 @@ import { createDocumentSetOperation, documentSetInputSchema } from './document-s
 import { exportOkf } from './export-okf.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
-const WORKSPACE_ID = 'ws-1'
+const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 const NOW = '2026-08-23T12:00:00.000Z'
 
 async function setup() {

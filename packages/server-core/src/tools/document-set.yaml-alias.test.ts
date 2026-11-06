@@ -18,7 +18,7 @@ import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetOperation, OkfParseError } from './document-set.js'
 
-const WORKSPACE_ID = 'ws-alias'
+const WORKSPACE_ID = '01K24RA5FYP4B78Y9MN13S4Q9Y'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const ALIASED = [
   '---',

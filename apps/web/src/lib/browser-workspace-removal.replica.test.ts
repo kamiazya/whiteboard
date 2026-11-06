@@ -8,6 +8,7 @@
 // jsdom + fake-indexeddb: this is IndexedDB persistence logic, not browser layout.
 import 'fake-indexeddb/auto'
 import { forgetAllForTests } from '@kamiazya/whiteboard-daemon-client/replica-session-key'
+import { workspaceIdFor } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
@@ -31,7 +32,7 @@ let counter = 0
 // `markReplica`'s mark is module state, so each test mints its own id.
 function freshWorkspaceId(): string {
   counter += 1
-  return `forgetreplica${counter}`
+  return workspaceIdFor(`forgetreplica${counter}`)
 }
 
 function recordWith(text: string): LoroDoc {

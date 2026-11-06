@@ -104,7 +104,7 @@ async function seedTwoWorkspaces() {
   const gone = await index.createDocument({ workspaceId: sourceId, path: 'gone', kind: 'spatial' })
   await versions.save(sourceId, 'sketch', { label: 'as drafted' })
   await index.deleteDocument({ workspaceId: sourceId, path: 'gone' })
-  const neighbourId = 'ws-neighbour'
+  const neighbourId = '01T0XWTNZFV0RTN415C2J0NXKG'
   await index.createWorkspace({ workspaceId: neighbourId })
   const kept = await index.createDocument({
     workspaceId: neighbourId,
@@ -174,10 +174,10 @@ describe('demoteBrowserWorkspace, beside a neighbour that will not open', () => 
     const { sourceId, sketch, gone, entry } = await seedTwoWorkspaces()
     // A registered neighbour whose record is bytes Loro will not import:
     // what its trash names is unknown, so no trash blob may go.
-    await new BrowserDocumentIndex().createWorkspace({ workspaceId: 'ws-unreadable' })
+    await new BrowserDocumentIndex().createWorkspace({ workspaceId: '01R66CYDDNDBVW12E1EASBGN1B' })
     const garbage = chunkSnapshot(new Uint8Array([1, 2, 3, 4]), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
     await openDocumentStore().saveSnapshot({
-      docRef: { kind: 'workspace-tree', workspaceId: 'ws-unreadable' },
+      docRef: { kind: 'workspace-tree', workspaceId: '01R66CYDDNDBVW12E1EASBGN1B' },
       ...garbage,
       frontier: new Uint8Array(),
     })
@@ -343,13 +343,15 @@ describe('replicaCarriesAll', () => {
     const docs = new BrowserWorkspaceDocs()
     // Registered so the record may be minted at all; which keeper holds it
     // is not what this asks.
-    await new BrowserDocumentIndex().createWorkspace({ workspaceId: 'ws-replica' })
-    const record = await docs.create('ws-replica')
+    await new BrowserDocumentIndex().createWorkspace({ workspaceId: '01WZ0WMJQF4H3BAYFCGJRC5WDH' })
+    const record = await docs.create('01WZ0WMJQF4H3BAYFCGJRC5WDH')
     // A record with no documents: ids are absent, so nothing is carried.
     writeDocumentKind(record, 'markdown')
-    await docs.save('ws-replica', record)
+    await docs.save('01WZ0WMJQF4H3BAYFCGJRC5WDH', record)
     expect(readWorkspaceDocuments(record)).toEqual([])
-    expect(await replicaCarriesAll(docs, 'ws-replica', ['01ARZ3NDEKTSV4RRFFQ69G5FAV'])).toBe(false)
-    expect(await replicaCarriesAll(docs, 'ws-replica', [])).toBe(true)
+    expect(
+      await replicaCarriesAll(docs, '01WZ0WMJQF4H3BAYFCGJRC5WDH', ['01ARZ3NDEKTSV4RRFFQ69G5FAV']),
+    ).toBe(false)
+    expect(await replicaCarriesAll(docs, '01WZ0WMJQF4H3BAYFCGJRC5WDH', [])).toBe(true)
   })
 })

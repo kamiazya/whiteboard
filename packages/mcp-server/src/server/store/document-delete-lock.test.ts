@@ -58,11 +58,11 @@ describe('wbDocumentDelete', () => {
     const db = await getDb(tempDir)
     const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
     // Registered explicitly: `createWorkspace: true` is ADR-0019's MINT
-    // boundary, and a mint would key the workspace by a fresh ULID with
-    // `ws-1` as its segment — leaving the store reads below naming nothing.
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    // boundary, and a mint would key the workspace by a fresh ULID,
+    // never by the id the store reads below address.
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'doomed',
       kind: 'spatial',
     })
@@ -80,16 +80,18 @@ describe('wbDocumentDelete', () => {
       writerAcquired = resolve
     })
     const versions = new FileVersionStore()
-    const writer = withWorkspaceWriteLock('ws-1', async () => {
+    const writer = withWorkspaceWriteLock('01ZVM89A4A1V9FS03Z9J64KEK1', async () => {
       writerAcquired()
       await mayWrite
-      const entry = await versions.save('ws-1', 'doomed', new LoroDoc(), { auto: false })
+      const entry = await versions.save('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed', new LoroDoc(), {
+        auto: false,
+      })
       return entry.id
     })
     await lockHeld
 
     const deleted = wbDocumentDelete(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: created.documentId,
     })
     // Let the delete run as far as it can before it needs the lock. What it
@@ -106,7 +108,7 @@ describe('wbDocumentDelete', () => {
     expect(await rowsOf()).toEqual([{ documentId: created.documentId }])
     if (!hasDocumentTrash(deps.documentIndex)) throw new Error('store-local index has a trash')
     await deps.documentIndex.purgeTrashEntry({
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       documentId: created.documentId,
     })
     expect(await rowsOf()).toEqual([])
@@ -116,22 +118,24 @@ describe('wbDocumentDelete', () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tempDir)))
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const created = await wbDocumentCreate(deps, {
-      workspaceId: 'ws-1',
+      workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1',
       path: 'gone',
       kind: 'spatial',
     })
-    await new FileVersionStore().save('ws-1', 'gone', new LoroDoc(), { auto: false })
+    await new FileVersionStore().save('01ZVM89A4A1V9FS03Z9J64KEK1', 'gone', new LoroDoc(), {
+      auto: false,
+    })
 
     // Removes the node the way no trash-recording delete does, so nothing
     // is left that a restore could rejoin the rows to.
     await deps.documentTeardown.around(
-      { workspaceId: 'ws-1', documentId: created.documentId, path: 'gone' },
+      { workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1', documentId: created.documentId, path: 'gone' },
       async () => {
-        const record = await deps.workspaceDocuments.get('ws-1')
+        const record = await deps.workspaceDocuments.get('01ZVM89A4A1V9FS03Z9J64KEK1')
         expect(deleteWorkspaceNodeAtPath(record, 'gone')).toBe(true)
-        await deps.workspaceDocuments.save('ws-1', record)
+        await deps.workspaceDocuments.save('01ZVM89A4A1V9FS03Z9J64KEK1', record)
       },
     )
 

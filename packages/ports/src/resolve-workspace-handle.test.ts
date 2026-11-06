@@ -32,44 +32,23 @@ describe('resolveWorkspaceHandle', () => {
     expect(resolveWorkspaceHandle(entries, ULID)).toEqual(entries[0])
   })
 
-  it('resolves a legacy id that is neither ULID- nor segment-shaped', () => {
-    // The daemon's live ids include `default` and nanoid-minted strings with
-    // `_`, which `workspaceSegmentSchema` rejects. A handle is never turned
-    // away for its SHAPE — only for matching nothing.
-    const entries: WorkspaceEntry[] = [{ workspaceId: 'V1StGXR8_Z5jdHi6B-myT' }]
-    expect(resolveWorkspaceHandle(entries, 'V1StGXR8_Z5jdHi6B-myT')).toEqual(entries[0])
+  it('reaches nothing by a legacy id, even one a row still carries', () => {
+    // `default` and nanoid-minted strings were the daemon's ids before the
+    // re-key onto ULIDs. Neither is an address any more: a bare handle names a
+    // segment and only a segment, so a row still keyed that way is reached by
+    // nobody rather than by a lookup that guesses which layer was meant.
+    const entries: WorkspaceEntry[] = [
+      { workspaceId: 'V1StGXR8_Z5jdHi6B-myT' },
+      { workspaceId: 'default' },
+    ]
+    expect(resolveWorkspaceHandle(entries, 'V1StGXR8_Z5jdHi6B-myT')).toBeNull()
+    expect(resolveWorkspaceHandle(entries, 'default')).toBeNull()
   })
 
   it('answers null for a handle that matches nothing', () => {
     const entries: WorkspaceEntry[] = [{ workspaceId: ULID, segment: 'design' }]
     expect(resolveWorkspaceHandle(entries, 'absent')).toBeNull()
     expect(resolveWorkspaceHandle([], ULID)).toBeNull()
-  })
-
-  it("segment beats another workspace's id", () => {
-    // The collision that decides the order. It cannot arise between a segment
-    // and a CANONICAL id — `workspaceSegmentSchema` structurally forbids a
-    // ULID-shaped segment — but it can against a legacy id, which is any
-    // `[a-zA-Z0-9_-]+` string. Segment wins: it is the layer a human typed on
-    // purpose, and the id remains reachable as itself.
-    const entries: WorkspaceEntry[] = [
-      { workspaceId: OTHER_ULID, segment: 'design' },
-      { workspaceId: 'design' },
-    ]
-    expect(resolveWorkspaceHandle(entries, 'design')).toEqual(entries[0])
-    // ...and reversing the list does not change the answer: precedence is by
-    // LAYER, not by position.
-    expect(resolveWorkspaceHandle([...entries].reverse(), 'design')).toEqual(entries[0])
-  })
-
-  it('is the identity over a segmentless registry', () => {
-    // Today's daemon, and the Stage-1 no-op this whole increment rests on:
-    // with no segment anywhere, resolution can only ever answer the id it was
-    // given, so every existing address behaves exactly as before.
-    const entries: WorkspaceEntry[] = [{ workspaceId: 'default' }, { workspaceId: ULID }]
-    for (const handle of ['default', ULID]) {
-      expect(resolveWorkspaceHandle(entries, handle)?.workspaceId).toBe(handle)
-    }
   })
 
   describe('the three address forms', () => {
@@ -175,32 +154,23 @@ describe('storedWorkspaceEntrySchema', () => {
     expect(resolveWorkspaceHandle([row], 'ada/plans')).toEqual(row)
   })
 
+  // A row keyed before the re-key onto ULIDs is an old stored shape: the
+  // read refuses it by its field rather than listing a workspace no address
+  // can reach.
+  it('refuses a stored row whose workspace id is not a canonical ULID', () => {
+    for (const workspaceId of ['default', 'V1StGXR8_Z5jdHi6B-myT']) {
+      const read = storedWorkspaceEntrySchema.safeParse({ workspaceId, segment: 'plans' })
+      expect(read.success).toBe(false)
+      expect(read.error?.issues.map((issue) => issue.path)).toEqual([['workspaceId']])
+    }
+  })
+
   it('reads a refused namespace as absent instead of failing the row', () => {
     const row = storedWorkspaceEntrySchema.parse({
       workspaceId: '01JAAAAAAAAAAAAAAAAAAAAAAA',
       namespace: '01JAAAAAAAAAAAAAAAAAAAAAAA',
     })
     expect(row).toEqual({ workspaceId: '01JAAAAAAAAAAAAAAAAAAAAAAA' })
-  })
-})
-
-describe('a legacy id is an id', () => {
-  it('reaches its workspace from any namespace, like a canonical id', () => {
-    // An opaque link an outsider opens (ADR-0053) names a workspace by id. A
-    // legacy id is not ULID-shaped, so it parses as bare; confining it to the
-    // caller's namespace would turn every such link away from an invitee.
-    const ada: WorkspaceEntry = { workspaceId: 'default', namespace: 'ada' }
-    expect(resolveWorkspaceHandle([ada], 'default', 'bob')).toEqual(ada)
-  })
-
-  it('still loses to a segment of the same spelling in the caller namespace', () => {
-    const ada: WorkspaceEntry = { workspaceId: 'plans', namespace: 'ada' }
-    const bob: WorkspaceEntry = {
-      workspaceId: '01JBBBBBBBBBBBBBBBBBBBBBBB',
-      namespace: 'bob',
-      segment: 'plans',
-    }
-    expect(resolveWorkspaceHandle([ada, bob], 'plans', 'bob')).toEqual(bob)
   })
 })
 
@@ -227,22 +197,16 @@ describe('resolveWorkspaceHandleBy', () => {
     return { find, asked }
   }
 
-  // Dense on the one collision the order decides: legacy ids spelled like
-  // the segments, beside segments in several namespaces.
-  const entryArb = fc.oneof(
-    fc.record({
-      workspaceId: canonicalUlidArbitrary,
-      namespace: fc.constantFrom('me', 'alice', 'bob'),
-      segment: fc.constantFrom('design', 'plan'),
-    }),
-    fc.record({
-      workspaceId: fc.constantFrom('design', 'plan', 'default'),
-      namespace: fc.constantFrom('me', 'alice'),
-    }),
-  )
+  // Dense on segments shared across namespaces, which is what the namespace
+  // in a lookup has to tell apart.
+  const entryArb = fc.record({
+    workspaceId: canonicalUlidArbitrary,
+    namespace: fc.constantFrom('me', 'alice', 'bob'),
+    segment: fc.constantFrom('design', 'plan'),
+  })
   const registryArb = fc.uniqueArray(entryArb, {
     maxLength: 8,
-    selector: (e) => ('segment' in e ? `${e.namespace}/${e.segment}` : e.workspaceId),
+    selector: (e) => `${e.namespace}/${e.segment}`,
   })
   const handleArb = fc.constantFrom(
     'design',
@@ -256,14 +220,14 @@ describe('resolveWorkspaceHandleBy', () => {
   )
 
   fcTest.prop([registryArb, handleArb, fc.constantFrom('me', 'alice', 'bob', '')], withDefaults())(
-    'answers what the whole-list form answers, in at most two lookups',
+    'answers what the whole-list form answers, in at most one lookup',
     async (entries, handle, caller) => {
       const ids = new Set(entries.map((e) => e.workspaceId))
       fc.pre(ids.size === entries.length)
       const { find, asked } = pointRegistry(entries)
       const found = await resolveWorkspaceHandleBy(find, handle, caller)
       expect(found).toEqual(resolveWorkspaceHandle(entries, handle, caller))
-      expect(asked.length).toBeLessThanOrEqual(2)
+      expect(asked.length).toBeLessThanOrEqual(1)
     },
   )
 

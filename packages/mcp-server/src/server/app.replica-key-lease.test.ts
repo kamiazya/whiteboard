@@ -16,7 +16,7 @@ import { createWorkspaceReplicaKeyStore } from './security/workspace-replica-key
 import { createIsolatedDb, type IsolatedDbHandle } from './store/db/test-helpers.js'
 
 const TOKEN = 'lease-test-token'
-const WORKSPACE = 'ws-lease'
+const WORKSPACE = '01P7GA8RW795ED28Y29NJBF6NE'
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000
 
 let dir: string

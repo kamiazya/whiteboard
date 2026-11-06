@@ -32,7 +32,7 @@ const { LibsqlDocumentStore } = await import('../store/libsql/libsql-document-st
 const { createIsolatedDb } = await import('../store/db/test-helpers.js')
 const { makeSpatialDocWithImage } = await import('../../shared/test-utils/spatial-doc.js')
 
-const WORKSPACE = 'ws_purge_route'
+const WORKSPACE = '01ZVMBX373EJEQTXN7RWC87R6P'
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 

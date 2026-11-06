@@ -1,19 +1,15 @@
 import {
   DOCUMENT_PATH_MAX_LENGTH,
   DOCUMENT_PATH_SEGMENT_PATTERN,
-  WORKSPACE_ID_PATTERN,
+  PATH_SAFE_ID_PATTERN,
+  workspaceCanonicalIdSchema,
+  workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 
-// The path-segment and workspace-id rules themselves are imported from model so
-// the shared layer and this validator cannot drift apart; what stays here is
-// only how a rejection is explained, which the schema's single message cannot
-// do per cause.
-//
-// Version and file ids are not workspace ids, but they are used the same way
-// (directly as path segments and keys), so they take the same character class
-// by choice rather than by sharing a concept; the alias names that choice so
-// loosening one is a decision, not an accident.
-const SAFE_IDENTIFIER = WORKSPACE_ID_PATTERN
+// The path-segment, id and workspace rules themselves are imported from model
+// so the shared layer and this validator cannot drift apart; what stays here
+// is only how a rejection is explained, which the schema's single message
+// cannot do per cause.
 export class ValidationError extends Error {
   constructor(
     readonly error: string,
@@ -41,10 +37,10 @@ function diagnosePathSegment(segment: string): string | null {
 }
 
 function validateSafeIdentifier(value: string, kind: string, maxLength = 64): string {
-  if (!SAFE_IDENTIFIER.test(value)) {
+  if (!PATH_SAFE_ID_PATTERN.test(value)) {
     throw new ValidationError(
       `invalid_${kind.replace(/\s+/g, '_')}`,
-      `Invalid ${kind} "${value}": must match ${SAFE_IDENTIFIER}`,
+      `Invalid ${kind} "${value}": must match ${PATH_SAFE_ID_PATTERN}`,
     )
   }
   if (value.length > maxLength) {
@@ -56,17 +52,44 @@ function validateSafeIdentifier(value: string, kind: string, maxLength = 64): st
   return value
 }
 
+/**
+ * A workspace's canonical id, as every store, row and on-disk directory keys
+ * one. Anything else — `default`, a nanoid carrying `_` — is an id from before
+ * the re-key onto ULIDs and is refused rather than read.
+ */
 export function validateWorkspaceId(workspaceId: string): string {
   if (workspaceId === '') {
     throw new ValidationError('invalid_workspace_id', 'Invalid workspaceId: workspaceId is empty')
   }
-  if (!WORKSPACE_ID_PATTERN.test(workspaceId)) {
+  if (!workspaceCanonicalIdSchema.safeParse(workspaceId).success) {
     throw new ValidationError(
       'invalid_workspace_id',
-      `Invalid workspaceId "${workspaceId}": only ASCII letters, digits, "_" and "-" are allowed`,
+      `Invalid workspaceId "${workspaceId}": a workspace id is a canonical ULID`,
     )
   }
   return workspaceId
+}
+
+/**
+ * The workspace handle one URL path component carries before it is resolved:
+ * the canonical id or a segment in the caller's namespace (ADR-0053). Both
+ * grammars keep `.`, `/`, whitespace and non-ASCII out, which is what makes a
+ * refused handle safe to echo and an accepted one safe to look up.
+ */
+export function validateWorkspaceHandle(handle: string): string {
+  if (handle === '') {
+    throw new ValidationError('invalid_workspace_id', 'Invalid workspaceId: workspaceId is empty')
+  }
+  if (
+    !workspaceCanonicalIdSchema.safeParse(handle).success &&
+    !workspaceSegmentSchema.safeParse(handle).success
+  ) {
+    throw new ValidationError(
+      'invalid_workspace_id',
+      `Invalid workspaceId "${handle}": a workspace is addressed by its canonical id or by a segment (ASCII letters, digits and interior hyphens)`,
+    )
+  }
+  return handle
 }
 
 export function validateDocumentPath(path: string): string {

@@ -56,7 +56,7 @@ const { loadDocument, _clearWorkspaceDocCacheForTests } = await import(
 const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 
-const WS = 'session1'
+const WS = '01M8BBN7JS60N0ZAR13NP8SXBF'
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'ws-doc-update-limits-'))

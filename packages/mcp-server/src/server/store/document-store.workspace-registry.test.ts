@@ -18,7 +18,8 @@ vi.mock('../config.js', () => ({
 }))
 
 // Use dynamic import so it runs after the mock is resolved.
-const { saveDocument, listWorkspaces } = await import('./document-store.js')
+const { saveDocument, listWorkspaces, workspaceRegistry } = await import('./document-store.js')
+const { CorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -47,13 +48,30 @@ describe('listWorkspaces', () => {
   })
 
   it('lists workspaces seeded via saveDocument', async () => {
-    await saveDocument('session-active', 'a', new LoroDoc())
-    await saveDocument('session-old', 'a', new LoroDoc())
+    await saveDocument('01QR94Q18PQ3B6P06BXBV4QXAG', 'a', new LoroDoc())
+    await saveDocument('01QR94Q18PQ3B6P06BXBV4QXAH', 'a', new LoroDoc())
 
     const workspaces = await listWorkspaces()
     const ids = workspaces.map((s) => s.workspaceId)
-    expect(ids).toContain('session-active')
-    expect(ids).toContain('session-old')
+    expect(ids).toContain('01QR94Q18PQ3B6P06BXBV4QXAG')
+    expect(ids).toContain('01QR94Q18PQ3B6P06BXBV4QXAH')
+  })
+
+  // A row keyed before the re-key onto ULIDs is an old stored shape. It is
+  // refused by its id, so the listing fails loudly instead of answering a
+  // workspace no address can reach.
+  it('refuses a stored row whose id is not a canonical ULID, naming it', async () => {
+    await handle.db
+      .insertInto('workspaces')
+      .values({ id: 'default', displayName: null, segment: null, createdAt: 0, updatedAt: 0 })
+      .execute()
+
+    await expect(listWorkspaces()).rejects.toThrow(CorruptStoredDataError)
+    await expect(listWorkspaces()).rejects.toThrow(/Workspace row "default"/)
+    await expect(workspaceRegistry().listWorkspaces()).rejects.toThrow(/Workspace row "default"/)
+    await expect(workspaceRegistry().findWorkspace({ workspaceId: 'default' })).rejects.toThrow(
+      CorruptStoredDataError,
+    )
   })
 
   it('returns an empty array when no workspaces have been saved yet', async () => {
@@ -83,15 +101,15 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
   it('echoes stored segment and displayName back through listWorkspaces', async () => {
     const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({
-      workspaceId: 'ws-echo',
+      workspaceId: '01JYCKPSSQHJ33JAX81DSC7FZ5',
       segment: 'team-notes',
       displayName: 'Team notes',
     })
 
     const rows = await deps.documentIndex.listWorkspaces()
-    const row = rows.find((r) => r.workspaceId === 'ws-echo')
+    const row = rows.find((r) => r.workspaceId === '01JYCKPSSQHJ33JAX81DSC7FZ5')
     expect(row).toEqual({
-      workspaceId: 'ws-echo',
+      workspaceId: '01JYCKPSSQHJ33JAX81DSC7FZ5',
       segment: 'team-notes',
       displayName: 'Team notes',
     })
@@ -99,53 +117,64 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
 
   it('a legacy workspace with no identity lists with the keys absent, not null', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-legacy' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01QX3DJ36GPBTZ9X1YB3FWDG50' })
 
     const rows = await deps.documentIndex.listWorkspaces()
-    const row = rows.find((r) => r.workspaceId === 'ws-legacy')
-    expect(row).toEqual({ workspaceId: 'ws-legacy' })
+    const row = rows.find((r) => r.workspaceId === '01QX3DJ36GPBTZ9X1YB3FWDG50')
+    expect(row).toEqual({ workspaceId: '01QX3DJ36GPBTZ9X1YB3FWDG50' })
   })
 
   it('a bare re-create (the wbDocumentCreate createWorkspace:true path) does not clobber stored identity', async () => {
     const deps = await resolveTestServerDeps(tempDir)
     await deps.documentIndex.createWorkspace({
-      workspaceId: 'ws-preserved',
+      workspaceId: '01SATZEK9ZY7WGS9DCZ01R7M5F',
       segment: 'kept',
       displayName: 'Kept',
     })
 
     // Every wbDocumentCreate({ createWorkspace: true }) call reaches this
     // bare shape — the identity claimed above must survive it.
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-preserved' })
+    await deps.documentIndex.createWorkspace({ workspaceId: '01SATZEK9ZY7WGS9DCZ01R7M5F' })
 
     const rows = await deps.documentIndex.listWorkspaces()
-    const row = rows.find((r) => r.workspaceId === 'ws-preserved')
-    expect(row).toEqual({ workspaceId: 'ws-preserved', segment: 'kept', displayName: 'Kept' })
+    const row = rows.find((r) => r.workspaceId === '01SATZEK9ZY7WGS9DCZ01R7M5F')
+    expect(row).toEqual({
+      workspaceId: '01SATZEK9ZY7WGS9DCZ01R7M5F',
+      segment: 'kept',
+      displayName: 'Kept',
+    })
   })
 
   it('re-creating with identical fields is idempotent', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    const input = { workspaceId: 'ws-idem', segment: 'idem', displayName: 'Idem' }
+    const input = {
+      workspaceId: '01CK7V02492BHNYNRB070WY0VT',
+      segment: 'idem',
+      displayName: 'Idem',
+    }
     await deps.documentIndex.createWorkspace(input)
     await expect(deps.documentIndex.createWorkspace(input)).resolves.toBeUndefined()
 
     const rows = await deps.documentIndex.listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'ws-idem')).toEqual(input)
+    expect(rows.find((r) => r.workspaceId === '01CK7V02492BHNYNRB070WY0VT')).toEqual(input)
   })
 
   it('a second workspace claiming an already-taken segment is refused, and neither row is left partial', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-first', segment: 'contested' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '015J4D4NQT6WSFQJWK6AJR47RG',
+      segment: 'contested',
+    })
 
     const err = await deps.documentIndex
-      .createWorkspace({ workspaceId: 'ws-second', segment: 'contested' })
+      .createWorkspace({ workspaceId: '01FQ39QDCDJFFBK9CXYFPM2JF7', segment: 'contested' })
       .catch((e: unknown) => e)
     expect(isWorkspaceSegmentTakenError(err)).toBe(true)
 
     const rows = await deps.documentIndex.listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'ws-second')).toBeUndefined()
-    expect(rows.find((r) => r.workspaceId === 'ws-first')).toEqual({
-      workspaceId: 'ws-first',
+    expect(rows.find((r) => r.workspaceId === '01FQ39QDCDJFFBK9CXYFPM2JF7')).toBeUndefined()
+    expect(rows.find((r) => r.workspaceId === '015J4D4NQT6WSFQJWK6AJR47RG')).toEqual({
+      workspaceId: '015J4D4NQT6WSFQJWK6AJR47RG',
       segment: 'contested',
     })
   })
@@ -157,23 +186,26 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
     const deps = await resolveTestServerDeps(tempDir)
     await expect(
       deps.documentIndex.createWorkspace({
-        workspaceId: 'ws-rejected',
+        workspaceId: '01BSK4EW4S1AP8DVCQBN01F82K',
         segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       }),
     ).rejects.toThrow()
 
     const rows = await deps.documentIndex.listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'ws-rejected')).toBeUndefined()
+    expect(rows.find((r) => r.workspaceId === '01BSK4EW4S1AP8DVCQBN01F82K')).toBeUndefined()
   })
 
   it('rejects an empty displayName at the boundary, before any row is written', async () => {
     const deps = await resolveTestServerDeps(tempDir)
     await expect(
-      deps.documentIndex.createWorkspace({ workspaceId: 'ws-rejected-2', displayName: '' }),
+      deps.documentIndex.createWorkspace({
+        workspaceId: '0162YDTMRMFHXD9MZTZ9HAYY7Y',
+        displayName: '',
+      }),
     ).rejects.toThrow()
 
     const rows = await deps.documentIndex.listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'ws-rejected-2')).toBeUndefined()
+    expect(rows.find((r) => r.workspaceId === '0162YDTMRMFHXD9MZTZ9HAYY7Y')).toBeUndefined()
   })
 })
 
@@ -196,22 +228,27 @@ describe('renameWorkspace — the daemon registry', () => {
 
   it('writes both layers and serves them back through listWorkspaces', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-rename', segment: 'before' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '01CB14DP1SFPYJQ27YTHP2HZCZ',
+      segment: 'before',
+    })
 
     const renamed = await deps.documentIndex.renameWorkspace({
-      workspaceId: 'ws-rename',
+      workspaceId: '01CB14DP1SFPYJQ27YTHP2HZCZ',
       segment: 'after',
       displayName: 'After',
     })
 
     expect(renamed).toEqual({
-      workspaceId: 'ws-rename',
+      workspaceId: '01CB14DP1SFPYJQ27YTHP2HZCZ',
       segment: 'after',
       displayName: 'After',
     })
     const rows = await deps.documentIndex.listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'ws-rename')).toEqual(renamed)
-    expect((await deps.documentIndex.resolveWorkspace('after'))?.workspaceId).toBe('ws-rename')
+    expect(rows.find((r) => r.workspaceId === '01CB14DP1SFPYJQ27YTHP2HZCZ')).toEqual(renamed)
+    expect((await deps.documentIndex.resolveWorkspace('after'))?.workspaceId).toBe(
+      '01CB14DP1SFPYJQ27YTHP2HZCZ',
+    )
     expect(await deps.documentIndex.resolveWorkspace('before')).toBeNull()
   })
 
@@ -220,23 +257,30 @@ describe('renameWorkspace — the daemon registry', () => {
   // statement targeted is untouched, rather than half renamed.
   it('is refused by the unique index, leaving the row as it was', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-holder', segment: 'contested' })
     await deps.documentIndex.createWorkspace({
-      workspaceId: 'ws-asking',
+      workspaceId: '01MYD5JHXXNFF0SJ7B9W29YQKM',
+      segment: 'contested',
+    })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '016JETMGXA27Z1VG9A07ESTCW3',
       segment: 'asking',
       displayName: 'Asking',
     })
 
     const err = await deps.documentIndex
-      .renameWorkspace({ workspaceId: 'ws-asking', segment: 'contested', displayName: 'Renamed' })
+      .renameWorkspace({
+        workspaceId: '016JETMGXA27Z1VG9A07ESTCW3',
+        segment: 'contested',
+        displayName: 'Renamed',
+      })
       .catch((e: unknown) => e)
     expect(isWorkspaceSegmentTakenError(err)).toBe(true)
 
     const rows = await deps.documentIndex.listWorkspaces()
     // The displayName the same call carried must not have landed either: a
     // refused rename is one operation refused, not a partial write.
-    expect(rows.find((r) => r.workspaceId === 'ws-asking')).toEqual({
-      workspaceId: 'ws-asking',
+    expect(rows.find((r) => r.workspaceId === '016JETMGXA27Z1VG9A07ESTCW3')).toEqual({
+      workspaceId: '016JETMGXA27Z1VG9A07ESTCW3',
       segment: 'asking',
       displayName: 'Asking',
     })
@@ -244,15 +288,18 @@ describe('renameWorkspace — the daemon registry', () => {
 
   it('names a workspace that had none, leaving its address alone', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-unnamed', segment: 'keep-me' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '01BPGTDJ59WBNAJE1R3QXWVQZ9',
+      segment: 'keep-me',
+    })
 
     const renamed = await deps.documentIndex.renameWorkspace({
-      workspaceId: 'ws-unnamed',
+      workspaceId: '01BPGTDJ59WBNAJE1R3QXWVQZ9',
       displayName: 'Now named',
     })
 
     expect(renamed).toEqual({
-      workspaceId: 'ws-unnamed',
+      workspaceId: '01BPGTDJ59WBNAJE1R3QXWVQZ9',
       segment: 'keep-me',
       displayName: 'Now named',
     })
@@ -263,24 +310,30 @@ describe('renameWorkspace — the daemon registry', () => {
   it('fails WorkspaceNotFoundError for a workspace the registry does not hold', async () => {
     const deps = await resolveTestServerDeps(tempDir)
     await expect(
-      deps.documentIndex.renameWorkspace({ workspaceId: 'ws-absent', displayName: 'nobody' }),
+      deps.documentIndex.renameWorkspace({
+        workspaceId: '01HV1A108E81FBY2CA68PD9HE7',
+        displayName: 'nobody',
+      }),
     ).rejects.toThrow(WorkspaceNotFoundError)
   })
 
   it('rejects a ULID-shaped segment at the boundary, before any row is written', async () => {
     const deps = await resolveTestServerDeps(tempDir)
-    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-guarded', segment: 'fine' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: '01GTPJ2F7RQTH8MVY7VQHA326V',
+      segment: 'fine',
+    })
 
     await expect(
       deps.documentIndex.renameWorkspace({
-        workspaceId: 'ws-guarded',
+        workspaceId: '01GTPJ2F7RQTH8MVY7VQHA326V',
         segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
       }),
     ).rejects.toThrow()
 
     const rows = await deps.documentIndex.listWorkspaces()
-    expect(rows.find((r) => r.workspaceId === 'ws-guarded')).toEqual({
-      workspaceId: 'ws-guarded',
+    expect(rows.find((r) => r.workspaceId === '01GTPJ2F7RQTH8MVY7VQHA326V')).toEqual({
+      workspaceId: '01GTPJ2F7RQTH8MVY7VQHA326V',
       segment: 'fine',
     })
   })

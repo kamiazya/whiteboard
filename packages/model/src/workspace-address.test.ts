@@ -27,19 +27,12 @@ const namespaceArb = fc.oneof(
   { weight: 1, arbitrary: fc.constant(SINGLE_PERSON_NAMESPACE) },
 )
 
-/** A legacy daemon id: path-safe, `_` included, which no segment may hold. */
-const legacyIdArb = fc
-  .stringMatching(/^[a-zA-Z0-9_-]{1,24}$/)
-  .filter((id) => !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id))
-
 const addressArb: fc.Arbitrary<WorkspaceAddress> = fc.oneof(
   canonicalUlidArbitrary.map((workspaceId) => ({ form: 'id' as const, workspaceId })),
   fc
     .tuple(namespaceArb, workspaceSegmentArbitrary)
     .map(([namespace, segment]) => ({ form: 'qualified' as const, namespace, segment })),
-  fc
-    .oneof(workspaceSegmentArbitrary, legacyIdArb)
-    .map((handle) => ({ form: 'bare' as const, handle })),
+  workspaceSegmentArbitrary.map((handle) => ({ form: 'bare' as const, handle })),
 )
 
 /** Dense on what the parser splits on and refuses: separators, `_`, case. */
@@ -109,10 +102,13 @@ describe('parseWorkspaceAddress', () => {
       segment: 'design',
     })
     expect(parseWorkspaceAddress('design')).toEqual({ form: 'bare', handle: 'design' })
-    expect(parseWorkspaceAddress('V1StGXR8_Z5jdHi6B-myT')).toEqual({
-      form: 'bare',
-      handle: 'V1StGXR8_Z5jdHi6B-myT',
-    })
+  })
+
+  // A workspace is keyed by a ULID and reached by a segment; a nanoid-minted
+  // id is neither, so it addresses nothing rather than being looked up raw.
+  it('refuses a legacy nanoid-minted id as any form', () => {
+    expect(parseWorkspaceAddress('V1StGXR8_Z5jdHi6B-myT')).toBeNull()
+    expect(parseWorkspaceAddress(ULID.toLowerCase())).toBeNull()
   })
 
   it('refuses a bare address holding a canonical id, which would read back as the id form', () => {
@@ -164,7 +160,16 @@ describe('workspaceAddressInputSchema', () => {
   })
 
   it('refuses more than one separator and characters no form holds', () => {
-    for (const input of ['', 'a/b/c', '/design', 'alice/', 'a.b', 'a b']) {
+    for (const input of [
+      '',
+      'a/b/c',
+      '/design',
+      'alice/',
+      'a.b',
+      'a b',
+      'ws_main',
+      'alice/my_ws',
+    ]) {
       expect(workspaceAddressInputSchema.safeParse(input).success, input).toBe(false)
     }
   })

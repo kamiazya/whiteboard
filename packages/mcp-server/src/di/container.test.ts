@@ -110,7 +110,7 @@ describe('resolveServerDeps document teardown', () => {
     uninstallAutoCompact()
 
     await deps.documentWritten?.({
-      workspaceId: 'ws-container',
+      workspaceId: '01AD0EBCZCCZMY8F94QTKHK2WV',
       documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
       doc: new LoroDoc(),
     })
@@ -124,19 +124,21 @@ describe('resolveServerDeps document teardown', () => {
     // A cached projection the teardown has to drop: an inert stub would run
     // the delete and leave it behind for the next create to inherit. Only a
     // placed document is cached, so it is saved at its path first.
-    await saveDocument('ws-container', 'torn-down', new LoroDoc(), { overwrite: true })
-    await getDoc('ws-container', 'torn-down')
-    expect(peekDoc('ws-container', 'torn-down')).toBeDefined()
+    await saveDocument('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down', new LoroDoc(), {
+      overwrite: true,
+    })
+    await getDoc('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down')
+    expect(peekDoc('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down')).toBeDefined()
 
     await deps.documentTeardown.around(
       {
-        workspaceId: 'ws-container',
+        workspaceId: '01AD0EBCZCCZMY8F94QTKHK2WV',
         documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ',
         path: 'torn-down',
       },
       async () => true,
     )
 
-    expect(peekDoc('ws-container', 'torn-down')).toBeUndefined()
+    expect(peekDoc('01AD0EBCZCCZMY8F94QTKHK2WV', 'torn-down')).toBeUndefined()
   })
 })
