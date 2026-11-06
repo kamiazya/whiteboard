@@ -47,14 +47,17 @@ the first instrument (see "Migration order"):
    measurement inside it, makes the property structural instead of observed.
 
 Two runtime constraints shape the decision rather than motivate it: a Worker
-isolate has 128 MB including wasm and a 1 s startup budget, and the daemon
-should not require a Node install (decision 5).
+runs within a startup budget (1 s), a per-request CPU budget (10 ms on the free
+plan) and an isolate memory limit that includes the wasm, and the daemon
+should not require a Node install (decision 5). Cloudflare's script-size
+limits are to be verified from its own documentation before the worker
+binding is built, because the sources consulted conflict (decision 22).
 
 ## Decision
 
 ### The decisions
 
-Each decision is the owner's (decisions 1–17, 2026-11-06). Under each, the
+Each decision is the owner's (decisions 1–25, 2026-11-06). Under each, the
 alternatives that were weighed and why they lost.
 
 #### 1. Two targets: wasm (browser, Workers, Node) and native (the daemon)
@@ -306,11 +309,122 @@ unsigned.
 | Wait for certificates before releasing binaries | Provenance and checksums already let a user verify what they install, and they cost no certificate |
 | Add signing when certificates arrive, from scratch | Scaffolding it now keeps the release workflow's shape stable, and a test can hold that the steps exist and report when they are skipped |
 
+#### 18. Security baseline: every technically solvable OpenSSF item
+
+Every OpenSSF guideline item that is technically solvable is met — the
+Scorecard checks, OSPS Baseline levels 1–3, the Best Practices badge
+criteria, the Concise Guide, the npm and SCM best practices — and the bar is
+set with SLSA v1, NIST SSDF (SP 800-218), CISA Secure by Design and ANSSI's
+secure Rust guidelines as well. The control-by-control matrix, with each
+control's evidence and regression guard, is the security baseline document
+(`docs/contributing/security-baseline.md`); items only the owner can action
+(account settings, certificates) are listed there as such.
+
+| Alternative | Why rejected |
+|---|---|
+| Aim for the badge or the Scorecard number | A score can be raised without meeting the control behind it; the controls are the point |
+| OpenSSF alone | It is silent on secure-development process (SSDF), on memory-safety posture (Secure by Design) and on Rust-specific rules (ANSSI) |
+
+#### 19. The daemon stays a native Rust binary
+
+Reconsidered against the counter-example of a project that moved its Rust
+engine back out of a per-OS native binary (its cost was cross-language
+serialisation on a chatty boundary, plus the binary's distribution), and
+confirmed: the daemon owns its whole process, so it has no per-call boundary
+to pay. Its distribution is fixed now (QR-27c): fixed package names and
+platform set (linux x64/arm64 × glibc/musl, darwin x64/arm64, win32
+x64/arm64), a launcher that checks the binary's version equals its own, npm
+trusted publishing (OIDC) per package, and an install smoke under npm, pnpm
+and yarn with `--ignore-scripts` and `--omit=optional`.
+
+| Alternative | Why rejected |
+|---|---|
+| A Node daemon hosting the wasm core | Puts a wasm boundary inside every store call of the one process that has no reason for one, and keeps the Node requirement |
+| Defer the platform matrix | npm's lockfile has skipped platform packages and installed both libcs in the past; the names and the set are cheap to fix now and expensive to rename after users install them |
+
+#### 20. Panic policy: prevent by lint, recover by recreate-and-rehydrate
+
+Panics are prevented by lints in production code (decision 16); this is the
+safety net. The stable toolchain everywhere. Wasm artifacts use
+`panic = "abort"`: a panic DISCARDS the instance, and the shim creates a new
+one and REHYDRATES it from persisted state, tested in CI by a scenario that
+poisons an instance and shows the next operation succeeding. The native
+daemon fails only the request that panicked and keeps serving (QR-26c).
+
+| Alternative | Why rejected |
+|---|---|
+| `panic = "unwind"` in wasm (WebAssembly exception handling, the default in workers-rs 0.6) | Keeps the instance usable, but on `wasm32-unknown-unknown` for the browser and Node it still needs nightly `-Zbuild-std`, and every export would have to be `extern "C-unwind"`; one panic model for every wasm target is simpler to test. Revisit when it is stable |
+| Recreate without rehydrating | Loses whatever the instance held — once the `LoroDoc` lives in the wasm, that is the open document |
+| Abort the native daemon | One malformed request would take down every client's session |
+
+#### 21. Browser support policy and an explicit wasm baseline
+
+Until general availability: the latest browser versions only. At GA the
+supported set is frozen as of that date, then moves gradually to the last
+~2 years of major browsers. The wasm target-feature baseline is explicit
+(`-Ctarget-feature`), pinned with the toolchain and `wasm-bindgen` as one
+unit, and documented with an engine-support matrix updated per this policy
+(QR-5a, QR-5b).
+
+| Alternative | Why rejected |
+|---|---|
+| The compiler's default target features | They change across Rust versions (multivalue, reference-types, bulk-memory and nontrapping-fptoint were turned on by default), so a toolchain bump would silently drop engines |
+| A long support window from the start | Pre-release, it would constrain the baseline for users who do not exist yet |
+
+#### 22. Workers: design to the free plan
+
+The free plan's budgets — 10 ms CPU per request, 1 s startup, the isolate
+memory limit — are performance goals, measured in CI and reported (QR-22c).
+Heavy work, such as a large board's layout, is designed to be splittable.
+The paid plan is adopted only when a measured technical limit is hit. Size
+limits are verified from Cloudflare's documentation before implementation:
+the sources disagree (compressed limits reported removed on 2026-09-04,
+against a 3 MB free-plan limit).
+
+| Alternative | Why rejected |
+|---|---|
+| Design to the paid plan | Hides the cost of a design that only fits a 30 s budget, and makes a personal workspace cost money by default |
+
+#### 23. The freeze lifts per module
+
+A module's freeze lifts once its switch is `rust` and its TypeScript
+implementation is deleted; from then on, new features for that module go to
+Rust.
+
+| Alternative | Why rejected |
+|---|---|
+| Lift the freeze only when the whole migration ends | Holds back product work on modules that have nothing left to be compared against |
+| Lift it at the switch, before deletion | Features would then be written twice, or the oracle would fall behind the code it still guards |
+
+#### 24. Coverage floors
+
+Per crate, the floor starts at the first measured value rounded down, only
+goes up, and is lowered only with a ledgered reason. Decision quality is the
+mutation gate's job, not coverage's (QR-18).
+
+| Alternative | Why rejected |
+|---|---|
+| One repository-wide threshold | Either too low for the core or unreachable for a binding; a per-crate floor is honest about each |
+| A fixed target (say 80%) | A number chosen before measuring is either free or arbitrary; the ratchet makes every crate at least as tested as it was |
+
+#### 25. YAML: a restricted in-house frontmatter parser
+
+No anchors or aliases (so no billion-laughs expansion) and a depth cap,
+differentially fuzzed against npm `yaml` (QR-28h). A document whose
+frontmatter uses anchors is refused — an accepted behaviour change.
+Markdown uses markdown-rs.
+
+| Alternative | Why rejected |
+|---|---|
+| `serde_yaml` | Archived |
+| `serde_yml` | RUSTSEC-2025-0068, unsound |
+| The libyaml-based forks | Carry `unsafe-libyaml`, which the `unsafe` ledger (decision 16) would have to absorb for a format whose frontmatter subset is small |
+
 ### Defaults adopted with this ADR
 
 Taken from the tooling research and the architecture analysis, and recorded
 here so a later change is a decision rather than a drift. A later ADR may
-revise one without reopening decisions 1–17.
+revise one without reopening decisions 1–25.
 
 | Area | Default | Alternative rejected, and why |
 |---|---|---|
@@ -325,12 +439,38 @@ revise one without reopening decisions 1–17.
 | Errors | Generated `RefusalCode` (Seams, 4) | Hand-written per language: the drift `v1-refusals-cover-errors` exists to catch |
 | Async | `MaybeSend` ports (Seams, 7) | `async-trait` boxing everywhere, or `Send` everywhere, which wasm cannot satisfy |
 | Daemon SQLite | rusqlite, bundled; migration log keys kept identical | libSQL client: only if a libSQL-specific feature is in use |
-| Daemon shape | Plain binary under biome-style `optionalDependencies` plus GitHub release binaries; static musl on Linux | napi-rs addon (decision 1) |
+| Daemon shape | Plain binary under biome-style `optionalDependencies` plus GitHub release binaries; static musl on Linux (decision 19) | napi-rs addon (decision 1) |
 | Workers MCP | `rmcp`-on-wasm spike before planning it | Assuming rmcp works without tokio |
 | Scene across the boundary | Decided before the composer is ported (Seams, 8) | Deciding it during the port |
 | Highlighting | A host seam during the transition (lowlight stays in TypeScript), then decided on measurements | A Rust highlighter now: none is a twin of highlight.js, so byte parity fails on the first fence |
 | Browser storage | Stays TypeScript (IndexedDB/OPFS) behind coarse ports | Rust over IndexedDB bindings: no gain, and the ports are coarse enough that the boundary is cheap |
 | Version skew | A protocol version in the daemon-to-web handshake, now | Compatibility shims: the project ships none pre-1.0 |
+
+The integrator adopted these from the gap research the same day; like the
+rows above, a later ADR may revise one:
+
+| Area | Default | Alternative rejected, and why |
+|---|---|---|
+| Boundary granularity | One boundary call per user operation, never per node; a boundary-cost bench per runtime, JSON against serde-wasm-bindgen (QR-22b) | Per-item calls: the cost that drove another project's Rust engine back out |
+| State ownership | The `LoroDoc` ends inside the wasm; the web app leaves `loro-crdt` with the loro cohort, and two Loro copies exist only until then | The document in JavaScript beside a wasm core: every operation would cross the boundary with the whole document's state |
+| Toolchain unit | Toolchain, `wasm-bindgen` and `-Ctarget-feature` baseline pinned as one unit; bumped every 1–2 releases in its own PR; no MSRV lane (QR-5a) | An MSRV lane: no crate is published, and the edition 2024 resolver is MSRV-aware |
+| Unicode | Pinned explicit crates with a version-asserting test; the oracle uses the same segmenter or the fixtures record the version (QR-20b) | std's tables, which follow the toolchain |
+| Parser limits | One shared TypeScript/Rust limit contract; `serde_json/unbounded_depth` banned; explicit regex `size_limit`; a deep-but-valid property inside wasm (QR-28b) | Per-site limits, which TypeScript and Rust would set differently |
+| Windows | Named pipes with `first_pipe_instance(true)` and an owner-only DACL in one ledgered `unsafe` crate, with a Windows CI test (QR-28i) | Spreading the `unsafe` call into the daemon binding |
+| Logging bridge | The RFC 5424 severity carried as a field through `tracing`; spans to the host's `@opentelemetry/api` from wasm, tracing-opentelemetry natively (QR-25b) | Mapping onto `tracing`'s five levels |
+| Supply chain | `cargo auditable` for the daemon; cargo-deny sources limited to crates.io with a review for every new crate; zizmor over the workflows; cargo-vet only for network-facing dependencies (QR-27a) | Accepting git or alternative-registry sources |
+| Notices | `cargo-about` notices in every platform package and the web bundle (QR-27d) | Hand-maintained notices |
+| CI throughput | rust-cache saved from `main`; nextest archive and partition with no retries; doctests separately; native arm64 runners; cross-compilation only for musl and the glibc floor; build timings as an artifact; a compiler cache only if measured (QR-32b) | Emulated arm64, and caches nobody measured |
+| Worktrees | A per-worktree `CARGO_TARGET_DIR` seeded from the main checkout; targets installed by the session hook; lanes pre-built (QR-32c) | A cold build per worktree |
+| Wasm memory | Peak-memory reports on a real board, Workers startup measured, an explicit maximum memory, `opt-level` chosen per artifact (QR-22d) | One optimisation level for every artifact |
+| Errors | `thiserror` in libraries; `anyhow` only in the daemon's `main`, banned from core and ops by the architecture map; a `kind()` tied to the generated codes (QR-26b) | Type-erased errors in libraries |
+| Exit criteria | Structure-preserving or redesigned recorded per module; a TypeScript deletion deadline; rollback is flipping the switch (QR-33b) | Leaving the TypeScript in place indefinitely "just in case" |
+| Crash reports | A local, redacted report written by the panic hook and attached by the user through the support bundle; no telemetry (QR-25c) | A hosted crash service |
+
+Considered and not adopted: cargo-semver-checks (no crate is published; the
+`.d.ts` and wasm export surface are diffed instead), denying `missing_docs`
+(only `broken_intra_doc_links` is denied), a feature-powerset CI lane
+(features are kept near zero), and per-crate CODEOWNERS.
 
 ## Target crate graph and layering
 
@@ -356,7 +496,7 @@ What each core crate absorbs:
 | `model` | `packages/model`, plus the invariants a schema cannot state (path and id grammar, `storedImageRefs`, facet key grammar) |
 | `facet-engine` | the facet engine's data half, over the facet-schema dialect |
 | `scene` | `packages/scene`; the contribution traits `RenderContribution`, `ShapeContribution`, `NodeDecoration`, `EdgeRouter` |
-| `codec` | `packages/codec` (markdown-rs for mdast, a YAML 1.2 crate) |
+| `codec` | `packages/codec` (markdown-rs for mdast; a restricted in-house frontmatter parser, decision 25) |
 | `search` | `packages/search` (unicode-segmentation) |
 | `plugin-visual` | the bundled plugin's default entry, `/render`, `/emoji*`, `/icons/shortcode` |
 | `edge-routing` | `canvas-render`'s edge layer: side choice, anchors, Hanan-grid A*, crossings, jumps, rounding, label anchor, budget, route cache |
@@ -389,7 +529,7 @@ fonts; `packages/core-wasm` (`@kamiazya/whiteboard-core-wasm`: the artifacts,
 a thin shim and init, no `node:*` — roots hand it bytes or a `Module`);
 `tools/*`, with arch-lint reading the language-neutral map.
 
-**One architecture map.** `architecture-map.json` serves both languages: per
+**One architecture map.** `crates/architecture-map.json` serves both languages: per
 entry `lang`, `layer`, `targets`, `absorbs`/`absorbedBy`, `status`, and
 `allowedThirdParty` with a reason each. The TypeScript scans read it; the
 Rust check (`xtask arch-map`) reads `cargo metadata` against it (QR-10).
@@ -427,7 +567,7 @@ before the first port.
    mapped in the adapters only. Across the wasm ABI an error is
    `{ok:false, refusal}`, and the shim rehydrates the TypeScript error
    classes during coexistence. An exhaustive `match` on `RefusalCode`
-   replaces `v1-refusals-cover-errors`. Panics: QR-26 and QR-28a.
+   replaces `v1-refusals-cover-errors`. Panics: decision 20, QR-26c and QR-28a.
 5. **Determinism rules** (the divergences already found in the current code):
    - `toFixed` ties: JS picks the larger `n` on an exact tie, Rust rounds half
      to even (0.0625 → `"0.063"` in JS, `"0.062"` in Rust). `det::format_coord`
@@ -446,8 +586,9 @@ before the first port.
      str` is UTF-8 byte order, which differs from UTF-16 code-unit order
      between U+E000–U+FFFF and the supplementary planes.
    - Unicode tables: `Intl.Segmenter` follows the host's ICU, Rust crates pin
-     their own; the one-time difference against the oracle is accepted and
-     ledgered.
+     their own; the crates are pinned explicitly and their table version
+     asserted by a test (QR-20b), and the one-time difference against the
+     oracle is accepted and ledgered.
    - Floats: no relaxed-simd; a NaN is never hashed; canonical JSON is RFC
      8785; numbers are formatted by ryu-js, never serde's `1.0` for `1`.
 6. **loro: one cohort, lock-step versions.** Pinned `=` with a cross-lockfile
@@ -513,7 +654,7 @@ returns the TypeScript answer. Each function's lifecycle:
 |---|---|---|---|
 | 1 | `ts` | TypeScript only | the Rust port compiles and its native tests pass |
 | 2 | `differential` | both, in CI and in dogfooding; TypeScript answers | the parity checklist (QR-33) is met |
-| 3 | `rust` | Rust answers; TypeScript is still present | one release with no mismatch reported |
+| 3 | `rust` | Rust answers; TypeScript is still present, so rollback is flipping the switch back | one release with no mismatch reported, and no later than the deletion deadline recorded at the switch |
 | 4 | — | TypeScript deleted; its tests kept and pointed at the shim | the whole package is absorbed |
 | 5 | — | tests move to Rust (proptest) | — |
 
@@ -547,6 +688,18 @@ module import on Workers. tsdown `noExternal` copies the wasm as an asset.
 Generated code is checked in: `crates/*/src/generated/*.rs` and
 `packages/*/src/generated/*.zod.ts`.
 
+**Per-module exit criteria** (QR-33b), recorded in the PR that moves a
+module's first switch to `rust`: whether the port is structure-preserving or
+redesigned, and why; the release by which its TypeScript is deleted (N
+releases after the switch, N recorded per module); and that rollback is
+flipping the switch in the composition root, nothing more. A
+structure-preserving port is the default: reading the two side by side is
+what lets layer 1 of the harness carry most of the proof. Another TypeScript
+compiler port chose Go over Rust precisely because a structure-preserving
+port was intractable in Rust; this migration keeps the core synchronous and
+data-oriented so that it is not, and records each module that had to be
+redesigned instead.
+
 ## Freeze policy for `packages/*` during the migration
 
 | Change | Allowed? | Condition |
@@ -554,7 +707,7 @@ Generated code is checked in: `crates/*/src/generated/*.rs` and
 | Bug fix in a module at stage 1 | Yes | TypeScript only; the oracle carries it into the port |
 | Bug fix in a module at stage 2 or 3 | Yes | The SAME PR fixes both sides and adds the regression test to the shared suite or fixture corpus, so the differential pins it |
 | Bug fix in a module at stage 4 | Yes | Rust only |
-| New feature, new field, changed contract or specification | No | Until the owner lifts the freeze |
+| New feature, new field, changed contract or specification | No, until the module's freeze lifts | Lifts PER MODULE once its switch is `rust` and its TypeScript is deleted; from then on its new features go to Rust (decision 23) |
 | Refactor of TypeScript that is being ported | No | It moves the oracle without moving behaviour; precursor changes (decision 11) are the exception |
 | UI work in `apps/web` | Only bug fixes | The UI/UX loop is stopped (decision 9) |
 | Tooling, CI, arch-lint, docs | Yes | — |
@@ -572,7 +725,7 @@ through a ledgered exception.
 | 3 | This step (decision 8): skeleton, gates, schema pipeline on the geometry contract, harness | each gate in QR-1…QR-32 has a running job, mutation-checked |
 | 4 | det precursor in TypeScript (decision 11) | goldens and scoreboards moved once, with reasons |
 | 5 | Geometry contract and `edge-routing` — the routing spike, then the port | parity checklist; routing scoreboards identical |
-| 6 | `model`, `facet-engine`, `scene`, `codec`, `plugin-visual` data half | codec round-trips byte-identical; markdown-rs stringify and YAML parity spiked first |
+| 6 | `model`, `facet-engine`, `scene`, `codec`, `plugin-visual` data half | codec round-trips byte-identical; markdown-rs stringify spiked first; the restricted frontmatter parser differentially fuzzed against npm `yaml` |
 | 7 | `canvas-render` (scene-across-boundary decided first) | SVG golden byte-identical on TypeScript, native and wasm |
 | 8 | `search` | search-quality scoreboard identical; Unicode-table diff ledgered |
 | 9 | The loro cohort: `crdt`, `workspace-index`, `history`, `reference-graph` | bidirectional fixtures; deep-value differential |
@@ -586,15 +739,15 @@ through a ledgered exception.
 |---|---|---|
 | 1 | Byte-identical SVG against the oracle fails on `toFixed` ties, transcendentals or map order | The det precursor (decision 11), before any port |
 | 2 | UTF-16 semantics — comparison, lengths, loro indices, `maxLength` | `det`'s UTF-16 operations; every contract offset declares its unit |
-| 3 | Markdown/YAML parity: markdown-rs parses, but there is no remark-stringify twin; YAML crates differ from npm `yaml` | Spike before step 6 |
+| 3 | Markdown/YAML parity: markdown-rs parses, but there is no remark-stringify twin; the YAML crates are archived or unsound | The restricted frontmatter parser, differentially fuzzed against npm `yaml` (decision 25); stringify spiked before step 6 |
 | 4 | Line breaking: `css-line-break` strict (CSS kinsoku) against a UAX #14 crate with no strictness levels | Spike before step 7 |
 | 5 | Highlighting has no Rust twin of highlight.js | Host seam through the transition |
 | 6 | Two loro engines: size, version pin, `_utf16` APIs | One-cohort migration; lock-step guard |
 | 7 | Workers: script size; CPU time for large layouts | Size ledgers per artifact; measured CPU per layout size |
 | 8 | Live-drag boundary cost | Measure first; typed-array fast path kept available |
-| 9 | A wasm panic poisons the instance | Re-instantiation designed into the shim and the worker pool (QR-26) |
+| 9 | A wasm panic poisons the instance, and state held inside it (a `LoroDoc`) goes with it | Recreate and rehydrate from persisted state, tested by a CI poison-and-recover scenario (decision 20, QR-26c) |
 | 10 | Dialect gaps between JSON Schema, Zod and serde | The round-trip property and ADR-0031's scoreboards |
-| 11 | CI and agent cost: coexistence doubles lanes; agents need cargo and the wasm target; worktrees need a shared `CARGO_TARGET_DIR` | Scope-aware CI first (decision 10) |
+| 11 | CI and agent cost: coexistence doubles lanes; agents need cargo and the wasm target; worktrees need a warm `CARGO_TARGET_DIR` | Scope-aware CI first (decision 10) |
 | 12 | Daemon store: kysely migrations re-expressed with identical log keys | Migration log keys are data in the database; a fixture of every shipped schema |
 | 13 | Pre-1.0 tooling: workers-rs, typify and wasm-bindgen's new organisation | Spikes before commitment; the own emitter as typify's fallback |
 | 14 | OS code-signing certificates are not yet available, so early binaries ship unsigned and macOS Gatekeeper and Windows SmartScreen warn | Provenance and checksums from the first release; signing scaffolded and enabled when the owner provides certificates (decision 17) |
@@ -616,6 +769,15 @@ through a ledgered exception.
   and a fuzz target; adding an entry without them fails a guard.
 - **Releases get slower and stricter:** two builds per artifact for the
   reproducibility check, a hardening check, provenance and checksums.
+- **Panics have a recovery path that is tested**, and state held inside a
+  wasm instance must be rehydratable from what the keeper persisted.
+- **The freeze is per module** (decision 23): product work resumes module by
+  module, in Rust, as each TypeScript implementation is deleted.
+- **Support promises are written down** — an engine-support matrix and a
+  browser policy that freezes at GA — and the wasm baseline follows them.
+- **Frontmatter with YAML anchors or aliases is refused** (decision 25).
+- **The security bar is external:** the OpenSSF and the other standards of
+  decision 18, mapped in `docs/contributing/security-baseline.md`.
 - **Contributors** must read Rust to change the core; the UI stays React.
 - **The Zod discipline** keeps its reader-facing form (`z.infer`, never a
   parallel interface) but its schema is written in `contracts/`, and a
