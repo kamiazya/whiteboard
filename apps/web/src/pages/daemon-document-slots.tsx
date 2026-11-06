@@ -238,18 +238,21 @@ export function daemonDocumentLabels(
 export function daemonVersionsSlot({
   canvas,
   labels,
+  currentDocumentId,
   backend,
   onVersionCreated,
 }: {
   canvas: { workspaceId: string; path: string } | null
   labels: ReturnType<typeof daemonDocumentLabels>
+  /** The listing's id for the open path; the column stays hidden while it is undefined. */
+  currentDocumentId: string | undefined
   backend: VersionsBackend
   onVersionCreated: () => void
 }): DocumentPageModel['versions'] {
   return versionsSlot({
     backend: canvas === null ? null : backend,
     workspaceId: labels.workspaceId,
-    path: labels.path,
+    documentId: currentDocumentId,
     announceRefresh: onVersionCreated,
   })
 }

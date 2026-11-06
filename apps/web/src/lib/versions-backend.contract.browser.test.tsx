@@ -103,7 +103,7 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
   return {
     backend: createBrowserVersionsBackend({ store, record: backend, kind: 'spatial' }),
     workspaceId,
-    path: 'canvas-a',
+    documentId,
     write,
     async read() {
       const record = await docs.open(workspaceId)
@@ -198,7 +198,7 @@ function daemonHarness(): VersionsBackendHarness {
   return {
     backend: createDaemonVersionsBackend(routes as typeof globalThis.fetch),
     workspaceId: 'ws-1',
-    path: 'canvas-a',
+    documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     async write(text) {
       current = text
     },

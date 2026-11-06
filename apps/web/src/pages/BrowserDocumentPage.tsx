@@ -561,7 +561,7 @@ function useBrowserDocument(
     versions: versionsSlot({
       backend: versionsBackend,
       workspaceId,
-      path: loadedPath,
+      documentId: openDocumentId,
       // The browser keeper's history column reads its own store, so a save
       // has nothing to announce.
       announceRefresh: () => {},

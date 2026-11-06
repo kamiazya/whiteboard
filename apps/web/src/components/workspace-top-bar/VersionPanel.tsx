@@ -6,7 +6,7 @@ import { InspectorPanel } from '../ui/InspectorPanel.js'
 interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>
   workspaceId: string
-  path: string
+  documentId: string
   documentKind?: DocumentKind
   onRestored?: () => void
   refreshSignal?: number
@@ -27,7 +27,7 @@ interface VersionPanelProps {
 export function VersionPanel({
   panelRef,
   workspaceId,
-  path,
+  documentId,
   documentKind,
   onRestored,
   refreshSignal,
@@ -43,7 +43,7 @@ export function VersionPanel({
     >
       <VersionTimeline
         workspaceId={workspaceId}
-        path={path}
+        documentId={documentId}
         {...(documentKind === undefined ? {} : { documentKind })}
         onRestored={onRestored}
         refreshSignal={refreshSignal}

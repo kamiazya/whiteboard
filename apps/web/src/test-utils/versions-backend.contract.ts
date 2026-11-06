@@ -28,7 +28,7 @@ import type { PastDocument, VersionsBackend } from '../lib/versions-backend.js'
 export interface VersionsBackendHarness {
   backend: VersionsBackend
   workspaceId: string
-  path: string
+  documentId: string
   /** Write this text as the document's content, the way an edit would. */
   write(text: string): Promise<void>
   /** What the document holds NOW, however this keeper stores it. */
@@ -56,11 +56,11 @@ export function versionsBackendContract(
     const h = await create()
     try {
       await h.write('first')
-      const older = await h.backend.save(h.workspaceId, h.path, { label: 'one' })
+      const older = await h.backend.save(h.workspaceId, h.documentId, { label: 'one' })
       await h.write('second')
-      const newer = await h.backend.save(h.workspaceId, h.path, { label: 'two' })
+      const newer = await h.backend.save(h.workspaceId, h.documentId, { label: 'two' })
 
-      const listed = await h.backend.list(h.workspaceId, h.path)
+      const listed = await h.backend.list(h.workspaceId, h.documentId)
       // The row `save` answered is the row `list` shows — a keeper that
       // minted an id for its answer and another for its record would pass
       // every other case here.
@@ -78,10 +78,10 @@ export function versionsBackendContract(
     const h = await create()
     try {
       await h.write('at the version')
-      const saved = await h.backend.save(h.workspaceId, h.path, { label: 'mark' })
+      const saved = await h.backend.save(h.workspaceId, h.documentId, { label: 'mark' })
       await h.write('moved on since')
 
-      expect(textOf(await h.backend.loadPast(h.workspaceId, h.path, saved.id))).toBe(
+      expect(textOf(await h.backend.loadPast(h.workspaceId, h.documentId, saved.id))).toBe(
         'at the version',
       )
       // The document itself is untouched by looking at its past.
@@ -101,7 +101,7 @@ export function versionsBackendContract(
       // Null rather than a throw, and rather than another document's content:
       // an id alone must not read a history that is not this document's, for
       // the same reason restore refuses it.
-      expect(await h.backend.loadPast(h.workspaceId, h.path, foreign)).toBeNull()
+      expect(await h.backend.loadPast(h.workspaceId, h.documentId, foreign)).toBeNull()
     } finally {
       await h.cleanup()
     }
@@ -111,10 +111,10 @@ export function versionsBackendContract(
     const h = await create()
     try {
       await h.write('the good version')
-      const saved = await h.backend.save(h.workspaceId, h.path, { label: 'good' })
+      const saved = await h.backend.save(h.workspaceId, h.documentId, { label: 'good' })
       await h.write('the regrettable one')
 
-      await h.backend.restore(h.workspaceId, h.path, saved.id)
+      await h.backend.restore(h.workspaceId, h.documentId, saved.id)
 
       expect(await h.read()).toBe('the good version')
     } finally {
@@ -126,12 +126,12 @@ export function versionsBackendContract(
     const h = await create()
     try {
       await h.write('original')
-      const saved = await h.backend.save(h.workspaceId, h.path, { label: 'original' })
+      const saved = await h.backend.save(h.workspaceId, h.documentId, { label: 'original' })
       await h.write('changed')
 
-      const before = await h.backend.list(h.workspaceId, h.path)
-      await h.backend.restore(h.workspaceId, h.path, saved.id)
-      const after = await h.backend.list(h.workspaceId, h.path)
+      const before = await h.backend.list(h.workspaceId, h.documentId)
+      await h.backend.restore(h.workspaceId, h.documentId, saved.id)
+      const after = await h.backend.list(h.workspaceId, h.documentId)
 
       // A restore is a MERGE, a descendant of the state you were on and the
       // one you went back to, so it leaves a point saying where it came from.

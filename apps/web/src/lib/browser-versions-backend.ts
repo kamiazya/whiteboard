@@ -1,5 +1,8 @@
 import { restorePointOptions } from '@kamiazya/whiteboard-history'
-import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readDocumentContent,
+  resolveWorkspaceDocumentById,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { BrowserVersionStore } from './browser-version-store.js'
@@ -18,6 +21,18 @@ import type { VersionsBackend } from './versions-backend.js'
 export interface VersionsRecordSeam {
   readonly readRecord: <T>(read: (doc: LoroDoc, documentId: string) => T) => T | null
   readonly applyRestore: (past: LoroDoc, label?: string) => Promise<void>
+}
+
+/**
+ * The path the live record stands `documentId` at. The store keys a
+ * document's rows by path, so the id the seam speaks is resolved against the
+ * record once per call; an id the record does not hold (or a record not yet
+ * delivered) throws before any store is touched.
+ */
+function pathOfDocument(record: VersionsRecordSeam, documentId: string): string {
+  const path = record.readRecord((doc) => resolveWorkspaceDocumentById(doc, documentId)?.path)
+  if (path == null) throw new Error(`no such document: ${documentId}`)
+  return path
 }
 
 /**
@@ -48,26 +63,28 @@ export function createBrowserVersionsBackend(deps: {
    */
   readonly kind: DocumentKind
 }): VersionsBackend {
+  const pathOf = (documentId: string) => pathOfDocument(deps.record, documentId)
   return {
-    list: (_workspaceId, path) => deps.store.list(getBrowserWorkspaceId(), path),
-    save(_workspaceId, path, { label }) {
-      return deps.store.save(getBrowserWorkspaceId(), path, {
+    list: async (_workspaceId, id) => deps.store.list(getBrowserWorkspaceId(), pathOf(id)),
+    async save(_workspaceId, documentId, { label }) {
+      return deps.store.save(getBrowserWorkspaceId(), pathOf(documentId), {
         label,
         // The person at this browser. The daemon names its humans by their
         // sync peer; the browser has one person and no peer to name.
         operator: { kind: 'human' },
       })
     },
-    async loadPast(_workspaceId, path, versionId) {
+    async loadPast(_workspaceId, documentId, versionId) {
       // The store answers a LoroDoc; the seam answers something to draw. The
       // projection happens here so the seam stays free of CRDT types and a
       // keeper that never held one could still implement it.
-      const past = await deps.store.loadPast(getBrowserWorkspaceId(), path, versionId)
+      const past = await deps.store.loadPast(getBrowserWorkspaceId(), pathOf(documentId), versionId)
       if (past === null) return null
       return readDocumentContent(past, deps.kind)
     },
-    async restore(_workspaceId, path, versionId) {
+    async restore(_workspaceId, documentId, versionId) {
       const workspaceId = getBrowserWorkspaceId()
+      const path = pathOf(documentId)
       const past = await deps.store.loadPast(workspaceId, path, versionId)
       if (past === null) throw new Error(`no such version: ${versionId}`)
       const label = (await deps.store.list(workspaceId, path)).find(

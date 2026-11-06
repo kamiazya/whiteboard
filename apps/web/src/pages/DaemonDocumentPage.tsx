@@ -518,6 +518,7 @@ function useDaemonDocument(
     versions: daemonVersionsSlot({
       canvas,
       labels,
+      currentDocumentId,
       backend: versionsBackend,
       onVersionCreated: events.onVersionCreated,
     }),

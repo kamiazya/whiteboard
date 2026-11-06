@@ -20,23 +20,26 @@ const log = getAppLogger('document-page-versions')
 export function versionsSlot({
   backend,
   workspaceId,
-  path,
+  documentId,
   announceRefresh,
 }: {
   backend: VersionsBackend | null
   workspaceId: string
-  path: string
+  /** Undefined until the keeper's listing names the document, which keeps the column hidden. */
+  documentId: string | undefined
   announceRefresh: () => void
 }): DocumentPageModel['versions'] {
+  const addressed = backend === null || documentId === undefined ? null : { backend, documentId }
   return {
-    enabled: backend !== null,
+    ...(addressed === null
+      ? { enabled: false as const }
+      : { enabled: true as const, documentId: addressed.documentId }),
     workspaceId,
-    path,
     save: async (label) => {
-      if (backend === null) throw new Error('saveVersion: no versions backend')
+      if (addressed === null) throw new Error('saveVersion: no versions backend')
       try {
-        const saved = await backend.save(workspaceId, path, { label })
-        return { workspaceId, path, versionId: saved.id }
+        const saved = await addressed.backend.save(workspaceId, addressed.documentId, { label })
+        return { workspaceId, documentId: addressed.documentId, versionId: saved.id }
       } catch (err) {
         log.warn('save version from the History panel failed', err)
         throw err

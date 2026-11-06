@@ -26,7 +26,9 @@ afterEach(() => {
 
 describe('VersionPanel', () => {
   it.each(['markdown', 'spatial'] as const)('hands the %s kind to the timeline', (kind) => {
-    render(<VersionPanel workspaceId="ws" path="notes/a" documentKind={kind} onClose={() => {}} />)
+    render(
+      <VersionPanel workspaceId="ws" documentId="notes/a" documentKind={kind} onClose={() => {}} />,
+    )
     expect(timelineProps.at(-1)?.documentKind).toBe(kind)
   })
 })

@@ -746,12 +746,15 @@ describe('DaemonDocumentPage', () => {
           // POST — so the catch-all reached `listVersionsResponseSchema` and this
           // test quietly exercised a schema failure it is not about.
           if (
-            url.includes('/workspaces/w1/documents/main/versions') &&
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
+            init?.method === 'POST'
+          ) {
             return Promise.resolve(
               jsonResponse({
                 version: {
@@ -802,7 +805,7 @@ describe('DaemonDocumentPage', () => {
       expect(
         fetchMock.mock.calls.filter(
           ([reqInput, init]) =>
-            String(reqInput).includes('/workspaces/w1/documents/main/versions') &&
+            String(reqInput).includes('/workspaces/w1/documents/id-main/versions') &&
             init?.method === 'POST',
         ),
       ).toHaveLength(0)
@@ -814,7 +817,7 @@ describe('DaemonDocumentPage', () => {
       await waitFor(() => {
         const postCalls = fetchMock.mock.calls.filter(
           ([reqInput, init]) =>
-            String(reqInput).includes('/workspaces/w1/documents/main/versions') &&
+            String(reqInput).includes('/workspaces/w1/documents/id-main/versions') &&
             init?.method === 'POST',
         )
         expect(postCalls).toHaveLength(1)

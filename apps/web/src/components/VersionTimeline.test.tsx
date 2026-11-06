@@ -132,7 +132,7 @@ describe('VersionTimeline', () => {
     // canvas's version staged — confirming would POST that version id to the
     // NEW canvas's restore endpoint.
     const { rerender } = render(
-      <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />,
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
     )
 
     const row = await screen.findByText(/Assistant/)
@@ -141,7 +141,9 @@ describe('VersionTimeline', () => {
       expect(preview.current).not.toBeNull()
     })
 
-    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-b" onPreview={preview.onPreview} />)
+    rerender(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-b" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(preview.current).toBeNull()
     })
@@ -150,7 +152,7 @@ describe('VersionTimeline', () => {
   it('refetches versions when refreshSignal changes (e.g. after a manual save)', async () => {
     const preview = capturePreview()
     const { rerender } = render(
-      <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" refreshSignal={0} />,
     )
     await screen.findByText(/Assistant/)
 
@@ -162,7 +164,7 @@ describe('VersionTimeline', () => {
     rerender(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         refreshSignal={1}
         onPreview={preview.onPreview}
       />,
@@ -179,7 +181,7 @@ describe('VersionTimeline', () => {
   it('does not refetch when re-rendered with an unchanged refreshSignal', async () => {
     const preview = capturePreview()
     const { rerender } = render(
-      <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" refreshSignal={0} />,
     )
     await screen.findByText(/Assistant/)
 
@@ -191,7 +193,7 @@ describe('VersionTimeline', () => {
     rerender(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         refreshSignal={0}
         onPreview={preview.onPreview}
       />,
@@ -230,7 +232,9 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(screen.getByText(/0s ago/)).toBeTruthy()
     })
@@ -239,7 +243,9 @@ describe('VersionTimeline', () => {
 
   it('renders operator affordances', async () => {
     const preview = capturePreview()
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
 
     await waitFor(() => {
       expect(screen.getByText(/Assistant/)).toBeTruthy()
@@ -282,7 +288,9 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     // An automatic checkpoint has no author to name. It used to be labelled
     // "System", which said the same thing the row's own title already did.
     const row = await screen.findByTestId('version-row')
@@ -305,7 +313,9 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     const empty = await screen.findByText(/No versions yet/i)
 
     // The interval is read from the scheduler's own constant, so the copy
@@ -324,7 +334,7 @@ describe('VersionTimeline', () => {
   it('scroll container can shrink inside the fixed-height history popover', async () => {
     const preview = capturePreview()
     const { container } = render(
-      <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />,
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
     )
 
     await waitFor(() => {
@@ -358,7 +368,7 @@ describe('VersionTimeline', () => {
     render(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         onRestored={onRestored}
         onPreview={preview.onPreview}
       />,
@@ -406,7 +416,7 @@ describe('VersionTimeline', () => {
     render(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         onRestored={onRestored}
         onPreview={preview.onPreview}
       />,
@@ -448,7 +458,7 @@ describe('VersionTimeline', () => {
     render(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         onRestored={vi.fn()}
         onPreview={preview.onPreview}
       />,
@@ -484,7 +494,7 @@ describe('VersionTimeline', () => {
     render(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         onRestored={onRestored}
         onPreview={preview.onPreview}
       />,
@@ -530,7 +540,7 @@ describe('VersionTimeline', () => {
     render(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         onRestored={onRestored}
         onPreview={preview.onPreview}
       />,
@@ -584,7 +594,7 @@ describe('VersionTimeline', () => {
     render(
       <VersionTimeline
         workspaceId="sess_1"
-        path="canvas-a"
+        documentId="canvas-a"
         onRestored={onRestored}
         onPreview={preview.onPreview}
       />,
@@ -659,7 +669,9 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 30_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(screen.getByText(/30s ago/)).toBeTruthy()
     })
@@ -672,7 +684,9 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 5 * 60_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(screen.getByText(/5m ago/)).toBeTruthy()
     })
@@ -685,7 +699,9 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 3 * 3600_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(screen.getByText(/3h ago/)).toBeTruthy()
     })
@@ -698,7 +714,9 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 2 * 86_400_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       // 2026-04-21 00:00 local time rendered as M/D HH:MM.
       expect(screen.getByText(/4\/21 \d{2}:\d{2}/)).toBeTruthy()
@@ -709,7 +727,9 @@ describe('formatRelative display branches (via rendered version rows)', () => {
     const preview = capturePreview()
     stubFetchWithVersionAt('not-a-real-date')
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(screen.getByText(/not-a-real-date/)).toBeTruthy()
     })
@@ -738,7 +758,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
+        <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -778,7 +798,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
+        <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -824,7 +844,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
+        <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -854,7 +874,9 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
 
     await waitFor(() => {
       expect(mockLog.error).toHaveBeenCalledWith('versions request threw', expect.any(TypeError))
@@ -877,7 +899,9 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
+    render(
+      <VersionTimeline workspaceId="sess_1" documentId="canvas-a" onPreview={preview.onPreview} />,
+    )
 
     await waitFor(() => {
       expect(mockLog.error).toHaveBeenCalledWith(
@@ -909,7 +933,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
       <VersionsBackendContext.Provider value={backend}>
         <VersionTimeline
           workspaceId="sess_1"
-          path="canvas-a"
+          documentId="canvas-a"
           refreshSignal={refreshSignal}
           onPreview={preview.onPreview}
         />
@@ -952,7 +976,11 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const { rerender } = render(
-      <VersionTimeline workspaceId="sess_1" path="canvas-old" onPreview={preview.onPreview} />,
+      <VersionTimeline
+        workspaceId="sess_1"
+        documentId="canvas-old"
+        onPreview={preview.onPreview}
+      />,
     )
 
     // Load canvas-old's versions first so there is stale data to leak.
@@ -964,7 +992,11 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     // clear that stale data immediately, even though canvas-new's own
     // /versions request never resolves here.
     rerender(
-      <VersionTimeline workspaceId="sess_1" path="canvas-new" onPreview={preview.onPreview} />,
+      <VersionTimeline
+        workspaceId="sess_1"
+        documentId="canvas-new"
+        onPreview={preview.onPreview}
+      />,
     )
     await waitFor(() => {
       expect(screen.queryByText('🤖 Assistant')).toBeNull()
@@ -1022,7 +1054,7 @@ describe('VersionTimeline draws where a restored state came from', () => {
       }),
     )
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" documentId="canvas-a" />)
     await screen.findByText('first draft')
 
     // Named by what the row it points at is CALLED, so the label and the
@@ -1038,7 +1070,7 @@ describe('VersionTimeline draws where a restored state came from', () => {
   })
 
   it('draws no arc for a history nobody restored in', async () => {
-    const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    const { container } = render(<VersionTimeline workspaceId="sess_1" documentId="canvas-a" />)
     await screen.findByText(/Assistant/)
     expect(container.querySelectorAll('[stroke-dasharray]')).toHaveLength(0)
     expect(screen.queryByTestId('version-restored-from')).toBeNull()

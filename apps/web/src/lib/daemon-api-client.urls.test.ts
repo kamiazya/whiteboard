@@ -22,7 +22,6 @@ import { createDaemonVersionsBackend } from './versions-backend.js'
 const BASE = 'http://daemon.test'
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const WS = 'ws a'
-const PATH = 'notes/a b'
 
 async function urlOf(call: (fetchFn: typeof fetch) => Promise<unknown>): Promise<string> {
   let seen = ''
@@ -107,15 +106,15 @@ describe('daemon-api-client request URLs', () => {
       seen.push(String(input))
       return jsonResponse({}, 500)
     }) as typeof fetch)
-    await capture.list(WS, PATH).catch(() => undefined)
-    await capture.loadPast(WS, PATH, 'v/1').catch(() => undefined)
-    await capture.save(WS, PATH, { label: 'l' }).catch(() => undefined)
-    await capture.restore(WS, PATH, 'v/1').catch(() => undefined)
+    await capture.list(WS, ID).catch(() => undefined)
+    await capture.loadPast(WS, ID, 'v/1').catch(() => undefined)
+    await capture.save(WS, ID, { label: 'l' }).catch(() => undefined)
+    await capture.restore(WS, ID, 'v/1').catch(() => undefined)
     expect(seen).toEqual([
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions',
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions/v%2F1/document',
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions',
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions/v%2F1/restore',
+      `/api/workspaces/ws%20a/documents/${ID}/versions`,
+      `/api/workspaces/ws%20a/documents/${ID}/versions/v%2F1/document`,
+      `/api/workspaces/ws%20a/documents/${ID}/versions`,
+      `/api/workspaces/ws%20a/documents/${ID}/versions/v%2F1/restore`,
     ])
   })
 })

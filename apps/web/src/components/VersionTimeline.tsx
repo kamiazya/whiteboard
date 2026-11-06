@@ -45,7 +45,7 @@ export interface VersionPreviewSession {
  */
 interface Props {
   workspaceId: string
-  path: string
+  documentId: string
   /**
    * Which kind of document the history is of. A row's element count is a
    * count of a board's nodes, so a note's rows carry none: every one would
@@ -151,7 +151,7 @@ function VersionRow({
  */
 function reportVersionsFailure(
   err: unknown,
-  where: { workspaceId: string; path: string },
+  where: { workspaceId: string; documentId: string },
 ): boolean {
   if (err instanceof VersionsRequestError) {
     log.error('versions request failed', { status: err.status, ...where })
@@ -267,7 +267,7 @@ function RowShell({
 
 export default function VersionTimeline({
   workspaceId,
-  path,
+  documentId,
   documentKind,
   onRestored,
   onPreview,
@@ -297,14 +297,14 @@ export default function VersionTimeline({
   // Monotonically increasing sequence stamp. Each refresh() call captures the
   // value at dispatch time; a response only commits if no newer refresh has
   // started meanwhile. Without this, a slow /versions response for an older
-  // workspaceId/path pair could overwrite the list after the canvas changed.
+  // workspaceId/documentId pair could overwrite the list after the canvas changed.
   const fetchSeqRef = useRef(0)
 
   const refresh = useCallback(async () => {
     const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
-      const next = await versionsBackend.list(workspaceId, path)
+      const next = await versionsBackend.list(workspaceId, documentId)
       if (seq !== fetchSeqRef.current) return
       setVersions(next)
       setStale(false)
@@ -315,15 +315,15 @@ export default function VersionTimeline({
       // list. The rows stay (they are still the last true answer)
       // and stop claiming to be up to date.
       setStale(true)
-      if (reportVersionsFailure(err, { workspaceId, path })) setVersions([])
+      if (reportVersionsFailure(err, { workspaceId, documentId })) setVersions([])
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
-  }, [workspaceId, path, versionsBackend])
+  }, [workspaceId, documentId, versionsBackend])
 
   // Clear the previously loaded canvas's versions immediately on canvas
   // change so a stale row (with thumbnail URLs pointing at the old
-  // workspaceId/path) never renders under the new canvas while the refetch
+  // workspaceId/documentId) never renders under the new canvas while the refetch
   // is in flight. Also drop any open preview — restoring a state the person
   // was looking at on the PREVIOUS document would apply that version id to
   // the one that arrived.
@@ -336,7 +336,7 @@ export default function VersionTimeline({
     setIsRestoring(false)
     setRestored(false)
     onPreview?.(null)
-  }, [workspaceId, path, onPreview])
+  }, [workspaceId, documentId, onPreview])
 
   // Reload whenever the canvas changes.
   useEffect(() => {
@@ -386,7 +386,7 @@ export default function VersionTimeline({
       setRestored(false)
       setPreviewing(v)
       try {
-        const past = await versionsBackend.loadPast(workspaceId, path, v.id)
+        const past = await versionsBackend.loadPast(workspaceId, documentId, v.id)
         // Still the version the person asked for? A slower load for an
         // earlier row must not draw itself over a later choice.
         if (previewingRef.current?.id !== v.id) return
@@ -403,7 +403,7 @@ export default function VersionTimeline({
         setRestoreError('That version could not be read.')
       }
     },
-    [isRestoring, workspaceId, path, versionsBackend],
+    [isRestoring, workspaceId, documentId, versionsBackend],
   )
 
   const closePreview = useCallback(() => {
@@ -427,7 +427,7 @@ export default function VersionTimeline({
     // run only once the keeper confirms: a failed request must not discard
     // undo history for a restore that did not happen.
     try {
-      await versionsBackend.restore(workspaceId, path, v.id)
+      await versionsBackend.restore(workspaceId, documentId, v.id)
     } catch (err) {
       if (err instanceof VersionsRequestError) {
         log.error('restore request failed', { status: err.status, versionId: v.id })
@@ -447,7 +447,7 @@ export default function VersionTimeline({
     setRestored(true)
     onRestored?.()
     await refresh()
-  }, [isRestoring, workspaceId, path, onRestored, refresh, versionsBackend])
+  }, [isRestoring, workspaceId, documentId, onRestored, refresh, versionsBackend])
 
   // One place the session is published from, rather than a call beside every
   // state change: `isRestoring` and the error move without any of the open /
