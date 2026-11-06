@@ -1,3 +1,5 @@
+import type { ToolAnnotations } from '@modelcontextprotocol/server'
+
 // Annotation profiles and TOOL_PROFILES map for MCP tool registration.
 //
 // MCP spec: https://modelcontextprotocol.io/specification/2025-06-18/server/tools#tool-annotations
@@ -9,14 +11,20 @@
 // schema reads it as TRUE whenever `readOnlyHint` is false and the SDK fills
 // no defaults, so a write profile that omits it is announced to every host as
 // destructive.
-const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const
+const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const satisfies AnnotationProfile
 const MUTATING_IDEMPOTENT = {
   destructiveHint: false,
   idempotentHint: true,
   openWorldHint: false,
-} as const
-const DESTRUCTIVE = { destructiveHint: true, openWorldHint: false } as const
-const MUTATING = { destructiveHint: false, openWorldHint: false } as const
+} as const satisfies AnnotationProfile
+const DESTRUCTIVE = {
+  destructiveHint: true,
+  openWorldHint: false,
+} as const satisfies AnnotationProfile
+const MUTATING = {
+  destructiveHint: false,
+  openWorldHint: false,
+} as const satisfies AnnotationProfile
 
 // What a tool with no profile is announced as: the worst case, so an omission
 // makes a host ask rather than letting an unreviewed write run unprompted.
@@ -24,7 +32,10 @@ export const UNPROFILED_TOOL_PROFILE = DESTRUCTIVE
 
 // Map from tool name to annotation profile and human-friendly title. Used by
 // registerToolWithAnnotations when building McpServer annotations.
-export type AnnotationProfile = Readonly<Record<string, boolean>>
+// The SDK's own ToolAnnotations, less `title` (each entry carries its own),
+// so a hint the spec does not define fails to compile instead of reaching
+// every host as a key it ignores.
+export type AnnotationProfile = Readonly<Omit<ToolAnnotations, 'title'>>
 export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: string }> = {
   // Document tools (server-core)
   wb_facet_set: {

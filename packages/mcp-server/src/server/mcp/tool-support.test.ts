@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer, type RequestId } from '@modelcontextprotocol/server'
 import { trace } from '@opentelemetry/api'
@@ -13,6 +14,7 @@ import { runAsMcpCaller } from '../security/mcp-caller.js'
 import type { MemberProfileStore } from '../security/member-profile-store.js'
 import { corruptStoredData } from '../store/corrupt-stored-data.js'
 import { RESOURCE_URI_META_KEY } from './mcp-apps.js'
+import type { AnnotationProfile } from './tool-profiles.js'
 import { registerToolWithAnnotations } from './tool-support.js'
 
 function fakeServer() {
@@ -123,6 +125,36 @@ describe('registerToolWithAnnotations', () => {
         return { content: [] }
       },
     )
+  })
+
+  // Type-level: what reaches `server.registerTool` is the SDK's own config
+  // shape, so a hint the spec does not define is a compile error rather than
+  // a key every host silently ignores.
+  it('refuses an annotation key or value the SDK does not define', () => {
+    // @ts-expect-error a misspelled hint is not a ToolAnnotations key
+    const misspelled: AnnotationProfile = { readOnlyHnt: true }
+    // @ts-expect-error `title` is the profile's own field, not a hint
+    const titled: AnnotationProfile = { title: 'x' }
+    // @ts-expect-error a hint is a boolean
+    const stringly: AnnotationProfile = { readOnlyHint: 'yes' }
+    expect([misspelled, titled, stringly]).toHaveLength(3)
+
+    registerToolWithAnnotations(
+      fakeServer(),
+      'meta-tool',
+      // @ts-expect-error _meta is the SDK's record, not a string
+      { inputSchema: {}, _meta: 'ui://whiteboard/canvas-view' },
+      async () => ({ content: [] }),
+    )
+  })
+
+  // The call into the SDK is what binds this config to the SDK's overloads;
+  // routing it through `as unknown as` again would uncheck every field above
+  // without failing a single type test, so the absence is pinned at source.
+  it('calls server.registerTool without erasing its signature', () => {
+    const source = readFileSync(new URL('./tool-support.ts', import.meta.url), 'utf8')
+    expect(source).toContain('server.registerTool')
+    expect(source).not.toMatch(/as unknown as/)
   })
 })
 
