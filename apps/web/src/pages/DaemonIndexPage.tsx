@@ -559,22 +559,17 @@ export function DaemonIndexPage({
       // The whole operation targets workspaceAtStart, not whatever the user
       // has switched the selector to by the time each await resolves — a
       // duplicate started in one workspace must finish in that SAME
-      // workspace even if the user has since switched away from it. Applying
-      // its completion (the rows refresh) to the page is gated separately,
-      // below, on whether that workspace is still the one being viewed.
+      // workspace. Applying its outcome to the page is gated on that
+      // workspace still being the one viewed.
       const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
       try {
         await duplicateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath, request)
       } catch (err) {
         if (!isStale()) setDuplicateError(messageOf(err, 'Failed to duplicate document.'))
-      }
-      // Re-read after a failure too: a refused request does not prove the
-      // daemon wrote nothing — the copy can exist while its answer is lost —
-      // so the list is read again rather than left showing a state nobody
-      // knows to be current. The same reason `refreshAfterDelete` gives.
-      try {
-        if (!isStale()) await loadWorkspace(workspaceAtStart, isStale)
       } finally {
+        // A refusal does not prove the daemon wrote nothing (the copy can
+        // exist while its answer is lost), so the list is re-read either way.
+        if (!isStale()) await loadWorkspace(workspaceAtStart, isStale)
         setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }
     },

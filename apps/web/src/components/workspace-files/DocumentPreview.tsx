@@ -89,6 +89,36 @@ function RenameLink({ label, onClick }: { readonly label: string; readonly onCli
   )
 }
 
+/** Both Duplicate verbs, worded as the card menu words them. */
+function DuplicateButtons({
+  document,
+  onDuplicate,
+}: {
+  document: WorkspaceDocumentEntry
+  onDuplicate: NonNullable<DocumentPreviewProps['onDuplicate']>
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onDuplicate(document)}
+        className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
+      >
+        <CopyPlus aria-hidden="true" className="size-3" />
+        Duplicate
+      </button>
+      <button
+        type="button"
+        onClick={() => onDuplicate(document, WITHOUT_ANNOTATIONS)}
+        className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
+      >
+        <CopyPlus aria-hidden="true" className="size-3" />
+        {DUPLICATE_WITHOUT_COMMENTS}
+      </button>
+    </>
+  )
+}
+
 export function DocumentPreview({
   document,
   loadRender,
@@ -224,24 +254,7 @@ export function DocumentPreview({
             </button>
           )}
           {onDuplicate !== undefined && (
-            <button
-              type="button"
-              onClick={() => onDuplicate(document)}
-              className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
-            >
-              <CopyPlus aria-hidden="true" className="size-3" />
-              Duplicate
-            </button>
-          )}
-          {onDuplicate !== undefined && (
-            <button
-              type="button"
-              onClick={() => onDuplicate(document, WITHOUT_ANNOTATIONS)}
-              className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
-            >
-              <CopyPlus aria-hidden="true" className="size-3" />
-              {DUPLICATE_WITHOUT_COMMENTS}
-            </button>
+            <DuplicateButtons document={document} onDuplicate={onDuplicate} />
           )}
           {onDelete !== undefined && (
             <button
