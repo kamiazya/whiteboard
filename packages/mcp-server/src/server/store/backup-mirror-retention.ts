@@ -51,19 +51,6 @@ const STORES = [
 ] as const
 
 /**
- * Delete from the mirror everything no retained backup references.
- *
- * Answers how many entries were removed. Runs after the scheduler has pruned
- * expired backup directories, so "retained" is simply "still on disk".
- *
- * **Refuses to collect anything if any backup cannot say what it needs.** A
- * directory with no readable manifest predates the mirror or is damaged, and
- * either way its references are unknown — narrowing the survivor set on the
- * strength of a backup that said nothing is how this pass would delete the
- * mirror out from under every backup beside it. Doing nothing costs disk;
- * getting it wrong costs the backups.
- */
-/**
  * A manifest that is there but unusable says nothing about what its backup
  * needs, the same as no manifest: the pass stands down. One an earlier release
  * wrote is refused rather than read, so it says nothing either.
@@ -76,6 +63,19 @@ async function manifestOrSilence(backupDir: string): Promise<Manifest> {
   })
 }
 
+/**
+ * Delete from the mirror everything no retained backup references.
+ *
+ * Answers how many entries were removed. Runs after the scheduler has pruned
+ * expired backup directories, so "retained" is simply "still on disk".
+ *
+ * **Refuses to collect anything if any backup cannot say what it needs.** A
+ * directory with no readable manifest predates the mirror or is damaged, and
+ * either way its references are unknown — narrowing the survivor set on the
+ * strength of a backup that said nothing is how this pass would delete the
+ * mirror out from under every backup beside it. Doing nothing costs disk;
+ * getting it wrong costs the backups.
+ */
 export async function collectMirroredBlobs(backupRoot: string): Promise<number> {
   let entries: string[]
   try {
