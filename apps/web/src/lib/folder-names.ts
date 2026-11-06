@@ -91,7 +91,8 @@ export type NestedFolderPlan =
 
 /**
  * What "Class/Week 6" typed as a new folder means: `/` nests, so each part is
- * one folder, named by that part. A part that names a folder already standing
+ * one folder, named by that part, starting under `known.from` (the root when
+ * absent). A part that names a folder already standing
  * under the same parent — by what it is called or by its address — is that
  * folder, the last part included: typing a folder that exists is asking to go
  * there, so the plan answers it and makes nothing. Each new address is derived
@@ -103,6 +104,7 @@ export function planNestedFolder(
     readonly folders: readonly string[]
     readonly names: FolderNames
     readonly taken: readonly string[]
+    readonly from?: string
   },
 ): NestedFolderPlan {
   const parts = typed
@@ -110,7 +112,7 @@ export function planNestedFolder(
     .map((part) => part.trim())
     .filter((part) => part !== '')
   if (parts.length === 0) return { refusal: folderNameRefusal('') ?? '' }
-  let parent = ''
+  let parent = known.from ?? ''
   const created: { path: string; name: string }[] = []
   for (const part of parts) {
     const refusal = folderNameRefusal(part)
@@ -130,4 +132,19 @@ export function planNestedFolder(
     created.push({ path: parent, name: part })
   }
   return { path: parent, created }
+}
+
+/**
+ * A typed folder planned for New folder, which MAKES one: the same nesting as
+ * `planNestedFolder`, but a path whose every part already stands makes
+ * nothing, so it is the duplicate refusal of the last folder on it rather than
+ * a quiet visit there.
+ */
+export function planFolderToCreate(
+  typed: string,
+  known: Parameters<typeof planNestedFolder>[1],
+): NestedFolderPlan {
+  const plan = planNestedFolder(typed, known)
+  if ('refusal' in plan || plan.created.length > 0) return plan
+  return { refusal: folderNameTakenMessage(plan.path, known.names) }
 }

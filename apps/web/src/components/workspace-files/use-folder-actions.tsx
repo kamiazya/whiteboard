@@ -5,7 +5,7 @@ import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import {
   folderNameTakenMessage,
   folderShowingName,
-  newFolderSegmentIn,
+  planFolderToCreate,
   planNestedFolder,
 } from '../../lib/folder-names.js'
 import { useAnnouncer } from '../annotations/announcer.js'
@@ -54,25 +54,26 @@ function takenPaths(
   return [...(documents ?? []).map((entry) => entry.path), ...folderNames.folders]
 }
 
-/**
- * Where a folder the dialog names would stand: the folder itself on a rename,
- * the address a new subfolder would be given otherwise.
- */
-function namedPath(
-  open: FolderDialog,
-  name: string,
+/** What New folder typed under `parent` makes: "/" nests, as in Move to folder. */
+function planSubfolder(
+  parent: string,
+  typed: string,
   documents: readonly WorkspaceDocumentEntry[] | null,
   folderNames: FolderNamesState,
-): string {
-  return open.kind === 'rename'
-    ? open.folder
-    : newFolderSegmentIn(open.folder, name, takenPaths(documents, folderNames))
+) {
+  return planFolderToCreate(typed, {
+    folders: folderNames.folders,
+    names: folderNames.names,
+    taken: takenPaths(documents, folderNames),
+    from: parent,
+  })
 }
 
 /**
- * Why the folder dialog's name cannot be used, before anything is sent: the
- * one folder-name rule every keeper holds, then a name a sibling folder
- * already shows, worded as the keeper words it.
+ * Why the folder dialog's name cannot be used, before anything is sent: a
+ * new folder's plan refuses what any of its parts cannot be called; a rename
+ * holds the one folder-name rule every keeper holds, then a name a sibling
+ * folder already shows, worded as the keeper words it.
  */
 function folderDialogRefusal(
   open: FolderDialog,
@@ -80,10 +81,13 @@ function folderDialogRefusal(
   documents: readonly WorkspaceDocumentEntry[] | null,
   folderNames: FolderNamesState,
 ): string | null {
+  if (open.kind === 'subfolder') {
+    const plan = planSubfolder(open.folder, name, documents, folderNames)
+    return 'refusal' in plan ? plan.refusal : null
+  }
   const rule = folderNameRefusal(name)
   if (rule !== null) return rule
-  const path = namedPath(open, name, documents, folderNames)
-  const target = { path, name: name.trim() }
+  const target = { path: open.folder, name: name.trim() }
   const holder = folderShowingName(folderNames.folders, folderNames.names, target)
   return holder === undefined ? null : folderNameTakenMessage(holder, folderNames.names)
 }
@@ -152,13 +156,14 @@ function nameHandlers(deps: HandlerDeps) {
   return {
     onSubmitName: async (open: FolderDialog, name: string) => {
       if (open.kind === 'subfolder') {
-        const path = namedPath(open, name, documents, folderNames)
-        folderNames.remember(path, name)
-        landOn(folderLanding(path))
+        const plan = planSubfolder(open.folder, name, documents, folderNames)
+        if ('refusal' in plan) return
+        for (const each of plan.created) folderNames.remember(each.path, each.name)
+        landOn(folderLanding(plan.path))
         setDialog(null)
-        goToFolder(path)
+        goToFolder(plan.path)
         // The route announcer still names the page; this says where in it.
-        announce(`In ${name}, empty`)
+        announce(`In ${plan.created.at(-1)?.name ?? name}, empty`)
       } else if (await renameFolder(open.folder, name)) {
         landOn(folderLanding(open.folder))
         setDialog(null)
