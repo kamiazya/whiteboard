@@ -113,8 +113,10 @@ export function RecentLane({
           instructional prose, not the noun that says what a thing is. */}
       <h2 className="text-muted-foreground pb-1 text-[11px] font-medium">Recent</h2>
       {/* Its own scroller: a phone fits two tiles, and the page body must
-          never scroll sideways to reach the third. */}
-      <div className="flex gap-2 overflow-x-auto">
+          never scroll sideways to reach the third. A scroller clips at its
+          padding edge, so the padding is what keeps the selected tile's ring
+          (drawn outside its border) from being cut off. */}
+      <div className="flex gap-2 overflow-x-auto p-0.5">
         {entries.map((entry) => (
           <RecentTile
             key={entry.documentId}
