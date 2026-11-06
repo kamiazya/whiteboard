@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { type PrintBlock, printBands } from '../../lib/print-bands.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { MarkdownViewMode } from './EditorToolbar.js'
+import { opensWithTitle } from './read-title.js'
 
 /**
  * Printing a note — the browser's own Print, or the document menu's
@@ -98,21 +99,22 @@ function bandCopies(svg: SVGSVGElement, blocks: readonly PrintBlock[]): SVGSVGEl
 }
 
 /**
- * The note as it prints. Rendered AFTER the preview, and empty until print
- * media applies; `hostRef` is the preview column holding the drawn body,
- * `blocksRef` its top-level blocks in the SVG's pixel space. After, because
- * layout effects run in tree order: the preview's re-render in the light
- * palette has to be patched in before the strips are copied from it.
+ * The note as it prints. Rendered AFTER the preview, inside the same
+ * `[data-print-content]` column, and empty until print media applies;
+ * `blocksRef` holds the drawn body's top-level blocks in the SVG's pixel
+ * space. After, because layout effects run in tree order: the preview's
+ * re-render in the light palette has to be patched in before the strips are
+ * copied from it. The title is left out when `body` already opens with it.
  */
 export function NotePrintView({
   printing,
   title,
-  hostRef,
+  body,
   blocksRef,
 }: {
   printing: boolean
   title: string | undefined
-  hostRef: RefObject<HTMLElement | null>
+  body: string
   blocksRef: RefObject<readonly PrintBlock[]> | undefined
 }) {
   const bandsRef = useRef<HTMLDivElement | null>(null)
@@ -121,21 +123,22 @@ export function NotePrintView({
   useLayoutEffect(() => {
     const target = bandsRef.current
     if (!printing || target === null) return
-    const svg = hostRef.current?.querySelector<SVGSVGElement>(
-      '[data-testid="markdown-preview-pane"] svg',
-    )
+    const svg = target
+      .closest('[data-print-content]')
+      ?.querySelector<SVGSVGElement>('[data-testid="markdown-preview-pane"] svg')
     if (svg === null || svg === undefined) return
     target.replaceChildren(...bandCopies(svg, blocksRef?.current ?? []))
     return () => target.replaceChildren()
-  }, [printing, hostRef, blocksRef])
+  }, [printing, blocksRef])
   if (!printing) return null
+  const printTitle = opensWithTitle(body, title) ? undefined : title
   return (
     <div
       data-testid="note-print-view"
       className="note-print-view"
       style={{ fill: editorTextFill('light') }}
     >
-      {title !== undefined && title !== '' && <h1>{title}</h1>}
+      {printTitle !== undefined && printTitle !== '' && <h1>{printTitle}</h1>}
       <div ref={bandsRef} />
     </div>
   )
