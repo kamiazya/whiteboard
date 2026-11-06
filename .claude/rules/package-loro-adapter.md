@@ -282,6 +282,24 @@ implementations live in the composition roots.
   and `readCanvasFacets` throw `RetiredStoredShapeError`, and the daemon
   answers it 409 `retired_stored_shape`.
 
+- **A sync update that NEWLY writes a retired shape is refused by the judge before it
+  lands** (`sync-retired-shape-limits.ts`, called last in `judgeImported`'s `??` chain so
+  every other refusal code is answered first). Suspects come from the decoded ops — Map and
+  List inserts only, a delete being the repair — deduplicated per `(container, key)`; the
+  readers above are asked of each suspect's host twice, while detached and after attach, and
+  the update is refused only for a pair retired after and not before: a replayed snapshot of
+  a record already holding one passes, and a promote into an empty workspace counts every
+  held shape as new. The hosts peek (`peekMap`/`peekList`/`peekText`) and never `getMap`/
+  `getText` an absent key — a byte-identity test holds it, and `retiredMarkdownBodyShape`
+  prefers `peekText` for the same reason. Restore and promote inherit it through
+  `judgeStateWithinTextLimits`; the codes are `retired_stored_shape` and
+  `retired_comment_plane`, both 400 in server-core. The browser keeper's fast path
+  (`mayNameRetiredKey`) scans the key needles `x-whiteboard`, `comments`, `elements`,
+  `okf-body` and NOT `type`: a short pre-ADR-0038 kind write skips the browser's own judge by
+  decision, since the daemon's judge has no fast path and the on-arrival read refusal is the
+  second line. A property over generated op sequences holds accept ⇒ no newly retired pair,
+  mutation-checked both ways with reachability counters.
+
 - **A document's content by kind is `readDocumentContent(doc, entryKind?)`,
   nowhere else.** The document's own recorded kind wins, then the entry's,
   then spatial, because spatial is the only kind that existed before kinds.
