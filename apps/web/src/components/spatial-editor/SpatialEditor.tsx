@@ -470,7 +470,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       longPressRef,
       clearLongPress,
     } = useInteractionState({ canvas })
-    useRemoveAbandonedNote({ gestureStateRef, canvasRef, onChange })
+    const abandoned = { gestureState, gestureStateRef, canvas, canvasRef, onChange }
+    useRemoveAbandonedNote({ ...abandoned, documentKey: viewportKey })
     const selectedId = selectionState.primaryId
     const {
       tool,
