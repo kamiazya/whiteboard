@@ -1,18 +1,25 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { highlightCode } from '../highlight/lowlight.js'
+import { LEGEND_MARGIN_PX } from '../legend/legend-geometry.js'
+import { legendSceneBlock } from '../legend/legend-scene.js'
 import { withReferenceSeams } from '../references/seams.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
 import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
-import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
+import type {
+  EmbeddedCanvasBox,
+  EmbeddedCanvasMiniature,
+  MdastLayoutOptions,
+} from './nodes/mdast-layout-options.js'
 import {
   fitSceneIntoBox,
   layoutSpatialCanvas,
   type SpatialLayoutOptions,
   type SpatialRenderStyle,
 } from './spatial-canvas.js'
+import { translateScene } from './translate-scene.js'
 
 export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
   /**
@@ -68,7 +75,7 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
   const appearance = canvasAppearance ?? createSpatialTheme({ mode: 'light' })
   return typesetMdastBlocks(root, {
     layoutEmbeddedCanvas: (canvas, box) =>
-      fitSceneIntoBox(
+      fitWithLegend(
         layoutSpatialCanvas(canvas, {
           measure: options.measure,
           appearance,
@@ -79,6 +86,7 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
           ...pickKeys(options, FORWARDED_TO_EMBEDDED_CANVAS),
         }),
         box,
+        appearance,
       ),
     ...rest,
     nestedLayoutBudget,
@@ -88,6 +96,30 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
     highlightCode: rest.highlightCode ?? highlightCode,
     syntax: rest.syntax ?? appearance.resolveSyntax?.(),
   })
+}
+
+/**
+ * The board fitted into the embed's box, with its legend under it when it
+ * has one. The legend keeps its own size and the board gives up the height
+ * it takes, so a printed or exported note still says what the colours mean.
+ * A board with nothing to key is fitted exactly as it always was.
+ */
+function fitWithLegend(
+  scene: Scene,
+  box: EmbeddedCanvasBox,
+  appearance: SpatialAppearanceResolver,
+): EmbeddedCanvasMiniature | undefined {
+  const legend = scene.legend && legendSceneBlock(scene.legend, appearance.resolveLabel())
+  if (legend === undefined) return fitSceneIntoBox(scene, box)
+  const room = legend.h + LEGEND_MARGIN_PX
+  const board = fitSceneIntoBox(scene, { ...box, maxHeight: Math.max(1, box.maxHeight - room) })
+  if (board === undefined) return undefined
+  const placed = translateScene({ nodes: legend.nodes }, box.x, box.y + board.h + LEGEND_MARGIN_PX)
+  return {
+    nodes: [...board.nodes, ...placed.nodes],
+    w: Math.max(board.w, legend.w),
+    h: board.h + room,
+  }
 }
 
 /**

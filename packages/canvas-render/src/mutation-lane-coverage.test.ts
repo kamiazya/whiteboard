@@ -396,9 +396,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // (moving a route's end along its side, from `edge-router.ts`) and
     // `layout/edges/coincident-ends.ts` (scoring a repaired pair, from
     // `spatial-edges.ts`). Same code, same tests, same answer as before.
+    //
+    // 123 with `legend/legend-scene.ts`, a board's legend as scene nodes for
+    // a canvas embedded in a note. Outside the lane: a row walk with no cost
+    // model or search, pinned by `embed-legend.test.ts` (rows, unscaled
+    // size, place inside the frame, swatch colours) and mutated by hand
+    // against it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 24,
-      production: 122,
+      production: 123,
     })
   })
 
