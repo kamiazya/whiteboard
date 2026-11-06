@@ -238,6 +238,9 @@ export const UNSCOPED_JOBS = {
     'a release gate the release-gate matrix pins as unconditional pull-request coverage (gate-isomorphism.test.ts), and off the wall-clock path',
   'packaged-smoke':
     'a release gate the release-gate matrix pins as unconditional pull-request coverage (gate-isomorphism.test.ts), and off the wall-clock path',
+  zizmor: 'audits the workflow files, which are CI itself',
+  'dependency-review':
+    'reads the dependency-graph diff GitHub computes between base and head, not a workspace path',
   'ci-gate': 'the aggregate check',
 }
 
