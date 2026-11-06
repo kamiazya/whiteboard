@@ -43,6 +43,9 @@ straight lines). The routing row draws each option as the line it makes — a di
 right-angle step, a curve — and shows whichever is in force. A routing you choose there beats
 the theme's, including choosing the straight line on a board whose theme routes otherwise.
 Picking the theme's own default leaves nothing stored, so the row follows the theme again.
+A straight connection is one diagonal wherever nothing stands in its way; where a box or a
+frame's title does, it bends round it rather than crossing it, and that holds while you are
+still drawing the connection as well as once it is dropped.
 
 **Line jumps** is the row below it, drawn as two crossing lines with and without a hop over
 the crossing.
