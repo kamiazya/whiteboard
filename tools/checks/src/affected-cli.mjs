@@ -18,6 +18,7 @@ import {
   failOpenJob,
   jobUniverse,
   PACKAGE_JOBS,
+  PATH_JOBS,
   PROJECT_JOBS,
   parseNameStatus,
   planScope,
@@ -130,7 +131,7 @@ function planCommand({ repoRoot, base, event, env }) {
  */
 function jobCommand({ repoRoot, rest, base, event, env }) {
   const jobId = rest[0]
-  if (!PROJECT_JOBS.includes(jobId) && !(jobId in PACKAGE_JOBS)) {
+  if (!PROJECT_JOBS.includes(jobId) && !(jobId in PACKAGE_JOBS) && !(jobId in PATH_JOBS)) {
     process.stderr.write(`[affected] ${jobId} is not a scoped job\n`)
     return 1
   }
