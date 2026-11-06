@@ -1,5 +1,6 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { writeDocumentKind } from './document-envelope.js'
 import { readSpatialCanvas } from './loro-bridge.js'
 import { RetiredStoredShapeError, retiredStoredShapeIn } from './retired-stored-shape.js'
 
@@ -67,6 +68,29 @@ const RETIRED: ReadonlyArray<{ name: string; seed: (doc: LoroDoc) => void; found
     found: /node "g".*type "group"/,
   },
 ]
+
+describe('the body-node check is asked only of a document that can hold a body', () => {
+  // The check keys on the id `okf-body`, which a canvas edit may mint for a
+  // node in the current shape; a recorded spatial document is content all
+  // the way down, so the probe must not refuse it while readSpatialCanvas
+  // serves it.
+  const bodyNode = {
+    id: 'okf-body',
+    ...BOX,
+    resource: { mimeType: 'text/markdown', content: 'hi' },
+  }
+  it('does not refuse a recorded spatial document whose node is named okf-body', () => {
+    const doc = docWith((d) => d.getMap('nodes').set('okf-body', bodyNode))
+    writeDocumentKind(doc, 'spatial')
+    expect(retiredStoredShapeIn(doc)).toBeNull()
+    expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toContain('okf-body')
+  })
+  it.each(['markdown', undefined] as const)('refuses it on a document whose kind is %s', (kind) => {
+    const doc = docWith((d) => d.getMap('nodes').set('okf-body', bodyNode))
+    if (kind !== undefined) writeDocumentKind(doc, kind)
+    expect(retiredStoredShapeIn(doc)).toMatch(/okf-body/)
+  })
+})
 
 describe('a canvas element in a retired stored shape is refused, not dropped', () => {
   it.each(RETIRED)('refuses $name, naming what it found', ({ seed, found }) => {

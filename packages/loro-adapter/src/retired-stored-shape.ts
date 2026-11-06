@@ -3,9 +3,12 @@
 // REFUSED by name, because with no reader left the honest alternatives are
 // both silent — the `.strict()` model drops an element it cannot parse, and
 // an absent key reads as "nothing here".
+
+import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import type { LoroMap } from 'loro-crdt'
 import {
   CANVAS_KEY,
+  DOCUMENT_KEY,
   type DocumentContainers,
   EDGES_KEY,
   MARKDOWN_BODY_KEY,
@@ -136,10 +139,16 @@ function firstRetired(
 export function retiredStoredShapeIn(doc: DocumentContainers): string | null {
   const peek = (key: string) => (doc.peekMap === undefined ? doc.getMap(key) : doc.peekMap(key))
   const canvasMap = peek(CANVAS_KEY)
+  // The body-node check keys on an id a canvas edit may legitimately mint, so
+  // it is asked only of a document that can hold a body: a recorded spatial
+  // document's `okf-body` node is content. An unrecorded kind is asked, since
+  // the shape dates from before kinds were written.
+  const kind = documentKindSchema.safeParse(peek(DOCUMENT_KEY)?.get('kind'))
+  const mayHoldBody = !kind.success || kind.data !== 'spatial'
   return (
     firstRetired(peek(NODES_KEY), retiredNodeShape) ??
     firstRetired(peek(EDGES_KEY), retiredEdgeShape) ??
     (canvasMap === undefined ? null : retiredCanvasShape(canvasMap)) ??
-    retiredMarkdownBodyShape(doc)
+    (mayHoldBody ? retiredMarkdownBodyShape(doc) : null)
   )
 }
