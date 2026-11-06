@@ -595,6 +595,14 @@ export function createDocumentSyncSession(
     deps.generations.nextApplyGeneration()
     const content = isStale() ? null : contentOf(targetDoc)
     if (content === null) return
+    // The same refusal the snapshot gets: an update from an older peer can
+    // bring the retired plane in after load, and a throw here would escape
+    // the import subscription unhandled while the stale canvas stays up.
+    if (holdsRetiredCommentPlane(content)) {
+      deps.onBackendError('retired-comment-plane')
+      deps.onStatusChange('error')
+      return
+    }
     const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
     // Read from the same doc read that produced the canvas, so the two
