@@ -1,10 +1,11 @@
-import { isFrame, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
+import { type CanvasLine, isFrame, nodeText, type SpatialNode } from '@kamiazya/whiteboard-model'
+import { isFreehandStroke } from '../../lib/spatial/freehand.js'
 import { edgeA11yName, nodeA11yName } from './node-a11y-name.js'
 
 interface HeadingSubject {
   readonly node: SpatialNode | undefined
   readonly edge: Parameters<typeof edgeA11yName>[0] | undefined
-  readonly line: object | undefined
+  readonly line: CanvasLine | undefined
   readonly comment: object | undefined
 }
 
@@ -32,6 +33,11 @@ export function contextMenuHeading(
     const title = edgeA11yName(subject.edge, nodes)
     return { label: `Actions for ${title}`, title }
   }
-  if (subject.line !== undefined) return { label: 'Actions for Line', title: 'Line' }
+  if (subject.line !== undefined) {
+    // The word the contents list and the stroke's own handles use for ink
+    // somebody drew; a ruled line stays a line.
+    const title = isFreehandStroke(subject.line) ? 'Drawing' : 'Line'
+    return { label: `Actions for ${title}`, title }
+  }
   return { label: 'Canvas actions', title: 'Canvas' }
 }
