@@ -76,6 +76,41 @@ function WidthOptions({
   )
 }
 
+function ColorOptions({
+  group,
+  pen,
+  palette,
+  onChange,
+}: {
+  readonly group: string
+  readonly pen: PenStyle
+  readonly palette: SpatialPalette
+  readonly onChange: (pen: PenStyle) => void
+}) {
+  const color = colorRow(palette, pen.color, (next) => {
+    const { color: _previous, ...rest } = pen
+    onChange(next === undefined ? rest : { ...rest, color: next })
+  })
+  return (
+    <FacetOptionGroup label={color.label}>
+      {color.options.map((option) => (
+        <FacetOption
+          key={option.label}
+          name={`${group}-color`}
+          label={option.ariaLabel ?? option.label}
+          selected={option.selected}
+          onSelect={option.onSelect}
+          {...(option.label === 'default'
+            ? { glyph: <DefaultInkDot palette={palette} /> }
+            : option.icon === undefined
+              ? {}
+              : { glyph: option.icon })}
+        />
+      ))}
+    </FacetOptionGroup>
+  )
+}
+
 /** Whether the strip would have to scroll to hold both groups on one row. */
 function stripCramped(strip: HTMLElement): boolean {
   return strip.scrollWidth > strip.clientWidth + 0.5
@@ -117,10 +152,6 @@ export function DrawOptions({
     '[data-testid="tool-palette"]',
   )
   const stacked = useStackWhenCramped(strip, stripCramped)
-  const color = colorRow(palette, pen.color, (next) => {
-    const { color: _previous, ...rest } = pen
-    onChange(next === undefined ? rest : { ...rest, color: next })
-  })
   return (
     <fieldset
       ref={strip}
@@ -141,22 +172,7 @@ export function DrawOptions({
       // buttons step up to.
       className="m-0 min-w-0 absolute bottom-[calc(3.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-nowrap items-center overflow-x-auto gap-x-3 gap-y-1 rounded-lg border bg-background px-2 py-1 shadow-md data-stacked:flex-col data-stacked:items-start data-stacked:px-1 pointer-coarse:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] [&_[role=radiogroup]]:flex-nowrap! [&_[role=radiogroup]]:justify-start! pointer-coarse:[&_label]:min-h-11! pointer-coarse:[&_label]:min-w-11!"
     >
-      <FacetOptionGroup label={color.label}>
-        {color.options.map((option) => (
-          <FacetOption
-            key={option.label}
-            name={`${group}-color`}
-            label={option.ariaLabel ?? option.label}
-            selected={option.selected}
-            onSelect={option.onSelect}
-            {...(option.label === 'default'
-              ? { glyph: <DefaultInkDot palette={palette} /> }
-              : option.icon === undefined
-                ? {}
-                : { glyph: option.icon })}
-          />
-        ))}
-      </FacetOptionGroup>
+      <ColorOptions group={group} pen={pen} palette={palette} onChange={onChange} />
       <div aria-hidden="true" className="h-5 w-px bg-border in-data-stacked:hidden" />
       <WidthOptions group={group} pen={pen} onChange={onChange} />
     </fieldset>

@@ -103,8 +103,9 @@ export interface MinimapOverlayProps {
  * the Draw options — which a fixed offset cannot know.
  */
 const TOGGLE_BOTTOM = 'bottom-[calc(5rem+env(safe-area-inset-bottom))]'
-/** The opened overview stands this far above where its toggle stands. */
-const ABOVE_TOGGLE = '3.5rem'
+/** Where the opened overview stands: 3.5rem above its toggle, once the toggle has measured. */
+const aboveToggle = (toggleLift: number | undefined): string | undefined =>
+  toggleLift === undefined ? undefined : `calc(${toggleLift}px + 3.5rem)`
 const RAISED_BOTTOM = 'bottom-[calc(8.5rem+env(safe-area-inset-bottom))]'
 
 /**
@@ -166,30 +167,37 @@ export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlay
           TOGGLE_BOTTOM,
         )}
       >
-        <button
-          type="button"
-          data-testid="minimap-toggle"
-          aria-label={open ? 'Hide overview' : 'Show overview'}
-          aria-expanded={open}
-          onClick={() => {
+        <MinimapToggle
+          open={open}
+          onToggle={() => {
             writeMinimapOpen(!open)
             setOpen(!open)
           }}
-          className={`${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`}
-        >
-          <MapIcon aria-hidden="true" className="size-4" />
-        </button>
-      </div>
-      {open && (
-        <MinimapSurface
-          {...props}
-          raised
-          raisedBottom={
-            toggleLift === undefined ? undefined : `calc(${toggleLift}px + ${ABOVE_TOGGLE})`
-          }
         />
-      )}
+      </div>
+      {open && <MinimapSurface {...props} raised raisedBottom={aboveToggle(toggleLift)} />}
     </>
+  )
+}
+
+function MinimapToggle({
+  open,
+  onToggle,
+}: {
+  readonly open: boolean
+  readonly onToggle: () => void
+}) {
+  return (
+    <button
+      type="button"
+      data-testid="minimap-toggle"
+      aria-label={open ? 'Hide overview' : 'Show overview'}
+      aria-expanded={open}
+      onClick={onToggle}
+      className={`${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`}
+    >
+      <MapIcon aria-hidden="true" className="size-4" />
+    </button>
   )
 }
 
