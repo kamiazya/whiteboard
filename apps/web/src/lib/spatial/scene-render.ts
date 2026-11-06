@@ -10,10 +10,9 @@ import type {
   MeasureText,
   ReferenceSeams,
   ResolvedReference,
-  SpatialRenderStyle,
   SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
-import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import { fittedTextNodeHeight } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
@@ -31,8 +30,6 @@ export interface RenderCanvasOptions {
   readonly measure: MeasureText
   /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
   readonly theme?: SpatialThemeMode
-  /** See RenderCanvasCoreOptions: `'document'` unless a session overrides it. */
-  readonly style?: SpatialRenderStyle
   /** Passed through to layout: the reference bundle text-node bodies read. */
   readonly references?: ReferenceSeams
   /** Passed through to layout: what the host resolved for one reference. */
@@ -53,21 +50,17 @@ export interface RenderCanvasOptions {
 }
 
 /**
- * The height a text node needs for its laid-out body, in canvas px.
- *
- * `naturalNodeContentSize` is canvas-render's own answer to "how big must
- * this box be", so this is padding arithmetic and nothing else. Laying the
- * node out at height 1 and reading the scene's bottom edge would work only
- * because a box that small cannot bound anything — layout could not tell
- * that probe apart from a node someone really made 1px tall, so the escape
- * hatch it needed would stay open for every tiny node as well.
+ * The height a text node needs for its laid-out body, in canvas px:
+ * canvas-render's `fittedTextNodeHeight`, the one answer `wb_canvas_edit`
+ * sizes an agent's node with too, under this editor's appearance — without
+ * the ratio floor, because the font measured here is the one on screen.
  */
 export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasOptions): number {
-  const content = naturalNodeContentSize(node, {
+  return fittedTextNodeHeight(node, {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
+    floor: 'none',
   })
-  return content.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
 }
 
 export function renderCanvasToSvg(

@@ -216,7 +216,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'packages/codec/src/spatial/census.ts#CensusFacet',
   'packages/codec/src/spatial/census.ts#jsonSchemaLeafPaths',
   'packages/mcp-server/src/server/app-types.ts#ServerModeAppOptions',
-  'packages/scene/src/scene-graph.ts#ShapeId',
   'packages/server-core/src/tools/canvas-edit-placement.ts#PLACEMENT_COLUMNS',
 ]
 
@@ -358,7 +357,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 142
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 15
+const PUBLISHED_CEILING = 14
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

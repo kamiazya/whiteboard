@@ -463,8 +463,8 @@ export const canvasEdgeSchema = z
      * They lived in `visual.path/v0` once, and that was the
      * ADR's own worked example of the cost the old binding imposed: adding a
      * field to an edge cost a facet definition, an `EdgeRouter` contract and
-     * the extraction of `packages/scene`. The seam stays — it was worth
-     * building — and the concept comes home.
+     * the extraction of `packages/scene`. The concept came home, and the
+     * router seam, left with no consumer, was deleted after it.
      *
      * Sub-pixel, like every other coordinate: the drag no
      * longer has to round before it writes.
@@ -645,9 +645,19 @@ export const spatialCanvasSchema = z
      * files. Adding `lines: []` to every one of them would be the largest part
      * of this diff by far, all of it noise, on a field almost every board
      * leaves empty — and a diff a reviewer cannot read is a diff nobody
-     * reviews. An absent `lines` and an empty one say the same thing, which is
-     * the canonicalisation the codec already makes for an empty extension
-     * object.
+     * reviews.
+     *
+     * The rule that makes optional safe: EMPTY IS SPELLED ABSENT. Every reader
+     * treats an absent `lines` and `[]` alike, and every producer of a stored
+     * canvas omits an empty one — the Loro bridge's read, the cascade, the
+     * OCIF lift and `wb_canvas_edit`'s write all drop it. They must, because
+     * the JSON Canvas projection writes `x-whiteboard.lines` whenever the
+     * field is PRESENT: `lines: []` would project to
+     * `"x-whiteboard": { "lines": [] }`, bytes its absence does not produce.
+     * The one reader that keeps a present `[]` is that projection's own
+     * import (`fromJsonCanvas`), so a document carrying it round-trips to the
+     * same bytes rather than to a different spelling; once stored, the
+     * bridge's read answers absent for the empty collection like any other.
      */
     lines: z.array(canvasLineSchema).optional(),
     /**

@@ -20,6 +20,7 @@
  * spans stay disjoint, because that is a claim about two regexes in two
  * files and those drift.
  */
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { BUILT_IN_ICON_NAMES } from './icons.js'
 
 /**
@@ -96,6 +97,6 @@ export function searchIconShortcodes(query: string): readonly string[] {
   const rank = (name: string): number =>
     name === needle ? 0 : name.startsWith(needle) ? 1 : name.includes(needle) ? 2 : 3
   return BUILT_IN_ICON_NAMES.filter((name) => rank(name) < 3).sort(
-    (a, b) => rank(a) - rank(b) || a.localeCompare(b),
+    (a, b) => rank(a) - rank(b) || compareCodeUnit(a, b),
   )
 }
