@@ -781,7 +781,7 @@ export function createDocumentSyncSession(
    * not ours to commit — the editor remounts on the new binding instead.
    */
   function bodyEdited(bound: LoroDoc): void {
-    if (bound !== doc || removed) return
+    if (bound !== doc || removed || unreadable) return
     persistence.edited()
     bodyOpsPending = true
     debounce.arm()
@@ -1193,7 +1193,7 @@ export function createDocumentSyncSession(
   }
 
   function undo(): boolean {
-    if (!doc || removed) return false
+    if (!doc || removed || unreadable) return false
     // An edit still inside its debounce window is the most recent thing the
     // person did and is not in the document yet, so taking it back IS the
     // undo — the committed stack is left alone.
@@ -1208,7 +1208,7 @@ export function createDocumentSyncSession(
   }
 
   function redo(): boolean {
-    if (!undoManager || !doc || removed) return false
+    if (!undoManager || !doc || removed || unreadable) return false
     if (!undoManager.canRedo()) return false
     // Same staleness, for the same reason: the queued write was computed
     // against the document as it stood before this redo.
@@ -1239,7 +1239,7 @@ export function createDocumentSyncSession(
   // VALUE is unchanged, so subscribers get a lock notification rather than a
   // canvas publish.
   function writeLocks(write: (content: DocumentContainers) => void): void {
-    const content = liveContent()
+    const content = unreadable ? null : liveContent()
     if (content === null) return
     write(content)
     notifyLocksChanged()
