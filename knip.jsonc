@@ -54,7 +54,9 @@
         // the GitHub Actions plugin has no way to see.
         "src/vitest-projects.mjs",
         "src/affected.mjs",
-        "src/affected-cli.mjs"
+        "src/affected-cli.mjs",
+        // The benefit instrument: run by hand, never by CI.
+        "src/affected-replay.mjs"
       ],
       "project": ["src/**/*.mjs"]
     },
