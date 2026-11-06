@@ -8,7 +8,7 @@ import { nextInRow } from '../../lib/spatial/row-placement.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import type { GestureResult } from './gestures.js'
-import { NEW_NODE_WIDTH } from './gestures.js'
+import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'
 import {
   DOCUMENT_NODE_HEIGHT,
   DOCUMENT_NODE_WIDTH,
@@ -27,6 +27,7 @@ import {
 import { DOCK_OCCLUSION_PX } from './ToolPalette.js'
 
 const GROUP_FRAME_SIZE = { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT }
+const NOTE_SIZE = { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }
 
 /**
  * How far above a frame its own chrome reaches: the name sits over the top
@@ -92,6 +93,55 @@ function frameInRow(canvas: SpatialCanvas, visible: Box | undefined): Point | un
     rowGap: PLACEMENT_GAP_PX + FRAME_TOP_CLEARANCE_PX,
   })
   return { x: corner.x + GROUP_FRAME_SIZE.width / 2, y: corner.y + GROUP_FRAME_SIZE.height / 2 }
+}
+
+/** What a new note must keep clear of: each obstacle grown by `gap` on every side. */
+function noteObstacles(canvas: SpatialCanvas, gap: number): readonly Box[] {
+  return creationObstacles(canvas).map((box) => ({
+    x: box.x - gap,
+    y: box.y - gap,
+    width: box.width + gap * 2,
+    height: box.height + gap * 2,
+  }))
+}
+
+/**
+ * Where a note asked for with nothing selected goes: after the board's loose
+ * notes in reading order, the way `frameInRow` places frames, while some of
+ * them are on screen; else the free spot nearest `preferred` a gap clear of
+ * everything, and only failing that one merely clear of it.
+ */
+function placeLooseNote(canvas: SpatialCanvas, preferred: Point, visible: Box | undefined): Point {
+  const frames = canvas.nodes.filter(isFrame)
+  const loose = canvas.nodes.filter(
+    (node) => !isFrame(node) && !frames.some((frame) => frameHolds(frame, node)),
+  )
+  const spaced = noteObstacles(canvas, PLACEMENT_GAP_PX)
+  const [first, ...rest] = loose
+  if (
+    first !== undefined &&
+    (visible === undefined || loose.some((node) => boxesIntersect(node, visible)))
+  ) {
+    const corner = nextInRow({
+      peers: [first, ...rest],
+      size: NOTE_SIZE,
+      obstacles: spaced,
+      visible,
+      gap: PLACEMENT_GAP_PX,
+      rowGap: PLACEMENT_GAP_PX,
+    })
+    return { x: corner.x + NOTE_SIZE.width / 2, y: corner.y + NOTE_SIZE.height / 2 }
+  }
+  const point = findFreeSpot(preferred, NOTE_SIZE, spaced, visible)
+  const box = {
+    x: Math.round(point.x - NOTE_SIZE.width / 2),
+    y: Math.round(point.y - NOTE_SIZE.height / 2),
+    ...NOTE_SIZE,
+  }
+  const fits =
+    !spaced.some((other) => boxesIntersect(box, other)) &&
+    (visible === undefined || frameHolds(visible, box))
+  return fits ? point : findFreeSpot(preferred, NOTE_SIZE, creationObstacles(canvas), visible)
 }
 
 /**
@@ -207,6 +257,10 @@ export function useNodeCreation({
     return screenToCanvas(centerScreen, viewport)
   }
 
+  /** Where Add > Note puts a note when no frame asks for it; see `placeLooseNote`. */
+  const placeNote = (preferred: Point): Point =>
+    placeLooseNote(canvasRef.current, preferred, visibleCanvasRect())
+
   const spawnPoint = (at: Point | undefined, size: { width: number; height: number }): Point => {
     const occupied = creationObstacles(canvasRef.current)
     return resolveSpawnPoint(at, viewCenter(), size, occupied, visibleCanvasRect())
@@ -305,7 +359,7 @@ export function useNodeCreation({
   }
 
   return {
-    visibleCanvasRect,
+    placeNote,
     panToShow,
     createLinkAtViewportCenter,
     createFileRefAtViewportCenter,

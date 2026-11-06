@@ -103,8 +103,7 @@ import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/command
 import { applyCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { creationObstacles, frameForNewNote } from '../../lib/spatial/frame-interior.js'
-import { findFreeSpot } from '../../lib/spatial/geometry.js'
+import { frameForNewNote } from '../../lib/spatial/frame-interior.js'
 import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
@@ -1261,9 +1260,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * The button path (unlike double-click, whose point comes straight from
      * the pointer) always resolves to the same viewport-center point, so
      * without a placement rule every click here would stack an identical,
-     * unreachable rect on the last one. `findFreeSpot` cascades off the
-     * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
-     * stale `canvas` prop) so two rapid clicks still see each other's result.
+     * unreachable rect on the last one. `placeNote` reads the CURRENT node
+     * boxes (`canvasRef.current`, not the possibly-stale `canvas` prop) so
+     * two rapid clicks still see each other's result.
      */
     const createNodeAtViewportCenter = () => {
       const size = { width: NEW_NODE_WIDTH, height: NEW_NODE_HEIGHT }
@@ -1271,14 +1270,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const frame = frameForNewNote(selectedNode, canvasRef.current.nodes)
       const inFrame =
         frame === undefined ? undefined : noteInFrame(frame, canvasRef.current.nodes, size)
-      const point =
-        inFrame?.center ??
-        findFreeSpot(
-          screenToCanvas(viewportCenterScreen(), viewport),
-          size,
-          creationObstacles(canvasRef.current),
-          visibleCanvasRect(),
-        )
+      const point = inFrame?.center ?? placeNote(screenToCanvas(viewportCenterScreen(), viewport))
       createNodeAt(point, inFrame?.before)
       panToShow({
         x: Math.round(point.x - NEW_NODE_WIDTH / 2),
@@ -1288,7 +1280,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const {
-      visibleCanvasRect,
+      placeNote,
       panToShow,
       createLinkAtViewportCenter,
       createFileRefAtViewportCenter,
