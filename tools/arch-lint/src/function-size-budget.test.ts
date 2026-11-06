@@ -271,7 +271,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // — the whole of what both layouts draw, counted once.
   // +1: the search box's combobox handle, which makes the list its listbox.
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 117,
-  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 103, // +1: the tag library's badge
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   // The two list effects do not repeat one another on a mount; the lines are the
   // guard plus the paragraph saying which run it skips and which it must not.

@@ -39,7 +39,7 @@ export function folderTrail(path: string, names: FolderNames = NO_NAMES): string
  * `taken` holds, documents included, since a document's path is an address
  * a folder may not reuse.
  */
-export function newFolderSegmentIn(parent: string, name: string, taken: readonly string[]): string {
+function newFolderSegmentIn(parent: string, name: string, taken: readonly string[]): string {
   return addressForNameIn(parent, name, 'folder', taken)
 }
 
