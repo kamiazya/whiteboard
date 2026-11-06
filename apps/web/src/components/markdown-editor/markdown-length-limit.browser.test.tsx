@@ -26,6 +26,12 @@ function mountEditor(value: string) {
   return { utils, onChange, editable }
 }
 
+/** The limit's own notice: the source pane's task region is a status region too, always mounted. */
+const limitNotices = (utils: ReturnType<typeof mountEditor>['utils']) =>
+  utils
+    .queryAllByRole('status')
+    .filter((el) => el.getAttribute('data-testid') !== 'source-task-announcement')
+
 function paste(target: HTMLElement, text: string): void {
   const clipboardData = new DataTransfer()
   clipboardData.setData('text/plain', text)
@@ -39,7 +45,11 @@ describe('pasting past the markdown size limit', () => {
 
     paste(editable() as HTMLElement, 'x'.repeat(MARKDOWN_MAX_CHARS))
 
-    const notice = await utils.findByRole('status')
+    const notice = await vi.waitFor(() => {
+      const [found] = limitNotices(utils)
+      if (found === undefined) throw new Error('no limit notice yet')
+      return found
+    })
     expect(notice.textContent).toBe(
       markdownBodyNotice('added', 'short'.length + MARKDOWN_MAX_CHARS),
     )
@@ -51,11 +61,11 @@ describe('pasting past the markdown size limit', () => {
     const { utils, onChange, editable } = mountEditor('short')
     await focusEditable(editable)
     paste(editable() as HTMLElement, 'x'.repeat(MARKDOWN_MAX_CHARS))
-    await utils.findByRole('status')
+    await vi.waitFor(() => expect(limitNotices(utils)).toHaveLength(1))
 
     paste(editable() as HTMLElement, ' and more')
 
     await vi.waitFor(() => expect(onChange).toHaveBeenCalled())
-    expect(utils.queryByRole('status')).toBeNull()
+    expect(limitNotices(utils)).toHaveLength(0)
   })
 })

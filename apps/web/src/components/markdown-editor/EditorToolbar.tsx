@@ -188,7 +188,12 @@ export function EditorToolbar({
         // complete catalog and stays. It is not the same list twice — the
         // catalog offers the heading LEVELS directly, where the bar has one
         // slot that cycles them.
-        <MarkdownVerbBar run={runVerb} openLinkPicker={openLinkPicker} pickImage={pickImage} />
+        <MarkdownVerbBar
+          run={runVerb}
+          openLinkPicker={openLinkPicker}
+          pickImage={pickImage}
+          showShortcuts
+        />
       ) : (
         <div className="flex-1" />
       )}
