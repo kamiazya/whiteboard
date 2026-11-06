@@ -1,5 +1,5 @@
 import type { StateCommand } from '@codemirror/state'
-import { type MouseEvent as ReactMouseEvent, useEffect, useState } from 'react'
+import { type MouseEvent as ReactMouseEvent, type ReactNode, useEffect, useState } from 'react'
 import { isMacPlatform } from '../../lib/platform.js'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
@@ -31,6 +31,26 @@ function ariaKeys(key: string): string {
     .split('-')
     .map((part) => (part === 'Mod' ? mod : part.length === 1 ? part.toUpperCase() : part))
     .join('+')
+}
+
+/** A verb's tooltip: its name, and its key when the host binds it. */
+function VerbTooltip({
+  label,
+  keyName,
+  children,
+}: {
+  readonly label: string
+  readonly keyName: string | undefined
+  readonly children: ReactNode
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent>
+        {keyName === undefined ? label : `${label} (${keyLabel(keyName)})`}
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 const barItems = (canAttach: boolean) =>
@@ -102,7 +122,7 @@ export interface MarkdownVerbBarProps {
    * the host binds a verb's key to something else — the canvas node editor's
    * Mod-Enter saves rather than ticking a task.
    */
-  readonly showShortcuts?: boolean
+  readonly shortcuts?: boolean
 }
 
 /**
@@ -128,7 +148,7 @@ export function MarkdownVerbBar({
   openLinkPicker,
   pickImage,
   className,
-  showShortcuts = false,
+  shortcuts = false,
 }: MarkdownVerbBarProps) {
   const [ref, width] = useMeasuredWidth()
   // Before the first measurement, showing nothing beats showing a bar that
@@ -156,33 +176,28 @@ export function MarkdownVerbBar({
       {visible.map((id, index) => {
         const spec = verb(id)
         const previous = index > 0 ? verb(visible[index - 1]) : undefined
-        const key = showShortcuts ? spec.key : undefined
+        const key = shortcuts ? spec.key : undefined
         return (
           <div key={id} className="flex items-center">
             {previous !== undefined && previous.band !== spec.band && (
               <span aria-hidden="true" className="bg-border mx-[3px] h-4 w-px" />
             )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-label={spec.label}
-                  aria-keyshortcuts={key === undefined ? undefined : ariaKeys(key)}
-                  tabIndex={id === stop ? 0 : -1}
-                  onFocus={() => onFocusItem(id)}
-                  onMouseDown={keepCaret}
-                  onClick={() => pressVerb(id, run, openLinkPicker, pickImage)}
-                  className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <span aria-hidden="true" className="[&>svg]:size-4">
-                    {VERB_ICONS[id]}
-                  </span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>
-                {key === undefined ? spec.label : `${spec.label} (${keyLabel(key)})`}
-              </TooltipContent>
-            </Tooltip>
+            <VerbTooltip label={spec.label} keyName={key}>
+              <button
+                type="button"
+                aria-label={spec.label}
+                aria-keyshortcuts={key === undefined ? undefined : ariaKeys(key)}
+                tabIndex={id === stop ? 0 : -1}
+                onFocus={() => onFocusItem(id)}
+                onMouseDown={keepCaret}
+                onClick={() => pressVerb(id, run, openLinkPicker, pickImage)}
+                className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex size-7 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none"
+              >
+                <span aria-hidden="true" className="[&>svg]:size-4">
+                  {VERB_ICONS[id]}
+                </span>
+              </button>
+            </VerbTooltip>
           </div>
         )
       })}

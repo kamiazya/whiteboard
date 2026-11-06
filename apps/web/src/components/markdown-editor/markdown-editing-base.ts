@@ -18,6 +18,7 @@ import { emojiShortcodeMarks } from './emoji-shortcode-marks.js'
 import { backspaceEmptyMarkup } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
 import { swallowRetypedMarkerExtension } from './swallow-retyped-marker.js'
+import { taskAnnouncer } from './task-announcer.js'
 
 /**
  * Markdown token styling, as class names rather than inline colors: the
@@ -70,6 +71,8 @@ const markdownHighlightStyle = HighlightStyle.define([
  * - Backspace on an empty list or quote marker removes the marker.
  * - A marker retyped over the one auto-continuation already wrote is
  *   swallowed instead of doubled.
+ * - A task cycled from the keyboard or a button is announced
+ *   (`task-announcer.ts`), on every host, since every host offers the verb.
  * - Prose, not code: long paragraphs soft-wrap instead of growing a
  *   horizontal scrollbar.
  */
@@ -83,6 +86,7 @@ export function markdownEditingBase(): Extension[] {
     Prec.highest(keymap.of([{ key: 'Backspace', run: backspaceEmptyMarkup }])),
     keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
     swallowRetypedMarkerExtension(),
+    taskAnnouncer,
     EditorView.lineWrapping,
   ]
 }
