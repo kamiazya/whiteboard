@@ -10,13 +10,13 @@ import { WorkspaceMissingError } from '../../lib/files-source.js'
 import { newDocumentPathIn } from '../../lib/new-document-path.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
-import { ContextMenu } from '../ui/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
 import { FolderActionsContext } from './folder-actions.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { PeekDialog } from './PeekDialog.js'
+import { PanelMenu } from './panel-menu.js'
 import { RecentLane } from './RecentLane.js'
 import { SelectionBar } from './SelectionBar.js'
 import { SourceTrashSection } from './SourceTrashSection.js'
@@ -843,7 +843,7 @@ export function WorkspaceFilesPanel({
           />
           <PanelRenameDialog rename={rename} workspace={workspace} />
           {cardMenu !== null && (
-            <ContextMenu
+            <PanelMenu
               x={cardMenu.x}
               y={cardMenu.y}
               label="Document actions"

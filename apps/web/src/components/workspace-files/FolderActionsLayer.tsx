@@ -3,11 +3,11 @@ import { FolderPlus, Pencil } from 'lucide-react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { folderDisplayName, type NestedFolderPlan } from '../../lib/folder-names.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
-import { ContextMenu } from '../ui/ContextMenu.js'
 import { ErrorLine, NESTED_FOLDER_HINT } from './FolderDialogParts.js'
 import { FolderNameDialog } from './FolderNameDialog.js'
 import { MoveDocumentsHereDialog } from './MoveDocumentsHereDialog.js'
 import { MoveToFolderDialog } from './MoveToFolderDialog.js'
+import { PanelMenu } from './panel-menu.js'
 import type { FolderNamesState } from './use-folder-names.js'
 
 export type FolderDialog = { readonly kind: 'rename' | 'subfolder'; readonly folder: string }
@@ -35,7 +35,7 @@ function FolderMenuView({
 }) {
   const rename = canRename ? [{ label: 'Rename…', icon: <Pencil />, onSelect: onRename }] : []
   return (
-    <ContextMenu
+    <PanelMenu
       x={menu.x}
       y={menu.y}
       label="Folder actions"
