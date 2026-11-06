@@ -126,7 +126,6 @@ type SceneInputs = Pick<
   | 'threads'
   | 'proposals'
   | 'tagLibrary'
-  | 'style'
 > & {
   readonly canvas: SpatialCanvas
   /**
@@ -242,7 +241,6 @@ export function useWorkerScene(
       threads: options.threads,
       proposals: options.proposals,
       tagLibrary: options.tagLibrary,
-      style: options.style,
       fontsGeneration: options.fontsGeneration,
     }),
     [
@@ -260,7 +258,6 @@ export function useWorkerScene(
       options.threads,
       options.proposals,
       options.tagLibrary,
-      options.style,
       options.fontsGeneration,
     ],
   )

@@ -8,17 +8,17 @@ import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 claimIsolatedWhiteboardDb('browser-files-source-trash-folders')
 
 beforeEach(clearWhiteboardDb)
 
 it('lists the names of the folders a deleted document stood in', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),

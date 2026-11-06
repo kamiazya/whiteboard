@@ -645,6 +645,12 @@ visible only as a timeout somewhere else. Directory WALKS are still repeated
 per word and deliberately so: deduping them saves 9ms of the 255, which does
 not buy a second thing to keep true.
 
+`intl-default-locale-ban.test.ts` is the determinism sibling: no Intl
+service or `toLocale*Case()` under the default locale in shared-layer
+production source; name `'en'`. `adr-index-status.test.ts` holds the ADR
+index's Status column and each record's **Status:** line to the same
+lifecycle word (and the same successor for Superseded).
+
 ## `store-interface-reach.test.ts`
 
 Every method an interface in `security/*-store.ts` or `store/*-store.ts`

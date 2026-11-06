@@ -372,7 +372,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical
   // test, and the idempotency case that seeds a post-v20 sealed replica row so
   // the version guard has something it would delete.
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
   // The three cases pinning undo: the document agreeing with the screen after an
   // undo and after a redo, and a taken-back write settling as saved rather than
   // reading as pending forever.
@@ -387,7 +386,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a wait here reports more than "it expired"; both the page embed and its
   // sibling, the note-body embed, have failed on CI from branches that cannot
   // reach them, so the note covers the two as one subject.
-  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 965,
+  'apps/web/src/pages/BrowserDocumentPage.markdown.browser.test.tsx': 997, // main's seeding through the tree plus the okf-body refusal case, in place of the two pre-unification ones
   'apps/web/src/pages/BrowserDocumentPage.test.tsx': 1018,
   // The cancel case: the page's effect cleanup has to stop the replica refresh
   // and the push it armed, and both schedulers' mocks have to answer a spy

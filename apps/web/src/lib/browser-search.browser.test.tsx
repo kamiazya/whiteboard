@@ -9,11 +9,9 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent, seedTreeDocument } from '../test-utils/seed-workspace-content.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
 
 // Body search over a browser-kept workspace, against real IndexedDB: the browser ranks with
 // the same stage-0 core the daemon uses, so a query finds the same
@@ -32,7 +30,7 @@ beforeEach(async () => {
 })
 
 async function seedMarkdown(path: string, body: string, name?: string): Promise<string> {
-  const entry = await seedLegacyRow({
+  const entry = await seedTreeDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'markdown',
@@ -41,12 +39,12 @@ async function seedMarkdown(path: string, body: string, name?: string): Promise<
   const doc = new Loro()
   writeDocumentKind(doc, 'markdown')
   writeMarkdownBody(doc, body)
-  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+  await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
   return entry.documentId
 }
 
 async function seedSpatial(path: string, canvas: SpatialCanvas) {
-  const entry = await seedLegacyRow({
+  const entry = await seedTreeDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'spatial',
@@ -54,7 +52,7 @@ async function seedSpatial(path: string, canvas: SpatialCanvas) {
   const doc = new Loro()
   writeDocumentKind(doc, 'spatial')
   writeSpatialCanvas(doc, canvas)
-  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+  await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 }
 
 describe('browser body search', () => {
@@ -121,7 +119,7 @@ describe('browser body search', () => {
     const doc = new Loro()
     writeDocumentKind(doc, 'markdown')
     writeMarkdownBody(doc, 'rewritten wording')
-    expect(await seedWorkspaceDocumentContent(id, doc.export({ mode: 'snapshot' }))).toBe(true)
+    await seedTreeContent(id, doc.export({ mode: 'snapshot' }))
 
     expect((await source.searchDocuments('rewritten')).map((h) => h.document.path)).toEqual([
       'draft',

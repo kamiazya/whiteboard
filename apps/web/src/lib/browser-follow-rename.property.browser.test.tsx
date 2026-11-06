@@ -24,11 +24,11 @@ import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-follow-rename-property')
@@ -167,7 +167,7 @@ describe('browser rename follow parity', () => {
       const P = (suffix: string) => `${prefix}/${suffix}`
       const NAME = `Plan-${prefix}`
       const alias = (a: string) => (a === 'Plan' ? NAME : P(a))
-      const index = new FoldingBrowserIndex()
+      const index = new BrowserDocumentIndex()
       await ensureBrowserWorkspace(index)
       const source = createBrowserFilesSource({ index })
       const model = new Model()

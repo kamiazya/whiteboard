@@ -23,8 +23,8 @@ import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
@@ -83,7 +83,7 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
   })
 
   it('persists a node across remount and never writes a __placeholder__ row', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     renderPage(<BrowserDocumentPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
@@ -120,7 +120,7 @@ describe('BrowserDocumentPage reload persistence (browser — real IndexedDB)', 
 
     cleanup()
     latestMountedCanvases = []
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     // The restored scene must include the node written before remount.

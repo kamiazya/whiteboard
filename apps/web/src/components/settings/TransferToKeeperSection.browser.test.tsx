@@ -21,9 +21,9 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import type { PopupHandle } from '../../lib/send-transfer.js'
 import { ReceiveTransferPage } from '../../pages/ReceiveTransferPage.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -103,7 +103,7 @@ afterEach(() => {
 
 describe('TransferToKeeperSection', () => {
   it('sends the browser workspace to a keeper that receives it, end to end', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const note = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),

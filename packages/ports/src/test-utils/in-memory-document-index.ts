@@ -9,7 +9,7 @@ import {
   shownName,
   siblingDisplayNameTaken,
 } from '@kamiazya/whiteboard-model'
-import { findDescendantPath, planSubtreeMove } from '../document-path-tree.js'
+import { planSubtreeMove } from '../document-path-tree.js'
 import type {
   CreateDocumentInput,
   CreateWorkspaceInput,
@@ -49,6 +49,17 @@ import {
   WorkspaceNotHeldError,
   WorkspaceSegmentTakenError,
 } from '../index.js'
+
+/**
+ * The first path strictly below `path`, or `undefined`. A delete of a
+ * document that still has one is refused, as the tree index refuses it.
+ */
+function findDescendantPath(
+  rows: Parameters<typeof planSubtreeMove>[0],
+  path: string,
+): string | undefined {
+  return rows.find((row) => row.path !== path && isSelfOrDescendant(row.path, path))?.path
+}
 
 /**
  * `DocumentIndex` with no persistence, for the DI module the tests compose

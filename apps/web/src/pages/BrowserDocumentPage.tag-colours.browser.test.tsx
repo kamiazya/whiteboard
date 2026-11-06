@@ -12,14 +12,14 @@ import { cleanup, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { LoroStore } from '../lib/loro-store.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-tag-colours')
 
@@ -32,7 +32,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 async function seedSnapshot(documentId: string, write: (doc: Loro) => void): Promise<void> {
   const doc = new Loro()
   write(doc)
-  await new LoroStore().save(documentId, doc.export({ mode: 'snapshot' }))
+  await seedTreeContent(documentId, doc.export({ mode: 'snapshot' }))
 }
 
 describe('BrowserDocumentPage tag colours in a note', () => {
@@ -68,7 +68,7 @@ describe('BrowserDocumentPage tag colours in a note', () => {
         [VISUAL_TAGS_KEY]: { keys: { health: { values: { failing: { color: '1' } } } } },
       }),
     )
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     await userEvent.keyboard(`![[[[${BOARD_ID}]]{Enter}`)

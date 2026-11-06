@@ -32,8 +32,8 @@ import { act, cleanup, configure, fireEvent, screen, waitFor, within } from '@te
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -84,7 +84,7 @@ async function openDeleteDialog(): Promise<HTMLElement> {
  * then refuses — so a test can stand between a duplicate failing for one
  * document and its error being reported.
  */
-class HeldDuplicateIndex extends FoldingBrowserIndex implements DocumentDuplicates {
+class HeldDuplicateIndex extends BrowserDocumentIndex implements DocumentDuplicates {
   private release: () => void = () => {}
   private readonly gate = new Promise<void>((resolve) => {
     this.release = resolve
@@ -131,7 +131,7 @@ describe('a destructive dialog does not outlive its document', () => {
   })
 
   it('confirming a delete opened on one document does not delete the one now on screen', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({
       path: 'opened-about',
       name: OPENED_ABOUT,
@@ -268,7 +268,7 @@ describe('a destructive dialog does not outlive its document', () => {
     ).toBeNull()
   })
   it('a body surface opened on one document does not stay open over the next', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({
       path: 'opened-about',
       name: OPENED_ABOUT,

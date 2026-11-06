@@ -8,12 +8,14 @@ import { longestFittingCount } from './longest-fit.js'
  * makes the unit this file cuts at readable at its declaration.
  *
  * The mutation lane reports emptying the STRING as a survivor. It is not one:
- * `new Intl.Segmenter(undefined, { granularity: '' })` throws `RangeError` at
+ * `new Intl.Segmenter('en', { granularity: '' })` throws `RangeError` at
  * module load, and applying it takes 34 test files down with it. The report is
  * an artifact of that mutant being judged by zero tests — every file that
  * would have caught it failed to import instead of failing an assertion.
  */
-const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+// An explicit locale, never the host's default: the same text must split the
+// same way on every machine (QR-20b).
+const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
 /**
  * Could this text hold a cluster at all?

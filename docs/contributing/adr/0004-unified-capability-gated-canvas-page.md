@@ -1,6 +1,6 @@
 # ADR-0004: Unified capability-gated CanvasPage
 
-**Status:** Accepted
+**Status:** Accepted — one page for both keepers stands; decision 1's capability gate dissolved (see the 2026-09-05 addendum)
 
 ## Context
 

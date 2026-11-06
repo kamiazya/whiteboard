@@ -15,7 +15,6 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { IdbDocumentStore } from './idb-document-store.js'
-import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 import { LoroStore } from './loro-store.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -43,38 +42,6 @@ function makeSnapshot(elements: unknown[]): Uint8Array {
   for (const el of elements) list.push(el)
   return doc.export({ mode: 'snapshot' })
 }
-
-describe('loroRecordEnvelopeSchema', () => {
-  it('accepts a valid envelope with v:1, snapshot Uint8Array, updatedAt string', () => {
-    const envelope = {
-      v: 1,
-      snapshot: new Uint8Array([1, 2, 3]),
-      updatedAt: '2026-06-06T00:00:00.000Z',
-    }
-    const result = loroRecordEnvelopeSchema.safeParse(envelope)
-    expect(result.success).toBe(true)
-  })
-
-  it('rejects payload with wrong v', () => {
-    const bad = { v: 2, snapshot: new Uint8Array([1]), updatedAt: '2026-01-01T00:00:00Z' }
-    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
-  })
-
-  it('rejects payload missing snapshot field', () => {
-    const bad = { v: 1, updatedAt: '2026-01-01T00:00:00Z' }
-    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
-  })
-
-  it('rejects payload where snapshot is not a Uint8Array', () => {
-    const bad = { v: 1, snapshot: [1, 2, 3], updatedAt: '2026-01-01T00:00:00Z' }
-    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
-  })
-
-  it('rejects payload missing updatedAt', () => {
-    const bad = { v: 1, snapshot: new Uint8Array([1]) }
-    expect(loroRecordEnvelopeSchema.safeParse(bad).success).toBe(false)
-  })
-})
 
 describe('LoroStore (real IndexedDB)', () => {
   beforeEach(async () => {

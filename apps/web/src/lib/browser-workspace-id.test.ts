@@ -1,6 +1,6 @@
 /**
  * The synchronous accessor + async resolver for the browser's own workspace
- * id — the canonical ULID a v14+ database keys its `workspaces` row under.
+ * id — the canonical ULID the database keys its `workspaces` row under.
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -8,10 +8,12 @@ import { clearNamedDb, registerTestWorkspace } from '../test-utils/browser-docum
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   BROWSER_DEFAULT_SEGMENT,
+  DB_VERSION,
   openWhiteboardDb,
   setWhiteboardDbNameForTests,
   WORKSPACES_STORE,
 } from './browser-idb.js'
+import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 import {
   browserWorkspaceHandleOrNull,
   getBrowserWorkspaceId,
@@ -47,6 +49,21 @@ async function removeRow(workspaceId: string): Promise<void> {
   } finally {
     db.close()
   }
+}
+
+/** What an earlier release left: the database one version below the baseline. */
+function seedOlderDatabase(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION - 1)
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(WORKSPACES_STORE)
+    }
+    req.onsuccess = () => {
+      req.result.close()
+      resolve()
+    }
+    req.onerror = () => reject(req.error)
+  })
 }
 
 async function clearRows(): Promise<void> {
@@ -92,6 +109,22 @@ describe('browser workspace id accessor', () => {
 
   it('throws an actionable message before resolveBrowserWorkspaceId() has completed', () => {
     expect(() => getBrowserWorkspaceId()).toThrow(/resolveBrowserWorkspaceId/)
+  })
+
+  it('a storage refusal reaches every later reader as itself, not as a generic failure', async () => {
+    // The boot chain swallows the resolve's rejection and renders degraded;
+    // what a page then learns comes from THIS accessor. Wrapping the refusal
+    // in a generic Error is how a pre-reset database read "Failed to load
+    // documents from this browser." instead of the storage's own sentence.
+    await seedOlderDatabase()
+
+    await expect(resolveBrowserWorkspaceId(DB_NAME)).rejects.toBeInstanceOf(
+      BrowserStorageRefusedError,
+    )
+    expect(() => getBrowserWorkspaceId()).toThrow(BrowserStorageRefusedError)
+    expect(() => getBrowserWorkspaceIdentity()).toThrow(
+      expect.objectContaining({ reason: 'database-version' }),
+    )
   })
 
   it('returns the canonical ULID once resolved, matching documentIdSchema', async () => {

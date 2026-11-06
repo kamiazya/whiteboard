@@ -144,6 +144,12 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
 
   // Dev-workflow prose (.claude/rules, .claude/skills). History and worked
   // examples first: each names a thing that is gone, in a sentence that says so.
+  '.claude/rules/vocabulary.md#localDaemonBaseUrl':
+    'the rule records a stored settings key retired by a migration; the migration has since gone too',
+  '.claude/rules/vocabulary.md#preferredProvider': 'same sentence',
+  '.claude/rules/vocabulary.md#lastBrowserCanvasId': 'same sentence',
+  '.claude/skills/testing-techniques/resources/executable-rungs.md#foldWorkspaceDocuments':
+    'a measurement table row attributing log records to the deleted startup fold',
   '.claude/rules/app-web.md#drawAs': 'names the deleted state to describe the chain it fed',
   '.claude/rules/app-web.md#AppShellWorkspaces':
     'a history sentence about the seam both implementations used to share',
@@ -155,7 +161,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
     'a history sentence about the parallel callbacks the references bundle replaced',
   '.claude/rules/package-facet-engine.md#facetPayloadSamples':
     'names the form-derived sampler the plugin-supplied one replaced',
-  '.claude/rules/package-scene.md#facetPayloadSamples': 'same sentence',
   '.claude/rules/vocabulary.md#OpenCanvas': 'the retired name, spelled in order to retire it',
   '.claude/rules/vocabulary.md#browserLocal':
     'the retired casing, listed so a sweep does not miss it',

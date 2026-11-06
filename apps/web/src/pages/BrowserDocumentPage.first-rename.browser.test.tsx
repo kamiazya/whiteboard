@@ -4,8 +4,8 @@ import { Loro } from 'loro-crdt'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
@@ -27,7 +27,7 @@ function AddressProbe() {
   return <output data-testid="address">{location.pathname}</output>
 }
 
-async function renderLoaded(store = new FoldingBrowserIndex()): Promise<FoldingBrowserIndex> {
+async function renderLoaded(store = new BrowserDocumentIndex()): Promise<BrowserDocumentIndex> {
   renderPage(
     <>
       <AddressProbe />

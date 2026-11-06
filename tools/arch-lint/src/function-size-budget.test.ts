@@ -313,7 +313,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/hooks/useDocumentOutline.ts#useDocumentOutline': 68,
   // Raised by two: the session's refused-write report and its teardown.
   'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 349,
-  'apps/web/src/lib/browser-idb.ts#openWhiteboardDb': 54,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
   'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
   'apps/web/src/lib/spatial/clipboard-fragment.ts#remintClipboardFragment': 55,
@@ -656,9 +655,6 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#checkInvariants': 80,
   'apps/web/src/components/spatial-editor/editor-state.property.test.ts#run~23': 127,
   'apps/web/src/components/spatial-editor/navigation.property.test.ts#drive': 137,
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV13Fixture': 79,
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV18Fixture': 61,
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx#seedV19Fixture': 93,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,

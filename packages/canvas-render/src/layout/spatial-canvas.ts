@@ -41,7 +41,6 @@ import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboar
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type {
   DecorationContext,
-  EdgeRouter,
   NodeDecoration,
   RenderContribution,
   ResolvedEdgeNode,
@@ -59,7 +58,6 @@ import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-g
 import { createThemedAppearance } from '../theme/theme-asset.js'
 import { canvasTheme, resolveThemeTable, themeFace } from './canvas-theme.js'
 import { composeComments, composeRegionOutlines, regionsOf } from './comments.js'
-import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import type { Point } from './edges/edge-geometry.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
@@ -135,13 +133,8 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
-  //
-  // A contribution may claim this edge; a decline or a name it did not
-  // register falls back to the built-in, never an error, so a document
-  // written against another deployment's plugins still draws.
   const routed = pullEdgeOntoOutlines(
-    contributedRoute(canvas, edge, options, anchors) ??
-      routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget, titles),
+    routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget, titles),
     canvas,
     edge,
     options.nodeOutlines,
@@ -447,10 +440,8 @@ function resolveContributions(
 ): {
   contributions: readonly RenderContribution[]
   shapeTable: ShapeTable
-  routerTable: Readonly<Record<string, EdgeRouter>>
   themeTable: Readonly<Record<string, ThemeTokens>>
   nodeOutlines: Readonly<Record<string, string>> | undefined
-  explicitNodeOutlines: Readonly<Record<string, string>> | undefined
   baseAppearance: SpatialAppearanceResolver
   layoutNestedCanvas: ResolvedLayoutOptions['layoutNestedCanvas']
 } {
@@ -461,10 +452,8 @@ function resolveContributions(
     // for a file embed and a body's `![[canvas]]` — see the field's own doc.
     layoutNestedCanvas: layoutSpatialCanvasInternalScene,
     shapeTable: resolveShapeTable(contributions),
-    routerTable: resolveRouterTable(contributions),
     themeTable: resolveThemeTable(contributions),
-    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, contributions),
-    explicitNodeOutlines: options.nodeOutlines,
+    nodeOutlines: resolveNodeOutlines(canvas, contributions),
     baseAppearance: options.appearance,
   }
 }
@@ -500,7 +489,6 @@ function withCanvasTheme(
     ...(activeTheme === undefined ? {} : { activeTheme }),
     nodeOutlines: resolveNodeOutlines(
       canvas,
-      resolved.explicitNodeOutlines,
       resolved.contributions,
       activeTheme?.tokens.defaults.nodeShape,
     ),
@@ -715,15 +703,11 @@ export function layoutSpatialEdges(
  * resolves `visual.diamond`. A document therefore cannot name another
  * plugin's geometry — no payload it can hold carries a namespace.
  *
- * An explicit `nodeOutlines` entry still overrides for that node, and is
- * already a full id.
- *
  * Later contributions win a contested node, which is the only ordering rule
  * this needs: a silhouette is one answer where a decoration is a stack.
  */
 function resolveNodeOutlines(
   canvas: SpatialCanvas,
-  explicit: Readonly<Record<string, string>> | undefined,
   contributions: readonly RenderContribution[],
   defaultShape?: string,
 ): Readonly<Record<string, string>> | undefined {
@@ -745,8 +729,7 @@ function resolveNodeOutlines(
     fromFacets ??= {}
     fromFacets[node.id] = chosen
   }
-  if (fromFacets === undefined) return explicit
-  return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }
+  return fromFacets
 }
 
 // The overlay layers and the options vocabulary live in their own modules

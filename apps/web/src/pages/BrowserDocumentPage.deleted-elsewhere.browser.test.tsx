@@ -7,9 +7,9 @@
 import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderInRouter } from '../test-utils/daemon-page-harness.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
@@ -45,7 +45,7 @@ function persistStateOf(container: HTMLElement): string | null | undefined {
  * the delete took.
  */
 async function openSavedNote() {
-  const store = new FoldingBrowserIndex()
+  const store = new BrowserDocumentIndex()
   const workspaceId = getBrowserWorkspaceId()
   await store.createWorkspace({ workspaceId })
   const { documentId } = await store.createDocument({ workspaceId, path: 'note', kind: 'markdown' })
@@ -77,7 +77,7 @@ function titleField(): HTMLInputElement {
 }
 
 async function deleteElsewhere(): Promise<void> {
-  await new FoldingBrowserIndex().deleteDocument({
+  await new BrowserDocumentIndex().deleteDocument({
     workspaceId: getBrowserWorkspaceId(),
     path: 'note',
   })
@@ -119,7 +119,7 @@ it('a note restored from the trash elsewhere is editable again, and saves', asyn
   await screen.findByTestId('document-removed-notice', undefined, WAIT)
   await waitFor(() => expect(sendCommentButton()?.closest('[inert]')).not.toBeNull(), WAIT)
 
-  await new FoldingBrowserIndex().restoreDocument({
+  await new BrowserDocumentIndex().restoreDocument({
     workspaceId: getBrowserWorkspaceId(),
     documentId,
   })

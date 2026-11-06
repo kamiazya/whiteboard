@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BrowserStorageRefusedError } from '../lib/browser-storage-refusal.js'
 import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
@@ -377,6 +378,21 @@ describe('BrowserIndexPage', () => {
     expect(alert.textContent).toBe('Failed to create a canvas in this browser.')
     expect(onOpenDocument).not.toHaveBeenCalled()
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+  })
+
+  it("a create the storage refuses says the storage's own sentence", async () => {
+    // The generic create copy is for a failure nobody can act on. A refusal
+    // names what to do, and swallowing it here would show a person "Failed
+    // to create" over a workspace the list above has already refused.
+    const store = new BrowserStoreDouble()
+    const refused = new BrowserStorageRefusedError('pre-tree-records')
+    store.index.createDocument = () => Promise.reject(refused)
+    renderPage(store)
+
+    fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toBe(refused.message)
   })
 
   it('the delete dialog names the kind: note for markdown, canvas for spatial', async () => {

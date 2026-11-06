@@ -326,23 +326,6 @@ describe('layoutSpatialCanvas', () => {
     expect(shapeBlock?.bbox.y ?? 0).toBeLessThan(40)
   })
 
-  it('an explicit nodeOutlines option overrides the facet for that node', () => {
-    const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
-    const shaped = {
-      ...node,
-      facets: { 'visual.shape/v0': { kind: 'hexagon' as const } },
-    }
-    const scene = layoutSpatialCanvas(
-      canvas([shaped]),
-      baseOptions({ nodeOutlines: { a: 'visual.ellipse' } }),
-    )
-    const chrome = scene.nodes.find(
-      (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
-        n.kind === 'shape' && n.id === 'a',
-    )
-    expect(chrome?.shape).toBe('visual.ellipse')
-  })
-
   it('routes by the visual.edges facet when the canvas carries one', () => {
     // Resolution is canvas-render's own default (ADR-0013), so every
     // surface — editor, export, viewer, widget — reads the same answer.

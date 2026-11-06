@@ -15,10 +15,10 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
@@ -116,7 +116,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
   })
 
   it('saves with Ctrl+S, lists in the History panel, and restores', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
     const { documentId } = await index.createDocument({
@@ -268,7 +268,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
     })
   })
   it('a markdown note bookmarks a point and restores its body', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
     const { documentId } = await index.createDocument({
@@ -323,7 +323,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
   })
 
   it('keeps the canvas pan and zoom through a restore and says the old state is kept', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
     const { documentId } = await index.createDocument({

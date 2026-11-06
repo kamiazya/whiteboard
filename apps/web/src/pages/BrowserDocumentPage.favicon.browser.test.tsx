@@ -11,8 +11,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { AppShell } from '../components/AppShell.js'
 import { KeeperNotices } from '../components/connection/KeeperNotices.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { renderFavicon } from '../lib/favicon.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
@@ -51,7 +51,7 @@ describe('the browser page tab icon', () => {
       <MemoryRouter initialEntries={['/w/me/default/d/c1']}>
         <AppShell daemon={false} />
         <KeeperNotices />
-        <BrowserDocumentPage store={new FoldingBrowserIndex()} />
+        <BrowserDocumentPage store={new BrowserDocumentIndex()} />
       </MemoryRouter>,
     )
     await waitFor(

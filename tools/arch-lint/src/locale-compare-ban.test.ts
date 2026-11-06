@@ -36,10 +36,6 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 1,
     why: 'orders values a person typed, drawn in the Facets panel, where a code-unit order puts every Japanese value after every Latin one',
   },
-  'packages/plugin-visual/src/icons/shortcode.ts': {
-    uses: 1,
-    why: 'orders the completion list of built-in icon names a person scrolls, never persisted or digested',
-  },
 }
 
 const REASON = /^(\S+\s+){7,}\S+/
