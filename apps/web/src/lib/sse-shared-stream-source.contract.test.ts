@@ -58,7 +58,7 @@ const server = setupServer(
     const body = (await request.json()) as (typeof subscribeBodies)[number]
     subscribeBodies.push(body)
     if (body.subscribe?.some((doc) => refusedDocs.has(doc))) {
-      return HttpResponse.json({ title: 'forbidden' }, { status: 403 })
+      return HttpResponse.json({ error: 'refused', message: 'forbidden' }, { status: 403 })
     }
     return HttpResponse.json({ ok: true })
   }),
@@ -70,7 +70,8 @@ const server = setupServer(
       return HttpResponse.json({ error: 'unavailable' }, { status: 503 })
     }
     const bytes = daemonState.get(doc)
-    if (!bytes) return HttpResponse.json({ title: 'not found' }, { status: 404 })
+    if (!bytes)
+      return HttpResponse.json({ error: 'refused', message: 'not found' }, { status: 404 })
     return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },

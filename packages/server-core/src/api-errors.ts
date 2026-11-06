@@ -1,32 +1,19 @@
 import { z } from 'zod'
 
-// The ONE shape a daemon HTTP error body may take, as a union of the two
-// families the routes actually emit.
+// The ONE shape a daemon HTTP error body may take: `{ error, message?, hint? }`,
+// a snake_case code a client switches on beside daemon-authored display copy.
 //
 // It lives HERE, below every producer, rather than in `daemon-client` where
 // it started. `/api/v1` is served from this package and `daemon-client`
 // depends on it, so a contract filed with the browser CLIENT was out of
-// reach of half the routes it describes — `create-server.ts` answered nine
-// refusals with a raw `issues` array because the constructor was one layer
-// above it. `daemon-client`'s barrel re-exports the reader, the way it already
-// re-exports the `/api/v1` answers from here for exactly this reason.
+// reach of half the routes it describes. `daemon-client`'s barrel re-exports
+// the reader, the way it already re-exports the `/api/v1` answers from here.
 //
 // Two schemas over one declaration, because emitting and reading are
-// opposite jobs: `apiErrorBodySchema` is strict in its code family (what a
-// daemon may write) and `apiErrorReadSchema` tolerates what a newer daemon
-// added (what a client may meet).
-//
-// - `{ title }` — RFC 9457-flavoured Problem Details, used by the canvas
-//   CRUD routes. `title` is static, display-intended copy.
-// - `{ error, message? }` — the code+reason family used everywhere else.
-//   `message`, when present beside an `error` code, is daemon-authored
-//   display copy: a route puts the human-readable reason there and nowhere
-//   else.
-//
-// Each arm REQUIRES its discriminating field, so an out-of-contract body
-// fails to parse instead of vacuously succeeding — the previous
-// title-optional schema accepted every object and silently discarded the
-// reason of any body that spelled it differently.
+// opposite jobs: `apiErrorBodySchema` is strict (what a daemon may write)
+// and `apiErrorReadSchema` tolerates what a newer daemon added (what a
+// client may meet). The code is REQUIRED, so an out-of-contract body fails
+// to parse instead of vacuously succeeding and discarding its reason.
 /**
  * A refusal CODE: lowercase snake_case, and nothing else.
  *
@@ -39,13 +26,6 @@ import { z } from 'zod'
  * one field no client reads as prose.
  */
 const apiErrorCodeSchema = z.string().regex(/^[a-z][a-z0-9]*(?:_[a-z0-9]+)*$/)
-
-// NOT strict, and the asymmetry is the RFC's: 9457 defines `type`,
-// `status`, `detail` and `instance` beside `title`, and explicitly allows
-// extension members. Refusing them would discard the title of a real
-// Problem Details body — measured, a `{type, title, status}` body
-// stopped reaching the UI's error copy the moment this arm was closed.
-const problemDetailsArm = z.object({ title: z.string().min(1) })
 
 const codeArmShape = {
   error: apiErrorCodeSchema,
@@ -79,17 +59,17 @@ const codeArmShape = {
  * reader looks. Route tests and the fuzz lanes hold what actually went out
  * against it. A BROWSER does not parse with it — see `apiErrorReadSchema`.
  */
-export const apiErrorBodySchema = z.union([problemDetailsArm, z.object(codeArmShape).strict()])
+export const apiErrorBodySchema = z.object(codeArmShape).strict()
 
 /**
- * What a client READS an error body with. The same two families as
+ * What a client READS an error body with. The same shape as
  * `apiErrorBodySchema`, minus the strictness: the hosted app and the daemon
  * update independently, so a newer daemon that adds a field to a refusal
  * (`retryAfter` beside a `rate_limited`) must not make the whole body
  * unreadable to an older bundle — which would drop the very sentence the
  * field travelled with. Zod's default object strips what it does not know.
  */
-const apiErrorReadSchema = z.union([problemDetailsArm, z.object(codeArmShape)])
+const apiErrorReadSchema = z.object(codeArmShape)
 
 export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>
 
@@ -103,9 +83,70 @@ export type ApiErrorBody = z.infer<typeof apiErrorBodySchema>
 export function apiErrorReason(body: unknown): string | undefined {
   const parsed = apiErrorReadSchema.safeParse(body)
   if (!parsed.success) return undefined
-  if ('title' in parsed.data) return parsed.data.title
   return parsed.data.message
 }
+
+type CodeChar =
+  | 'a'
+  | 'b'
+  | 'c'
+  | 'd'
+  | 'e'
+  | 'f'
+  | 'g'
+  | 'h'
+  | 'i'
+  | 'j'
+  | 'k'
+  | 'l'
+  | 'm'
+  | 'n'
+  | 'o'
+  | 'p'
+  | 'q'
+  | 'r'
+  | 's'
+  | 't'
+  | 'u'
+  | 'v'
+  | 'w'
+  | 'x'
+  | 'y'
+  | 'z'
+  | '0'
+  | '1'
+  | '2'
+  | '3'
+  | '4'
+  | '5'
+  | '6'
+  | '7'
+  | '8'
+  | '9'
+type CodeLead = Exclude<CodeChar, '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'>
+
+/** Whether `S` continues a code: more code characters, each `_` followed by one. */
+type IsCodeTail<S extends string> = S extends ''
+  ? true
+  : S extends `_${CodeChar}${infer Rest}`
+    ? IsCodeTail<Rest>
+    : S extends `${CodeChar}${infer Rest}`
+      ? IsCodeTail<Rest>
+      : false
+
+/**
+ * `C` itself when it is a code `apiErrorCodeSchema` admits, `never` when it
+ * is a literal it refuses. A code only known as `string` (one a refusal
+ * class carries) passes: its own declaration is a literal, and the fuzz
+ * lanes parse what actually went out.
+ */
+export type ApiErrorCode<C extends string> = string extends C
+  ? C
+  : C extends `${CodeLead}${infer Rest}`
+    ? IsCodeTail<Rest> extends true
+      ? C
+      : never
+    : never
 
 /**
  * The one constructor for a refusal body.
@@ -117,7 +158,10 @@ export function apiErrorReason(body: unknown): string | undefined {
  * `apiErrorReason` discards any body carrying it — so it was the reason
  * written where no reader looks.
  */
-export function errorBody(code: string, message?: string): ApiErrorBody {
+export function errorBody<const C extends string>(
+  code: C & ApiErrorCode<C>,
+  message?: string,
+): ApiErrorBody {
   return message === undefined ? { error: code } : { error: code, message }
 }
 

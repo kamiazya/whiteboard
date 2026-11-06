@@ -275,7 +275,7 @@ describe('a document in the trash, on the document routes', () => {
 })
 
 describe('a malformed workspace address, on the document routes', () => {
-  it('is still the route’s own Problem Details 400', async () => {
+  it('is still the route’s own 400', async () => {
     const d = await daemon()
 
     const res = await send(d, probeFor('PUT', 'file/:fileId'), 'bad.handle')

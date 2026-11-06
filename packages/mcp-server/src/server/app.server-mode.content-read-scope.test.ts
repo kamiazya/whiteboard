@@ -41,10 +41,10 @@ let bearerScopes: readonly AuthScope[] = []
 const scopedBearer: AsyncAuthStrategy = {
   async authorize({ authorizationHeader, requiredScopes }) {
     if (authorizationHeader !== `Bearer ${SUBJECT}`) {
-      return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+      return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
     }
     if (!hasRequiredScopes(bearerScopes, requiredScopes)) {
-      return { ok: false, status: 403, code: 'auth.forbidden' }
+      return { ok: false, status: 403, code: 'auth_forbidden' }
     }
     return {
       ok: true,

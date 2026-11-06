@@ -73,7 +73,7 @@ const server = setupServer(
     snapshotFetches.set(doc, (snapshotFetches.get(doc) ?? 0) + 1)
     const content = daemonContent.get(doc)
     return content === undefined
-      ? HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
+      ? HttpResponse.json({ error: 'refused', message: 'Canvas not found' }, { status: 404 })
       : new HttpResponse(daemonSnapshot(content), {
           status: 200,
           headers: { 'Content-Type': 'application/octet-stream' },

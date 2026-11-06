@@ -250,19 +250,24 @@ export const purgeTrashEntryResponseSchema = z.object({
 export function trashRestoreRefusal(
   documentId: string,
   placedPath: string | null,
-): { status: 404 | 409; title: string } {
+): { status: 404 | 409; code: 'already_placed' | 'not_found'; message: string } {
   if (placedPath !== null) {
     return {
       status: 409,
-      title: `"${placedPath}" is already in this workspace, so there is nothing to restore`,
+      code: 'already_placed',
+      message: `"${placedPath}" is already in this workspace, so there is nothing to restore`,
     }
   }
-  return { status: 404, title: `Nothing restorable for "${documentId}"` }
+  return { status: 404, code: 'not_found', message: `Nothing restorable for "${documentId}"` }
 }
 
 /** What a purge of an id the trash does not hold answers, for both keepers. */
-export function trashPurgeRefusal(documentId: string): { status: 404; title: string } {
-  return { status: 404, title: `Nothing in the trash for "${documentId}"` }
+export function trashPurgeRefusal(documentId: string): {
+  status: 404
+  code: 'not_found'
+  message: string
+} {
+  return { status: 404, code: 'not_found', message: `Nothing in the trash for "${documentId}"` }
 }
 
 // DELETE /api/workspaces/:workspaceId/documents/:path — success body.

@@ -53,10 +53,10 @@ const EDITOR_SCOPES: readonly AuthScope[] = ['canvas:read', 'canvas:write']
 const contentOnlyBearer: AsyncAuthStrategy = {
   async authorize({ authorizationHeader, requiredScopes }) {
     if (authorizationHeader !== `Bearer ${SUBJECT}`) {
-      return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+      return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
     }
     if (!hasRequiredScopes(EDITOR_SCOPES, requiredScopes)) {
-      return { ok: false, status: 403, code: 'auth.forbidden' }
+      return { ok: false, status: 403, code: 'auth_forbidden' }
     }
     return {
       ok: true,

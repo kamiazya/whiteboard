@@ -168,7 +168,7 @@ describe('whiteboard daemon rotate-replica-key', () => {
   it("reports the daemon's refusal with its status and reason, exit 1", async () => {
     const daemon = daemonAnswering(404, {
       error: 'workspace_not_found',
-      title: 'Workspace not found',
+      message: 'Workspace not found',
     })
     const { result, exitCode } = await runDaemonRotateReplicaKey({
       dataDir: '/data',

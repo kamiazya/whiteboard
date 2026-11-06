@@ -275,36 +275,36 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     })
 
     expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(json.title).toContain('design/login')
+    const json = (await res.json()) as { message?: string }
+    expect(json.message).toContain('design/login')
   })
 
-  it('returns 404 with Problem Details { title } for a missing canvas', async () => {
+  it('returns 404 with the error contract for a missing canvas', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request('/api/workspaces/session1/documents/never-created', {
       method: 'DELETE',
     })
     expect(res.status).toBe(404)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
-    expect(json).not.toHaveProperty('error')
+    const json = (await res.json()) as { message?: string }
+    expect(typeof json.message).toBe('string')
+    expect(json.message!.length).toBeGreaterThan(0)
+    expect(json).toMatchObject({ error: 'not_found' })
   })
 
-  it('returns 400 with Problem Details { title } for an invalid workspaceId or path', async () => {
+  it('returns 400 with the error contract for an invalid workspaceId or path', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
     const badWs = await app.request('/api/workspaces/bad.workspace/documents/canvas-a', {
       method: 'DELETE',
     })
     expect(badWs.status).toBe(400)
-    expect(typeof ((await badWs.json()) as { title?: string }).title).toBe('string')
+    expect(typeof ((await badWs.json()) as { message?: string }).message).toBe('string')
 
     const badPath = await app.request('/api/workspaces/session1/documents/bad.path', {
       method: 'DELETE',
     })
     expect(badPath.status).toBe(400)
-    expect(typeof ((await badPath.json()) as { title?: string }).title).toBe('string')
+    expect(typeof ((await badPath.json()) as { message?: string }).message).toBe('string')
   })
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
@@ -391,8 +391,8 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     })
 
     expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(json.title).toContain('c/x')
+    const json = (await res.json()) as { message?: string }
+    expect(json.message).toContain('c/x')
   })
 
   it('refuses a move into the document’s own subtree with 400, not a generic 500', async () => {
@@ -434,7 +434,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     await createTestDocument(serverDeps, { workspaceId: 'session1', path: 'a' })
   })
 
-  it('returns 404 with Problem Details { title } for a missing source canvas', async () => {
+  it('returns 404 with the error contract for a missing source canvas', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request('/api/workspaces/session1/documents/never-created/path', {
       method: 'PUT',
@@ -442,13 +442,13 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       body: JSON.stringify({ path: 'target' }),
     })
     expect(res.status).toBe(404)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
-    expect(json).not.toHaveProperty('error')
+    const json = (await res.json()) as { message?: string }
+    expect(typeof json.message).toBe('string')
+    expect(json.message!.length).toBeGreaterThan(0)
+    expect(json).toMatchObject({ error: 'not_found' })
   })
 
-  it('returns 409 with Problem Details { title } when the target path is already taken', async () => {
+  it('returns 409 with the error contract when the target path is already taken', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     await saveDocument('session1', 'b', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
@@ -458,9 +458,9 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       body: JSON.stringify({ path: 'b' }),
     })
     expect(res.status).toBe(409)
-    const json = (await res.json()) as { title?: string }
-    expect(typeof json.title).toBe('string')
-    expect(json.title!.length).toBeGreaterThan(0)
+    const json = (await res.json()) as { message?: string }
+    expect(typeof json.message).toBe('string')
+    expect(json.message!.length).toBeGreaterThan(0)
 
     // Neither canvas was mutated by the rejected rename.
     const listRes = await app.request('/api/workspaces/session1/documents')
@@ -468,7 +468,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(listJson.documents.map((c) => c.path).sort()).toEqual(['a', 'b'])
   })
 
-  it('returns 400 with Problem Details { title } for invalid input shapes', async () => {
+  it('returns 400 with the error contract for invalid input shapes', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
@@ -506,9 +506,9 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(badCurrentPath.status).toBe(400)
 
     for (const res of [noBody, badNewPath, emptyPath, badWorkspace, badCurrentPath]) {
-      const body = (await res.json()) as { title?: string }
-      expect(typeof body.title).toBe('string')
-      expect(body.title!.length).toBeGreaterThan(0)
+      const body = (await res.json()) as { message?: string }
+      expect(typeof body.message).toBe('string')
+      expect(body.message!.length).toBeGreaterThan(0)
     }
   })
 

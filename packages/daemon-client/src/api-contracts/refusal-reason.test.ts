@@ -13,9 +13,9 @@ const json = (body: unknown, status = 409) =>
 describe('refusalReasonOf', () => {
   it.each([
     {
-      name: 'an RFC 9457 problem body answers its title',
+      name: 'a Problem Details body states no reason: it is not the daemon contract',
       res: () => json({ type: 'about:blank', title: 'Path already exists', status: 409 }),
-      reason: 'Path already exists',
+      reason: FALLBACK,
     },
     {
       name: 'an error-code body answers its message',

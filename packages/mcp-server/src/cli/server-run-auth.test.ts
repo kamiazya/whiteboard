@@ -63,7 +63,7 @@ describe('server-mode OAuth JWT auth wiring', () => {
     expect(decision.ok).toBe(false)
     if (decision.ok) return
     expect(decision.status).toBe(401)
-    expect(decision.code).toBe('auth.required')
+    expect(decision.code).toBe('auth_required')
   })
 
   it('malformed token (not a JWT) → 401', async () => {
@@ -137,7 +137,7 @@ describe('server-mode OAuth JWT auth wiring', () => {
     expect(decision.ok).toBe(false)
     if (decision.ok) return
     expect(decision.status).toBe(403)
-    expect(decision.code).toBe('auth.forbidden')
+    expect(decision.code).toBe('auth_forbidden')
   })
 
   it('keyResolver failure → 401 (validator_unavailable)', async () => {

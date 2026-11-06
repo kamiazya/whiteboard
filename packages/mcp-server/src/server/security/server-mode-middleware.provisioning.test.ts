@@ -29,7 +29,7 @@ function strategyFor(issuer: string): AsyncAuthStrategy {
     async authorize({ authorizationHeader }) {
       const [client, sub] = (authorizationHeader ?? '').replace(/^Bearer /, '').split(':')
       if (client === undefined || sub === undefined) {
-        return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+        return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
       }
       return {
         ok: true,

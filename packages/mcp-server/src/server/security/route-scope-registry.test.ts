@@ -47,7 +47,7 @@ afterAll(async () => {
 
 const alwaysDeny: AsyncAuthStrategy = {
   async authorize() {
-    return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+    return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
   },
 }
 

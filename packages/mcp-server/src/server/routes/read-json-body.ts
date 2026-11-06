@@ -3,23 +3,9 @@ import type { Context } from 'hono'
 import type { z } from 'zod'
 import { JSON_BODY_LIMIT_BYTES, readTextWithin } from './body-limit.js'
 
-/**
- * Which of the two error families a route answers in (`apiErrorBodySchema`):
- * `{ title }` Problem Details, or `{ error, message }`. A route keeps the
- * family its clients already read; the reader only makes a body that is not
- * JSON answer one way inside each.
- */
-type BodyVoice = 'problem' | 'code'
-
-const NOT_JSON_REASON = 'the request body is not valid JSON'
-
-const NOT_JSON: Record<BodyVoice, ApiErrorBody> = {
-  problem: { title: NOT_JSON_REASON },
-  code: errorBody('invalid_body', NOT_JSON_REASON),
-}
+const NOT_JSON: ApiErrorBody = errorBody('invalid_body', 'the request body is not valid JSON')
 
 export interface ReadJsonBodyOptions {
-  voice: BodyVoice
   /** The route's own sentence for JSON that does not fit the schema. */
   refuseShape: (error: z.ZodError) => ApiErrorBody
   /**
@@ -62,7 +48,7 @@ export async function readJsonBody<S extends z.ZodType>(
     try {
       json = JSON.parse(text)
     } catch {
-      return { refusal: c.json(NOT_JSON[options.voice], 400) }
+      return { refusal: c.json(NOT_JSON, 400) }
     }
   }
   const parsed = schema.safeParse(json)

@@ -67,7 +67,7 @@ const server = setupServer(
   ),
   http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
     if (failingWrites.has(`workspace:${String(params.workspaceId)}`))
-      return HttpResponse.json({ title: 'busy' }, { status: 503 })
+      return HttpResponse.json({ error: 'refused', message: 'busy' }, { status: 503 })
     updateWrites.push({
       doc: `workspace:${String(params.workspaceId)}`,
       body: new Uint8Array(await request.arrayBuffer()),
@@ -77,9 +77,11 @@ const server = setupServer(
   http.get(`${BASE}/api/w/:workspaceId/workspace-document/snapshot`, ({ params }) => {
     const doc = `workspace:${String(params.workspaceId)}`
     snapshotHits.push(doc)
-    if (failingSnapshots.has(doc)) return HttpResponse.json({ title: 'boom' }, { status: 503 })
+    if (failingSnapshots.has(doc))
+      return HttpResponse.json({ error: 'refused', message: 'boom' }, { status: 503 })
     const bytes = snapshotByDoc.get(doc)
-    if (!bytes) return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
+    if (!bytes)
+      return HttpResponse.json({ error: 'refused', message: 'Canvas not found' }, { status: 404 })
     return new HttpResponse(bytes.slice().buffer as ArrayBuffer, {
       status: 200,
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -87,7 +89,7 @@ const server = setupServer(
   }),
   http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
     perDocumentSnapshotHits.push(`${String(params.workspaceId)}/${String(params.path)}`)
-    return HttpResponse.json({ title: 'not this route' }, { status: 500 })
+    return HttpResponse.json({ error: 'refused', message: 'not this route' }, { status: 500 })
   }),
 )
 

@@ -67,7 +67,7 @@ export const DENY_ALL_STRATEGY: AsyncAuthStrategy = {
   authorize: async () => ({
     ok: false,
     status: 401,
-    code: 'auth.required',
+    code: 'auth_required',
     wwwAuthenticate: 'Bearer',
   }),
 }
