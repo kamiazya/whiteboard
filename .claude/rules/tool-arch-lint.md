@@ -731,6 +731,20 @@ error class in ports, model and server-core to a `REFUSALS` row or a reasoned
 `EXEMPT` entry. `script-entry-check` keeps a script's is-main test on `is-run-as-script.mjs` (a path needing URL-encoding made the hand form exit 0 having run nothing); `serve-dist-one-place` keeps static serving on `serve-dist.mjs`. `docs-tool-names.test.ts` holds every `wb_*` / `canvas_*` token
 in `docs/**` (minus ADRs), `skills/` and `README.md` to `registeredTools()`.
 
+## The guards read `crates/**/*.rs` too
+
+`rust-source.ts` lexes a Rust file's comments (`//`, `///`, `//!`, nested
+`/* */`, skipping string, char, byte and raw literals) and measures a `fn`
+from its line to its closing brace with comments and literals blanked, which
+is reliable because Rust braces must balance. The file and function size
+budgets, vocabulary-check, and the chronology, retired-pairing,
+file-pointer, identifier-pointer and no-logger-claim comment guards all read
+`.rs` through it; stacked-doc-comments and dead-refs do not, since rustdoc
+joins every `///` and `useRef` is React's. `crate-map.ts` reads
+`crates/architecture-map.json`, and `crate-architecture-map.test.ts` holds
+the tree, the TS map (`absorbs`) and `.claude/rules/crates.md`'s table to
+it. A `planned` crate resolves by directory only in the docs-path guard.
+
 ## `scan-roots.ts` and `size-ledger-assertions.ts`: what scans share
 
 `scan-roots.ts` owns `REPO_ROOT`, `workspaceDirs()` (every `packages/*`, `apps/*`

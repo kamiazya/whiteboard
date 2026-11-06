@@ -34,6 +34,10 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   '.secretlintignore',
   '.secretlintrc.json',
   'AGENTS.md',
+  // The Cargo workspace: cargo, rustup, rustfmt and cargo-deny each look for
+  // their file at the workspace root, the way pnpm does for its own.
+  'Cargo.lock',
+  'Cargo.toml',
   'CHANGELOG.md',
   'CLAUDE.md',
   'CODE_OF_CONDUCT.md',
@@ -44,6 +48,7 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   'README.md',
   'SECURITY.md',
   'biome.json',
+  'deny.toml',
   'docker-compose.server.yml',
   'gemini-extension.json',
   'knip.jsonc',
@@ -52,6 +57,8 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   'pnpm-lock.yaml',
   'pnpm-workspace.yaml',
   'release-please-config.json',
+  'rust-toolchain.toml',
+  'rustfmt.toml',
   'server.json',
   // The scanner reads it from the directory it is pointed at, and the lane
   // points it at the repo — a monorepo has one Sonar project, not one per

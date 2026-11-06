@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { commentLinesOf } from './rust-source.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { trackedFiles } from './tracked-files.js'
 
@@ -61,17 +62,30 @@ const SELF = 'tools/arch-lint/src/comment-chronology-phrases.test.ts'
 
 const isComment = (line: string): boolean => /^\s*(?:\/\/|\*|\/\*)/.test(line)
 
-/** Product code, tests, tools and package-root configs: anywhere a comment is written. */
+/**
+ * Product code, tests, tools and package-root configs: anywhere a comment is
+ * written — the crates' Rust included, whose comments are read through the
+ * Rust lexer (`rust-source.ts`), so a raw string that begins with `//` is not
+ * one.
+ */
 const isCommentSource = (path: string): boolean =>
-  /^(?:packages|apps|tools)\/.+\.(?:tsx?|mjs|mts)$/.test(path) &&
+  (/^(?:packages|apps|tools)\/.+\.(?:tsx?|mjs|mts)$/.test(path) || /^crates\/.+\.rs$/.test(path)) &&
   path !== SELF &&
   !path.includes('/migrations/')
 
+const phrasesInComment = (comment: string): string[] =>
+  PHRASES.filter(({ pattern }) => pattern.test(comment)).map(({ name }) => name)
+
 /** The phrases a comment line carries. */
 function phrasesIn(line: string): string[] {
-  return isComment(line)
-    ? PHRASES.filter(({ pattern }) => pattern.test(line)).map(({ name }) => name)
-    : []
+  return isComment(line) ? phrasesInComment(line) : []
+}
+
+/** Every phrase in a file's comments, with its 1-based line. */
+function phrasesInFile(file: string, text: string): Array<{ line: number; name: string }> {
+  return commentLinesOf(file, text).flatMap((comment, index) =>
+    comment === '' ? [] : phrasesInComment(comment).map((name) => ({ line: index + 1, name })),
+  )
 }
 
 describe('a source comment names the rule, not the working session that produced it', () => {
@@ -144,20 +158,27 @@ describe('a source comment names the rule, not the working session that produced
     const files = trackedFiles(REPO_ROOT).filter(isCommentSource)
     expect(files.length).toBeGreaterThan(2_000)
     expect(files).toContain('apps/web/vitest.browser.config.ts')
+    expect(files.filter((file) => file.endsWith('.rs')).length).toBeGreaterThan(10)
+  })
+
+  it('reads a Rust file by its comments, not by the literals that look like one', () => {
+    const planted = (name: string) =>
+      readFileSync(join(import.meta.dirname, '__fixtures__/rust', name), 'utf8')
+    expect(phrasesInFile('planted.rs', planted('comment-violations.rs'))).toEqual([
+      { line: 4, name: 'this PR' },
+      { line: 17, name: 'issue or PR number' },
+    ])
+    expect(phrasesInFile('planted.rs', planted('comment-clean.rs'))).toEqual([])
   })
 
   const found = trackedFiles(REPO_ROOT)
     .filter(isCommentSource)
     .flatMap((file) =>
-      readFileSync(join(REPO_ROOT, file), 'utf8')
-        .split('\n')
-        .flatMap((line, index) =>
-          phrasesIn(line).map((name) => ({
-            at: `${file}:${index + 1}`,
-            key: `${file}#${name}`,
-            name,
-          })),
-        ),
+      phrasesInFile(file, readFileSync(join(REPO_ROOT, file), 'utf8')).map(({ line, name }) => ({
+        at: `${file}:${line}`,
+        key: `${file}#${name}`,
+        name,
+      })),
     )
 
   it('finds no such phrase in a comment outside the ledger', () => {
