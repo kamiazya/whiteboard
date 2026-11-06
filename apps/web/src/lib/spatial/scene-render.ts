@@ -52,12 +52,14 @@ export interface RenderCanvasOptions {
 /**
  * The height a text node needs for its laid-out body, in canvas px:
  * canvas-render's `fittedTextNodeHeight`, the one answer `wb_canvas_edit`
- * sizes an agent's node with too, under this editor's appearance.
+ * sizes an agent's node with too, under this editor's appearance — without
+ * the ratio floor, because the font measured here is the one on screen.
  */
 export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasOptions): number {
   return fittedTextNodeHeight(node, {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
+    floor: 'none',
   })
 }
 

@@ -37,4 +37,11 @@ describe('fittedTextNodeHeight', () => {
     expect(bodyUnder(wide)).toBeGreaterThan(bodyUnder(constantRatioMeasureText))
     expect(fittedTextNodeHeight(node, { measure: wide })).toBe(bodyUnder(wide) + PADDING)
   })
+
+  it("answers the measure's own reading alone when the caller declines the floor", () => {
+    const narrow = createFixedMeasure({ advance: (t) => t.length * 2, ascent: 10, descent: 2 })
+    expect(fittedTextNodeHeight(node, { measure: narrow, floor: 'none' })).toBeLessThan(
+      fittedTextNodeHeight(node, { measure: narrow }),
+    )
+  })
 })

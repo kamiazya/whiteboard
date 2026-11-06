@@ -29,10 +29,21 @@ const DEFAULT_APPEARANCE = createSpatialTheme({ mode: 'light' })
  */
 export function fittedTextNodeHeight(
   node: SpatialNode,
-  options: { readonly measure: MeasureText; readonly appearance?: SpatialAppearanceResolver },
+  options: {
+    readonly measure: MeasureText
+    readonly appearance?: SpatialAppearanceResolver
+    /**
+     * `'ratio'` (the default) takes the taller of the caller's font and the
+     * ratio measurer; `'none'` trusts the caller's font alone. The editor
+     * declines the floor: its font IS the one the person sees, and measured
+     * in the app the floor left a third of a nine-line note empty.
+     */
+    readonly floor?: 'ratio' | 'none'
+  },
 ): number {
   const appearance = options.appearance ?? DEFAULT_APPEARANCE
   const under = (measure: MeasureText) => naturalNodeContentSize(node, { measure, appearance }).h
-  const natural = Math.max(under(options.measure), under(constantRatioMeasureText))
+  const own = under(options.measure)
+  const natural = options.floor === 'none' ? own : Math.max(own, under(constantRatioMeasureText))
   return natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
 }
