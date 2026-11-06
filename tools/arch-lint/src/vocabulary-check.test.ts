@@ -123,13 +123,7 @@ const EXCLUDED_SEGMENTS = ['migrations', 'adr']
  * reason each one is. Keep this list tiny — a growing one means the word is
  * not actually retired.
  */
-const EXEMPT_FILES: Readonly<Record<string, string>> = {
-  // Seeds a pre-0008 database and then runs the real migrator over it, so
-  // every column it writes has to be spelled as it stood at 0007. Using the
-  // current name here would test a database that never existed.
-  'packages/mcp-server/src/server/store/db/migrator.legacy-upgrade.test.ts':
-    'writes the schema as it stood at 0007, before the rename',
-}
+const EXEMPT_FILES: Readonly<Record<string, string>> = {}
 
 const BANNED = [
   {

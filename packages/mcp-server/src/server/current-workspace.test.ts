@@ -33,13 +33,10 @@ describe('ensureWorkspaceId', () => {
     await expect(ensureWorkspaceId(dataDir)).resolves.toBe(cached)
   })
 
-  it('mints a canonical ULID, the shape migration 0019 re-keyed every other workspace to', async () => {
-    // ADR-0019 fixes the canonical workspace id as a bare ULID, and `0019`
-    // re-keys every workspace a daemon ALREADY holds to that shape. This is
-    // the other half: the writer that runs on a fresh install. It kept minting
-    // nanoids, so the migration corrected the data while the producer went on
-    // writing the old shape — a daemon created after 0019 shipped is never
-    // re-keyed by anything.
+  it('mints a canonical ULID, the one shape a workspace id has', async () => {
+    // ADR-0019 fixes the canonical workspace id as a bare ULID, and nothing
+    // re-keys a workspace after it is minted, so the writer on a fresh install
+    // is the only place the shape is decided.
     //
     // Segment-first resolution stays unambiguous only because a segment may
     // not be ULID-shaped; a nanoid is not ULID-shaped either, so it lands in

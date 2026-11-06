@@ -11,7 +11,6 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Kysely, type QueryExecutorProvider, SqliteDialect, sql } from 'kysely'
-import { type MigrationProvider, Migrator } from 'kysely/migration'
 // libsql ships a native better-sqlite3-shaped binding next to @libsql/client.
 // We bypass @libsql/client here because its `:memory:` path nulls the cached
 // connection after every transaction, so subsequent non-transaction queries
@@ -20,7 +19,6 @@ import { type MigrationProvider, Migrator } from 'kysely/migration'
 import LibsqlNativeDatabase from 'libsql'
 import { busyRetryingDialect } from './busy-retry.js'
 import { DB_FILENAME, getDb, injectCachedDb, removeCachedDb, runDbDisposeHooks } from './index.js'
-import { migrations } from './migrations/index.js'
 import { runMigrations } from './migrator.js'
 import { clearPrepareCache } from './prepare.js'
 import type { Database, DatabaseSchema } from './schema.js'
@@ -104,62 +102,6 @@ export async function createIsolatedDb(
       // to call prepareDataDir again without picking up the disposed promise.
       clearPrepareCache()
       await db.destroy()
-    },
-  }
-}
-
-// A table-agnostic handle: a migration test reads rows in the shape a schema
-// had BEFORE the migration under test, which `DatabaseSchema` (the head) no
-// longer describes.
-export type AnyTables = Record<string, Record<string, unknown>>
-
-/** The migrator over the real migration log, for a database a test already holds. */
-export function migratorFor<DB>(db: Kysely<DB>): Migrator {
-  const provider: MigrationProvider = { getMigrations: async () => migrations }
-  return new Migrator({ db: db as never, provider })
-}
-
-export interface MigrationHarness<DB = AnyTables> {
-  db: Kysely<DB>
-  /** Applies the log up to and including `name`; throws the migration's own error. */
-  migrateTo(name: string): Promise<void>
-  migrateToHead(): Promise<void>
-  /** Runs to head and hands back the error instead of throwing it, for a test about failing. */
-  migrateToHeadRaw(): Promise<unknown>
-}
-
-/**
- * A database a migration test walks the log over one step at a time, unlike
- * `createIsolatedDb`, which hands back a fully migrated one.
- *
- * With a `dataDir` the database is the `whiteboard.db` file production opens
- * (the log's FILE behaviour — renames, blob moves — is what those tests are
- * about); without one it is `:memory:`, for a test that calls a single
- * migration's `up`/`down` directly. Foreign keys are on either way, as in
- * production's `buildDb`, because a migration that only works with them off
- * is not one an install can run.
- */
-export async function openMigrationHarness<DB = AnyTables>(
-  dataDir?: string,
-): Promise<MigrationHarness<DB>> {
-  const db = new Kysely<DB>({
-    dialect: nativeSqliteDialect(dataDir === undefined ? ':memory:' : join(dataDir, DB_FILENAME)),
-  })
-  await sql`PRAGMA foreign_keys = ON`.execute(db)
-  const migrator = migratorFor(db)
-  const unwrap = (error: unknown): void => {
-    if (error !== undefined) throw error
-  }
-  return {
-    db,
-    async migrateTo(name) {
-      unwrap((await migrator.migrateTo(name)).error)
-    },
-    async migrateToHead() {
-      unwrap((await migrator.migrateToLatest()).error)
-    },
-    async migrateToHeadRaw() {
-      return (await migrator.migrateToLatest()).error
     },
   }
 }

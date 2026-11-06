@@ -437,8 +437,9 @@ library the HTTP app composes (now `server/stdio-root.ts` beside
 `server/sync-streams.ts`, `sync-audience.ts` and `viewport-requests.ts`, the
 scheduler to `store/auto-version.ts`, the fetch-model contract to
 `shared/api-contracts/search-fetch-model.ts`, and the legacy trust-file purge
-to `server/purge-legacy-trust-file.ts`. The eight were cross-checked against
-an independent directory-level import matrix first. Type-only edges count, as
+to its own top-level module (since deleted: an old trust store is refused at
+boot now). The eight were cross-checked against an independent
+directory-level import matrix first. Type-only edges count, as
 in the web guard.
 
 ## `route-portability.test.ts`: which routes could leave Node
