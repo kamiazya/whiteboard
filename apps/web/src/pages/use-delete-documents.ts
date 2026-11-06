@@ -71,6 +71,9 @@ function dialogSubject(pending: PendingDelete | null): DeleteDocumentsDialogProp
     displayName: pending.displayName,
     ...(pending.kind === undefined ? {} : { kind: pending.kind }),
     ...(pending.paths.length > 1 ? { count: pending.paths.length } : {}),
+    ...(pending.paths.length === 1 && pending.paths[0] !== undefined
+      ? { path: pending.paths[0] }
+      : {}),
   }
 }
 

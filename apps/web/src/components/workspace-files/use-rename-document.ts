@@ -82,12 +82,27 @@ interface RenameDocumentDeps {
   readonly rootRef: RefObject<HTMLElement | null>
 }
 
-/** Where focus goes as the dialog closes: the card of the document a saved rename landed on. */
+/**
+ * Where focus goes as the dialog closes: the card of the document a saved
+ * rename landed on, or — dismissed — the control that opened it while it is
+ * still on screen, else the card it was opened for: a menu item that opened
+ * it is gone, and Radix, with no Trigger, lands on <body>.
+ */
 function useRenameLanding(rootRef: RefObject<HTMLElement | null>) {
   const landing = useRef<string | null>(null)
+  const openedFor = useRef<{ element: Element | null; path: string } | null>(null)
   const onCloseAutoFocus = useCallback(
     (event: Event) => {
-      const path = landing.current
+      const from = openedFor.current
+      const path = landing.current ?? from?.path ?? null
+      openedFor.current = null
+      if (landing.current === null && from?.element instanceof HTMLElement) {
+        if (from.element.isConnected) from.element.focus()
+        if (document.activeElement === from.element) {
+          event.preventDefault()
+          return
+        }
+      }
       landing.current = null
       if (path !== null && focusLanding(rootRef.current, documentLanding(path))) {
         event.preventDefault()
@@ -95,7 +110,7 @@ function useRenameLanding(rootRef: RefObject<HTMLElement | null>) {
     },
     [rootRef],
   )
-  return { landing, onCloseAutoFocus }
+  return { landing, openedFor, onCloseAutoFocus }
 }
 
 export function useRenameDocument({
@@ -106,14 +121,18 @@ export function useRenameDocument({
   rootRef,
 }: RenameDocumentDeps): RenameDocument {
   const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
-  const { landing, onCloseAutoFocus } = useRenameLanding(rootRef)
+  const { landing, openedFor, onCloseAutoFocus } = useRenameLanding(rootRef)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const open = useCallback((entry: WorkspaceDocumentEntry) => {
-    setError(null)
-    setRenaming(entry)
-  }, [])
+  const open = useCallback(
+    (entry: WorkspaceDocumentEntry) => {
+      openedFor.current = { element: document.activeElement, path: entry.path }
+      setError(null)
+      setRenaming(entry)
+    },
+    [openedFor],
+  )
 
   // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
   // lets scoped-screen-state.test.ts verify the setters from here.

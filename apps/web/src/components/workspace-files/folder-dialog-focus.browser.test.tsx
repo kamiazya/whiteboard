@@ -88,3 +88,62 @@ describe('focus after a folder dialog closes', () => {
     )
   })
 })
+
+async function openCardMenuItem(title: string, item: string) {
+  const card = (await screen.findAllByTestId('card-title')).find(
+    (each) => each.textContent === title,
+  )
+  await userEvent.click(card?.closest('button') as HTMLElement, { button: 'right' })
+  const menu = await screen.findByRole('menu', { name: 'Document actions' })
+  await userEvent.click(within(menu).getByRole('menuitem', { name: item }))
+}
+
+describe('focus after a dialog is dismissed', () => {
+  it('Escape on New folder returns to the New folder button', async () => {
+    renderPanel()
+    const opener = await screen.findByRole('button', { name: 'New folder' })
+    await userEvent.click(opener)
+    await screen.findByRole('dialog', { name: 'New folder' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+  })
+
+  it('Cancel on New folder returns to the New folder button', async () => {
+    renderPanel()
+    const opener = await screen.findByRole('button', { name: 'New folder' })
+    await userEvent.click(opener)
+    const dialog = await screen.findByRole('dialog', { name: 'New folder' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(document.activeElement).toBe(opener))
+  })
+
+  it('Escape on a folder rename returns to that folder', async () => {
+    renderPanel()
+    const contents = await screen.findByTestId('folder-contents')
+    const folder = await within(contents).findByRole('button', { name: 'Open folder archive' })
+    await userEvent.click(folder, { button: 'right' })
+    const menu = await screen.findByRole('menu', { name: 'Folder actions' })
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Rename…' }))
+    await screen.findByRole('dialog', { name: 'Rename folder' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('data-folder-path')).toBe('archive'),
+    )
+  })
+
+  it('Escape on a card Rename… returns to the card', async () => {
+    renderPanel()
+    await openCardMenuItem('Notes', 'Rename…')
+    await screen.findByRole('dialog')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-doc-path')).toBe('notes'))
+  })
+
+  it('Escape on a card Move to folder… returns to the card', async () => {
+    renderPanel()
+    await openCardMenuItem('Notes', 'Move to folder…')
+    await screen.findByRole('dialog', { name: 'Move to folder' })
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(document.activeElement?.getAttribute('data-doc-path')).toBe('notes'))
+  })
+})
