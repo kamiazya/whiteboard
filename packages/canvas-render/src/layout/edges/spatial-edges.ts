@@ -609,6 +609,7 @@ function shortened(
   score: ConfigScore,
   edges: readonly RoutableElement[],
   locked: ReadonlySet<string> | undefined,
+  search: AroundLedger,
 ): ReadonlyMap<string, SidePair> {
   for (const [index, edge] of edges.entries()) {
     const chosen = score.sideOf(edge.id)
@@ -616,10 +617,51 @@ function shortened(
     const trial = new Map(score.sides())
     trial.set(edge.id, { fromSide: chosen.fromSide, toSide: chosen.toSide })
     const evaluated = score.evaluateTrial(trial, index)
-    if (evaluated === undefined) break
+    if (evaluated === undefined) return search.unconfirmedDropped(score.sides())
     if (!lessCost(score.cost(), evaluated.cost)) score.adopt(trial, evaluated)
+    // The corner route cost something here, so stepping round is the
+    // search's own answer for this edge.
+    else search.confirmed.add(edge.id)
   }
   return score.sides()
+}
+
+/**
+ * Which `around` choices the search has priced. A straight edge is SEEDED
+ * stepping round (`steppingRound`) on the expectation that `shortened`
+ * prices its corner route before the search ends; a search the layout's
+ * account cuts short never does, and a seeded detour nobody priced is
+ * just a longer line. So on exhaustion every seeded `around` the search did
+ * not confirm — by adopting it as a candidate, or by finding its corner
+ * route costs more — goes back to the corner route, while what the search
+ * DID confirm, and what it never seeded (a frozen override, or the aligned
+ * run's input, which the first run already priced or dropped), stays.
+ */
+interface AroundLedger {
+  readonly confirmed: Set<string>
+  /** Records a candidate the search adopted: stepping round, it is confirmed. */
+  readonly adopted: (id: string, pair: SidePair) => void
+  readonly unconfirmedDropped: (
+    sides: ReadonlyMap<string, SidePair>,
+  ) => ReadonlyMap<string, SidePair>
+}
+
+function aroundLedger(seeded: ReadonlySet<string>): AroundLedger {
+  const confirmed = new Set<string>()
+  return {
+    confirmed,
+    adopted: (id, pair) => {
+      if (pair.around === true) confirmed.add(id)
+    },
+    unconfirmedDropped: (sides) => {
+      const dropped = new Map(sides)
+      for (const [id, pair] of sides) {
+        if (pair.around !== true || !seeded.has(id) || confirmed.has(id)) continue
+        dropped.set(id, { fromSide: pair.fromSide, toSide: pair.toSide })
+      }
+      return dropped
+    },
+  }
 }
 
 /**
@@ -679,6 +721,9 @@ function optimizeSideChoices(
   // The layout's account (`routing-budget.ts`). Past it no trial is adopted,
   // so the search ends on the sides it has reached: a partial repair.
   budget: RoutingBudget = createRoutingBudget(),
+  // Edges whose `around` in `initial` is a seed rather than a decision
+  // (`steppingRound`): dropped again if the account ends the search first.
+  seeded: ReadonlySet<string> = new Set(),
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const score = createConfigScore(
@@ -697,7 +742,8 @@ function optimizeSideChoices(
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
   // crossings is healthy, and reshuffling it purely to shave bends is
   // churn, not repair.
-  const shorten = () => shortened(score, edges, locked)
+  const search = aroundLedger(seeded)
+  const shorten = () => shortened(score, edges, locked, search)
   if (!hasRepairableProblem(score.cost())) return shorten()
 
   /**
@@ -729,6 +775,7 @@ function optimizeSideChoices(
       if (evaluated === undefined) return 'exhausted'
       if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
         score.adopt(trial, evaluated)
+        search.adopted(edge.id, candidate)
         return 'adopted'
       }
     }
@@ -739,7 +786,7 @@ function optimizeSideChoices(
     let improved = false
     for (const edge of trialEdgesFor(edges, align, score.contribution)) {
       const outcome = locked?.has(edge.id) ? 'kept' : improveEdge(edge)
-      if (outcome === 'exhausted') return score.sides()
+      if (outcome === 'exhausted') return search.unconfirmedDropped(score.sides())
       if (!hasRepairableProblem(score.cost())) return shorten()
       improved ||= outcome === 'adopted'
     }
@@ -873,14 +920,16 @@ function steppingRound(
   edges: readonly RoutableElement[],
   styleOf: EdgeStyleOf,
   locked: ReadonlySet<string> | undefined,
-): ReadonlyMap<string, SidePair> {
+): { sides: ReadonlyMap<string, SidePair>; seeded: ReadonlySet<string> } {
   const around = new Map(seed)
+  const seeded = new Set<string>()
   for (const edge of edges) {
     const pair = seed.get(edge.id)
     if (pair === undefined || locked?.has(edge.id) || styleOf(edge) !== 'straight') continue
     around.set(edge.id, { ...pair, around: true })
+    seeded.add(edge.id)
   }
-  return around
+  return { sides: around, seeded }
 }
 
 /**
@@ -932,7 +981,12 @@ function optimizeAcrossRegions(
     // layout-wide map would therefore buy nothing and hold every completed
     // region's paths until the layout finished.
     const routeCache = new Map<string, readonly Point[]>()
-    const run = (from: ReadonlyMap<string, SidePair>, align: boolean, p: typeof pins) =>
+    const run = (
+      from: ReadonlyMap<string, SidePair>,
+      align: boolean,
+      p: typeof pins,
+      seeded?: ReadonlySet<string>,
+    ) =>
       optimizeSideChoices(
         nodes,
         labels,
@@ -944,8 +998,10 @@ function optimizeAcrossRegions(
         p,
         routeCache,
         budget,
+        seeded,
       )
-    return run(run(steppingRound(seed, regionEdges, styleOf, locked), false, undefined), true, pins)
+    const stepping = steppingRound(seed, regionEdges, styleOf, locked)
+    return run(run(stepping.sides, false, undefined, stepping.seeded), true, pins)
   }
 
   if (edges.length <= CROSSING_OPT_MAX_EDGES) return bothRuns(edges, initial)
