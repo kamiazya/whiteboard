@@ -7,7 +7,7 @@
 // the Excalidraw `elements` list.
 
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
-import { type ContainerID, LoroDoc, type LoroMap } from 'loro-crdt'
+import { type ContainerID, LoroDoc, LoroList, type LoroMap, LoroMovableList } from 'loro-crdt'
 import {
   CANVAS_KEY,
   DOCUMENT_KEY,
@@ -153,6 +153,12 @@ export function retiredMarkdownShape(doc: DocumentContainers): string | null {
   )
 }
 
+const listRootOf = (doc: LoroDoc, key: string): LoroList | LoroMovableList | undefined => {
+  const cid = doc.getShallowValue()[key]
+  const held = typeof cid === 'string' ? doc.getContainerById(cid as ContainerID) : undefined
+  return held instanceof LoroList || held instanceof LoroMovableList ? held : undefined
+}
+
 /**
  * Whether the retired Excalidraw `elements` list still holds entries. An
  * empty root is what an old client leaves by merely opening it and carries
@@ -162,16 +168,12 @@ export function retiredMarkdownShape(doc: DocumentContainers): string | null {
  * there. A host that is neither a LoroDoc nor offers `peekList` holds none.
  */
 export function retiredElementsShape(doc: DocumentContainers): string | null {
-  let held: { readonly length: number } | undefined
-  if (doc.peekList !== undefined) {
-    held = doc.peekList(RETIRED_ELEMENTS_KEY)
-  } else if (doc instanceof LoroDoc) {
-    const cid = doc.getShallowValue()[RETIRED_ELEMENTS_KEY]
-    if (typeof cid === 'string' && (cid.endsWith(':MovableList') || cid.endsWith(':List'))) {
-      const container = doc.getContainerById(cid as ContainerID)
-      held = container as { readonly length: number } | undefined
-    }
-  }
+  const held =
+    doc.peekList !== undefined
+      ? doc.peekList(RETIRED_ELEMENTS_KEY)
+      : doc instanceof LoroDoc
+        ? listRootOf(doc, RETIRED_ELEMENTS_KEY)
+        : undefined
   return held !== undefined && held.length > 0
     ? `canvas elements stored as the retired Excalidraw \`${RETIRED_ELEMENTS_KEY}\` list (${held.length} entries)`
     : null
