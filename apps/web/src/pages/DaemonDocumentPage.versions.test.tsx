@@ -1,3 +1,5 @@
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
@@ -476,19 +478,12 @@ describe('DaemonDocumentPage versions', () => {
       const backend = createdBackends[0]!
       const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
       const restoredDoc = new LoroDoc()
-      const list = restoredDoc.getMovableList('elements')
-      const map = list.insertContainer(
-        0,
-        new (require('loro-crdt') as typeof import('loro-crdt')).LoroMap(),
-      )
-      map.set('id', 'restored-el')
-      map.set('type', 'rectangle')
-      map.set('x', 0)
-      map.set('y', 0)
-      map.set('width', 10)
-      map.set('height', 10)
-      map.set('isDeleted', false)
-      restoredDoc.commit()
+      writeSpatialCanvas(restoredDoc, {
+        nodes: [
+          textNode({ id: 'restored-el', text: 'restored', x: 0, y: 0, width: 10, height: 10 }),
+        ],
+        edges: [],
+      })
       const update = restoredDoc.export({ mode: 'update' })
 
       await act(async () => {
