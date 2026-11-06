@@ -105,6 +105,8 @@ const WORKSPACE_DOCUMENT_ACTION_METHODS: Record<WorkspaceDocumentApiAction, Meth
 
 const DOC = 'notes/plan'
 const doc = [WS, DOC] as const
+// A canonical ULID no document holds: the id routes answer it with their own 404, not "no route".
+const docById = [WS, '01ARZ3NDEKTSV4RRFFQ69G5FAV'] as const
 
 // One entry per builder, keyed by its export name. A builder with no entry
 // fails the completeness test below, so adding one means pinning it here.
@@ -166,6 +168,55 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   ],
   versionRestoreApiUrl: [
     { label: 'restore', method: 'POST', url: daemonUrls.versionRestoreApiUrl(...doc, 'v1') },
+  ],
+  documentByIdApiUrl: DOCUMENT_API_ACTIONS.map((action) => ({
+    label: action,
+    method: DOCUMENT_ACTION_METHODS[action],
+    url: documentUrls.documentByIdApiUrl(...docById, action),
+  })),
+  documentFileByIdApiUrl: [
+    { label: 'file', method: 'GET', url: documentUrls.documentFileByIdApiUrl(...docById, 'img1') },
+    {
+      label: 'upload',
+      method: 'PUT',
+      url: documentUrls.documentFileByIdApiUrl(...docById, 'img1'),
+    },
+  ],
+  documentRecordByIdApiUrl: [
+    { label: 'delete', method: 'DELETE', url: daemonUrls.documentRecordByIdApiUrl(...docById) },
+  ],
+  documentPathByIdApiUrl: [
+    { label: 'move', method: 'PUT', url: daemonUrls.documentPathByIdApiUrl(...docById) },
+  ],
+  documentNameByIdApiUrl: [
+    { label: 'name', method: 'PUT', url: daemonUrls.documentNameByIdApiUrl(...docById) },
+  ],
+  documentPinByIdApiUrl: [
+    { label: 'pin', method: 'PUT', url: daemonUrls.documentPinByIdApiUrl(...docById) },
+  ],
+  documentDuplicateByIdApiUrl: [
+    { label: 'duplicate', method: 'POST', url: daemonUrls.documentDuplicateByIdApiUrl(...docById) },
+  ],
+  documentVersionsByIdApiUrl: [
+    { label: 'list', method: 'GET', url: daemonUrls.documentVersionsByIdApiUrl(...docById) },
+    { label: 'save', method: 'POST', url: daemonUrls.documentVersionsByIdApiUrl(...docById) },
+  ],
+  documentVersionsPageByIdApiUrl: [
+    {
+      label: 'list page',
+      method: 'GET',
+      url: daemonUrls.documentVersionsPageByIdApiUrl(...docById, { cursor: '1000.1', limit: 10 }),
+    },
+  ],
+  versionDocumentByIdApiUrl: [
+    { label: 'read', method: 'GET', url: daemonUrls.versionDocumentByIdApiUrl(...docById, 'v1') },
+  ],
+  versionRestoreByIdApiUrl: [
+    {
+      label: 'restore',
+      method: 'POST',
+      url: daemonUrls.versionRestoreByIdApiUrl(...docById, 'v1'),
+    },
   ],
   trashApiUrl: [{ label: 'list', method: 'GET', url: daemonUrls.trashApiUrl(WS) }],
   trashEntryApiUrl: [

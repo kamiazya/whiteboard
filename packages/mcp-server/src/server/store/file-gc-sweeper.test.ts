@@ -767,6 +767,43 @@ describe('discoverFsWorkspaces (default, via real filesystem)', () => {
   })
 })
 
+describe('createFileGcSweeper default DB listing', () => {
+  it('skips and reports a registry row keyed before the re-key and still sweeps the rest', async () => {
+    const cap = captureLogsForTests('warning')
+    try {
+      await handle.db
+        .insertInto('workspaces')
+        .values({ id: 'default', displayName: null, segment: null, createdAt: 0, updatedAt: 0 })
+        .execute()
+      await handle.db
+        .insertInto('workspaces')
+        .values({ id: WS_A, displayName: null, segment: null, createdAt: 0, updatedAt: 0 })
+        .execute()
+
+      const purged: string[] = []
+      const sweeper = createFileGcSweeper({
+        discoverFsWorkspaces: async () => [],
+        purge: async (id: string) => {
+          purged.push(id)
+          return undefined as never
+        },
+      })
+      await sweeper.tick()
+      await sweeper.stop()
+
+      expect(purged).toEqual([WS_A])
+      expect(cap.records).toContainEqual(
+        expect.objectContaining({
+          data: { workspaceId: 'default' },
+          msg: expect.stringContaining('canonical ULID'),
+        }),
+      )
+    } finally {
+      cap.restore()
+    }
+  })
+})
+
 describe('createFileGcSweeper per-workspace containment revalidation', () => {
   it('refuses a later workspace whose dir was swapped for a symlink after discovery', async () => {
     // Processing ws_first swaps ws_second's directory for a symlink escaping

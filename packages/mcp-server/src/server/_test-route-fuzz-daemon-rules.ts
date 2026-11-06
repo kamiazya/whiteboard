@@ -49,7 +49,7 @@ import { exportSvgRequestSchema } from '../shared/api-contracts/export-svg.js'
 import { fc } from '../shared/test-utils/fast-check.js'
 import type { Rule } from './_test-route-fuzz-lane.js'
 
-export const RULES: Record<string, Rule> = {
+const PATH_RULES: Record<string, Rule> = {
   'GET /api/workspaces': { answers: 'json', response: listWorkspacesResponseSchema },
   'POST /api/workspaces': {
     answers: 'json',
@@ -206,3 +206,33 @@ export const RULES: Record<string, Rule> = {
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
 }
+
+const DOCUMENTS = '/api/workspaces/:workspaceId/documents'
+const PAGE_DOCUMENT = '/api/w/:workspaceId/document/*'
+
+/** Each path-addressed document route's id-addressed twin, by registered key. */
+const ID_TWINS: Record<string, string> = {
+  [`GET ${PAGE_DOCUMENT}/snapshot`]: `GET ${DOCUMENTS}/:documentId/snapshot`,
+  [`GET ${PAGE_DOCUMENT}/client-count`]: `GET ${DOCUMENTS}/:documentId/client-count`,
+  [`POST ${PAGE_DOCUMENT}/export`]: `POST ${DOCUMENTS}/:documentId/export`,
+  [`POST ${PAGE_DOCUMENT}/export-svg`]: `POST ${DOCUMENTS}/:documentId/export-svg`,
+  [`PUT ${PAGE_DOCUMENT}/file/:fileId`]: `PUT ${DOCUMENTS}/:documentId/files/:fileId`,
+  [`GET ${PAGE_DOCUMENT}/file/:fileId`]: `GET ${DOCUMENTS}/:documentId/files/:fileId`,
+  [`DELETE ${DOCUMENTS}/*`]: `DELETE ${DOCUMENTS}/:documentId`,
+  [`PUT ${DOCUMENTS}/*/path`]: `PUT ${DOCUMENTS}/:documentId/path`,
+  [`POST ${DOCUMENTS}/*/duplicate`]: `POST ${DOCUMENTS}/:documentId/duplicate`,
+  [`PUT ${DOCUMENTS}/*/name`]: `PUT ${DOCUMENTS}/:documentId/name`,
+  [`PUT ${DOCUMENTS}/*/pin`]: `PUT ${DOCUMENTS}/:documentId/pin`,
+  [`GET ${DOCUMENTS}/*/versions`]: `GET ${DOCUMENTS}/:documentId/versions`,
+  [`POST ${DOCUMENTS}/*/versions`]: `POST ${DOCUMENTS}/:documentId/versions`,
+  [`GET ${DOCUMENTS}/*/versions/:id/document`]: `GET ${DOCUMENTS}/:documentId/versions/:id/document`,
+  [`POST ${DOCUMENTS}/*/versions/:id/restore`]: `POST ${DOCUMENTS}/:documentId/versions/:id/restore`,
+}
+
+// The id form reaches the same handler, so its twin's answers, body and
+// response contract are its own; deriving them keeps the two from drifting.
+const ID_RULES: Record<string, Rule> = Object.fromEntries(
+  Object.entries(ID_TWINS).map(([twin, idKey]) => [idKey, PATH_RULES[twin] as Rule]),
+)
+
+export const RULES: Record<string, Rule> = { ...PATH_RULES, ...ID_RULES }

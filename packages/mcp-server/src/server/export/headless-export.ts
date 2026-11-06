@@ -32,9 +32,9 @@ export type HeadlessCanvasExportOptions = Pick<
   'padding' | 'scale' | 'theme' | 'style'
 >
 
-// Reads the persisted doc and derives its spatial canvas. A doc holding only
-// the retired Excalidraw `elements` list has no nodes and exports as an empty
-// canvas, the same as every other surface shows it.
+// Reads the persisted doc and derives its spatial canvas. A doc holding
+// entries in the retired Excalidraw `elements` list is refused
+// (RetiredStoredShapeError) rather than exported as an empty canvas.
 async function readCanvas(
   workspaceId: string,
   path: string,

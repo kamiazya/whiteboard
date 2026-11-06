@@ -19,7 +19,6 @@ import { isMissingFileError } from '../../shared/errno.js'
 import { MAX_TIMER_DELAY_MS } from '../../shared/timer-delay.js'
 import { getLogger } from '../log.js'
 import { workspaceFilesDir, workspacesRoot } from '../tenant/data-layout.js'
-import { listWorkspaces } from './document-store.js'
 import { FilesDirNotContainedError, purgeDanglingFiles } from './file-gc.js'
 import { parseFileGcIntervalMs } from './storage-env.js'
 import { globalStoreScope, type StoreScope } from './store-scope.js'
@@ -84,6 +83,28 @@ async function discoveredWorkspaceId(name: string, scope: StoreScope): Promise<s
   } catch {
     return null
   }
+}
+
+/**
+ * The registry's ids, minus rows keyed before the re-key onto ULIDs: those are
+ * skipped and reported per row, as discovery does, so one legacy row cannot
+ * reject the pass for every other workspace.
+ */
+async function listRegistryWorkspaces(scope: StoreScope): Promise<{ workspaceId: string }[]> {
+  const db = await scope.db()
+  const rows = await db.selectFrom('workspaces').select('id').execute()
+  const result: { workspaceId: string }[] = []
+  for (const { id } of rows) {
+    if (workspaceCanonicalIdSchema.safeParse(id).success) {
+      result.push({ workspaceId: id })
+      continue
+    }
+    log.warning(
+      { workspaceId: id },
+      'file-gc sweep: skipped a registry row not keyed by a canonical ULID; it was stored before the re-key onto ULIDs and is not read',
+    )
+  }
+  return result
 }
 
 async function discoverFsWorkspaces(scope: StoreScope): Promise<string[]> {
@@ -164,7 +185,7 @@ async function workspacesToSweep(
   scope: StoreScope,
   options: Pick<FileGcSweeperOptions, 'listWorkspaces' | 'discoverFsWorkspaces'>,
 ): Promise<Set<string>> {
-  const listWs = options.listWorkspaces ?? (() => listWorkspaces(scope))
+  const listWs = options.listWorkspaces ?? (() => listRegistryWorkspaces(scope))
   const discoverFs = options.discoverFsWorkspaces ?? (() => discoverFsWorkspaces(scope))
   const [dbWorkspaces, fsWorkspaces] = await Promise.all([listWs(), discoverFs()])
   return new Set([...fsWorkspaces, ...dbWorkspaces.map((w) => w.workspaceId)])

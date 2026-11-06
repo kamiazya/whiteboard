@@ -184,10 +184,11 @@ export function syncRootContainer(
     return spliceText(roots.text(key), value)
   }
   if (Array.isArray(value)) {
-    // A legacy List/MovableList root (old clients' `elements`). Carried as a
-    // VALUE copy — dropping a container kind the bridge does not favour would
-    // turn a save into content loss. Rewritten wholesale on change: this shape
-    // has no per-entry key to diff by.
+    // A sequence root of any name is carried BY KIND, as a VALUE copy —
+    // dropping a container kind the bridge does not favour would turn a save
+    // into content loss. Whether a reader serves it is
+    // retired-stored-shape.ts's question. Rewritten wholesale on change: this
+    // shape has no per-entry key to diff by.
     const list = roots.list(key)
     if (jsonEqual(list.toJSON(), value)) return false
     for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
@@ -377,8 +378,8 @@ export function copyContainerValue(
   } else if (kind === 'Text') {
     into.text(key).insert(0, (value as LoroText).toString())
   } else if (kind === 'MovableList' || kind === 'List') {
-    // A legacy list root, carried as a value copy — see syncRootContainer's
-    // array branch.
+    // A sequence root, carried by kind as a value copy — see
+    // syncRootContainer's array branch.
     const list = into.list(key)
     for (const entry of (value as LoroMovableList).toJSON() as unknown[]) {
       list.push(entry as Parameters<typeof list.push>[0])
