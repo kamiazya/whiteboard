@@ -194,9 +194,10 @@ paths:
   carry vendor keys, so refusing it would be wrong; this is the INTERNAL model, where a key it
   does not name is a defect. A plain `z.object` STRIPS an unknown key and returns success, which
   during ADR-0037's migration would have meant every reader still spelling the old key parsing
-  cleanly and losing what it read. Measured: without the storage lift that goes with it, a node
-  written under the old key does not lose a field — it VANISHES, because `readSpatialCanvas`
-  drops what fails to parse (`loro-adapter`'s `legacy-extension.test.ts`).
+  cleanly and losing what it read. Measured when it was introduced: without the storage lift that went
+  with it, a node written under the old key did not lose a field, it VANISHED, because
+  `readSpatialCanvas` drops what fails to parse. The lift is retired; such a record is now
+  refused by name (`loro-adapter`'s `retired-stored-shape.test.ts`).
 - Strictness has one cost worth knowing: a schema error names the KEY and not the node's type,
   so a caller told only that `label` is invalid is left guessing which of its nodes was wrong.
   `canvas-edit`'s patch path therefore uses strictness as the DETECTOR and still writes the
