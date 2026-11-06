@@ -26,6 +26,9 @@ export const documentFileRecordSchema = z.object({
   ref: blobRefSchema,
 })
 
+/** The retired `v: 1` envelope: only its version is read, to name it. */
+const retiredDocumentFileRecordSchema = z.object({ v: z.literal(1) }).loose()
+
 type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
 
 /** What `DocumentFileStore.read` found under a fileId. */
@@ -121,7 +124,7 @@ export class DocumentFileStore {
         if (raw === undefined) return null
         const parsed = documentFileRecordSchema.safeParse(raw)
         if (parsed.success) return parsed.data
-        return (raw as { v?: unknown } | null)?.v === 1 ? 'retired' : null
+        return retiredDocumentFileRecordSchema.safeParse(raw).success ? 'retired' : null
       })
     } catch (error) {
       return { kind: 'unreadable', error }

@@ -87,7 +87,7 @@ inside the serialised write; a folder on the copy path counts as taken) with
 a REQUIRED content seam, since placement alone would pass an empty copy.
 `DuplicatingInMemoryDocumentIndex` is the row-backed double's form of it,
 given a synchronous content-copy seam, and answers the same suite. `KeyedSerializer` is the one per-key, submission-ordered,
-non-poisoning async queue (the index's writes and apps/web's `LoroStore`).
+non-poisoning async queue (the index's writes).
 
 They must run unchanged in a browser like the rest of the package — the blob
 suite computes its expected digest with `globalThis.crypto.subtle`, never
