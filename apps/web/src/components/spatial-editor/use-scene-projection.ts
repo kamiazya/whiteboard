@@ -13,7 +13,7 @@ import { boundsOf, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useMemo } from 'react'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
-import { buildMinimapNodes } from '../../lib/spatial/minimap.js'
+import { buildMinimap } from '../../lib/spatial/minimap.js'
 import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 
@@ -191,11 +191,12 @@ export function useSceneProjection({
    */
   const palette = useMemo(() => resolveCanvasPalette(canvas, theme), [canvas, theme])
   /**
-   * Node boxes for the overview, each colour (its own, else its tag's by the
-   * library) resolved to the accent the scene uses; none falls back to muted.
+   * Node boxes and ink for the overview, each colour (its own, else a box's
+   * tag's by the library) resolved to the accent the scene uses; none falls
+   * back to muted.
    */
-  const minimapNodes = useMemo(
-    () => buildMinimapNodes(canvas.nodes, boxes, palette, tagLibrary),
+  const minimap = useMemo(
+    () => buildMinimap(canvas, boxes, palette, tagLibrary),
     [boxes, canvas, palette, tagLibrary],
   )
 
@@ -207,6 +208,6 @@ export function useSceneProjection({
     proposalChromeBoxes,
     selectionMembers,
     selectionBox,
-    minimapNodes,
+    minimap,
   }
 }

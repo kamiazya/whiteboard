@@ -209,7 +209,8 @@ to see everything, or to get closer to something, and the magnification
 between those two is not a number you have to manage.
 
 A corner **overview** of the whole canvas shows whenever the editor is wide
-enough to hold it beside the dock. In a narrower editor, such as a phone held
+enough to hold it beside the dock. It draws every box and every pen drawing,
+each in its own colour, so a board that holds only a sketch still has one. In a narrower editor, such as a phone held
 upright, it sits behind a map button just above the dock, hidden until you tap
 it and hidden again on a second tap; the choice lasts for the browser session.
 While you type into a note, label or comment the overview steps aside, so it

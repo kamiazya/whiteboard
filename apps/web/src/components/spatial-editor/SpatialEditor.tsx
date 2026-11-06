@@ -606,7 +606,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       proposalChromeBoxes,
       selectionMembers,
       selectionBox,
-      minimapNodes,
+      minimap,
     } = useSceneProjection({
       scene,
       bounds,
@@ -1711,10 +1711,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       scene (ADR-0040 decision 6). Screen space like the minimap; the keyed
       projection omits its SVG twin, so the corner is drawn once. */}
         {scene?.legend !== undefined && <LegendOverlay legend={scene.legend} />}
-        {boxes.length > 0 && (
+        {(boxes.length > 0 || minimap.strokes.length > 0) && (
           <MinimapOverlay
             collapsible={rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX}
-            boxes={minimapNodes}
+            {...minimap}
             viewportRect={{
               x: viewport.x,
               y: viewport.y,
