@@ -29,7 +29,8 @@ pnpm test --project mcp-node
 pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change touches UI
 
 # 2. After targeted test passes, run the broader gate for the touched area
-#    (not the whole repo: CI runs the full matrix on every push)
+#    (not the whole repo: CI runs every suite your change reaches;
+#    `pnpm test:affected` runs that same selection locally)
 pnpm check:local         # every gate CI's check job runs
 pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser + web-browser-window-state)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes

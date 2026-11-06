@@ -30,7 +30,7 @@
 // first answer and the wrong one: it drops real product coverage to dodge a
 // budget that is only tight because this lane made it so.
 //
-// Derives-and-execs rather than printing flags, for run-shared-layer-tests'
+// Derives-and-execs rather than printing flags, for affected-cli.mjs run's
 // reason: an empty --project filter set does not fail, it runs EVERY project.
 
 import { spawnSync } from 'node:child_process'

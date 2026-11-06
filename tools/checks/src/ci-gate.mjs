@@ -19,14 +19,18 @@
 // (`test-jsdom (1)`), so the question does not arise. `needs` stays, for
 // ordering and as the declared coverage list this cross-checks against.
 //
-// Three ways an aggregate gate goes quietly wrong, each closed here:
+// Four ways an aggregate gate goes quietly wrong, each closed here:
 //
 //   - it checks nothing and reports "no problems found" — an empty or
 //     unreadable job list is a failure, not a pass;
 //   - a job runs but is not looked at — every name in `needs` must appear in
 //     the run, so a job that vanished from the run fails the gate;
 //   - `skipped` is waved through. A job that fails to start also reports
-//     `skipped`, so it is allowed per job, with a reason.
+//     `skipped`, so it is allowed per job, with a reason;
+//   - a job that skipped its WORK as not affected by the change concludes
+//     `success` like one that ran. Each such skip must agree with the `scope`
+//     job's plan, and the scope job is itself a needed job, so a failed one
+//     fails the gate.
 
 import { isRunAsScript } from './is-run-as-script.mjs'
 
@@ -99,14 +103,74 @@ function jobProblem(job) {
 }
 
 /**
+ * The step a scoped job runs INSTEAD of its work when the change does not
+ * reach it (ci.yml). A job that skipped this way still concludes `success`,
+ * so the gate reads the step to tell a skip from a run.
+ */
+export const NOT_AFFECTED_STEP = 'Not affected by this change'
+
+/**
+ * The job that computes the change scope, whose `plan` output says which
+ * jobs a pull request reaches.
+ */
+export const SCOPE_JOB = 'scope'
+
+/**
+ * What is wrong with the jobs that skipped their work as not affected: each
+ * is a pass only when the scope job's plan ALSO says the job was not reached.
+ * A job's own detection and the plan run the same code on the same checkout,
+ * so a disagreement is a defect in one of them — and an unreadable plan is no
+ * evidence for the skip at all.
+ *
+ * @param {{name: string, steps?: {name: string, status: string, conclusion: string | null}[]}[]} jobs
+ * @param {{ jobs?: Record<string, { run?: unknown }> } | null} plan
+ * @returns {string[]}
+ */
+export function scopeProblems(jobs, plan) {
+  return jobs
+    .filter((job) =>
+      (job.steps ?? []).some(
+        (step) => step.name === NOT_AFFECTED_STEP && step.conclusion === 'success',
+      ),
+    )
+    .flatMap((job) => {
+      if (plan === null || typeof plan !== 'object' || typeof plan.jobs !== 'object') {
+        return [`${job.name}: skipped its work as not affected, but the scope plan is unreadable`]
+      }
+      const planned = plan.jobs[baseJobName(job.name)]
+      if (planned?.run === false) return []
+      return [
+        `${job.name}: skipped its work as not affected, but the \`${SCOPE_JOB}\` job's plan ` +
+          (planned === undefined ? 'does not name it' : 'says the change reaches it'),
+      ]
+    })
+}
+
+/**
+ * The scope plan out of the `needs` context, or null when it is absent or
+ * does not parse.
+ * @param {Record<string, { outputs?: Record<string, string> }>} needs
+ */
+export function readScopePlan(needs) {
+  const raw = needs?.[SCOPE_JOB]?.outputs?.plan
+  if (typeof raw !== 'string') return null
+  try {
+    return JSON.parse(raw)
+  } catch {
+    return null
+  }
+}
+
+/**
  * @param {{
  *   jobs: {name: string, status: string, conclusion: string | null}[],
  *   needed: string[],
  *   gateJobName: string,
+ *   plan?: { jobs?: Record<string, { run?: unknown }> } | null,
  * }} input
  * @returns {string[]} one line per problem; empty means the gate passes
  */
-export function gateFailures({ jobs, needed, gateJobName }) {
+export function gateFailures({ jobs, needed, gateJobName, plan = null }) {
   if (!Array.isArray(jobs)) {
     // Not "no problems": an unreadable list means the gate checked nothing.
     return ['the run job list was not an array, so no job was checked']
@@ -131,6 +195,7 @@ export function gateFailures({ jobs, needed, gateJobName }) {
     const problem = jobProblem(job)
     if (problem !== undefined) problems.push(problem)
   }
+  problems.push(...scopeProblems(others, plan))
   return problems
 }
 
@@ -203,6 +268,7 @@ export function stillSettling({ jobs, needed, gateJobName }) {
  *   sleep: (ms: number) => Promise<unknown>,
  *   needed: string[],
  *   gateJobName: string,
+ *   plan?: { jobs?: Record<string, { run?: unknown }> } | null,
  *   attempts?: number,
  * }} input
  */
@@ -211,16 +277,17 @@ export async function readSettledJobs({
   sleep,
   needed,
   gateJobName,
+  plan = null,
   attempts = SETTLE_ATTEMPTS,
 }) {
   let jobs = await fetchJobs()
-  let problems = gateFailures({ jobs, needed, gateJobName })
+  let problems = gateFailures({ jobs, needed, gateJobName, plan })
   for (let attempt = 1; attempt < attempts; attempt++) {
     if (problems.length === 0) break
     if (!stillSettling({ jobs, needed, gateJobName })) break
     await sleep(SETTLE_DELAY_MS)
     jobs = await fetchJobs()
-    problems = gateFailures({ jobs, needed, gateJobName })
+    problems = gateFailures({ jobs, needed, gateJobName, plan })
   }
   return { jobs, problems }
 }
@@ -280,6 +347,7 @@ async function main() {
       sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
       needed: Object.keys(needed),
       gateJobName,
+      plan: readScopePlan(needed),
     }))
   } catch (err) {
     // A gate that cannot see the run must block, never wave the merge through.
