@@ -588,9 +588,9 @@ describe('movedAnchor', () => {
     })
   })
   it('leaves a node set, a region and a non-spatial anchor where they are', () => {
-    const set = { kind: 'spatial', x: 1, y: 2, nodeIds: ['n1', 'n2'] } as const
-    const region = { kind: 'spatial', x: 1, y: 2, width: 10, height: 10 } as const
-    const document = { kind: 'document' } as const
+    const set: AnnotationAnchor = { kind: 'spatial', x: 1, y: 2, nodeIds: ['n1', 'n2'] }
+    const region: AnnotationAnchor = { kind: 'spatial', x: 1, y: 2, width: 10, height: 10 }
+    const document: AnnotationAnchor = { kind: 'document' }
     expect(movedAnchor(set, to)).toBe(set)
     expect(movedAnchor(region, to)).toBe(region)
     expect(movedAnchor(document, to)).toBe(document)
