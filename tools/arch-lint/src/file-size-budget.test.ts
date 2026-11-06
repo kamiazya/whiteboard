@@ -363,7 +363,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // fixture, the chunk-range no-op case, the drop-and-leaves-others-byte-identical
   // test, and the idempotency case that seeds a post-v20 sealed replica row so
   // the version guard has something it would delete.
-  'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1892,
   // The three cases pinning undo: the document agreeing with the screen after an
   // undo and after a redo, and a taken-back write settling as saved rather than
   // reading as pending forever.

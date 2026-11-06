@@ -179,7 +179,7 @@ async function readWorkspaceIdentity(
 }
 
 /**
- * Opens the whiteboard database (running the v14+ migration if needed) and
+ * Opens the whiteboard database (creating the baseline on a fresh install) and
  * caches the one canonical workspace id it holds. Safe to call from more than
  * one boot path or consumer — a resolved id is served from cache, and
  * concurrent unresolved calls share one open.

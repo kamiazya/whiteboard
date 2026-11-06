@@ -19,8 +19,8 @@ import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
  *
  * Also seeds the `getBrowserWorkspaceId()` test seam with a freshly-minted
  * ULID: a fixture that seeds the isolated DB's `workspaces` store directly
- * (rather than through a real v14 open + resolve) never runs the migration
- * that would otherwise supply one, and the production code paths under test
+ * (rather than through a real fresh open + resolve) never gets the row the
+ * baseline mints, and the production code paths under test
  * read the accessor synchronously. Every caller in this file spells
  * `getBrowserWorkspaceId()`, so the seeded id is what those calls see.
  */

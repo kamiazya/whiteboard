@@ -1,8 +1,6 @@
 import { type DocumentKind, generateDocumentId } from '@kamiazya/whiteboard-model'
 import { type DocumentEntry, documentEntrySchema } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from '../lib/browser-idb.js'
-import { resolveBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { inTransaction, request } from '../lib/idb-tx.js'
 
 export interface LegacyRowInput {
@@ -45,26 +43,4 @@ export async function seedLegacyRow(
     )
   })
   return entry
-}
-
-/**
- * The browser workspace's per-document rows, read raw and held as a
- * port-shaped index — for a suite that inspects what an upgrade left in the
- * row store, which no production reader lists any more.
- */
-export async function legacyRowsOfBrowserWorkspace(
-  dbName?: string,
-): Promise<InMemoryDocumentIndex> {
-  const workspaceId = await resolveBrowserWorkspaceId(dbName)
-  const index = new InMemoryDocumentIndex()
-  index.seedWorkspace({ workspaceId })
-  const rows = await inTransaction(dbName, [DOCUMENT_INDEX_STORE], 'readonly', (tx) =>
-    request(
-      tx
-        .objectStore(DOCUMENT_INDEX_STORE)
-        .getAll(IDBKeyRange.bound([workspaceId], [workspaceId, []])),
-    ),
-  )
-  for (const row of rows) index.seed({ ...documentEntrySchema.parse(row), workspaceId })
-  return index
 }

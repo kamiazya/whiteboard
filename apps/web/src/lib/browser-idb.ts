@@ -1,45 +1,118 @@
 /**
- * Single opener for the shared 'whiteboard' IndexedDB, used by both
- * browser-backend.ts (JSON 'documents' metadata) and loro-store.ts
- * (canonical 'loroDocuments' CRDT records). Both stores live in the same
- * database, so a version bump or upgrade change to one that isn't mirrored in
- * the other produces a VersionError the next time the stale opener runs.
- * Owning DB_VERSION and onupgradeneeded in one place makes that impossible by
- * construction instead of relying on a hand-synced comment.
+ * Single opener for the shared 'whiteboard' IndexedDB. Every store lives in
+ * this one database, so the version and the schema are owned here, in one
+ * place, rather than by each store that opens it.
  *
- * That pairing is the whole invariant, and it is what decides the split
- * beside this file. The upgrade STEPS are `browser-idb-upgrades.ts` and the
- * store NAMES are `browser-idb-stores.ts`; neither weakens the sentence
- * above, because a step is only ever reached through the handler here and a
- * name is a string with no version in it. What may never move is DB_VERSION
- * away from the `onupgradeneeded` that reads it.
- *
- * The names are re-exported below, so a caller still reaches them here. They
- * live one level down because BOTH this file and the steps read them, and the
- * steps cannot import this one — the handler calls them, so the edge back
- * would be a cycle.
+ * ONE baseline schema, created whole on a fresh install. There is no upgrade
+ * ladder: a database at an older version than this one is not migrated but
+ * REFUSED (`BrowserStorageRefusedError`, reason `database-version`), and is
+ * left exactly as it was — the open is aborted before anything is written,
+ * so no byte the person had is touched. Old stored shapes are not carried
+ * forward (0.0.x, no compatibility), and refusing by name is what keeps that
+ * from reading as an empty browser. A daemon-kept workspace never opens this
+ * database, so it is unaffected.
  */
-import { CREATED_STORES, DELETED_STORES, dropStore, ensureStore } from './browser-idb-stores.js'
-import {
-  copyStoreThenDelete,
-  ORDERED_UPGRADE_STEPS,
-  RENAMED_STORES,
-  renameMetaKey,
-  runUpgradeStepsInOrder,
-  sweepVersionsWrittenBeforeDigests,
-} from './browser-idb-upgrades.js'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 
-// Re-exported so a caller reaches a store name at the module it already
-// imports; the names themselves live one level down, where both this file
-// and the upgrade steps can read them without closing a cycle.
-export * from './browser-idb-stores.js'
-export {
-  BROWSER_DEFAULT_SEGMENT,
-  discardPlaintextReplicas,
-  mintBrowserWorkspaceSegment,
-  rekeyBrowserWorkspace,
-  sweepVersionsWrittenBeforeDigests,
-} from './browser-idb-upgrades.js'
+/** The `DocumentIndex` port's two stores. Exported so the implementation and
+ * the opener cannot disagree about a name. */
+export const WORKSPACES_STORE = 'workspaces'
+export const DOCUMENT_INDEX_STORE = 'documentIndex'
+
+/** The `BlobStore` port's store. Keyed by `<algorithm>:<digestHex>` — the ref
+ * IS the key, which is what makes the store deduplicating by construction. */
+export const BLOBS_STORE = 'blobs'
+
+/** Where a document's file references live: fileId -> BlobRef. */
+export const DOCUMENT_FILES_STORE = 'documentFiles'
+
+/** The `DocumentStore` port's store, keyed by `docRefKey`. Holds a document's
+ * snapshot MANIFEST, frontier and delta log — never the snapshot's bytes. */
+export const SYNC_DOCUMENTS_STORE = 'syncDocuments'
+
+/**
+ * The snapshot bytes those manifests describe, keyed by `[docRefKey, index]`.
+ *
+ * A separate store rather than a separate field, because the cost this splits
+ * is IndexedDB's `get`: a record comes back whole or not at all, so any read of
+ * a document's delta log paid for its snapshot too. A compound key gives each
+ * chunk its own value while keeping a document's chunks contiguous, so
+ * replacing or deleting a snapshot is one ranged operation.
+ */
+export const SYNC_SNAPSHOT_CHUNKS_STORE = 'syncSnapshotChunks'
+
+/**
+ * When a document's content was last written, keyed by documentId.
+ *
+ * Its own store because it belongs to neither port. `DocumentStore` has no
+ * notion of wall-clock time — a frontier is the only ordering it knows — and
+ * `DocumentIndex` deliberately holds only placement and naming. This is the
+ * third app-side concern beside the default-document pointer and the content
+ * clock that reads it, and it lives where those do: outside the contracts.
+ */
+export const CONTENT_TIMESTAMPS_STORE = 'contentTimestamps'
+
+/**
+ * A document's saved versions, keyed by version id, with a `byDocument`
+ * index over `[workspaceId, documentId]`.
+ *
+ * A version is a FRONTIER into the workspace record (the same shape the
+ * daemon's `versions` table keeps) plus the row the History panel lists —
+ * never a copy of the content. The record keeps every op it ever held (the
+ * fold re-snapshots, it does not shallow-export), so a frontier saved today
+ * still checks out after any number of folds.
+ */
+export const VERSIONS_STORE = 'versions'
+export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
+
+/**
+ * The name the browser's own workspace answers to in a URL.
+ *
+ * A fixed word rather than something derived, because there is nothing to
+ * derive from: this is the one workspace nobody chose to create. `default`
+ * asserts only what is true — the workspace you get without choosing one —
+ * where `personal` or `home` would assert a use the app cannot know.
+ * ADR-0019 makes a segment renameable, so a word its owner dislikes costs
+ * exactly one rename.
+ */
+export const BROWSER_DEFAULT_SEGMENT = 'default'
+
+/** A store the baseline holds: its name, the options it is created with, and its indexes. */
+type StoreSpec = {
+  readonly name: string
+  readonly options?: IDBObjectStoreParameters
+  readonly indexes?: readonly {
+    readonly name: string
+    readonly keyPath: string | readonly string[]
+    readonly options?: IDBIndexParameters
+  }[]
+}
+
+/**
+ * Every store the database holds. `documentIndex` keeps the per-document rows
+ * builds before the workspace tree wrote: nothing writes it now, and a row in
+ * it is a workspace the browser keeper refuses (`holdsPreTreeRecords`).
+ */
+const BASELINE_STORES: readonly StoreSpec[] = [
+  { name: 'meta' },
+  { name: WORKSPACES_STORE },
+  { name: BLOBS_STORE },
+  { name: DOCUMENT_FILES_STORE },
+  { name: SYNC_DOCUMENTS_STORE },
+  { name: SYNC_SNAPSHOT_CHUNKS_STORE },
+  { name: CONTENT_TIMESTAMPS_STORE },
+  {
+    name: DOCUMENT_INDEX_STORE,
+    options: { keyPath: ['workspaceId', 'path'] },
+    indexes: [{ name: 'byId', keyPath: ['workspaceId', 'documentId'], options: { unique: true } }],
+  },
+  {
+    name: VERSIONS_STORE,
+    options: { keyPath: 'id' },
+    indexes: [{ name: VERSIONS_BY_DOCUMENT_INDEX, keyPath: ['workspaceId', 'documentId'] }],
+  },
+]
 
 const DB_NAME = 'whiteboard'
 
@@ -68,128 +141,30 @@ export function whiteboardDbName(): string {
 }
 
 /**
- * v2 -> v3: elements are canonical in the Loro doc; the JSON metadata row is
- * demoted to metadata only (id/name/updatedAt). Any legacy 'scene' field left
- * over from a pre-v3 row is stripped during upgrade so no old-schema shape
- * survives it.
- *
- * v3 -> v4: additive — adds the uploaded-image Blob store (see
- * document-file-store.ts). Existing data is untouched.
- *
- * v4 -> v5: additive — added the 'reconnectKeypairs' object store (WebCrypto
- * ECDSA P-256 keypairs for silent-reconnect).
- *
- * v5 -> v6: REMOVES the 'reconnectKeypairs' object store. Unattended
- * reconnect is gone (see docs/explanation/security-model.md): a process
- * that takes over this origin's port inherits everything in this origin's
- * storage, and a non-extractable CryptoKey does not need to be exfiltrated
- * to be abused — same-origin script can call crypto.subtle.sign() with it
- * directly. Deleting the store (not just abandoning it) is the point: a
- * credential no longer read but still stored is still stealable. The
- * companion plaintext secret this store's credential redeemed
- * (localStorage['whiteboard.reconnect-secret.v1']) is purged separately by
- * purge-legacy-reconnect-credentials.ts, since a localStorage key is not
- * reachable from this IndexedDB upgrade transaction.
- *
- * v6 -> v7: renames the three stores that spelled the CONTAINER `canvas`,
- * which ADR-0009 calls a Document — 'canvases' -> 'documents',
- * 'loroCanvases' -> 'loroDocuments', 'canvasFiles' -> 'documentFiles' — plus
- * the 'meta' pointer key 'defaultCanvasId' -> 'defaultDocumentId'.
- * IndexedDB has no rename, so each store is created, copied record by record,
- * and the old one deleted once its cursor is exhausted. The pre-v3 'scene'
- * strip is folded into that copy rather than kept as a separate pass: it is a
- * guarded no-op on every v3+ row, and running it inside the copy avoids two
- * cursors contending over the same source store.
- *
- * v7 -> v8: DISCARDS every document row that predates workspace+path
- * addressing. A pre-v8 row carries only `{id, name, updatedAt, kind}` — no
- * workspace, no path, and a `crypto.randomUUID()` id the model's canonical
- * ULID schema refuses — so there is nothing to migrate it TO without
- * inventing an address, and an invented address is worse than none: it is
- * indistinguishable from one the user chose. Local documents are discardable
- * by explicit decision (0.0.x, no users), so the row and its Loro record are
- * deleted outright, and the default pointer is cleared when it named one of
- * them. Deleting the bytes matters as much as the row: a Loro record no
- * document names is unreachable storage nothing would ever collect.
- *
- * v8 -> v9: adds the two stores behind the browser's `DocumentIndex` port
- * implementation — `workspaces` (keyed by workspaceId) and `documentIndex`
- * (keyed by the pair `[workspaceId, path]`, with a unique `byId` index on
- * `[workspaceId, documentId]`). Purely additive; the bespoke `documents`
- * store keeps serving `browser-backend.ts` until its call sites move.
- *
- * The compound keys are the schema doing the work rather than the code: the
- * primary key IS the uniqueness rule `createDocument` has to enforce, so
- * claiming a path is one `add()` that fails on conflict rather than a read
- * followed by a write two callers could interleave.
- *
- * v9 -> v10: backfills those two stores from the bespoke `documents` store
- * and then drops it. v9 created them empty on the promise that `documents`
- * would keep serving reads "until its call sites move"; this is that move.
- * The row shapes already agree — v8 left every surviving row carrying a
- * `workspaceId` and a `path` — so the backfill is a copy, not a conversion.
- * The `workspaces` row is written even when there is nothing to copy: the
- * port answers a list against an unknown workspace with an error rather than
- * an empty list, so a user who had no documents must still get a workspace or
- * their first visit reads as a failure.
- *
- * v10 -> v11: adds `blobs`, the `BlobStore` port's store — content-addressed
- * bytes keyed by `<algorithm>:<digestHex>`. Purely additive, and nothing is
- * migrated INTO it: `documentFiles` keeps its own records and gains a
- * fileId -> ref mapping beside them, because the fileId a document embeds is
- * a published address (the daemon's file route validates it) and is not this
- * increment's to change.
- *
- * v11 -> v12: adds `syncDocuments`, the `DocumentStore` port's store. One
- * record per `docRefKey`, holding the snapshot manifest, its chunk bytes, the
- * frontier and the delta log together — the daemon spreads the same state
- * across four SQL tables because a row is the unit there, and a record is the
- * unit here, so one `readwrite` transaction over one key gives the port's
- * atomicity without a join.
- *
- * Purely additive, and deliberately NOT where `LoroStore` writes: that store
- * keeps `loroDocuments` until its callers move, and two writers on one shape
- * during a transition is how a subtle corruption gets in.
- *
- * v12 -> v13: moves a snapshot's chunk BYTES out of the `syncDocuments`
- * record into their own store, `syncSnapshotChunks`, keyed by the pair
- * `[docRefKey, chunkIndex]`. The record keeps the manifest and becomes
- * envelope v2.
- *
- * v12 put them together for atomicity, which one record does buy. What it also
- * bought is a read of the whole snapshot on every edit: `appendDeltas` reads
- * the record to append to its delta log, and IndexedDB has no partial `get`,
- * so appending 88 bytes deserialized however many megabytes the document had
- * grown to. Two stores in one `readwrite` transaction keep the atomicity and
- * charge the append only for what it touches.
- *
- * Cross-tab upgrades are handled rather than accepted from v8 on: every
- * connection this module opens closes itself on `versionchange`, so a newer
- * tab's upgrade is not blocked by an older one sitting idle, and a block that
- * happens anyway (a tab still running a pre-v8 bundle) rejects with a
- * message a caller can show instead of hanging on a request that never
- * settles.
- *
- * v13 -> v14: re-keys the browser's single workspace off the literal string
- * `'local'` onto a canonical ULID (ADR-0019's browser-keeper half — the
- * daemon keeper is a separate lane). `'local'` was never a valid
- * `workspaceCanonicalIdSchema` value; it survived as a stand-in because
- * nothing before this needed the two keepers' workspace ids to share a
- * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
- * rename-and-done.
- *
- * v18 -> v19: EMPTIES the `versions` store, because a point saved before a
- * row carried its content's digest can never gain one. The reasoning, and why
- * it is a `clear()` rather than the cursor rewrite the v18 note below refuses,
- * is at `sweepVersionsWrittenBeforeDigests`.
- *
- * v19 -> v20: DISCARDS a `workspace-tree` record this browser did not keep
- * itself (ADR-0042/0043's read plane) — a daemon replica pulled and stored
- * before this release sealed it, plaintext at rest, with no key ever
- * persisted to seal it with retroactively. The next daemon resolve re-pulls
- * it through `openDocumentStore`, sealed. See `discardPlaintextReplicas`.
+ * The one schema version. It stays at the number the last upgrade step
+ * reached, so a database that step left behind opens as the baseline it is;
+ * every lower number is a database this build refuses.
  */
 export const DB_VERSION = 20
+
+/**
+ * Creates the baseline on a fresh install: every store, and the browser's own
+ * workspace — the one nobody chose to create — under a canonical id and the
+ * `default` segment, so a first visit has a workspace to list.
+ */
+function createBaseline(db: IDBDatabase, tx: IDBTransaction): void {
+  for (const spec of BASELINE_STORES) {
+    const store = db.createObjectStore(spec.name, spec.options)
+    for (const index of spec.indexes ?? []) {
+      store.createIndex(index.name, index.keyPath as string | string[], index.options)
+    }
+  }
+  const workspaceId = generateDocumentId()
+  tx.objectStore(WORKSPACES_STORE).put(
+    { workspaceId, segment: BROWSER_DEFAULT_SEGMENT },
+    workspaceId,
+  )
+}
 
 /**
  * The database name is a parameter so a test can have one of its own. Browser
@@ -201,38 +176,19 @@ export const DB_VERSION = 20
 export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, DB_VERSION)
+    let refusedFrom: number | null = null
     req.onupgradeneeded = (event) => {
-      const db = req.result
-      // The schema is a declaration (`CREATED_STORES` / `DELETED_STORES`) and
-      // this is the loop that applies it. The rename TARGETS come from
-      // `RENAMED_STORES` instead, which is where the pairing lives.
-      for (const spec of CREATED_STORES) ensureStore(db, spec)
-      for (const [, to] of RENAMED_STORES) ensureStore(db, { name: to })
-      for (const name of DELETED_STORES) dropStore(db, name)
-
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.
       const tx = req.transaction
       if (!tx) return
-      // Unordered against the chain below on purpose: it walks nothing, and no
-      // copy in that chain writes this store.
-      sweepVersionsWrittenBeforeDigests(tx, event.oldVersion)
-      renameMetaKey(tx, 'defaultCanvasId', 'defaultDocumentId')
-      // The ordered chain starts only once every rename copy has drained,
-      // because its first step walks the store those copies are still
-      // filling. Starting it beside them is NOT equivalent: a cursor opened
-      // while the copy's puts are still queued in their own callbacks sees an
-      // empty store, deletes nothing, and looks exactly like a successful
-      // upgrade. Measured — a v6 pre-path row survived a v6->v8 open until
-      // this was ordered. Why the steps are then ordered AMONG THEMSELVES is
-      // on `ORDERED_UPGRADE_STEPS`, entry by entry.
-      let pendingCopies = RENAMED_STORES.length
-      const onCopyDone = () => {
-        pendingCopies -= 1
-        if (pendingCopies === 0) {
-          runUpgradeStepsInOrder(ORDERED_UPGRADE_STEPS, tx, event.oldVersion, () => {})
-        }
+      if (event.oldVersion === 0) {
+        createBaseline(req.result, tx)
+        return
       }
-      for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to, onCopyDone)
+      // Aborted, not upgraded: the abort rolls the version change back, so
+      // the database stays at its old version with every record it held.
+      refusedFrom = event.oldVersion
+      tx.abort()
     }
     req.onsuccess = () => {
       const db = req.result
@@ -249,6 +205,17 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
     // or delete, which is the only harm an unowned connection can do here.
     req.onblocked = () =>
       reject(new Error('another tab has this app open at an older version; close it and reload'))
-    req.onerror = () => reject(req.error)
+    req.onerror = () => {
+      if (refusedFrom === null) {
+        reject(req.error)
+        return
+      }
+      reject(
+        new BrowserStorageRefusedError(
+          'database-version',
+          `database version ${refusedFrom}, baseline ${DB_VERSION}`,
+        ),
+      )
+    }
   })
 }

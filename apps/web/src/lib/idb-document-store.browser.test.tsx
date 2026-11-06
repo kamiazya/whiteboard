@@ -53,9 +53,9 @@ describe('IdbDocumentStore layout', () => {
     documentId: '01JD000000000000000000000A',
   }
 
-  function openRaw(version?: number): Promise<IDBDatabase> {
+  function openRaw(): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {
-      const req = version === undefined ? indexedDB.open(DB_NAME) : indexedDB.open(DB_NAME, version)
+      const req = indexedDB.open(DB_NAME)
       req.onupgradeneeded = () => {
         const db = req.result
         if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
@@ -70,8 +70,8 @@ describe('IdbDocumentStore layout', () => {
     })
   }
 
-  async function withRaw<T>(body: (db: IDBDatabase) => Promise<T>, version?: number): Promise<T> {
-    const db = await openRaw(version)
+  async function withRaw<T>(body: (db: IDBDatabase) => Promise<T>): Promise<T> {
+    const db = await openRaw()
     try {
       return await body(db)
     } finally {
@@ -140,27 +140,6 @@ describe('IdbDocumentStore layout', () => {
     // so the assertion above cannot be passing because the chunks were still
     // there.
     await expect(store.loadSnapshot({ docRef })).rejects.toThrow(/chunks/)
-  })
-
-  it('carries a pre-split record with inline chunks out to the chunk store', async () => {
-    const bytes = Uint8Array.from({ length: 3000 }, (_, i) => i % 251)
-    const { manifest, chunks } = chunkSnapshot(bytes, 1024)
-    await withRaw(
-      (db) =>
-        put(
-          db,
-          SYNC_DOCUMENTS_STORE,
-          { v: 1, snapshot: { manifest, chunks }, frontier: new Uint8Array([9]), deltas: [] },
-          docRefKey(docRef),
-        ),
-      12,
-    )
-
-    const loaded = await new IdbDocumentStore(DB_NAME).loadSnapshot({ docRef })
-    expect(loaded?.manifest).toEqual(manifest)
-    expect(loaded?.chunks.map((chunk) => [...chunk.bytes])).toEqual(
-      chunks.map((chunk) => [...chunk.bytes]),
-    )
   })
 
   // A v2 record is lifted on read and its first append is permanent, so the

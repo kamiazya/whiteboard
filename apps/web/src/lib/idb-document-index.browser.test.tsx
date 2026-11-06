@@ -19,8 +19,8 @@ import { inTransaction, request } from './idb-tx.js'
 // Its OWN database, not the app's. Browser tests share an origin, so deleting
 // `whiteboard` between cases would tear it out from under whatever other file
 // is mid-fixture — and the failure would land there, in a test that did
-// nothing wrong. Measured: it did exactly that to
-// `browser-idb-migration.browser.test.tsx`.
+// nothing wrong. Measured: it did exactly that to the upgrade suite that
+// stood beside this one.
 const DB_NAME = 'whiteboard-document-index-conformance'
 
 describe('IdbDocumentIndex.holdsPreTreeRecords', () => {

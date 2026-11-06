@@ -51,15 +51,15 @@ describe('createBrowserFilesSource', () => {
 
   it('lists a fresh database as empty, not as missing', async () => {
     // Written as the missing-workspace case first, and the test refuted its
-    // own premise: the v8+ IndexedDB upgrade seeds the browser workspace row
-    // unconditionally, so a fresh database HAS the workspace before anything
+    // own premise: a fresh IndexedDB's baseline seeds the browser workspace
+    // row unconditionally, so a fresh database HAS the workspace before anything
     // else touches it. The `WorkspaceMissingError` mapping in the source
     // stays — it guards a state a hand-edited store can still reach — but the
     // reachable first-run behaviour is an empty list.
     //
     // Nothing seeds a workspace here on purpose — that is the point being
     // tested — so `getBrowserWorkspaceId()` has to read the id the fresh
-    // database's own v14 upgrade actually minted, not the arbitrary id
+    // database's own baseline actually minted, not the arbitrary id
     // `claimIsolatedWhiteboardDb` claimed for tests that create their
     // workspace explicitly under it.
     resetBrowserWorkspaceIdForTests()

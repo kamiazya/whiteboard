@@ -7,8 +7,8 @@
  * IndexedDB open has ever gated boot (every browser-workspace call site
  * already isolates a failed open locally — see e.g. workspace-content.ts's
  * `.open(...).catch(() => null)`), and a daemon-only route must not
- * white-screen because THIS tab's browser storage is unavailable (a stale
- * tab blocking the v14 upgrade, a quota failure, Safari private browsing).
+ * white-screen because THIS tab's browser storage is unavailable (a
+ * database older than the baseline, a quota failure, Safari private browsing).
  * `resolveBrowserWorkspaceId()` caches the rejection's cause itself, so
  * swallowing it here for boot purposes only still lets every later
  * `getBrowserWorkspaceId()` read throw that cause into whichever browser-

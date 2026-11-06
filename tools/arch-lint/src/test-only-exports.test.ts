@@ -71,7 +71,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/hooks/use-document-file-seams.ts#toFacetCard',
   'apps/web/src/hooks/use-tag-vocabulary.ts#readTagVocabulary',
   'apps/web/src/lib/block-range-at.ts#blockRangeAt',
-  'apps/web/src/lib/browser-idb.ts#DB_VERSION',
   'apps/web/src/lib/browser-workspace-id.ts#getBrowserWorkspaceIdentity',
   'apps/web/src/lib/destructive-copy.ts#DestructiveDescription',
   'apps/web/src/lib/extension-bridge-fetch.ts#createBridgeFetch',
@@ -204,9 +203,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
  * re-export), not a test reaching into an internal.
  */
 const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
-  'apps/web/src/lib/browser-idb-upgrades.ts#discardPlaintextReplicas',
-  'apps/web/src/lib/browser-idb-upgrades.ts#mintBrowserWorkspaceSegment',
-  'apps/web/src/lib/browser-idb-upgrades.ts#rekeyBrowserWorkspace',
   'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
   'packages/canvas-render/src/layout/comment-placement.ts#COMMENT_BUBBLE_OFFSET_PX',
   'packages/canvas-render/src/layout/comments.ts#COMMENT_PIN_SIZE_PX',
@@ -361,10 +357,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 143
+const DEBT_CEILING = 142
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 18
+const PUBLISHED_CEILING = 15
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

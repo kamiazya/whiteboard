@@ -238,11 +238,12 @@ A `bounded` lease
 lapses client-side on the same clock check the daemon's own copy uses, and a
 key withheld is felt at the next ask, not before: an already-read
 replica stays readable in memory until the tab closes, matching the
-plaintext-doesn't-mean-invalidated point above. A replica this browser
-stored **before** this sealing shipped is plaintext on disk with no key ever
-recorded to seal it retroactively — the next IndexedDB open (`DB_VERSION`
-20) discards that record outright, chunks included, and the next daemon
-resolve re-pulls it sealed.
+plaintext-doesn't-mean-invalidated point above. A browser database written
+**before** this sealing shipped is older than the one schema the app now
+creates, so the app refuses to open it at all rather than read a plaintext
+replica out of it: the page says the saved data comes from an older version
+and that clearing the site's data starts a new workspace. Workspaces a daemon
+keeps are unaffected, and the next daemon resolve pulls their replica sealed.
 
 **The offline read page shows one of six states**, decided from what the
 daemon answered, what the in-memory key holder knows, and whether this

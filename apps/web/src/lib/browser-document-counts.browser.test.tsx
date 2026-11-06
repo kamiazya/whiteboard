@@ -72,11 +72,10 @@ it('counts each workspace separately', async () => {
   // not count, so the absence has to fail here or nowhere.
   //
   // Asserted as a SUBSET rather than the whole key set: opening a fresh
-  // database runs its upgrade chain, which seeds a `'local'` row and then
-  // rekeys it to a freshly minted canonical ULID. That third workspace is
-  // the database's, not this test's, and pinning an exact set would make
-  // this fail whenever the migrations change something it never meant to
-  // assert about.
+  // database creates its baseline, which mints a workspace row of its own
+  // under a fresh canonical ULID. That third workspace is the database's,
+  // not this test's, and pinning an exact set would make this fail whenever
+  // the baseline changes something it never meant to assert about.
   expect(counts.has(ACTIVE)).toBe(true)
   expect(counts.has(SECOND)).toBe(true)
   expect(counts.get(ACTIVE)).toBe(2)

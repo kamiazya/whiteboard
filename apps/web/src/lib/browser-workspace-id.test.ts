@@ -1,6 +1,6 @@
 /**
  * The synchronous accessor + async resolver for the browser's own workspace
- * id — the canonical ULID a v14+ database keys its `workspaces` row under.
+ * id — the canonical ULID the database keys its `workspaces` row under.
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
