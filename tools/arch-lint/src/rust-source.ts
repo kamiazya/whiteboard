@@ -252,10 +252,27 @@ function headerEnd(code: string, from: number): { at: number; body: boolean } | 
   return undefined
 }
 
+/**
+ * `header` with every `<...>` group removed, at any nesting depth. A scan with
+ * a depth counter rather than a repeated regex, so `Deep<Vec<Option<Box<T>>>>`
+ * loses all four levels; `->` is an arrow, not a close.
+ */
+function withoutGenerics(header: string): string {
+  let depth = 0
+  let out = ''
+  for (let i = 0; i < header.length; i += 1) {
+    const ch = header[i]
+    if (ch === '<') depth += 1
+    else if (ch === '>' && header[i - 1] !== '-' && depth > 0) depth -= 1
+    else if (depth === 0) out += ch
+  }
+  return out
+}
+
 /** The type an `impl` header is for: `impl<T> Trait for Type<T>` and `impl Type` both answer `Type`. */
 function implSubject(header: string): string {
-  const withoutGenerics = header.replace(/<[^<>]*>/g, '').replace(/<[^<>]*>/g, '')
-  const subject = withoutGenerics.split(/\bfor\b/).pop() ?? withoutGenerics
+  const plain = withoutGenerics(header)
+  const subject = plain.split(/\bfor\b/).pop() ?? plain
   const path = subject.replace(/\bwhere\b[\s\S]*$/, '').match(/[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*/g)
   return path?.at(-1)?.split('::').at(-1) ?? 'impl'
 }

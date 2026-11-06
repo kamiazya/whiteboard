@@ -86,6 +86,19 @@ describe('measureRustSource: fn bodies by brace matching over code', () => {
     expect(measured.find((row) => row.key === 'f.rs#Board.short')?.lines).toBe(3)
   })
 
+  it('names an impl by its subject under generics nested to any depth', () => {
+    const nested = [
+      'impl<T> Iterator for Deep<Vec<Option<Box<T>>>> { fn next(&mut self) {} }',
+      'impl<F: Fn(u8) -> u8> Apply<F> { fn run(&self) {} }',
+      'impl Plain { fn new() {} }',
+    ].join('\n')
+    expect(measureRustSource(nested, 'h.rs').map((row) => row.key)).toEqual([
+      'h.rs#Deep.next',
+      'h.rs#Apply.run',
+      'h.rs#Plain.new',
+    ])
+  })
+
   it('indexes a name that repeats in one scope', () => {
     const twice = 'fn a() {}\n#[cfg(x)]\nfn a() {}\n'
     expect(measureRustSource(twice, 'g.rs').map((row) => row.key)).toEqual(['g.rs#a~1', 'g.rs#a~2'])
