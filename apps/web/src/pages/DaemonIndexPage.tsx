@@ -16,7 +16,6 @@ import {
   createDaemonFetch,
   createDocument,
   DaemonApiError,
-  duplicateDocument,
   listWorkspaces,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
@@ -31,7 +30,7 @@ import {
   workspaceHandle,
   workspaceLabel,
 } from '../lib/workspace-handle.js'
-import { type DocumentRow, deleteEach } from './daemon-index-actions.js'
+import { type DocumentRow, deleteRows, duplicateRow } from './daemon-index-actions.js'
 // What the list shows: a failed load with the recovery that is actually
 // available, the transient loading state, onboarding, or the panel. Split out
 // of the page body — each arm is a different screen, and the page is about
@@ -112,6 +111,7 @@ function selectionOf(
 // and these rows serve lookups (a name, a path, a kind) only.
 function listingRows(entries: readonly WorkspaceDocumentEntry[]): DocumentRow[] {
   return entries.map((entry) => ({
+    documentId: entry.documentId,
     path: entry.path,
     displayName: documentLabel(entry, 'path'),
     updatedAt: entry.updatedAt,
@@ -489,7 +489,7 @@ export function DaemonIndexPage({
       // reset in the workspace effect below.
       const workspaceAtStart = selectedWorkspace
       if (!workspaceAtStart) throw new Error('No workspace is selected.')
-      return deleteEach(daemonFetch, daemonBaseUrl, workspaceAtStart, paths)
+      return deleteRows(daemonFetch, daemonBaseUrl, workspaceAtStart, rows, paths)
     },
     lookup: (path) => rows.find((row) => row.path === path),
     refresh: refreshAfterDelete,
@@ -584,7 +584,7 @@ export function DaemonIndexPage({
       const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
       let failure: string | null = null
       try {
-        await duplicateDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, sourcePath, request)
+        await duplicateRow(daemonFetch, daemonBaseUrl, workspaceAtStart, rows, sourcePath, request)
       } catch (err) {
         failure = messageOf(err, 'Failed to duplicate document.')
       }

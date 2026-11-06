@@ -78,7 +78,11 @@ export interface WorkspaceFilesSource {
    * Both shipped keepers answer it, which `keeper-parity.test.ts` states
    * member by member.
    */
-  setPinned?(entry: Pick<WorkspaceDocumentEntry, 'path'>, pinned: boolean): Promise<void>
+  setPinned?(
+    entry: Pick<WorkspaceDocumentEntry, 'path'> &
+      Partial<Pick<WorkspaceDocumentEntry, 'documentId'>>,
+    pinned: boolean,
+  ): Promise<void>
   /**
    * Every NAMED folder, once per path — what a folder is called apart from
    * its segment, which stays its address. Read beside `listDocuments` and

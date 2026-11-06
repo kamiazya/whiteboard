@@ -209,18 +209,30 @@ function useDaemonDocument(
     proposals,
   } = sync
 
+  // Undefined until the list names a row for this path — a refresh in flight
+  // leaves it so, which both the picker's exclusion and the backlinks fetch
+  // read as "not yet".
+  const currentSummary = controller.documents.find((d) => d.path === controller.path)
+  const currentDocumentId = currentSummary?.documentId
+
   // New file nodes store the target's immutable id (ADR-0008: stored
   // references key on ids, so a path rename cannot dangle them); the
-  // daemon's read routes stay path-addressed, so refs resolve to the
-  // CURRENT path through the live documents list. Read through a ref so the
-  // adapter identity survives list refreshes; the lookup itself resolves by
-  // membership, never by format — legacy path refs miss it and pass
-  // through unchanged.
+  // daemon addresses a document by that id, so a ref resolves through the
+  // live documents list: a listed id answers itself, a legacy path its id,
+  // and anything else nothing. Read through a ref so the adapter identity
+  // survives list refreshes; the lookup resolves by membership, never by
+  // format.
   const canvasesRef = useRef(controller.documents)
   canvasesRef.current = controller.documents
 
   const resolveRefPath = useCallback(
     (ref: string) => canvasesRef.current.find((entry) => entry.documentId === ref)?.path,
+    [],
+  )
+  const resolveRefId = useCallback(
+    (ref: string) =>
+      canvasesRef.current.find((entry) => entry.documentId === ref || entry.path === ref)
+        ?.documentId,
     [],
   )
 
@@ -237,17 +249,11 @@ function useDaemonDocument(
         daemonFetch,
         daemonBaseUrl,
         workspaceId: canvas?.workspaceId ?? '',
-        path: canvas?.path ?? '',
-        resolveRefPath,
+        documentId: currentDocumentId,
+        resolveRefId,
       }),
-    [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefPath],
+    [daemonFetch, daemonBaseUrl, canvas?.workspaceId, currentDocumentId, resolveRefId],
   )
-
-  // Undefined until the list names a row for this path — a refresh in flight
-  // leaves it so, which both the picker's exclusion and the backlinks fetch
-  // read as "not yet".
-  const currentSummary = controller.documents.find((d) => d.path === controller.path)
-  const currentDocumentId = currentSummary?.documentId
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
@@ -515,7 +521,10 @@ function useDaemonDocument(
       backend: versionsBackend,
       onVersionCreated: events.onVersionCreated,
     }),
-    topBar: daemonTopBarSlot(canvas, onNavigateBack, { persistence, connection }),
+    topBar: daemonTopBarSlot(canvas, currentDocumentId, onNavigateBack, {
+      persistence,
+      connection,
+    }),
     spatial: {
       editorRef: spatialEditorRef,
       ...agentTouchedProps(agentActivity),

@@ -60,8 +60,8 @@ function daemonStub(options: { confirms: boolean }) {
         versionsKept: options.confirms ? (body.versions ?? []).map((each) => each.id) : [],
       })
     }
-    if (url.includes('/file/') && init?.method === 'PUT') {
-      putFiles.push(decodeURIComponent(url.slice(url.indexOf('/document/'))))
+    if (url.includes('/files/') && init?.method === 'PUT') {
+      putFiles.push(decodeURIComponent(url.slice(url.indexOf('/documents/'))))
       return new Response(null, { status: 204 })
     }
     if (url.endsWith('/documents')) return jsonResponse({ documents: [] })
@@ -122,7 +122,7 @@ describe('promoteWorkspace, the planes beside the record', () => {
     vi.mocked(readCarriedPlanes).mockClear()
   })
 
-  it('sends a workspace holding only trash its entry and uploads its image under its path', async () => {
+  it('reports a picture only a trashed document names and sends nothing for it', async () => {
     const { index } = await newWorkspace()
     const gone = await trashedCanvas(index, 'gone', 'only-in-the-trash')
     const daemon = daemonStub({ confirms: true })
@@ -131,10 +131,24 @@ describe('promoteWorkspace, the planes beside the record', () => {
 
     expect(result).toEqual(expect.objectContaining({ kind: 'ok', leftBehind: [] }))
     expect(daemon.promotes[0]?.trash?.map((each) => each.documentId)).toEqual([gone.documentId])
-    expect(daemon.putFiles).toEqual(['/document/gone/file/only-in-the-trash'])
+    // The id file route resolves live documents only, so there is nothing to
+    // address this picture through.
+    expect(daemon.putFiles).toEqual([])
+    if (result.kind !== 'ok') return
+    expect(result.blobs).toEqual({
+      transferred: [],
+      missing: [],
+      failed: [
+        {
+          fileId: 'only-in-the-trash',
+          reason:
+            'no live document to send that picture through; restore the document on the daemon and move again',
+        },
+      ],
+    })
   })
 
-  it('uploads an image only a saved version names under a live document path', async () => {
+  it('uploads an image only a saved version names under the id of the first live document', async () => {
     const { index, workspaceId } = await newWorkspace()
     const docs = new BrowserWorkspaceDocs()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
@@ -155,7 +169,7 @@ describe('promoteWorkspace, the planes beside the record', () => {
     expect(daemon.promotes[0]?.versions?.map((each) => each.id)).toEqual([drafted.id])
     expect(result.blobs.transferred).toEqual(['only-in-a-version'])
     expect(result.blobs.missing).toEqual(['redrawn'])
-    expect(daemon.putFiles).toEqual(['/document/sketch/file/only-in-a-version'])
+    expect(daemon.putFiles).toEqual([`/documents/${sketch.documentId}/files/only-in-a-version`])
   })
 
   it('lists what could not be read before what the daemon did not confirm', async () => {

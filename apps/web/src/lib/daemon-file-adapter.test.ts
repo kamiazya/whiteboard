@@ -19,7 +19,7 @@ import { createDaemonFileAdapter, putDaemonImage } from './daemon-file-adapter.j
 
 const BASE = 'http://127.0.0.1:3099'
 const WS = 'ws-1'
-const path = 'my-canvas'
+const DOC = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 function snapshotOf(text: string): Uint8Array {
   const doc = new Loro()
@@ -60,7 +60,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch: vi.fn(),
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     // The SAME convention browser uses, so a canvas keeps meaning the
@@ -78,34 +79,57 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     const url = await adapter.loadImageUrl('asset:file-abc')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/${path}/file/file-abc`)
+    expect(daemonFetch).toHaveBeenCalledWith(
+      `${BASE}/api/workspaces/${WS}/documents/${DOC}/files/file-abc`,
+    )
     expect(url).toBe(FAKE_OBJECT_URL)
   })
 
-  it('sends a nested document path one encoded segment at a time', async () => {
-    // The document-path grammar is document-url.ts's: a `/` separates
-    // segments and only a segment's own characters are escaped. The answers
-    // are refusals: only the requested URLs are under test.
+  it('encodes a reserved character in an id on its way into the address', async () => {
+    // The answers are refusals: only the requested URLs are under test.
     const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: 'notes/a plan',
+      documentId: 'a b/c',
+      resolveRefId: () => 'x y',
     })
 
     await adapter.loadImageUrl('asset:file-abc')
-    await adapter.loadDocument('notes/sibling')
+    await adapter.loadDocument('anything')
 
     expect(daemonFetch).toHaveBeenCalledWith(
-      `${BASE}/api/w/${WS}/document/notes/a%20plan/file/file-abc`,
+      `${BASE}/api/workspaces/${WS}/documents/a%20b%2Fc/files/file-abc`,
     )
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/notes/sibling/snapshot`)
+    expect(daemonFetch).toHaveBeenCalledWith(
+      `${BASE}/api/workspaces/${WS}/documents/x%20y/snapshot`,
+    )
+  })
+
+  it('refuses every file address while no document is open', async () => {
+    const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
+    const adapter = createDaemonFileAdapter({
+      daemonFetch,
+      daemonBaseUrl: BASE,
+      workspaceId: WS,
+      documentId: undefined,
+    })
+
+    const stored = await adapter.storeImage(new File(['x'], 'x.png', { type: 'image/png' }))
+
+    expect(stored).toEqual({ ok: false, reason: 'no document is open to keep that picture under' })
+    await expect(adapter.loadImageBlob('asset:abc')).rejects.toThrow()
+    await expect(adapter.loadImageUrl('asset:abc')).rejects.toThrow()
+    expect(adapter.fileScope).toBe(`daemon:${BASE}/w/${WS}`)
+    expect(daemonFetch).not.toHaveBeenCalled()
+    await expectLoggedFailure('image load failed')
   })
 
   it('resolves a missing image to undefined instead of throwing', async () => {
@@ -114,7 +138,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     // Totality: a broken reference keeps the card, it never takes the page down.
@@ -127,12 +152,15 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     const blob = await adapter.loadImageBlob('asset:file-abc')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/${path}/file/file-abc`)
+    expect(daemonFetch).toHaveBeenCalledWith(
+      `${BASE}/api/workspaces/${WS}/documents/${DOC}/files/file-abc`,
+    )
     expect(await blob?.text()).toBe('12345')
     // The bytes, not a URL minted for them: a caller that wants bytes owns no URL to revoke.
     expect(URL.createObjectURL).not.toHaveBeenCalled()
@@ -148,7 +176,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     await expect(adapter.loadImageBlob('asset:file-abc')).rejects.toThrow('network down')
@@ -164,7 +193,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     await expect(adapter.loadImageBlob('asset:file-abc')).rejects.toThrow('503')
@@ -178,7 +208,7 @@ describe('createDaemonFileAdapter', () => {
 
   it('scopes its files to this workspace on this daemon', () => {
     const adapterFor = (daemonBaseUrl: string, workspaceId: string) =>
-      createDaemonFileAdapter({ daemonFetch: vi.fn(), daemonBaseUrl, workspaceId, path })
+      createDaemonFileAdapter({ daemonFetch: vi.fn(), daemonBaseUrl, workspaceId, documentId: DOC })
 
     expect(adapterFor(BASE, WS).fileScope).toBe(`daemon:${BASE}/w/${WS}`)
     expect(adapterFor(BASE, 'ws-2').fileScope).not.toBe(adapterFor(BASE, WS).fileScope)
@@ -193,7 +223,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     const file = new File(['xy'], 'x.png', { type: 'image/png' })
@@ -201,7 +232,7 @@ describe('createDaemonFileAdapter', () => {
 
     expect(ref).toEqual({ ok: true, ref: `asset:${FAKE_UUID}` })
     const [url, init] = daemonFetch.mock.calls[0] as unknown as [string, RequestInit]
-    expect(url).toBe(`${BASE}/api/w/${WS}/document/${path}/file/${FAKE_UUID}`)
+    expect(url).toBe(`${BASE}/api/workspaces/${WS}/documents/${DOC}/files/${FAKE_UUID}`)
     expect(init.method).toBe('PUT')
     // The route rejects an unrecognised Content-Type with 415, so the
     // picked file's own type has to travel.
@@ -218,7 +249,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     // Returning a ref anyway would put a node on the canvas pointing at bytes
@@ -238,7 +270,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     const result = await adapter.storeImage(new File(['x'], 'x.png', { type: 'image/png' }))
@@ -253,12 +286,15 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     const loaded = await adapter.loadDocument('sibling')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/sibling/snapshot`)
+    expect(daemonFetch).toHaveBeenCalledWith(
+      `${BASE}/api/workspaces/${WS}/documents/sibling/snapshot`,
+    )
     const only = loaded?.canvas?.nodes[0]
     expect(only?.id).toBe('n1')
     expect(only !== undefined && nodeText(only)).toBe('hello')
@@ -273,7 +309,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     const loaded = await adapter.loadDocument('notes')
@@ -287,7 +324,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     expect((await adapter.loadDocument('empty'))?.body).toBeUndefined()
@@ -308,7 +346,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     expect((await adapter.loadDocument('diagram'))?.facets).toBeUndefined()
@@ -325,7 +364,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     expect((await adapter.loadDocument('notes'))?.facets).toEqual({
@@ -346,7 +386,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     await expect(adapter.loadDocument('sibling')).rejects.toThrow('network down')
@@ -359,7 +400,8 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     await expect(adapter.loadDocument('sibling')).rejects.toThrow(String(status))
@@ -372,63 +414,64 @@ describe('createDaemonFileAdapter', () => {
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     await expect(adapter.loadDocument('gone')).resolves.toBeUndefined()
   })
 
-  it('percent-encodes a path on its way into the path', async () => {
+  it('percent-encodes a resolved id on its way into the address', async () => {
     const daemonFetch = vi.fn(async () => new Response(null, { status: 404 }))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
+      documentId: DOC,
+      resolveRefId: (ref) => ref,
     })
 
     await adapter.loadDocument('a b')
 
-    expect(daemonFetch).toHaveBeenCalledWith(`${BASE}/api/w/${WS}/document/a%20b/snapshot`)
+    expect(daemonFetch).toHaveBeenCalledWith(
+      `${BASE}/api/workspaces/${WS}/documents/a%20b/snapshot`,
+    )
   })
 })
 
 describe('createDaemonFileAdapter — id references', () => {
-  it('resolves an id reference to its CURRENT path through the injected lookup', async () => {
+  it('resolves a reference to a document id through the injected lookup', async () => {
     const daemonFetch = vi.fn(async () => new Response(snapshotOf('hello') as BodyInit))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
-      resolveRefPath: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
+      documentId: DOC,
+      resolveRefId: (ref) => (ref === 'nanoid-123' ? 'renamed-canvas' : undefined),
     })
     const loaded = await adapter.loadDocument('nanoid-123')
     expect(loaded).toBeDefined()
     expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
-      '/api/w/ws-1/document/renamed-canvas/snapshot',
+      '/api/workspaces/ws-1/documents/renamed-canvas/snapshot',
     )
   })
 
-  it('falls back to treating an unknown reference as a legacy path', async () => {
+  it('answers undefined for a reference naming no document, sending no request', async () => {
     const daemonFetch = vi.fn(async () => new Response(snapshotOf('legacy') as BodyInit))
     const adapter = createDaemonFileAdapter({
       daemonFetch,
       daemonBaseUrl: BASE,
       workspaceId: WS,
-      path: path,
-      resolveRefPath: () => undefined,
+      documentId: DOC,
+      resolveRefId: () => undefined,
     })
-    const loaded = await adapter.loadDocument('old-path-ref')
-    expect(loaded).toBeDefined()
-    expect(String((daemonFetch.mock.calls as unknown[][])[0]?.[0])).toContain(
-      '/api/w/ws-1/document/old-path-ref/snapshot',
-    )
+    await expect(adapter.loadDocument('old-path-ref')).resolves.toBeUndefined()
+    expect(daemonFetch).not.toHaveBeenCalled()
   })
 })
 
 describe('putDaemonImage, the one writer of the file route', () => {
-  const url = `${BASE}/api/w/${WS}/document/${path}/file/f1`
+  const url = `${BASE}/api/workspaces/${WS}/documents/${DOC}/files/f1`
 
   it("sends the caller's Content-Type, not the blob's, so an untyped stored blob can travel", async () => {
     const daemonFetch = vi.fn(async () => new Response(null, { status: 204 }))

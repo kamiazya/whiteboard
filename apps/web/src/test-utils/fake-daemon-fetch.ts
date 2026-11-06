@@ -34,13 +34,13 @@ import {
 import {
   createDocumentV1ResponseSchema,
   type DocumentOkfV1Response,
-  documentApiUrl,
-  documentDuplicateApiUrl,
-  documentNameApiUrl,
+  documentByIdApiUrl,
+  documentDuplicateByIdApiUrl,
+  documentNameByIdApiUrl,
   documentOkfApiUrl,
   documentOkfV1ResponseSchema,
-  documentPathApiUrl,
-  documentRecordApiUrl,
+  documentPathByIdApiUrl,
+  documentRecordByIdApiUrl,
   documentsV1ApiUrl,
   trashApiUrl,
   workspaceDocumentsApiUrl,
@@ -142,31 +142,34 @@ export interface FakeDaemonRoutes {
 // the old path answering for a request nothing sends any more.
 const WS_MARK = 'WSMARK'
 const DOC_MARK = 'DOCMARK'
-// A document path keeps its slashes (`encodeDocumentPath` encodes per
-// SEGMENT), so its match has to admit them.
-const PATH_MARK = 'PATHMARK/MORE'
 const regexEscape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const derive = (builtUrl: string) =>
-  new RegExp(
-    `${regexEscape(builtUrl)
-      .replace(WS_MARK, '([^/]+)')
-      .replace(PATH_MARK, '(.+)')
-      .replace(DOC_MARK, '([^/]+)')}$`,
-  )
+  new RegExp(`${regexEscape(builtUrl).replace(WS_MARK, '([^/]+)').replace(DOC_MARK, '([^/]+)')}$`)
 
 const WORKSPACES = derive(workspacesApiUrl())
 const DOCUMENTS = [
   derive(workspaceDocumentsApiUrl(WS_MARK)),
   derive(documentsV1ApiUrl(WS_MARK)),
 ] as const
-const DOCUMENT = derive(documentRecordApiUrl(WS_MARK, PATH_MARK))
-const DOCUMENT_PATH = derive(documentPathApiUrl(WS_MARK, PATH_MARK))
-const DOCUMENT_NAME = derive(documentNameApiUrl(WS_MARK, PATH_MARK))
+const DOCUMENT = derive(documentRecordByIdApiUrl(WS_MARK, DOC_MARK))
+const DOCUMENT_PATH = derive(documentPathByIdApiUrl(WS_MARK, DOC_MARK))
+const DOCUMENT_NAME = derive(documentNameByIdApiUrl(WS_MARK, DOC_MARK))
 const DOCUMENT_OKF = derive(documentOkfApiUrl(WS_MARK, DOC_MARK))
 const TRASH = derive(trashApiUrl(WS_MARK))
 const NAMES = derive(workspaceNamesApiUrl(WS_MARK))
-const SNAPSHOT = derive(documentApiUrl(WS_MARK, PATH_MARK, 'snapshot'))
-const DUPLICATE = derive(documentDuplicateApiUrl(WS_MARK, PATH_MARK))
+const SNAPSHOT = derive(documentByIdApiUrl(WS_MARK, DOC_MARK, 'snapshot'))
+const DUPLICATE = derive(documentDuplicateByIdApiUrl(WS_MARK, DOC_MARK))
+
+/**
+ * The path of the listed row carrying `documentId`, or undefined for an id no
+ * row carries — which the daemon answers 404, and so does this. The hooks
+ * below take the path, the way the fixtures name documents.
+ */
+function pathOfId(routes: FakeDaemonRoutes, workspaceId: string, documentId: string) {
+  const listed = routes.documentsByWorkspace[workspaceId]
+  const rows = withSummaryDefaults(typeof listed === 'function' ? listed() : (listed ?? []))
+  return rows.find((row) => row.documentId === documentId)?.path
+}
 
 const isGet = (init?: RequestInit) => !init || init.method === undefined
 const seg = (match: RegExpMatchArray, index: number) => decodeURIComponent(match[index] ?? '')
@@ -339,22 +342,32 @@ const ROUTES: readonly Route[] = [
     pattern: DOCUMENT_PATH,
     method: 'PUT',
     handle: (routes, m, init) => {
+      const from = pathOfId(routes, seg(m, 1), seg(m, 2))
+      if (from === undefined) return notFound()
       const to = parseBody<{ path: string }>(init).path
-      const override = overrideOf(routes.onRenameDocumentPath?.(seg(m, 1), seg(m, 2), to))
+      const override = overrideOf(routes.onRenameDocumentPath?.(seg(m, 1), from, to))
       return override ?? jsonResponse(renameDocumentPathResponseSchema.parse({ path: to }))
     },
   },
   {
     pattern: DOCUMENT_NAME,
     method: 'PUT',
-    handle: (routes, m, init) => setDocumentName(routes, seg(m, 1), seg(m, 2), init),
+    handle: (routes, m, init) => {
+      const path = pathOfId(routes, seg(m, 1), seg(m, 2))
+      return path === undefined ? notFound() : setDocumentName(routes, seg(m, 1), path, init)
+    },
   },
   {
     pattern: DOCUMENT,
     method: 'DELETE',
-    handle: (routes, m) =>
-      overrideOf(routes.onDeleteDocument?.(seg(m, 1), seg(m, 2))) ??
-      jsonResponse(deleteDocumentResponseSchema.parse({ ok: true })),
+    handle: (routes, m) => {
+      const path = pathOfId(routes, seg(m, 1), seg(m, 2))
+      if (path === undefined) return notFound()
+      return (
+        overrideOf(routes.onDeleteDocument?.(seg(m, 1), path)) ??
+        jsonResponse(deleteDocumentResponseSchema.parse({ ok: true }))
+      )
+    },
   },
   {
     pattern: DOCUMENT_OKF,
@@ -383,7 +396,8 @@ const ROUTES: readonly Route[] = [
   {
     pattern: SNAPSHOT,
     handle: (routes, m) => {
-      const bytes = routes.snapshotByDocument?.[seg(m, 2)]
+      const path = pathOfId(routes, seg(m, 1), seg(m, 2))
+      const bytes = path === undefined ? undefined : routes.snapshotByDocument?.[path]
       if (!bytes) return notFound()
       return new Response(bytes as BodyInit, {
         status: 200,
@@ -394,9 +408,14 @@ const ROUTES: readonly Route[] = [
   {
     pattern: DUPLICATE,
     method: 'POST',
-    handle: (routes, m, init) =>
-      overrideOf(routes.onDuplicateDocument?.(seg(m, 1), seg(m, 2), duplicateRequestOf(init))) ??
-      duplicateDocument(routes, seg(m, 1), seg(m, 2), duplicateRequestOf(init)),
+    handle: (routes, m, init) => {
+      const path = pathOfId(routes, seg(m, 1), seg(m, 2))
+      if (path === undefined) return notFound()
+      return (
+        overrideOf(routes.onDuplicateDocument?.(seg(m, 1), path, duplicateRequestOf(init))) ??
+        duplicateDocument(routes, seg(m, 1), path, duplicateRequestOf(init))
+      )
+    },
   },
 ]
 

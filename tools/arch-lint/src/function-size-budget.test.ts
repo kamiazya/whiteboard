@@ -77,7 +77,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/FontsCard.tsx#FontsCard': 129,
   'apps/web/src/components/StorageReportCard.tsx#StorageReportCard': 275,
   'apps/web/src/components/VersionTimeline.tsx#VersionTimeline': 284,
-  'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 106,
+  'apps/web/src/components/workspace-top-bar/WorkspaceTopBar.tsx#WorkspaceTopBar': 108, // +2: the document id reaches the rename, which the daemon addresses by id
   'apps/web/src/components/annotations/CommentBody.tsx#CommentBody': 64,
   // +1: the comment message bound joins its extensions; CommentComposeOverlay's +1 is the same bound.
   'apps/web/src/components/annotations/CommentComposer.tsx#CommentComposer': 70,
@@ -375,7 +375,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // slot carries. Long because every optional prop is spread-or-nothing
   // (given a value or left out entirely), and splitting it further would cut the
   // row a reader sees as one thing.
-  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 68, // +1: the title box's placeholder is the list's name for an unnamed document; +2: the page heading is where Enter in the title hands focus
+  'apps/web/src/pages/DocumentPage.tsx#DocumentHeader': 69, // +1: the bar is handed the document id its rename is addressed by; +1: the title box's placeholder is the list's name for an unnamed document; +2: the page heading is where Enter in the title hands focus
   'apps/web/src/pages/document-page-inspector.tsx#DocumentInspectorSegment': 54,
   // The row's controls in one JSX run; the notice prop is one more spread.
   'apps/web/src/pages/document-page-inspector.tsx#DocumentRowActions': 58, // +4: the export's selection scope passes through to the menu; +1: a note's print row

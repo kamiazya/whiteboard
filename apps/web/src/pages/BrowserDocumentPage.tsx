@@ -572,6 +572,7 @@ function useBrowserDocument(
       // the daemon's `/names`, so `title`/`onTitleChange` stay the source.
       workspaceId,
       path: loadedPath,
+      documentId: openDocumentId,
       keeper: 'browser',
       saveState: { persistence: writes, connection },
       // The way out of the editor. This page had none until now — the

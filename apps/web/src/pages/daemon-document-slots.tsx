@@ -286,6 +286,7 @@ export function daemonMarkdownSlot({
  */
 export function daemonTopBarSlot(
   canvas: { workspaceId: string; path: string } | null,
+  documentId: string | undefined,
   onNavigateBack: (() => void) | undefined,
   saveState?: SaveState,
 ): DocumentPageModel['topBar'] {
@@ -293,6 +294,7 @@ export function daemonTopBarSlot(
   return {
     workspaceId: canvas.workspaceId,
     path: canvas.path,
+    documentId,
     ...(onNavigateBack === undefined ? {} : { onNavigateBack }),
     ...(saveState === undefined ? {} : { saveState }),
   }

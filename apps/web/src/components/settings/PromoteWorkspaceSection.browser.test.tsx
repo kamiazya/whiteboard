@@ -101,7 +101,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
         shadowed: [],
       })
     }
-    if (url.includes('/file/') && init?.method === 'PUT') {
+    if (url.includes('/files/') && init?.method === 'PUT') {
       if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))
       if (opts.failPutStatus) return new Response(null, { status: opts.failPutStatus })
       return new Response(null, { status: 204 })

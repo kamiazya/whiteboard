@@ -10,8 +10,8 @@
  * not about anyone using it.
  *
  * A caller is a call whose LAST argument is the action's string literal, in a
- * production file that names `documentApiUrl`. That reads `documentApiUrl(ws,
- * path, 'snapshot')` and a wrapper that fixes the action
+ * production file that names `documentApiUrl` or its id twin `documentByIdApiUrl`.
+ * That reads `documentByIdApiUrl(ws, id, 'snapshot')` and a wrapper that fixes the action
  * (`documentRouteUrl(base, doc, 'update')`) alike, and it does not read the
  * server's own `onDocumentAction(app, 'get', 'snapshot', …)`, which is a
  * registration and not a use. The source is read as an AST, so prose naming a
@@ -29,6 +29,8 @@ import { describe, expect, it } from 'vitest'
 import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
+
+const DOCUMENT_URL_BUILDERS: ReadonlySet<string> = new Set(['documentApiUrl', 'documentByIdApiUrl'])
 
 const ACTIONS_FILE = 'packages/daemon-client/src/api-contracts/document-url.ts'
 
@@ -79,13 +81,13 @@ function declaredActions(): string[] {
   return found
 }
 
-/** Whether `source` names `documentApiUrl` and calls something with `action` last. */
+/** Whether `source` names a document URL builder and calls something with `action` last. */
 function callsWithAction(source: string): Set<string> {
   const file = parse(source, 'scanned.ts')
   let namesBuilder = false
   const literals = new Set<string>()
   const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && node.text === 'documentApiUrl') namesBuilder = true
+    if (ts.isIdentifier(node) && DOCUMENT_URL_BUILDERS.has(node.text)) namesBuilder = true
     if (ts.isCallExpression(node)) {
       const last = node.arguments.at(-1)
       if (last !== undefined && ts.isStringLiteralLike(last)) literals.add(last.text)

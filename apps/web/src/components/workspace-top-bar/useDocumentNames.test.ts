@@ -15,6 +15,7 @@ describe('useDocumentNames', () => {
       useDocumentNames({
         workspaceId: 'ws1',
         keptByBrowser: false,
+        documentId: 'id-foo',
         daemonFetch,
       }),
     )
@@ -32,6 +33,7 @@ describe('useDocumentNames', () => {
       useDocumentNames({
         workspaceId: 'ws1',
         keptByBrowser: false,
+        documentId: 'id-foo',
         daemonFetch,
       }),
     )
@@ -63,14 +65,57 @@ describe('useDocumentNames', () => {
       useDocumentNames({
         workspaceId: 'ws1',
         keptByBrowser: false,
+        documentId: 'id-foo',
         daemonFetch,
       }),
     )
     await waitFor(() => expect(daemonFetch).toHaveBeenCalledTimes(1))
     await act(async () => {
-      await result.current.renameDocument('foo', 'Renamed')
+      await result.current.renameDocument('Renamed')
     })
     expect(result.current.effectiveNames.documents.foo).toBe('Renamed')
+  })
+
+  it('refuses a rename while the document has no id, sending nothing', async () => {
+    const daemonFetch = vi.fn().mockResolvedValue(jsonResponse({ documents: {}, pinned: [] }))
+    const { result } = renderHook(() =>
+      useDocumentNames({
+        workspaceId: 'ws1',
+        keptByBrowser: false,
+        documentId: undefined,
+        daemonFetch,
+      }),
+    )
+    await waitFor(() => expect(daemonFetch).toHaveBeenCalledTimes(1))
+    let outcome: string | null = null
+    await act(async () => {
+      outcome = await result.current.renameDocument('New')
+    })
+    expect(outcome).toBe('Could not rename it.')
+    expect(daemonFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.effectiveNames).toEqual({ documents: {}, pinned: [] })
+  })
+
+  it('renameDocument PUTs the name to the document by its id', async () => {
+    const daemonFetch = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse({ documents: {}, pinned: [] }))
+      .mockResolvedValueOnce(jsonResponse({ documents: { foo: 'Renamed' }, pinned: [] }))
+    const { result } = renderHook(() =>
+      useDocumentNames({
+        workspaceId: 'ws1',
+        keptByBrowser: false,
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        daemonFetch,
+      }),
+    )
+    await waitFor(() => expect(daemonFetch).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      await result.current.renameDocument('Renamed')
+    })
+    expect(daemonFetch.mock.calls[1]?.[0]).toBe(
+      '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/name',
+    )
   })
 
   it('renameDocument answers null once the daemon has saved the name', async () => {
@@ -79,12 +124,17 @@ describe('useDocumentNames', () => {
       .mockResolvedValueOnce(jsonResponse({ documents: {}, pinned: [] }))
       .mockResolvedValueOnce(jsonResponse({ documents: { foo: 'Renamed' }, pinned: [] }))
     const { result } = renderHook(() =>
-      useDocumentNames({ workspaceId: 'ws1', keptByBrowser: false, daemonFetch }),
+      useDocumentNames({
+        workspaceId: 'ws1',
+        keptByBrowser: false,
+        documentId: 'id-foo',
+        daemonFetch,
+      }),
     )
     await waitFor(() => expect(daemonFetch).toHaveBeenCalledTimes(1))
     let outcome: string | null | undefined
     await act(async () => {
-      outcome = await result.current.renameDocument('foo', 'Renamed')
+      outcome = await result.current.renameDocument('Renamed')
     })
     expect(outcome).toBeNull()
   })
@@ -100,12 +150,17 @@ describe('useDocumentNames', () => {
         ),
       )
     const { result } = renderHook(() =>
-      useDocumentNames({ workspaceId: 'ws1', keptByBrowser: false, daemonFetch }),
+      useDocumentNames({
+        workspaceId: 'ws1',
+        keptByBrowser: false,
+        documentId: 'id-foo',
+        daemonFetch,
+      }),
     )
     await waitFor(() => expect(result.current.effectiveNames.documents.foo).toBe('Before'))
     let outcome: string | null | undefined
     await act(async () => {
-      outcome = await result.current.renameDocument('foo', 'x'.repeat(201))
+      outcome = await result.current.renameDocument('x'.repeat(201))
     })
     expect(outcome).toBe('a display name is at most 200 characters')
     expect(result.current.effectiveNames.documents.foo).toBe('Before')
@@ -124,13 +179,18 @@ describe('useDocumentNames', () => {
       } as unknown as Response)
       .mockRejectedValueOnce(new TypeError('Failed to fetch'))
     const { result } = renderHook(() =>
-      useDocumentNames({ workspaceId: 'ws1', keptByBrowser: false, daemonFetch }),
+      useDocumentNames({
+        workspaceId: 'ws1',
+        keptByBrowser: false,
+        documentId: 'id-foo',
+        daemonFetch,
+      }),
     )
     await waitFor(() => expect(daemonFetch).toHaveBeenCalledTimes(1))
     const outcomes: Array<string | null> = []
     await act(async () => {
-      outcomes.push(await result.current.renameDocument('foo', 'Renamed'))
-      outcomes.push(await result.current.renameDocument('foo', 'Renamed'))
+      outcomes.push(await result.current.renameDocument('Renamed'))
+      outcomes.push(await result.current.renameDocument('Renamed'))
     })
     expect(outcomes).toEqual(['Could not rename it.', 'Could not rename it.'])
   })
@@ -150,6 +210,7 @@ describe('useDocumentNames', () => {
       useDocumentNames({
         workspaceId: 'ws1',
         keptByBrowser: false,
+        documentId: 'id-foo',
         daemonFetch,
         recorded: { path: 'foo', name: recordedName },
       }),

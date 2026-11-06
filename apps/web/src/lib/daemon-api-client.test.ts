@@ -21,6 +21,7 @@ import {
 import { DAEMON_CONTRACT_COPY, DaemonContractError } from './daemon-contract-error.js'
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
+const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 describe('createDaemonFetch', () => {
   let fetchMock: ReturnType<typeof vi.fn>
@@ -390,16 +391,18 @@ describe('getDocumentSnapshot', () => {
         headers: { 'Content-Type': 'application/octet-stream' },
       }),
     )
-    const result = await getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')
+    const result = await getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', ID)
     expect(new Uint8Array(result)).toEqual(bytes)
-    expect(fetchFn).toHaveBeenCalledWith(`${DAEMON_BASE_URL}/api/w/w1/document/main/snapshot`)
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${DAEMON_BASE_URL}/api/workspaces/w1/documents/${ID}/snapshot`,
+    )
   })
 
   it('rejects on a non-2xx response, surfacing the daemon reason', async () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Not found' }, 404))
-    await expect(getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main')).rejects.toThrow(
+    await expect(getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', ID)).rejects.toThrow(
       /not found/i,
     )
   })
@@ -414,9 +417,9 @@ describe('getDocumentSnapshot', () => {
     const rejected = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'))
     const cutOff = vi.fn().mockResolvedValue(new Response(cut, { status: 200 }))
     for (const fetchFn of [rejected, cutOff]) {
-      await expect(
-        getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', 'main'),
-      ).rejects.toMatchObject({ name: 'FetchFailedError' })
+      await expect(getDocumentSnapshot(fetchFn, DAEMON_BASE_URL, 'w1', ID)).rejects.toMatchObject({
+        name: 'FetchFailedError',
+      })
     }
   })
 })
@@ -431,14 +434,12 @@ describe('duplicateDocument', () => {
     }
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ document: copy }))
 
-    await expect(
-      duplicateDocument(fetchFn, DAEMON_BASE_URL, 'w1', 'notes/roadmap'),
-    ).resolves.toEqual({ document: copy })
+    await expect(duplicateDocument(fetchFn, DAEMON_BASE_URL, 'w1', ID)).resolves.toEqual({
+      document: copy,
+    })
     expect(fetchFn).toHaveBeenCalledTimes(1)
     const [urlArg, initArg] = fetchFn.mock.calls[0]
-    expect(String(urlArg)).toBe(
-      `${DAEMON_BASE_URL}/api/workspaces/w1/documents/notes/roadmap/duplicate`,
-    )
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/${ID}/duplicate`)
     expect(initArg?.method).toBe('POST')
     expect(duplicateDocumentRequestSchema.parse(JSON.parse(String(initArg?.body)))).toEqual({})
   })
@@ -491,10 +492,10 @@ describe('setDocumentDisplayName', () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(jsonResponse({ documents: { main: 'My canvas' }, pinned: [] }))
-    const result = await setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'My canvas')
+    const result = await setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', ID, 'My canvas')
     expect(result).toEqual({ documents: { main: 'My canvas' }, pinned: [] })
     const [urlArg, initArg] = fetchFn.mock.calls[0]
-    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/main/name`)
+    expect(String(urlArg)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/${ID}/name`)
     expect(initArg?.method).toBe('PUT')
     expect(JSON.parse(String(initArg?.body))).toEqual({ name: 'My canvas' })
   })
@@ -503,29 +504,23 @@ describe('setDocumentDisplayName', () => {
     const fetchFn = vi
       .fn()
       .mockResolvedValue(jsonResponse({ error: 'refused', message: 'Bad request' }, 400))
-    await expect(
-      setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'x'),
-    ).rejects.toThrow(/bad request/i)
+    await expect(setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', ID, 'x')).rejects.toThrow(
+      /bad request/i,
+    )
   })
 })
 
 describe('renameDocumentPath', () => {
   it('sends the new path to the old path’s /path URL', async () => {
     const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'archive/notes' }))
-    const result = await renameDocumentPath(
-      fetchFn,
-      DAEMON_BASE_URL,
-      'w1',
-      'design/notes',
-      'archive/notes',
-    )
+    const result = await renameDocumentPath(fetchFn, DAEMON_BASE_URL, 'w1', ID, 'archive/notes')
 
     expect(result).toEqual({ path: 'archive/notes' })
     const [url, init] = fetchFn.mock.calls[0]!
-    // The path being MOVED is in the URL and the destination is in the body:
-    // sending the new one in the URL would address a document that does not
+    // The document's id is in the URL and the destination is in the body:
+    // sending the new path in the URL would address a document that does not
     // exist yet and 404.
-    expect(String(url)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/design/notes/path`)
+    expect(String(url)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/${ID}/path`)
     expect((init as RequestInit).method).toBe('PUT')
     expect(JSON.parse(String((init as RequestInit).body))).toEqual({ path: 'archive/notes' })
   })

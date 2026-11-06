@@ -29,11 +29,10 @@
  * the move, refuses it by name.
  */
 
-import { documentFileApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { documentFileByIdApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   collectImageRefIds,
   documentContainers,
-  readTrashEntries,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { bytesToBase64Url, newImageRef } from '@kamiazya/whiteboard-model'
@@ -186,25 +185,26 @@ export async function promoteWorkspace(
 /**
  * Every image the workspace still needs — its live documents, its trash and
  * its saved versions, by `scanFileReferences`, the definition both keepers'
- * file collections judge by — each mapped to a document path for the
- * daemon's file route. Files there are kept per workspace and the path in the
- * address is only checked for its grammar, so an image no live document
- * names goes under the path of whatever named it first.
+ * file collections judge by — each mapped to a document id for the
+ * daemon's file route. Files there are kept per workspace but addressed through
+ * a LIVE document's id, so an image no live document names goes under the
+ * first live document's. With no live document at all there is nothing to
+ * address it through, and the image maps to `undefined` so the move reports it.
  */
 function imageAddresses(
   record: LoroDoc,
   entries: ReturnType<typeof readWorkspaceDocuments>,
   scan: CarriedPlanes['scan'],
-): Map<string, string> {
-  const refs = new Map<string, string>()
+): Map<string, string | undefined> {
+  const refs = new Map<string, string | undefined>()
   for (const entry of entries) {
     for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
-      if (!refs.has(fileId)) refs.set(fileId, entry.path)
+      if (!refs.has(fileId)) refs.set(fileId, entry.documentId)
     }
   }
-  const fallback = entries[0]?.path ?? readTrashEntries(record)[0]?.path
+  const fallback = entries[0]?.documentId
   for (const fileId of scan.referenced) {
-    if (!refs.has(fileId) && fallback !== undefined) refs.set(fileId, fallback)
+    if (!refs.has(fileId)) refs.set(fileId, fallback)
   }
   return refs
 }
@@ -238,19 +238,22 @@ async function readImage(
   return undefined
 }
 
+const NO_LIVE_DOCUMENT_REASON =
+  'no live document to send that picture through; restore the document on the daemon and move again'
+
 /** Sends each referenced image through the daemon's file route, one outcome per file. */
 async function transferImages(
   fetch: typeof globalThis.fetch,
   keeperBaseUrl: string,
   workspaceId: string,
   fileStore: DocumentFileStore,
-  refs: ReadonlyArray<readonly [fileId: string, path: string]>,
+  refs: ReadonlyArray<readonly [fileId: string, documentId: string | undefined]>,
 ): Promise<PromotedBlobs> {
   const blobs: PromotedBlobs = { transferred: [], missing: [], failed: [] }
   // One image at a time, on purpose: each is read whole into memory before
   // its PUT, so a workspace of large pictures uploaded at once would hold
   // them all, and would race every upload against the daemon's file route.
-  for (const [fileId, path] of refs) {
+  for (const [fileId, documentId] of refs) {
     const blob = await readImage(fileStore, workspaceId, fileId)
     if (blob === undefined) {
       blobs.failed.push({ fileId, reason: 'This browser could not read that image.' })
@@ -268,7 +271,11 @@ async function transferImages(
       blobs.failed.push({ fileId, reason: refusal })
       continue
     }
-    const url = `${keeperBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`
+    if (documentId === undefined) {
+      blobs.failed.push({ fileId, reason: NO_LIVE_DOCUMENT_REASON })
+      continue
+    }
+    const url = `${keeperBaseUrl}${documentFileByIdApiUrl(workspaceId, documentId, fileId)}`
     const put = await putDaemonImage(fetch, url, blob, contentType)
     if (put.ok) blobs.transferred.push(fileId)
     else blobs.failed.push({ fileId, reason: put.reason })

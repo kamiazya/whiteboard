@@ -61,7 +61,7 @@ function daemon(record: LoroDoc, served: string[] = []): typeof globalThis.fetch
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
-    const file = /\/document\/boards\/photo\/file\/([\w-]+)$/.exec(url)
+    const file = new RegExp(`/documents/${BOARD}/files/([\\w-]+)$`).exec(url)
     if (file?.[1] !== undefined) {
       served.push(file[1])
       return new Response(pictureOf(file[1]) as BodyInit, {

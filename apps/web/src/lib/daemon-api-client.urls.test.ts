@@ -20,6 +20,7 @@ import { createDaemonVersionsBackend } from './versions-backend.js'
 // The URL each client function put on the wire before its path moved onto the
 // shared builders, written out literally: the move must not change a byte.
 const BASE = 'http://daemon.test'
+const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const WS = 'ws a'
 const PATH = 'notes/a b'
 
@@ -37,23 +38,23 @@ describe('daemon-api-client request URLs', () => {
   it.each([
     [
       'renameDocumentPath',
-      (f: typeof fetch) => renameDocumentPath(f, BASE, WS, PATH, 'x'),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b/path`,
+      (f: typeof fetch) => renameDocumentPath(f, BASE, WS, ID, 'x'),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}/path`,
     ],
     [
       'deleteDocument',
-      (f: typeof fetch) => deleteDocument(f, BASE, WS, PATH),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b`,
+      (f: typeof fetch) => deleteDocument(f, BASE, WS, ID),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}`,
     ],
     [
       'setDocumentPinned',
-      (f: typeof fetch) => setDocumentPinned(f, BASE, WS, PATH, true),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b/pin`,
+      (f: typeof fetch) => setDocumentPinned(f, BASE, WS, ID, true),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}/pin`,
     ],
     [
       'setDocumentDisplayName',
-      (f: typeof fetch) => setDocumentDisplayName(f, BASE, WS, PATH, 'n'),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b/name`,
+      (f: typeof fetch) => setDocumentDisplayName(f, BASE, WS, ID, 'n'),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}/name`,
     ],
     [
       'getWorkspaceNames',

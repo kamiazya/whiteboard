@@ -124,7 +124,7 @@ describe('DaemonDocumentPage Move to folder', () => {
       timeout: 5000,
     })
     const moves = fetch.mock.calls.filter(
-      ([input, init]) => init?.method === 'PUT' && String(input).endsWith('/untitled/path'),
+      ([input, init]) => init?.method === 'PUT' && String(input).endsWith(`/${DOCUMENT_ID}/path`),
     )
     expect(moves.map(([, init]) => JSON.parse(String(init?.body)).path)).toEqual(['unit/untitled'])
   })

@@ -19,6 +19,22 @@ import { resolveWorkspaceAddress } from '../lib/workspace-handle.js'
 // `app-logger` takes (message, data) — the opposite order to the server's pino seam.
 const log = getAppLogger('daemon-document-page')
 
+/**
+ * The workspace and the id the listing gives the open path. The daemon
+ * addresses a document by id, so a path the listing does not hold (deleted
+ * elsewhere, not yet listed) has none, and nothing is sent for it.
+ */
+function listedTarget(
+  workspaceId: string | null,
+  documents: readonly DocumentSummary[],
+  path: string | null,
+  refusal: string,
+): { workspaceId: string; documentId: string } {
+  const documentId = documents.find((each) => each.path === path)?.documentId
+  if (workspaceId === null || documentId === undefined) throw new Error(refusal)
+  return { workspaceId, documentId }
+}
+
 export interface UseDaemonDocumentControllerOptions {
   daemonBaseUrl: string
   // Absent workspaceId/path is resolved to a default (first workspace / first
@@ -262,34 +278,30 @@ export function useDaemonDocumentController(
 
   const duplicateDocument = useCallback(
     async (request?: DuplicateDocumentRequest): Promise<void> => {
-      if (workspaceId === null || path === null) {
-        throw new Error('No document is open to duplicate.')
-      }
+      const target = listedTarget(workspaceId, documents, path, 'No document is open to duplicate.')
       const { document: copy } = await duplicateDocumentApi(
         daemonFetch,
         daemonBaseUrl,
-        workspaceId,
-        path,
+        target.workspaceId,
+        target.documentId,
         request,
       )
       // Same two steps `createDocument` ends with, and the same order: the list
       // is refreshed BEFORE the path moves, so the page never points at a
       // document its own switcher does not hold yet.
-      await relist(workspaceId)
+      await relist(target.workspaceId)
       setPath(copy.path)
     },
-    [daemonFetch, daemonBaseUrl, workspaceId, path, relist],
+    [daemonFetch, daemonBaseUrl, workspaceId, path, documents, relist],
   )
 
   const deleteDocument = useCallback(async (): Promise<void> => {
-    if (workspaceId === null || path === null) {
-      throw new Error('No document is open to delete.')
-    }
-    await deleteDocumentApi(daemonFetch, daemonBaseUrl, workspaceId, path)
+    const target = listedTarget(workspaceId, documents, path, 'No document is open to delete.')
+    await deleteDocumentApi(daemonFetch, daemonBaseUrl, target.workspaceId, target.documentId)
     // The page leaves for the workspace list; picking a sibling to show here
     // would make a delete read as the document turning into another one.
-    await relist(workspaceId)
-  }, [daemonFetch, daemonBaseUrl, workspaceId, path, relist])
+    await relist(target.workspaceId)
+  }, [daemonFetch, daemonBaseUrl, workspaceId, path, documents, relist])
 
   return {
     loading,

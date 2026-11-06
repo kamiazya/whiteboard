@@ -137,6 +137,8 @@ export interface DocumentPageModel {
   readonly topBar: {
     readonly workspaceId: string
     readonly path: string
+    /** The open document's id; undefined while the keeper's listing has not named it. */
+    readonly documentId: string | undefined
     readonly keeper?: 'daemon' | 'browser'
     readonly onNavigateBack?: () => void
     /** Where an edit stands, for the row's quiet save status; absent draws none. */
