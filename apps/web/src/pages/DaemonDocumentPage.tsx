@@ -15,6 +15,7 @@ import { type ConnectionState, sessionHealthOf } from '../lib/connection-state.j
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
+import { documentReadFailureOf } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { faviconStatusOf } from '../lib/favicon.js'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
@@ -44,6 +45,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { refineForContentReadFailure } from './document-page-state.js'
 import { connectionsStamp } from './use-connections.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
@@ -437,7 +439,15 @@ function useDaemonDocument(
 
   const onNameSettled = usePlaceByName(controller, daemonFetch, daemonBaseUrl, onPathMoved)
 
-  const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
+  // The second phase of the page state: what reading the CONTENT said. A
+  // snapshot the session refused (a retired stored shape, corrupt bytes)
+  // binds no editor, and the screen has to say why rather than keep the
+  // loading copy up.
+  const renderState = refineForContentReadFailure(
+    pageState,
+    documentReadFailureOf(sync.backendError),
+  )
+  const terminal = daemonTerminalAnswer(renderState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 
   const labels = daemonDocumentLabels(

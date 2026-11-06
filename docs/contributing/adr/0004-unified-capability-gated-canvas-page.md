@@ -129,8 +129,11 @@ Decision 3's state machine is implemented as a shared vocabulary rather
 than as two per-page shapes: `apps/web/src/pages/document-page-state.ts`
 declares every page-level render state once, each annotated with which
 keeper produces it and why the other cannot, and each page derives its own
-machine from its own controller's fields — `browser-page-state.ts` (plus
-the content-read-failure refinement) and `daemon-page-state.ts`. Two
+machine from its own controller's fields — `browser-page-state.ts` and
+`daemon-page-state.ts` — and both then apply the shared content-read-failure
+refinement in `document-page-state.ts` (until 2026-11-06 the browser page
+alone applied it, and a daemon-kept document the session refused stayed on
+the loading copy for good). Two
 daemon-only states postdate the decision text: `document-missing` (a stale
 URL against a non-empty documents list, rendered as an explicit
 create-at-this-path offer) and `workspace-empty`. The controller layer

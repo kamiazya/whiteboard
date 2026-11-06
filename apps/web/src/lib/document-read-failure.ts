@@ -53,3 +53,8 @@ export function documentReadFailureMessage(kind: DocumentReadFailure): string {
 export function isDocumentReadFailure(reason: string | null): reason is DocumentReadFailure {
   return reason !== null && reason in MESSAGES
 }
+
+/** The read failure a backend reason names, or null when it is not one (a write that did not land, nothing). */
+export function documentReadFailureOf(reason: string | null): DocumentReadFailure | null {
+  return isDocumentReadFailure(reason) ? reason : null
+}
