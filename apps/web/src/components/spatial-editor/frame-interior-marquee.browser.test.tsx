@@ -58,3 +58,39 @@ it('a drag from the frame border still carries the frame and its members', async
   await vi.waitFor(() => expect(frameOf(latest)).toMatchObject({ x: 140, y: 120 }))
   expect(latest.canvas.nodes.find((n) => n.id === 'a')).toMatchObject({ x: 180, y: 160 })
 })
+
+function tapAt(root: HTMLElement, p: { x: number; y: number }) {
+  const r = root.getBoundingClientRect()
+  const at = { pointerId: 1, clientX: r.left + p.x, clientY: r.top + p.y }
+  fireEvent.pointerDown(root, { ...at, button: 0, buttons: 1 })
+  fireEvent.pointerUp(root, at)
+}
+
+const selectedOptions = (container: HTMLElement) =>
+  [...container.querySelectorAll('[role="option"][aria-selected="true"]')].map((el) => el.id)
+
+it('a tap on the empty interior of a frame selects the frame', async () => {
+  const { Host } = makeEditorHost({ initial: framed })
+  const { container } = render(<Host />)
+
+  tapAt(rootOf(container), { x: 400, y: 120 })
+
+  await vi.waitFor(() =>
+    expect(selectedOptions(container)).toEqual([expect.stringMatching(/-node-g1$/)]),
+  )
+})
+
+it('a tap on the empty interior of an unnamed frame selects it too', async () => {
+  const unnamed: SpatialCanvas = {
+    nodes: [groupNode({ id: 'g1', x: 80, y: 80, width: 360, height: 220 })],
+    edges: [],
+  }
+  const { Host } = makeEditorHost({ initial: unnamed })
+  const { container } = render(<Host />)
+
+  tapAt(rootOf(container), { x: 260, y: 190 })
+
+  await vi.waitFor(() =>
+    expect(selectedOptions(container)).toEqual([expect.stringMatching(/-node-g1$/)]),
+  )
+})

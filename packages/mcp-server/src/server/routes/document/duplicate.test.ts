@@ -8,7 +8,9 @@
 import { duplicateDocumentResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { documentDuplicateApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
+  readCommentThreads,
   readMarkdownBody,
+  writeCommentThread,
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -48,6 +50,20 @@ function note(body: string): LoroDoc {
   writeMarkdownBody(doc, body)
   return doc
 }
+
+function commented(body: string): LoroDoc {
+  const doc = note(body)
+  writeCommentThread(doc, {
+    id: 't1',
+    anchor: { kind: 'document' },
+    status: 'open',
+    messages: [{ id: 'm1', body: 'which release?' }],
+  })
+  return doc
+}
+
+const threadIds = async (path: string): Promise<string[]> =>
+  readCommentThreads(await getDoc(WS, path)).map((thread) => thread.id)
 
 async function appWithRealDeps() {
   await prepareDataDir(tmp.dir)
@@ -109,5 +125,54 @@ describe('POST …/documents/<path>/duplicate', () => {
     const listed = await app.request(`/api/workspaces/${WS}/documents`)
     const { documents } = (await listed.json()) as { documents: { path: string }[] }
     expect(documents.map((row) => row.path)).toEqual([deep])
+  })
+
+  it('copies the content without its comment threads when asked, and the source keeps them', async () => {
+    await saveDocument(WS, 'notes/roadmap', commented('ship it'), { kind: 'markdown' })
+    const app = await appWithRealDeps()
+
+    const res = await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ withoutAnnotations: true }),
+    })
+
+    expect(res.status).toBe(200)
+    const answered = duplicateDocumentResponseSchema.parse(await res.json())
+    expect(answered.document).toMatchObject({ path: 'notes/roadmap-copy', name: 'roadmap (copy)' })
+    // The echo is how a client tells this daemon from one that never read
+    // the body and copied the comments anyway.
+    expect(answered.withoutAnnotations).toBe(true)
+    expect(readMarkdownBody(await getDoc(WS, 'notes/roadmap-copy'))).toBe('ship it')
+    await expect(threadIds('notes/roadmap-copy')).resolves.toEqual([])
+    await expect(threadIds('notes/roadmap')).resolves.toEqual(['t1'])
+  })
+
+  it('keeps the comment threads in a copy asked for with no body', async () => {
+    await saveDocument(WS, 'notes/roadmap', commented('ship it'), { kind: 'markdown' })
+    const app = await appWithRealDeps()
+
+    const res = await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), { method: 'POST' })
+
+    expect(duplicateDocumentResponseSchema.parse(await res.json())).not.toHaveProperty(
+      'withoutAnnotations',
+    )
+    await expect(threadIds('notes/roadmap-copy')).resolves.toEqual(['t1'])
+  })
+
+  it('answers 400 for a body of the wrong shape, and makes nothing', async () => {
+    await saveDocument(WS, 'kept', note('kept'), { kind: 'markdown' })
+    const app = await appWithRealDeps()
+
+    const res = await app.request(documentDuplicateApiUrl(WS, 'kept'), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ withoutAnnotations: 'yes' }),
+    })
+
+    expect(res.status).toBe(400)
+    const listed = await app.request(`/api/workspaces/${WS}/documents`)
+    const { documents } = (await listed.json()) as { documents: { path: string }[] }
+    expect(documents.map((row) => row.path)).toEqual(['kept'])
   })
 })

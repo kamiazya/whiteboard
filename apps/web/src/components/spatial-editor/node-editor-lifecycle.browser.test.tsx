@@ -57,6 +57,78 @@ it('pagehide commits the draft so a reload cannot lose it', async () => {
   await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('start typed'))
 })
 
+it('pagehide keeps the text typed into a note just made', async () => {
+  const { Host, latest } = makeEditorHost({ initial: empty })
+  const { container } = render(<Host />)
+  await addNote()
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+  await userEvent.keyboard('kept')
+
+  window.dispatchEvent(new Event('pagehide'))
+
+  await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('kept'))
+  expect(latest.canvas.nodes).toHaveLength(1)
+})
+
+// The page's own save flush listens for the same events and was registered
+// first — it mounts with the page, the editor with the edit — so the draft
+// has to be in the canvas BEFORE any listener the page already holds runs,
+// or the flush writes the note as it was before the typing. Closing or
+// reloading a tab fires `visibilitychange` (hidden) and then `pagehide`; the
+// first flush is the one that has to see the draft.
+it('a closing tab hands the page a note just made with its draft', async () => {
+  const { Host, latest } = makeEditorHost({ initial: empty })
+  // What the editor had handed the page when each flush ran: `onChange` is
+  // synchronous, while the host's canvas only follows on its next render.
+  const seen: number[] = []
+  const flush = () => seen.push(latest.commands.length)
+  const onHidden = () => {
+    if (document.visibilityState === 'hidden') flush()
+  }
+  window.addEventListener('pagehide', flush)
+  document.addEventListener('visibilitychange', onHidden)
+  const hidden = vi.spyOn(document, 'visibilityState', 'get')
+  try {
+    const { container } = render(<Host />)
+    await addNote()
+    await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+    await userEvent.keyboard('kept')
+    const before = latest.commands.length
+    hidden.mockReturnValue('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(new Event('pagehide'))
+    expect(seen).toEqual([before + 1, before + 1])
+    await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('kept'))
+  } finally {
+    hidden.mockRestore()
+    window.removeEventListener('pagehide', flush)
+    document.removeEventListener('visibilitychange', onHidden)
+  }
+})
+
+it('the draft lands before a tab-hidden listener registered ahead of the editor', async () => {
+  const { Host, latest } = makeEditorHost({ initial: withNode })
+  const seen: number[] = []
+  const onHidden = () => {
+    if (document.visibilityState === 'hidden') seen.push(latest.commands.length)
+  }
+  document.addEventListener('visibilitychange', onHidden)
+  const hidden = vi.spyOn(document, 'visibilityState', 'get')
+  try {
+    const { container } = render(<Host />)
+    await editExisting(container)
+    await userEvent.keyboard(' typed')
+    const before = latest.commands.length
+    hidden.mockReturnValue('hidden')
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(seen).toEqual([before + 1])
+    await vi.waitFor(() => expect(textOf(latest.canvas)).toBe('start typed'))
+  } finally {
+    hidden.mockRestore()
+    document.removeEventListener('visibilitychange', onHidden)
+  }
+})
+
 it('hiding the tab commits the draft the way a phone app switch does', async () => {
   const { Host, latest } = makeEditorHost({ initial: withNode })
   const { container } = render(<Host />)

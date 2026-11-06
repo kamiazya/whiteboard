@@ -2,11 +2,16 @@ import { parentOfPath } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import type { WorkspaceFilesPanelProps } from './workspace-files-panel-props.js'
+
+type DuplicateHandler = NonNullable<WorkspaceFilesPanelProps['onDuplicateDocument']>
 
 interface DuplicatedCopy {
   readonly entry: WorkspaceDocumentEntry
   /** What the source is called, which is what the person asked to duplicate. */
   readonly from: string
+  /** Asked for without the annotation layer, so the notice says which copy it is. */
+  readonly withoutComments: boolean
 }
 
 /** Long enough to read the line and reach the button on a phone, like the undo toast. */
@@ -35,6 +40,7 @@ interface DuplicateAsked {
   readonly ids: ReadonlySet<string>
   readonly folder: string
   readonly from: string
+  readonly withoutComments: boolean
   readonly askedAt: number
 }
 
@@ -58,7 +64,7 @@ function useCopyArrival(
     const found = arrivedIn(documents, pending)
     if (found === undefined) return
     asked.current = null
-    setCopy({ entry: found, from: pending.from })
+    setCopy({ entry: found, from: pending.from, withoutComments: pending.withoutComments })
     select(found)
     document
       .querySelector(`[data-doc-path="${CSS.escape(found.path)}"]`)
@@ -81,7 +87,7 @@ export function useDuplicateFeedback({
   select,
 }: {
   documents: readonly WorkspaceDocumentEntry[] | null
-  onDuplicateDocument: ((path: string) => void) | undefined
+  onDuplicateDocument: WorkspaceFilesPanelProps['onDuplicateDocument']
   select: (entry: WorkspaceDocumentEntry) => void
 }) {
   const asked = useRef<DuplicateAsked | null>(null)
@@ -92,16 +98,18 @@ export function useDuplicateFeedback({
   const listed = useRef(documents)
   listed.current = documents
   const duplicate = useCallback(
-    (path: string) => {
+    (...args: Parameters<DuplicateHandler>) => {
+      const [path, options] = args
       const rows = listed.current ?? []
       const source = rows.find((entry) => entry.path === path)
       asked.current = {
         ids: new Set(rows.map((entry) => entry.documentId)),
         folder: parentOfPath(path),
         from: source === undefined ? path : documentLabel(source, 'leaf'),
+        withoutComments: options?.withoutAnnotations === true,
         askedAt: Date.now(),
       }
-      onDuplicateDocument?.(path)
+      onDuplicateDocument?.(...args)
     },
     [onDuplicateDocument],
   )
@@ -110,7 +118,7 @@ export function useDuplicateFeedback({
   return { duplicate: onDuplicateDocument === undefined ? undefined : duplicate, copy, dismiss }
 }
 
-/** "Duplicated <name> — Open", floating over the list until it times out or is used. */
+/** "Duplicated <name> [without comments] — Open", floating over the list until it times out or is used. */
 export function DuplicatedToast({
   copy,
   onOpen,
@@ -127,7 +135,10 @@ export function DuplicatedToast({
         aria-live="polite"
         className="bg-background animate-in fade-in-0 slide-in-from-bottom-2 flex items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-lg duration-(--motion-duration-normal) ease-(--motion-ease-out)"
       >
-        <span className="min-w-0 truncate">Duplicated {copy.from}</span>
+        <span className="min-w-0 truncate">
+          Duplicated {copy.from}
+          {copy.withoutComments ? ' without comments' : ''}
+        </span>
         {onOpen !== undefined && (
           <button
             type="button"

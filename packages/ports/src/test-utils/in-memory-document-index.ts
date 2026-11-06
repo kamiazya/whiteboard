@@ -301,9 +301,13 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
    */
   protected placeCopy(
     raw: DuplicateDocumentInput,
-    copyContent: (sourceDocumentId: string, copyDocumentId: string) => void,
+    copyContent: (
+      sourceDocumentId: string,
+      copyDocumentId: string,
+      opts: { withoutAnnotations: boolean },
+    ) => void,
   ): DocumentEntry {
-    const { workspaceId, path } = duplicateDocumentInputSchema.parse(raw)
+    const { workspaceId, path, withoutAnnotations } = duplicateDocumentInputSchema.parse(raw)
     if (!this.#workspaces.has(workspaceId)) throw new WorkspaceNotFoundError(workspaceId)
     const documents = this.#inWorkspace(workspaceId)
     const source = documents.get(path)
@@ -320,7 +324,9 @@ export class InMemoryDocumentIndex implements DocumentIndex, DocumentPins {
         [...documents.values()].map((entry) => shownName('document', entry)),
       ),
     }
-    copyContent(source.documentId, copy.documentId)
+    copyContent(source.documentId, copy.documentId, {
+      withoutAnnotations: withoutAnnotations === true,
+    })
     documents.set(copyPath, copy)
     return copy
   }
@@ -358,11 +364,16 @@ function occupiedPaths(documentPaths: Iterable<string>): Set<string> {
 }
 
 /**
- * Copies one document's content record to another id. Synchronous, so the
- * duplicate that calls it completes without awaiting; a throw leaves no copy.
+ * Copies one document's content record to another id — its annotation layer
+ * too unless `withoutAnnotations`. Synchronous, so the duplicate that calls it
+ * completes without awaiting; a throw leaves no copy.
  */
 export interface InMemoryContentCopy {
-  copy(sourceDocumentId: string, copyDocumentId: string): void
+  copy(
+    sourceDocumentId: string,
+    copyDocumentId: string,
+    opts: { withoutAnnotations: boolean },
+  ): void
 }
 
 /**
@@ -383,6 +394,6 @@ export class DuplicatingInMemoryDocumentIndex
   }
 
   async duplicateDocument(input: DuplicateDocumentInput): Promise<DocumentEntry> {
-    return this.placeCopy(input, (from, to) => this.#content.copy(from, to))
+    return this.placeCopy(input, (from, to, opts) => this.#content.copy(from, to, opts))
   }
 }

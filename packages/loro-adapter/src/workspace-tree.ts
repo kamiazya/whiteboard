@@ -1012,21 +1012,21 @@ export function deleteWorkspaceNodeAtPath(doc: LoroDoc, path: string): boolean {
  * The inverse of `adoptWorkspaceDocument`: one document's containers, copied
  * out of its tree node into a standalone Loro document with root containers —
  * the shape every pre-workspace consumer (the daemon import, a duplicate
- * seed) still speaks.
+ * seed) still speaks. Roots named in `omit` stay behind with the tree.
  *
  * A VALUE copy with a fresh oplog, like the adopt direction: the caller gets
  * the current state, never the workspace document's history. Scalar meta keys
  * (segment, kind, name, documentId) are tree bookkeeping and stay behind —
  * only containers are content.
  */
-export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): LoroDoc | null {
-  const node = nodeById(doc, documentId)
+export function projectWorkspaceDocument(doc: LoroDoc, id: string, omit = new Set<string>()) {
+  const node = nodeById(doc, id)
   if (node === null) return null
   const out = new LoroDoc()
   for (const key of node.data.keys()) {
     // A stored plane belongs to the record, not the document: see
     // STORED_PLANE_KEY_PREFIX for what carrying one into the projection costs.
-    if (isPlaneKey(key)) continue
+    if (isPlaneKey(key) || omit.has(key)) continue
     const value = node.data.get(key) as unknown
     const kind = containerKind(value)
     // Scalars are node meta, not content — see the doc comment.

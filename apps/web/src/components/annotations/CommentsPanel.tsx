@@ -22,6 +22,7 @@ import type { KeyboardEvent } from 'react'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
+import { COMMENT_ANNOUNCEMENTS } from '../../lib/comment-announcements.js'
 import { cn } from '../../lib/utils.js'
 import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
 import { AnnouncerRegion, useAnnouncer } from './announcer.js'
@@ -235,7 +236,7 @@ export function CommentsPanel({
     const body = composeDraft.trim()
     if (body === '' || composeAnchor === null || onCreateThread === undefined) return
     onCreateThread(composeAnchor, body)
-    announce('Comment posted')
+    announce(COMMENT_ANNOUNCEMENTS.posted)
     setComposeDraft('')
   }
 
@@ -334,7 +335,7 @@ export function CommentsPanel({
     const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
     onResolve(thread.id, next === 'resolved')
     offerUndo(withUndo ? { threadId: thread.id, to: next } : null)
-    announce(next === 'resolved' ? 'Conversation resolved' : 'Conversation reopened')
+    announce(next === 'resolved' ? COMMENT_ANNOUNCEMENTS.resolved : COMMENT_ANNOUNCEMENTS.reopened)
     setPending((prev) => new Map(prev).set(thread.id, next))
     window.setTimeout(() => {
       setPending((prev) => {
@@ -513,7 +514,7 @@ export function CommentsPanel({
               resolveAnchor={resolveAnchor}
               anchorLabelOf={anchorLabelOf}
               onResolve={onResolve}
-              onReply={announcing(onReply, 'Reply sent')}
+              onReply={announcing(onReply, COMMENT_ANNOUNCEMENTS.replied)}
               onEditMessage={onEditMessage}
               rowRefs={rowRefs}
             />

@@ -38,6 +38,9 @@ function RecentTile({
     <button
       type="button"
       aria-label={documentAccessibleName(entry, 'leaf')}
+      // Not `data-doc-path`: that names THE row for a document, which the
+      // grid's card is; this is where Back returns after a Recent open.
+      data-recent-path={entry.path}
       aria-current={entry.path === selectedPath ? 'true' : undefined}
       onClick={() => onSelect(entry)}
       onDoubleClick={() => onOpen(entry)}

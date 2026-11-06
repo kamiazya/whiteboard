@@ -110,6 +110,7 @@ export function canvasRootLabel(
   canvas: SpatialCanvas,
   selectedId: string | null,
   selectedEdgeId: string | null,
+  tabLeavesCanvas = false,
 ): string {
   const hasSelection = selectedId !== null || selectedEdgeId !== null
   const lines = canvas.lines ?? []
@@ -125,7 +126,13 @@ export function canvasRootLabel(
     ...(drawings > 0 ? [countOf(drawings, 'drawing', 'drawings')] : []),
     ...(ruled > 0 ? [countOf(ruled, 'line', 'lines')] : []),
   ]
-  return `Canvas, ${parts.join(', ')}. ${hasSelection ? 'Tab selects the next node' : `Tab selects the first ${firstStopNoun(canvas)}`}`
+  return `Canvas, ${parts.join(', ')}. ${tabHint(canvas, hasSelection, tabLeavesCanvas)}`
+}
+
+function tabHint(canvas: SpatialCanvas, hasSelection: boolean, tabLeavesCanvas: boolean): string {
+  if (hasSelection) return 'Tab selects the next node'
+  if (tabLeavesCanvas) return 'Tab leaves the canvas'
+  return `Tab selects the first ${firstStopNoun(canvas)}`
 }
 
 /** What Tab reaches first from nothing: a node when there is one, else the first line or drawing. */

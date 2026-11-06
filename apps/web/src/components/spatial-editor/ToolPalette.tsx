@@ -27,6 +27,7 @@
  */
 import {
   CircleHelp,
+  Eraser,
   FileBox,
   Focus,
   Frame,
@@ -414,6 +415,7 @@ export function ToolPalette({
             </TooltipTrigger>
             <TooltipContent>{withShortcut('Draw — freehand ink', 'tool-draw')}</TooltipContent>
           </Tooltip>
+          <EraserToolButton tool={tool} onToolChange={onToolChange} />
         </div>
         <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
         <Tooltip>
@@ -505,5 +507,33 @@ export function ToolPalette({
       </div>
       {shortcutHelp !== undefined && <ShortcutsButton {...shortcutHelp} />}
     </>
+  )
+}
+
+/** The eraser's dock button, beside the pen it takes strokes away from. */
+function EraserToolButton({
+  tool,
+  onToolChange,
+}: {
+  readonly tool: EditorTool
+  readonly onToolChange: (tool: EditorTool) => void
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          data-testid="eraser-tool-button"
+          aria-pressed={tool === 'erase'}
+          aria-label="Eraser"
+          aria-keyshortcuts={shortcutAriaKeysFor('tool-erase')}
+          onClick={() => onToolChange('erase')}
+          className={TOOL_BUTTON_CLASS}
+        >
+          <Eraser aria-hidden="true" className="size-4" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{withShortcut('Eraser — drag over drawings', 'tool-erase')}</TooltipContent>
+    </Tooltip>
   )
 }

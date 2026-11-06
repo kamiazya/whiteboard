@@ -377,9 +377,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // and one small geometry, pinned by example and by a property over
     // touching pairs in `edge-touching-boxes.test.ts`, its guards each
     // mutated by hand against them; nothing in it is a cost model or a search.
+    //
+    // 119 with `layout/edges/stroke-weight.ts`, the multiple of the theme's
+    // line weight a stroke's named weight draws at. Outside the lane: a
+    // three-entry table and one product, pinned by `stroke-weight.test.ts`
+    // and mutated by hand against it (the call removed, the factor changed).
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 118,
+      production: 119,
     })
   })
 

@@ -95,7 +95,7 @@ it('losing focus commits what was typed — nothing is ever lost to a stray clic
   })
 })
 
-it('Enter continues a list item, and Enter on an empty item exits the list', async () => {
+it('Enter continues a list item, and Enter on an empty item ends the list with a blank line', async () => {
   const { Host, latest } = makeEditorHost({ initial: canvasWithText('- alpha') })
   const { container } = render(<Host />)
   openEditor(container)
@@ -108,7 +108,7 @@ it('Enter continues a list item, and Enter on an empty item exits the list', asy
 
   await vi.waitFor(() => {
     const node = latest.canvas.nodes[0]
-    expect(node === undefined ? undefined : nodeText(node)).toBe('- alpha\n- beta\ndone')
+    expect(node === undefined ? undefined : nodeText(node)).toBe('- alpha\n- beta\n\ndone')
   })
 })
 

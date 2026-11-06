@@ -70,7 +70,7 @@ const snap: DocumentSnapshot = {
   kind: 'spatial' as const,
 }
 
-function documentOpsItem(name: RegExp) {
+function documentOpsItem(name: RegExp | string) {
   return screen.findByRole('menuitem', { name })
 }
 
@@ -285,10 +285,35 @@ describe('BrowserDocumentPage', () => {
       )
     })
     await openDocumentOpsMenu()
-    fireEvent.pointerUp(await documentOpsItem(/duplicate/i))
+    fireEvent.pointerUp(await documentOpsItem('Duplicate'))
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled (copy)')
     })
+  })
+
+  it('asks for a copy without comments from More actions and switches to it', async () => {
+    vi.useRealTimers()
+    const store = new BrowserStoreDouble()
+    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
+    await store.save(snap)
+    const asked = vi.spyOn(store.index, 'duplicateDocument')
+    await store.loro.save('069CFJNRVY147ADGKPSWZ258BE', new Loro().export({ mode: 'snapshot' }))
+    await act(async () => {
+      renderInRouter(
+        <BrowserDocumentPage
+          store={store.index}
+          pointer={store.pointer}
+          clock={store.clock}
+          loro={store.loro}
+        />,
+      )
+    })
+    await openDocumentOpsMenu()
+    fireEvent.pointerUp(await documentOpsItem('Duplicate without comments'))
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled (copy)')
+    })
+    expect(asked).toHaveBeenCalledWith(expect.objectContaining({ withoutAnnotations: true }))
   })
 
   it('disables the Duplicate button while a duplicate is in flight, and double-clicking produces exactly one copy', async () => {
@@ -321,11 +346,11 @@ describe('BrowserDocumentPage', () => {
       )
     })
     await openDocumentOpsMenu()
-    fireEvent.pointerUp(await documentOpsItem(/duplicate/i))
+    fireEvent.pointerUp(await documentOpsItem('Duplicate'))
     // The menu closes on select; while the duplicate is in flight the item
     // is disabled, so a second attempt from the reopened menu is inert.
     await openDocumentOpsMenu()
-    const inFlightItem = await documentOpsItem(/duplicate/i)
+    const inFlightItem = await documentOpsItem('Duplicate')
     await waitFor(() => expect(inFlightItem.getAttribute('aria-disabled')).toBe('true'))
     fireEvent.pointerUp(inFlightItem)
     await act(async () => {
@@ -337,7 +362,7 @@ describe('BrowserDocumentPage', () => {
     // The row remounts with the copy (keyed on canvas identity): the fresh
     // menu offers Duplicate enabled again.
     await openDocumentOpsMenu()
-    expect((await documentOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
+    expect((await documentOpsItem('Duplicate')).getAttribute('aria-disabled')).toBeNull()
     const list = await store.listDocuments()
     expect(list.filter((c) => c.name === 'Untitled (copy)')).toHaveLength(1)
   })
@@ -364,13 +389,13 @@ describe('BrowserDocumentPage', () => {
     // on an otherwise healthy page.
     loro.shouldThrow = true
     await openDocumentOpsMenu()
-    fireEvent.pointerUp(await documentOpsItem(/duplicate/i))
+    fireEvent.pointerUp(await documentOpsItem('Duplicate'))
     expect((await screen.findByRole('alert')).textContent).toContain('loro save failed')
     // No switch happened — still on the source canvas. (Asserted before
     // reopening the menu: Radix's modal dropdown aria-hides the page.)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled')
     await openDocumentOpsMenu()
-    expect((await documentOpsItem(/duplicate/i)).getAttribute('aria-disabled')).toBeNull()
+    expect((await documentOpsItem('Duplicate')).getAttribute('aria-disabled')).toBeNull()
   })
 
   it('Copy as JSON Canvas puts the extended document on the clipboard', async () => {
@@ -433,7 +458,7 @@ describe('BrowserDocumentPage', () => {
     // so what this page owns is that the row is HERE and nowhere else.
     expect(await documentOpsItem(/^export…$/i)).toBeTruthy()
     expect(screen.queryByText(/export as png/i)).toBeNull()
-    expect(await documentOpsItem(/duplicate/i)).toBeTruthy()
+    expect(await documentOpsItem('Duplicate')).toBeTruthy()
     expect(await documentOpsItem(/^delete$/i)).toBeTruthy()
   })
 

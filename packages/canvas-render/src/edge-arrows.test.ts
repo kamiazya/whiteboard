@@ -72,4 +72,23 @@ describe('edge arrowhead polygons', () => {
     expect(edgeArrowPolygons(edge(point, 'arrow', 'arrow'))).toEqual([])
     expect(edgeArrowEnds(edge(point, 'arrow', 'arrow'))).toEqual({ from: false, to: false })
   })
+
+  it('grows the head with a heavy line, so bounds reach the wider wings', () => {
+    const heavy = { ...edge(RIGHTWARD, 'none', 'arrow'), appearance: { strokeWidth: 7.5 } }
+    const [arrow] = edgeArrowPolygons(heavy)
+    expect(rounded(arrow?.points)).toEqual([
+      { x: 100, y: 0 },
+      { x: 70, y: 12 },
+      { x: 70, y: -12 },
+    ])
+  })
+
+  it('keeps the head its fixed size up to the light weights', () => {
+    const light = { ...edge(RIGHTWARD, 'none', 'arrow'), appearance: { strokeWidth: 2.5 } }
+    expect(rounded(edgeArrowPolygons(light)[0]?.points)).toEqual([
+      { x: 100, y: 0 },
+      { x: 90, y: 4 },
+      { x: 90, y: -4 },
+    ])
+  })
 })

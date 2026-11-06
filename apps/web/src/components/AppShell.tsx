@@ -147,19 +147,19 @@ export interface AppShellProps {
  * The corner is the default, and the lift is the exception, because the
  * bottom edge is also where the editing surfaces keep a strip. The canvas
  * dock is centred, so its left edge walks toward the corner only as the
- * viewport narrows: below 407px it reaches this control, and above it the
+ * viewport narrows: below 459px it reaches this control, and above it the
  * dock is nowhere near — where a control floating a strip's height up,
  * with empty space beneath it, reads as unanchored rather than as placed.
  *
- * 445 is arithmetic, not taste. The dock is centred at 333px, so its left
- * edge is (vw - 333) / 2; this control spans 12..44; 8px of clearance
- * wants vw >= 333 + 112. `declares a corner breakpoint that still clears
+ * 483 is arithmetic, not taste. The dock is centred at 371px, so its left
+ * edge is (vw - 371) / 2; this control spans 12..44; 8px of clearance
+ * wants vw >= 371 + 112. `declares a corner breakpoint that still clears
  * the dock` reads the number back out of this class and re-measures it
  * against the real dock, so widening the dock fails there rather than on
  * someone's phone — which is exactly how the pen's tool button moved it
- * from 407.
+ * from 407 and the eraser's from 445.
  *
- * Narrower than 357 the dock stops growing (it is capped to the editor's
+ * Narrower than 395 the dock stops growing (it is capped to the editor's
  * width less a gutter, and its tools scroll), so its left edge parks at
  * 12 and this control's horizontal clearance is gone for good — which is
  * the band the 70px lift below covers.
@@ -184,7 +184,7 @@ function ExitFullscreenControl({
       onClick={onExit}
       className={cn(
         HEADER_BUTTON_CLASS,
-        'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[445px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
+        'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[483px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
       )}
     >
       <Minimize2 aria-hidden="true" className="size-4" />

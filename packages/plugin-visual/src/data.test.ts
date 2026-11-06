@@ -15,6 +15,7 @@ import {
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
+  resolveStrokeWidth,
   VISUAL_AXES_KEY,
   VISUAL_AXES_MAX,
   VISUAL_EDGES_KEY,
@@ -27,6 +28,7 @@ import {
   visualShapeFacetSchema,
   visualSymbolFacetSchema,
 } from './data.js'
+import { VISUAL_STROKE_KEY } from './stroke.js'
 
 const registry = createFacetRegistry(bundledPlugins)
 
@@ -479,5 +481,46 @@ describe('visual.ink/v0 — which strokes are one thing', () => {
       facets: { [VISUAL_INK_KEY]: { group: 42 } },
     }
     expect(resolveInkGroup(wrong as never)).toBeUndefined()
+  })
+})
+
+describe('visual.stroke/v0 — how heavy a stroke is drawn', () => {
+  const stroke = (facets?: Record<string, unknown>) => ({
+    id: 'a',
+    from: { kind: 'point' as const, point: { x: 0, y: 0 }, end: 'none' as const },
+    to: { kind: 'point' as const, point: { x: 10, y: 10 }, end: 'none' as const },
+    ...(facets === undefined ? {} : { facets }),
+  })
+
+  it('attaches where a line keeps its facets, the edge slot', () => {
+    const registry = createFacetRegistry(bundledPlugins)
+    expect(registry.targetsOf(VISUAL_STROKE_KEY)).toEqual(['edge'])
+  })
+
+  it('answers the width a stroke was drawn at', () => {
+    expect(resolveStrokeWidth(stroke({ [VISUAL_STROKE_KEY]: { width: 'medium' } }) as never)).toBe(
+      'medium',
+    )
+    expect(resolveStrokeWidth(stroke({ [VISUAL_STROKE_KEY]: { width: 'thick' } }) as never)).toBe(
+      'thick',
+    )
+  })
+
+  it('answers thin for a stroke that says nothing, since thin is the absent facet', () => {
+    // Every line drawn before widths existed, and every line an import or an
+    // agent wrote, carries none — and must keep the weight it always had.
+    expect(resolveStrokeWidth(stroke() as never)).toBe('thin')
+    expect(resolveStrokeWidth(stroke({}) as never)).toBe('thin')
+  })
+
+  it('refuses to store thin, so one weight has one spelling', () => {
+    const registry = createFacetRegistry(bundledPlugins)
+    expect(registry.resolveFacetPayload(VISUAL_STROKE_KEY, { width: 'thin' }).kind).not.toBe(
+      'resolved',
+    )
+  })
+
+  it('answers thin rather than throwing on a payload that does not fit', () => {
+    expect(resolveStrokeWidth(stroke({ [VISUAL_STROKE_KEY]: { width: 9 } }) as never)).toBe('thin')
   })
 })

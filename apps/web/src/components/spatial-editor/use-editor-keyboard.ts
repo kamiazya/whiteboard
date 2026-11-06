@@ -13,7 +13,7 @@ import {
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import { useRef } from 'react'
+import { useRef, useState } from 'react'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { attachTargetName } from '../../lib/spatial/attach-target-label.js'
@@ -54,12 +54,30 @@ const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
   ArrowDown: { dx: 0, dy: 1 },
 }
 
+/**
+ * Escape with the eraser armed and no sweep in flight puts it down. An
+ * eraser left armed turns the next press on a drawing into a deletion, so
+ * the key that means "stop" must reach it the way it reaches a gesture.
+ */
+function leaveEraserWithEscape(
+  e: React.KeyboardEvent<HTMLDivElement>,
+  tool: EditorTool,
+  gesture: string,
+  changeTool: (tool: EditorTool) => void,
+): boolean {
+  if (e.key !== 'Escape' || tool !== 'erase' || gesture !== 'idle') return false
+  e.preventDefault()
+  changeTool('select')
+  return true
+}
+
 /** The catalog rows that arm a tool, and the tool each arms. */
 const TOOL_SHORTCUTS: Partial<Record<ShortcutId, EditorTool>> = {
   'tool-select': 'select',
   'tool-hand': 'hand',
   'tool-connect': 'connect',
   'tool-draw': 'draw',
+  'tool-erase': 'erase',
 }
 
 const ATTACH_TARGET_STEP: Record<string, 1 | -1> = {
@@ -175,6 +193,12 @@ export function useEditorKeyboard({
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
   const handOffTabRef = useRef(false)
+  // The same fact as state, so the canvas name can say what Tab will do.
+  const [handingOffTab, setHandingOffTab] = useState(false)
+  const handOffTab = (next: boolean): void => {
+    handOffTabRef.current = next
+    setHandingOffTab(next)
+  }
 
   const selectOnly = (id: string): void => {
     applySelection({ type: 'set-members', ids: [id] })
@@ -200,14 +224,14 @@ export function useEditorKeyboard({
   const stepThroughStops = (step: 1 | -1): boolean => {
     const nothingSelected = selection === undefined && selectedInkIds.length === 0
     const handOff = handOffTabRef.current && nothingSelected
-    handOffTabRef.current = false
+    handOffTab(false)
     return !handOff && walk.step(step)
   }
 
   const selectAdjacent = (key: string): boolean => {
     const direction = ADJACENT_DIRECTION[key]
     if (direction === undefined) return false
-    handOffTabRef.current = false
+    handOffTab(false)
     const nodes = traversableNodes()
     const id =
       selection === undefined
@@ -246,6 +270,14 @@ export function useEditorKeyboard({
   }
 
   const runNavigation = (id: ShortcutId, e: React.KeyboardEvent<HTMLDivElement>): boolean => {
+    // F6 moves between page regions from anywhere in the canvas's region,
+    // the dock and a node's links included — not only from the root — so a
+    // keyboard user on Undo is not stranded there. A text field keeps it.
+    const leave =
+      id === 'leave-canvas-forward' ? 1 : id === 'leave-canvas-backward' ? -1 : undefined
+    if (leave !== undefined && gestureState.kind === 'idle' && !typingInText(e)) {
+      return focusPastCanvas(e.currentTarget, leave)
+    }
     // Only the canvas root itself: a Tab or Enter from the dock, a handle or a
     // connect target belongs to that control.
     if (e.target !== e.currentTarget || gestureState.kind !== 'idle') return false
@@ -262,10 +294,6 @@ export function useEditorKeyboard({
       case 'open-context-menu-shift-f10':
         openSelectionMenu()
         return true
-      case 'leave-canvas-forward':
-        return focusPastCanvas(e.currentTarget, 1)
-      case 'leave-canvas-backward':
-        return focusPastCanvas(e.currentTarget, -1)
       default:
         return false
     }
@@ -278,10 +306,10 @@ export function useEditorKeyboard({
       // Nothing left to let go of: this Escape is the way out, so the Tab
       // after it is the browser's. An Escape that DID release a selection
       // keeps the walk, or the first Escape would already have left it.
-      handOffTabRef.current = true
+      handOffTab(true)
       return false
     }
-    handOffTabRef.current = false
+    handOffTab(false)
     e.preventDefault()
     applySelection({ type: 'clear' })
     setSelectedEdgeId(null)
@@ -665,6 +693,7 @@ export function useEditorKeyboard({
       clearInkSelection(e) ||
       deleteInkSelection(e) ||
       cancelWithEscape(e) ||
+      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool) ||
       releaseSelectionWithEscape(e) ||
       armSpacePan(e) ||
       nudgeSelection(e) ||
@@ -754,5 +783,11 @@ export function useEditorKeyboard({
     )
   }
 
-  return { handleKeyDown, handleResizeHandleKeyDown, handleConnectKeyDown }
+  return {
+    handleKeyDown,
+    handleResizeHandleKeyDown,
+    handleConnectKeyDown,
+    /** Whether the next Tab is the browser's: nothing selected, after the Escape that let go. */
+    tabLeavesCanvas: handingOffTab && selection === undefined && selectedInkIds.length === 0,
+  }
 }

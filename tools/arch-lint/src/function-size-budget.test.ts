@@ -168,7 +168,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/navigation.ts#reduceTouchPress': 65,
   'apps/web/src/components/spatial-editor/CanvasContextMenu.tsx#CanvasContextMenu': 218,
   'apps/web/src/components/spatial-editor/CanvasDisplaySettings.tsx#CanvasDisplaySettings': 114, // +1: the Whole canvas heading
-  'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 151,
+  'apps/web/src/components/spatial-editor/CommentThreadCard.tsx#CommentThreadCard': 155, // +4: reply and resolve announce on the canvas region
   // One branch per item kind instead of a nested JSX ternary.
   'apps/web/src/components/ui/ContextMenu.tsx#ContextMenu': 210,
   'apps/web/src/components/spatial-editor/DocumentPickerDialog.tsx#DocumentPickerDialog': 62,
@@ -200,7 +200,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1750, // +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle; +1: the orphaned-conversation flag on the comment card; +3: the Connect tool hint mount
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1753, // +1: the Tab hand-off state and the Draw tool's pen both thread through; +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle; +1: the orphaned-conversation flag on the comment card; +3: the Connect tool hint mount; +2: the Draw tool's pen and the eraser's announcement verb
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -211,9 +211,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 117, // +1: the exit strip told the field is one line; +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 269,
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 270, // +1: the eraser's dock button
   // +9: the exit hint follows the bubble as it grows.
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 108, // +1: a posted comment is announced; +1: the editor's accessible name
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
@@ -235,7 +235,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 620, // +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node; +4: F6 and Shift+F6 leave the canvas keeping the selection
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 637, // +1: Escape puts the eraser down; +16: the Tab hand-off is state the canvas name reads, and F6 leaves the canvas from its dock too; +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node; +4: F6 and Shift+F6 leave the canvas keeping the selection
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in
@@ -250,7 +250,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 98, // +3: the lift is recorded, and taken back once nothing is being typed into
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
-  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 152, // +5: Group frames a selection and opens the new frame's name
+  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 156, // +4: a new frame from the dock takes the frame search, so its name strip stays clear; +5: Group frames a selection and opens the new frame's name
   'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
   'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 218,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,
@@ -281,7 +281,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // is the shape a LINE budget cannot tell from logic and the complexity budget
   // can: all four are under the complexity threshold.
   // +3: the search combobox, owned here because the box and its results are siblings.
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 807,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel': 810, // +3: Recent and preview opens name the row Back returns to
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx#WorkspaceFilesPanel.renderColumns': 92,
   // +1: the search box's `maxLength`, the query bound the search tool holds.
   'apps/web/src/components/workspace-files/workspace-files-panel-parts.tsx#PanelToolbar': 97,

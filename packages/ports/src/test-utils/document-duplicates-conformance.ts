@@ -13,6 +13,10 @@ type DuplicatingIndex = DocumentIndex & DocumentDuplicates
 interface ContentSeam {
   write(workspaceId: string, path: string, marker: string): Promise<void>
   read(workspaceId: string, path: string): Promise<string>
+  /** Opens a comment thread `threadId` on the document — its annotation layer. */
+  comment(workspaceId: string, path: string, threadId: string): Promise<void>
+  /** The ids of the comment threads the document holds, sorted. */
+  threadIds(workspaceId: string, path: string): Promise<string[]>
 }
 
 type MakeDuplicatingIndex = () => Promise<{
@@ -73,6 +77,7 @@ export function describeDocumentDuplicatesConformance(makeIndex: MakeDuplicating
 
     describeNumbering(withIndex)
     describeSource(withIndex)
+    describeAnnotations(withIndex)
     describeRefusals(withIndex)
   })
 }
@@ -165,6 +170,43 @@ function describeSource(withIndex: WithIndex): void {
       await content.write(WS, 'notes/roadmap', 'changed afterwards')
 
       await expect(content.read(WS, 'notes/roadmap-copy')).resolves.toBe('ship it')
+    })
+  })
+}
+
+/**
+ * The conversation travels with a plain copy, and stays behind when asked
+ * to: a copy without comments holds the content alone, and the source keeps
+ * every thread it had.
+ */
+function describeAnnotations(withIndex: WithIndex): void {
+  it('carries the comment threads into a plain copy', async () => {
+    await withIndex(async (index, content) => {
+      await roadmap(index, content)
+      await content.comment(WS, 'notes/roadmap', 't1')
+
+      await index.duplicateDocument({ workspaceId: WS, path: 'notes/roadmap' })
+
+      await expect(content.threadIds(WS, 'notes/roadmap-copy')).resolves.toEqual(['t1'])
+    })
+  })
+
+  it('leaves the threads behind in a copy without them, and the source keeps its own', async () => {
+    await withIndex(async (index, content) => {
+      await roadmap(index, content)
+      await content.comment(WS, 'notes/roadmap', 't1')
+      await content.comment(WS, 'notes/roadmap', 't2')
+
+      const copy = await index.duplicateDocument({
+        workspaceId: WS,
+        path: 'notes/roadmap',
+        withoutAnnotations: true,
+      })
+
+      expect(copy).toMatchObject({ path: 'notes/roadmap-copy', name: 'Roadmap (copy)' })
+      await expect(content.read(WS, 'notes/roadmap-copy')).resolves.toBe('ship it')
+      await expect(content.threadIds(WS, 'notes/roadmap-copy')).resolves.toEqual([])
+      await expect(content.threadIds(WS, 'notes/roadmap')).resolves.toEqual(['t1', 't2'])
     })
   })
 }

@@ -146,7 +146,11 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // reported only where a relation holds it and every position a line can
     // hold went uncounted — `visual.ink/v0`'s `group` and `visual.edges/v0`'s
     // `lineJumps` and `routing`, under `lines[].facets`.
-    expect(census.facet).toHaveLength(19)
+    //
+    // 19 -> 21 for `visual.stroke/v0`'s `width`: how heavy a stroke is drawn.
+    // One field on the edge target, so two positions — `edges[].facets` and
+    // `lines[].facets` — the same placement the census learned above.
+    expect(census.facet).toHaveLength(21)
   })
 
   it('classifies the positions outside the format', () => {
@@ -199,8 +203,11 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // 53/75 -> 56/78, a correction of the instrument rather than a move of
     // the model: the three line positions of an edge-target facet, which the
     // census had not placed. Both halves again, so 70.7% -> 71.8%.
+    //
+    // 56/78 -> 58/80 for `visual.stroke/v0`'s two positions: both halves
+    // again, so 71.8% -> 72.5%.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(56)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(78)
+    expect(outside).toBe(58)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(80)
   })
 })

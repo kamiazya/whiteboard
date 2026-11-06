@@ -87,3 +87,48 @@ describe('edge arrowheads render as shared <marker> defs', () => {
     expect(svg).toContain('fill="none"/></marker>')
   })
 })
+
+describe('a heavy line scales its arrowhead and stops short of the tip', () => {
+  // 7.5 is the bundled theme's 1.5 at the `thick` weight's 5x.
+  const heavy = (overrides: Partial<ResolvedEdgeNode> = {}) =>
+    edge({ appearance: { stroke: '#404040', strokeWidth: 7.5 }, ...overrides })
+
+  it('draws the end marker three times larger, tip still on the endpoint', () => {
+    const svg = renderSceneToSvg({ nodes: [heavy()] })
+    // Head length 30 and width 24; the line stops 9.375 short, so the
+    // marker's reference sits that far back from the tip.
+    expect(svg).toMatch(
+      /<marker id="wb-arrow-end-_23404040-[^"]+" markerWidth="30" markerHeight="24" refX="20.625" refY="12" markerUnits="userSpaceOnUse" orient="auto"><polygon points="30,12 0,0 0,24" fill="#404040"\/><\/marker>/,
+    )
+    expect(svg).toContain('points="0,0 90.625,0"')
+  })
+
+  it('pulls the start of the line back under a start arrow', () => {
+    const svg = renderSceneToSvg({ nodes: [heavy({ fromEnd: 'arrow', toEnd: 'none' })] })
+    expect(svg).toMatch(
+      /<marker id="wb-arrow-start-[^"]+" markerWidth="30" markerHeight="24" refX="9.375" refY="12"/,
+    )
+    expect(svg).toContain('points="9.375,0 100,0"')
+  })
+
+  it('a heavy and a light arrow in one colour keep separate definitions', () => {
+    const svg = renderSceneToSvg({ nodes: [edge({}), heavy()] })
+    expect(svg.match(/<marker /g)).toHaveLength(2)
+  })
+
+  it('a terminal run too short to shorten keeps its end, tip on the endpoint', () => {
+    const svg = renderSceneToSvg({
+      nodes: [
+        heavy({
+          path: [
+            { x: 0, y: 0 },
+            { x: 0, y: 50 },
+            { x: 5, y: 50 },
+          ],
+        }),
+      ],
+    })
+    expect(svg).toContain('points="0,0 0,50 5,50"')
+    expect(svg).toMatch(/markerWidth="30" markerHeight="24" refX="30" refY="12"/)
+  })
+})

@@ -5,8 +5,8 @@ const LAST_TOOL_KEY_PREFIX = 'wb.lastTool:'
 const keyFor = (documentKey: string) => `${LAST_TOOL_KEY_PREFIX}${documentKey}`
 
 /**
- * Only the two resting tools are remembered. `connect` and `draw` are
- * transient marking modes — restoring either would drop the user into
+ * Only the two resting tools are remembered. `connect`, `draw` and `erase`
+ * are transient marking modes — restoring either would drop the user into
  * drawing on a canvas they just opened.
  */
 type RestingTool = Extract<EditorTool, 'select' | 'hand'>

@@ -11,6 +11,8 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useRef, useState } from 'react'
+import { announceOnCanvas } from '../../lib/canvas-announcer.js'
+import { COMMENT_ANNOUNCEMENTS } from '../../lib/comment-announcements.js'
 import { commentMessageLengthLimit } from '../../lib/comment-message-limit.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -215,6 +217,7 @@ export function CommentComposeOverlay({
               ],
             })
           }
+          if (text.length > 0) announceOnCanvas(COMMENT_ANNOUNCEMENTS.posted)
           onClose()
         }}
         onCancel={onClose}

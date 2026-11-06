@@ -2,6 +2,8 @@
 export interface PrintBlock {
   readonly y: number
   readonly h: number
+  /** A heading, which prints on the same page as the block it introduces. */
+  readonly heading?: boolean
 }
 
 /** One horizontal strip of the drawn body that prints as a unit. */
@@ -22,8 +24,9 @@ export interface PrintBand {
  * first strip starts at 0 and the last ends at `height`, so the padding the
  * SVG was drawn with survives. Blocks are taken in order of their top; a
  * block that overlaps the one before (nothing lays out that way, but the
- * input is data) joins its strip rather than cutting through it. With no
- * blocks the whole body is one strip.
+ * input is data) joins its strip rather than cutting through it. A heading
+ * shares its strip with the block after it, so it is never left alone at the
+ * foot of a page. With no blocks the whole body is one strip.
  */
 export function printBands(blocks: readonly PrintBlock[], height: number): readonly PrintBand[] {
   if (!(height > 0)) return []
@@ -38,7 +41,7 @@ export function printBands(blocks: readonly PrintBlock[], height: number): reado
     const block = sorted[index] as PrintBlock
     reach = Math.max(reach, block.y + block.h)
     const next = sorted[index + 1]
-    if (next === undefined || next.y < reach) continue
+    if (next === undefined || next.y < reach || block.heading === true) continue
     const cut = Math.min(height, (reach + next.y) / 2)
     if (cut > top) bands.push({ top, bottom: cut })
     top = cut

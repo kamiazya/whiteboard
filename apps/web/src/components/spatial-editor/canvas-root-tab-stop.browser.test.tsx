@@ -99,3 +99,28 @@ it('the canvas name follows the board: frames and connections apart from notes, 
     ),
   )
 })
+
+it('after the Escape that hands Tab back, the canvas name says Tab leaves it', async () => {
+  const { container } = mountAfterButton(board)
+  rootOf(container).focus()
+  await userEvent.keyboard('{Tab}')
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() =>
+    expect(rootOf(container).getAttribute('aria-label')).toBe(
+      'Canvas, 2 notes. Tab selects the first note',
+    ),
+  )
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() =>
+    expect(rootOf(container).getAttribute('aria-label')).toBe(
+      'Canvas, 2 notes. Tab leaves the canvas',
+    ),
+  )
+  await userEvent.keyboard('{Tab}')
+  expect(document.activeElement).not.toBe(rootOf(container))
+  // Coming back starts the walk again, and says so.
+  rootOf(container).focus()
+  expect(rootOf(container).getAttribute('aria-label')).toBe(
+    'Canvas, 2 notes. Tab selects the first note',
+  )
+})
