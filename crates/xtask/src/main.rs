@@ -5,6 +5,7 @@ mod dist;
 mod harden;
 mod inputs;
 mod metadata;
+mod notices;
 mod repro;
 mod size;
 mod unsafe_ledger;
@@ -29,6 +30,7 @@ tasks:
                     SOURCE_DATE_EPOCH, cargo-auditable for native)
   repro-check [native|wasm]...
                     two release builds, from two source paths, are byte-equal
+  notices           THIRD-PARTY-NOTICES for the wasm and native artifacts
   unsafe-ledger [--update]
                     dependency `unsafe` fits crates/unsafe-ledger.json";
 
@@ -46,6 +48,7 @@ fn main() -> ExitCode {
         ["harden-check", rest @ ..] => harden::run(rest),
         ["dist", rest @ ..] => dist::run_task(rest),
         ["repro-check", rest @ ..] => repro::run(rest),
+        ["notices"] => notices::run(),
         ["unsafe-ledger"] => unsafe_ledger::run(unsafe_ledger::Mode::Check),
         ["unsafe-ledger", "--update"] => unsafe_ledger::run(unsafe_ledger::Mode::Update),
         _ => Err(vec![USAGE.to_owned()]),
