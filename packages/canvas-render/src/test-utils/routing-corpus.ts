@@ -321,19 +321,8 @@ export function stackedFrameLayouts(count: number): readonly RoutingCase[] {
         label: TITLES[int(5)] ?? 'Actions',
       }),
     ]
-    const members: string[][] = [[], []]
-    for (const [f, oy] of [
-      [0, 0],
-      [1, frameH + gap],
-    ] as const) {
-      for (let site = 0; site < 6; site++) {
-        if (int(4) === 0) continue
-        const id = `${f === 0 ? 't' : 'b'}${site}`
-        nodes.push(node(id, 40 + (site % 3) * 200, oy + 40 + Math.floor(site / 3) * 130, 160, 100))
-        members[f]?.push(id)
-      }
-    }
-    const [upper, lower] = members as [string[], string[]]
+    const upper = placeNotes(nodes, 't', 0, int)
+    const lower = placeNotes(nodes, 'b', frameH + gap, int)
     const edges: CanvasEdge[] = []
     const seen = new Set<string>()
     for (let e = 0; e < 3 + int(4); e++) {
@@ -350,4 +339,21 @@ export function stackedFrameLayouts(count: number): readonly RoutingCase[] {
     if (edges.length > 0) cases.push({ name: `stacked frames ${i}`, nodes, edges })
   }
   return cases
+}
+
+/** Notes on a frame's 3x2 grid from `top`, about three sites in four filled; answers their ids. */
+function placeNotes(
+  nodes: SpatialNode[],
+  prefix: string,
+  top: number,
+  int: (max: number) => number,
+): string[] {
+  const ids: string[] = []
+  for (let site = 0; site < 6; site++) {
+    if (int(4) === 0) continue
+    const id = `${prefix}${site}`
+    nodes.push(node(id, 40 + (site % 3) * 200, top + 40 + Math.floor(site / 3) * 130, 160, 100))
+    ids.push(id)
+  }
+  return ids
 }

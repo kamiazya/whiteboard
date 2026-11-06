@@ -14,10 +14,15 @@
  * it starts from the boxes the direct line meets and adds a box's corners
  * only once a leg it tried has run into that box, so a route on a crowded
  * canvas pays for the few boxes near it rather than for the canvas.
+ *
+ * Beside it, what decides how such a route meets its two boxes: whether a
+ * leg runs along the side it ends on (`approachesSideways`), and the stub
+ * that squares a detour's glancing end (`squareEnds`).
  */
 
+import type { EdgeSide } from '@kamiazya/whiteboard-model'
 import type { Point, Rect } from './edge-geometry.js'
-import { containsPoint, segmentCrossesRect } from './edge-geometry.js'
+import { containsPoint, outwardNormal, segmentCrossesRect } from './edge-geometry.js'
 
 /**
  * Something a leg must not cross. `block` is the rect the leg is tested
@@ -50,8 +55,7 @@ const CORNER_COST_PX = 4
 /**
  * The shortest path from `start` to `end` turning only at the corners of
  * `obstacles`' bodies grown by `clearance`, or `undefined` when none was found
- * within the search's budget. The direct segment is NOT tried here — the
- * caller asks this only once it is blocked.
+ * within the search's budget. The direct segment when nothing blocks it.
  */
 export function cornerDetour(
   start: Point,
@@ -59,31 +63,7 @@ export function cornerDetour(
   obstacles: readonly DetourObstacle[],
   clearance: number,
 ): Point[] | undefined {
-  const blockerOf = (a: Point, b: Point): number | undefined => {
-    const minX = Math.min(a.x, b.x)
-    const maxX = Math.max(a.x, b.x)
-    const minY = Math.min(a.y, b.y)
-    const maxY = Math.max(a.y, b.y)
-    for (let i = 0; i < obstacles.length; i++) {
-      const o = obstacles[i] as DetourObstacle
-      const { block } = o
-      // Most boxes are nowhere near a given leg; reject those before the
-      // escape test, which costs two containment checks.
-      if (
-        maxX < block.x ||
-        minX > block.x + block.w ||
-        maxY < block.y ||
-        minY > block.y + block.h
-      ) {
-        continue
-      }
-      const rect =
-        o.escapable && (containsPoint(o.block, a) || containsPoint(o.block, b)) ? o.body : o.block
-      if (segmentCrossesRect(a, b, rect)) return i
-    }
-    return undefined
-  }
-
+  const blockerOf = firstBlocker(obstacles)
   const first = blockerOf(start, end)
   if (first === undefined) return [start, end]
 
@@ -120,6 +100,39 @@ export function cornerDetour(
     for (const i of [...met].sort((a, b) => a - b)) add(i)
   }
   return best
+}
+
+/**
+ * The index of the first obstacle the leg `a`->`b` runs into, testing an
+ * escapable obstacle by its body for a leg with an end inside its block.
+ */
+function firstBlocker(
+  obstacles: readonly DetourObstacle[],
+): (a: Point, b: Point) => number | undefined {
+  return (a: Point, b: Point): number | undefined => {
+    const minX = Math.min(a.x, b.x)
+    const maxX = Math.max(a.x, b.x)
+    const minY = Math.min(a.y, b.y)
+    const maxY = Math.max(a.y, b.y)
+    for (let i = 0; i < obstacles.length; i++) {
+      const o = obstacles[i] as DetourObstacle
+      const { block } = o
+      // Most boxes are nowhere near a given leg; reject those before the
+      // escape test, which costs two containment checks.
+      if (
+        maxX < block.x ||
+        minX > block.x + block.w ||
+        maxY < block.y ||
+        minY > block.y + block.h
+      ) {
+        continue
+      }
+      const rect =
+        o.escapable && (containsPoint(o.block, a) || containsPoint(o.block, b)) ? o.body : o.block
+      if (segmentCrossesRect(a, b, rect)) return i
+    }
+    return undefined
+  }
 }
 
 /** The corners a route may turn at: a body grown by `clearance`, minus any inside a block. */
@@ -213,4 +226,73 @@ function pathTo(at: number, prev: readonly number[], vertices: readonly Point[])
   const path: Point[] = []
   for (let v = at; v !== -1; v = prev[v] as number) path.push(vertices[v] as Point)
   return path.reverse()
+}
+
+/**
+ * The part of `rect` a line may not enter: everything but its border, so a
+ * leg arriving at an anchor on the border, or running along it, is clear.
+ */
+export function strictInterior(rect: Rect): Rect {
+  const inset = Math.min(0.5, rect.w / 2, rect.h / 2)
+  return { x: rect.x + inset, y: rect.y + inset, w: rect.w - 2 * inset, h: rect.h - 2 * inset }
+}
+
+/** Below this outward-to-tangential ratio (~14°), an approach reads as
+ * running along the side rather than into it. */
+const SIDEWAYS_RATIO = 0.25
+
+/**
+ * Whether a straight run from `anchor` toward `other` would leave through
+ * the anchor side's outward half-plane. When it would not (the direction
+ * grazes along the side or points back across the node — the shape an
+ * occlusion-moved side produces), the edge needs a perpendicular stub
+ * first, or it draws sliding along the node's own border and the arrowhead
+ * meets the side edge-on.
+ */
+export function approachesSideways(anchor: Point, other: Point, side: EdgeSide): boolean {
+  const vx = other.x - anchor.x
+  const vy = other.y - anchor.y
+  // Coincident anchors have no direction to graze along — the degenerate
+  // zero-length path stays minimal rather than growing stubs.
+  if (vx === 0 && vy === 0) return false
+  const normal = outwardNormal(side)
+  const outward = normal.x * vx + normal.y * vy
+  const tangential = Math.abs(normal.x * vy - normal.y * vx)
+  return outward <= tangential * SIDEWAYS_RATIO
+}
+
+/**
+ * A detour's first or last leg can run nearly along its own side — a turn at
+ * a corner beside the box sends it off at a glancing angle — so the line and
+ * its arrowhead slide into the box edge-on. A stub squares that end, where
+ * the leg on from the stub's tip is clear; otherwise the glancing leg stays,
+ * since a line through something is worse than one meeting a box obliquely.
+ */
+export function squareEnds(
+  path: Point[],
+  {
+    exit,
+    entry,
+    fromSide,
+    toSide,
+    clear,
+  }: {
+    exit: Point
+    entry: Point
+    fromSide: EdgeSide
+    toSide: EdgeSide
+    clear: (a: Point, b: Point) => boolean
+  },
+): Point[] {
+  if (path.length === 2) return path
+  const squared = [...path]
+  const start = squared[0] as Point
+  const next = squared[1] as Point
+  if (approachesSideways(start, next, fromSide) && clear(exit, next)) squared.splice(1, 0, exit)
+  const end = squared[squared.length - 1] as Point
+  const before = squared[squared.length - 2] as Point
+  if (approachesSideways(end, before, toSide) && clear(before, entry)) {
+    squared.splice(squared.length - 1, 0, entry)
+  }
+  return squared
 }

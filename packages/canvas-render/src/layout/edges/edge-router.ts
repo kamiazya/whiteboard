@@ -43,7 +43,13 @@ import { deriveDefaultSides, ORTHOGONAL_STUB_PX, selfEdgeLoopControlPoints } fro
 import { routeOnGrid } from './grid-route.js'
 import type { RouteEnds, RouteObstacles } from './route-ends.js'
 import type { RoutingBudget } from './routing-budget.js'
-import { cornerDetour, type DetourObstacle } from './straight-detour.js'
+import {
+  approachesSideways,
+  cornerDetour,
+  type DetourObstacle,
+  squareEnds,
+  strictInterior,
+} from './straight-detour.js'
 
 /** How close a route may pass to a foreign node's border, in px. */
 const ROUTE_MARGIN_PX = 8
@@ -158,39 +164,6 @@ function routeStraight(
 }
 
 /**
- * The part of `rect` a line may not enter: everything but its border, so a
- * leg arriving at an anchor on the border, or running along it, is clear.
- */
-function strictInterior(rect: Rect): Rect {
-  const inset = Math.min(0.5, rect.w / 2, rect.h / 2)
-  return { x: rect.x + inset, y: rect.y + inset, w: rect.w - 2 * inset, h: rect.h - 2 * inset }
-}
-
-/** Below this outward-to-tangential ratio (~14°), an approach reads as
- * running along the side rather than into it. */
-const SIDEWAYS_RATIO = 0.25
-
-/**
- * Whether a straight run from `anchor` toward `other` would leave through
- * the anchor side's outward half-plane. When it would not (the direction
- * grazes along the side or points back across the node — the shape an
- * occlusion-moved side produces), the edge needs a perpendicular stub
- * first, or it draws sliding along the node's own border and the arrowhead
- * meets the side edge-on.
- */
-function approachesSideways(anchor: Point, other: Point, side: EdgeSide): boolean {
-  const vx = other.x - anchor.x
-  const vy = other.y - anchor.y
-  // Coincident anchors have no direction to graze along — the degenerate
-  // zero-length path stays minimal rather than growing stubs.
-  if (vx === 0 && vy === 0) return false
-  const normal = outwardNormal(side)
-  const outward = normal.x * vx + normal.y * vy
-  const tangential = Math.abs(normal.x * vy - normal.y * vx)
-  return outward <= tangential * SIDEWAYS_RATIO
-}
-
-/**
  * The anchor slid along its side so the run to `target` is axis-aligned,
  * or undefined when the target's coordinate falls outside the side's span
  * (keeping a corner inset). A side midpoint is a default, not authored
@@ -262,42 +235,6 @@ function routeStraightWithApproach(
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
   return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own), end])
 }
-/**
- * A detour's first or last leg can run nearly along its own side — a turn at
- * a corner beside the box sends it off at a glancing angle — so the line and
- * its arrowhead slide into the box edge-on. A stub squares that end, where
- * the leg on from the stub's tip is clear; otherwise the glancing leg stays,
- * since a line through something is worse than one meeting a box obliquely.
- */
-function squareEnds(
-  path: Point[],
-  {
-    exit,
-    entry,
-    fromSide,
-    toSide,
-    clear,
-  }: {
-    exit: Point
-    entry: Point
-    fromSide: EdgeSide
-    toSide: EdgeSide
-    clear: (a: Point, b: Point) => boolean
-  },
-): Point[] {
-  if (path.length === 2) return path
-  const squared = [...path]
-  const start = squared[0] as Point
-  const next = squared[1] as Point
-  if (approachesSideways(start, next, fromSide) && clear(exit, next)) squared.splice(1, 0, exit)
-  const end = squared[squared.length - 1] as Point
-  const before = squared[squared.length - 2] as Point
-  if (approachesSideways(end, before, toSide) && clear(before, entry)) {
-    squared.splice(squared.length - 1, 0, entry)
-  }
-  return squared
-}
-
 function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
   return {

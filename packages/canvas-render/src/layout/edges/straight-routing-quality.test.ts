@@ -137,71 +137,83 @@ type Board = {
   borderInk: number
 }
 
+/** Running totals over every edge scored, rounded only when reported. */
+type Tally = Omit<Board, 'ratio' | 'worstRatio'> & { worst: number }
+
 function score(
   cases: readonly RoutingCase[],
   route: (testCase: RoutingCase) => { paths: Map<string, Path>; titles: MetricRect[] },
 ): Board {
-  const violations = { foreign: 0, 'own-endpoint': 0 }
-  let interior = 0
-  let titleCrossings = 0
-  let length = 0
-  let direct = 0
-  let worst = 1
-  let longDetours = 0
-  let grazingEnds = 0
-  let bendCount = 0
-  let crossingCount = 0
-  let border = 0
+  const tally: Tally = {
+    violations: { foreign: 0, 'own-endpoint': 0 },
+    interiorInk: 0,
+    titleCrossings: 0,
+    length: 0,
+    direct: 0,
+    worst: 1,
+    longDetours: 0,
+    grazingEnds: 0,
+    bends: 0,
+    crossings: 0,
+    borderInk: 0,
+  }
   for (const testCase of cases) {
     const { paths, titles } = route(testCase)
     const drawn: Path[] = []
     for (const edge of testCase.edges as readonly CanvasEdge[]) {
       const path = paths.get(edge.id)
-      const start = path?.[0]
-      const end = path?.[path.length - 1]
-      if (path === undefined || start === undefined || end === undefined) continue
+      if (path === undefined || path.length < 2) continue
       drawn.push(path)
-      const span = Math.hypot(end.x - start.x, end.y - start.y)
-      const travelled = pathLength(path)
-      length += travelled
-      direct += span
-      if (span > 0) worst = Math.max(worst, travelled / span)
-      if (travelled > LONG_DETOUR_RATIO * span) longDetours++
-      bendCount += bends(path)
-      const fromNode = testCase.nodes.find((n) => n.id === endNode(edge.from))
-      const toNode = testCase.nodes.find((n) => n.id === endNode(edge.to))
-      const second = path[1]
-      const penultimate = path[path.length - 2]
-      if (fromNode && second && grazes(start, second, rectOf(fromNode))) grazingEnds++
-      if (toNode && penultimate && grazes(end, penultimate, rectOf(toNode))) grazingEnds++
-      for (const n of testCase.nodes) {
-        const rect = rectOf(n)
-        border += borderInk(path, rect)
-        if (strictlyInside(rect, start) || strictlyInside(rect, end)) continue
-        const ink = interiorInk(path, rect)
-        if (ink <= 0) continue
-        const own = n.id === endNode(edge.from) || n.id === endNode(edge.to)
-        violations[own ? 'own-endpoint' : 'foreign']++
-        interior += ink
-      }
-      if (titles.some((title) => interiorInk(path, title) > 0)) titleCrossings++
+      scoreEdge(tally, testCase, edge, path, titles)
     }
-    crossingCount += crossings(drawn)
+    tally.crossings += crossings(drawn)
   }
+  const { worst, ...totals } = tally
   return {
-    violations,
-    interiorInk: Math.round(interior),
-    titleCrossings,
-    length: Math.round(length),
-    direct: Math.round(direct),
-    ratio: Math.round((length / direct) * 1000) / 1000,
+    ...totals,
+    interiorInk: Math.round(tally.interiorInk),
+    length: Math.round(tally.length),
+    direct: Math.round(tally.direct),
+    ratio: Math.round((tally.length / tally.direct) * 1000) / 1000,
     worstRatio: Math.round(worst * 100) / 100,
-    longDetours,
-    grazingEnds,
-    bends: bendCount,
-    crossings: crossingCount,
-    borderInk: Math.round(border),
+    borderInk: Math.round(tally.borderInk),
   }
+}
+
+/** Adds one routed edge's columns to `tally`. */
+function scoreEdge(
+  tally: Tally,
+  testCase: RoutingCase,
+  edge: CanvasEdge,
+  path: Path,
+  titles: readonly MetricRect[],
+): void {
+  const start = path[0] as MetricPoint
+  const end = path[path.length - 1] as MetricPoint
+  const span = Math.hypot(end.x - start.x, end.y - start.y)
+  const travelled = pathLength(path)
+  tally.length += travelled
+  tally.direct += span
+  if (span > 0) tally.worst = Math.max(tally.worst, travelled / span)
+  if (travelled > LONG_DETOUR_RATIO * span) tally.longDetours++
+  tally.bends += bends(path)
+  const fromNode = testCase.nodes.find((n) => n.id === endNode(edge.from))
+  const toNode = testCase.nodes.find((n) => n.id === endNode(edge.to))
+  if (fromNode && grazes(start, path[1] as MetricPoint, rectOf(fromNode))) tally.grazingEnds++
+  if (toNode && grazes(end, path[path.length - 2] as MetricPoint, rectOf(toNode))) {
+    tally.grazingEnds++
+  }
+  for (const n of testCase.nodes) {
+    const rect = rectOf(n)
+    tally.borderInk += borderInk(path, rect)
+    if (strictlyInside(rect, start) || strictlyInside(rect, end)) continue
+    const ink = interiorInk(path, rect)
+    if (ink <= 0) continue
+    const own = n.id === endNode(edge.from) || n.id === endNode(edge.to)
+    tally.violations[own ? 'own-endpoint' : 'foreign']++
+    tally.interiorInk += ink
+  }
+  if (titles.some((title) => interiorInk(path, title) > 0)) tally.titleCrossings++
 }
 
 const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase), titles: [] })
