@@ -5,9 +5,11 @@
 // right-angle detour around everything between its ends.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import { stackedFramesBoard } from '../../test-utils/routing-corpus.js'
 import { interiorInk, pathLength } from '../../test-utils/routing-metrics.js'
 import { node } from '../../test-utils/spatial-node.js'
 import { routeEdge } from './edge-router.js'
+import { assignEdgeAnchors } from './spatial-edges.js'
 
 const rectOf = (n: SpatialNode) => ({ x: n.x, y: n.y, w: n.width, h: n.height })
 
@@ -50,5 +52,22 @@ describe('a straight connection around a box in its way', () => {
     expect(routed.inkThrough('c1')).toBe(0)
     expect(routed.inkThrough('c2')).toBe(0)
     expect(routed.ratio).toBeLessThan(1.5)
+  })
+
+  it('arrives across the side it reaches, not along it', () => {
+    // On two stacked frames of notes, a1 -> b6 passes the column between
+    // them at a corner; the leg on from that corner ran 7 degrees off b6's
+    // left side, sliding into the box edge-on.
+    const { nodes, edges } = stackedFramesBoard()
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    const edge = edges.find((e) => e.id === 'a1_b6')!
+    const routed = routeEdge(nodes, edge, 'straight', anchors.get(edge.id))
+    const end = routed.path[routed.path.length - 1]!
+    const before = routed.path[routed.path.length - 2]!
+    const normal = { left: [-1, 0], right: [1, 0], top: [0, -1], bottom: [0, 1] }[routed.toSide]
+    const [nx, ny] = normal as [number, number]
+    const outward = nx * (before.x - end.x) + ny * (before.y - end.y)
+    const along = Math.abs(nx * (before.y - end.y) - ny * (before.x - end.x))
+    expect(outward).toBeGreaterThan(along * 0.25)
   })
 })

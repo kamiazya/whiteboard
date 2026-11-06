@@ -233,7 +233,17 @@ function routeStraightWithApproach(
   const own = [fromRect, toRect]
   const fromSideways = approachesSideways(start, end, fromSide)
   const toSideways = approachesSideways(end, start, toSide)
-  if (!fromSideways && !toSideways) return routeStraight(start, end, inflated, raw, own)
+  if (!fromSideways && !toSideways) {
+    return squareEnds(routeStraight(start, end, inflated, raw, own), {
+      exit: stubFrom(start, fromSide, fromDepth),
+      entry: stubFrom(end, toSide, toDepth),
+      fromSide,
+      toSide,
+      clear: (a, b) =>
+        blockingRegion(a, b, inflated) === undefined &&
+        !own.some((rect) => segmentCrossesRect(a, b, strictInterior(rect))),
+    })
+  }
   if (toSideways && !fromSideways) {
     const entry = stubFrom(end, toSide, toDepth)
     const slid = slideAlongSide(start, fromRect, fromSide, entry)
@@ -252,6 +262,42 @@ function routeStraightWithApproach(
   const entry = toSideways ? stubFrom(end, toSide, toDepth) : end
   return withoutRepeats([start, ...routeStraight(exit, entry, inflated, raw, own), end])
 }
+/**
+ * A detour's first or last leg can run nearly along its own side — a turn at
+ * a corner beside the box sends it off at a glancing angle — so the line and
+ * its arrowhead slide into the box edge-on. A stub squares that end, where
+ * the leg on from the stub's tip is clear; otherwise the glancing leg stays,
+ * since a line through something is worse than one meeting a box obliquely.
+ */
+function squareEnds(
+  path: Point[],
+  {
+    exit,
+    entry,
+    fromSide,
+    toSide,
+    clear,
+  }: {
+    exit: Point
+    entry: Point
+    fromSide: EdgeSide
+    toSide: EdgeSide
+    clear: (a: Point, b: Point) => boolean
+  },
+): Point[] {
+  if (path.length === 2) return path
+  const squared = [...path]
+  const start = squared[0] as Point
+  const next = squared[1] as Point
+  if (approachesSideways(start, next, fromSide) && clear(exit, next)) squared.splice(1, 0, exit)
+  const end = squared[squared.length - 1] as Point
+  const before = squared[squared.length - 2] as Point
+  if (approachesSideways(end, before, toSide) && clear(before, entry)) {
+    squared.splice(squared.length - 1, 0, entry)
+  }
+  return squared
+}
+
 function stubFrom(point: Point, side: EdgeSide, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
   return {

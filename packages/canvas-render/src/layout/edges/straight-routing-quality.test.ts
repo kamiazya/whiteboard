@@ -206,34 +206,36 @@ function score(
 
 const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase), titles: [] })
 
-// The pins below moved once, when a blocked straight connection stopped going
+// The pins below moved when a blocked straight connection stopped going
 // round one box covering everything in its way and started taking the
 // shortest path through the corners of the boxes actually blocking it
-// (`straight-detour.ts`). Every board got shorter and lost every pixel of
-// border ink, since a corner path never runs along a box's side. What it
-// paid, stated so nobody has to rediscover it:
+// (`straight-detour.ts`), with a perpendicular stub on any first or last leg
+// that would otherwise meet its box at a glancing angle (`squareEnds`).
+// Every board got shorter relative to its direct distance, long detours
+// fell 66 -> 5 and 245 -> 130, and border ink went to zero everywhere but
+// the synthetic corpus (10530 -> 879). What it paid, stated so nobody has
+// to rediscover it:
 //
 // - crossings rose on the framed boards (persona 0 -> 3, generated 76 ->
-//   112) and fell everywhere else (synthetic 248 -> 188, lattice 724 ->
-//   590). A diagonal through a corner gap crosses a neighbour the old
+//   107) and fell everywhere else (synthetic 248 -> 187, lattice 724 ->
+//   592). A diagonal through a corner gap crosses a neighbour the old
 //   detour's outer lane went round.
 // - synthetic `foreign` 21 -> 25 while `own-endpoint` fell 52 -> 20 and
-//   interior ink 5763 -> 3494. Each of the four new ones crosses a box the
-//   router never saw: one touched on its border by an anchor is dropped from
-//   the obstacles, and the side search, seeing different routes, now
-//   settles on anchors that touch it.
-// - `titleCrossings` 114 -> 80 on the generated boards and still 1 on the
+//   interior ink 5763 -> 3446. Each new foreign one crosses a box the router
+//   never saw: one touched on its border by an anchor is dropped from the
+//   obstacles, and the side search, seeing different routes, now settles on
+//   anchors that touch it.
+// - `grazingEnds` 2/111/374/209 -> 1/110/119/0 (persona, generated,
+//   synthetic, lattice). The corner paths alone made it 5/386/167/118 — a
+//   leg on from a corner beside the target can arrive nearly along its
+//   side — which is what the stubs are for; they cost bends (persona
+//   8 -> 9, lattice 1422 -> 1434, generated 841 -> 864).
+// - `titleCrossings` 114 -> 82 on the generated boards and still 1 on the
 //   persona board. The router does not know where a frame's title is — the
 //   title is text, measured, and routing is measure-free — so this column
 //   falls only as a side effect of shorter routes. Making it zero means
 //   handing the measured title boxes to the router and to the side search's
 //   cost model alike.
-//
-// `grazingEnds` was added after that change, and read back against the code
-// before it: 2/111/374/209 there (persona, generated, synthetic, lattice)
-// against 5/386/167/118 here. A corner leg can arrive nearly along its
-// target's side — on the stacked boards three times as often as the old
-// detour did — which no other column could see.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
@@ -241,13 +243,13 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 1,
       // 2618/1860 (1.408), worst 1.69 before the corner detours.
-      length: 1899,
-      direct: 1580,
-      ratio: 1.202,
-      worstRatio: 1.4,
+      length: 2074,
+      direct: 1683,
+      ratio: 1.232,
+      worstRatio: 1.42,
       longDetours: 0,
-      grazingEnds: 5,
-      bends: 6,
+      grazingEnds: 1,
+      bends: 9,
       crossings: 3,
       borderInk: 0,
     })
@@ -257,16 +259,16 @@ describe('straight routing quality', () => {
     expect(score(stackedFrameLayouts(200), layoutStraight)).toEqual({
       violations: { foreign: 0, 'own-endpoint': 0 },
       interiorInk: 0,
-      titleCrossings: 80,
+      titleCrossings: 82,
       // ratio 1.194, worst 1.91, 66 long detours before.
-      length: 270710,
-      direct: 242226,
-      ratio: 1.118,
+      length: 273505,
+      direct: 248787,
+      ratio: 1.099,
       worstRatio: 1.58,
-      longDetours: 6,
-      grazingEnds: 386,
-      bends: 786,
-      crossings: 112,
+      longDetours: 5,
+      grazingEnds: 110,
+      bends: 864,
+      crossings: 107,
       borderInk: 0,
     })
   })
@@ -274,18 +276,18 @@ describe('straight routing quality', () => {
   it('reports the synthetic corpus', { timeout: 180_000 }, () => {
     expect(score(syntheticLayouts(2000), routedOnly)).toEqual({
       violations: { foreign: 25, 'own-endpoint': 20 },
-      interiorInk: 3494,
+      interiorInk: 3446,
       titleCrossings: 0,
       // ratio 1.116, worst 11.63, 245 long detours before.
-      length: 858236,
-      direct: 800854,
-      ratio: 1.072,
+      length: 858299,
+      direct: 801178,
+      ratio: 1.071,
       worstRatio: 7.67,
-      longDetours: 125,
-      grazingEnds: 167,
-      bends: 1896,
-      crossings: 188,
-      borderInk: 998,
+      longDetours: 130,
+      grazingEnds: 119,
+      bends: 1902,
+      crossings: 187,
+      borderInk: 879,
     })
   })
 
@@ -295,14 +297,14 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.068, worst 2.01, 26 long detours before.
-      length: 1178375,
-      direct: 1151990,
+      length: 1176854,
+      direct: 1150196,
       ratio: 1.023,
       worstRatio: 1.53,
       longDetours: 3,
-      grazingEnds: 118,
-      bends: 1416,
-      crossings: 590,
+      grazingEnds: 0,
+      bends: 1434,
+      crossings: 592,
       borderInk: 0,
     })
   })
