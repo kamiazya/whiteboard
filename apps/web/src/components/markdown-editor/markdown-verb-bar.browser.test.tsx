@@ -94,3 +94,15 @@ it('applies a verb to a selection the browser placed that CodeMirror has not rea
 
   await vi.waitFor(() => expect(lastValue(onChange)).toBe('m**il**k'))
 })
+
+it('names a verb its keyboard shortcut, Task among them', async () => {
+  await setViewport(1280, 800)
+  await mount()
+  await vi.waitFor(() => expect(slots().length).toBeGreaterThan(0))
+  const task = screen.getByRole('button', { name: 'Task' })
+  expect(task.getAttribute('aria-keyshortcuts')).toMatch(/\bControl\+Enter\b/)
+  await userEvent.hover(task)
+  await vi.waitFor(() =>
+    expect(screen.getByRole('tooltip').textContent).toBe('Task (⌘/Ctrl+Enter)'),
+  )
+})

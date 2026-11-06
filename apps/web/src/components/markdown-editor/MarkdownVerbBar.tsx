@@ -1,5 +1,6 @@
 import type { StateCommand } from '@codemirror/state'
 import { type MouseEvent as ReactMouseEvent, useEffect, useState } from 'react'
+import { isMacPlatform } from '../../lib/platform.js'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 import {
@@ -14,6 +15,23 @@ import {
 import { useRovingStop } from './use-roving-stop.js'
 import { DESKTOP_BAR_METRICS, layoutVerbBar } from './verb-bar-layout.js'
 import { VERB_ICONS } from './verb-icons.js'
+
+/** A CodeMirror key ("Mod-Enter") as the toolbar's other tooltips spell one ("⌘/Ctrl+Enter"). */
+function keyLabel(key: string): string {
+  return key
+    .split('-')
+    .map((part) => (part === 'Mod' ? '⌘/Ctrl' : part.length === 1 ? part.toUpperCase() : part))
+    .join('+')
+}
+
+/** The same key as `aria-keyshortcuts` spells it, for the platform CodeMirror binds `Mod` on. */
+function ariaKeys(key: string): string {
+  const mod = isMacPlatform() ? 'Meta' : 'Control'
+  return key
+    .split('-')
+    .map((part) => (part === 'Mod' ? mod : part.length === 1 ? part.toUpperCase() : part))
+    .join('+')
+}
 
 const barItems = (canAttach: boolean) =>
   offeredVerbs(VERB_BAR_ORDER, canAttach).map((id) => ({ id, band: verb(id).band }))
@@ -79,6 +97,12 @@ export interface MarkdownVerbBarProps {
   /** Opens the host's image picker; absent, the bar offers no Image slot. */
   readonly pickImage?: () => void
   readonly className?: string
+  /**
+   * Names each verb's key in its tooltip and `aria-keyshortcuts`. Off where
+   * the host binds a verb's key to something else — the canvas node editor's
+   * Mod-Enter saves rather than ticking a task.
+   */
+  readonly showShortcuts?: boolean
 }
 
 /**
@@ -104,6 +128,7 @@ export function MarkdownVerbBar({
   openLinkPicker,
   pickImage,
   className,
+  showShortcuts = false,
 }: MarkdownVerbBarProps) {
   const [ref, width] = useMeasuredWidth()
   // Before the first measurement, showing nothing beats showing a bar that
@@ -131,6 +156,7 @@ export function MarkdownVerbBar({
       {visible.map((id, index) => {
         const spec = verb(id)
         const previous = index > 0 ? verb(visible[index - 1]) : undefined
+        const key = showShortcuts ? spec.key : undefined
         return (
           <div key={id} className="flex items-center">
             {previous !== undefined && previous.band !== spec.band && (
@@ -141,6 +167,7 @@ export function MarkdownVerbBar({
                 <button
                   type="button"
                   aria-label={spec.label}
+                  aria-keyshortcuts={key === undefined ? undefined : ariaKeys(key)}
                   tabIndex={id === stop ? 0 : -1}
                   onFocus={() => onFocusItem(id)}
                   onMouseDown={keepCaret}
@@ -152,7 +179,9 @@ export function MarkdownVerbBar({
                   </span>
                 </button>
               </TooltipTrigger>
-              <TooltipContent>{spec.label}</TooltipContent>
+              <TooltipContent>
+                {key === undefined ? spec.label : `${spec.label} (${keyLabel(key)})`}
+              </TooltipContent>
             </Tooltip>
           </div>
         )
