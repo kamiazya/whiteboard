@@ -97,6 +97,11 @@ keeps every one of its own. The copy is named and placed the same way. Both
 are offered on every document; on one that has no comments they make the
 same copy.
 
+A daemon from before **Duplicate without comments** existed copies the
+comments anyway. The app notices and says so — "This daemon is too old to
+duplicate without comments — update it" — rather than reporting a clean
+copy; the copy that daemon made is left for you to keep or delete.
+
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so
 its menu has no **Rename…**; rename the document instead.

@@ -256,7 +256,12 @@ function duplicateRequestOf(init: RequestInit | undefined): DuplicateDocumentReq
 }
 
 /** The copy the daemon would make, by the rules both keepers share. */
-function duplicateDocument(routes: FakeDaemonRoutes, workspaceId: string, path: string): Response {
+function duplicateDocument(
+  routes: FakeDaemonRoutes,
+  workspaceId: string,
+  path: string,
+  request: DuplicateDocumentRequest,
+): Response {
   const listed = routes.documentsByWorkspace[workspaceId]
   const rows = withSummaryDefaults(typeof listed === 'function' ? listed() : (listed ?? []))
   const source = rows.find((row) => row.path === path)
@@ -276,6 +281,7 @@ function duplicateDocument(routes: FakeDaemonRoutes, workspaceId: string, path: 
         ),
         kind: source.kind,
       },
+      ...(request.withoutAnnotations === true ? { withoutAnnotations: true } : {}),
     }),
   )
 }
@@ -382,7 +388,7 @@ const ROUTES: readonly Route[] = [
     method: 'POST',
     handle: (routes, m, init) =>
       overrideOf(routes.onDuplicateDocument?.(seg(m, 1), seg(m, 2), duplicateRequestOf(init))) ??
-      duplicateDocument(routes, seg(m, 1), seg(m, 2)),
+      duplicateDocument(routes, seg(m, 1), seg(m, 2), duplicateRequestOf(init)),
   },
 ]
 

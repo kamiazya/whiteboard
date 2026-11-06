@@ -138,8 +138,11 @@ describe('POST …/documents/<path>/duplicate', () => {
     })
 
     expect(res.status).toBe(200)
-    const { document } = duplicateDocumentResponseSchema.parse(await res.json())
-    expect(document).toMatchObject({ path: 'notes/roadmap-copy', name: 'roadmap (copy)' })
+    const answered = duplicateDocumentResponseSchema.parse(await res.json())
+    expect(answered.document).toMatchObject({ path: 'notes/roadmap-copy', name: 'roadmap (copy)' })
+    // The echo is how a client tells this daemon from one that never read
+    // the body and copied the comments anyway.
+    expect(answered.withoutAnnotations).toBe(true)
     expect(readMarkdownBody(await getDoc(WS, 'notes/roadmap-copy'))).toBe('ship it')
     await expect(threadIds('notes/roadmap-copy')).resolves.toEqual([])
     await expect(threadIds('notes/roadmap')).resolves.toEqual(['t1'])
@@ -149,8 +152,11 @@ describe('POST …/documents/<path>/duplicate', () => {
     await saveDocument(WS, 'notes/roadmap', commented('ship it'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), { method: 'POST' })
+    const res = await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), { method: 'POST' })
 
+    expect(duplicateDocumentResponseSchema.parse(await res.json())).not.toHaveProperty(
+      'withoutAnnotations',
+    )
     await expect(threadIds('notes/roadmap-copy')).resolves.toEqual(['t1'])
   })
 

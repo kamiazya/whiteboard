@@ -297,14 +297,14 @@ export async function getDocumentSnapshot(
  * there is no half-made copy for this side to clean up. `request` asks for a
  * copy without the annotation layer; absent, the copy is whole.
  */
-export function duplicateDocument(
+export async function duplicateDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
   path: string,
   request: DuplicateDocumentRequest = {},
 ): Promise<DuplicateDocumentResponse> {
-  return fetchAndParse(
+  const answered = await fetchAndParse(
     fetchFn,
     `${daemonBaseUrl}${documentDuplicateApiUrl(workspaceId, path)}`,
     duplicateDocumentResponseSchema,
@@ -314,6 +314,15 @@ export function duplicateDocument(
       body: JSON.stringify(request),
     },
   )
+  // A daemon that predates the option ignores the body and copies the
+  // comments too. The copy it made is the person's to keep or delete — this
+  // side removes nothing — but it must not be reported as comment-free.
+  if (request.withoutAnnotations === true && answered.withoutAnnotations !== true) {
+    throw new Error(
+      'This daemon is too old to duplicate without comments — update it. The copy it made keeps its comments.',
+    )
+  }
+  return answered
 }
 
 export function getWorkspaceNames(
