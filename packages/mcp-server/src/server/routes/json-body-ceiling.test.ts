@@ -139,6 +139,15 @@ async function serverMode(): Promise<Composition> {
   return { app, headers, base: PUBLIC_URL, workspace: workspaceId }
 }
 
+/**
+ * A document addressed by id is resolved before its handler reads the body, so
+ * this walk's placeholder id (which names nothing) is answered 404 first. The
+ * body ceiling those handlers apply is the path form's, which is walked.
+ */
+const ID_ROUTE = '/documents/:documentId'
+const resolvesBeforeTheBody = (key: string) =>
+  key.includes(`${ID_ROUTE}/`) || key.endsWith(ID_ROUTE)
+
 /** `METHOD /pattern` for every write the app registers, `/api/v1` and wildcard actions included. */
 function writeKeys(app: App): string[] {
   const v1 = app.routes
@@ -186,11 +195,14 @@ describe.each(COMPOSITIONS)('an oversized request body on %s', (_name, compose) 
     expect(keys.length).toBeGreaterThan(20)
     expect(keys).toContain('POST /api/sync/message')
     expect(keys.some((key) => key.includes('/api/v1/'))).toBe(true)
+    expect(keys.filter(resolvesBeforeTheBody).length).toBeGreaterThan(5)
   })
 
   it('is 413 on every write that reads a body, whatever its own ceiling', async () => {
     const composition = await compose()
-    const keys = writeKeys(composition.app).filter((key) => READS_NO_BODY[key] === undefined)
+    const keys = writeKeys(composition.app).filter(
+      (key) => READS_NO_BODY[key] === undefined && !resolvesBeforeTheBody(key),
+    )
 
     const answers = await statusOfEach(composition, keys, OVER_EVERY_CEILING)
 
@@ -200,7 +212,10 @@ describe.each(COMPOSITIONS)('an oversized request body on %s', (_name, compose) 
   it('is 413 past a megabyte on every write that takes only fields', async () => {
     const composition = await compose()
     const keys = writeKeys(composition.app).filter(
-      (key) => READS_NO_BODY[key] === undefined && TAKES_CONTENT[key] === undefined,
+      (key) =>
+        READS_NO_BODY[key] === undefined &&
+        TAKES_CONTENT[key] === undefined &&
+        !resolvesBeforeTheBody(key),
     )
 
     const answers = await statusOfEach(composition, keys, A_MEGABYTE_AND_ONE)
