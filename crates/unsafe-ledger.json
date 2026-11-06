@@ -57,6 +57,10 @@
       "ceiling": 333,
       "reason": "xtask only, never shipped: SIMD byte search inside serde_json"
     },
+    "object": {
+      "ceiling": 14,
+      "reason": "xtask only, never shipped: zero-copy casts of header structs from file bytes (the Pod trait, alignment- and length-checked) and a read-cache lifetime transmute; harden-check reads ELF headers through it"
+    },
     "proc-macro2": {
       "ceiling": 6,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: token-stream plumbing of every derive"

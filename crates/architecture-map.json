@@ -409,14 +409,25 @@
       "path": "crates/xtask",
       "layer": "tooling",
       "status": "present",
-      "description": "repository tasks: codegen, architecture map, wasm import scan, size ledger",
+      "description": "repository tasks: codegen, architecture map, wasm import scan, size and unsafe ledgers, fuzz registry, release gates (harden-check, repro-check, dist)",
       "targets": ["native"],
       "allowedInternalDeps": [],
       "allowedThirdParty": {
         "serde": "deserializes the architecture map and the size ledger",
         "serde_json": "reads cargo metadata and the checked-in JSON ledgers",
-        "wasmparser": "reads a wasm artifact's import section for the core import scan"
+        "wasmparser": "reads a wasm artifact's import section for the core import scan",
+        "object": "reads a native binary's ELF headers, segments and dynamic table for harden-check (read-only, std + elf features only)"
       },
+      "absorbs": []
+    },
+    "whiteboard-native-fixture": {
+      "path": "crates/bindings/native-fixture",
+      "layer": "bindings",
+      "status": "present",
+      "description": "a minimal native binary built with the dist-native profile, so the release gates (harden-check, repro-check, cargo-auditable, third-party notices) run against a real artifact until whiteboard-daemon replaces it",
+      "targets": ["native"],
+      "allowedInternalDeps": [],
+      "allowedThirdParty": {},
       "absorbs": []
     },
     "whiteboard-fuzz": {
