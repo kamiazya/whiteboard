@@ -38,7 +38,7 @@ pinch zooms in every tool.
 | `C` | With a node selected: start a connection from it (arrows choose the target, `Enter` connects, `Esc` cancels) |
 | `Cmd/Ctrl + Arrows` | Select the nearest node in that direction |
 | `Enter` / `F2` | Edit the selected node's text, a frame's label, or the selected connection's or line's label (a frame's, connection's or line's label is one line: `Enter` saves it) |
-| `F6` / `Shift + F6` | Leave the canvas for the next control (the bottom dock) or the one before it (the header), keeping the selection. They work the same from a control in the canvas's dock, such as Undo |
+| `F6` / `Shift + F6` | Leave the canvas for the next control after it or the one before it (the header), keeping the selection; the canvas's own dock is skipped. They work the same from a control in the canvas's dock, such as Undo |
 | `Menu` / `Shift + F10` | Open the selection's menu — the one a right-click on it opens — at the selection; with nothing selected, the canvas menu |
 | Arrow keys | Nudge the whole selection (`Shift` for a larger step) |
 | `Cmd/Ctrl + Alt + M` | Comment on the selected node, nodes or connection: opens the comment composer, the same one **Comment on this** opens |
@@ -57,7 +57,7 @@ canvas), so the walk is never a trap. `Esc`
 clears the selection and `Tab` starts the walk again; a second `Esc` with nothing
 selected makes the next `Tab` the browser's, which is the way on to the bottom dock, and
 the canvas then says so ("Tab leaves the canvas").
-To leave without losing the selection, press `F6` (on to the dock) or
+To leave without losing the selection, press `F6` (on past the canvas and its dock) or
 `Shift + F6` (back to the header, where the Display panel shows the selected
 node) — the selection stays exactly as it was. A canvas with no nodes lets `Tab` go straight to the
 dock. Locked nodes and locked connections are skipped, since they cannot be selected.
