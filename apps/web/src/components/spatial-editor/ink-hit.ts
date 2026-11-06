@@ -148,3 +148,33 @@ export function withGroupMates(
   for (const [id, group] of groupOf) if (wanted.has(group)) selected.add(id)
   return [...selected]
 }
+
+/**
+ * The DRAWINGS an eraser moving from `from` to `to` passes over — freehand
+ * strokes only, never a relation, a ruled line or a locked stroke, and never
+ * a node, which the eraser does not see at all.
+ *
+ * The run between two pointer samples is walked, not just its end: a quick
+ * sweep moves further between two events than a stroke is wide, and testing
+ * only where each event landed would step straight over the scribble the
+ * hand plainly crossed. `tolerance` is in canvas units, like `inkUnder`'s.
+ */
+export function drawingsAlong(
+  paths: readonly DrawnPath[],
+  isDrawing: (id: string) => boolean,
+  from: Point,
+  to: Point,
+  tolerance: number,
+  isLocked: (id: string) => boolean,
+): readonly string[] {
+  const step = Math.max(tolerance / 2, Number.EPSILON)
+  const samples = Math.max(1, Math.ceil(Math.hypot(to.x - from.x, to.y - from.y) / step))
+  const along = Array.from({ length: samples + 1 }, (_, i) => ({
+    x: from.x + ((to.x - from.x) * i) / samples,
+    y: from.y + ((to.y - from.y) * i) / samples,
+  }))
+  return paths
+    .filter((entry) => entry.ink === true && isDrawing(entry.id) && !isLocked(entry.id))
+    .filter((entry) => along.some((point) => distanceToPolyline(point, entry.path) <= tolerance))
+    .map((entry) => entry.id)
+}

@@ -20,11 +20,12 @@ Two rules hold for the whole table:
 | `H` | Hand (pan) — drag anywhere to pan. A canvas opens in Select; one you come back to within the same browser session returns to whichever of Select and Hand you were last using on it |
 | `V` | Select — click to select, drag to marquee |
 | `C` | Connect — click one node, then another, to draw an edge |
-| `D` | Draw — drag across the board to leave a freehand stroke |
+| `D` | Draw — drag across the board to leave a freehand stroke, in the colour and width chosen in the strip above the dock |
+| `E` | Eraser — drag over drawings to remove them; `Esc` puts it down |
 | `N` | Add a note at the centre of the view, or inside the selected frame |
 | `Space` + drag | Pan from any tool, without leaving it |
 
-The four tools live in the bottom dock, and their letters show in its tooltips. The letters work from any tool and never while you are typing; with `Cmd/Ctrl` held, `C` and `D` stay copy and duplicate. On touch, two-finger drag pans and
+The five tools live in the bottom dock, and their letters show in its tooltips. The letters work from any tool and never while you are typing; with `Cmd/Ctrl` held, `C` and `D` stay copy and duplicate. On touch, two-finger drag pans and
 pinch zooms in every tool.
 
 ## Selection and editing
@@ -46,7 +47,7 @@ pinch zooms in every tool.
 | Double-click | Edit a node's text or an edge's label; on empty space add a note there; on a group's name (above its top edge) edit the name; inside a group add a note in it. The same in Hand mode |
 | `Cmd/Ctrl + Shift + L` | Lock or unlock the selection |
 | `Cmd/Ctrl + Enter` | Save the text you are editing and close the editor |
-| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed |
+| `Esc` | Cancel the current gesture, or clear the selection; on a connection reached with `Tab`, go back to the node it leaves; in a text edit, discard what you typed; with the eraser armed, put it down and go back to Select |
 
 **Reaching a node without a pointer.** The canvas is a Tab stop, announced as
 "Canvas, 5 notes. Tab selects the first note" (frames, connections, drawings and lines are counted apart, a canvas holding only a drawing says "Canvas, 1 drawing. Tab selects the first drawing", and once something is selected it says Tab selects the next node). With it focused, `Tab` walks the
@@ -288,7 +289,7 @@ while a new note is still empty removes it too.
 
 On an empty canvas the cue to add a note is part of the canvas's description, so
 it is read with the canvas. Choosing a tool, by key or from the dock, announces
-it ("Hand tool", "Select tool", "Connect tool", "Draw tool"). On a canvas with
+it ("Hand tool", "Select tool", "Connect tool", "Draw tool", "Eraser"). On a canvas with
 notes, the Connect tool also shows what to press at the top of the canvas —
 "Click the first note, then the second" ("Tap…" on a touch screen), then "Now
 click the note to connect to" once the first is chosen — and the first line is

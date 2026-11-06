@@ -32,6 +32,7 @@ function useCanvasAnnouncements(
   selectedNodeIds: readonly string[],
   selectedEdgeId: string | null,
   externalVersion: number | undefined,
+  erasing: boolean,
 ): void {
   const selectionKey = `${selectedNodeIds.join('\u0000')}\u0001${selectedEdgeId ?? ''}`
   const previous = useRef({ canvas, selectionKey, externalVersion })
@@ -42,14 +43,16 @@ function useCanvasAnnouncements(
     // a load, not something the person just added.
     const loaded = before.externalVersion !== externalVersion && before.canvas.nodes.length === 0
     const changed =
-      before.canvas === canvas || loaded ? undefined : canvasChangeMessage(before.canvas, canvas)
+      before.canvas === canvas || loaded
+        ? undefined
+        : canvasChangeMessage(before.canvas, canvas, erasing)
     const selected =
       before.selectionKey === selectionKey
         ? undefined
         : selectionMessage(canvas, selectedNodeIds, selectedEdgeId)
     const message = changed ?? selected
     if (message !== undefined) announceOnCanvas(message)
-  }, [canvas, selectionKey, selectedNodeIds, selectedEdgeId, externalVersion])
+  }, [canvas, selectionKey, selectedNodeIds, selectedEdgeId, externalVersion, erasing])
 }
 
 function A11yOption({
@@ -108,6 +111,7 @@ export function CanvasA11yTree({
   extraIds,
   selectedEdgeId,
   externalVersion,
+  erasing = false,
 }: {
   readonly canvas: SpatialCanvas
   /** The editor's external-replacement counter; a bump marks the canvas as arriving rather than edited. */
@@ -116,12 +120,14 @@ export function CanvasA11yTree({
   readonly primaryId: string | null
   readonly extraIds: ReadonlySet<string>
   readonly selectedEdgeId: string | null
+  /** The eraser is armed, so drawings that go were ERASED rather than deleted. */
+  readonly erasing?: boolean
 }) {
   const selectedNodeIds = useMemo(
     () => (primaryId === null ? [] : [primaryId, ...extraIds]),
     [primaryId, extraIds],
   )
-  useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId, externalVersion)
+  useCanvasAnnouncements(canvas, selectedNodeIds, selectedEdgeId, externalVersion, erasing)
   const stops = useMemo(
     () => traversalStops(canvas, { isNodeLocked: () => false, isInkLocked: () => false }),
     [canvas],

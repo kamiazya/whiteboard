@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { inkUnder, inkWithin } from './ink-hit.js'
+import { drawingsAlong, inkUnder, inkWithin } from './ink-hit.js'
 
 const straight = [
   { x: 0, y: 0 },
@@ -98,5 +98,51 @@ describe('inkWithin', () => {
     ]
     expect(inkWithin([{ id: 'e', path: crossing }], band, never)).toEqual([])
     expect(inkWithin([ink('a', crossing)], band, (id) => id === 'a')).toEqual([])
+  })
+})
+
+describe('drawingsAlong', () => {
+  const across = {
+    id: 'across',
+    path: [
+      { x: 50, y: 0 },
+      { x: 50, y: 100 },
+    ],
+    ink: true,
+  }
+  const ruled = {
+    id: 'ruled',
+    path: [
+      { x: 70, y: 0 },
+      { x: 70, y: 100 },
+    ],
+    ink: true,
+  }
+  const relation = {
+    id: 'relation',
+    path: [
+      { x: 60, y: 0 },
+      { x: 60, y: 100 },
+    ],
+  }
+  const drawn = (id: string) => id === 'across' || id === 'relation'
+
+  it('finds a drawing the sweep crossed between two samples', () => {
+    // Both samples are far from the stroke; only the run between them meets it.
+    const hit = drawingsAlong([across], drawn, { x: 0, y: 50 }, { x: 100, y: 50 }, 4, () => false)
+    expect(hit).toEqual(['across'])
+  })
+
+  it('passes over ruled lines, relations and locked drawings', () => {
+    const paths = [across, ruled, relation]
+    const from = { x: 0, y: 50 }
+    const to = { x: 100, y: 50 }
+    expect(drawingsAlong(paths, drawn, from, to, 4, () => false)).toEqual(['across'])
+    expect(drawingsAlong(paths, drawn, from, to, 4, (id) => id === 'across')).toEqual([])
+  })
+
+  it('misses a drawing the sweep stayed clear of', () => {
+    const hit = drawingsAlong([across], drawn, { x: 0, y: 50 }, { x: 40, y: 50 }, 4, () => false)
+    expect(hit).toEqual([])
   })
 })

@@ -31,6 +31,7 @@ import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
 import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
 import { visualStencilsFacetSchema } from './stencil-library.js'
 import { VISUAL_STENCILS } from './stencils.js'
+import { type StrokeWidth, VISUAL_STROKE_KEY, visualStrokeFacetSchema } from './stroke.js'
 import { visualTagsFacetSchema } from './tag-library.js'
 import { VISUAL_THEMES } from './themes.js'
 
@@ -361,6 +362,17 @@ export const visualPlugin = definePlugin({
       // the facet rather than editing it.
     }),
     defineFacet({
+      name: 'stroke',
+      displayName: 'Stroke',
+      version: 'v0',
+      // EDGE target, where a line's facets live — the slot `visual.ink/v0`
+      // takes for the same reason.
+      targets: ['edge'],
+      schema: visualStrokeFacetSchema,
+      // No editor spec: the width is chosen by the draw tool's options and
+      // by a drawing's own menu, the two places a person picks a pen.
+    }),
+    defineFacet({
       name: 'shape',
       displayName: 'Shape',
       version: 'v0',
@@ -668,6 +680,19 @@ export function resolveInkGroup(
   if (resolution.kind !== 'resolved') return undefined
   const parsed = visualInkFacetSchema.safeParse(resolution.value)
   return parsed.success ? parsed.data.group : undefined
+}
+
+/** The weight a stroke draws at: `thin` when it carries none, or none this build can read. */
+export function resolveStrokeWidth(
+  element: RoutableElement,
+  registry: FacetRegistry = bundledFacetRegistry,
+): StrokeWidth {
+  const stored = element.facets?.[VISUAL_STROKE_KEY]
+  if (stored === undefined) return 'thin'
+  const resolution = registry.resolveFacetPayload(VISUAL_STROKE_KEY, stored)
+  if (resolution.kind !== 'resolved') return 'thin'
+  const parsed = visualStrokeFacetSchema.safeParse(resolution.value)
+  return parsed.success ? parsed.data.width : 'thin'
 }
 
 /**

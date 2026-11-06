@@ -133,6 +133,7 @@ import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectToolHint } from './ConnectToolHint.js'
 import { commentComposeStyle } from './comment-compose-overlay.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
+import { DrawOptions, penInk } from './DrawOptions.js'
 import { isInFlightGesture } from './drag-preview.js'
 import type { EditorGesture } from './editor-gesture.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
@@ -185,6 +186,7 @@ import { useLockedPress } from './use-locked-press.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
+import { usePen } from './use-pen.js'
 import { useSceneProjection } from './use-scene-projection.js'
 import { useShortcutHelp } from './use-shortcut-help.js'
 import { useToolState } from './use-tool-state.js'
@@ -622,6 +624,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * setState from the release that wrote it.
      */
     const lastStrokeRef = useRef<PreviousStroke | null>(null)
+    const [pen, setPen] = usePen()
     /**
      * How near a press has to land to count as on a drawn path, in CANVAS
      * units: the budget is a screen distance, so zooming out widens it in
@@ -1382,6 +1385,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       hitTestProposal,
       isOverlayEvent,
       lastStrokeRef,
+      pen,
       menuPickInputs,
       lockedPress,
       openProposalId,
@@ -1622,6 +1626,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {tool === 'connect' && canvas.nodes.length > 0 && (
           <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />
         )}
+        {tool === 'draw' && <DrawOptions pen={pen} palette={palette} onChange={setPen} />}
         <ToolPalette
           onReturnFocus={() => rootRef.current?.focus({ preventScroll: true })}
           // The dock does NOT change with the mode. Navigation belongs to the
@@ -1831,7 +1836,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           tool={tool}
           marquee={marquee}
           snapGuides={snapGuides}
-          inkStroke={palette.edgeStroke}
+          inkStroke={penInk(pen, palette, theme)}
           boxes={boxes}
           cutIds={pendingCut?.snapshot}
           members={isMultiSelection ? selectionMembers : undefined}
@@ -2012,6 +2017,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             extraIds={extraIds}
             selectedEdgeId={selectedEdgeId}
             externalVersion={externalVersion}
+            erasing={tool === 'erase'}
           />
           {revealPulse === null ? null : (
             <CommentRevealPulse

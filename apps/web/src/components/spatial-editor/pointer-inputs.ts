@@ -4,6 +4,7 @@
 // import the editor that mounts it — the editor's props stay the editor's.
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Dispatch, RefObject, SetStateAction } from 'react'
+import type { PenStyle } from '../../lib/spatial/pen-style.js'
 import type { PreviousStroke } from '../../lib/spatial/stroke-group.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { PickInputs } from './element-pick.js'
@@ -94,6 +95,8 @@ export interface EditorPointerInputs {
   readonly hitTestProposal: (point: Point) => string | undefined
   readonly isOverlayEvent: (e: React.SyntheticEvent) => boolean
   readonly lastStrokeRef: RefObject<PreviousStroke | null>
+  /** What the Draw tool lays its next stroke down with. */
+  readonly pen: PenStyle
   readonly menuPickInputs: PickInputs
   readonly lockedPress: ReturnType<typeof useLockedPress>
   readonly openProposalId: string | null

@@ -89,7 +89,14 @@ import {
   rememberCommentPress,
   startCommentPinDrag,
 } from './pointer-comment-claim.js'
-import { advanceDrawing, armInkDrag, beginDrawStroke, releaseInkDrag } from './pointer-ink-claim.js'
+import {
+  advanceInkTool,
+  armInkDrag,
+  beginDrawStroke,
+  beginErase,
+  releaseErase,
+  releaseInkDrag,
+} from './pointer-ink-claim.js'
 import type { EditorPointerInputs } from './pointer-inputs.js'
 import { handleContextMenu as handleMenu, openContextMenuAt } from './pointer-menu-claim.js'
 import {
@@ -438,7 +445,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
       armHandDoublePress(e, pressKey, screenPoint, point)
       return
     }
-    if (beginDrawStroke(inputs, e, root, point)) return
+    if (beginDrawStroke(inputs, e, root, point) || beginErase(inputs, e, root, point)) return
     // Deliberately NO pointer capture below. Capturing on the press retargets
     // the subsequent clicks to the capturing root, so a control the press
     // bubbled from never receives its click. Capture is taken on the first
@@ -569,8 +576,8 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
     if (!navigation.fallThrough) return
     if (advanceCommentDrag(inputs, screenPoint)) return
     if (advanceMarquee(screenPoint)) return
-    if (gestureState.kind === 'idle' && gestureStateRef.current.kind !== 'drawing') return
-    if (advanceDrawing(inputs, screenPoint)) return
+    if (advanceInkTool(inputs, screenPoint)) return
+    if (gestureState.kind === 'idle') return
     advanceSnappedGesture(e, screenPoint)
   }
 
@@ -648,7 +655,7 @@ export function useEditorPointer(inputs: EditorPointerInputs) {
 
     const armed = doublePressRef.current
     doublePressRef.current = null
-    if (releaseInkDrag(inputs, e, root, armed)) return
+    if (releaseInkDrag(inputs, e, root, armed) || releaseErase(inputs)) return
     if (marquee !== null) {
       releaseMarquee(e, root, armed, marquee, releaseContext)
       return

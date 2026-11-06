@@ -431,6 +431,10 @@ const GESTURE_EVENT_COVERAGE = {
     'not modelled: the press that arms an ink drag. This model reduces gestures over generated NODES and never draws a stroke, so nothing here produces one; its reducer arms are ink-drag.test.ts and the whole way from a pointer to the moved ink is ink-drag.browser.test.tsx',
   'move-bend':
     'not modelled: the keyboard twin of the bend drag — one set-edge-facet write with one point moved, no gesture state; edge-bend-gesture.test.ts pins it and edge-bend.browser.test.tsx drives the arrow keys',
+  'pointerdown-erase':
+    'not modelled: the eraser press names the drawings under it, which only the scene knows — this model never lays one out; its reducer arms are gesture-ink-tools.test.ts and the way from a pointer to erased ink is eraser.browser.test.tsx',
+  'erase-over':
+    'not modelled: the eraser sweep, which names drawings by the scene paths this model never lays out; gesture-ink-tools.test.ts pins the accumulation and eraser.browser.test.tsx the sweep by mouse and touch',
 } satisfies Record<GestureEvent['type'], SurfaceCoverage>
 
 /**
@@ -468,6 +472,7 @@ const SHORTCUT_COVERAGE = {
   'connect-pick-target':
     'not modelled: moves keyboard focus between attach targets — covered by connect-from-keyboard.browser.test.tsx',
   'tool-draw': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
+  'tool-erase': 'not modelled: switches the armed tool — covered by tool-hotkeys.browser.test.tsx',
   'new-note':
     'not modelled: places a note at the viewport centre — covered by tool-hotkeys.browser.test.tsx',
   'select-next-node':

@@ -320,7 +320,10 @@ describe('what an errand costs in tool calls', () => {
         // the call count does not move.
         // Then 14,226 -> 14,256: +30 because wb_facet_list's schema for
         // `visual.axes/v0` now states its 64-axis `maxItems`.
-        responseBytes: 14256,
+        // Then 14,256 -> 14,966: +710 for `visual.stroke/v0`, how heavy a
+        // stroke is drawn — one two-value field on one target, so near the
+        // floor a facet costs the listing, the same price `visual.ink/v0` paid.
+        responseBytes: 14966,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
