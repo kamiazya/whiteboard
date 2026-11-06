@@ -146,8 +146,7 @@ name and all. The same duplicate rule as a rename applies.
 
 A `/` nests here exactly as it does in **Move to folder… > New folder…**, and
 the dialog says so under its field: `Workshops/Template` makes a folder called
-**Workshops** with a folder called **Template** inside it, and opens
-**Template**. A part that matches a folder already there is that folder, so
+“Workshops” with a folder called “Template” inside it, and opens “Template”. A part that matches a folder already there is that folder, so
 only the missing levels are made; typing a path whose every folder already
 exists is refused with the last folder's name, since nothing would be made.
 
