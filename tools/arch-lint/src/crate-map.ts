@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { REPO_ROOT } from './scan-roots.js'
 
 /** The crate half of the architecture map, read by `cargo xtask arch-map`. */
-export const CRATE_MAP_PATH = 'crates/architecture-map.json'
+const CRATE_MAP_PATH = 'crates/architecture-map.json'
 
 export interface CrateEntry {
   readonly name: string

@@ -21,7 +21,7 @@ import { REPO_ROOT, relativeToRepo, walk } from './scan-roots.js'
  */
 
 /** A lexical span: `[start, end)` offsets into the text it was read from. */
-export type Span = readonly [number, number]
+type Span = readonly [number, number]
 
 interface RustLexemes {
   readonly comments: readonly Span[]
@@ -336,7 +336,7 @@ function withOccurrenceIndex(found: readonly RustFunction[]): RustFunction[] {
 const CRATE_SKIPPED_DIRS: ReadonlySet<string> = new Set(['target', 'node_modules', 'tmp', '.git'])
 
 /** The Rust workspace's tree, relative to the repo root. */
-export const RUST_ROOT = 'crates'
+const RUST_ROOT = 'crates'
 
 /**
  * Every `.rs` file under `crates/`, as sorted repo-relative paths, walked
@@ -369,9 +369,6 @@ export function crateDirs(repoRoot: string = REPO_ROOT): string[] {
   if (existsSync(join(repoRoot, RUST_ROOT))) visit(RUST_ROOT)
   return found.sort()
 }
-
-/** Whether a repo-relative path is Rust source under `crates/`. */
-export const isRustSource = (path: string): boolean => /^crates\/.+\.rs$/.test(path)
 
 const LEADING_COMMENT_MARKER = /^\s*(?:\/\/|\*|\/\*)/
 
