@@ -2,8 +2,8 @@
 // `pnpm rust:check`: every gate the Rust workspace has, in the order a
 // failure is cheapest to read — formatting, lints, tests, then the xtask
 // guards (architecture map, input caps and the fuzz registry, wasm import
-// scan, size ledger) and the supply-chain check. Stops at the first failing
-// step.
+// scan, size ledger, dependency-unsafe ledger) and the supply-chain check
+// over both workspaces. Stops at the first failing step.
 //
 // crates/fuzz is a workspace of its own (its targets need nightly), so its
 // formatting, lints and the stable replay of every committed fuzz regression
@@ -31,7 +31,9 @@ const STEPS = [
   ['cargo', ['xtask', 'inputs']],
   ['cargo', ['xtask', 'wasm-imports']],
   ['cargo', ['xtask', 'size']],
+  ['cargo', ['xtask', 'unsafe-ledger']],
   ['cargo', ['deny', '--locked', 'check']],
+  ['cargo', ['deny', ...FUZZ, '--locked', 'check']],
 ]
 
 const DENY_INSTALL = 'cargo install --locked cargo-deny --version 0.20.2'

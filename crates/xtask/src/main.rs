@@ -4,6 +4,7 @@ mod arch_map;
 mod inputs;
 mod metadata;
 mod size;
+mod unsafe_ledger;
 mod wasm_imports;
 
 use std::io::Write;
@@ -16,7 +17,9 @@ tasks:
   arch-map          crates follow crates/architecture-map.json
   inputs            untrusted-input entries declare caps in crates/input-caps.json
   wasm-imports      core crates built for wasm32 import nothing
-  size [--update]   wasm artifacts fit crates/wasm-size-ledger.json";
+  size [--update]   wasm artifacts fit crates/wasm-size-ledger.json
+  unsafe-ledger [--update]
+                    dependency `unsafe` fits crates/unsafe-ledger.json";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -29,6 +32,8 @@ fn main() -> ExitCode {
         ["wasm-imports"] => wasm_imports::run(),
         ["size"] => size::run(size::Mode::Check),
         ["size", "--update"] => size::run(size::Mode::Update),
+        ["unsafe-ledger"] => unsafe_ledger::run(unsafe_ledger::Mode::Check),
+        ["unsafe-ledger", "--update"] => unsafe_ledger::run(unsafe_ledger::Mode::Update),
         _ => Err(vec![USAGE.to_owned()]),
     };
     let (lines, code) = match result {

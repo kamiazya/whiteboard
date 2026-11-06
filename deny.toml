@@ -51,8 +51,22 @@ deny = [
   # reaches a built artifact (libfuzzer-sys's build is where it appears).
   { crate = "getrandom", wrappers = ["whiteboard-daemon", "whiteboard-worker", "jobserver"], reason = "randomness is a port (IdMint); core is seeded" },
 ]
+# serde_json's recursion limit (128 levels) is part of every JSON entry's
+# depth cap (crates/input-caps.json); `unbounded_depth` removes it, so one
+# nested request overflows the stack — the wasm stack is 1 MiB. And
+# `arbitrary_precision` changes what a number IS for every crate in the
+# graph (feature unification), so a value would no longer round-trip the way
+# the TypeScript oracle's JSON.parse does.
+features = [
+  { crate = "serde_json", deny = ["unbounded_depth", "arbitrary_precision"] },
+]
 
+# crates.io and nothing else: no git dependency, no other registry. A crate
+# arriving from anywhere else (a fork, a typosquat's mirror) fails here;
+# crates.io itself is the only place a dependency can come from, and a new
+# one is reviewed against its entry in crates/architecture-map.json.
 [sources]
 unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

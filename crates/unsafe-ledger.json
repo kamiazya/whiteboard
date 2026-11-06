@@ -1,0 +1,113 @@
+{
+  "$comment": "The `unsafe` tokens each registry dependency's source carries, across both Cargo workspaces (root and crates/fuzz) and every platform the lockfiles resolve, read by `cargo xtask unsafe-ledger` (QR-28c). The count is a lexer's: every `unsafe` keyword outside comments and literals, used or not, so it over-counts and measures arrival, not risk. Shrink-only: a count above its ceiling fails until the entry is raised BY HAND with its reason updated, after someone has read what arrived; a count below fails until `--update` banks it; a crate with unsafe and no entry, or an entry for a crate gone from the tree, fails. A reason says where the crate sits (shipped, build time, xtask, fuzz) and what the unsafe is for. Measured 2026-11-06.",
+  "crates": {
+    "arbitrary": {
+      "ceiling": 5,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: structured-input derivation for fuzz targets"
+    },
+    "bitflags": {
+      "ceiling": 2,
+      "reason": "xtask only, never shipped: flag types under wasmparser"
+    },
+    "bumpalo": {
+      "ceiling": 185,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: arena allocator of wasm-bindgen-macro-support"
+    },
+    "cc": {
+      "ceiling": 34,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: compiles libFuzzer's C++; process and job-server plumbing"
+    },
+    "find-msvc-tools": {
+      "ceiling": 55,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: cc's MSVC discovery (Windows registry FFI)"
+    },
+    "foldhash": {
+      "ceiling": 10,
+      "reason": "xtask only, never shipped: hasher under wasmparser's indexmap"
+    },
+    "getrandom": {
+      "ceiling": 113,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: OS randomness FFI, reached only through cc's jobserver"
+    },
+    "hashbrown": {
+      "ceiling": 455,
+      "reason": "xtask only, never shipped: the hash table under wasmparser's indexmap"
+    },
+    "indexmap": {
+      "ceiling": 13,
+      "reason": "xtask only, never shipped: wasmparser's ordered map"
+    },
+    "itoa": {
+      "ceiling": 13,
+      "reason": "xtask only, never shipped: integer formatting inside serde_json"
+    },
+    "jobserver": {
+      "ceiling": 40,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: make job-server client used by cc (fds, signals)"
+    },
+    "libc": {
+      "ceiling": 800,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: libc bindings under cc/jobserver/getrandom"
+    },
+    "libfuzzer-sys": {
+      "ceiling": 4,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: the libFuzzer entry symbol and its FFI"
+    },
+    "memchr": {
+      "ceiling": 333,
+      "reason": "xtask only, never shipped: SIMD byte search inside serde_json"
+    },
+    "proc-macro2": {
+      "ceiling": 6,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: token-stream plumbing of every derive"
+    },
+    "r-efi": {
+      "ceiling": 332,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: UEFI bindings of getrandom, for a target never built"
+    },
+    "rustversion": {
+      "ceiling": 2,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: version-conditional attributes used by wasm-bindgen"
+    },
+    "semver": {
+      "ceiling": 47,
+      "reason": "xtask only, never shipped: version parsing in wasmparser"
+    },
+    "serde": {
+      "ceiling": 2,
+      "reason": "xtask only, never shipped: serde's derive and data model (also counts `unsafe` in generated-code templates)"
+    },
+    "serde_core": {
+      "ceiling": 2,
+      "reason": "xtask only, never shipped: serde's core traits"
+    },
+    "serde_json": {
+      "ceiling": 17,
+      "reason": "xtask only, never shipped: JSON reading of cargo metadata and the ledgers"
+    },
+    "shlex": {
+      "ceiling": 6,
+      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: shell-word splitting inside cc"
+    },
+    "syn": {
+      "ceiling": 78,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: Rust parser of every derive; mostly the `unsafe` keyword as a TOKEN it parses, not unsafe code"
+    },
+    "unicode-ident": {
+      "ceiling": 2,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: identifier tables for proc-macro2"
+    },
+    "wasm-bindgen": {
+      "ceiling": 136,
+      "reason": "SHIPPED in the wasm artifact: the JS/wasm ABI glue (externref table, closures, string passing) is unsafe by nature; the one runtime dependency of whiteboard-wasm, pinned with the CLI"
+    },
+    "wasm-bindgen-macro-support": {
+      "ceiling": 50,
+      "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: #[wasm_bindgen] expansion; mostly `unsafe` inside the code it GENERATES, which wasm-bindgen's count stands for"
+    },
+    "zmij": {
+      "ceiling": 70,
+      "reason": "xtask only, never shipped: float formatting inside serde_json"
+    }
+  }
+}
