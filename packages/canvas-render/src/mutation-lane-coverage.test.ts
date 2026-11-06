@@ -117,13 +117,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // axis), and the first survived, which is how the tie case came to be
     // pinned.
     //
-    // Still 67 with `layout/contributed-router.ts`, which arrived in the same
+    // Still 67 with the contributed-router module, which arrived in the same
     // increment that moved `scene-graph.ts` out: one module in, one out.
     // The router is outside the lane, because every
     // branch it has is a way of DECLINING — no contribution claims the edge,
     // the name is one nobody registered, the router answers `null`, the path
     // is under two points, an endpoint is missing — and each falls back to
-    // the built-in, which `contributed-router.test.ts` pins by name. A
+    // the built-in, which its own test pinned by name. A
     // survivor there would say a fallback is unobserved, and the fallbacks
     // are the whole module.
     // 68 and 13 since `tidy-units.ts`, split out of `tidy.ts` when that file
@@ -408,7 +408,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // model or search, pinned by `embed-legend.test.ts` (rows, unscaled
     // size, place inside the frame, swatch colours) and mutated by hand
     // against it.
-    // 123 without `layout/contributed-router.ts`: the edge-router
+    // 123 without the contributed-router module: the edge-router
     // contribution seam had no consumer but its own test, and edge routing
     // is this package's alone. It was outside the lane, so the reach is
     // unchanged.

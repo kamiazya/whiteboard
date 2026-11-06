@@ -30,7 +30,6 @@ export type {
   SceneInk,
   SceneLegend,
   SceneNode,
-  ShapeId,
   ShapeSceneNode,
   SvgFragmentNode,
   TableBlockNode,
