@@ -41,28 +41,64 @@ import { PROJECTS_RUN_ELSEWHERE, readVitestProjects } from './vitest-projects.mj
  */
 export const SELECTS_EVERYTHING = [
   {
-    pattern: /^[^/]+$/,
-    why: 'a root-level file (lockfile, root manifest, vitest/tsconfig/biome/knip config, .node-version) reaches every package',
+    // Every root-level file but the documents and metadata READ_ROOT_FILES
+    // names: the lockfile, the root manifest, the vitest, tsconfig and biome
+    // configs, .node-version, .npmrc, the Dockerfile.
+    pattern: { test: (path) => /^[^/]+$/.test(path) && !READ_ROOT_FILES.includes(path) },
+    why: 'a root-level build, install or test config reaches every package',
   },
-  { pattern: /^\.github\//, why: 'the workflows and actions that run CI itself' },
+  {
+    pattern: /^\.github\/(?:workflows\/ci\.yml|actions\/)/,
+    why: 'ci.yml and the actions it runs are CI itself',
+  },
   { pattern: /^tools\/checks\//, why: 'the CI scripts, this selection among them' },
   { pattern: /^tools\/biome-plugins\//, why: 'lint rules applied to every package' },
   { pattern: /^tools\/[^/]+$/, why: 'a loose tools/ script' },
   { pattern: /^patches\//, why: 'a dependency patch, installed into every package' },
-  { pattern: /^tests\//, why: 'the distribution smokes, run by several jobs and by test:scripts' },
   {
-    pattern: /^\.claude\/scripts\//,
-    why: "the root vitest config's globalSetup lives here and runs for every project",
+    pattern: /^\.claude\/scripts\/node-version-banner\.mjs$/,
+    why: "the root vitest config's globalSetup, which runs for every project",
   },
 ]
 
 /**
  * Top-level trees no package owns but packages READ — the docs a test holds
- * code to, the rules and skills a guard scans. A change under one selects the
- * nodes whose source names the tree (`scanTreeReaders`). Any other unowned
- * path is unattributable and selects everything.
+ * code to, the rules and skills a guard scans, the workflows a release-policy
+ * test parses, the distribution smokes mcp-server's scripts run. A change
+ * under one selects the nodes whose source names the tree
+ * (`scanTreeReaders`). Any other unowned path is unattributable and selects
+ * everything.
  */
-export const READ_TREES = ['docs', '.claude', 'skills']
+export const READ_TREES = ['docs', '.claude', 'skills', '.github', 'tests']
+
+/**
+ * Root-level files that build, install and run nothing: documents and the
+ * metadata of tools CI runs whole either way (knip, lefthook, release-please,
+ * secretlint, sonar). A change to one selects the nodes whose source names
+ * it, like a READ_TREES entry. A root file not listed here selects everything.
+ */
+export const READ_ROOT_FILES = [
+  'AGENTS.md',
+  'CHANGELOG.md',
+  'CLAUDE.md',
+  'CODE_OF_CONDUCT.md',
+  'CONTRIBUTING.md',
+  'README.md',
+  'SECURITY.md',
+  '.env.server.example',
+  '.mcp.json',
+  '.pinact.yaml',
+  '.release-please-manifest.json',
+  '.secretlintignore',
+  '.secretlintrc.json',
+  'docker-compose.server.yml',
+  'gemini-extension.json',
+  'knip.jsonc',
+  'lefthook.yml',
+  'release-please-config.json',
+  'server.json',
+  'sonar-project.properties',
+]
 
 /**
  * Nodes whose tests read the whole repository — every package's source, the
@@ -321,7 +357,7 @@ export function namesTree(text, tree) {
 }
 
 /**
- * For each READ_TREES entry, the nodes whose files name it — split by whether
+ * For each READ_TREES and READ_ROOT_FILES entry, the nodes whose files name it — split by whether
  * only TEST files do. A test-only reader runs its own projects when the tree
  * changes; a node whose shipped source, script, config or test-utils names it
  * counts as touched, so its dependents run too.
@@ -329,7 +365,12 @@ export function namesTree(text, tree) {
  * @param {{ files: string[], nodes: GraphNode[], read: (path: string) => string | null, trees?: string[] }} input
  * @returns {Record<string, { testReaders: string[], sourceReaders: string[] }>}
  */
-export function scanTreeReaders({ files, nodes, read, trees = READ_TREES }) {
+export function scanTreeReaders({
+  files,
+  nodes,
+  read,
+  trees = [...READ_TREES, ...READ_ROOT_FILES],
+}) {
   /** @type {Record<string, { test: Set<string>, source: Set<string> }>} */
   const found = Object.fromEntries(
     trees.map((tree) => [tree, { test: new Set(), source: new Set() }]),
@@ -418,7 +459,7 @@ export function jobUniverse(jobId, projects) {
  * @param {Change} change
  * @param {GraphNode[]} nodes
  * @param {Record<string, { testReaders: string[], sourceReaders: string[] }>} readers
- * @returns {{ everything?: string, touch: string[], own: string[] }}
+ * @returns {{ everything?: string, touch: string[], own: string[], changed?: string }}
  */
 function attributeChange({ path, status }, nodes, readers) {
   const failClosed = SELECTS_EVERYTHING.find(({ pattern }) => pattern.test(path))
@@ -426,9 +467,15 @@ function attributeChange({ path, status }, nodes, readers) {
   const node = owningNode(path, nodes)
   if (node) {
     const listsTests = TEST_FILE.test(path) && (status === 'A' || status === 'D')
-    return { touch: [node.id], own: listsTests ? Object.keys(TEST_INVENTORY_READERS) : [] }
+    return {
+      touch: [node.id],
+      own: listsTests ? Object.keys(TEST_INVENTORY_READERS) : [],
+      changed: node.id,
+    }
   }
-  const tree = READ_TREES.find((name) => path.startsWith(`${name}/`))
+  const tree = READ_ROOT_FILES.includes(path)
+    ? path
+    : READ_TREES.find((name) => path.startsWith(`${name}/`))
   if (tree && readers[tree]) {
     return { touch: readers[tree].sourceReaders, own: readers[tree].testReaders }
   }
@@ -479,6 +526,33 @@ function planJobs({ everything, projects, selected, affected }) {
 }
 
 /**
+ * Fold every change's attribution into the sets planScope reads.
+ * @param {Change[]} changes
+ * @param {GraphNode[]} nodes
+ * @param {Record<string, { testReaders: string[], sourceReaders: string[] }>} readers
+ */
+function attributeChanges(changes, nodes, readers) {
+  const touched = new Set()
+  /** Nodes a changed file lies inside, as opposed to nodes that read a changed tree. */
+  const changedNodes = new Set()
+  /** Nodes whose own projects run, without their dependents. */
+  const ownProjectsOf = new Set(Object.keys(REPO_WIDE_READERS))
+  /** @type {string[]} */
+  const failClosed = []
+  for (const change of changes) {
+    const { everything, touch, own, changed } = attributeChange(change, nodes, readers)
+    if (everything) failClosed.push(everything)
+    for (const id of touch) touched.add(id)
+    for (const id of own) ownProjectsOf.add(id)
+    if (changed) changedNodes.add(changed)
+  }
+  for (const { reader, target } of CROSS_PACKAGE_READS) {
+    if (changedNodes.has(target)) ownProjectsOf.add(reader)
+  }
+  return { touched, ownProjectsOf, failClosed }
+}
+
+/**
  * The selection for one change.
  *
  * @param {{
@@ -496,19 +570,8 @@ export function planScope({ changes, event, nodes, projects, readers }) {
     event === 'pull_request'
       ? []
       : [`a ${event} run selects everything; selection is for pull requests`]
-  const touched = new Set()
-  /** Nodes whose own projects run, without their dependents. */
-  const ownProjectsOf = new Set(Object.keys(REPO_WIDE_READERS))
-
-  for (const change of changes) {
-    const { everything, touch, own } = attributeChange(change, nodes, readers)
-    if (everything) everythingBecause.push(everything)
-    for (const id of touch) touched.add(id)
-    for (const id of own) ownProjectsOf.add(id)
-  }
-  for (const { reader, target } of CROSS_PACKAGE_READS) {
-    if (touched.has(target)) ownProjectsOf.add(reader)
-  }
+  const { touched, ownProjectsOf, failClosed } = attributeChanges(changes, nodes, readers)
+  everythingBecause.push(...failClosed)
 
   const everything = everythingBecause.length > 0
   const affected = everything

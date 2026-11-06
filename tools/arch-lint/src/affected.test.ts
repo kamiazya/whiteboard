@@ -5,7 +5,7 @@
 // project and ci.yml job is reachable by some rule — a new package that no
 // rule selects would otherwise never be tested on a pull request, silently.
 
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -70,6 +70,7 @@ const affected = (await import(
   jobUniverse: (jobId: string, projects: Project[]) => string[]
   SELECTS_EVERYTHING: { pattern: RegExp; why: string }[]
   READ_TREES: string[]
+  READ_ROOT_FILES: string[]
   REPO_WIDE_READERS: Record<string, string>
   CROSS_PACKAGE_READS: { reader: string; target: string; why: string }[]
   TEST_INVENTORY_READERS: Record<string, string>
@@ -169,7 +170,6 @@ describe('the selection on a synthetic graph', () => {
     'tools/checks/src/affected.mjs',
     'tools/biome-plugins/test-flake-shapes.grit',
     'patches/some-dep.patch',
-    'tests/e2e/distribution/smoke.mjs',
     '.claude/scripts/node-version-banner.mjs',
     'somewhere-new/file.ts',
   ])('selects everything for %s', (path) => {
@@ -311,6 +311,50 @@ describe('every package, project and job is reachable by some rule', () => {
     // test below reads the same graph, so it cannot see a field going unread.
     const facetEngine = real.nodes.find((n) => n.id === '@kamiazya/whiteboard-facet-engine')
     expect(facetEngine?.deps).toContain('@kamiazya/whiteboard-model')
+  })
+
+  it('lists only root files that exist and are not configs every package reads', () => {
+    for (const file of affected.READ_ROOT_FILES) {
+      expect(existsSync(join(REPO_ROOT, file)), file).toBe(true)
+      expect(file).not.toMatch(
+        /^(package\.json|pnpm-|vitest\.|tsconfig|biome\.json|\.node-version|\.npmrc)/,
+      )
+    }
+  })
+
+  it("selects everything for each file the root vitest config's globalSetup names", () => {
+    const config = readFileSync(join(REPO_ROOT, 'vitest.config.ts'), 'utf-8')
+    const setup = [
+      ...(config.match(/globalSetup:\s*\[([^\]]*)\]/)?.[1] ?? '').matchAll(/'\.\/([^']+)'/g),
+    ]
+    expect(setup.length).toBeGreaterThan(0)
+    for (const [, path] of setup) {
+      const result = affected.planScope({
+        changes: [{ path, status: 'M' }],
+        event: 'pull_request',
+        ...real,
+      })
+      expect(result.everything, path).toBe(true)
+    }
+  })
+
+  it('runs the packaged smoke when a distribution smoke changes', () => {
+    const result = affected.planScope({
+      changes: [{ path: 'tests/e2e/distribution/smoke-helpers.mjs', status: 'M' }],
+      event: 'pull_request',
+      ...real,
+    })
+    expect(result.jobs['packaged-smoke']?.run).toBe(true)
+  })
+
+  it("runs mcp-server's release-policy tests when release.yml changes", () => {
+    const result = affected.planScope({
+      changes: [{ path: '.github/workflows/release.yml', status: 'M' }],
+      event: 'pull_request',
+      ...real,
+    })
+    expect(result.everything).toBe(false)
+    expect(result.projects).toContain('mcp-node')
   })
 
   it('maps every workspace package to a project or a job, unless its path selects everything', () => {
