@@ -16,6 +16,49 @@ function clearance(mine: DOMRect, chrome: readonly DOMRect[], floor: number): nu
   return needed
 }
 
+/** Re-measures on every change that can move the chrome: its size, the set of
+ *  elements, and (viewport scope) the window. Coalesced to one measure a frame
+ *  for the subtree watch, which fires for every mutation deep in a page. */
+function watchBottomChrome(
+  root: HTMLElement,
+  own: HTMLElement,
+  below: string,
+  scope: 'parent' | 'viewport',
+  onChrome: (chrome: HTMLElement[]) => void,
+): () => void {
+  const resize = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure())
+  const measure = () => {
+    const chrome = [...root.querySelectorAll<HTMLElement>(below)].filter((el) => el !== own)
+    for (const el of chrome) resize?.observe(el)
+    onChrome(chrome)
+  }
+  measure()
+  resize?.observe(own)
+  let frame = 0
+  const schedule = () => {
+    if (frame !== 0) return
+    frame = requestAnimationFrame(() => {
+      frame = 0
+      measure()
+    })
+  }
+  // Bottom chrome comes and goes (the Draw options with the tool, the
+  // overview with its toggle), and a new element is nothing a
+  // ResizeObserver already watching would report.
+  const mutations =
+    typeof MutationObserver === 'undefined'
+      ? null
+      : new MutationObserver(scope === 'viewport' ? schedule : measure)
+  mutations?.observe(root, { childList: true, subtree: scope === 'viewport' })
+  if (scope === 'viewport') window.addEventListener('resize', schedule)
+  return () => {
+    resize?.disconnect()
+    mutations?.disconnect()
+    if (frame !== 0) cancelAnimationFrame(frame)
+    if (scope === 'viewport') window.removeEventListener('resize', schedule)
+  }
+}
+
 /**
  * How high a piece of bottom-anchored chrome must stand, measured from the
  * editor's bottom edge, to clear whatever chrome matched by `below` reaches
@@ -49,46 +92,15 @@ export function useBottomChromeClearance<E extends HTMLElement>(
     }
     const floor = () =>
       scope === 'viewport' ? window.innerHeight : root.getBoundingClientRect().bottom
-    const resize =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure())
-    const measure = () => {
-      const chrome = [...root.querySelectorAll<HTMLElement>(below)].filter((el) => el !== own)
-      for (const el of chrome) resize?.observe(el)
+    return watchBottomChrome(root, own, below, scope, (chrome) =>
       setLift(
         clearance(
           own.getBoundingClientRect(),
           chrome.map((el) => el.getBoundingClientRect()),
           floor(),
         ),
-      )
-    }
-    measure()
-    resize?.observe(own)
-    // Bottom chrome comes and goes (the Draw options with the tool, the
-    // overview with its toggle), and a new element is nothing a
-    // ResizeObserver already watching would report. Across the whole
-    // document the chrome mounts deep inside a page, so the watch is the
-    // subtree, coalesced to one measure per frame.
-    let frame = 0
-    const schedule = () => {
-      if (frame !== 0) return
-      frame = requestAnimationFrame(() => {
-        frame = 0
-        measure()
-      })
-    }
-    const mutations =
-      typeof MutationObserver === 'undefined'
-        ? null
-        : new MutationObserver(scope === 'viewport' ? schedule : measure)
-    mutations?.observe(root, { childList: true, subtree: scope === 'viewport' })
-    if (scope === 'viewport') window.addEventListener('resize', schedule)
-    return () => {
-      resize?.disconnect()
-      mutations?.disconnect()
-      if (frame !== 0) cancelAnimationFrame(frame)
-      if (scope === 'viewport') window.removeEventListener('resize', schedule)
-    }
+      ),
+    )
   }, [active, below, scope])
   return [surface, lift]
 }
