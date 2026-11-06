@@ -49,7 +49,7 @@ const ANY_DELETE = /indexedDB\s*\.\s*deleteDatabase\(/
  */
 const MAY_DELETE = [
   '../test-utils/browser-document.ts',
-  './folding-browser-index.conformance.browser.test.tsx',
+  './browser-document-index.conformance.browser.test.tsx',
 ]
 
 /** The shared database's name as a standalone literal, not a prefix of another one. */

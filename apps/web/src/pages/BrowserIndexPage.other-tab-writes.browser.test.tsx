@@ -4,7 +4,7 @@
  * Every tab of this origin keeps its own index over one IndexedDB record, and
  * nothing re-reads a list another tab changed except a broadcast — the daemon
  * list answers the same need through its update frames. "Another tab" here is
- * a second `FoldingBrowserIndex`: what separates two tabs is two index
+ * a second `BrowserDocumentIndex`: what separates two tabs is two index
  * instances writing one record, each announcing on the workspace channel, and
  * a channel end never hears its own posts, so an announcement this page heard
  * is one a different end sent.
@@ -14,10 +14,10 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import '../index.css'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { idbContentClock } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -32,16 +32,16 @@ afterEach(cleanup)
 
 const titles = () => screen.queryAllByTestId('card-title').map((each) => each.textContent)
 
-const seed = (index: FoldingBrowserIndex) =>
+const seed = (index: BrowserDocumentIndex) =>
   createSeededDocument(index, new LoroStore(), idbContentClock(), undefined, 'markdown')
 
 /** Tab A on the list, after tab B has written one document it can see. */
 async function openTabs() {
-  const tabB = new FoldingBrowserIndex()
+  const tabB = new BrowserDocumentIndex()
   const first = await seed(tabB)
   render(
     <MemoryRouter initialEntries={['/']}>
-      <BrowserIndexPage index={new FoldingBrowserIndex()} onOpenDocument={vi.fn()} />
+      <BrowserIndexPage index={new BrowserDocumentIndex()} onOpenDocument={vi.fn()} />
     </MemoryRouter>,
   )
   await waitFor(() => expect(titles()).toEqual(['Untitled']), { timeout: 15_000 })

@@ -17,12 +17,14 @@ import { LoadDegradedView } from '../components/document-editor/LoadDegradedView
 import { exportFilenameBaseFor } from '../components/workspace-top-bar/export-filename.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { loadBrowserReference } from '../lib/document-embed-content.js'
 import type { DocumentReadFailure } from '../lib/document-read-failure.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type { BrowserPageState } from './browser-page-state.js'
 import type { DocumentKeeperAnswer } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { loadWasRefused } from './use-browser-document-controller.js'
 import type { Connections } from './use-connections.js'
 
 /** The one control a terminal screen offers. */
@@ -48,11 +50,17 @@ function RecoveryButton({ label, onClick }: { label: string; onClick: () => void
  * build cannot read, and the worst possible button for one whose read was
  * simply blocked — the data is intact and one click removes it. So the retry
  * is what an unavailable read gets, and it is the only affordance there.
+ *
+ * A load `persistence` says was refused offers nothing: this browser's
+ * storage holds a shape this build does not read (`BrowserStorageRefusedError`), so a create would be
+ * refused the same way and a reload changes nothing. The message says what to
+ * do instead.
  */
 export function browserTerminalAnswer(
   renderState: BrowserPageState,
   backendError: DocumentReadFailure | string | null,
   startFresh: () => Promise<void> | void,
+  persistence?: BrowserPersistenceState,
 ): { answer: DocumentKeeperAnswer } | { editing: Extract<BrowserPageState, { kind: 'editing' }> } {
   if (renderState.kind === 'load-degraded') {
     return {
@@ -60,7 +68,8 @@ export function browserTerminalAnswer(
         kind: 'terminal',
         node: (
           <LoadDegradedView message={renderState.message}>
-            {backendError === 'read-unavailable' ? (
+            {persistence !== undefined && loadWasRefused(persistence) ? null : backendError ===
+              'read-unavailable' ? (
               <RecoveryButton label="Try again" onClick={() => window.location.reload()} />
             ) : (
               <RecoveryButton label="Start fresh" onClick={() => void startFresh()} />

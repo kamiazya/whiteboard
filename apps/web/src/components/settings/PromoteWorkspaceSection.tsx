@@ -349,24 +349,12 @@ export function PromoteWorkspaceSection({
     if (!daemon) return
     const fetchImpl = daemonFetch(daemon, baseFetch)
     try {
-      const [
-        { countBrowserWorkspaceDocuments },
-        { BrowserWorkspaceDocs },
-        { foldOrServeTheTree },
-        workspaces,
-      ] = await Promise.all([
-        import('../../lib/promote-workspace.js'),
-        import('../../lib/browser-workspace-docs.js'),
-        import('../../lib/fold-workspace.js'),
-        listWorkspaces(fetchImpl, daemon.baseUrl),
-      ])
-      // Settings can be a session's first surface (deep-link/reload), so the
-      // startup fold may not have run yet — and this count reads the
-      // workspace record, which without the fold silently omits an older
-      // build's per-document records. A fold failure degrades to the
-      // pre-fold count rather than refusing the move: the record itself is
-      // still read below, and a record that cannot be read is what refuses.
-      await foldOrServeTheTree(log)
+      const [{ countBrowserWorkspaceDocuments }, { BrowserWorkspaceDocs }, workspaces] =
+        await Promise.all([
+          import('../../lib/promote-workspace.js'),
+          import('../../lib/browser-workspace-docs.js'),
+          listWorkspaces(fetchImpl, daemon.baseUrl),
+        ])
       const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
       const targets: WorkspaceIdentity[] = workspaces.workspaces.map((ws) => ({
         workspaceId: ws.workspaceId,

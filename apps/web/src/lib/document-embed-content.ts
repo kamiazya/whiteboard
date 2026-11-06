@@ -15,6 +15,7 @@ import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type {
   DocumentFileAdapter,
@@ -22,7 +23,6 @@ import type {
   LoadedFileDocument,
 } from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { imageRefusal } from './image-upload-policy.js'
 import { readLoadedFileDocument } from './read-loaded-file-document.js'
 import { loadDocumentContent } from './workspace-content.js'
@@ -38,12 +38,12 @@ const log = getAppLogger('document-embed-content')
  * Total like every loader here: an unnamed, missing or corrupt row is
  * `undefined`, and the caller falls back to the reference.
  */
-// Lazy singleton, not per-call: the folding index memoizes its startup fold
+// Lazy singleton, not per-call: the index memoizes its per-workspace settle
 // per instance, and a canvas full of embeds resolves one name per embed.
-let embedIndex: FoldingBrowserIndex | null = null
+let embedIndex: BrowserDocumentIndex | null = null
 
-/** The fold memo is per-instance, so a test that swaps the database out
- *  from under the singleton must also drop the folded instance. */
+/** The settle memo is per-instance, so a test that swaps the database out
+ *  from under the singleton must also drop the instance. */
 export function resetEmbedIndexForTests(): void {
   embedIndex = null
 }
@@ -55,7 +55,7 @@ async function loadDocumentEntry(
     // The workspace tree owns naming; the production index's fold gate is
     // what makes a legacy record (row + content, not yet in the tree)
     // answer too — one read path, no second store of its own.
-    embedIndex ??= new FoldingBrowserIndex()
+    embedIndex ??= new BrowserDocumentIndex()
     const entry = await embedIndex.resolveDocumentById({
       workspaceId: getBrowserWorkspaceId(),
       documentId,

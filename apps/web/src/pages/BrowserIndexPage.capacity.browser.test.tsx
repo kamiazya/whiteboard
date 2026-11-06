@@ -9,8 +9,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import '../index.css'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
@@ -23,7 +23,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 async function pageHolding(paths: string[], capacity: { bandStartsAt: number; limit: number }) {
-  const index = new FoldingBrowserIndex(undefined, { capacity })
+  const index = new BrowserDocumentIndex(undefined, { capacity })
   const workspaceId = getBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId, segment: 'default' })
   for (const path of paths) await index.createDocument({ workspaceId, path, kind: 'markdown' })

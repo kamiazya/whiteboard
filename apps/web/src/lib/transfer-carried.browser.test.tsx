@@ -28,14 +28,14 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { acceptTransferredRecord } from './accept-transferred-record.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { CROSS_ORIGIN_TRANSFER_PROTOCOL } from './cross-origin-transfer-protocol.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { readOfferedTransfer } from './receive-transfer.js'
 import { type PopupHandle, sendTransfer } from './send-transfer.js'
 import { readTransferPayload } from './transfer-payload.js'
@@ -56,12 +56,12 @@ function canvasSaying(text: string): Uint8Array {
 
 /** A browser workspace with a labelled version of a live canvas and one trashed canvas. */
 async function seedWorkspace() {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
   const gone = await index.createDocument({ workspaceId, path: 'gone', kind: 'spatial' })
-  expect(await seedWorkspaceDocumentContent(gone.documentId, canvasSaying('bin me'))).toBe(true)
+  await seedTreeContent(gone.documentId, canvasSaying('bin me'))
   const drafted = await new BrowserVersionStore({
     docs: new BrowserWorkspaceDocs(),
     index,

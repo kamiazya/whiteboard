@@ -82,10 +82,10 @@ const CONFORMANCE_LEDGER: readonly LedgerEntry[] = [
     test: 'packages/ports/src/test-utils/in-memory-document-store.test.ts',
   },
   {
-    cls: 'FoldingBrowserIndex',
+    cls: 'BrowserDocumentIndex',
     port: 'DocumentIndex',
-    source: 'apps/web/src/lib/folding-browser-index.ts',
-    test: 'apps/web/src/lib/folding-browser-index.conformance.browser.test.tsx',
+    source: 'apps/web/src/lib/browser-document-index.ts',
+    test: 'apps/web/src/lib/browser-document-index.conformance.browser.test.tsx',
   },
   {
     cls: 'LoroWorkspaceDocumentIndex',

@@ -37,6 +37,14 @@ export type Rule =
        * where no client contract exists for the answer.
        */
       readonly response?: z.ZodTypeAny
+      /**
+       * A body field this ROW draws differently from the harness's shared
+       * override, consulted first. For a route whose answer needs one
+       * particular value of a field the other rows share: the shared draw
+       * is sized for them, and a row it starves fails its ledger on a bad
+       * day rather than on a bad change.
+       */
+      readonly override?: Override
     }
   | { readonly refusesOnly: string; readonly body?: z.ZodTypeAny }
   | { readonly skip: string }
@@ -286,7 +294,13 @@ export function fuzzRows(
         try {
           const requestArb = fc.record({
             target: harness.target(key, pattern),
-            body: bodyArb(method, rule, harness.override),
+            body: bodyArb(
+              method,
+              rule,
+              (path, schema) =>
+                ('override' in rule ? rule.override?.(path, schema) : undefined) ??
+                harness.override(path, schema),
+            ),
           })
           await fc.assert(
             fc.asyncProperty(requestArb, async (request) => {

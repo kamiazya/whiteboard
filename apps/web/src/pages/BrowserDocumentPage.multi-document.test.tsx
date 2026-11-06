@@ -26,12 +26,12 @@ import { act, cleanup, configure, screen, waitFor } from '@testing-library/react
 import type { ReactElement } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { documentPath } from '../lib/app-routes.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import {
   IdbDefaultDocumentPointer,
   idbContentClock,
   listBrowserDocuments,
 } from '../lib/browser-document-summary.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
@@ -68,7 +68,7 @@ const render = (ui: ReactElement) => renderPage(ui, { probe: true })
  * a [[reference]]). A document created behind the controller's back is not
  * in that list and the navigation would be a no-op.
  */
-async function seedTwoDocuments(store: FoldingBrowserIndex): Promise<[string, string]> {
+async function seedTwoDocuments(store: BrowserDocumentIndex): Promise<[string, string]> {
   const { createSeededDocument } = await import('../lib/create-seeded-document.js')
   const loro = new LoroStore()
   const clock = idbContentClock()
@@ -101,7 +101,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 // The switcher addresses a document by PATH; the store's default pointer and
 // every persistence helper here address it by id. This is the one conversion.
-async function pathOf(store: FoldingBrowserIndex, documentId: string): Promise<string> {
+async function pathOf(store: BrowserDocumentIndex, documentId: string): Promise<string> {
   const found = (await listBrowserDocuments(store)).find((row) => row.documentId === documentId)
   if (found === undefined) throw new Error(`no document ${documentId}`)
   return found.path
@@ -133,7 +133,7 @@ describe('BrowserDocumentPage multi-canvas UI (real IndexedDB)', () => {
   })
 
   it('edits A, switching to empty B and back to A restores the edited node', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const [pathA, pathB] = await seedTwoDocuments(store)
     render(<BrowserDocumentPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
@@ -205,7 +205,7 @@ describe('BrowserDocumentPage multi-canvas UI (real IndexedDB)', () => {
   })
 
   it('persists an edit made inside the 300ms debounce before switching canvas', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const [, pathB] = await seedTwoDocuments(store)
     render(<BrowserDocumentPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())

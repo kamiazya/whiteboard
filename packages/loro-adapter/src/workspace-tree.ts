@@ -778,53 +778,6 @@ export function moveWorkspaceNodeToPath(doc: LoroDoc, from: string, to: string):
   return true
 }
 
-/**
- * Folds a STANDALONE document into the workspace tree as a node at `path`.
- *
- * The migration step: every pre-workspace document is its own LoroDoc with
- * root containers (`nodes`, `body`, ...), and a workspace-tree document holds
- * the same containers on a node's meta. This copies the one into the other,
- * keeping the `documentId` the caller supplies — which is the id the old
- * world already published, so nothing that names the document notices the
- * move.
- *
- * A VALUE copy, deliberately. The source's edit history stays in the old
- * store until it is retired; carrying it into the workspace document would
- * multiply the workspace's oplog by every document's past for no reader that
- * exists.
- *
- * Answers null without writing when the id is already in the tree, which is
- * what makes a crashed fold safe to run again: the work list is derived from
- * "index rows not yet in the tree", so a document folded before the crash is
- * simply not on the work list.
- */
-export function adoptWorkspaceDocument(
-  doc: LoroDoc,
-  input: {
-    path: string
-    documentId: string
-    kind: DocumentKind
-    name?: string
-    createdAt?: number
-    updatedAt?: number
-  },
-  source: LoroDoc,
-): WorkspaceDocumentEntry | null {
-  if (resolveWorkspaceDocumentById(doc, input.documentId) !== null) return null
-  const created = createWorkspaceDocumentAtPath(doc, input)
-  if (created === null) return null
-  // The content write re-stamps updatedAt on a diff; carry the caller's
-  // value so a fold records the document's own history, not fold time.
-  if (
-    !writeWorkspaceDocumentContent(doc, input.documentId, source, {
-      ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
-    })
-  ) {
-    return null
-  }
-  return resolveWorkspaceDocumentById(doc, input.documentId)
-}
-
 /** What a document node keeps for itself, so never a content root (`rootFitsNode`). */
 export const NODE_META_KEYS: ReadonlySet<string> = new Set(
   Object.keys(workspaceNodeMetaSchema.shape),
@@ -832,9 +785,9 @@ export const NODE_META_KEYS: ReadonlySet<string> = new Set(
 
 /**
  * Makes an EXISTING tree document's content equal a standalone document's —
- * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
- * already exists: a duplicate's copy, and `writeDocumentContentAndName`, which
- * every keeper's whole-content write outside this package goes through.
+ * for callers whose node already exists: a duplicate's copy, and
+ * `writeDocumentContentAndName`, which every keeper's whole-content write
+ * outside this package goes through.
  *
  * A DIFF, not a rewrite, and that is load-bearing twice over: the daemon
  * calls this on every save, so a wholesale rewrite would append a
@@ -1009,8 +962,8 @@ export function deleteWorkspaceNodeAtPath(doc: LoroDoc, path: string): boolean {
 }
 
 /**
- * The inverse of `adoptWorkspaceDocument`: one document's containers, copied
- * out of its tree node into a standalone Loro document with root containers —
+ * The inverse of `writeWorkspaceDocumentContent`: one document's containers,
+ * copied out of its tree node into a standalone Loro document with root containers —
  * the shape every pre-workspace consumer (the daemon import, a duplicate
  * seed) still speaks. Roots named in `omit` stay behind with the tree.
  *

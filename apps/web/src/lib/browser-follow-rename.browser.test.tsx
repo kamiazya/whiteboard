@@ -23,11 +23,11 @@ import { Loro, type LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
@@ -45,13 +45,11 @@ beforeEach(async () => {
 })
 
 async function seedContent(documentId: string, doc: LoroDoc): Promise<void> {
-  expect(await seedWorkspaceDocumentContent(documentId, doc.export({ mode: 'snapshot' }))).toBe(
-    true,
-  )
+  await seedTreeContent(documentId, doc.export({ mode: 'snapshot' }))
 }
 
 async function seedMarkdown(
-  index: FoldingBrowserIndex,
+  index: BrowserDocumentIndex,
   path: string,
   body: string,
   name?: string,
@@ -69,7 +67,7 @@ async function seedMarkdown(
   return entry.documentId
 }
 
-async function seedSpatial(index: FoldingBrowserIndex, path: string, canvas: SpatialCanvas) {
+async function seedSpatial(index: BrowserDocumentIndex, path: string, canvas: SpatialCanvas) {
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
@@ -94,7 +92,7 @@ async function bodyOf(documentId: string): Promise<string> {
 
 describe('browser rename follows references', () => {
   it('a path move repoints markdown and spatial references to the old path', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await seedMarkdown(index, 'follow/design-login', 'the target')
     const sourceId = await seedMarkdown(
@@ -129,7 +127,7 @@ describe('browser rename follows references', () => {
   })
 
   it('a subtree move follows references to a descendant', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await seedMarkdown(index, 'tree/folder', 'the parent')
     await seedMarkdown(index, 'tree/folder/child', 'the child')
@@ -142,7 +140,7 @@ describe('browser rename follows references', () => {
   })
 
   it('writes the repointed reference into the record, never the per-document store', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     await seedMarkdown(index, 'legacy/target', 'the target')
     const sourceId = await seedMarkdown(index, 'legacy/daily', 'see [[legacy/target]]')

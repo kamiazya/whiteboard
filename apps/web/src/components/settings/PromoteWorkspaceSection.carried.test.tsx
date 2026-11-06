@@ -31,7 +31,6 @@ vi.mock('../../lib/promote-workspace.js', () => ({
   promoteWorkspace: vi.fn(),
 }))
 vi.mock('../../lib/browser-workspace-docs.js', () => ({ BrowserWorkspaceDocs: class {} }))
-vi.mock('../../lib/fold-workspace.js', () => ({ foldOrServeTheTree: vi.fn(async () => {}) }))
 vi.mock('../../lib/replica-cache.js', () => ({ cacheDaemonWorkspace: vi.fn() }))
 vi.mock('../../lib/demote-browser-workspace.js', () => ({
   demoteBrowserWorkspace: vi.fn(async () => {}),

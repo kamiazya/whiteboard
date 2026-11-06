@@ -28,7 +28,7 @@
  * (`IdbDocumentIndex`'s `readsAwaitIssuedWrites: false`). That is sound
  * because the writes queued here are document renames, which change none of
  * those. A tracked caller that reaches one of the three reopens the deadlock;
- * `folding-browser-index.write-barrier.browser.test.tsx` calls every other
+ * `browser-document-index.write-barrier.browser.test.tsx` calls every other
  * method from a tracked promise.
  */
 const issued = new Set<Promise<unknown>>()

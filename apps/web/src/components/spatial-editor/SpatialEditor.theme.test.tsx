@@ -1,8 +1,7 @@
 // The editor draws the document's OWN theme, and has no way to draw
-// anything else. ADR-0030 decision 6's `style` argument still reaches every
-// render entry point below this one — headless callers ask for `'clean'` —
-// but no editor prop sets it any more, so the board a person edits and the
-// board every other surface pictures cannot disagree.
+// anything else: this app's one render composition fixes the look to
+// `'document'`, so the board a person edits and the board every other
+// surface pictures cannot disagree.
 
 import { resolveCanvasPalette, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'

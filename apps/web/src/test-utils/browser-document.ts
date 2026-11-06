@@ -11,7 +11,7 @@
 import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { Loro } from 'loro-crdt'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import {
   BROWSER_DEFAULT_SEGMENT,
@@ -21,10 +21,7 @@ import {
 } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { startupFoldsSettled } from '../lib/fold-workspace.js'
-import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { inTransaction, request } from '../lib/idb-tx.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { indexWritesSettled } from '../lib/pending-index-writes.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { settleAutoCheckpoints } from '../pages/use-auto-checkpoint.js'
@@ -75,8 +72,6 @@ export async function clearWhiteboardDb(): Promise<void> {
   // A page torn down a moment ago may still be taking its pending checkpoint,
   // or finishing a queued rename (its save loop outlives the unmount);
   // deleting the database under either makes that save warn in the NEXT test.
-  // Its startup fold likewise runs on past the unmount.
-  await startupFoldsSettled()
   await settleAutoCheckpoints()
   await indexWritesSettled()
   return deleteAndKeepDeleted(whiteboardDbName())
@@ -147,8 +142,8 @@ async function databaseExists(dbName: string): Promise<boolean> {
  *
  * A deleted database COMES BACK, and that is the second half of the flake
  * whose first half `deleteDatabaseAndWait` closed. Unmounting a page does not
- * end its writes: the workspace record's save and the startup fold are async
- * tails that outlive React's cleanup, and each one opens the database BY NAME
+ * end its writes: the workspace record's save and the index's first settle are
+ * async tails that outlive React's cleanup, and each one opens the database BY NAME
  * — re-creating it, after the deletion has already succeeded.
  *
  * Measured, mounting `BrowserDocumentPage` and then deleting: gone the
@@ -236,33 +231,12 @@ export async function loroDocumentsKeys(): Promise<string[]> {
 
 /** Node ids persisted for a given canvas id, decoded through the real store. */
 export async function persistedNodeIds(documentId: string): Promise<string[]> {
-  // The workspace document is where the editor persists now: a document the
-  // tree holds answers from its node's containers. The per-document record
-  // below stays as the fallback for suites that seed the OLD stores and
-  // assert before any backend has folded them.
   const workspace = await new BrowserWorkspaceDocs(whiteboardDbName())
     .open(getBrowserWorkspaceId())
     .catch(() => null)
-  if (workspace !== null) {
-    const projected = projectWorkspaceDocument(workspace, documentId)
-    if (projected !== null) {
-      return Object.keys(projected.getMap('nodes').toJSON() as Record<string, unknown>)
-    }
-  }
-  // Through `LoroStore` rather than a hand-decoded envelope: content is behind
-  // the `DocumentStore` port now, so its chunking and its delta log are the
-  // store's business and a test that re-implemented either would be asserting
-  // against its own copy of them.
-  const loaded = await new LoroStore(whiteboardDbName()).load(documentId)
-  if (loaded.kind !== 'ok') return []
-
-  const doc = new Loro()
-  doc.import(loaded.snapshot)
-  // Replay deltas recorded after the snapshot — a canvas that received more
-  // than one write is stored as snapshot + deltas, not a single snapshot.
-  for (const delta of loaded.deltas ?? []) doc.import(delta)
-  // crdt's LoroDoc spatial layout: doc.getMap('nodes') keyed by nodeId.
-  return Object.keys(doc.getMap('nodes').toJSON() as Record<string, unknown>)
+  const projected = workspace === null ? null : projectWorkspaceDocument(workspace, documentId)
+  if (projected === null) return []
+  return Object.keys(projected.getMap('nodes').toJSON() as Record<string, unknown>)
 }
 
 /** A canvas holding one text node — the minimal edit these suites drive. */
@@ -304,7 +278,7 @@ export function deleteNodeCommand(id: string): EditorCommand {
  */
 export async function describeBrowserStore(): Promise<string> {
   const pointer = await new IdbDefaultDocumentPointer().get().catch(() => '<unreadable>')
-  const rows = await new IdbDocumentIndex()
+  const rows = await new BrowserDocumentIndex(whiteboardDbName())
     .listDocuments({ workspaceId: getBrowserWorkspaceId() })
     .catch(() => null)
   if (rows === null) return `pointer=${pointer ?? '<none>'} documents=<unreadable>`

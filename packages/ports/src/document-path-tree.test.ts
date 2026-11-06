@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { findDescendantPath, planSubtreeMove } from './document-path-tree.js'
+import { planSubtreeMove } from './document-path-tree.js'
 
 describe('planSubtreeMove', () => {
   const rows = [
@@ -13,16 +13,5 @@ describe('planSubtreeMove', () => {
       ok: true,
       moves: [{ id: 'a', from: 'design/a', path: 'design-v2/a' }],
     })
-  })
-})
-
-describe('findDescendantPath', () => {
-  it('ignores a sibling that shares the prefix', () => {
-    const rows = [
-      { id: 'a', path: 'design' },
-      { id: 'b', path: 'design-system' },
-    ]
-    expect(findDescendantPath(rows, 'design')).toBeUndefined()
-    expect(findDescendantPath([...rows, { id: 'c', path: 'design/x' }], 'design')).toBe('design/x')
   })
 })

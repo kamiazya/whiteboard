@@ -8,10 +8,10 @@ import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
 import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
@@ -34,7 +34,7 @@ function listingStub(answer: () => Response): typeof globalThis.fetch {
 const listsOne = listingStub(() => Response.json({ workspaces: [{ workspaceId: 'ws-a' }] }))
 
 async function seedOneDocument(): Promise<void> {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),

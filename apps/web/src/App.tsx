@@ -50,9 +50,9 @@ interface AppProps {
 }
 
 export function App({ providerState }: AppProps) {
-  // The browser's DocumentIndex (the workspace tree behind the startup fold)
+  // The browser's DocumentIndex (the workspace-tree index)
   // is NOT constructed here: the pages that need it default to the shared
-  // instance from folding-browser-index.ts, which keeps loro-crdt off the
+  // instance from browser-document-index.ts, which keeps loro-crdt off the
   // entry chunk's critical path (entry-graph-loro-free.test.ts).
   const [userSettingsStore] = useState(() => createUserSettingsStore())
   const [defaultProviderState] = useState<ProviderState>(() =>

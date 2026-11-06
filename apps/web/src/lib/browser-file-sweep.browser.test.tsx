@@ -23,13 +23,13 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { sweepUnreferencedFiles } from './browser-file-sweep.js'
 import { DOCUMENT_FILES_STORE, openWhiteboardDb, VERSIONS_STORE } from './browser-idb.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { openDocumentStore } from './replica-store.js'
 import { withReplicaEntry } from './replicas.js'
@@ -123,7 +123,7 @@ async function seedDocument(
   fileIds: readonly string[],
   workspaceId = getBrowserWorkspaceId(),
 ) {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await index.createWorkspace({ workspaceId })
   const { documentId } = await index.createDocument({ workspaceId, path, kind: 'spatial' })
   await draw(documentId, fileIds, workspaceId)
@@ -379,7 +379,7 @@ describe('sweepUnreferencedFiles on the cross-keeper scenario', () => {
 
   // The daemon takes the same steps in file-gc.conformance.test.ts.
   it('reaches the verdict every keeper reaches', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })
     const versions = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })

@@ -9,13 +9,14 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
 import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
-import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { seedTreeContent, seedTreeDocument } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { transferFragmentImages } from './clipboard-images.js'
@@ -25,7 +26,6 @@ import {
   resetEmbedIndexForTests,
 } from './document-embed-content.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('document-embed-content')
@@ -37,7 +37,7 @@ describe('loadBrowserReference', () => {
   })
 
   it('resolves the name of a document the workspace tree holds', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() }).catch(() => {})
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -51,7 +51,7 @@ describe('loadBrowserReference', () => {
   })
 
   it('resolves the name of a legacy record through the fold, not a second read path', async () => {
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/old',
       kind: 'markdown',
@@ -59,7 +59,7 @@ describe('loadBrowserReference', () => {
     })
     const doc = new Loro()
     doc.getText('body').insert(0, 'legacy body')
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const source = await loadBrowserReference(entry.documentId)
     expect(source).toEqual({ documentId: entry.documentId, body: 'legacy body', name: 'Old Note' })
@@ -87,7 +87,7 @@ describe('loadBrowserReference', () => {
     // row's "no record here" is the only answer left — and on its own it
     // says nothing, because the place the content actually lives was never
     // reached.
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/tree-only',
       kind: 'markdown',
@@ -110,20 +110,14 @@ describe('loadBrowserReference', () => {
     // variant that exists to say "the read failed and this says nothing
     // about the document" — so a fix that only handled REJECTIONS left the
     // designed signal folded into "no content" exactly as before.
-    const entry = await seedLegacyRow({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'notes/unavailable',
-      kind: 'markdown',
-      name: 'Unavailable',
-    })
-    const doc = new Loro()
-    doc.getText('body').insert(0, 'a body the caller never gets to see')
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    // Held by no tree node, so the read under test is the per-document
+    // store's: a tree-held document answers from the projection.
+    const documentId = generateDocumentId()
     const unavailable = vi
       .spyOn(LoroStore.prototype, 'load')
       .mockResolvedValue({ kind: 'read-unavailable' })
     try {
-      await expect(loadBrowserReference(entry.documentId)).rejects.toThrow(/could not be read/)
+      await expect(loadBrowserReference(documentId)).rejects.toThrow(/could not be read/)
       await expectLoggedFailure('referenced document load failed')
     } finally {
       unavailable.mockRestore()
@@ -136,24 +130,14 @@ describe('loadBrowserReference', () => {
     // terminal), a rejection is the database's ("could not read", asked
     // again). Reporting a failed read as the first is what left an embed
     // blank for the life of the page, with nothing logged.
-    // A legacy record, so the read under test is the per-document store's:
-    // a tree-held document answers from the projection and never reaches it.
-    const entry = await seedLegacyRow({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'notes/unreadable',
-      kind: 'markdown',
-      name: 'Unreadable',
-    })
-    const doc = new Loro()
-    doc.getText('body').insert(0, 'a body the caller never gets to see')
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    // Held by no tree node, so the read under test is the per-document
+    // store's: a tree-held document answers from the projection.
+    const documentId = generateDocumentId()
     const failing = vi
       .spyOn(LoroStore.prototype, 'load')
       .mockRejectedValue(new Error('the store could not be read'))
     try {
-      await expect(loadBrowserReference(entry.documentId)).rejects.toThrow(
-        'the store could not be read',
-      )
+      await expect(loadBrowserReference(documentId)).rejects.toThrow('the store could not be read')
       await expectLoggedFailure('referenced document load failed')
     } finally {
       failing.mockRestore()
@@ -161,7 +145,7 @@ describe('loadBrowserReference', () => {
   })
 
   it('answers a spatial document with its canvas rather than an empty body', async () => {
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'boards/plan',
       kind: 'spatial',
@@ -173,7 +157,7 @@ describe('loadBrowserReference', () => {
     }
     const doc = new Loro()
     writeSpatialCanvas(doc, canvas)
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const source = await loadBrowserReference(entry.documentId)
     expect(source).toEqual({ documentId: entry.documentId, name: 'The Plan', canvas })
@@ -189,7 +173,7 @@ describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
   // The name is the embed card's heading; without it the card falls back to
   // the raw reference.
   it('answers an embedded note with its workspace name and its body', async () => {
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'notes/spec',
       kind: 'markdown',
@@ -197,7 +181,7 @@ describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
     })
     const doc = new Loro()
     doc.getText('body').insert(0, 'spec body')
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const loaded = await BROWSER_FILE_ADAPTER.loadDocument(entry.documentId)
     expect(loaded?.name).toBe('The Spec')
@@ -207,18 +191,14 @@ describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
   it('re-throws a store read that FAILED, so the canvas seam asks again', async () => {
     // The canvas's embeds read through this door, not `loadBrowserReference`,
     // and the contract is the same: `undefined` is cached as terminal.
-    const entry = await seedLegacyRow({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'boards/unreadable',
-      kind: 'spatial',
-      name: 'Unreadable',
-    })
-    await new LoroStore().save(entry.documentId, new Loro().export({ mode: 'snapshot' }))
+    // Held by no tree node, so the read under test is the per-document
+    // store's: a tree-held document answers from the projection.
+    const documentId = generateDocumentId()
     const failing = vi
       .spyOn(LoroStore.prototype, 'load')
       .mockRejectedValue(new Error('the store could not be read'))
     try {
-      await expect(BROWSER_FILE_ADAPTER.loadDocument(entry.documentId)).rejects.toThrow(
+      await expect(BROWSER_FILE_ADAPTER.loadDocument(documentId)).rejects.toThrow(
         'the store could not be read',
       )
       await expectLoggedFailure('embedded document load failed')

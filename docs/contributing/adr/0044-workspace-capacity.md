@@ -296,6 +296,6 @@ workspace. Editing what is there stays open, and nothing already kept stops
 being readable. That is decision 2 read for a limit measured in documents.
 
 Built in `apps/web`: `lib/browser-keeper-capacity.ts`, the refusal in
-`FoldingBrowserIndex.createDocument` (every browser path that adds a document
+`BrowserDocumentIndex.createDocument` (every browser path that adds a document
 ends there), and `BrowserCapacityNotice` on the document list.
 

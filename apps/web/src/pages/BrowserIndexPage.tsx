@@ -13,6 +13,7 @@ import { browserMemoryScope } from '../components/workspace-files/use-device-mem
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useListRoutePresence } from '../hooks/use-route-presence.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
+import { sharedBrowserDocumentIndex } from '../lib/browser-document-index.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
@@ -23,6 +24,7 @@ import {
 } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
+import { isBrowserStorageRefusedError } from '../lib/browser-storage-refusal.js'
 import {
   browserWorkspaceIdentitySnapshot,
   browserWorkspaceIdOrNull,
@@ -34,7 +36,6 @@ import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { documentLabel } from '../lib/document-label.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { duplicateLanded } from '../lib/duplicate-landed.js'
-import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { NEW_CANVAS_SHORTCUT } from '../lib/new-canvas-shortcut.js'
@@ -214,7 +215,14 @@ interface BrowserDocumentsLoadInput {
  */
 function loadFailed(err: unknown, listed: string | undefined, props: BrowserDocumentsLoadInput) {
   if (isWorkspaceRemovedError(err) && listed !== undefined) props.onRemoved(listed)
+  else if (isBrowserStorageRefusedError(err)) props.setError(err.message)
   else props.setError('Failed to load documents from this browser.')
+}
+
+/** What a refused create says: the storage's own sentence, or the generic one. */
+function createFailureMessage(err: unknown, kind: DocumentKind): string {
+  if (isBrowserStorageRefusedError(err)) return err.message
+  return `Failed to create a ${kindNoun(kind)} in this browser.`
 }
 
 function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
@@ -520,7 +528,7 @@ function useBrowserCreate({
         onOpenDocument(created.path)
       } catch (err) {
         if (isWorkspaceRemovedError(err) && target !== null) onRemoved(target)
-        else setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
+        else setError(createFailureMessage(err, kind))
       } finally {
         setCreating(false)
       }
@@ -583,7 +591,7 @@ export function BrowserIndexPage({
   // accessor memoizes, so every render sees the same identity. The concrete
   // index lives behind this lazy page, not in App, to keep loro-crdt off the
   // entry chunk (entry-graph-loro-free.test.ts).
-  index = sharedFoldingBrowserIndex(),
+  index = sharedBrowserDocumentIndex(),
   loro = defaultLoroStore,
   pointer = defaultPointer,
   clock = defaultClock,

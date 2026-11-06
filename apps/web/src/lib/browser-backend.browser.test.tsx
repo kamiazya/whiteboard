@@ -17,20 +17,17 @@ import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
-  projectWorkspaceDocument,
   readSpatialCanvas,
   readWorkspaceDocumentName,
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   writeMarkdownBody,
-  writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { Loro, LoroDoc } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
 import { BROWSER_DEFAULT_SEGMENT } from './browser-idb.js'
 
@@ -39,18 +36,15 @@ const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
 
 import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browser-backend')
+claimIsolatedWhiteboardDb('browser-backend')
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const ID_B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 const ID_C = '01CX5ZZKBKACTAV9WEVGEMMVRZ'
-const ID_D = '01DX5ZZKBKACTAV9WEVGEMMVRZ'
-const ID_E = '01EX5ZZKBKACTAV9WEVGEMMVRZ'
-const ID_F = '01FX5ZZKBKACTAV9WEVGEMMVRZ'
 
 function target(documentId: string, path = 'design'): BrowserBackendTarget {
   return { documentId, path, kind: 'spatial' }
@@ -193,7 +187,7 @@ describe('BrowserBackend', () => {
       await backend.pushLocalUpdate(doc.export({ mode: 'update', from }))
       backend.disconnect()
     }
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const nameNow = async () =>
       (await index.resolveDocumentById({ workspaceId: getBrowserWorkspaceId(), documentId: ID_A }))
         ?.name
@@ -225,7 +219,7 @@ describe('BrowserBackend', () => {
       writeMarkdownBody(documentContainers(session, ID_A), body)
       await backend.pushLocalUpdate(session.export({ mode: 'update', from }))
     }
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const nameNow = async () =>
       (await index.resolveDocumentById({ workspaceId: getBrowserWorkspaceId(), documentId: ID_A }))
         ?.name
@@ -244,28 +238,6 @@ describe('BrowserBackend', () => {
     await type('# Weekly review, edited\n')
 
     expect(await nameNow()).toBe('Weekly')
-    backend.disconnect()
-  })
-
-  it('a readable legacy per-document record is folded in and served from the tree', async () => {
-    const legacy = new Loro()
-    writeSpatialCanvas(legacy, {
-      nodes: [textNode({ id: 'n-old', x: 1, y: 2, width: 80, height: 40, text: 'kept' })],
-      edges: [],
-    })
-    await seedSyncDocument(ID_B, { snapshot: legacy.export({ mode: 'snapshot' }) }, ISOLATED_DB)
-
-    const handlers = makeHandlers()
-    const backend = new BrowserBackend(target(ID_B, 'imported'))
-    await connectAndWait(backend, handlers)
-
-    const doc = new LoroDoc()
-    doc.import(deliveredSnapshot(handlers))
-    const projected = projectWorkspaceDocument(doc, ID_B)
-    expect(projected).not.toBeNull()
-    expect(projected === null ? [] : readSpatialCanvas(projected).nodes.map((n) => n.id)).toEqual([
-      'n-old',
-    ])
     backend.disconnect()
   })
 
@@ -312,7 +284,7 @@ describe('BrowserBackend', () => {
     // empty node placed under it would list beside the trashed copy, and a
     // restore would then put a second node under the same id.
     const workspaceId = getBrowserWorkspaceId()
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await index.createWorkspace({ workspaceId })
     const { documentId } = await index.createDocument({
       workspaceId,
@@ -498,72 +470,6 @@ describe('BrowserBackend', () => {
     // address moved to.
     expect(recording.saves).not.toContain(ELSEWHERE_ULID)
     expect(recording.saves).toContain(origin)
-    backend.disconnect()
-  })
-
-  it('an unreadable legacy record surfaces its own failure and is NOT shadowed by an empty node', async () => {
-    // {v:99} — an envelope from a version this build does not know.
-    await seedSyncDocument(ID_D, { raw: { v: 99, garbage: true } }, ISOLATED_DB)
-
-    const h = makeHandlers()
-    const backend = new BrowserBackend(target(ID_D, 'damaged'))
-    backend.connect(h)
-    await vi.waitFor(
-      () => {
-        expect(h.onError).toHaveBeenCalledWith('unsupported-version')
-      },
-      { timeout: WAIT_TIMEOUT },
-    )
-    expect(h.onSnapshot).not.toHaveBeenCalled()
-
-    // A push against an undelivered document has nothing to land on and must
-    // not throw — the session never got a doc to edit anyway.
-    await expect(backend.pushLocalUpdate(new Uint8Array([1, 2, 3]))).resolves.toBeUndefined()
-    backend.disconnect()
-  })
-
-  it('onError fires with corrupt-snapshot for v:1 envelope with invalid Loro bytes', async () => {
-    await seedSyncDocument(
-      ID_E,
-      { snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]) },
-      ISOLATED_DB,
-    )
-
-    const h = makeHandlers()
-    const backend = new BrowserBackend(target(ID_E, 'damaged'))
-    backend.connect(h)
-    await vi.waitFor(
-      () => {
-        expect(h.onError).toHaveBeenCalledWith('corrupt-snapshot')
-      },
-      { timeout: WAIT_TIMEOUT },
-    )
-    expect(h.onSnapshot).not.toHaveBeenCalled()
-    backend.disconnect()
-  })
-
-  it('onError fires with corrupt-delta for valid snapshot but invalid delta bytes', async () => {
-    const doc = new Loro()
-    doc.getList('elements').push({ id: 'a' })
-    await seedSyncDocument(
-      ID_F,
-      {
-        snapshot: doc.export({ mode: 'snapshot' }),
-        deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
-      },
-      ISOLATED_DB,
-    )
-
-    const h = makeHandlers()
-    const backend = new BrowserBackend(target(ID_F, 'damaged'))
-    backend.connect(h)
-    await vi.waitFor(
-      () => {
-        expect(h.onError).toHaveBeenCalledWith('corrupt-delta')
-      },
-      { timeout: WAIT_TIMEOUT },
-    )
-    expect(h.onSnapshot).not.toHaveBeenCalled()
     backend.disconnect()
   })
 })
