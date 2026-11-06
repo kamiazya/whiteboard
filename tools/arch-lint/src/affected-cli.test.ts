@@ -125,6 +125,7 @@ function jobOutputs(args: string[]): Record<string, string> {
 describe('affected-cli job', () => {
   it("keeps its commits in the fixture under a hook's exported GIT_DIR", () => {
     const other = mkdtempSync(join(tmpdir(), 'affected-cli-other-'))
+    const originalGitDir = process.env.GIT_DIR
     try {
       withoutRepoPointers(() =>
         execFileSync('git', ['init', '-q'], { cwd: other, stdio: 'ignore' }),
@@ -140,7 +141,8 @@ describe('affected-cli job', () => {
       })
       expect(otherLog.trim()).toBe('0')
     } finally {
-      delete process.env.GIT_DIR
+      if (originalGitDir === undefined) delete process.env.GIT_DIR
+      else process.env.GIT_DIR = originalGitDir
       rmSync(other, { recursive: true, force: true })
     }
   })

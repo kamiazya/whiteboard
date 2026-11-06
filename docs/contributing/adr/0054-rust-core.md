@@ -1,7 +1,8 @@
 # ADR-0054: The core moves to Rust — one pure core for wasm and native, with the TypeScript implementation as its oracle until it is deleted
 
-**Status:** Accepted, decided by the owner on 2026-11-06. Nothing is built
-yet; the migration order below is the plan. The development quality bar the
+**Status:** Accepted, decided by the owner on 2026-11-06. The workspace
+skeleton and the Rust gates are in place; no product module has been ported
+yet, and the migration order below is the plan. The development quality bar the
 migration is held to is a separate, language-neutral document,
 [Development quality requirements](../quality-requirements.md), which this
 ADR cites by requirement number (QR-n). Amends
@@ -176,7 +177,9 @@ This step delivers: the requirements document, this ADR, the module
 partition, an empty cargo workspace skeleton, the Rust CI gates, the
 neutral-schema pipeline end to end on ONE small contract (the geometry
 vocabulary: `Point`, `Rect`, `Side`, `EdgeRoutingStyle`), and the
-differential harness. The routing spike follows it. The full target crate
+differential harness; of these, the schema pipeline and the harness are
+still to come and land as the first crates do. The routing spike follows
+them. The full target crate
 graph is declared in the neutral architecture map with status `planned`;
 only `det`, `log`, `edge-routing` (empty), `bindings/wasm` (exporting
 `abi_version()`) and `xtask` are materialised.

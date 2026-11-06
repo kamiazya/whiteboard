@@ -82,7 +82,7 @@ fn cargo_home() -> PathBuf {
     )
 }
 
-fn source_date_epoch(root: &Path) -> Result<String, Vec<String>> {
+pub(crate) fn source_date_epoch(root: &Path) -> Result<String, Vec<String>> {
     if let Ok(v) = std::env::var("SOURCE_DATE_EPOCH") {
         return Ok(v);
     }
@@ -107,13 +107,15 @@ fn run(cmd: &mut Command) -> Result<(), Vec<String>> {
 }
 
 /// Builds `artifact` from the workspace at `root` into `target_dir` and
-/// returns every file that ships.
+/// returns every file that ships. `epoch` is the `SOURCE_DATE_EPOCH` it is
+/// stamped with: the caller resolves it, because a root may be a copy of the
+/// sources with no `.git` to ask (`repro-check`'s build B).
 pub(crate) fn build(
     root: &Path,
     target_dir: &Path,
     artifact: Artifact,
+    epoch: &str,
 ) -> Result<Vec<PathBuf>, Vec<String>> {
-    let epoch = source_date_epoch(root)?;
     let mut cargo = Command::new(metadata::cargo());
     cargo
         .current_dir(root)
@@ -211,7 +213,8 @@ pub(crate) fn run_task(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
         ["--target-dir", dir] => PathBuf::from(dir),
         _ => return Err(usage()),
     };
-    let files = build(&meta.workspace_root, &target_dir, artifact)?;
+    let epoch = source_date_epoch(&meta.workspace_root)?;
+    let files = build(&meta.workspace_root, &target_dir, artifact, &epoch)?;
     Ok(files.iter().map(|f| format!("dist: {}", f.display())).collect())
 }
 

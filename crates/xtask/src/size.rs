@@ -118,7 +118,8 @@ pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
     let mut report = Vec::new();
     let mut changed = false;
     let dist_dir = dist::default_target_dir(&metadata.target_directory);
-    let shipped = dist::build(&metadata.workspace_root, &dist_dir, dist::Artifact::Wasm)?;
+    let epoch = dist::source_date_epoch(&metadata.workspace_root)?;
+    let shipped = dist::build(&metadata.workspace_root, &dist_dir, dist::Artifact::Wasm, &epoch)?;
     for name in WASM_BINDINGS {
         let actual = match shipped_bytes(name, &dist_dir, &shipped) {
             Ok(bytes) => bytes,

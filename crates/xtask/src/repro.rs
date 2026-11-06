@@ -119,10 +119,12 @@ pub(crate) fn run(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
     let mut lines =
         vec![format!("repro-check: build B is a copy of {copied} files at {}", source_b.display())];
     let mut failures = Vec::new();
+    // Build B's copy carries no `.git`, so the checkout answers for both.
+    let epoch = dist::source_date_epoch(&meta.workspace_root)?;
     for artifact in artifacts {
         let (dir_a, dir_b) = (base.join("target-a"), base.join("target-b"));
-        let a = dist::build(&meta.workspace_root, &dir_a, artifact)?;
-        let b = dist::build(&source_b, &dir_b, artifact)?;
+        let a = dist::build(&meta.workspace_root, &dir_a, artifact, &epoch)?;
+        let b = dist::build(&source_b, &dir_b, artifact, &epoch)?;
         match compare(&a, &dir_a, &b, &dir_b) {
             Ok(ok) => lines.extend(ok),
             Err(bad) => failures.extend(bad),

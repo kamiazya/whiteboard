@@ -165,14 +165,32 @@ pub(crate) fn verdict(f: &Findings, policy: Policy) -> Vec<String> {
     v
 }
 
-pub(crate) fn run(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
-    let policy = Policy { require_stack_protector: args.contains(&"--require-stack-protector") };
-    let binaries: Vec<&&str> = args.iter().filter(|a| !a.starts_with("--")).collect();
-    if binaries.is_empty() {
-        return Err(vec![
-            "usage: cargo xtask harden-check [--require-stack-protector] <binary>...".to_owned(),
-        ]);
+const USAGE: &str = "usage: cargo xtask harden-check [--require-stack-protector] <binary>...";
+const REQUIRE_STACK_PROTECTOR: &str = "--require-stack-protector";
+
+/// The policy the flags ask for and the binaries to inspect. A flag the task
+/// does not know is an error, never a dropped word: a misspelled
+/// `--require-stack-protector` would otherwise relax the gate silently.
+fn parse_args<'a>(args: &[&'a str]) -> Result<(Policy, Vec<&'a str>), Vec<String>> {
+    let mut policy = Policy { require_stack_protector: false };
+    let mut binaries = Vec::new();
+    for arg in args {
+        if *arg == REQUIRE_STACK_PROTECTOR {
+            policy.require_stack_protector = true;
+        } else if arg.starts_with("--") {
+            return Err(vec![format!("harden-check: unknown flag {arg}; {USAGE}")]);
+        } else {
+            binaries.push(*arg);
+        }
     }
+    if binaries.is_empty() {
+        return Err(vec![USAGE.to_owned()]);
+    }
+    Ok((policy, binaries))
+}
+
+pub(crate) fn run(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
+    let (policy, binaries) = parse_args(args)?;
     let mut ok = Vec::new();
     let mut failed = Vec::new();
     for path in binaries {
@@ -223,6 +241,16 @@ mod tests {
     }
 
     const STABLE: Policy = Policy { require_stack_protector: false };
+
+    #[test]
+    fn an_unknown_flag_is_refused_rather_than_dropped() {
+        let err = parse_args(&["--require-stack-protecter", "a.out"]).unwrap_err();
+        assert!(err[0].contains("unknown flag --require-stack-protecter"), "{err:?}");
+        let (policy, binaries) = parse_args(&["--require-stack-protector", "a.out"]).unwrap();
+        assert!(policy.require_stack_protector);
+        assert_eq!(binaries, vec!["a.out"]);
+        assert_eq!(parse_args(&["--require-stack-protector"]).unwrap_err(), vec![USAGE.to_owned()]);
+    }
 
     #[test]
     fn a_hardened_binary_passes_without_a_stack_protector_unless_required() {
