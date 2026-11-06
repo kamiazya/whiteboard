@@ -1529,7 +1529,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           boxes={boxes}
           selectableBoxes={selectableBoxes}
           createId={createId}
-          menu={{ open: setContextMenu, rootWidth: rootSize.width }}
+          menu={{ open: setContextMenu, root: rootSize }}
         />
         {inPlaceEditors}
       </>
