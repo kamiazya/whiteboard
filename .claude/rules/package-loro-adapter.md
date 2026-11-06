@@ -256,11 +256,25 @@ implementations live in the composition roots.
   cost of the resource shape stays recorded: 156960 -> 184960 over 1000
   edits (+18%, ~28B).
 
-- **The retired Excalidraw `elements` list is carried, never read.** `content-sync`
-  copies it through as a value so a save loses nothing, but no reader consumes
-  it: counts, file GC and export treat a document holding only it as empty. Do
-  not add one, and do not probe for it with `getMovableList('elements')`, which
-  creates the root container as a side effect.
+- **The retired Excalidraw `elements` list root has no reader, and a record
+  still holding entries there is REFUSED by name** (`retiredElementsShape` in
+  `retired-stored-shape.ts`, chained last in `retiredStoredShapeIn` and asked at
+  the top of `readSpatialCanvasWithSkipped`, so every reader, the daemon's 409,
+  the MCP tool failure and the web read-failure screen get it with no plumbing
+  of their own). An EMPTY root is not refused: an old client left one by merely
+  opening it, and it carries nothing. `content-sync` still carries a sequence
+  root of any name BY KIND as a value copy — deleting that branch would drop the
+  root from the standalone projection the daemon's readers run on, and the
+  refusal would never fire, which is the silent loss the refusal exists to
+  prevent. The probe OPENS NOTHING, and that is measured rather than assumed:
+  on loro-crdt 1.17.1 `getMovableList('elements')` and even `getContainerById`
+  of an unseen root cid register the root in `getShallowValue()`, so a LoroDoc
+  host reads `getShallowValue()` first and fetches only a cid listed there, and
+  a tree-node host answers through the optional `peekList` beside `peekMap`;
+  `retired-stored-shape.test.ts` pins the shallow value, the frontiers and the
+  update-export byte length identical before and after the probe, and the
+  `workspace-record-growth` pins did not move. `RETIRED_ELEMENTS_KEY` lives in
+  `containers.ts` beside `RETIRED_COMMENTS_KEY`.
 
 - **A record written before [ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)
   stored all of this under the FORMAT's extension key** (`x-whiteboard` on a

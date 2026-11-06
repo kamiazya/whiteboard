@@ -44,7 +44,9 @@ describe('countSpatialNodes', () => {
     expect(countSpatialNodes(doc)).toBe(0)
   })
 
-  it('counts nothing for a doc that holds only the retired elements list', () => {
+  // readSpatialCanvas refuses a document holding the retired list and the
+  // advisory count soft-fails to 0 — that is not an empty canvas.
+  it('counts 0 for a doc that holds only the retired elements list, which the read refuses', () => {
     const doc = new LoroDoc()
     legacyElement(doc, 'el-1')
     legacyElement(doc, 'el-2')
@@ -57,14 +59,14 @@ describe('countSpatialNodes', () => {
     expect(Object.keys(doc.getShallowValue())).not.toContain('elements')
   })
 
-  it('counts only the nodes map, not stale legacy entries, once nodes are present', () => {
+  it('counts 0 for nodes beside a retired elements list, because the read refuses the document', () => {
     const doc = makeSpatialDoc({
       nodes: [textNode({ id: 'n1', text: 'a', x: 0, y: 0, width: 10, height: 10 })],
       edges: [],
     })
     legacyElement(doc, 'stale-1')
     legacyElement(doc, 'stale-2')
-    expect(countSpatialNodes(doc)).toBe(1)
+    expect(countSpatialNodes(doc)).toBe(0)
   })
 
   it('counts 0 rather than throwing when the canvas cannot be read', () => {

@@ -2,10 +2,12 @@
 // more. Nothing here converts one: a record still holding a retired shape is
 // REFUSED by name, because with no reader left the honest alternatives are
 // both silent — the `.strict()` model drops an element it cannot parse, and
-// an absent key reads as "nothing here".
+// an absent key reads as "nothing here". Today: a node, edge or canvas in the
+// pre-ADR-0037/0038 forms, a markdown body stored as a canvas text node, and
+// the Excalidraw `elements` list.
 
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
-import type { LoroMap } from 'loro-crdt'
+import { type ContainerID, LoroDoc, LoroList, type LoroMap, LoroMovableList } from 'loro-crdt'
 import {
   CANVAS_KEY,
   DOCUMENT_KEY,
@@ -13,6 +15,7 @@ import {
   EDGES_KEY,
   MARKDOWN_BODY_KEY,
   NODES_KEY,
+  RETIRED_ELEMENTS_KEY,
 } from './containers.js'
 
 /**
@@ -150,6 +153,32 @@ export function retiredMarkdownShape(doc: DocumentContainers): string | null {
   )
 }
 
+const listRootOf = (doc: LoroDoc, key: string): LoroList | LoroMovableList | undefined => {
+  const cid = doc.getShallowValue()[key]
+  const held = typeof cid === 'string' ? doc.getContainerById(cid as ContainerID) : undefined
+  return held instanceof LoroList || held instanceof LoroMovableList ? held : undefined
+}
+
+/**
+ * Whether the retired Excalidraw `elements` list still holds entries. An
+ * empty root is what an old client leaves by merely opening it and carries
+ * nothing, so only entries are refused. Opens nothing: on a LoroDoc even
+ * asking for a root that was never there registers it, so the root is looked
+ * up in the shallow value first and fetched by the container id listed
+ * there. A host that is neither a LoroDoc nor offers `peekList` holds none.
+ */
+export function retiredElementsShape(doc: DocumentContainers): string | null {
+  const held =
+    doc.peekList !== undefined
+      ? doc.peekList(RETIRED_ELEMENTS_KEY)
+      : doc instanceof LoroDoc
+        ? listRootOf(doc, RETIRED_ELEMENTS_KEY)
+        : undefined
+  return held !== undefined && held.length > 0
+    ? `canvas elements stored as the retired Excalidraw \`${RETIRED_ELEMENTS_KEY}\` list (${held.length} entries)`
+    : null
+}
+
 /**
  * The first retired shape this document holds, or null — for a caller that
  * must decide before it reads (a snapshot arriving in an editor), where the
@@ -162,6 +191,7 @@ export function retiredStoredShapeIn(doc: DocumentContainers): string | null {
     firstRetired(peekMap(doc, NODES_KEY), retiredNodeShape) ??
     firstRetired(peekMap(doc, EDGES_KEY), retiredEdgeShape) ??
     (canvasMap === undefined ? null : retiredCanvasShape(canvasMap)) ??
-    retiredMarkdownShape(doc)
+    retiredMarkdownShape(doc) ??
+    retiredElementsShape(doc)
   )
 }
