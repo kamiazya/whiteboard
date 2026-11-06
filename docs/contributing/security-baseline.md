@@ -72,7 +72,7 @@ and are judged from the REST API and the workflows instead.
 
 ## Workflow static analysis: zizmor
 
-`.github/workflows/zizmor.yml` runs [zizmor](https://docs.zizmor.sh) 1.32.0 at
+`ci.yml`'s `zizmor` job runs [zizmor](https://docs.zizmor.sh) 1.32.0 at
 its `regular` persona on every pull request and push to `main`, and fails the
 job on a finding (template injection, credential persistence, dangerous
 triggers, excessive permissions, and impostor commits behind a pinned SHA).
@@ -86,8 +86,8 @@ beside each: the stable-tag job's persisted checkout token, the privileged
 `workflow_run` half of the preview build/deploy split, and the setup action's
 exact-pinned corepack install. Its `self-repository` suggestion (24 sites, 13
 of them in `ci.yml`) is disabled in the config, because the guards name the
-local action by its `./` path. Status: **met**, and a gate once the owner makes
-the `zizmor` check required.
+local action by its `./` path. Status: **met**, and a gate: the job is one of
+`ci-gate`'s `needs`, the one required check, so a finding blocks the merge.
 
 The stricter `auditor` persona, which gates nothing here, adds what is worth
 knowing: `RELEASE_PLEASE_TOKEN` and `SONAR_TOKEN` are repository secrets used
@@ -175,7 +175,7 @@ auditor persona clean too.
 | OSPS-VM-04.02 | non-affecting vulnerabilities in a VEX document | met | `.github/security/whiteboard.openvex.json`, held equal to the audit suppressions by `vex-audit-ignores.test.ts` |
 | OSPS-VM-05.01 | threshold for remediating SCA findings | gap-technical | `SECURITY.md` "Remediation thresholds" sets the vulnerability threshold; no license-finding threshold is stated yet |
 | OSPS-VM-05.02 | SCA violations addressed before any release | gap-technical | `release.yml` audits the lockfile and the packed tarball before the npm package publishes; the container image (`docker-publish-sign` needs `build-docker`, not the audit) and the web deploy are not gated on an audit |
-| OSPS-VM-05.03 | every change checked for vulnerable or malicious dependencies, and blocked | gap-owner | `pnpm audit:prod` in CI, `dependency-review.yml` on every PR, and `minimumReleaseAge` (seven days) in `pnpm-workspace.yaml` against a freshly published malicious version. Owner: add `dependency-review` as a required check, since it runs as its own workflow outside `ci-gate` |
+| OSPS-VM-05.03 | every change checked for vulnerable or malicious dependencies, and blocked | met | `pnpm audit:prod` in CI, `ci.yml`'s `dependency-review` job on every PR (one of `ci-gate`'s `needs`, so it blocks; it skips on push to main, which `ci-gate` declares), and `minimumReleaseAge` (seven days) in `pnpm-workspace.yaml` against a freshly published malicious version |
 | OSPS-VM-06.01 | threshold for remediating SAST findings | met | `SECURITY.md` "Remediation thresholds" |
 | OSPS-VM-06.02 | every change checked for weaknesses, and blocked | met | CodeQL is a required check |
 
@@ -381,21 +381,20 @@ The items above that only the owner can close, in one list:
 2. Confirm or add a ruleset on `main`: pull request required, force push and
    deletion blocked, stale approvals dismissed, applies to administrators
    (Branch-Protection, OSPS-AC-03.01/.02).
-3. Add `dependency-review` as a required status check (OSPS-VM-05.03).
-4. Enable secret scanning push protection (OSPS-BR-07.01).
-5. Confirm the base collaborator permission is read (OSPS-AC-02.01).
-6. Confirm the member list and roles above; adopt the escalation policy
+3. Enable secret scanning push protection (OSPS-BR-07.01).
+4. Confirm the base collaborator permission is read (OSPS-AC-02.01).
+5. Confirm the member list and roles above; adopt the escalation policy
    (OSPS-GV-01.01/.02, OSPS-GV-04.01).
-7. Decide DCO or CLA (OSPS-LE-01.01).
-8. Set a rotation cadence for `RELEASE_PLEASE_TOKEN` and the Cloudflare
+6. Decide DCO or CLA (OSPS-LE-01.01).
+7. Set a rotation cadence for `RELEASE_PLEASE_TOKEN` and the Cloudflare
    credentials (OSPS-BR-07.02).
-9. Apply for the Best Practices badge with the data above, then add both
+8. Apply for the Best Practices badge with the data above, then add both
    badges to the README.
-10. Check that any webhook uses a secret (Webhooks).
-11. Make `zizmor` a required status check, and move `RELEASE_PLEASE_TOKEN`
+9. Check that any webhook uses a secret (Webhooks).
+10. Move `RELEASE_PLEASE_TOKEN`
     and `SONAR_TOKEN` into deployment environments bound to the jobs that
     use them.
-12. At each new npm package's first publish (the per-platform binaries),
+11. At each new npm package's first publish (the per-platform binaries),
     register `release.yml` as its trusted publisher on npmjs.com.
 
 Two need people rather than settings: a second human reviewer (Code-Review,

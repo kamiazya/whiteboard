@@ -173,20 +173,47 @@ describe('the gate judges the run, and refuses everything but success', () => {
     // Captured from an actual run (36360686717, the first with `native-host-windows`),
     // so the fixture cannot drift into a shape the gate happens to like. Jobs
     // added since are appended as plain success rows (today: `rust`,
-    // `rust-fuzz-pr`), for the reason the red fixture gives below.
+    // `rust-fuzz-pr`, `zizmor`, `dependency-review`), for the reason the red fixture gives below.
     expect(run(fixture('green'))).toEqual([])
   })
 
   it('fails a real red run of this workflow', () => {
     // Captured from the run whose dry-run-docker job really failed. A job
     // added to the workflow after that capture is appended to it as a plain
-    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`, `scope`, `rust`, `rust-fuzz-pr`), since `needs` is read live and a
+    // success row (today: `test-shared`, `native-host-windows`, `extension-smokes`, `scope`, `rust`, `rust-fuzz-pr`, `zizmor`, `dependency-review`), since `needs` is read live and a
     // needed job absent from the run is one of the failures this gate
     // reports — and a red run is not something to re-capture on demand.
     // This is what settles the question the `needs` form could not: the gate
     // sees per-leg conclusions, so whether a matrix job's single `needs`
     // result turns to `failure` never arises.
     expect(run(fixture('red'))).toEqual(['dry-run-docker: failure'])
+  })
+
+  it('passes a push-shaped run where the pull-request-only jobs are skipped', () => {
+    const jobs = fixture('green').map((job) =>
+      ['dependency-review', 'stress-changed-tests'].includes(baseJobName(job.name))
+        ? { ...job, conclusion: 'skipped' }
+        : job,
+    )
+    expect(run(jobs)).toEqual([])
+  })
+
+  it('fails when dependency-review or zizmor fails', () => {
+    for (const name of ['dependency-review', 'zizmor']) {
+      const jobs = fixture('green').map((job) =>
+        job.name === name ? { ...job, conclusion: 'failure' } : job,
+      )
+      expect(run(jobs)).toEqual([`${name}: failure`])
+    }
+  })
+
+  it('refuses a skipped zizmor, which must reach success on every event', () => {
+    const jobs = fixture('green').map((job) =>
+      job.name === 'zizmor' ? { ...job, conclusion: 'skipped' } : job,
+    )
+    const problems = run(jobs)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatch(/not a declared outcome/)
   })
 
   it('ignores its own job, which is still running when it looks', () => {
