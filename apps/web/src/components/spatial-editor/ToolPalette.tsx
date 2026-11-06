@@ -115,7 +115,7 @@ interface ToolPaletteProps {
  * bottom-dock.browser.test.tsx, which is what stops it drifting when the
  * dock's classes change.
  */
-export const DOCK_OCCLUSION_PX = 70
+const DOCK_OCCLUSION_PX = 70
 
 /**
  * The chrome along the editor's bottom edge that a placed, revealed or
@@ -392,9 +392,6 @@ export function ToolPalette({
             <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
           </div>
         )}
-        {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
-          user decision 2026-08-08), so it sits leftmost where the active
-          mode reads first. */}
         {/* When the single row cannot hold every tool (a phone), the tools
           take a row of their own along the bottom, nearest the thumb, and the
           history, Add and zoom controls stand above them: a tool scrolled out
@@ -406,71 +403,14 @@ export function ToolPalette({
           data-dock-tools
           className="flex min-w-0 items-center gap-0.5 overflow-x-auto group-data-stacked:justify-self-center group-data-stacked:[grid-area:tools]"
         >
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                data-testid="hand-tool-button"
-                aria-pressed={tool === 'hand'}
-                aria-label="Hand (pan)"
-                aria-keyshortcuts={shortcutAriaKeysFor('tool-hand')}
-                onClick={() => onToolChange('hand')}
-                className={TOOL_BUTTON_CLASS}
-              >
-                <Hand aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{withShortcut('Hand — drag to pan', 'tool-hand')}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                data-testid="select-tool-button"
-                aria-pressed={tool === 'select'}
-                aria-label="Select"
-                aria-keyshortcuts={shortcutAriaKeysFor('tool-select')}
-                onClick={() => onToolChange('select')}
-                className={TOOL_BUTTON_CLASS}
-              >
-                <MousePointer2 aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{withShortcut('Select', 'tool-select')}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                data-testid="connect-tool-button"
-                aria-pressed={tool === 'connect'}
-                aria-label="Connect"
-                aria-keyshortcuts={shortcutAriaKeysFor('tool-connect')}
-                onClick={() => onToolChange('connect')}
-                className={TOOL_BUTTON_CLASS}
-              >
-                <Spline aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{withShortcut('Connect nodes', 'tool-connect')}</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                data-testid="draw-tool-button"
-                aria-pressed={tool === 'draw'}
-                aria-label="Draw"
-                aria-keyshortcuts={shortcutAriaKeysFor('tool-draw')}
-                onClick={() => onToolChange('draw')}
-                className={TOOL_BUTTON_CLASS}
-              >
-                <Pencil aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{withShortcut('Draw — freehand ink', 'tool-draw')}</TooltipContent>
-          </Tooltip>
-          <EraserToolButton tool={tool} onToolChange={onToolChange} />
+          {DOCK_TOOLS.map((entry) => (
+            <DockToolButton
+              key={entry.tool}
+              entry={entry}
+              pressed={tool === entry.tool}
+              onToolChange={onToolChange}
+            />
+          ))}
         </div>
         <div className={cn(STACKED_CELL_CLASS, 'group-data-stacked:[grid-area:rest]')}>
           <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border group-data-stacked:hidden" />
@@ -567,30 +507,54 @@ export function ToolPalette({
   )
 }
 
-/** The eraser's dock button, beside the pen it takes strokes away from. */
-function EraserToolButton({
-  tool,
+/**
+ * The dock's tools, in order. Hand leads: it is the DEFAULT (navigation-first,
+ * user decision 2026-08-08), so it sits leftmost where the active mode reads
+ * first; the eraser sits beside the pen it takes strokes away from.
+ */
+const DOCK_TOOLS = [
+  { tool: 'hand', label: 'Hand (pan)', tip: 'Hand — drag to pan', Icon: Hand },
+  { tool: 'select', label: 'Select', tip: 'Select', Icon: MousePointer2 },
+  { tool: 'connect', label: 'Connect', tip: 'Connect nodes', Icon: Spline },
+  { tool: 'draw', label: 'Draw', tip: 'Draw — freehand ink', Icon: Pencil },
+  { tool: 'erase', label: 'Eraser', tip: 'Eraser — drag over drawings', Icon: Eraser },
+] as const satisfies readonly {
+  readonly tool: EditorTool
+  readonly label: string
+  readonly tip: string
+  readonly Icon: unknown
+}[]
+
+/** The test id a tool's button has always carried: the eraser's is named for the control, not the tool. */
+const toolTestId = (tool: (typeof DOCK_TOOLS)[number]['tool']) =>
+  `${tool === 'erase' ? 'eraser' : tool}-tool-button`
+
+function DockToolButton({
+  entry: { tool, label, tip, Icon },
+  pressed,
   onToolChange,
 }: {
-  readonly tool: EditorTool
+  readonly entry: (typeof DOCK_TOOLS)[number]
+  readonly pressed: boolean
   readonly onToolChange: (tool: EditorTool) => void
 }) {
+  const shortcut = `tool-${tool}` as const
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <button
           type="button"
-          data-testid="eraser-tool-button"
-          aria-pressed={tool === 'erase'}
-          aria-label="Eraser"
-          aria-keyshortcuts={shortcutAriaKeysFor('tool-erase')}
-          onClick={() => onToolChange('erase')}
+          data-testid={toolTestId(tool)}
+          aria-pressed={pressed}
+          aria-label={label}
+          aria-keyshortcuts={shortcutAriaKeysFor(shortcut)}
+          onClick={() => onToolChange(tool)}
           className={TOOL_BUTTON_CLASS}
         >
-          <Eraser aria-hidden="true" className="size-4" />
+          <Icon aria-hidden="true" className="size-4" />
         </button>
       </TooltipTrigger>
-      <TooltipContent>{withShortcut('Eraser — drag over drawings', 'tool-erase')}</TooltipContent>
+      <TooltipContent>{withShortcut(tip, shortcut)}</TooltipContent>
     </Tooltip>
   )
 }

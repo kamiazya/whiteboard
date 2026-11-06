@@ -12,7 +12,10 @@ import '../../index.css'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { SpatialEditor } from './SpatialEditor.js'
-import { bottomChromeOcclusionPx, DOCK_OCCLUSION_PX } from './ToolPalette.js'
+import { bottomChromeOcclusionPx } from './ToolPalette.js'
+
+/** The one-row dock's strip: the floor the measured occlusion answers with when nothing is measured. */
+const DOCK_OCCLUSION_PX = bottomChromeOcclusionPx(null)
 
 afterEach(cleanup)
 
