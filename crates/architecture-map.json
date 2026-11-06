@@ -1,0 +1,451 @@
+{
+  "$comment": "The crate half of the architecture map, read by `cargo xtask arch-map`. Every crate of the target graph is listed, planned ones included, so dependency direction is fixed before any code exists. A layer may depend only on the layers in its mayDependOn; a crate only on its allowedInternalDeps. A crate path must sit under one of its layer's dirs. Adapters never reach mechanics: ADR-0018 holds by construction.",
+  "layers": {
+    "core": {
+      "dirs": ["crates/core"],
+      "mayDependOn": ["core"],
+      "description": "pure, no I/O, unchanged on wasm32 and native"
+    },
+    "ports": {
+      "dirs": ["crates/ports"],
+      "mayDependOn": ["core"],
+      "description": "the only route to I/O: async traits and the error taxonomy"
+    },
+    "ops": {
+      "dirs": ["crates/ops"],
+      "mayDependOn": ["core", "ports", "ops"],
+      "description": "transport-neutral operations over ports"
+    },
+    "adapters": {
+      "dirs": ["crates/adapters"],
+      "mayDependOn": ["core", "ports", "ops"],
+      "description": "translate HTTP and MCP to ops, and nothing else"
+    },
+    "mechanics": {
+      "dirs": ["crates/mechanics"],
+      "mayDependOn": ["core", "ports"],
+      "description": "port implementations over a concrete store"
+    },
+    "bindings": {
+      "dirs": ["crates/bindings"],
+      "mayDependOn": ["core", "ports", "ops", "adapters", "mechanics"],
+      "description": "composition roots: wasm-bindgen, workers-rs, the native daemon"
+    },
+    "tooling": {
+      "dirs": ["crates/xtask", "crates/fuzz"],
+      "mayDependOn": ["core", "ports", "ops", "adapters"],
+      "description": "repository tooling and fuzz targets, never shipped"
+    }
+  },
+  "crates": {
+    "whiteboard-det": {
+      "path": "crates/core/det",
+      "layer": "core",
+      "status": "present",
+      "description": "JS-compatible number formatting, pinned math, UTF-16 helpers, seeded randomness, ordered collections",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [],
+      "allowedThirdParty": {},
+      "absorbs": []
+    },
+    "whiteboard-log": {
+      "path": "crates/core/log",
+      "layer": "core",
+      "status": "present",
+      "description": "RFC 5424 levels, records, sinks and the fields-first logging macro",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/server-core/src/log.ts"]
+    },
+    "whiteboard-model": {
+      "path": "crates/core/model",
+      "layer": "core",
+      "status": "planned",
+      "description": "serde types generated from contracts/model plus the invariants a schema cannot express",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/model"]
+    },
+    "whiteboard-facet-engine": {
+      "path": "crates/core/facet-engine",
+      "layer": "core",
+      "status": "planned",
+      "description": "facet registry, write validation, compat chain, derived forms, theme tokens",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/facet-engine"]
+    },
+    "whiteboard-scene": {
+      "path": "crates/core/scene",
+      "layer": "core",
+      "status": "planned",
+      "description": "the scene vocabulary and the contribution traits",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-facet-engine"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/scene"]
+    },
+    "whiteboard-codec": {
+      "path": "crates/core/codec",
+      "layer": "core",
+      "status": "planned",
+      "description": "OKF Markdown, JSON Canvas and OCIF serialize and parse",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-log", "whiteboard-model"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/codec"]
+    },
+    "whiteboard-search": {
+      "path": "crates/core/search",
+      "layer": "core",
+      "status": "planned",
+      "description": "tokenizer, BM25 ranking, snippets, searchable text",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/search"]
+    },
+    "whiteboard-plugin-visual": {
+      "path": "crates/core/plugin-visual",
+      "layer": "core",
+      "status": "planned",
+      "description": "the bundled visual plugin as an ordinary contribution implementer",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/plugin-visual (default entry, /render, /emoji*, /icons/shortcode)"]
+    },
+    "whiteboard-edge-routing": {
+      "path": "crates/core/edge-routing",
+      "layer": "core",
+      "status": "present",
+      "description": "side choice, anchors, grid search, crossings, jumps, rounding, label anchor, budget, route cache",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-scene"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/canvas-render/src/layout/edges"]
+    },
+    "whiteboard-canvas-render": {
+      "path": "crates/core/canvas-render",
+      "layer": "core",
+      "status": "planned",
+      "description": "composer, typesetter, line breaking, theme, SVG backend, sceneDigest, references",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene",
+        "whiteboard-codec",
+        "whiteboard-plugin-visual",
+        "whiteboard-edge-routing"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/canvas-render"]
+    },
+    "whiteboard-crdt": {
+      "path": "crates/core/crdt",
+      "layer": "core",
+      "status": "planned",
+      "description": "the loro bridge, workspace tree, file references, text-limit judge",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/loro-adapter"]
+    },
+    "whiteboard-history": {
+      "path": "crates/core/history",
+      "layer": "core",
+      "status": "planned",
+      "description": "checkpoint scheduling, version retention, frontier encoding",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/history"]
+    },
+    "whiteboard-workspace-index": {
+      "path": "crates/core/workspace-index",
+      "layer": "core",
+      "status": "planned",
+      "description": "the document index over a workspace tree",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-crdt"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/workspace-index"]
+    },
+    "whiteboard-reference-graph": {
+      "path": "crates/core/reference-graph",
+      "layer": "core",
+      "status": "planned",
+      "description": "per-document reference facts and the backlink aggregate",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-model",
+        "whiteboard-codec",
+        "whiteboard-search",
+        "whiteboard-crdt"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/reference-graph"]
+    },
+    "whiteboard-ports": {
+      "path": "crates/ports/ports",
+      "layer": "ports",
+      "status": "planned",
+      "description": "async I/O traits (stores, index, blobs, clock, id mint, scheduler, text measurement, fonts) and the error taxonomy",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-log", "whiteboard-model"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/ports"]
+    },
+    "whiteboard-api-contracts": {
+      "path": "crates/ops/api-contracts",
+      "layer": "ops",
+      "status": "planned",
+      "description": "generated types for /api, sync frames, MCP tool I/O and the refusal enum",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/daemon-client/src/api-contracts"]
+    },
+    "whiteboard-ops": {
+      "path": "crates/ops/ops",
+      "layer": "ops",
+      "status": "planned",
+      "description": "every /api/v1 operation and MCP tool as a transport-neutral execute over ports; the tool table as data",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene",
+        "whiteboard-codec",
+        "whiteboard-search",
+        "whiteboard-plugin-visual",
+        "whiteboard-edge-routing",
+        "whiteboard-canvas-render",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-workspace-index",
+        "whiteboard-reference-graph",
+        "whiteboard-ports",
+        "whiteboard-api-contracts"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/server-core (operations and tool definitions)"]
+    },
+    "whiteboard-http": {
+      "path": "crates/adapters/http",
+      "layer": "adapters",
+      "status": "planned",
+      "description": "an axum router over ops, mounted natively and on Workers",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-ports",
+        "whiteboard-api-contracts",
+        "whiteboard-ops"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/server-core (Hono routes)", "packages/mcp-server/src/server/routes"]
+    },
+    "whiteboard-mcp": {
+      "path": "crates/adapters/mcp",
+      "layer": "adapters",
+      "status": "planned",
+      "description": "a transport-agnostic JSON-RPC dispatcher over the ops tool table",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-ports",
+        "whiteboard-api-contracts",
+        "whiteboard-ops"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/mcp-server/src/server/mcp"]
+    },
+    "whiteboard-daemon-store": {
+      "path": "crates/mechanics/daemon-store",
+      "layer": "mechanics",
+      "status": "planned",
+      "description": "SQLite record store, fs blob store, versions, migrations, file GC, security stores, export",
+      "targets": ["native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-ports"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/mcp-server/src/server/store"]
+    },
+    "whiteboard-edge-store": {
+      "path": "crates/mechanics/edge-store",
+      "layer": "mechanics",
+      "status": "planned",
+      "description": "Durable Object, D1 and R2 stores",
+      "targets": ["wasm32-unknown-unknown"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-ports"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": []
+    },
+    "whiteboard-wasm": {
+      "path": "crates/bindings/wasm",
+      "layer": "bindings",
+      "status": "present",
+      "description": "the wasm-bindgen cdylib for the browser and Node; render and full artifacts by feature",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene",
+        "whiteboard-codec",
+        "whiteboard-search",
+        "whiteboard-plugin-visual",
+        "whiteboard-edge-routing",
+        "whiteboard-canvas-render",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-workspace-index",
+        "whiteboard-reference-graph",
+        "whiteboard-ports",
+        "whiteboard-api-contracts",
+        "whiteboard-ops"
+      ],
+      "allowedThirdParty": {
+        "wasm-bindgen": "the JS boundary itself; pinned = to the wasm-bindgen-cli that post-processes the artifact"
+      },
+      "absorbs": ["packages/core-wasm (artifact half)"]
+    },
+    "whiteboard-worker": {
+      "path": "crates/bindings/worker",
+      "layer": "bindings",
+      "status": "planned",
+      "description": "the workers-rs app: router, MCP over HTTP, edge store, alarms",
+      "targets": ["wasm32-unknown-unknown"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene",
+        "whiteboard-codec",
+        "whiteboard-search",
+        "whiteboard-plugin-visual",
+        "whiteboard-edge-routing",
+        "whiteboard-canvas-render",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-workspace-index",
+        "whiteboard-reference-graph",
+        "whiteboard-ports",
+        "whiteboard-api-contracts",
+        "whiteboard-ops",
+        "whiteboard-http",
+        "whiteboard-mcp",
+        "whiteboard-edge-store"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": []
+    },
+    "whiteboard-daemon": {
+      "path": "crates/bindings/daemon",
+      "layer": "bindings",
+      "status": "planned",
+      "description": "the native daemon binary: UDS server, MCP stdio, native-messaging host, PNG export",
+      "targets": ["native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene",
+        "whiteboard-codec",
+        "whiteboard-search",
+        "whiteboard-plugin-visual",
+        "whiteboard-edge-routing",
+        "whiteboard-canvas-render",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-workspace-index",
+        "whiteboard-reference-graph",
+        "whiteboard-ports",
+        "whiteboard-api-contracts",
+        "whiteboard-ops",
+        "whiteboard-http",
+        "whiteboard-mcp",
+        "whiteboard-daemon-store"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/mcp-server (composition root)"]
+    },
+    "xtask": {
+      "path": "crates/xtask",
+      "layer": "tooling",
+      "status": "present",
+      "description": "repository tasks: codegen, architecture map, wasm import scan, size ledger",
+      "targets": ["native"],
+      "allowedInternalDeps": [],
+      "allowedThirdParty": {
+        "serde": "deserializes the architecture map and the size ledger",
+        "serde_json": "reads cargo metadata and the checked-in JSON ledgers",
+        "wasmparser": "reads a wasm artifact's import section for the core import scan"
+      },
+      "absorbs": []
+    },
+    "whiteboard-fuzz": {
+      "path": "crates/fuzz",
+      "layer": "tooling",
+      "status": "planned",
+      "description": "cargo-fuzz targets, one per untrusted-input entry (OKF/JSON Canvas/OCIF parsers, sync frames, HTTP and MCP JSON-RPC, loro import, wasm-boundary JSON, font files). Nightly toolchain only (libFuzzer, sanitizers), so it is excluded from the stable workspace build",
+      "targets": ["native"],
+      "allowedInternalDeps": [
+        "whiteboard-det",
+        "whiteboard-log",
+        "whiteboard-model",
+        "whiteboard-facet-engine",
+        "whiteboard-scene",
+        "whiteboard-codec",
+        "whiteboard-search",
+        "whiteboard-plugin-visual",
+        "whiteboard-edge-routing",
+        "whiteboard-canvas-render",
+        "whiteboard-crdt",
+        "whiteboard-history",
+        "whiteboard-workspace-index",
+        "whiteboard-reference-graph",
+        "whiteboard-api-contracts",
+        "whiteboard-http",
+        "whiteboard-mcp"
+      ],
+      "allowedThirdParty": {},
+      "absorbs": []
+    }
+  }
+}
