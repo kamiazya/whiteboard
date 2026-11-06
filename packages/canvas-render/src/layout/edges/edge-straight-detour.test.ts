@@ -83,6 +83,21 @@ describe('a straight connection that would cross another to save length', () => 
     expect(crossings(paths)).toBe(0)
   })
 
+  it('keeps the corner route where stepping round buys nothing', () => {
+    // The search starts every straight edge stepping round; with nothing
+    // else on the board to cross, it must hand back the corner route.
+    const nodes = [
+      node('a', 0, 0, 120, 80),
+      node('b', 300, 400, 120, 80),
+      node('c', 130, 180, 160, 100),
+    ]
+    const edges = [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }]
+    const anchors = assignEdgeAnchors(nodes, edges, 'straight')
+    expect(anchors.get('e')?.around).toBeUndefined()
+    const { path } = routeEdge(nodes, edges[0]!, 'straight', anchors.get('e'))
+    expect(path).toHaveLength(3)
+  })
+
   it('routes round the box covering everything in the way when asked', () => {
     // The corner route bends once at c's corner; `around` steps round c in
     // right angles, the way it did before corner routes existed.

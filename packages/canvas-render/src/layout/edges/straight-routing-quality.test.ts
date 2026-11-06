@@ -258,6 +258,15 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 // ratio 1.12 -> 1.16, long detours 16 -> 32; lattice long detours 3 -> 16,
 // worst 1.53 -> 2.04). A frame title's margin dropped to 2px at the same
 // time, since a box's 8px turned a line passing a title's end aside.
+//
+// Then the search STARTED from stepping round and took the corner route
+// wherever that cost nothing (`shorten`), since starting from the corner
+// routes left crossings only a move of two edges at once could undo.
+// Crossings generated 72 -> 70, synthetic 164 -> 161, violations 25/20 ->
+// 22/19 and interior ink 3418 -> 2898; long detours generated 32 -> 37.
+// The persona board stays at 1 crossing: every configuration with none
+// steps BOTH a1->b6 and a3->b1 round (2869px or more against 2304), and no
+// single-edge move reaches one.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
@@ -283,33 +292,33 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.194, worst 1.91, 66 long detours before.
-      length: 289202,
-      direct: 249267,
-      ratio: 1.16,
+      length: 290941,
+      direct: 251277,
+      ratio: 1.158,
       worstRatio: 2.37,
-      longDetours: 32,
-      grazingEnds: 99,
-      bends: 1035,
-      crossings: 72,
+      longDetours: 37,
+      grazingEnds: 89,
+      bends: 1029,
+      crossings: 70,
       borderInk: 0,
     })
   })
 
   it('reports the synthetic corpus', { timeout: 180_000 }, () => {
     expect(score(syntheticLayouts(2000), routedOnly)).toEqual({
-      violations: { foreign: 25, 'own-endpoint': 20 },
-      interiorInk: 3418,
+      violations: { foreign: 22, 'own-endpoint': 19 },
+      interiorInk: 2898,
       titleCrossings: 0,
       // ratio 1.116, worst 11.63, 245 long detours before.
-      length: 866090,
-      direct: 802139,
-      ratio: 1.08,
+      length: 866004,
+      direct: 800052,
+      ratio: 1.082,
       worstRatio: 7.67,
-      longDetours: 150,
-      grazingEnds: 115,
-      bends: 1944,
-      crossings: 164,
-      borderInk: 891,
+      longDetours: 152,
+      grazingEnds: 114,
+      bends: 2051,
+      crossings: 161,
+      borderInk: 876,
     })
   })
 
@@ -319,13 +328,13 @@ describe('straight routing quality', () => {
       interiorInk: 0,
       titleCrossings: 0,
       // ratio 1.068, worst 2.01, 26 long detours before.
-      length: 1194487,
-      direct: 1152403,
-      ratio: 1.037,
+      length: 1188758,
+      direct: 1147569,
+      ratio: 1.036,
       worstRatio: 2.04,
-      longDetours: 16,
-      grazingEnds: 0,
-      bends: 1561,
+      longDetours: 17,
+      grazingEnds: 3,
+      bends: 1518,
       crossings: 531,
       borderInk: 0,
     })

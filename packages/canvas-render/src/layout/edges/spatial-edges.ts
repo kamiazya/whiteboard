@@ -672,7 +672,26 @@ function optimizeSideChoices(
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
   // crossings is healthy, and reshuffling it purely to shave bends is
   // churn, not repair.
-  if (!hasRepairableProblem(score.cost())) return score.sides()
+  /**
+   * Each edge still stepping round what is in its way tries its corner route
+   * on the same sides, and takes it unless that costs something — which is
+   * the one move this search makes on a TIE. It cannot oscillate: it only
+   * ever clears `around`, and nothing else sets it on a tie.
+   */
+  const shorten = (): ReadonlyMap<string, SidePair> => {
+    for (const [index, edge] of edges.entries()) {
+      const chosen = score.sideOf(edge.id)
+      if (chosen?.around !== true || locked?.has(edge.id)) continue
+      const trial = new Map(score.sides())
+      trial.set(edge.id, { fromSide: chosen.fromSide, toSide: chosen.toSide })
+      const evaluated = score.evaluateTrial(trial, index)
+      if (evaluated === undefined) break
+      if (!lessCost(score.cost(), evaluated.cost)) score.adopt(trial, evaluated)
+    }
+    return score.sides()
+  }
+
+  if (!hasRepairableProblem(score.cost())) return shorten()
 
   /**
    * Try every candidate side pair for one edge, adopting the first that is a
@@ -724,12 +743,13 @@ function optimizeSideChoices(
     let improved = false
     for (const edge of trialEdgesFor(edges, align, score.contribution)) {
       const outcome = locked?.has(edge.id) ? 'kept' : improveEdge(edge)
-      if (outcome === 'exhausted' || !hasRepairableProblem(score.cost())) return score.sides()
+      if (outcome === 'exhausted') return score.sides()
+      if (!hasRepairableProblem(score.cost())) return shorten()
       improved ||= outcome === 'adopted'
     }
     if (!improved) break
   }
-  return score.sides()
+  return shorten()
 }
 
 interface RepairScore {
@@ -1094,8 +1114,29 @@ export function assignEdgeAnchors(
   const edges = allEdges.filter((edge) => !marksContact(nodes, edge))
   const styleOf: EdgeStyleOf = typeof style === 'function' ? style : () => style
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
-  const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) =>
-    optimizeAcrossRegions(nodes, labels, edges, styleOf, seed, locked, sideOverrides, budget)
+  // A straight edge starts out stepping round what is in its way — the
+  // route that crosses least — and the search's `shorten` takes the corner
+  // route wherever that costs nothing. Starting from the corner routes left
+  // crossings no single-edge move could undo: two diagonals crossing
+  // through one gap need BOTH to step round.
+  const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) => {
+    const around = new Map(seed)
+    for (const edge of edges) {
+      const pair = seed.get(edge.id)
+      if (pair === undefined || locked?.has(edge.id) || styleOf(edge) !== 'straight') continue
+      around.set(edge.id, { ...pair, around: true })
+    }
+    return optimizeAcrossRegions(
+      nodes,
+      labels,
+      edges,
+      styleOf,
+      around,
+      locked,
+      sideOverrides,
+      budget,
+    )
+  }
   if (sideOverrides !== undefined) {
     const merged = new Map(sides)
     const locked = new Set<string>()
