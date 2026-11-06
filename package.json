@@ -18,6 +18,7 @@
     "build:mcp": "pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget && pnpm --filter @kamiazya/whiteboard-mcp build",
     "test": "vitest run",
     "coverage": "node tools/checks/src/run-coverage.mjs",
+    "test:affected": "node tools/checks/src/affected-cli.mjs local",
     "test:mcp-node": "vitest run --project mcp-node",
     "test:web-jsdom": "vitest run --project web-jsdom",
     "test:distribution": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution",

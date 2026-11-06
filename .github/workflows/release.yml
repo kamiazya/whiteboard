@@ -41,15 +41,15 @@ on:
         type: boolean
         default: true
 
-# No workflow-level `permissions` block on purpose: a write granted here is
-# ambient to every job that does not override it, and the only job that needs
-# one is release-please. Every other job declares its own, so moving
-# the grant down changes what they get by exactly nothing and removes a
-# standing write from whichever job is added next. A job-level block REPLACES
-# the workflow-level one rather than adding to it, which is what makes this
-# safe — and also what made the old block invisible to four of five jobs.
-# ci-policy.test.ts fails on a write reappearing at the root, or on a job that
+# The workflow root grants NOTHING (`permissions: {}`): a write granted here
+# is ambient to every job that does not override it. Every job declares its
+# own, and a job-level block REPLACES the root rather than adding to it, so the
+# empty root changes what they get by exactly nothing — while a job added
+# later with no block of its own starts from no token instead of inheriting
+# the repository default, which an absent root would hand it.
+# ci-policy.test.ts fails on anything but an empty root, or on a job that
 # declares no permissions of its own.
+permissions: {}
 
 jobs:
   release-please:
@@ -90,11 +90,12 @@ jobs:
     permissions:
       contents: write
     steps:
-      # Keeps the token in .git/config on purpose: the push below uses it.
+      # Keeps the token in .git/config on purpose: the push below uses it, and
+      # this job uploads no artifact a persisted token could leak through.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          fetch-tags: true
+          fetch-tags: true # zizmor: ignore[artipacked]
 
       - name: Fast-forward stable to the release tag
         env:

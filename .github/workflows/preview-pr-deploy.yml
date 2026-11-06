@@ -14,14 +14,17 @@
 name: Preview PR Deploy
 
 on:
-  workflow_run:
+  # workflow_run on purpose: the PR's code is built unprivileged by
+  # preview-pr-build.yml, and this run only deploys that artifact after
+  # verifying it. preview-pr-deploy-label.test.ts and
+  # workflow-credentials.test.ts hold that nothing PR-built decides what runs.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: ["Preview PR Build"]
     types: [completed]
 
-permissions:
-  contents: read
-  actions: read
-  pull-requests: write
+# The root grants nothing; the deploy job states what it needs, so a job
+# added later starts from no token rather than inheriting a write.
+permissions: {}
 
 concurrency:
   group: preview-pr-deploy-${{ github.event.workflow_run.head_branch }}
@@ -34,6 +37,10 @@ jobs:
       github.event.workflow_run.event == 'pull_request' &&
       github.event.workflow_run.head_repository.full_name == github.repository
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
     environment:
       name: preview-web
       # Attaches this PR's branch-alias preview URL to the deployment record so

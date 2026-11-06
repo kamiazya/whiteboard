@@ -83,5 +83,6 @@
     "name": "extension-smokes",
     "status": "completed",
     "conclusion": "success"
-  }
+  },
+  { "conclusion": "success", "name": "scope", "status": "completed" }
 ]

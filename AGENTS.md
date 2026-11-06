@@ -191,7 +191,7 @@ Before closing a change:
 - Complete manual verification of the real behavior.
 - Preserve the verified user scenario in `canvas-viewer-browser`/`web-browser` or E2E coverage.
 - Run the suites for the AREA you touched. **Full suites are CI's job, not a
-  local step** (user decision, 2026-09-05): CI runs everything on every push
+  local step** (user decision, 2026-09-05): CI runs what a PR reaches, all on main,
   at about 6 min wall on main (a PR that touches tests adds the sharded stress job; `node .claude/scripts/stress-changed.mjs` runs its plan locally), so a local full run is the same work twice — push, then
   watch the run (Monitor / `steward`). Exceptions: `pnpm check:local` for a
   pre-release check-job answer, and `pnpm test:browser` when the
