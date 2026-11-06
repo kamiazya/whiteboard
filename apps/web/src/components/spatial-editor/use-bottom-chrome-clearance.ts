@@ -28,21 +28,27 @@ function clearance(mine: DOMRect, chrome: readonly DOMRect[], floor: number): nu
  * spans decide whether something reaches under, so standing higher does not
  * undo the answer that lifted it.
  *
- * The chrome is looked up inside the element's own parent, the editor root.
+ * The chrome is looked up inside the element's own parent, the editor root —
+ * or, with `scope: 'viewport'`, anywhere in the document against the
+ * viewport's bottom edge, for a control fixed to the screen rather than placed
+ * in the editor (the shell's exit-fullscreen button).
  */
 export function useBottomChromeClearance<E extends HTMLElement>(
   active: boolean,
   below: string,
+  scope: 'parent' | 'viewport' = 'parent',
 ): readonly [RefObject<E | null>, number | undefined] {
   const surface = useRef<E>(null)
   const [lift, setLift] = useState<number | undefined>(undefined)
   useLayoutEffect(() => {
     const own = surface.current
-    const root = own?.parentElement
+    const root = scope === 'viewport' ? document.body : own?.parentElement
     if (!active || own === null || own === undefined || root === null || root === undefined) {
       setLift(undefined)
       return
     }
+    const floor = () =>
+      scope === 'viewport' ? window.innerHeight : root.getBoundingClientRect().bottom
     const resize =
       typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure())
     const measure = () => {
@@ -52,7 +58,7 @@ export function useBottomChromeClearance<E extends HTMLElement>(
         clearance(
           own.getBoundingClientRect(),
           chrome.map((el) => el.getBoundingClientRect()),
-          root.getBoundingClientRect().bottom,
+          floor(),
         ),
       )
     }
@@ -60,14 +66,29 @@ export function useBottomChromeClearance<E extends HTMLElement>(
     resize?.observe(own)
     // Bottom chrome comes and goes (the Draw options with the tool, the
     // overview with its toggle), and a new element is nothing a
-    // ResizeObserver already watching would report.
+    // ResizeObserver already watching would report. Across the whole
+    // document the chrome mounts deep inside a page, so the watch is the
+    // subtree, coalesced to one measure per frame.
+    let frame = 0
+    const schedule = () => {
+      if (frame !== 0) return
+      frame = requestAnimationFrame(() => {
+        frame = 0
+        measure()
+      })
+    }
     const mutations =
-      typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => measure())
-    mutations?.observe(root, { childList: true })
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(scope === 'viewport' ? schedule : measure)
+    mutations?.observe(root, { childList: true, subtree: scope === 'viewport' })
+    if (scope === 'viewport') window.addEventListener('resize', schedule)
     return () => {
       resize?.disconnect()
       mutations?.disconnect()
+      if (frame !== 0) cancelAnimationFrame(frame)
+      if (scope === 'viewport') window.removeEventListener('resize', schedule)
     }
-  }, [active, below])
+  }, [active, below, scope])
   return [surface, lift]
 }
