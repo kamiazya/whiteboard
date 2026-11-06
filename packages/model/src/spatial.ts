@@ -463,8 +463,8 @@ export const canvasEdgeSchema = z
      * They lived in `visual.path/v0` once, and that was the
      * ADR's own worked example of the cost the old binding imposed: adding a
      * field to an edge cost a facet definition, an `EdgeRouter` contract and
-     * the extraction of `packages/scene`. The seam stays — it was worth
-     * building — and the concept comes home.
+     * the extraction of `packages/scene`. The concept came home, and the
+     * router seam, left with no consumer, was deleted after it.
      *
      * Sub-pixel, like every other coordinate: the drag no
      * longer has to round before it writes.

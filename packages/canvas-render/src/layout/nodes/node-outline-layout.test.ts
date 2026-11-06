@@ -35,12 +35,23 @@ const canvas: SpatialCanvas = {
   ],
 }
 
-const layout = (nodeOutlines?: Readonly<Record<string, 'visual.ellipse'>>) =>
-  layoutSpatialCanvas(canvas, { measure: createFakeMeasure(), appearance, nodeOutlines })
+/** Lays the canvas out with node `a` shaped as an ellipse by its own facet, or plain. */
+const layout = (ellipse?: 'ellipse') =>
+  layoutSpatialCanvas(
+    ellipse === undefined
+      ? canvas
+      : {
+          ...canvas,
+          nodes: canvas.nodes.map((node) =>
+            node.id === 'a' ? { ...node, facets: { 'visual.shape/v0': { kind: ellipse } } } : node,
+          ),
+        },
+    { measure: createFakeMeasure(), appearance },
+  )
 
-describe('nodeOutlines layout seam (plain data, worker-safe)', () => {
+describe('a node silhouette in layout', () => {
   it('threads the outline kind onto the chrome shape', () => {
-    const scene = layout({ a: 'visual.ellipse' })
+    const scene = layout('ellipse')
     const chrome = scene.nodes.find((n) => n.kind === 'shape' && n.id === 'a')
     expect(chrome).toMatchObject({ shape: 'visual.ellipse' })
     const plain = layout().nodes.find((n) => n.kind === 'shape' && n.id === 'a')
@@ -48,7 +59,7 @@ describe('nodeOutlines layout seam (plain data, worker-safe)', () => {
   })
 
   it('pulls the edge terminal onto the outline rim instead of the bbox border', () => {
-    const withOutline = layout({ a: 'visual.ellipse' })
+    const withOutline = layout('ellipse')
     const without = layout()
     const edgeOf = (scene: typeof withOutline) =>
       scene.nodes.find((n) => n.kind === 'edge' && n.id === 'e')

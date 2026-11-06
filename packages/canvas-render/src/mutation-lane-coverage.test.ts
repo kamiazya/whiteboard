@@ -408,9 +408,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // model or search, pinned by `embed-legend.test.ts` (rows, unscaled
     // size, place inside the frame, swatch colours) and mutated by hand
     // against it.
+    // 123 without `layout/contributed-router.ts`: the edge-router
+    // contribution seam had no consumer but its own test, and edge routing
+    // is this package's alone. It was outside the lane, so the reach is
+    // unchanged.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 24,
-      production: 124,
+      production: 123,
     })
   })
 

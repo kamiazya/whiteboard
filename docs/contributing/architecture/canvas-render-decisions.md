@@ -397,6 +397,12 @@ glow (`themes.test.ts` pins the chroma and the per-kind difference).
 
 ### Contributable edge routers
 
+The seam is gone: `RenderContribution.routers` / `readRouting` were deleted
+on 2026-11-06. No plugin claimed one after `visual.path/v0` left with
+ADR-0037 slice 4, and keeping it would have committed any reimplementation
+of the renderer to a router-plugin ABI nothing exercised. Edge routing is
+canvas-render's own. What follows is kept for the measurement.
+
 #### The reader-selection measurement, second half
 
 (The measurement had a second half that no longer holds, and saying so keeps

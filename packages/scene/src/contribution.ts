@@ -10,21 +10,16 @@
  * reaching for each other.
  */
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type {
-  CanvasEdge,
-  CanvasLine,
-  EdgeSide,
-  SpatialCanvas,
-  SpatialNode,
-} from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 
 /**
- * What a router and an appearance resolver are handed: an EDGE or a LINE
+ * What the router and an appearance resolver are handed: an EDGE or a LINE
  * ([ADR-0038](../../../docs/contributing/adr/0038-ocif-projection.md)
  * decision 2). The two differ in what they MEAN and in the shape of an end,
- * never in how a route between two places is found, so a contribution sees
- * both — and a router that only understands relations narrows on `'kind' in
- * end` rather than being handed a narrower type it cannot ask about.
+ * never in how a route between two places is found, so both are routed and
+ * painted alike — and code that only understands relations narrows on
+ * `'kind' in end` rather than being handed a narrower type it cannot ask
+ * about.
  */
 export type RoutableElement = CanvasEdge | CanvasLine
 
@@ -110,59 +105,6 @@ export interface ScenePoint {
 }
 
 /**
- * The endpoints a route must honour, as the anchor pass chose them.
- *
- * Chosen BEFORE routing and across the whole edge set — fan-out needs to see
- * every end sharing a side, which no single route can — so this is a
- * router's INPUT, never part of its answer. A router that returned sides
- * would be returning what it was told.
- */
-interface EdgeRouteAnchors {
-  readonly fromSide: EdgeSide
-  readonly toSide: EdgeSide
-  /** Where on that side, when the fan-out moved the end off the midpoint. */
-  readonly from?: ScenePoint
-  readonly to?: ScenePoint
-}
-
-/** Everything a router is told about the one edge it is drawing. */
-export interface EdgeRouteRequest {
-  readonly edge: RoutableElement
-  /** The endpoint nodes' boxes. A route needs their geometry, not their content. */
-  readonly from: BoundingBox
-  readonly to: BoundingBox
-  /**
-   * Every OTHER node's box. The two endpoints are deliberately absent: an
-   * edge has to reach them, so they are never obstacles.
-   */
-  readonly obstacles: readonly BoundingBox[]
-  readonly anchors: EdgeRouteAnchors | undefined
-}
-
-/**
- * A route: the points, and whether they are drawn as a curve.
- *
- * Points rather than a scene node, on purpose. Terminating on a silhouette,
- * the arrowheads, the paint and the ink are the renderer's, and it applies
- * them to every edge the same way — a router that built the node would be a
- * second producer of that geometry, which is the drift this package's own
- * rules exist to prevent.
- */
-interface EdgeRoute {
-  readonly path: readonly ScenePoint[]
-  readonly rounded?: boolean
-}
-
-/**
- * How one edge gets from end to end.
- *
- * `null` DECLINES — the renderer draws it with the built-in the canvas would
- * otherwise have used. The same degradation an unknown shape id gets, and
- * what lets a router answer for the cases it knows and no others.
- */
-export type EdgeRouter = (request: EdgeRouteRequest) => EdgeRoute | null
-
-/**
  * Everything one plugin contributes to rendering.
  *
  * `shapes` are keyed by BARE name and `readShape` answers a bare kind: the
@@ -189,47 +131,4 @@ export interface RenderContribution {
   readonly themes?: Readonly<Record<string, ThemeTokens>>
   /** The theme id the CANVAS names (its own facet), or undefined for none. */
   readonly readTheme?: (canvas: SpatialCanvas) => string | undefined
-  /**
-   * Edge routers by BARE name, namespaced to `${namespace}.${name}` the way
-   * `shapes` are, and selected by `readRouting` the way a shape is selected
-   * by `readShape`.
-   *
-   * **No bundled plugin claims one, and that is the settled state rather than
-   * a gap.** `visual.path/v0` and its router left with ADR-0037 slice 4: an
-   * edge's bends became `edge.bends`, a field of the model, and the route
-   * through them became `canvas-render`'s own `bend-route.ts`. The seam was
-   * the right shape and what it carried turned out to be core.
-   *
-   * It reads as dead code to anything counting consumers, and has been
-   * rediscovered as such more than once, so the two answers are here at the
-   * declaration rather than in a rule file: the contract is exercised
-   * END TO END by `canvas-render`'s `contributed-router.test.ts`, which drives
-   * a fake plugin's router through `layoutSpatialCanvas` and pins both
-   * fallbacks — so a break in the wiring fails a test, not merely a type.
-   * And the two ways to "close" it are both worse than leaving it: deleting a
-   * published extension point because this repo happens not to use it, or
-   * inventing a bundled router to justify it, which puts an algorithm nobody
-   * asked for in front of every edge.
-   */
-  readonly routers?: Readonly<Record<string, EdgeRouter>>
-  /**
-   * Which of THIS contribution's routers draws an edge — a bare name, or
-   * undefined to leave it to the built-ins.
-   *
-   * A reader rather than a facet key, and a bare name rather than a
-   * namespaced one, for the two reasons `readShape` is both: reading a facet
-   * is the plugin's job (through the engine's compat chain and schema), and
-   * the renderer composing the namespace is what stops a document naming
-   * another plugin's algorithm however it is written.
-   *
-   * A plugin declares its OWN facet to store the choice in. That is not a
-   * limitation but the pattern: `visual.shape/v0`'s `kind` enumerates the
-   * silhouettes `visual` ships, and a plugin adding one adds it to its own
-   * facet rather than widening somebody else's. The same holds here, and it
-   * is why `visual.edges/v0`'s `routing` stays the three built-in words —
-   * widening it to accept an id put the payload outside the vocabulary the
-   * engine derives an editor form from, which silently cost the routing
-   * control the inspector renders.
-   */
-  readonly readRouting?: (edge: RoutableElement, canvas: SpatialCanvas) => string | undefined
 }
