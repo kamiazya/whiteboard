@@ -2,6 +2,8 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync } from 'node:fs'
 import { basename, join, posix } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { readCrateMap } from './crate-map.js'
+import { commentLinesOf } from './rust-source.js'
 import { REPO_ROOT } from './scan-roots.js'
 
 // A backticked filename in a comment is a POINTER, and a pointer at a file
@@ -94,7 +96,7 @@ const BARE_TEST_FILE = /(?<![\w./*-])([\w][\w.-]*\.test\.tsx?)(?![\w-]|\.\w)/g
  * tracked suffix when a directory is written.
  */
 const BARE_SOURCE_NAME =
-  /(?<![\w./*@`-])([A-Za-z][\w-]*(?:\/[\w.-]+)*\.(?:tsx?|mjs|md))(?![\w-]|\.\w)/g
+  /(?<![\w./*@`-])([A-Za-z][\w-]*(?:\/[\w.-]+)*\.(?:tsx?|mjs|md|rs))(?![\w-]|\.\w)/g
 
 /**
  * Shapes that are not pointers: an illustration of a path (`path/to/…`), a
@@ -189,7 +191,7 @@ function unresolvedOnLine(
       }
     }
   }
-  for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.tsx?)`/g)) {
+  for (const match of line.matchAll(/`([A-Za-z0-9._/-]+\.(?:tsx?|rs))`/g)) {
     const name = match[1] ?? ''
     if (isPointer(name) && !resolvesTo(name, tracked, byBasename)) names.push(name)
   }
@@ -210,8 +212,30 @@ function unresolvedOnLine(
 function isScannedFile(path: string): boolean {
   return (
     /\.(?:tsx?|mjs)$/.test(path) ||
+    /^crates\/.+\.rs$/.test(path) ||
     (path.startsWith('.claude/') && path.endsWith('.md')) ||
     /^(?:packages|apps)\/[^/]+\/(?:README|DESIGN|BRAND)\.md$/.test(path)
+  )
+}
+
+/**
+ * Every unresolved name in one file: a Markdown file's every line, a source
+ * file's comment lines — a Rust file's read through its lexer, so a trailing
+ * or block comment counts and a raw string that begins with `//` does not.
+ */
+function unresolvedInFile(
+  file: string,
+  text: string,
+  tracked: readonly string[],
+  byBasename: ReadonlySet<string>,
+): string[] {
+  const wholeFile = file.endsWith('.md')
+  const lines = text.split('\n')
+  const judged = wholeFile ? lines : commentLinesOf(file, text)
+  return judged.flatMap((line, lineIndex) =>
+    line === ''
+      ? []
+      : unresolvedOnLine(line, lines[lineIndex - 1] ?? '', wholeFile, tracked, byBasename),
   )
 }
 
@@ -220,19 +244,13 @@ function unresolvedPointers(): Pointer[] {
   const byBasename = new Set(tracked.map((path) => basename(path)))
   const found: Pointer[] = []
   const seen = new Set<string>()
-  const scanned = tracked.filter(isScannedFile)
-  for (const file of scanned) {
-    const wholeFile = file.endsWith('.md')
-    const lines = readFileSync(join(REPO_ROOT, file), 'utf8').split('\n')
-    for (const [lineIndex, line] of lines.entries()) {
-      if (!wholeFile && !/^\s*(\/\/|\*|\/\*)/.test(line)) continue
-      const previous = lines[lineIndex - 1] ?? ''
-      for (const name of unresolvedOnLine(line, previous, wholeFile, tracked, byBasename)) {
-        const key = `${file}#${name}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        found.push({ key, file, name })
-      }
+  for (const file of tracked.filter(isScannedFile)) {
+    const text = readFileSync(join(REPO_ROOT, file), 'utf8')
+    for (const name of unresolvedInFile(file, text, tracked, byBasename)) {
+      const key = `${file}#${name}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      found.push({ key, file, name })
     }
   }
   return found
@@ -259,6 +277,23 @@ describe('a filename in a comment, backticked or a bare test file, names a file 
     expect(tracked.filter(isScannedFile)).toContain(
       'tests/e2e/distribution/packaged-server-mode-entrypoint-smoke.mjs',
     )
+    expect(tracked.filter(isScannedFile).filter((path) => path.endsWith('.rs')).length).toBe(
+      tracked.filter((path) => /^crates\/.+\.rs$/.test(path)).length,
+    )
+    expect(tracked.filter((path) => /^crates\/.+\.rs$/.test(path)).length).toBeGreaterThan(10)
+  })
+
+  it('reads a Rust file by its comments, not by the literals that look like one', () => {
+    const tracked = trackedFiles()
+    const byBasename = new Set(tracked.map((path) => basename(path)))
+    const planted = (name: string) =>
+      readFileSync(join(import.meta.dirname, '__fixtures__/rust', name), 'utf8')
+    expect(
+      unresolvedInFile('planted.rs', planted('comment-violations.rs'), tracked, byBasename),
+    ).toEqual(['gone_module.rs'])
+    expect(
+      unresolvedInFile('planted.rs', planted('comment-clean.rs'), tracked, byBasename),
+    ).toEqual([])
   })
 
   it('has no pointer at a file that is gone', () => {
@@ -294,7 +329,20 @@ describe('a filename in a comment, backticked or a bare test file, names a file 
 // entries below are not shorthand at all — an MCP method, a per-machine file,
 // an illustrative name.
 const REPO_ROOTED_PATH =
-  /`((?:packages|apps|tools|docs|\.claude|scripts|tests)\/[A-Za-z0-9._/@-]+)`/g
+  /`((?:packages|apps|tools|docs|\.claude|scripts|tests|crates)\/[A-Za-z0-9._/@-]+)`/g
+
+/**
+ * A crate `crates/architecture-map.json` lists as `planned` has a path and no
+ * directory yet, by design: the map fixes where a crate goes before any code
+ * exists, and a rule or a plan naming that place is naming a declared target,
+ * not a file that went missing. Only the crate's own directory resolves that
+ * way — a FILE under a planned crate is a claim about code that is not there.
+ */
+const PLANNED_CRATE_PATHS: ReadonlySet<string> = new Set(
+  readCrateMap()
+    .filter((crate) => crate.status === 'planned')
+    .map((crate) => crate.path),
+)
 
 /** Matches that name no tracked path and are meant to. Guarded from both sides. */
 const NOT_A_TRACKED_PATH: Record<string, string> = {
@@ -341,6 +389,7 @@ function repoRootedPaths(): RootedPath[] {
 
 function resolvesExactly(path: string, tracked: readonly string[]): boolean {
   const bare = path.replace(/\/$/, '')
+  if (PLANNED_CRATE_PATHS.has(bare)) return true
   return tracked.some((entry) => entry === bare || entry.startsWith(`${bare}/`))
 }
 
@@ -352,6 +401,15 @@ describe('a repo-rooted path in AGENTS.md, a contributor doc, a rule or a skill 
     // 301 when written. A scan whose regex or scope silently matched nothing
     // reports every path as resolving, which reads like a clean tree.
     expect(rooted.length).toBeGreaterThan(250)
+  })
+
+  it('resolves a crate path, and a planned crate by its declared directory alone', () => {
+    expect(resolvesExactly('crates/core/det/src/lib.rs', tracked)).toBe(true)
+    expect(resolvesExactly('crates/architecture-map.json', tracked)).toBe(true)
+    expect(resolvesExactly('crates/core/model', tracked)).toBe(true)
+    expect(resolvesExactly('crates/core/model/', tracked)).toBe(true)
+    expect(resolvesExactly('crates/core/model/src/lib.rs', tracked)).toBe(false)
+    expect(resolvesExactly('crates/core/no-such-crate', tracked)).toBe(false)
   })
 
   it('has no path that resolves to nothing', () => {
@@ -461,7 +519,7 @@ describe('a flake shape is cited by the name of its heading in flake-shapes.md',
 // STRING — a document it renders, with links relative to where that document
 // lands — is not judged against the source file's directory.
 const MARKDOWN_LINK = /\]\((\.{1,2}\/[^)\s]*)\)/g
-const LINK_SOURCE = /\.(?:tsx?|mts|mjs|cjs|js)$/
+const LINK_SOURCE = /\.(?:tsx?|mts|mjs|cjs|js|rs)$/
 
 /** Every relative Markdown link on a comment line of `text` that resolves to nothing. */
 function brokenRelativeLinks(
@@ -470,8 +528,7 @@ function brokenRelativeLinks(
   exists: (repoPath: string) => boolean,
 ): string[] {
   const broken: string[] = []
-  for (const line of text.split('\n')) {
-    if (!/^\s*(?:\/\/|\*|\/\*)/.test(line)) continue
+  for (const line of commentLinesOf(file, text)) {
     for (const match of line.matchAll(MARKDOWN_LINK)) {
       const target = (match[1] ?? '').replace(/#.*$/, '')
       const resolved = posix.normalize(posix.join(posix.dirname(file), target))
@@ -519,6 +576,17 @@ describe('a Markdown link in a comment resolves from the file it sits in', () =>
         real,
       ),
     ).toEqual([])
+  })
+
+  it('reads a Rust doc comment link, and not one a raw string holds', () => {
+    const adr = 'docs/contributing/adr/0038-ocif-projection.md'
+    const real = (path: string) => path === adr
+    const file = 'crates/core/det/src/lib.rs'
+    expect(brokenRelativeLinks(file, `//! [ADR-0038](../../../../${adr})`, real)).toEqual([])
+    expect(brokenRelativeLinks(file, `/// [ADR-0038](../../../${adr})`, real)).toHaveLength(1)
+    expect(brokenRelativeLinks(file, `const S: &str = r#"\n// [x](../gone.md)\n"#;`, real)).toEqual(
+      [],
+    )
   })
 
   it('reads the links source comments carry', () => {
