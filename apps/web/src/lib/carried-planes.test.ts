@@ -24,7 +24,8 @@ import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BLOBS_STORE, VERSIONS_STORE, whiteboardDbName } from './browser-idb.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -35,7 +36,6 @@ import {
   unconfirmedPlanes,
   versionsWithinJudgedBudget,
 } from './carried-planes.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { inTransaction, request } from './idb-tx.js'
 
@@ -184,15 +184,13 @@ function canvasWith(imageId: string): Uint8Array {
 
 /** A browser workspace with a live canvas `sketch` and a trashed canvas `gone`. */
 async function seedWorkspace() {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const workspaceId = getBrowserWorkspaceId()
   const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
   const gone = await index.createDocument({ workspaceId, path: 'gone', kind: 'spatial' })
-  expect(await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('on-the-sketch'))).toBe(
-    true,
-  )
-  expect(await seedWorkspaceDocumentContent(gone.documentId, canvasWith('in-the-trash'))).toBe(true)
+  await seedTreeContent(sketch.documentId, canvasWith('on-the-sketch'))
+  await seedTreeContent(gone.documentId, canvasWith('in-the-trash'))
   await index.deleteDocument({ workspaceId, path: 'gone' })
   const record = await new BrowserWorkspaceDocs().open(workspaceId)
   if (record === null) throw new Error('no workspace record')

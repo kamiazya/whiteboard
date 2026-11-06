@@ -11,14 +11,14 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { BROWSER_FILE_ADAPTER } from './document-embed-content.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 
-claimIsolatedWhiteboardDb('folding-browser-index-purge-sweep')
+claimIsolatedWhiteboardDb('browser-document-index-purge-sweep')
 
 /** Past the sweep's grace window, which keeps an upload whose node is not saved yet. */
 const PAST_GRACE_MS = 2 * 60 * 60 * 1000
@@ -33,7 +33,7 @@ async function uploadImage(name: string): Promise<string> {
   return stored.ref
 }
 
-async function spatialDocumentShowing(index: FoldingBrowserIndex, path: string, ref: string) {
+async function spatialDocumentShowing(index: BrowserDocumentIndex, path: string, ref: string) {
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
@@ -44,23 +44,18 @@ async function spatialDocumentShowing(index: FoldingBrowserIndex, path: string, 
     nodes: [fileNode({ id: 'img', file: ref, x: 0, y: 0, width: 10, height: 10 })],
     edges: [],
   })
-  expect(
-    await seedWorkspaceDocumentContent(
-      entry.documentId,
-      new Uint8Array(content.export({ mode: 'snapshot' })),
-    ),
-  ).toBe(true)
+  await seedTreeContent(entry.documentId, new Uint8Array(content.export({ mode: 'snapshot' })))
   return entry.documentId
 }
 
-describe('FoldingBrowserIndex.purgeTrashEntry', () => {
+describe('BrowserDocumentIndex.purgeTrashEntry', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(() => {
     vi.useRealTimers()
   })
 
   it('reclaims the images only the purged document named, without a reload', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const workspaceId = getBrowserWorkspaceId()
     const doomedRef = await uploadImage('doomed')

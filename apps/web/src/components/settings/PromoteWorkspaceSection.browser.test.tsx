@@ -16,18 +16,18 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { base64UrlToBytes, newImageRef } from '@kamiazya/whiteboard-model'
-import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../../lib/browser-document-summary.js'
+import { BrowserStorageRefusedError } from '../../lib/browser-storage-refusal.js'
 import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
-import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
-import { LoroStore } from '../../lib/loro-store.js'
 import { connectReplicaKeeper } from '../../lib/replica-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -35,7 +35,7 @@ import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { replicaKeyBody } from '../../test-utils/replica-key-fetch.js'
 import { seedLegacyRow } from '../../test-utils/seed-legacy-row.js'
-import { seedWorkspaceDocumentContent } from '../../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../../test-utils/seed-workspace-content.js'
 import { PromoteWorkspaceSection } from './PromoteWorkspaceSection.js'
 
 claimIsolatedWhiteboardDb('promote-section')
@@ -130,7 +130,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
 }
 
 async function seedTwoDocuments(): Promise<{ roadmapId: string; sketchId: string }> {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   const roadmap = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
@@ -157,32 +157,7 @@ async function seedImageOnSketch(sketchId: string): Promise<void> {
     nodes: [fileNode({ id: 'img', file: newImageRef('img-1'), x: 0, y: 0, width: 5, height: 5 })],
     edges: [],
   })
-  expect(
-    await seedWorkspaceDocumentContent(
-      sketchId,
-      new Uint8Array(content.export({ mode: 'snapshot' })),
-    ),
-  ).toBe(true)
-}
-
-/**
- * A document as an older build left it: an index row plus per-document Loro
- * bytes, never absorbed into the workspace record. Exactly what a session
- * that deep-links straight to Settings sees before any page ran the fold.
- */
-async function seedPreFoldDocument(path: string): Promise<string> {
-  const entry = await seedLegacyRow({
-    workspaceId: getBrowserWorkspaceId(),
-    path,
-    kind: 'spatial',
-  })
-  const doc = new LoroDoc()
-  doc
-    .getMap('nodes')
-    .set('n1', textNode({ id: 'n1', x: 0, y: 0, width: 80, height: 40, text: 'pre-fold' }))
-  doc.commit()
-  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
-  return entry.documentId
+  await seedTreeContent(sketchId, new Uint8Array(content.export({ mode: 'snapshot' })))
 }
 
 /**
@@ -539,28 +514,23 @@ describe('PromoteWorkspaceSection', () => {
     expect(single.textContent).not.toContain('01ARZ3')
   })
 
-  // The section can be a session's FIRST surface (deep-link/reload straight
-  // to Settings): no browser page has run the startup fold, so the workspace
-  // record does not hold pre-fold legacy documents yet. The count and the
-  // transfer must still include them — silently omitting a document from a
-  // data-migration UI is the data-loss shape this pins.
-  it('counts and moves a document held only by pre-fold records, with no page mounted first', async () => {
-    const legacyId = await seedPreFoldDocument('legacy/roadmap')
-    const target = new LoroDoc()
+  // A workspace whose documents predate the tree holds them outside the
+  // record the move reads, so counting the record would offer "nothing to
+  // move" over a workspace full of them. The section says why instead.
+  it('refuses to prepare a move of a workspace whose documents predate the tree', async () => {
+    await seedLegacyRow({ workspaceId: getBrowserWorkspaceId(), path: 'old', kind: 'spatial' })
     render(
       <PromoteWorkspaceSection
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
-        baseFetch={daemonStub(target)}
+        baseFetch={daemonStub(new LoroDoc())}
         reload={vi.fn()}
       />,
     )
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
-    const dialog = await screen.findByTestId('promote-dialog')
-    expect(dialog.textContent).toMatch(/all 1 document\b/i)
-    await userEvent.click(screen.getByTestId('promote-confirm'))
-    await screen.findByTestId('promote-last-result')
-    expect(resolveWorkspaceDocumentById(target, legacyId)).not.toBeNull()
+    const unavailable = await screen.findByTestId('promote-unavailable')
+    expect(unavailable.textContent).toBe(new BrowserStorageRefusedError('pre-tree-records').message)
+    expect(screen.queryByTestId('promote-confirm')).toBeNull()
   })
 
   it('a successful move leaves a cached copy of the daemon workspace in this browser', async () => {
@@ -653,7 +623,7 @@ describe('PromoteWorkspaceSection', () => {
     // at a fresh empty workspace in the same operation.
     expect(getBrowserWorkspaceId()).not.toBe(sourceId)
     expect(
-      await new FoldingBrowserIndex().listDocuments({ workspaceId: getBrowserWorkspaceId() }),
+      await new BrowserDocumentIndex().listDocuments({ workspaceId: getBrowserWorkspaceId() }),
     ).toEqual([])
     const promotion = createUserSettingsStore().load().migration.promotion
     if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
@@ -680,12 +650,7 @@ describe('PromoteWorkspaceSection', () => {
       ],
       edges: [],
     })
-    expect(
-      await seedWorkspaceDocumentContent(
-        sketchId,
-        new Uint8Array(content.export({ mode: 'snapshot' })),
-      ),
-    ).toBe(true)
+    await seedTreeContent(sketchId, new Uint8Array(content.export({ mode: 'snapshot' })))
     const sourceId = getBrowserWorkspaceId()
     const target = new LoroDoc()
     render(

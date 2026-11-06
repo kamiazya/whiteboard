@@ -41,9 +41,9 @@ function rootEl(): HTMLElement {
 
 /**
  * A connection at an old version with no `onversionchange` handler — the
- * "stale tab" `openWhiteboardDb`'s `onblocked` branch (browser-idb.ts:531-533)
- * exists for. Opening the real `whiteboard` schema at the current DB_VERSION
- * against this database then rejects instead of hanging.
+ * "stale tab" `openWhiteboardDb`'s `onblocked` branch exists for. Opening the
+ * real `whiteboard` schema at the current DB_VERSION against this database
+ * then rejects instead of hanging.
  */
 async function openStubbornAtOldVersion(dbName: string): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -110,7 +110,11 @@ describe('startBootSequence — resolver rejection does not block render', () =>
     }
 
     // Retryable: a later resolve against a database the stale tab no longer
-    // holds recovers, rather than replaying the cached rejection.
+    // holds recovers, rather than replaying the cached rejection. The stale
+    // tab's database is itself older than the baseline, which is refused
+    // rather than upgraded, so it goes first: what this pins is the
+    // resolver's retry, not the refusal (`browser-idb.browser.test.tsx`).
+    await clearNamedDb(REAL_DB_NAME)
     const recovered = await resolveBrowserWorkspaceId(REAL_DB_NAME)
     expect(recovered).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
     expect(getBrowserWorkspaceId()).toBe(recovered)

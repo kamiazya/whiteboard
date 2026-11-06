@@ -14,7 +14,6 @@ import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import {
-  adoptWorkspaceDocument,
   createWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
@@ -34,6 +33,16 @@ import {
   WORKSPACE_TREE_KEY,
   writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
+
+/** A document placed at `input.path` holding `source`'s content. */
+function adopt(
+  doc: LoroDoc,
+  input: Parameters<typeof createWorkspaceDocumentAtPath>[1],
+  source: LoroDoc,
+): void {
+  createWorkspaceDocumentAtPath(doc, input)
+  writeWorkspaceDocumentContent(doc, input.documentId, source)
+}
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const ID_B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -181,7 +190,7 @@ describe('workspace tree', () => {
         edges: [],
       })
       const doc = workspace()
-      adoptWorkspaceDocument(doc, { path: 'design', documentId: ID_A, kind: 'spatial' }, standalone)
+      adopt(doc, { path: 'design', documentId: ID_A, kind: 'spatial' }, standalone)
 
       // Same content again: nothing may change.
       const before = doc.oplogVersion()
@@ -227,7 +236,7 @@ describe('workspace tree', () => {
         edges: [],
       })
       const doc = workspace()
-      adoptWorkspaceDocument(doc, { path: 'design', documentId: ID_A, kind: 'spatial' }, standalone)
+      adopt(doc, { path: 'design', documentId: ID_A, kind: 'spatial' }, standalone)
 
       const shrunk = new LoroDoc()
       writeSpatialCanvas(shrunk, {
@@ -250,7 +259,7 @@ describe('workspace tree', () => {
       standalone.commit()
 
       const doc = workspace()
-      adoptWorkspaceDocument(doc, { path: 'legacy', documentId: ID_A, kind: 'spatial' }, standalone)
+      adopt(doc, { path: 'legacy', documentId: ID_A, kind: 'spatial' }, standalone)
 
       const projected = projectWorkspaceDocument(doc, ID_A)
       expect(projected).not.toBeNull()
@@ -276,7 +285,7 @@ describe('workspace tree', () => {
       standalone.getText('body').insert(0, '# hello')
       standalone.commit()
       const doc = workspace()
-      adoptWorkspaceDocument(doc, { path: 'notes', documentId: ID_A, kind: 'markdown' }, standalone)
+      adopt(doc, { path: 'notes', documentId: ID_A, kind: 'markdown' }, standalone)
 
       const before = doc.oplogVersion()
       writeWorkspaceDocumentContent(doc, ID_A, standalone)
@@ -300,11 +309,7 @@ describe('workspace tree', () => {
       })
 
       const doc = workspace()
-      adoptWorkspaceDocument(
-        doc,
-        { path: 'design', documentId: ID_A, kind: 'spatial', name: 'Design' },
-        standalone,
-      )
+      adopt(doc, { path: 'design', documentId: ID_A, kind: 'spatial', name: 'Design' }, standalone)
 
       const projected = projectWorkspaceDocument(doc, ID_A)
       expect(projected).not.toBeNull()
@@ -330,7 +335,7 @@ describe('workspace tree', () => {
       standalone.getText('body').insert(0, '# carried\n\nbody text')
       standalone.commit()
       const doc = workspace()
-      adoptWorkspaceDocument(doc, { path: 'note', documentId: ID_A, kind: 'markdown' }, standalone)
+      adopt(doc, { path: 'note', documentId: ID_A, kind: 'markdown' }, standalone)
 
       const projected = projectWorkspaceDocument(doc, ID_A)
       expect(projected?.getText('body').toString()).toBe('# carried\n\nbody text')
@@ -338,69 +343,6 @@ describe('workspace tree', () => {
 
     it('answers null for an id the tree does not hold', () => {
       expect(projectWorkspaceDocument(workspace(), ID_A)).toBeNull()
-    })
-  })
-
-  describe('adopting a standalone document (the migration step)', () => {
-    it('copies the root containers onto the node and keeps the documentId', () => {
-      const standalone = new LoroDoc()
-      standalone.setPeerId(9n)
-      writeSpatialCanvas(standalone, {
-        nodes: [textNode({ id: 'n1', x: 5, y: 6, width: 80, height: 40, text: 'moved in' })],
-        edges: [],
-      })
-
-      const doc = workspace()
-      const adopted = adoptWorkspaceDocument(
-        doc,
-        { path: 'imported/design', documentId: ID_A, kind: 'spatial' },
-        standalone,
-      )
-
-      expect(adopted?.documentId).toBe(ID_A)
-      expect(adopted?.path).toBe('imported/design')
-      const read = readSpatialCanvas(documentContainers(doc, ID_A))
-      expect(read.nodes).toHaveLength(1)
-      const only = read.nodes[0]
-      expect(only !== undefined && nodeText(only)).toBe('moved in')
-    })
-
-    it('answers null without writing when the id is already in the tree', () => {
-      const doc = workspace()
-      createWorkspaceDocument(doc, { documentId: ID_A, segment: 'design', kind: 'spatial' })
-      const before = doc.oplogVersion().encode()
-
-      const again = adoptWorkspaceDocument(
-        doc,
-        { path: 'design', documentId: ID_A, kind: 'spatial' },
-        new LoroDoc(),
-      )
-
-      // The re-run safety of the whole fold: a document already carried over
-      // is not work, and must not become a second node either.
-      expect(again).toBeNull()
-      expect(doc.oplogVersion().encode()).toEqual(before)
-    })
-
-    it('answers null without writing when the id is already in the tree at another path', () => {
-      // The path-taken guard cannot see this one: the new path is free, so
-      // only the id check stands between a re-run after a rename and two
-      // nodes carrying one documentId.
-      const doc = workspace()
-      createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ID_A, kind: 'markdown' })
-      const before = doc.oplogVersion().encode()
-
-      const adopted = adoptWorkspaceDocument(
-        doc,
-        { path: 'b', documentId: ID_A, kind: 'markdown' },
-        new LoroDoc(),
-      )
-
-      expect(adopted).toBeNull()
-      expect(doc.oplogVersion().encode()).toEqual(before)
-      expect(
-        readWorkspaceDocuments(doc).map((entry) => `${entry.documentId}@${entry.path}`),
-      ).toEqual([`${ID_A}@a`])
     })
   })
 
@@ -716,7 +658,7 @@ describe('row-relocated meta write paths (dual-plane collapse S4b)', () => {
       edges: [],
     })
     const doc = workspace()
-    adoptWorkspaceDocument(
+    adopt(
       doc,
       { path: 'design', documentId: ULID_A, kind: 'spatial', createdAt: 1, updatedAt: 1 },
       standalone,
@@ -744,23 +686,5 @@ describe('row-relocated meta write paths (dual-plane collapse S4b)', () => {
     replica.import(doc.export({ mode: 'update', from }))
     const merged = resolveWorkspaceDocumentById(replica, ULID_A)
     expect(merged?.updatedAt).toBeGreaterThanOrEqual(stampFloor)
-  })
-
-  it('adoption carries the supplied updatedAt instead of stamping fold time', () => {
-    const standalone = new LoroDoc()
-    standalone.setPeerId(9n)
-    writeSpatialCanvas(standalone, {
-      nodes: [textNode({ id: 'n-a', x: 0, y: 0, width: 80, height: 40, text: 'aa' })],
-      edges: [],
-    })
-    const doc = workspace()
-    adoptWorkspaceDocument(
-      doc,
-      { path: 'design', documentId: ULID_A, kind: 'spatial', createdAt: 111, updatedAt: 222 },
-      standalone,
-    )
-    const entry = resolveWorkspaceDocumentById(doc, ULID_A)
-    expect(entry?.createdAt).toBe(111)
-    expect(entry?.updatedAt).toBe(222)
   })
 })

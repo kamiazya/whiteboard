@@ -5,10 +5,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 claimIsolatedWhiteboardDb('browser-files-source-search-names')
 
@@ -20,7 +20,7 @@ describe('createBrowserFilesSource search by display names', () => {
   beforeEach(clearWhiteboardDb)
 
   it('finds a document by its folder’s display name, below one that says the word', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const source = createBrowserFilesSource({ index })
     await source.createDocument('quipe-ops/untitled-8', 'markdown')
@@ -33,7 +33,7 @@ describe('createBrowserFilesSource search by display names', () => {
   })
 
   it('quotes a [[link]] in an excerpt by the name of what it points at', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const source = createBrowserFilesSource({ index })
     await source.createDocument('folder/deep-learning/transformer', 'markdown', 'Transformer')

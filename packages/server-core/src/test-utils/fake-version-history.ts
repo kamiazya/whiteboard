@@ -1,4 +1,5 @@
 import { countSpatialNodes } from '@kamiazya/whiteboard-loro-adapter'
+import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import type { AdoptedVersion, VersionHistory } from '../server-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
@@ -60,6 +61,6 @@ export class FakeVersionHistory implements VersionHistory {
     return [...this.rows.values()]
       .map((row) => row.entry)
       .filter((entry) => entry.path === path)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+      .sort((a, b) => compareCodeUnit(b.createdAt, a.createdAt))
   }
 }

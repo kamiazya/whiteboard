@@ -24,12 +24,11 @@ export type DocumentContent =
  * which no projection of the content carries.
  *
  * Recorded nowhere, a document is SPATIAL: it is the only kind that existed
- * before kinds did (migration `0005-canvases-kind` maps a null kind to it),
- * so the opposite default would draw a pre-kind diagram as prose. A markdown
- * document whose canvas still holds the body an older writer stored there is
- * refused (`RetiredStoredShapeError`). A stored kind this
- * build does not recognise reads as recorded nowhere, as `readDocumentKind`
- * answers it.
+ * before kinds did, and a markdown document's stored form also parses as a
+ * canvas, so the opposite default would draw a pre-kind diagram as prose. A
+ * markdown document whose canvas still holds the body an older writer stored
+ * there is refused (`RetiredStoredShapeError`). A stored kind this build does
+ * not recognise reads as recorded nowhere, as `readDocumentKind` answers it.
  */
 export function readDocumentContent(doc: DocumentContainers, kind?: DocumentKind): DocumentContent {
   if ((readDocumentKind(doc) ?? kind) !== 'markdown') {

@@ -230,6 +230,34 @@ describe('wb_document_get reads a document in its own format', () => {
     expect(failed[0]?.reason).toMatch(/wb_canvas_edit/)
   })
 
+  it('a document in a retired stored shape lands in failed, and the others are answered', async () => {
+    // The refusal is about one document; thrown out of the batch it took the
+    // readable ones with it.
+    const deps = makeDeps()
+    const retired = await createDoc(deps, 'spatial')
+    const doc = await loadOrCreateDocument(deps, 'ws', retired)
+    doc
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    doc.commit()
+    await saveDocumentSnapshot(deps, 'ws', retired, doc)
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
+    const { documentId: readable } = await wbDocumentCreate(deps, {
+      workspaceId: 'ws',
+      path: 'doc-readable',
+      kind: 'spatial',
+    })
+
+    const { documents, failed } = await createDocumentGetTool(deps).execute({
+      workspaceId: 'ws',
+      documentIds: [retired, readable],
+    })
+
+    expect(documents.map((entry) => entry.documentId)).toEqual([readable])
+    expect(failed.map((entry) => entry.documentId)).toEqual([retired])
+    expect(failed[0]?.reason).toMatch(/older version.*its data has not been changed/)
+  })
+
   it('reads many documents in one call, each in its own format', async () => {
     // Axis B: the cost of reading N documents was N calls, because the tool
     // took one `documentId`. The order out follows the order in, so a

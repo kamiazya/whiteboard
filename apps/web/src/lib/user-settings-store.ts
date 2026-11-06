@@ -16,7 +16,9 @@ import { safeGetItem, safeRemoveItem, safeSetItem } from './safe-local-storage.j
 export const STORAGE_KEY = 'whiteboard:user-settings:v5'
 
 /**
- * The keys older versions wrote, each read once and then removed.
+ * The key the previous version wrote, read once and then removed. Older keys
+ * (v1 to v3) are not read at all: a browser still holding one starts from
+ * the defaults.
  *
  * A new key per version rather than a version discriminator inside one,
  * because that is what makes a concurrently-open OLD tab harmless: it keeps
@@ -25,9 +27,6 @@ export const STORAGE_KEY = 'whiteboard:user-settings:v5'
  * `version` and overwriting the current payload with its defaults.
  */
 export const LEGACY_V4_STORAGE_KEY = 'whiteboard:user-settings:v4'
-export const LEGACY_V3_STORAGE_KEY = 'whiteboard:user-settings:v3'
-export const LEGACY_V2_STORAGE_KEY = 'whiteboard:user-settings:v2'
-export const LEGACY_V1_STORAGE_KEY = 'whiteboard:user-settings:v1'
 
 /**
  * Constrained to http/https because these values are rendered into an `href`
@@ -150,9 +149,8 @@ const promotionResultCommonFields = {
 
 // A discriminated union rather than one all-optional bag: the v2 shape could
 // represent states no run produces (ok with no counts, a failure carrying
-// shadowed paths), and every reader paid for that in `??` fallbacks. The
-// v2->v3 migration normalizes legacy partial records once, so each arm can
-// require what its writer always writes.
+// shadowed paths), and every reader paid for that in `??` fallbacks. Each arm
+// requires what its writer always writes.
 const promotionResultSchema = z.discriminatedUnion('ok', [
   z
     .object({
@@ -225,22 +223,6 @@ const capabilitySettingsSchema = z
   })
   .strict()
 
-/**
- * The capability shape v1 and v2 stored, kept parse-only. `webMcpMaxTier`
- * was declared speculative in the very first schema and never written or
- * read by anything since — dropped from the live shape (a field nobody
- * reads does not need to survive the bump), kept here so a payload holding
- * the retired key migrates instead of being discarded by `.strict()`.
- */
-const legacyCapabilitySettingsSchema = z
-  .object({
-    webMcpEnabled: z.boolean().optional(),
-    webMcpMaxTier: z
-      .union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
-      .optional(),
-  })
-  .strict()
-
 const appearanceSettingsSchema = z
   .object({
     // Which favicon the canvas pages render: a live minimap of the board's
@@ -282,205 +264,9 @@ export const userSettingsSchema = z
 const readSchema = tolerantAnswer(userSettingsSchema)
 
 /**
- * The all-optional promotion shape v1 and v2 stored, kept parse-only. The
- * live schema is a discriminated union; this one's job is to read whatever
- * partial record an old payload holds so the v3 migration can normalize it.
- */
-const legacyPromotionResultSchema = z
-  .object({
-    at: z.string(),
-    daemonBaseUrl: httpUrl.optional(),
-    workspaceId: z.string(),
-    sourceWorkspaceId: z.string().optional(),
-    replicaSyncedAt: z.string().optional(),
-    ok: z.boolean(),
-    promotedCount: z.number().optional(),
-    shadowedPaths: z.array(z.string()).optional(),
-    blobsMissing: z.array(z.string()).optional(),
-    blobsFailed: z.array(z.string()).optional(),
-    reason: z.string().optional(),
-  })
-  .strict()
-
-const legacyMigrationSettingsSchema = z
-  .object({
-    // Written by the retired per-document import panel and read by nothing
-    // since; v2 kept it parse-only because dropping the key under `.strict()`
-    // would have discarded the whole payload. The v3 migration is the
-    // version bump that lets it finally be dropped.
-    browserToDaemon: z
-      .object({
-        lastExportedAt: z.string().optional(),
-        lastImportedAt: z.string().optional(),
-        lastImportedDocumentId: z.string().optional(),
-      })
-      .strict()
-      .optional(),
-    promotion: legacyPromotionResultSchema.optional(),
-  })
-  .strict()
-
-/**
- * The shape v2 migrates FROM, kept parse-only.
- *
- * It spells the retired keeper words on purpose, for the same reason a
- * database migration names the columns as they stood at its point in the log:
- * this schema's whole job is to read a payload that was written under those
- * names. Correcting them here would make it parse nothing.
- *
- * Not derived from `storageSettingsSchema` by `.extend()`/`.omit()`, because
- * the two shapes are only coincidentally similar — v2 is free to move without
- * silently changing what a v1 payload is allowed to contain.
- */
-export const legacyV1SettingsSchema = z
-  .object({
-    version: z.literal(1),
-    storage: z
-      .object({
-        // Dead on arrival: nothing in the app ever read or wrote either of
-        // these. They are dropped rather than renamed — a field nobody reads
-        // does not need a better name.
-        preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
-        lastBrowserCanvasId: z.string().optional(),
-        localDaemonBaseUrl: httpUrl.optional(),
-        lastConnectedWorkspaceId: z.string().optional(),
-        lastConnectedPath: z.string().optional(),
-        knownDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
-        dismissedDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
-        dismissedPersistenceWarningAt: z.string().optional(),
-        dismissedBetaBannerAt: z.string().optional(),
-        dismissedDaemonCtaAt: z.string().optional(),
-        dismissedDaemonCtaInstanceId: z.string().optional(),
-      })
-      // `.strict()` here for the same reason the live schema has it: the
-      // migration must not become the hole a token-shaped key travels
-      // through.
-      .strict(),
-    migration: legacyMigrationSettingsSchema,
-    capabilities: legacyCapabilitySettingsSchema,
-    appearance: appearanceSettingsSchema.optional(),
-  })
-  .strict()
-
-/**
- * The shape v3 migrates FROM. Its storage half is spelled out rather than
- * reusing `storageSettingsSchema`, for the same reason v1's is: the live
- * schema is free to move without silently changing what a v2 payload is
- * allowed to contain — a required field added to the live shape must not
- * start failing this parse and discarding migrating users' payloads.
- */
-export const legacyV2SettingsSchema = z
-  .object({
-    version: z.literal(2),
-    storage: z
-      .object({
-        daemonBaseUrl: httpUrl.optional(),
-        lastConnectedWorkspaceId: z.string().optional(),
-        lastConnectedPath: z.string().optional(),
-        knownDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
-        dismissedDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
-        dismissedPersistenceWarningAt: z.string().optional(),
-        dismissedBetaBannerAt: z.string().optional(),
-        dismissedDaemonCtaAt: z.string().optional(),
-        dismissedDaemonCtaInstanceId: z.string().optional(),
-        replicas: z
-          .record(
-            z.string(),
-            z
-              .object({
-                daemonBaseUrl: httpUrl,
-                syncedAt: z.string(),
-                segment: z.string().optional(),
-                displayName: z.string().optional(),
-              })
-              .strict(),
-          )
-          .optional(),
-      })
-      .strict(),
-    migration: legacyMigrationSettingsSchema,
-    capabilities: legacyCapabilitySettingsSchema,
-    appearance: appearanceSettingsSchema.optional(),
-  })
-  .strict()
-
-/**
- * The shape v4 migrates FROM, kept parse-only and spelled out for the reason
- * v1's and v2's are.
- *
- * Its storage half still names the six fields the pairing link and the
- * loopback probe wrote, and its promotion record the `attested` flag a
- * passkey-confirmed move set. ADR-0050 retired all of them: a local daemon is
- * reached through the extension alone and has one person, so nothing reads
- * or writes them.
- */
-export const legacyV3SettingsSchema = z
-  .object({
-    version: z.literal(3),
-    storage: z
-      .object({
-        daemonBaseUrl: httpUrl.optional(),
-        lastConnectedWorkspaceId: z.string().optional(),
-        lastConnectedPath: z.string().optional(),
-        knownDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
-        dismissedDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
-        dismissedDaemonCtaAt: z.string().optional(),
-        dismissedDaemonCtaInstanceId: z.string().optional(),
-        dismissedPersistenceWarningAt: z.string().optional(),
-        dismissedBetaBannerAt: z.string().optional(),
-        replicas: z
-          .record(
-            z.string(),
-            z
-              .object({
-                daemonBaseUrl: httpUrl,
-                syncedAt: z.string(),
-                segment: z.string().optional(),
-                displayName: z.string().optional(),
-                syncedFrontier: z.string().optional(),
-              })
-              .strict(),
-          )
-          .optional(),
-      })
-      .strict(),
-    migration: z
-      .object({
-        promotion: z
-          .discriminatedUnion('ok', [
-            z
-              .object({
-                ...promotionResultCommonFields,
-                ok: z.literal(true),
-                sourceWorkspaceId: z.string().optional(),
-                replicaSyncedAt: z.string().optional(),
-                promotedCount: z.number(),
-                shadowedPaths: z.array(z.string()),
-                blobsMissing: z.array(z.string()),
-                blobsFailed: z.array(z.string()),
-                localCopyRemoved: z.boolean().optional(),
-                attested: z.boolean().optional(),
-              })
-              .strict(),
-            z
-              .object({
-                ...promotionResultCommonFields,
-                ok: z.literal(false),
-                reason: z.string(),
-              })
-              .strict(),
-          ])
-          .optional(),
-      })
-      .strict(),
-    capabilities: capabilitySettingsSchema,
-    appearance: appearanceSettingsSchema.optional(),
-  })
-  .strict()
-
-/**
- * The shape v5 migrates FROM, kept parse-only and spelled out for the reason
- * the others are. It still names the two dismissal stamps — the persistence
+ * The shape v5 migrates FROM, kept parse-only. Spelled out rather than
+ * derived from the live schema, so the live shape is free to move without
+ * silently changing what a v4 payload is allowed to contain. It still names the two dismissal stamps — the persistence
  * warning's and the beta banner's — that nothing has read or written since
  * the banners they belonged to went; v5 is the bump that lets them go.
  */
@@ -516,107 +302,6 @@ export const legacyV4SettingsSchema = z
 
 export type UserSettings = z.infer<typeof userSettingsSchema>
 
-export function migrateV1(
-  legacy: z.infer<typeof legacyV1SettingsSchema>,
-): z.infer<typeof legacyV2SettingsSchema> {
-  const { preferredProvider, lastBrowserCanvasId, localDaemonBaseUrl, ...carried } = legacy.storage
-  return {
-    version: 2,
-    storage: {
-      ...carried,
-      // Spread conditionally rather than assigning `undefined`: the value is
-      // JSON.stringify-ed straight back out, and an explicit `undefined` and
-      // an absent key are the same there but not to `toHaveProperty`.
-      ...(localDaemonBaseUrl === undefined ? {} : { daemonBaseUrl: localDaemonBaseUrl }),
-    },
-    migration: legacy.migration,
-    capabilities: legacy.capabilities,
-    ...(legacy.appearance === undefined ? {} : { appearance: legacy.appearance }),
-  }
-}
-
-/**
- * The one-time home of the `??` fallbacks the union retired from readers:
- * an old ok record may lack the counts its writer now always supplies, and
- * an old failure may lack its reason.
- */
-function normalizeLegacyPromotion(
-  legacy: z.infer<typeof legacyPromotionResultSchema>,
-): PromotionResultRecord {
-  const common = {
-    at: legacy.at,
-    ...(legacy.daemonBaseUrl === undefined ? {} : { daemonBaseUrl: legacy.daemonBaseUrl }),
-    workspaceId: legacy.workspaceId,
-  }
-  if (!legacy.ok) {
-    return { ...common, ok: false, reason: legacy.reason ?? 'unknown error' }
-  }
-  return {
-    ...common,
-    ok: true,
-    ...(legacy.sourceWorkspaceId === undefined
-      ? {}
-      : { sourceWorkspaceId: legacy.sourceWorkspaceId }),
-    ...(legacy.replicaSyncedAt === undefined ? {} : { replicaSyncedAt: legacy.replicaSyncedAt }),
-    promotedCount: legacy.promotedCount ?? 0,
-    shadowedPaths: legacy.shadowedPaths ?? [],
-    blobsMissing: legacy.blobsMissing ?? [],
-    blobsFailed: legacy.blobsFailed ?? [],
-  }
-}
-
-export function migrateV2(
-  legacy: z.infer<typeof legacyV2SettingsSchema>,
-): z.infer<typeof legacyV3SettingsSchema> {
-  const { promotion } = legacy.migration
-  return {
-    version: 3,
-    storage: legacy.storage,
-    // browserToDaemon and webMcpMaxTier go IN the migration (dropped), not
-    // through it: a field nobody reads does not need to survive the bump.
-    migration: promotion === undefined ? {} : { promotion: normalizeLegacyPromotion(promotion) },
-    capabilities:
-      legacy.capabilities.webMcpEnabled === undefined
-        ? {}
-        : { webMcpEnabled: legacy.capabilities.webMcpEnabled },
-    ...(legacy.appearance === undefined ? {} : { appearance: legacy.appearance }),
-  }
-}
-
-/**
- * The six pairing-era storage fields and the promotion's `attested` flag go
- * IN this migration, not through it: nothing reads or writes them.
- */
-export function migrateV3(
-  legacy: z.infer<typeof legacyV3SettingsSchema>,
-): z.infer<typeof legacyV4SettingsSchema> {
-  const {
-    lastConnectedWorkspaceId: _lastConnectedWorkspaceId,
-    lastConnectedPath: _lastConnectedPath,
-    knownDaemonBaseUrls: _knownDaemonBaseUrls,
-    dismissedDaemonBaseUrls: _dismissedDaemonBaseUrls,
-    dismissedDaemonCtaAt: _dismissedDaemonCtaAt,
-    dismissedDaemonCtaInstanceId: _dismissedDaemonCtaInstanceId,
-    ...storage
-  } = legacy.storage
-  const promotion = legacy.migration.promotion
-  return {
-    version: 4,
-    storage,
-    migration:
-      promotion === undefined
-        ? {}
-        : { promotion: promotion.ok ? withoutAttested(promotion) : promotion },
-    capabilities: legacy.capabilities,
-    ...(legacy.appearance === undefined ? {} : { appearance: legacy.appearance }),
-  }
-}
-
-function withoutAttested<T extends { attested?: boolean }>(record: T): Omit<T, 'attested'> {
-  const { attested: _attested, ...rest } = record
-  return rest
-}
-
 /**
  * The two dismissal stamps go IN this migration, not through it: nothing
  * reads or writes them, and a field nobody reads does not need to survive
@@ -647,41 +332,6 @@ export function defaultUserSettings(): UserSettings {
   }
 }
 
-/** Parses `raw` as one old version and carries it to the live shape, or null when it is not that version. */
-function migrated<T>(
-  schema: z.ZodType<T>,
-  toLive: (legacy: T) => UserSettings,
-): (raw: unknown) => UserSettings | null {
-  return (raw) => {
-    const result = schema.safeParse(raw)
-    return result.success ? toLive(result.data) : null
-  }
-}
-
-/**
- * Each key an older version wrote, NEWEST first, and how it reaches the live
- * shape. Newest first because a step migrates only when every newer key is
- * ABSENT (see `load`).
- */
-const LEGACY_VERSIONS: readonly { key: string; migrate: (raw: unknown) => UserSettings | null }[] =
-  [
-    { key: LEGACY_V4_STORAGE_KEY, migrate: migrated(legacyV4SettingsSchema, migrateV4) },
-    {
-      key: LEGACY_V3_STORAGE_KEY,
-      migrate: migrated(legacyV3SettingsSchema, (v3) => migrateV4(migrateV3(v3))),
-    },
-    {
-      key: LEGACY_V2_STORAGE_KEY,
-      migrate: migrated(legacyV2SettingsSchema, (v2) => migrateV4(migrateV3(migrateV2(v2)))),
-    },
-    {
-      key: LEGACY_V1_STORAGE_KEY,
-      migrate: migrated(legacyV1SettingsSchema, (v1) =>
-        migrateV4(migrateV3(migrateV2(migrateV1(v1)))),
-      ),
-    },
-  ]
-
 export interface UserSettingsStore {
   load(): UserSettings
   save(next: UserSettings): void
@@ -701,8 +351,8 @@ export function createUserSettingsStore(): UserSettingsStore {
   }
 
   /**
-   * Each step migrates only when every NEWER key is ABSENT, never when one
-   * is merely invalid. A corrupt or tampered payload keeps the store's
+   * The v4 payload migrates only when the current key is ABSENT, never when
+   * it is merely invalid. A corrupt or tampered payload keeps the store's
    * existing invalid-means-defaults contract instead of quietly resurrecting
    * settings the user may have since changed.
    */
@@ -711,15 +361,13 @@ export function createUserSettingsStore(): UserSettingsStore {
       const result = readSchema.safeParse(readJson(STORAGE_KEY))
       return result.success ? result.data : defaultUserSettings()
     }
-    for (const { key, migrate } of LEGACY_VERSIONS) {
-      if (safeGetItem(key) === null) continue
-      const result = migrate(readJson(key))
-      if (result === null) return defaultUserSettings()
-      save(result)
-      safeRemoveItem(key)
-      return result
-    }
-    return defaultUserSettings()
+    if (safeGetItem(LEGACY_V4_STORAGE_KEY) === null) return defaultUserSettings()
+    const legacy = legacyV4SettingsSchema.safeParse(readJson(LEGACY_V4_STORAGE_KEY))
+    if (!legacy.success) return defaultUserSettings()
+    const live = migrateV4(legacy.data)
+    save(live)
+    safeRemoveItem(LEGACY_V4_STORAGE_KEY)
+    return live
   }
 
   function save(next: UserSettings): void {
@@ -734,10 +382,10 @@ export function createUserSettingsStore(): UserSettingsStore {
 
   function reset(): void {
     safeRemoveItem(STORAGE_KEY)
-    // Every key, or a reset on a browser that has not migrated yet clears
-    // nothing that lasts: load() would find the current key absent, migrate
-    // an old one again, and hand back the settings the user just reset.
-    for (const { key } of LEGACY_VERSIONS) safeRemoveItem(key)
+    // The v4 key too, or a reset on a browser that has not migrated yet
+    // clears nothing that lasts: load() would find the current key absent,
+    // migrate the old one again, and hand back the settings just reset.
+    safeRemoveItem(LEGACY_V4_STORAGE_KEY)
   }
 
   return { load, save, update, reset }

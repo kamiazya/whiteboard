@@ -22,6 +22,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserBackend } from './browser-backend.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { idbContentClock } from './browser-document-summary.js'
 import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 import { BrowserVersionStore, savedVersionRows } from './browser-version-store.js'
@@ -32,7 +33,6 @@ import {
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
 import { demoteBrowserWorkspace, replicaCarriesAll } from './demote-browser-workspace.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { touchContentTimestamp } from './loro-store.js'
@@ -91,7 +91,7 @@ describe('demoteBrowserWorkspace', () => {
  * neighbouring workspace that has a saved version of its own.
  */
 async function seedTwoWorkspaces() {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   const docs = new BrowserWorkspaceDocs()
   const versions = new BrowserVersionStore({ docs, index })
   const sourceId = await resolveBrowserWorkspaceId()
@@ -174,7 +174,7 @@ describe('demoteBrowserWorkspace, beside a neighbour that will not open', () => 
     const { sourceId, sketch, gone, entry } = await seedTwoWorkspaces()
     // A registered neighbour whose record is bytes Loro will not import:
     // what its trash names is unknown, so no trash blob may go.
-    await new FoldingBrowserIndex().createWorkspace({ workspaceId: '01R66CYDDNDBVW12E1EASBGN1B' })
+    await new BrowserDocumentIndex().createWorkspace({ workspaceId: '01R66CYDDNDBVW12E1EASBGN1B' })
     const garbage = chunkSnapshot(new Uint8Array([1, 2, 3, 4]), DEFAULT_SNAPSHOT_MAX_CHUNK_BYTES)
     await openDocumentStore().saveSnapshot({
       docRef: { kind: 'workspace-tree', workspaceId: '01R66CYDDNDBVW12E1EASBGN1B' },
@@ -243,7 +243,7 @@ describe('demoteBrowserWorkspace, another tab still holding the record', () => {
 
     await demoteBrowserWorkspace(sourceId)
     await expect(
-      new FoldingBrowserIndex().createWorkspace({ workspaceId: sourceId }),
+      new BrowserDocumentIndex().createWorkspace({ workspaceId: sourceId }),
     ).rejects.toSatisfy(isWorkspaceRemovedError)
 
     expect(await registryRows()).not.toContain(sourceId)
@@ -343,7 +343,7 @@ describe('replicaCarriesAll', () => {
     const docs = new BrowserWorkspaceDocs()
     // Registered so the record may be minted at all; which keeper holds it
     // is not what this asks.
-    await new FoldingBrowserIndex().createWorkspace({ workspaceId: '01WZ0WMJQF4H3BAYFCGJRC5WDH' })
+    await new BrowserDocumentIndex().createWorkspace({ workspaceId: '01WZ0WMJQF4H3BAYFCGJRC5WDH' })
     const record = await docs.create('01WZ0WMJQF4H3BAYFCGJRC5WDH')
     // A record with no documents: ids are absent, so nothing is carried.
     writeDocumentKind(record, 'markdown')

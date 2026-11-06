@@ -9,7 +9,7 @@ import type { ReactElement } from 'react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
 import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -48,7 +48,7 @@ afterEach(async () => {
 })
 
 it('a line typed on one page shows up on the other page open on the note', async () => {
-  const store = new FoldingBrowserIndex()
+  const store = new BrowserDocumentIndex()
   await seedIdbDocument({
     path: 'note',
     kind: 'markdown',
@@ -67,7 +67,7 @@ it('a line typed on one page shows up on the other page open on the note', async
 })
 
 it('a page opened later on the note is heard by the page that was there first', async () => {
-  const store = new FoldingBrowserIndex()
+  const store = new BrowserDocumentIndex()
   await seedIdbDocument({
     path: 'note',
     kind: 'markdown',

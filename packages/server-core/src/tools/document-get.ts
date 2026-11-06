@@ -1,5 +1,10 @@
 import { okfMarkdownFrontmatterSchema } from '@kamiazya/whiteboard-codec'
-import { readAnnotations, readDocumentKind, readProposals } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  RetiredStoredShapeError,
+  readAnnotations,
+  readDocumentKind,
+  readProposals,
+} from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   type DocumentKind,
@@ -201,9 +206,16 @@ async function readOrFail(
     return await readOne(deps, input, documentId, entry.kind)
   } catch (error) {
     // Only the failures that are genuinely ABOUT this document: it has
-    // no kind to read it by, or its content has no representation in
-    // that format. Everything else propagates.
-    if (!(error instanceof DocumentKindUnknownError || error instanceof DocumentSerializeError)) {
+    // no kind to read it by, its content has no representation in that
+    // format, or it holds a shape this version no longer reads. Everything
+    // else propagates.
+    if (
+      !(
+        error instanceof DocumentKindUnknownError ||
+        error instanceof DocumentSerializeError ||
+        error instanceof RetiredStoredShapeError
+      )
+    ) {
       throw error
     }
     return { documentId, reason: reportedFaultText(deps, 'wb_document_get', error) }

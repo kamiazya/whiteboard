@@ -29,6 +29,7 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
 import { storedWorkspaceEntrySchema, type WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
 import { WORKSPACES_STORE } from './browser-idb.js'
+import { isBrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { inTransaction, request } from './idb-tx.js'
 import { createSubscribers } from './subscribers.js'
 import { resolveWorkspaceAddress, workspaceHandle } from './workspace-handle.js'
@@ -118,6 +119,11 @@ export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
           'await it in the boot chain, or use the test seam',
       )
     case 'failed':
+      // A refusal by name travels as itself, so every reader that knows the
+      // type says the storage's own sentence rather than a generic one;
+      // measured over a pre-reset database in the real app, where the boot's
+      // degraded path had turned it into "Failed to load documents".
+      if (isBrowserStorageRefusedError(state.cause)) throw state.cause
       throw new Error(`browser workspace unavailable: ${causeMessage(state.cause)}`)
   }
 }
@@ -190,7 +196,7 @@ async function readWorkspaceIdentity(
 }
 
 /**
- * Opens the whiteboard database (running the v14+ migration if needed) and
+ * Opens the whiteboard database (creating the baseline on a fresh install) and
  * caches the one canonical workspace id it holds. Safe to call from more than
  * one boot path or consumer — a resolved id is served from cache, and
  * concurrent unresolved calls share one open.

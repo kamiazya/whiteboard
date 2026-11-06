@@ -1,9 +1,4 @@
-import {
-  constantRatioMeasureText,
-  type MeasureText,
-  naturalNodeContentSize,
-  SPATIAL_THEME_GEOMETRY,
-} from '@kamiazya/whiteboard-canvas-render'
+import { fittedTextNodeHeight, type MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyNodePatch,
@@ -54,15 +49,11 @@ import { publishedKind } from './published-node-kind.js'
  * width, not a position.
  */
 export function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
-  // The taller of two readings: the composition root's own font, and the
-  // ratio measurer every machine has. The daemon's font is narrower than
-  // the ratio, so a box it fits can still read as cut to the drawing score
-  // and to a client drawing with a wider font; the floor is what makes
-  // "fits" mean the same thing to the tool and to what judges it.
-  const under = (m: MeasureText) =>
-    naturalNodeContentSize(node, { measure: m, appearance: MCP_SCENE_APPEARANCE }).h
-  const natural = Math.max(under(measure), under(constantRatioMeasureText))
-  return Math.max(fallback, natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+  // canvas-render's one fitted height, the same the editor grows a node to.
+  return Math.max(
+    fallback,
+    fittedTextNodeHeight(node, { measure, appearance: MCP_SCENE_APPEARANCE }),
+  )
 }
 
 /**

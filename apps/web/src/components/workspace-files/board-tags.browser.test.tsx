@@ -8,10 +8,9 @@ import { afterEach, beforeEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { createBrowserFilesSource } from '../../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
-import { LoroStore } from '../../lib/loro-store.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
-import { seedLegacyRow } from '../../test-utils/seed-legacy-row.js'
+import { seedTreeContent, seedTreeDocument } from '../../test-utils/seed-workspace-content.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 claimIsolatedWhiteboardDb('board-tags-list')
@@ -20,15 +19,14 @@ afterEach(cleanup)
 
 it('shows a board’s own tag on its row and filters the list by it', async () => {
   const workspaceId = getBrowserWorkspaceId()
-  const store = new LoroStore()
-  const board = await seedLegacyRow({ workspaceId, path: 'floor-plan', kind: 'spatial' })
-  const note = await seedLegacyRow({ workspaceId, path: 'groceries', kind: 'markdown' })
+  const board = await seedTreeDocument({ workspaceId, path: 'floor-plan', kind: 'spatial' })
+  const note = await seedTreeDocument({ workspaceId, path: 'groceries', kind: 'markdown' })
   const boardDoc = new Loro()
   writeSpatialCanvas(boardDoc, { nodes: [], edges: [], tags: ['home'] })
-  await store.save(board.documentId, boardDoc.export({ mode: 'snapshot' }))
+  await seedTreeContent(board.documentId, boardDoc.export({ mode: 'snapshot' }))
   const noteDoc = new Loro()
   writeCoreFacets(noteDoc, { type: 'note' })
-  await store.save(note.documentId, noteDoc.export({ mode: 'snapshot' }))
+  await seedTreeContent(note.documentId, noteDoc.export({ mode: 'snapshot' }))
 
   render(<WorkspaceFilesPanel source={createBrowserFilesSource()} />)
 

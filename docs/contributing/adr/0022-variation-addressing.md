@@ -1,6 +1,6 @@
 # ADR-0022: A variation is not in the address, and the default one has no name to put there
 
-**Status:** Accepted — decision 2 revisited on 2026-09-05 (see the dated note); decision 1 unchanged. **The surface both decisions address is retired by [ADR-0029](0029-proposal-layer.md) (2026-09-06)** — see the note below the Decision.
+**Status:** Superseded by [ADR-0029](0029-proposal-layer.md) (2026-09-07) — the surface both decisions address is retired; decision 1's grammar rule stands as history, and decision 2 was revisited on 2026-09-05 (see the dated note).
 
 **Superseded by [ADR-0029](0029-proposal-layer.md)** (2026-09-07). Its
 decision that a variation is not in the address stands as history; the

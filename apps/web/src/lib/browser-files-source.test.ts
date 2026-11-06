@@ -24,19 +24,22 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
-import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import {
+  seedTreeContent,
+  seedTreeDocument,
+  seedWorkspaceDocumentContent,
+} from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
+import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
@@ -48,15 +51,15 @@ describe('createBrowserFilesSource', () => {
 
   it('lists a fresh database as empty, not as missing', async () => {
     // Written as the missing-workspace case first, and the test refuted its
-    // own premise: the v8+ IndexedDB upgrade seeds the browser workspace row
-    // unconditionally, so a fresh database HAS the workspace before anything
+    // own premise: a fresh IndexedDB's baseline seeds the browser workspace
+    // row unconditionally, so a fresh database HAS the workspace before anything
     // else touches it. The `WorkspaceMissingError` mapping in the source
     // stays — it guards a state a hand-edited store can still reach — but the
     // reachable first-run behaviour is an empty list.
     //
     // Nothing seeds a workspace here on purpose — that is the point being
     // tested — so `getBrowserWorkspaceId()` has to read the id the fresh
-    // database's own v14 upgrade actually minted, not the arbitrary id
+    // database's own baseline actually minted, not the arbitrary id
     // `claimIsolatedWhiteboardDb` claimed for tests that create their
     // workspace explicitly under it.
     resetBrowserWorkspaceIdForTests()
@@ -64,31 +67,22 @@ describe('createBrowserFilesSource', () => {
     await expect(createBrowserFilesSource().listDocuments()).resolves.toEqual([])
   })
 
-  it('lists a legacy row-plane document — the startup fold absorbs it into the tree', async () => {
-    // A pre-collapse browser's world: an index row plus a content record,
-    // nothing in the workspace tree. The default source folds on first read,
-    // so the legacy document lists with its name and kind intact.
-    const entry = await seedLegacyRow({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'a',
-      kind: 'spatial',
-      name: 'A',
-    })
-    await new LoroStore().save(entry.documentId, new Loro().export({ mode: 'snapshot' }))
-
-    const entries = await createBrowserFilesSource().listDocuments()
-    expect(entries.map((e) => ({ path: e.path, name: e.name, kind: e.kind }))).toEqual([
-      { path: 'a', name: 'A', kind: 'spatial' },
-    ])
+  it('refuses a workspace whose documents predate the tree, rather than listing it as empty', async () => {
+    // A pre-tree browser's world: an index row, nothing in the workspace tree.
+    // Listing the tree alone would answer [] over a workspace full of documents.
+    await seedLegacyRow({ workspaceId: getBrowserWorkspaceId(), path: 'a', kind: 'spatial' })
+    await expect(createBrowserFilesSource().listDocuments()).rejects.toBeInstanceOf(
+      BrowserStorageRefusedError,
+    )
   })
 
   it('defaults to the production index: a document only the workspace tree knows is listed', async () => {
-    // Production injects FoldingBrowserIndex (App.tsx), whose creates land
+    // Production injects BrowserDocumentIndex (App.tsx), whose creates land
     // in the workspace tree and write no legacy row. A default of
     // IdbDocumentIndex would silently list a DIFFERENT store than the app
     // writes to — exactly the split the injectable parameter exists to
     // close, reopened by the default.
-    const production = new FoldingBrowserIndex()
+    const production = new BrowserDocumentIndex()
     await production.createWorkspace({ workspaceId: getBrowserWorkspaceId() }).catch(() => {})
     await production.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -152,14 +146,14 @@ describe('createBrowserFilesSource', () => {
 
   it('reads a markdown document body back', async () => {
     const source = createBrowserFilesSource()
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'n',
       kind: 'markdown',
     })
     const doc = new Loro()
     doc.getText('body').insert(0, '# Hello from browser')
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const markdown = await source.loadMarkdown({ ...entry, kind: 'markdown' })
     expect(markdown.body).toContain('Hello from browser')
@@ -171,7 +165,7 @@ describe('createBrowserFilesSource', () => {
   // test rather than a failing one (coverage-ledger.md).
   it('reads a markdown document’s facets back with its body', async () => {
     const source = createBrowserFilesSource()
-    const entry = await seedLegacyRow({
+    const entry = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'marked',
       kind: 'markdown',
@@ -179,38 +173,11 @@ describe('createBrowserFilesSource', () => {
     const doc = new Loro()
     doc.getText('body').insert(0, '# Marked')
     writeFacets(doc, { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const markdown = await source.loadMarkdown({ ...entry, kind: 'markdown' })
     expect(markdown.body).toContain('Marked')
     expect(markdown.facets).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
-  })
-
-  it('answers the CURRENT spatial bytes, deltas folded in', async () => {
-    const source = createBrowserFilesSource()
-    const entry = await seedLegacyRow({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 's',
-      kind: 'spatial',
-    })
-    const doc = new Loro()
-    doc.getList('elements').push({ id: 'a' })
-    doc.commit()
-    const snapshot = doc.export({ mode: 'snapshot' })
-    const before = doc.version()
-    doc.getList('elements').push({ id: 'b' })
-    doc.commit()
-    await seedSyncDocument(entry.documentId, {
-      snapshot,
-      deltas: [doc.export({ mode: 'update', from: before })],
-    })
-
-    const bytes = await source.loadSpatialSnapshot({ ...entry, kind: 'spatial' })
-    const fresh = new Loro()
-    fresh.import(bytes)
-    // Both elements: a thumbnail of the last snapshot alone would show a
-    // document the user is not looking at.
-    expect(fresh.getList('elements').toJSON()).toHaveLength(2)
   })
 })
 
@@ -218,12 +185,12 @@ describe('createBrowserFilesSource tags', () => {
   beforeEach(clearWhiteboardDb)
 
   it('surfaces core-facet tags on markdown entries and omits them elsewhere', async () => {
-    const tagged = await seedLegacyRow({
+    const tagged = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'tagged',
       kind: 'markdown',
     })
-    await seedLegacyRow({
+    await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'plain',
       kind: 'markdown',
@@ -231,12 +198,11 @@ describe('createBrowserFilesSource tags', () => {
 
     const doc = new Loro()
     writeCoreFacets(doc, { type: 'note', tags: ['release', 'q3'] })
-    await new LoroStore().save(tagged.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(tagged.documentId, doc.export({ mode: 'snapshot' }))
 
     const entries = await createBrowserFilesSource().listDocuments()
     expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
     expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
-    await expectLoggedFailure('startup fold left documents behind')
   })
 })
 
@@ -244,7 +210,7 @@ describe('createBrowserFilesSource trash', () => {
   beforeEach(clearWhiteboardDb)
 
   it('exposes the shared index trash: delete lists it, restore brings it back', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -269,7 +235,7 @@ describe('createBrowserFilesSource trash', () => {
     // that resolves the button's promise and the section reloads with the
     // row still there — a silent no-op. The daemon path already rejects
     // (its route 404s, in the same words); the browser path must agree.
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const source = createBrowserFilesSource({ index })
     const absent = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -283,7 +249,7 @@ describe('createBrowserFilesSource trash', () => {
   // The daemon answers 409 in the same words for the same case: the id is
   // live, so the restore has nothing to bring back and "not found" would lie.
   it('refuses to restore a document the workspace already places, naming its path', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -321,7 +287,7 @@ describe('createBrowserFilesSource search', () => {
    * whose point is the picture was findable by nothing.
    */
   it('finds a document by what its emoji is called, in either language', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -344,7 +310,7 @@ describe('createBrowserFilesSource search', () => {
   // The daemon's spelling is `extract.test.ts`: both keepers read content
   // through `readDocumentContent`, and this holds the browser's half.
   it('finds a document by a word only its description holds', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -376,12 +342,7 @@ describe('createBrowserFilesSource search', () => {
       const notes = (await searching.listDocuments()).find((entry) => entry.path === 'notes')
       const doc = new Loro()
       writeMarkdownBody(doc, 'see [[design/login]] for the flow')
-      expect(
-        await seedWorkspaceDocumentContent(
-          notes?.documentId ?? '',
-          doc.export({ mode: 'snapshot' }),
-        ),
-      ).toBe(true)
+      await seedTreeContent(notes?.documentId ?? '', doc.export({ mode: 'snapshot' }))
       const paths = async (query: string) =>
         (await searching.searchDocuments(query)).map((hit) => hit.document.path)
       // Searched once first, so the old body is what the corpus holds.
@@ -404,20 +365,19 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
   beforeEach(clearWhiteboardDb)
 
   it('lists a board’s own tags on its entry and counts every bearer in listTagsInUse', async () => {
-    const note = await seedLegacyRow({
+    const note = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'note',
       kind: 'markdown',
     })
-    const board = await seedLegacyRow({
+    const board = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'board',
       kind: 'spatial',
     })
-    const store = new LoroStore()
     const noteDoc = new Loro()
     writeCoreFacets(noteDoc, { type: 'note', tags: ['q3'] })
-    await store.save(note.documentId, noteDoc.export({ mode: 'snapshot' }))
+    await seedTreeContent(note.documentId, noteDoc.export({ mode: 'snapshot' }))
     const boardDoc = new Loro()
     writeSpatialCanvas(boardDoc, {
       tags: ['team:core', 'q3'],
@@ -427,7 +387,7 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
       ],
       edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' }, tags: ['link:slow'] }],
     })
-    await store.save(board.documentId, boardDoc.export({ mode: 'snapshot' }))
+    await seedTreeContent(board.documentId, boardDoc.export({ mode: 'snapshot' }))
 
     const source = createBrowserFilesSource()
     const entries = await source.listDocuments()
@@ -445,15 +405,14 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
   })
 
   it('lists a board tag added after the first listing, under the real content clock', async () => {
-    const board = await seedLegacyRow({
+    const board = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: 'home-board',
       kind: 'spatial',
     })
-    const store = new LoroStore()
     const doc = new Loro()
     writeSpatialCanvas(doc, { nodes: [], edges: [] })
-    await store.save(board.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(board.documentId, doc.export({ mode: 'snapshot' }))
 
     const source = createBrowserFilesSource()
     expect((await source.listDocuments())[0]?.tags).toBeUndefined()
@@ -462,9 +421,7 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
     // The content stamp is a millisecond clock: move it past the first write's.
     for (const t = Date.now(); Date.now() === t; ) {}
     reconcileSpatialCanvas(doc, { nodes: [], edges: [] }, { nodes: [], edges: [], tags: ['home'] })
-    expect(
-      await seedWorkspaceDocumentContent(board.documentId, doc.export({ mode: 'snapshot' })),
-    ).toBe(true)
+    await seedTreeContent(board.documentId, doc.export({ mode: 'snapshot' }))
 
     expect((await source.listDocuments())[0]?.tags).toEqual(['home'])
     expect((await source.listTagsInUse?.())?.map((row) => row.tag)).toEqual(['home'])
@@ -472,10 +429,9 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
 
   it('reads the tag library the document at the tag library path declares, and answers none without one', async () => {
     await new IdbDocumentIndex().createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-    const store = new LoroStore()
     const before = createBrowserFilesSource()
     await expect(before.readTagLibrary?.()).resolves.toEqual({})
-    const library = await seedLegacyRow({
+    const library = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: TAG_LIBRARY_PATH,
       kind: 'markdown',
@@ -484,7 +440,7 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
     writeFacets(doc, {
       'visual.tags/v0': { keys: { health: { exclusive: true, values: { ok: { color: '4' } } } } },
     } as never)
-    await store.save(library.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(library.documentId, doc.export({ mode: 'snapshot' }))
     const source = createBrowserFilesSource()
     await expect(source.readTagLibrary?.()).resolves.toEqual({
       health: { exclusive: true, values: { ok: { color: '4' } } },
@@ -493,9 +449,8 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
 
   it('reads the stencil library the document at the stencil library path declares, and answers none without one', async () => {
     await new IdbDocumentIndex().createWorkspace({ workspaceId: getBrowserWorkspaceId() })
-    const store = new LoroStore()
     await expect(createBrowserFilesSource().readStencilLibrary?.()).resolves.toEqual({})
-    const library = await seedLegacyRow({
+    const library = await seedTreeDocument({
       workspaceId: getBrowserWorkspaceId(),
       path: STENCIL_LIBRARY_PATH,
       kind: 'markdown',
@@ -504,26 +459,10 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
     writeFacets(doc, {
       'visual.stencils/v0': { stencils: { lakehouse: { displayName: 'Lakehouse', color: '3' } } },
     } as never)
-    await store.save(library.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(library.documentId, doc.export({ mode: 'snapshot' }))
     await expect(createBrowserFilesSource().readStencilLibrary?.()).resolves.toEqual({
       lakehouse: { displayName: 'Lakehouse', color: '3', facets: {} },
     })
-  })
-
-  it('reads a library document whose stored bytes cannot be decoded as no library, not as a failure', async () => {
-    const store = new LoroStore()
-    for (const path of [TAG_LIBRARY_PATH, STENCIL_LIBRARY_PATH]) {
-      const entry = await seedLegacyRow({
-        workspaceId: getBrowserWorkspaceId(),
-        path,
-        kind: 'markdown',
-      })
-      await store.save(entry.documentId, new Uint8Array([1, 2, 3, 4]))
-    }
-    const source = createBrowserFilesSource()
-    await expect(source.readTagLibrary?.()).resolves.toEqual({})
-    await expect(source.readStencilLibrary?.()).resolves.toEqual({})
-    await expectLoggedFailure('startup fold left documents behind')
   })
 })
 
@@ -624,7 +563,6 @@ describe('createBrowserFilesSource tag cache', () => {
       path: 'shape-shifter',
       kind: 'spatial',
     })
-    const store = new LoroStore()
     const doc = new Loro()
     writeSpatialCanvas(doc, {
       nodes: [
@@ -632,7 +570,7 @@ describe('createBrowserFilesSource tag cache', () => {
       ],
       edges: [],
     })
-    await store.save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
     const source = createBrowserFilesSource({
       index,
       clock: async () => new Map([[entry.documentId, 'stamp-1']]),
@@ -659,7 +597,7 @@ describe('createBrowserFilesSource over a row that names no kind', () => {
     // The row of a document written before kinds existed. Whatever the content
     // holds, `readDocumentContent` says what such a document is, and every walk
     // in the source has to agree with it rather than each choosing its own.
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const entry = await index.createDocument({
       workspaceId: getBrowserWorkspaceId(),
@@ -689,7 +627,7 @@ describe('createBrowserFilesSource over a row that names no kind', () => {
         value: async (input: Parameters<typeof index.listDocuments>[0]) =>
           (await index.listDocuments(input)).map(({ kind: _kind, ...row }) => row),
       },
-    }) as FoldingBrowserIndex
+    }) as BrowserDocumentIndex
     const source = createBrowserFilesSource({ index: kindless })
 
     const [listed] = await source.listDocuments()
@@ -733,7 +671,7 @@ describe('createBrowserFilesSource conformance', () => {
   beforeEach(clearWhiteboardDb)
 
   describeWorkspaceFilesSourceConformance('createBrowserFilesSource', async (fixture) => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const workspaceId = getBrowserWorkspaceId()
     for (const document of fixture.documents ?? []) {

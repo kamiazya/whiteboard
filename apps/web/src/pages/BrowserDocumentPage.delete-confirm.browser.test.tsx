@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
@@ -20,7 +20,7 @@ claimIsolatedWhiteboardDb('browserdocumentpage-delete-confirm')
  * The deleted rows are gone and nothing took their place: the page leaves
  * for the list, so no fresh canvas is seeded behind it.
  */
-async function expectDeleted(store: FoldingBrowserIndex, beforeIds: string[]): Promise<void> {
+async function expectDeleted(store: BrowserDocumentIndex, beforeIds: string[]): Promise<void> {
   await waitFor(
     async () => {
       const afterIds = (await listBrowserDocuments(store)).map((c) => c.documentId)
@@ -32,8 +32,8 @@ async function expectDeleted(store: FoldingBrowserIndex, beforeIds: string[]): P
 }
 
 async function renderLoaded(
-  store: FoldingBrowserIndex = new FoldingBrowserIndex(),
-): Promise<FoldingBrowserIndex> {
+  store: BrowserDocumentIndex = new BrowserDocumentIndex(),
+): Promise<BrowserDocumentIndex> {
   renderPage(<BrowserDocumentPage store={store} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
@@ -65,7 +65,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
   it('a markdown note names itself in the dialog: note, not canvas', async () => {
     // The kind-aware copy's whole point on this page — the markdown branch
     // must not inherit the spatial wording.
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({
       path: 'meeting-notes',
       name: 'Meeting notes',
@@ -183,7 +183,7 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
   it('a refused delete says so in the row and keeps the document open', async () => {
     // The refusal travels as the keeper's REJECTION into the shared delete
     // bundle, which draws it — the same path the daemon keeper's takes.
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     store.deleteDocument = async () => {
       throw new Error('simulated IndexedDB failure')
     }

@@ -18,6 +18,7 @@ import {
 } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
+import { isBrowserStorageRefusedError } from '../lib/browser-storage-refusal.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
@@ -143,6 +144,30 @@ export interface BrowserControllerDeps {
 const defaultLoroStore = /* @__PURE__ */ new LoroStore()
 const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
+
+/**
+ * The degraded reason a load takes when this browser's storage holds a shape
+ * this build does not read (`BrowserStorageRefusedError`): the page shows the
+ * refusal's own sentence and offers no recovery, since a create is refused
+ * the same way.
+ */
+const STORAGE_REFUSED_REASON = 'storage-refused'
+
+/** What a load that threw leaves the page in. */
+function loadFailure(err: unknown): BrowserPersistenceState {
+  const refused = isBrowserStorageRefusedError(err)
+  return {
+    kind: 'degraded',
+    reason: refused ? STORAGE_REFUSED_REASON : 'load-failed',
+    message: refused ? err.message : 'The canvas could not be loaded.',
+    lastSavedAt: null,
+  }
+}
+
+/** Whether the load was refused that way, for the page to offer no recovery. */
+export function loadWasRefused(persistence: BrowserPersistenceState): boolean {
+  return persistence.kind === 'degraded' && persistence.reason === STORAGE_REFUSED_REASON
+}
 
 /**
  * The stores a page reads to decide which document it opens. Taken as a
@@ -434,15 +459,8 @@ export function useBrowserDocumentController(
       setSnapshot(opened)
     }
 
-    load().catch(() => {
-      if (!cancelled) {
-        setPersistenceRef.current({
-          kind: 'degraded',
-          reason: 'load-failed',
-          message: 'The canvas could not be loaded.',
-          lastSavedAt: null,
-        })
-      }
+    load().catch((err: unknown) => {
+      if (!cancelled) setPersistenceRef.current(loadFailure(err))
     })
 
     return () => {

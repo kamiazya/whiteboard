@@ -7,13 +7,13 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
@@ -33,20 +33,20 @@ function markdown(body: string): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-async function note(index: FoldingBrowserIndex, path: string, name: string, body: string) {
+async function note(index: BrowserDocumentIndex, path: string, name: string, body: string) {
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'markdown',
     name,
   })
-  expect(await seedWorkspaceDocumentContent(entry.documentId, markdown(body))).toBe(true)
+  await seedTreeContent(entry.documentId, markdown(body))
   return entry.documentId
 }
 
 describe("the browser keeper's Link on a mention", () => {
   it('writes the mention as a link in the source, and the source becomes a backlink', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const gamma = await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
@@ -73,7 +73,7 @@ describe("the browser keeper's Link on a mention", () => {
     vi.useFakeTimers({ toFake: ['Date'] })
     try {
       vi.setSystemTime(new Date('2026-09-01T00:00:00.000Z'))
-      const index = new FoldingBrowserIndex()
+      const index = new BrowserDocumentIndex()
       await ensureBrowserWorkspace(index)
       const zebra = await note(index, 'design/zebra', 'Login Flow', 'The target.')
       const notes = await note(index, 'notes', 'Notes', 'We discussed the Login Flow today.')
@@ -92,7 +92,7 @@ describe("the browser keeper's Link on a mention", () => {
   })
 
   it('writes nothing when the source has nothing to link', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const alpha = await note(index, 'alpha', 'Alpha', 'Nothing about it here.')

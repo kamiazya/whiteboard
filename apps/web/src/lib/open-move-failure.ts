@@ -7,6 +7,7 @@
  * stored copy cannot be read must not be sent to check a connection that works.
  */
 import { getAppLogger } from './app-logger.js'
+import { isBrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { DaemonApiError } from './daemon-api-client.js'
 import { DaemonContractError } from './daemon-contract-error.js'
 import { describeTransferFailure, type FailureCopy } from './keeper-transfer-failure.js'
@@ -25,6 +26,8 @@ export const OPEN_CONTRACT_FAILURE =
   'The daemon answered with an unexpected response, so the move was not prepared.'
 
 export function openFailureReason(err: unknown, daemonBaseUrl: string): string {
+  // This browser's own storage refused, and its sentence says what to do.
+  if (isBrowserStorageRefusedError(err)) return err.message
   // The daemon answered and refused: its own sentence says why.
   if (err instanceof DaemonApiError) {
     log.warn('daemon refused the workspace listing; move not prepared', {

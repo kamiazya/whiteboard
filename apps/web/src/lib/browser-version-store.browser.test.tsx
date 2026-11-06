@@ -11,10 +11,10 @@ import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
@@ -45,7 +45,7 @@ async function writeContent(docs: BrowserWorkspaceDocs, documentId: string, text
 }
 
 async function seedDocument(path: string) {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   const workspaceId = getBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId })
   const { documentId } = await index.createDocument({ workspaceId, path, kind: 'spatial' })
@@ -78,7 +78,7 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
     // A reload: nothing held in memory survives, only IndexedDB.
     const reloaded = new BrowserVersionStore({
       docs: new BrowserWorkspaceDocs(),
-      index: new FoldingBrowserIndex(),
+      index: new BrowserDocumentIndex(),
     })
     const listed = await reloaded.list(workspaceId, 'canvas-a')
     expect(listed.map((v) => v.id)).toEqual([second.id, first.id])

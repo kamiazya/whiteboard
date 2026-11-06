@@ -3,11 +3,14 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import {
+  seedTreeContent,
+  seedWorkspaceDocumentContent,
+} from '../test-utils/seed-workspace-content.js'
 import { browserBacklinksReader } from './browser-backlinks.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore } from './loro-store.js'
 
 // The browser keeper answering "what links here" from its own documents,
@@ -27,20 +30,20 @@ function markdown(body: string): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-async function note(index: FoldingBrowserIndex, path: string, name: string, body: string) {
+async function note(index: BrowserDocumentIndex, path: string, name: string, body: string) {
   const entry = await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'markdown',
     name,
   })
-  expect(await seedWorkspaceDocumentContent(entry.documentId, markdown(body))).toBe(true)
+  await seedTreeContent(entry.documentId, markdown(body))
   return entry.documentId
 }
 
 describe('the browser keeper answering what links here', () => {
   it('lists a document that links here, and one that names it without a link', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
@@ -57,7 +60,7 @@ describe('the browser keeper answering what links here', () => {
   // stale answer: an edit that drops the link has to drop the backlink on
   // the very next ask, through the same reader.
   it('drops a backlink on the next ask once the link is edited away', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const alpha = await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')

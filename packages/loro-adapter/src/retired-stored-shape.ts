@@ -90,7 +90,7 @@ const RETIRED_BODY_NODE_ID = 'okf-body'
  * whatever else the canvas holds, so only the empty one could hide prose.
  * Opens no container on a tree host.
  */
-export function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
+function retiredMarkdownBodyShape(doc: DocumentContainers): string | null {
   const nodes = doc.peekMap === undefined ? doc.getMap(NODES_KEY) : doc.peekMap(NODES_KEY)
   if (nodes?.get(RETIRED_BODY_NODE_ID) === undefined) return null
   return doc.getText(MARKDOWN_BODY_KEY).length > 0
@@ -118,7 +118,8 @@ export function refuseRetiredShape(found: string | null): void {
   if (found !== null) throw new RetiredStoredShapeError(found)
 }
 
-function firstRetired(
+/** The first entry of `map` in a retired shape, or null. */
+export function firstRetired(
   map: LoroMap | undefined,
   shapeOf: (id: string, raw: unknown) => string | null,
 ): string | null {
@@ -130,6 +131,25 @@ function firstRetired(
   return null
 }
 
+const peekMap = (doc: DocumentContainers, key: string): LoroMap | undefined =>
+  doc.peekMap === undefined ? doc.getMap(key) : doc.peekMap(key)
+
+/**
+ * The body checks, asked by the document's recorded kind: none of a spatial
+ * document, since a canvas edit may legitimately mint the body node's id
+ * and a text node is content there; the body-node check of an unrecorded
+ * kind, since the shape dates from before kinds were written; both of a
+ * markdown document. Opens no container.
+ */
+export function retiredMarkdownShape(doc: DocumentContainers): string | null {
+  const kind = documentKindSchema.safeParse(peekMap(doc, DOCUMENT_KEY)?.get('kind'))
+  if (kind.success && kind.data === 'spatial') return null
+  return (
+    retiredMarkdownBodyShape(doc) ??
+    (kind.success && kind.data === 'markdown' ? retiredMarkdownCanvasShape(doc) : null)
+  )
+}
+
 /**
  * The first retired shape this document holds, or null — for a caller that
  * must decide before it reads (a snapshot arriving in an editor), where the
@@ -137,18 +157,11 @@ function firstRetired(
  * opens one by WRITING it.
  */
 export function retiredStoredShapeIn(doc: DocumentContainers): string | null {
-  const peek = (key: string) => (doc.peekMap === undefined ? doc.getMap(key) : doc.peekMap(key))
-  const canvasMap = peek(CANVAS_KEY)
-  // The body-node check keys on an id a canvas edit may legitimately mint, so
-  // it is asked only of a document that can hold a body: a recorded spatial
-  // document's `okf-body` node is content. An unrecorded kind is asked, since
-  // the shape dates from before kinds were written.
-  const kind = documentKindSchema.safeParse(peek(DOCUMENT_KEY)?.get('kind'))
-  const mayHoldBody = !kind.success || kind.data !== 'spatial'
+  const canvasMap = peekMap(doc, CANVAS_KEY)
   return (
-    firstRetired(peek(NODES_KEY), retiredNodeShape) ??
-    firstRetired(peek(EDGES_KEY), retiredEdgeShape) ??
+    firstRetired(peekMap(doc, NODES_KEY), retiredNodeShape) ??
+    firstRetired(peekMap(doc, EDGES_KEY), retiredEdgeShape) ??
     (canvasMap === undefined ? null : retiredCanvasShape(canvasMap)) ??
-    (mayHoldBody ? retiredMarkdownBodyShape(doc) : null)
+    retiredMarkdownShape(doc)
   )
 }
