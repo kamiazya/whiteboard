@@ -102,6 +102,20 @@ describe('a file carrying the conversation it no longer may (ADR-0026 decision 1
     expect(result.error.message).toMatch(/remove/i)
   })
 
+  it('reads a file whose comments key holds nothing, since nothing is lost', () => {
+    for (const comments of [[], null]) {
+      const result = parseSpatial(
+        JSON.stringify({
+          nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+          edges: [],
+          'x-whiteboard': { comments, tags: ['kept'] },
+        }),
+      )
+      expect(result.ok, JSON.stringify(comments)).toBe(true)
+      if (result.ok) expect(result.value.tags).toEqual(['kept'])
+    }
+  })
+
   it('reads the same file without the key, extension and all', () => {
     const result = parseSpatial(
       JSON.stringify({
