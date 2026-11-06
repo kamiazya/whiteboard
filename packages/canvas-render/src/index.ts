@@ -54,6 +54,7 @@ export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
 export {
   edgeLabelPlacement,
   frameTitleObstacles,
+  type LabelObstacle,
   labelObstacles,
 } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'

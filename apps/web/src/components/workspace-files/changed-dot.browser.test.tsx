@@ -10,6 +10,7 @@ import { userEvent } from 'vitest/browser'
 // needs for the same reason.
 import '../../index.css'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { STORAGE_KEY as RECENT_KEY } from '../../lib/recent-documents.js'
 import { STORAGE_KEY } from '../../lib/seen-documents.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
@@ -26,6 +27,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   localStorage.removeItem(STORAGE_KEY)
+  // Opening a document also lands it in the Recent lane under this scope.
+  localStorage.removeItem(RECENT_KEY)
   document.documentElement.classList.remove('dark')
 })
 

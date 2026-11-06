@@ -22,7 +22,17 @@ import { COST_QUANTUM, inkAlongRects, quantize, selfRetracedInk, tunnelledInk } 
 // caller that needs the quantum reaches for this module's rules.
 export { COST_QUANTUM }
 
-export type SidePair = { readonly fromSide: EdgeSide; readonly toSide: EdgeSide }
+/**
+ * Which sides an edge leaves and arrives on, and whether a straight one
+ * steps round everything in its way at once (`around`) rather than bending
+ * at the corners of what blocks it — a choice only the side search can make,
+ * since only it sees which route crosses another edge.
+ */
+export type SidePair = {
+  readonly fromSide: EdgeSide
+  readonly toSide: EdgeSide
+  readonly around?: true
+}
 
 export function oppositeSide(side: EdgeSide): EdgeSide {
   switch (side) {

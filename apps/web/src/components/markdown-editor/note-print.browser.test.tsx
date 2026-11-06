@@ -9,9 +9,12 @@
  * not have.
  */
 import '../../index.css'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cdp } from 'vitest/browser'
+import { useReferenceSeams } from '../../hooks/use-reference-seams.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 import { requestNotePrint } from './note-print.js'
 
@@ -118,6 +121,159 @@ describe('a note printed from the browser', () => {
     await emulatePrint(false)
     await expect.poll(() => screen.queryByTestId('note-print-view')).toBeNull()
     expect(getComputedStyle(screen.getByTestId('app-chrome')).display).not.toBe('none')
+  })
+})
+
+const BOARD: SpatialCanvas = {
+  nodes: [textNode({ id: 'cloud', x: 0, y: 0, width: 160, height: 60, text: 'Cloud' })],
+  edges: [],
+}
+
+function ThemedNote({ theme }: { theme: 'light' | 'dark' }) {
+  return <EmbedNote theme={theme} value={'## The cycle\n\n![[board]]\n\nRain falls.'} />
+}
+
+function EmbedNote({
+  theme = 'light',
+  value,
+  canvas = BOARD,
+}: {
+  theme?: 'light' | 'dark'
+  value: string
+  canvas?: SpatialCanvas
+}) {
+  const references = useReferenceSeams({
+    body: value,
+    load: async () => ({ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'board', canvas }),
+  })
+  return (
+    <MarkdownEditor
+      theme={theme}
+      value={value}
+      onChange={() => {}}
+      initialViewMode="read"
+      previewDebounceMs={0}
+      references={references}
+    />
+  )
+}
+
+/** Every paint an SVG subtree names, as a sorted set: what a palette changes. */
+const paints = (root: Element | null): string[] =>
+  [
+    ...new Set(
+      [...(root?.querySelectorAll('[fill], [stroke]') ?? [])].flatMap((node) => [
+        node.getAttribute('fill') ?? '',
+        node.getAttribute('stroke') ?? '',
+      ]),
+    ),
+  ]
+    .filter((paint) => paint !== '')
+    .sort()
+
+async function printedPaints(): Promise<string[]> {
+  await emulatePrint(true)
+  await expect
+    .poll(() => document.querySelectorAll('[data-testid="note-print-band"] text').length)
+    .toBeGreaterThan(0)
+  const view = screen.getByTestId('note-print-view')
+  return paints(view)
+}
+
+const drawnEmbed = () => drawn()?.textContent?.includes('Cloud') === true
+
+describe('a note printed while the app is dark', () => {
+  it('prints its embedded board in the light palette', async () => {
+    const light = render(<ThemedNote theme="light" />)
+    await expect.poll(drawnEmbed).toBe(true)
+    const lightPrint = await printedPaints()
+    await emulatePrint(false)
+    light.unmount()
+
+    render(<ThemedNote theme="dark" />)
+    await expect.poll(drawnEmbed).toBe(true)
+    const darkScreen = paints(drawn())
+    // The palettes differ on screen, or the comparison below proves nothing.
+    expect(darkScreen).not.toEqual(lightPrint)
+
+    expect(await printedPaints()).toEqual(lightPrint)
+    await emulatePrint(false)
+    await expect.poll(() => screen.queryByTestId('note-print-view')).toBeNull()
+    await expect.poll(() => paints(drawn())).toEqual(darkScreen)
+  })
+})
+
+describe('a heading before an embed, and a block taller than a page', () => {
+  it('keeps a heading on the strip of the embed it introduces', async () => {
+    render(<EmbedNote value={'## The cycle\n\n![[board]]\n\n## After\n\nRain falls.'} />)
+    await expect.poll(drawnEmbed).toBe(true)
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(2)
+  })
+
+  // Paging itself is not observable here (emulated print media lays out one
+  // long page). What Chromium does with a strip taller than a page was
+  // measured with the headless shell's --print-to-pdf: it slices it across
+  // pages, every line kept, starting on a fresh page. So the strip only has
+  // to arrive whole and uncapped for that to hold.
+  it('draws a code block taller than a page whole, on one uncapped strip', async () => {
+    const code = Array.from({ length: 160 }, (_, i) => `line ${i + 1}`).join('\n')
+    render(<EmbedNote value={`## Long\n\n\`\`\`\n${code}\n\`\`\`\n\nEnd.`} />)
+    await expect.poll(() => drawn()?.textContent?.includes('line 160') === true).toBe(true)
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(2)
+    const [tall] = document.querySelectorAll<SVGSVGElement>('[data-testid="note-print-band"]')
+    const box = tall?.viewBox.baseVal
+    const rendered = tall?.getBoundingClientRect()
+    // Over 160 lines of code: three pages' worth on any paper.
+    expect(box?.height ?? 0).toBeGreaterThan(2400)
+    // Drawn at its own aspect, so nothing caps it to a page and clips the rest.
+    expect((rendered?.height ?? 0) / (rendered?.width ?? 1)).toBeCloseTo(
+      (box?.height ?? 0) / (box?.width ?? 1),
+      1,
+    )
+  })
+})
+
+const ARROW_BOARD: SpatialCanvas = {
+  nodes: [
+    textNode({ id: 'cloud', x: 0, y: 0, width: 160, height: 60, text: 'Cloud' }),
+    textNode({ id: 'rain', x: 0, y: 200, width: 160, height: 60, text: 'Rain' }),
+  ],
+  edges: [{ id: 'falls', from: { node: 'cloud' }, to: { node: 'rain' } }],
+}
+
+describe('an embedded board with arrows, printed', () => {
+  it('draws each strip with arrowheads defined inside that strip', async () => {
+    render(
+      <EmbedNote canvas={ARROW_BOARD} value={'## The cycle\n\n![[board]]\n\n## After\n\nOk.'} />,
+    )
+    await expect.poll(drawnEmbed).toBe(true)
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(2)
+    const refs: { band: Element; id: string }[] = []
+    for (const band of document.querySelectorAll('[data-testid="note-print-band"]')) {
+      for (const path of band.querySelectorAll('[marker-end]')) {
+        const id = /^url\(#(.+)\)$/.exec(path.getAttribute('marker-end') ?? '')?.[1]
+        if (id !== undefined) refs.push({ band, id })
+      }
+    }
+    // The arrow is present, or the check below asserts nothing.
+    expect(refs.length).toBeGreaterThan(0)
+    for (const { band, id } of refs) {
+      // `url(#id)` resolves to the FIRST element with that id in the page;
+      // the on-screen preview is hidden while printing, so a marker there
+      // draws no arrowhead on paper.
+      const marker = document.getElementById(id)
+      expect(marker !== null && band.contains(marker)).toBe(true)
+      expect(getComputedStyle(band).display).not.toBe('none')
+    }
   })
 })
 

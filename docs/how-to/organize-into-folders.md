@@ -90,8 +90,8 @@ so a copy of a document listed as "Untitled 3" is "Untitled 3 (copy)". The copy 
 "Duplicated _name_" notice offers **Open** for it.
 
 **Duplicate** copies the whole document, its comments and open proposals
-included. **Duplicate without comments**, next to it in a document's menu and
-in an open document's **More actions**, copies only what the document says:
+included. **Duplicate without comments**, next to it in a document's menu, in the
+preview beside the list, and in an open document's **More actions**, copies only what the document says:
 the copy starts with no comment threads and no proposals, and the original
 keeps every one of its own. The copy is named and placed the same way, and
 the notice reads "Duplicated _name_ without comments". Both
@@ -102,6 +102,13 @@ A daemon from before **Duplicate without comments** existed copies the
 comments anyway. The app notices and says so — "This daemon is too old to
 duplicate without comments — update it" — rather than reporting a clean
 copy; the copy that daemon made is left for you to keep or delete.
+
+When a duplicate fails, the page reads the list again, in the browser and on
+a daemon alike. A failure can come after the copy was already made — the
+answer lost on its way back — so when the copy is in the list, the page treats
+it as made: the copy is selected and the notice says "Duplicated …", with no
+failure shown. Only when no copy arrived does the page say the duplicate
+failed, above the list.
 
 A document that has documents under it (`plan` beside `plan/outline`) is
 listed as a folder too, but there is no folder of its own to name there, so

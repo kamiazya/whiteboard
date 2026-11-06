@@ -12,6 +12,8 @@ import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
+import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -49,6 +51,10 @@ describe('browser list landing (browser — real IndexedDB)', () => {
 
   afterEach(() => {
     cleanup()
+    // Opening a document records it in this device's Recent lane and
+    // changed-dot baseline, which live in localStorage and outlive the test.
+    localStorage.removeItem(RECENT_KEY)
+    localStorage.removeItem(SEEN_KEY)
   })
 
   it("'/' lands on the list; create, edit, Back, and the list shows the work", async () => {

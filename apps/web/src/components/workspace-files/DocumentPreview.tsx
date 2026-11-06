@@ -12,11 +12,16 @@
  */
 
 import { SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
 import { type MouseEvent, useEffect, useState } from 'react'
 import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { documentLabel } from '../../lib/document-label.js'
+import {
+  DUPLICATE_WITHOUT_COMMENTS,
+  WITHOUT_ANNOTATIONS,
+} from '../../lib/duplicate-without-comments.js'
 import { formatRelative } from '../../lib/format-relative.js'
 import { sceneLinkTarget } from '../../lib/scene-link.js'
 import { cn } from '../../lib/utils.js'
@@ -35,8 +40,14 @@ export interface DocumentPreviewProps {
   readonly findDocument?: (documentId: string) => WorkspaceDocumentEntry | undefined
   /** Opens the shared Rename dialog (name + path together). */
   readonly onRename?: (document: WorkspaceDocumentEntry) => void
-  /** Copy it. Absent means the pane offers no copy. */
-  readonly onDuplicate?: (document: WorkspaceDocumentEntry) => void
+  /**
+   * Copy it — whole, or without its comments when `request` says so, the
+   * same two verbs the card menu offers. Absent means the pane offers no copy.
+   */
+  readonly onDuplicate?: (
+    document: WorkspaceDocumentEntry,
+    request?: DuplicateDocumentRequest,
+  ) => void
   /**
    * ASK to delete it. The pane never performs the deletion: it is
    * destructive and takes the whole subtree, so the confirmation belongs to
@@ -75,6 +86,36 @@ function RenameLink({ label, onClick }: { readonly label: string; readonly onCli
     >
       {label}
     </button>
+  )
+}
+
+/** Both Duplicate verbs, worded as the card menu words them. */
+function DuplicateButtons({
+  document,
+  onDuplicate,
+}: {
+  document: WorkspaceDocumentEntry
+  onDuplicate: NonNullable<DocumentPreviewProps['onDuplicate']>
+}) {
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => onDuplicate(document)}
+        className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
+      >
+        <CopyPlus aria-hidden="true" className="size-3" />
+        Duplicate
+      </button>
+      <button
+        type="button"
+        onClick={() => onDuplicate(document, WITHOUT_ANNOTATIONS)}
+        className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
+      >
+        <CopyPlus aria-hidden="true" className="size-3" />
+        {DUPLICATE_WITHOUT_COMMENTS}
+      </button>
+    </>
   )
 }
 
@@ -213,14 +254,7 @@ export function DocumentPreview({
             </button>
           )}
           {onDuplicate !== undefined && (
-            <button
-              type="button"
-              onClick={() => onDuplicate(document)}
-              className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
-            >
-              <CopyPlus aria-hidden="true" className="size-3" />
-              Duplicate
-            </button>
+            <DuplicateButtons document={document} onDuplicate={onDuplicate} />
           )}
           {onDelete !== undefined && (
             <button

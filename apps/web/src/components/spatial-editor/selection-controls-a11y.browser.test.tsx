@@ -39,9 +39,7 @@ it('the controls around a node say which node they act on', async () => {
     .element(page.getByRole('button', { name: 'More actions for Draft' }))
     .toBeInTheDocument()
   await expect
-    .element(
-      page.getByRole('button', { name: 'Connect Draft to another node (from the right side)' }),
-    )
+    .element(page.getByRole('button', { name: 'Connect Draft to another node (right handle)' }))
     .toBeInTheDocument()
 })
 
@@ -49,7 +47,20 @@ it('a selected node adds one Tab stop each for resizing, connecting and its acti
   const container = await mountSelected()
   expect(tabStops(container)).toEqual([
     'Resize Draft, south-east',
-    'Connect Draft to another node (from the right side)',
+    'Connect Draft to another node (right handle)',
     'More actions for Draft',
   ])
+})
+
+// Every handle starts the same connection and the edge's sides are routed
+// from geometry, so a name promising "from the bottom side" would be false:
+// each says only where its handle is.
+it('names each connect handle by where it is, promising no side', async () => {
+  const container = await mountSelected()
+  const names = [...container.querySelectorAll('[data-testid^="connect-handle"]')].map((el) =>
+    el.getAttribute('aria-label'),
+  )
+  expect(names.sort()).toEqual(
+    ['bottom', 'left', 'right', 'top'].map((at) => `Connect Draft to another node (${at} handle)`),
+  )
 })

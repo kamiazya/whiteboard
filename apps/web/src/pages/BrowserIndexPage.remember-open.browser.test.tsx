@@ -29,7 +29,13 @@ describe('a document opened by address is remembered (browser — real IndexedDB
   beforeEach(async () => {
     await clearWhiteboardDb()
   })
-  afterEach(cleanup)
+  // Opening a document records it in this device's Recent lane and changed-dot
+  // baseline, which live in localStorage and outlive the test.
+  afterEach(() => {
+    cleanup()
+    localStorage.removeItem(RECENT_KEY)
+    localStorage.removeItem(SEEN_KEY)
+  })
 
   it('enters Recent with a seen baseline and shows no changed dot', async () => {
     const router = createMemoryRouter([{ path: '*', element: <App /> }], {

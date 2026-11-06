@@ -7,6 +7,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { STORAGE_KEY } from '../../lib/recent-documents.js'
+import { STORAGE_KEY as SEEN_KEY } from '../../lib/seen-documents.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
@@ -33,6 +34,8 @@ beforeEach(() => localStorage.removeItem(STORAGE_KEY))
 afterEach(() => {
   cleanup()
   localStorage.removeItem(STORAGE_KEY)
+  // Opening a document also records its changed-dot baseline under this scope.
+  localStorage.removeItem(SEEN_KEY)
 })
 
 function boardSnapshot(): Uint8Array {

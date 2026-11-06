@@ -1,3 +1,4 @@
+import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { type DocumentKind, SEARCH_QUERY_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import {
   CheckCircle2,
@@ -166,7 +167,10 @@ export function PanelPreview({
       onRename={onRename}
       {...(onDuplicateDocument === undefined
         ? {}
-        : { onDuplicate: (entry: WorkspaceDocumentEntry) => onDuplicateDocument(entry.path) })}
+        : {
+            onDuplicate: (entry: WorkspaceDocumentEntry, request?: DuplicateDocumentRequest) =>
+              onDuplicateDocument(entry.path, request),
+          })}
       {...(onRequestDelete === undefined
         ? {}
         : {

@@ -40,7 +40,7 @@ function openStream({ daemonFetch, daemonBaseUrl, streamSource }: Connection): {
 export function useFollowWorkspaceWrites(
   connection: Connection,
   workspaceId: string | null,
-  reload: (workspaceId: string, isStale: () => boolean) => Promise<void>,
+  reload: (workspaceId: string, isStale: () => boolean) => Promise<unknown>,
 ): void {
   const { daemonFetch, daemonBaseUrl, streamSource } = connection
   useEffect(() => {

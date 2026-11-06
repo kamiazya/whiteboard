@@ -80,7 +80,8 @@ const ARROW_KEYS = new Set(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'])
 /**
  * One connect handle per side. Every handle starts the SAME connecting
  * gesture — the committed edge's path is routed from geometry at layout
- * time, so the chosen side is ergonomic freedom, not persisted data. The
+ * time, so the chosen side is ergonomic freedom, not persisted data — and
+ * a handle's name says where IT is, never a side the edge would keep. The
  * right handle keeps the historical un-suffixed testid.
  */
 type SideSpec = {
@@ -247,7 +248,7 @@ export function SelectionOverlay({
               data-testid={side.kind === 'e' ? 'connect-handle' : `connect-handle-${side.kind}`}
               role="button"
               tabIndex={side.kind === CONNECT_TAB_STOP ? 0 : -1}
-              aria-label={`Connect ${subject} to another node (from the ${side.label} side)`}
+              aria-label={`Connect ${subject} to another node (${side.label} handle)`}
               cx={side.cx(box, connectHandleSize)}
               cy={side.cy(box, connectHandleSize)}
               r={connectHitRadius}

@@ -33,6 +33,7 @@ import {
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { documentLabel } from '../lib/document-label.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
+import { duplicateLanded } from '../lib/duplicate-landed.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -553,6 +554,30 @@ function useLauncherShortcut(onCreate: (kind: DocumentKind) => Promise<void>): v
   }, [params, setParams, onCreate])
 }
 
+/**
+ * Whether a refused browser duplicate made its copy all the same. A refusal
+ * after the write (reading the copy back) leaves one, and the panel announces
+ * it once the list shows it — so the list is asked, and a copy there is the
+ * outcome. A listing that refuses here proves nothing either way: the
+ * failure stands, and the load effect reports its own refusal.
+ */
+async function browserCopyLanded(
+  index: Parameters<typeof listBrowserDocuments>[0],
+  clock: Parameters<typeof listBrowserDocuments>[1],
+  before: readonly DocumentSnapshot[] | null,
+  sourcePath: string,
+): Promise<boolean> {
+  if (before === null) return false
+  const after = await listBrowserDocuments(index, clock).catch(() => null)
+  if (after === null) return false
+  const paths = new Set(before.map((row) => row.path))
+  return duplicateLanded(
+    paths,
+    after.map((row) => row.path),
+    sourcePath,
+  )
+}
+
 export function BrowserIndexPage({
   // Safe as a parameter default (unlike the clocks below): the shared
   // accessor memoizes, so every render sees the same identity. The concrete
@@ -614,27 +639,33 @@ export function BrowserIndexPage({
   // One at a time, for the reason the daemon row gives: two duplicates of the
   // same source race on the name the copy is given.
   const [duplicating, setDuplicating] = useState(false)
+  // Its own state rather than the list's `error`: the re-read that follows
+  // every duplicate clears that one, and would take this failure with it.
+  const [duplicateError, setDuplicateError] = useState<string | null>(null)
+  // SCOPE RESET — the failure names a document of the workspace it was about.
+  useEffect(() => setDuplicateError(null), [activeWorkspace])
   const handleDuplicate = useCallback(
     async (sourcePath: string, request?: DuplicateDocumentRequest) => {
       if (duplicating) return
       setDuplicating(true)
-      setError(null)
+      setDuplicateError(null)
       try {
         await duplicateBrowserDocument({ index, clock, sourcePath, ...request })
-        // ONLY the duplicate itself is under this catch. The bump is what
-        // re-reads the list (the load effect follows it) and that effect owns
-        // its own refusal — so a re-read that fails after the copy exists is
-        // reported as a list that could not be read, never as a duplicate
+      } catch {
+        if (!(await browserCopyLanded(index, clock, snapshots, sourcePath))) {
+          setDuplicateError('Failed to duplicate the document in this browser.')
+        }
+      } finally {
+        // Re-read either way, outside the catch on purpose: the load effect
+        // owns its own refusal, so a re-read that fails after the copy exists
+        // is reported as a list that could not be read, never as a duplicate
         // that did not happen. The wrong answer there invites a second press,
         // and the second copy is real too.
         setFilesRevision((n) => n + 1)
-      } catch {
-        setError('Failed to duplicate the document in this browser.')
-      } finally {
         setDuplicating(false)
       }
     },
-    [index, loro, clock, duplicating, setError, setFilesRevision],
+    [index, clock, duplicating, snapshots, setFilesRevision],
   )
 
   const { creating, handleCreate } = useBrowserCreate({
@@ -663,6 +694,11 @@ export function BrowserIndexPage({
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}
+        </div>
+      )}
+      {duplicateError && (
+        <div role="alert" className="mb-2 text-sm text-destructive">
+          {duplicateError}
         </div>
       )}
       <BrowserIndexBody

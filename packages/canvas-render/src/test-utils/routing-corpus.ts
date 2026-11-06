@@ -247,3 +247,113 @@ export function designerBoard(): { nodes: SpatialNode[]; edges: CanvasEdge[] } {
     ],
   }
 }
+
+/**
+ * Two frames of notes stacked one above the other, with connections running
+ * between them — the board a designer sketches on a tablet, where an edge
+ * between the frames has other notes and the lower frame's title in its way.
+ * Notes sit on a grid inside each frame, as people place them.
+ */
+export function stackedFramesBoard(): { nodes: SpatialNode[]; edges: CanvasEdge[] } {
+  const note = (id: string, x: number, y: number) => node(id, x, y, 160, 100)
+  return {
+    nodes: [
+      groupNode({ id: 'ideas', x: 0, y: 0, width: 640, height: 300, label: 'Ideas' }),
+      groupNode({
+        id: 'actions',
+        x: 0,
+        y: 380,
+        width: 640,
+        height: 300,
+        label: 'Next actions agreed with the team',
+      }),
+      note('a1', 40, 40),
+      note('a2', 240, 40),
+      note('a3', 440, 40),
+      note('a4', 40, 170),
+      note('a5', 240, 170),
+      note('a6', 440, 170),
+      note('b1', 40, 420),
+      note('b2', 240, 420),
+      note('b3', 440, 420),
+      note('b4', 40, 550),
+      note('b5', 240, 550),
+      note('b6', 440, 550),
+    ],
+    edges: [
+      { id: 'a1_b6', from: { node: 'a1' }, to: { node: 'b6' } },
+      { id: 'a2_b5', from: { node: 'a2' }, to: { node: 'b5' } },
+      { id: 'a3_b1', from: { node: 'a3' }, to: { node: 'b1' } },
+      { id: 'a5_b2', from: { node: 'a5' }, to: { node: 'b2' } },
+    ],
+  }
+}
+
+/**
+ * Generated boards of the `stackedFramesBoard` shape: two frames, one above
+ * the other, each holding notes on a 3x2 grid, with connections mostly
+ * running between the frames. Titles vary in length, because whether a
+ * route crosses one depends on how far it reaches along the frame's top.
+ */
+export function stackedFrameLayouts(count: number): readonly RoutingCase[] {
+  const random = styleRandomFromSeed(0xf4a3e5)
+  const int = (max: number) => Math.floor(random() * max)
+  const TITLES = ['Ideas', 'Actions', 'Open questions', 'Research findings from interviews', 'Q3']
+  const cases: RoutingCase[] = []
+  for (let i = 0; cases.length < count; i++) {
+    const gap = 60 + int(80)
+    const frameH = 300
+    const nodes: SpatialNode[] = [
+      groupNode({
+        id: 'top',
+        x: 0,
+        y: 0,
+        width: 640,
+        height: frameH,
+        label: TITLES[int(5)] ?? 'Ideas',
+      }),
+      groupNode({
+        id: 'bottom',
+        x: 0,
+        y: frameH + gap,
+        width: 640,
+        height: frameH,
+        label: TITLES[int(5)] ?? 'Actions',
+      }),
+    ]
+    const upper = placeNotes(nodes, 't', 0, int)
+    const lower = placeNotes(nodes, 'b', frameH + gap, int)
+    const edges: CanvasEdge[] = []
+    const seen = new Set<string>()
+    for (let e = 0; e < 3 + int(4); e++) {
+      const within = int(4) === 0
+      const pool = within ? (int(2) === 0 ? upper : lower) : undefined
+      const from = pool !== undefined ? pool[int(pool.length)] : upper[int(upper.length)]
+      const to = pool !== undefined ? pool[int(pool.length)] : lower[int(lower.length)]
+      if (from === undefined || to === undefined || from === to) continue
+      const key = `${from}->${to}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      edges.push({ id: `e_${from}_${to}`, from: { node: from }, to: { node: to } })
+    }
+    if (edges.length > 0) cases.push({ name: `stacked frames ${i}`, nodes, edges })
+  }
+  return cases
+}
+
+/** Notes on a frame's 3x2 grid from `top`, about three sites in four filled; answers their ids. */
+function placeNotes(
+  nodes: SpatialNode[],
+  prefix: string,
+  top: number,
+  int: (max: number) => number,
+): string[] {
+  const ids: string[] = []
+  for (let site = 0; site < 6; site++) {
+    if (int(4) === 0) continue
+    const id = `${prefix}${site}`
+    nodes.push(node(id, 40 + (site % 3) * 200, top + 40 + Math.floor(site / 3) * 130, 160, 100))
+    ids.push(id)
+  }
+  return ids
+}

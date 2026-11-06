@@ -5,7 +5,7 @@
 // travels with the pointer IS what lands.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -23,6 +23,25 @@ const start: SpatialCanvas = {
 }
 
 const { Host } = makeEditorHost({ initial: start })
+
+/** A note above a frame, and a member of it straight below the note. */
+const framed: SpatialCanvas = {
+  nodes: [
+    textNode({ id: 'a', x: 300, y: 250, width: 160, height: 80, text: 'above' }),
+    groupNode({
+      id: 'frame',
+      x: 260,
+      y: 410,
+      width: 400,
+      height: 180,
+      label: 'Next actions agreed with the team',
+    }),
+    textNode({ id: 'member', x: 300, y: 470, width: 160, height: 80, text: 'member' }),
+  ],
+  edges: [],
+}
+
+const { Host: FramedHost } = makeEditorHost({ initial: framed })
 
 async function beginConnectFromWest(container: HTMLElement) {
   const root = rootOf(container)
@@ -105,4 +124,19 @@ it('the preview line carries the committed arrowhead', async () => {
   expect(arrow).not.toBeNull()
   const corners = (arrow?.getAttribute('points') ?? '').split(' ').filter((p) => p.length > 0)
   expect(corners.length).toBe(3)
+})
+
+it('previews a route round a frame title, as the drop routes it', async () => {
+  const { container } = render(<FramedHost />)
+  const { root, rootRect } = await beginConnectFromWest(container)
+
+  // Hover the member: the straight drop to it runs through the title.
+  fireEvent.pointerMove(root, {
+    pointerId: 80,
+    clientX: rootRect.left + 380,
+    clientY: rootRect.top + 510,
+    buttons: 1,
+  })
+  // A straight drop is two points; the committed route steps round.
+  await expect.poll(() => previewPoints(container).length).toBeGreaterThan(2)
 })

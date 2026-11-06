@@ -6,44 +6,62 @@
  * and the long-press is a gesture nothing on screen announces: a stroke
  * drawn on a tablet in an earlier session could not be found a Delete for.
  * Drawn above the top-right corner of the selection's drawn paths, the place
- * the node chip sits relative to its box.
+ * the node chip sits relative to its box — unless one of the path's own
+ * handles is there, in which case `placePathChip` picks a clear corner.
  */
 import { hasCoarsePointer } from '../../lib/platform.js'
+import { type PathChipRect, placePathChip } from '../../lib/spatial/path-chip-placement.js'
 import { canvasToScreen, type Point, type Viewport } from '../../lib/spatial/viewport.js'
 import type { ContextMenuTarget } from './CanvasContextMenu.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX } from './use-editor-measurements.js'
+
+/** Half a handle's press target in screen pixels: `EdgeEndHandles`' finger target, else its marker. */
+const HANDLE_HALF_FINE_PX = 6
+const HANDLE_HALF_COARSE_PX = 22
 
 const TOOL_INK = 'var(--muted-foreground, oklch(0.556 0 0))'
 const TOOL_EDGE = 'var(--border, oklch(0.922 0 0))'
 
 export function PathMoreActions({
   paths,
+  handles,
+  visible,
   zoom,
   subject,
   onOpen,
 }: {
   /** The drawn paths of everything selected. */
   readonly paths: readonly (readonly Point[])[]
+  /** Where the selection's own handles sit, which the chip must not cover. */
+  readonly handles: readonly Point[]
+  /** The canvas area on screen, in canvas coordinates. */
+  readonly visible?: PathChipRect
   readonly zoom: number
   /** What the menu is about, as a screen reader should hear it ("this drawing"). */
   readonly subject: string
   /** Opens the menu, anchored at the chip, in canvas coordinates. */
   readonly onOpen: (anchor: Point) => void
 }) {
-  const points = paths.flat()
-  if (points.length < 2) return null
-  const right = Math.max(...points.map((p) => p.x))
-  const top = Math.min(...points.map((p) => p.y))
   const scale = Math.max(zoom, 0.01)
+  const coarse = hasCoarsePointer()
   // The node chip's sizes: a finger needs 44.
-  const size = (hasCoarsePointer() ? 44 : 24) / scale
+  const size = (coarse ? 44 : 24) / scale
+  const corner = placePathChip({
+    points: paths.flat(),
+    handles,
+    handleHalf: (coarse ? HANDLE_HALF_COARSE_PX : HANDLE_HALF_FINE_PX) / scale,
+    size,
+    gap: 6 / scale,
+    ...(visible === undefined ? {} : { visible }),
+  })
+  if (corner === undefined) return null
   return (
     <svg
       style={{ position: 'absolute', overflow: 'visible', left: 0, top: 0, pointerEvents: 'none' }}
     >
       <title>Selection actions</title>
       <DotsButton
-        box={{ x: right - size, y: top - size - 6 / scale, size }}
+        box={{ ...corner, size }}
         scale={scale}
         label={`More actions for ${subject}`}
         onOpen={onOpen}

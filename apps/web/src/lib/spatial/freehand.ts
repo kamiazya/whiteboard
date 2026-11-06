@@ -244,5 +244,10 @@ export function withPen(line: CanvasLine, pen: PenStyle): CanvasLine {
 export function isFreehandStroke(element: CanvasEdge | CanvasLine): boolean {
   if (!('kind' in element.from) || !('kind' in element.to)) return false
   if (element.from.kind !== 'point' || element.to.kind !== 'point') return false
+  return isCurvedLine(element)
+}
+
+/** Whether the renderer rounds this element's corners into a curve. */
+export function isCurvedLine(element: CanvasEdge | CanvasLine): boolean {
   return resolveEdgeOwnStyle(element).routing === 'curved'
 }

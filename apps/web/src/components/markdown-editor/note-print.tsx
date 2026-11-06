@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import { type PrintBlock, printBands } from '../../lib/print-bands.js'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { MarkdownViewMode } from './EditorToolbar.js'
+import { opensWithTitle } from './read-title.js'
 
 /**
  * Printing a note — the browser's own Print, or the document menu's
@@ -51,8 +52,13 @@ export function useNotePrintRequest(
   }, [setMode])
 }
 
-/** Whether print media applies now, following both the dialog and an emulated medium. */
-function usePrinting(): boolean {
+/**
+ * Whether print media applies now, following both the dialog and an emulated
+ * medium. The preview column asks too: a handout is drawn in the light
+ * palette whatever the screen's theme, so the body is re-rendered light for
+ * the length of the print and the strips are cut from that.
+ */
+export function usePrinting(): boolean {
   const [printing, setPrinting] = useState(false)
   useEffect(() => {
     // A realm with no media queries (jsdom) still has the print events.
@@ -75,13 +81,53 @@ function usePrinting(): boolean {
   return printing
 }
 
+/**
+ * Gives every id inside `copy` a per-copy suffix and points the copy's own
+ * `url(#…)` and `href="#…"` references at the renamed ids. A reference
+ * resolves to the FIRST element in the page with that id, which for an
+ * unrenamed copy is the on-screen preview's — hidden while printing, so a
+ * marker, mask or filter defined there draws nothing on paper. An `href` to
+ * an id the copy does not define (a document link) is left alone.
+ */
+function renameIds(copy: SVGSVGElement, suffix: string): void {
+  const renamed = new Map<string, string>()
+  for (const el of copy.querySelectorAll('[id]')) {
+    const next = `${el.id}-${suffix}`
+    renamed.set(el.id, next)
+    el.id = next
+  }
+  if (renamed.size === 0) return
+  for (const el of [copy, ...copy.querySelectorAll('*')]) {
+    for (const attr of [...el.attributes]) {
+      if (attr.name === 'id') continue
+      const value = renamedReference(attr, renamed)
+      if (value !== attr.value) el.setAttributeNS(attr.namespaceURI, attr.name, value)
+    }
+  }
+}
+
+const URL_REFERENCE = /url\(\s*(['"]?)#([^'")\s]+)\1\s*\)/g
+
+/** `attr`'s value with its references to ids in `renamed` pointed at the new ids. */
+function renamedReference(attr: Attr, renamed: ReadonlyMap<string, string>): string {
+  if (attr.localName === 'href' && attr.value.startsWith('#')) {
+    const local = renamed.get(attr.value.slice(1))
+    return local === undefined ? attr.value : `#${local}`
+  }
+  return attr.value.replace(URL_REFERENCE, (whole, quote: string, id: string) => {
+    const next = renamed.get(id)
+    return next === undefined ? whole : `url(${quote}#${next}${quote})`
+  })
+}
+
 /** Copies of the drawn body, one per band, each showing only its band. */
 function bandCopies(svg: SVGSVGElement, blocks: readonly PrintBlock[]): SVGSVGElement[] {
   const box = svg.viewBox.baseVal
   const width = box.width > 0 ? box.width : svg.getBoundingClientRect().width
   const height = box.height > 0 ? box.height : svg.getBoundingClientRect().height
-  return printBands(blocks, height).map((band) => {
+  return printBands(blocks, height).map((band, index) => {
     const copy = svg.cloneNode(true) as SVGSVGElement
+    renameIds(copy, `print-${index}`)
     copy.setAttribute('viewBox', `${box.x} ${box.y + band.top} ${width} ${band.bottom - band.top}`)
     copy.setAttribute('width', String(width))
     copy.setAttribute('height', String(band.bottom - band.top))
@@ -93,41 +139,46 @@ function bandCopies(svg: SVGSVGElement, blocks: readonly PrintBlock[]): SVGSVGEl
 }
 
 /**
- * The note as it prints. Rendered beside the preview, and empty until print
- * media applies; `hostRef` is the preview column holding the drawn body,
- * `blocksRef` its top-level blocks in the SVG's pixel space.
+ * The note as it prints. Rendered AFTER the preview, inside the same
+ * `[data-print-content]` column, and empty until print media applies;
+ * `blocksRef` holds the drawn body's top-level blocks in the SVG's pixel
+ * space. After, because layout effects run in tree order: the preview's
+ * re-render in the light palette has to be patched in before the strips are
+ * copied from it. The title is left out when `body` already opens with it.
  */
 export function NotePrintView({
+  printing,
   title,
-  hostRef,
+  body,
   blocksRef,
 }: {
+  printing: boolean
   title: string | undefined
-  hostRef: RefObject<HTMLElement | null>
+  body: string
   blocksRef: RefObject<readonly PrintBlock[]> | undefined
 }) {
-  const printing = usePrinting()
   const bandsRef = useRef<HTMLDivElement | null>(null)
   // A layout effect, so the strips are in place inside the same synchronous
   // commit `beforeprint` forces — before the browser takes the print layout.
   useLayoutEffect(() => {
     const target = bandsRef.current
     if (!printing || target === null) return
-    const svg = hostRef.current?.querySelector<SVGSVGElement>(
-      '[data-testid="markdown-preview-pane"] svg',
-    )
+    const svg = target
+      .closest('[data-print-content]')
+      ?.querySelector<SVGSVGElement>('[data-testid="markdown-preview-pane"] svg')
     if (svg === null || svg === undefined) return
     target.replaceChildren(...bandCopies(svg, blocksRef?.current ?? []))
     return () => target.replaceChildren()
-  }, [printing, hostRef, blocksRef])
+  }, [printing, blocksRef])
   if (!printing) return null
+  const printTitle = opensWithTitle(body, title) ? undefined : title
   return (
     <div
       data-testid="note-print-view"
       className="note-print-view"
       style={{ fill: editorTextFill('light') }}
     >
-      {title !== undefined && title !== '' && <h1>{title}</h1>}
+      {printTitle !== undefined && printTitle !== '' && <h1>{printTitle}</h1>}
       <div ref={bandsRef} />
     </div>
   )

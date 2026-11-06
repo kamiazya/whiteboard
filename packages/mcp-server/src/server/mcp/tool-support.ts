@@ -1,5 +1,11 @@
 import { describeThrown } from '@kamiazya/whiteboard-model'
-import type { McpServer } from '@modelcontextprotocol/server'
+import type {
+  CallToolResult,
+  McpServer,
+  ServerContext,
+  StandardSchemaWithJSON,
+  ToolAnnotations,
+} from '@modelcontextprotocol/server'
 import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { getTracer, MCP_ATTR } from '../observability/tracing.js'
@@ -24,6 +30,21 @@ export function structuredJsonResult<T extends object>(result: T) {
   }
 }
 
+// Mirrors the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
+// into the deprecated `_meta["ui/resourceUri"]` key too, matching what the
+// ext-apps package's own registerAppTool does — a host built before
+// ui.resourceUri was standardized only reads the legacy key.
+function withLegacyResourceUri(
+  meta: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  const uiMeta = meta?.ui
+  const resourceUri =
+    uiMeta !== null && typeof uiMeta === 'object' && 'resourceUri' in uiMeta
+      ? (uiMeta as { resourceUri?: unknown }).resourceUri
+      : undefined
+  return typeof resourceUri === 'string' ? { ...meta, [RESOURCE_URI_META_KEY]: resourceUri } : meta
+}
+
 // Binds a registered tool's handler return shape to its declared outputSchema.
 // When outputSchema is given, the handler must hand structuredContent whose
 // shape matches z.infer<O>; drift becomes a compile error instead of a
@@ -32,18 +53,29 @@ export type ToolHandlerReturn<O extends z.ZodTypeAny | undefined> = O extends z.
   ?
       | {
           structuredContent: z.infer<O>
-          content: ReadonlyArray<{ type: 'text'; text: string } | Record<string, unknown>>
+          content: CallToolResult['content']
           isError?: false
         }
       | {
           isError: true
-          content: ReadonlyArray<{ type: 'text'; text: string } | Record<string, unknown>>
+          content: CallToolResult['content']
         }
   : {
-      content: ReadonlyArray<{ type: 'text'; text: string } | Record<string, unknown>>
+      content: CallToolResult['content']
       structuredContent?: unknown
       isError?: boolean
     }
+
+// The config the SDK's registerTool takes, read off its first (Standard
+// Schema) overload so `_meta`, `annotations` and the rest are the SDK's own
+// field types rather than a copy of them. Matching both overloads is what
+// selects the first: `Parameters<>` alone reads only the last, deprecated one.
+type SdkToolConfig = McpServer['registerTool'] extends {
+  (name: string, config: infer C, cb: infer _Cb): unknown
+  (...args: infer _Legacy): unknown
+}
+  ? C
+  : never
 
 // A tool's inputSchema is either a raw shape (`{ field: z.string() }`,
 // auto-wrapped by the SDK's z.object()) or a whole Zod schema — the latter
@@ -73,21 +105,19 @@ export function registerToolWithAnnotations<
 >(
   server: McpServer,
   name: string,
-  config: {
-    description?: string
+  config: Pick<SdkToolConfig, 'description' | '_meta'> & {
     // Required: the SDK calls a schemaless tool as `(ctx)`, not `(args, ctx)`.
     inputSchema: I
     outputSchema?: O
-    // MCP Apps (SEP-1865) tool-linkage metadata, e.g.
+    // `_meta` carries MCP Apps (SEP-1865) tool linkage, e.g.
     // `{ ui: { resourceUri: 'ui://whiteboard/canvas-view' } }` — see
     // mcp-apps.ts for the resource this links against. A `ui.resourceUri`
-    // here is additionally mirrored into the deprecated
+    // there is additionally mirrored into the deprecated
     // `["ui/resourceUri"]` key below before reaching server.registerTool.
-    _meta?: Record<string, unknown>
   },
   handler: (
     args: InferToolArgs<I>,
-    extra: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
+    extra: ServerContext,
   ) => Promise<ToolHandlerReturn<O>> | ToolHandlerReturn<O>,
 ): unknown {
   const profile = TOOL_PROFILES[name]
@@ -95,28 +125,15 @@ export function registerToolWithAnnotations<
     // Fall back to the destructive profile and emit a warning so it is noticed.
     getLogger('mcp').warning({ name }, 'tool has no annotations profile; announced as destructive')
   }
-  const annotations = profile
+  const annotations: ToolAnnotations = profile
     ? { ...profile.profile, title: profile.title }
     : { ...UNPROFILED_TOOL_PROFILE, title: name }
-  // Mirror the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
-  // into the deprecated `_meta["ui/resourceUri"]` key too, matching what
-  // the ext-apps package's own registerAppTool does — a host built before
-  // ui.resourceUri was standardized only reads the legacy key.
-  const uiMeta = config._meta?.ui
-  const resourceUri =
-    uiMeta !== null && typeof uiMeta === 'object' && 'resourceUri' in uiMeta
-      ? (uiMeta as { resourceUri?: unknown }).resourceUri
-      : undefined
-  const meta =
-    typeof resourceUri === 'string'
-      ? { ...config._meta, [RESOURCE_URI_META_KEY]: resourceUri }
-      : config._meta
   // Wrap the handler so thrown errors become isError responses, and so
   // every tool call is observable as a single MCP-semconv span.
   const tracedHandler = (
     args: InferToolArgs<I>,
-    extra: Parameters<typeof handler>[1],
-  ): Promise<unknown> => {
+    extra: ServerContext,
+  ): Promise<ToolHandlerReturn<O>> => {
     // The JSON-RPC id joins this span to the client's own request log. Read
     // defensively: an attribute must never be the reason a tool call fails.
     const rawRequestId = extra?.mcpReq?.id
@@ -151,12 +168,14 @@ export function registerToolWithAnnotations<
   // Kept separate so the span finishes BEFORE we rewrite the throw into a
   // structured response — otherwise the error would still mark the span
   // ERROR but the user would see a "successful" tool call.
-  const outerHandler = async (
-    args: InferToolArgs<I>,
-    extra: Parameters<typeof handler>[1],
-  ): Promise<unknown> => {
+  //
+  // The SDK parses `args` against `inputSchema` before calling this, but its
+  // callback type reads the parsed value through StandardSchemaWithJSON's
+  // InferOutput, which cannot see the generic `I` — so the parsed value is
+  // re-bound to InferToolArgs<I> here, the one place that relation is known.
+  const outerHandler = async (args: unknown, extra: ServerContext): Promise<CallToolResult> => {
     try {
-      return await tracedHandler(args, extra)
+      return await tracedHandler(args as InferToolArgs<I>, extra)
     } catch (err) {
       const message = toolErrorText(name, err)
       return {
@@ -165,7 +184,14 @@ export function registerToolWithAnnotations<
       }
     }
   }
-  return (
-    server.registerTool as unknown as (n: string, c: object, h: typeof outerHandler) => unknown
-  )(name, { ...config, _meta: meta, annotations }, outerHandler)
+  const sdkConfig: SdkToolConfig = {
+    ...config,
+    // A raw shape is the SDK's deprecated overload's form; both overloads
+    // share one implementation, which wraps a raw shape in z.object() itself,
+    // so only the first overload's declared type is narrower than it accepts.
+    inputSchema: config.inputSchema as StandardSchemaWithJSON,
+    _meta: withLegacyResourceUri(config._meta),
+    annotations,
+  }
+  return server.registerTool(name, sdkConfig, outerHandler)
 }

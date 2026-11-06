@@ -19,6 +19,8 @@ import {
   readMarkdownBody,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { parentOfPath } from '@kamiazya/whiteboard-model'
+import { DisplayNameTakenError } from '@kamiazya/whiteboard-ports'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -93,6 +95,21 @@ class Model {
   byPath(path: string): ModelDoc | undefined {
     for (const d of this.docs.values()) if (d.path === path) return d
     return undefined
+  }
+
+  /**
+   * Whether a document placed at `path` under `name` would show a name a
+   * sibling already shows — which both keepers refuse on create, rename and
+   * move. Only named documents can collide here: `name` never equals a path
+   * segment.
+   */
+  nameTakenBeside(path: string, name: string, except: readonly string[] = []): boolean {
+    const folder = parentOfPath(path)
+    for (const d of this.docs.values()) {
+      if (except.includes(d.id) || d.name !== name) continue
+      if (parentOfPath(d.path) === folder) return true
+    }
+    return false
   }
 
   movedBy(from: string): ModelDoc[] {
@@ -188,6 +205,10 @@ describe('browser rename follow parity', () => {
         switch (cmd.t) {
           case 'create': {
             if (model.byPath(P(cmd.path)) !== undefined) break
+            if (cmd.name !== undefined && model.nameTakenBeside(P(cmd.path), NAME)) {
+              await expect(create(P(cmd.path), NAME)).rejects.toThrow(DisplayNameTakenError)
+              break
+            }
             const id = await create(P(cmd.path), cmd.name === undefined ? undefined : NAME)
             slots[cmd.slot] = id
             model.docs.set(id, {
@@ -223,6 +244,13 @@ describe('browser rename follow parity', () => {
               return holder !== undefined && !movedPaths.includes(holder.path)
             })
             if (collides) break
+            const movedIds = model.movedBy(from).map((d) => d.id)
+            if (doc.name !== undefined && model.nameTakenBeside(to, doc.name, movedIds)) {
+              await expect(source.renameDocumentPath(from, to)).rejects.toThrow(
+                DisplayNameTakenError,
+              )
+              break
+            }
             await source.renameDocumentPath(from, to)
             model.followMove(from, to)
             break
@@ -234,6 +262,12 @@ describe('browser rename follow parity', () => {
             const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
             const entry = entries.find((e) => e.documentId === doc.id)
             if (entry === undefined) break
+            if (cmd.name !== undefined && model.nameTakenBeside(doc.path, NAME, [doc.id])) {
+              await expect(source.setDocumentName(entry, NAME)).rejects.toThrow(
+                DisplayNameTakenError,
+              )
+              break
+            }
             await source.setDocumentName(entry, cmd.name === undefined ? undefined : NAME)
             if (cmd.name === undefined) delete doc.name
             else doc.name = NAME

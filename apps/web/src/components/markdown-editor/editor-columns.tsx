@@ -3,10 +3,10 @@ import type { MouseEvent as ReactMouseEvent, RefObject } from 'react'
 import { cn } from '../../lib/utils.js'
 import { DocumentHeader, type DocumentHeaderProps } from './DocumentHeader.js'
 import type { MarkdownViewMode } from './EditorToolbar.js'
-import { NotePrintView } from './note-print.js'
+import { NotePrintView, usePrinting } from './note-print.js'
 import { PreviewPane } from './PreviewPane.js'
 import { previewColumnMaxWidth } from './preview-width.js'
-import { opensWithTitle, shownBody } from './read-title.js'
+import { shownBody } from './read-title.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 
 // The two COLUMNS the editor lays side by side, and the marker that sits in
@@ -194,7 +194,7 @@ export function PreviewColumn({
   onToggleTask: Parameters<typeof PreviewPane>[0]['onToggleTask']
 }) {
   const drawnBody = shownBody(value, mode, meta !== undefined, title)
-  const printTitle = opensWithTitle(drawnBody, title) ? undefined : title
+  const printing = usePrinting()
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: delegation for the SVG's native <a> elements — a focused anchor's Enter already dispatches the click this handler receives, so the keyboard path lives on the anchor, not this container
     // biome-ignore lint/a11y/useKeyWithClickEvents: same rationale — the interactive element is the anchor inside, which is natively keyboard-activatable
@@ -205,7 +205,6 @@ export function PreviewColumn({
       className="min-w-0 flex-1 overflow-auto"
       onClick={onPreviewClick}
     >
-      <NotePrintView title={printTitle} hostRef={scrollRef} blocksRef={blocksRef} />
       <div
         ref={innerRef}
         className="note-print-screen relative mx-auto px-6 py-8"
@@ -226,7 +225,7 @@ export function PreviewColumn({
             value={drawnBody}
             maxWidth={previewWidth}
             measure={measure}
-            theme={theme}
+            theme={printing ? 'light' : theme}
             references={references}
             renderMath={renderMath}
             renderDiagram={renderDiagram}
@@ -237,6 +236,7 @@ export function PreviewColumn({
           />
         )}
       </div>
+      <NotePrintView printing={printing} title={title} body={drawnBody} blocksRef={blocksRef} />
     </div>
   )
 }

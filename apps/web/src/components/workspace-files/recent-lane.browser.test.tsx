@@ -1,164 +1,57 @@
-// The recently-opened lane end to end in a REAL browser: a real click on a
-// real card, a real localStorage write, and the lane on the next mount. jsdom
-// covers the lane's own rendering; what only a browser proves is that the two
-// halves meet through storage the panel actually writes to.
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, onTestFinished } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { useState } from 'react'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { STORAGE_KEY } from '../../lib/recent-documents.js'
-import { forgetSearchQueries } from '../../lib/search-query-memory.js'
-import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
-import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
+import '../../index.css'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { RecentLane } from './RecentLane.js'
 
-const few = [
-  { documentId: 'd1', path: 'meeting-notes', name: 'Meeting notes', kind: 'markdown' as const },
-  { documentId: 'd2', path: 'roadmap', name: 'Roadmap', kind: 'spatial' as const },
-]
-// More documents than any grid row holds, so the lane has something to short-cut.
-const entries = [
-  ...few,
-  ...Array.from({ length: 10 }, (_, i) => ({
-    documentId: `f${i}`,
-    path: `filler-${i}`,
-    name: `Filler ${i}`,
-    kind: 'markdown' as const,
-  })),
+// Real browser: what is under test is what a fine pointer and the keyboard do
+// to a tile, and whether its selected mark is actually painted — the tiles
+// sit in their own sideways scroller, which clips whatever reaches past it.
+
+afterEach(cleanup)
+
+const documents: WorkspaceDocumentEntry[] = [
+  { documentId: 'd1', path: 'login', name: 'Login', kind: 'markdown' },
+  { documentId: 'd2', path: 'board', name: 'Board', kind: 'spatial' },
 ]
 
-beforeEach(() => localStorage.removeItem(STORAGE_KEY))
-afterEach(() => {
-  cleanup()
-  forgetSearchQueries()
-  localStorage.removeItem(STORAGE_KEY)
-})
-
-// No default parameter: a default fires on an EXPLICIT undefined too, so
-// `renderPanel(undefined)` would have rendered the 'space' workspace and the
-// no-scope case would have tested nothing.
-function renderPanel(memoryScope: string | undefined, listed: typeof entries = entries) {
-  const source = fakeFilesSource({ listDocuments: async () => listed })
-  render(
-    <WorkspaceFilesPanel source={source} memoryScope={memoryScope} onOpenDocument={() => {}} />,
+function Host({ onOpen }: { onOpen: (entry: WorkspaceDocumentEntry) => void }) {
+  const [selected, setSelected] = useState<string | undefined>(undefined)
+  return (
+    <RecentLane
+      documents={documents}
+      recentIds={['d2', 'd1']}
+      selectedPath={selected}
+      onSelect={(entry) => setSelected(entry.path)}
+      onOpen={onOpen}
+    />
   )
 }
 
-async function openCard(name: string) {
-  // Scoped to the grid: once the lane exists it holds the same names, so an
-  // unscoped query is ambiguous exactly when the feature is working.
-  const grid = await screen.findByTestId('folder-contents')
-  const title = await within(grid).findByText(name)
-  const card = title.closest('button')
-  if (card === null) throw new Error(`no card for ${name}`)
-  // A fine pointer selects on click and opens on double-click, which is the
-  // desktop half of the wayfinding contract slice 1 established.
-  await userEvent.dblClick(card)
-}
+describe('a Recent tile on a fine pointer', () => {
+  it('selects on a click with its ring unclipped, then Enter opens it', async () => {
+    const onOpen = vi.fn()
+    render(<Host onOpen={onOpen} />)
+    const tile = () => screen.getByRole('button', { name: /Board/ })
 
-const lane = () => screen.queryByTestId('recent-lane')
+    await userEvent.click(tile())
+    expect(tile().getAttribute('aria-current')).toBe('true')
+    expect(onOpen).not.toHaveBeenCalled()
 
-describe('recently opened lane', () => {
-  it('is absent until something has been opened', async () => {
-    renderPanel('space')
-    await screen.findByText('Meeting notes')
+    // The selected ring is a 1px shadow OUTSIDE the border; the scroller has
+    // to leave room for it, or the top and bottom of the mark are cut off.
+    const style = getComputedStyle(tile())
+    expect(style.boxShadow).not.toBe('none')
+    const scroller = tile().parentElement as HTMLElement
+    const inner = scroller.getBoundingClientRect()
+    const box = tile().getBoundingClientRect()
+    expect(box.top - inner.top).toBeGreaterThanOrEqual(1)
+    expect(inner.bottom - box.bottom).toBeGreaterThanOrEqual(1)
+    expect(box.left - inner.left).toBeGreaterThanOrEqual(1)
 
-    expect(lane()).toBeNull()
-  })
-
-  it('carries what was opened to the next mount, newest first', async () => {
-    renderPanel('space')
-    await openCard('Meeting notes')
-    await openCard('Roadmap')
-    cleanup()
-
-    renderPanel('space')
-    const strip = await screen.findByTestId('recent-lane')
-    await waitFor(() =>
-      expect(
-        within(strip)
-          .getAllByRole('button')
-          .map((each) => each.textContent),
-      ).toEqual(['Roadmap', 'Meeting notes']),
-    )
-  })
-
-  it('keeps one entry per document however often it is reopened', async () => {
-    renderPanel('space')
-    await openCard('Roadmap')
-    await openCard('Meeting notes')
-    await openCard('Roadmap')
-    cleanup()
-
-    renderPanel('space')
-    const strip = await screen.findByTestId('recent-lane')
-    await waitFor(() => expect(within(strip).getAllByRole('button')).toHaveLength(2))
-    expect(within(strip).getAllByRole('button')[0]?.textContent).toBe('Roadmap')
-  })
-
-  it("stays out of the way while every document fits in the grid's first row", async () => {
-    const only = few.slice(1)
-    renderPanel('space', only)
-    await openCard('Roadmap')
-    cleanup()
-
-    renderPanel('space', only)
-    await screen.findByText('Roadmap')
-    expect(lane()).toBeNull()
-  })
-
-  it('belongs to the workspace root, not to a folder opened below it', async () => {
-    renderPanel('space', [
-      ...entries,
-      { documentId: 's1', path: 'design/spec', name: 'Spec', kind: 'markdown' },
-    ])
-    await openCard('Roadmap')
-    await screen.findByTestId('recent-lane')
-
-    const grid = screen.getByTestId('folder-contents')
-    await userEvent.click(within(grid).getByRole('button', { name: 'Open folder design' }))
-    await within(screen.getByTestId('folder-contents')).findByText('Spec')
-    expect(lane()).toBeNull()
-  })
-
-  it('steps aside in the one-column list, which already lists everything', async () => {
-    // The column choice is remembered; left behind it would put every later test in one column.
-    onTestFinished(() => localStorage.removeItem('whiteboard.document-browser.columns.v1'))
-    renderPanel('space')
-    await openCard('Roadmap')
-    await screen.findByTestId('recent-lane')
-
-    await userEvent.click(screen.getByRole('button', { name: 'One column' }))
-
-    await waitFor(() => expect(lane()).toBeNull())
-    expect(screen.getByRole('navigation', { name: 'Folder path' })).toBeTruthy()
-  })
-
-  it('steps aside while a search is showing its own answer', async () => {
-    renderPanel('space')
-    await openCard('Roadmap')
-    await screen.findByTestId('recent-lane')
-
-    await userEvent.fill(screen.getByLabelText('Search documents'), 'meeting')
-
-    await waitFor(() => expect(lane()).toBeNull())
-  })
-
-  it('does not carry one workspace lane into another', async () => {
-    renderPanel('alpha')
-    await openCard('Roadmap')
-    cleanup()
-
-    renderPanel('beta')
-    await screen.findByText('Meeting notes')
-    expect(lane()).toBeNull()
-  })
-
-  it('stays absent for a host that passes no memory scope', async () => {
-    renderPanel(undefined)
-    await openCard('Roadmap')
-    cleanup()
-
-    renderPanel(undefined)
-    await screen.findByText('Meeting notes')
-    expect(lane()).toBeNull()
+    await userEvent.keyboard('{Enter}')
+    expect(onOpen).toHaveBeenCalledExactlyOnceWith(documents[1])
   })
 })

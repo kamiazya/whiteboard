@@ -63,4 +63,9 @@ it('dragging from the LEFT handle onto another node creates an edge', async () =
   )
 
   expect(latest.kinds).toContain('connect-nodes')
+  // The handle chose nothing about the edge: its sides stay routed, which is
+  // why the handles' names promise no side.
+  const [edge] = latest.canvas.edges
+  expect(edge?.from).toEqual({ node: 'a' })
+  expect(edge?.to).toEqual({ node: 'b' })
 })
