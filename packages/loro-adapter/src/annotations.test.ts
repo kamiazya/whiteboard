@@ -3,15 +3,22 @@
  * (ADR-0026 step 2): the plane is stored one level above content, so reading
  * it must not require the document to have a canvas.
  *
- * `readSpatialCanvas` could never serve that — it is the canvas reader, and a
- * markdown document's threads were unreachable rather than absent.
+ * It is also where the plane BEFORE threads is refused. Nothing reads the
+ * retired `comments` map any more, so a record still holding rows there would
+ * otherwise read as having no conversation at all — the comments lost with no
+ * word said, which owner decision 27 rules out.
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { readAnnotations } from './annotations.js'
+import {
+  holdsRetiredCommentPlane,
+  RetiredCommentPlaneError,
+  readAnnotations,
+} from './annotations.js'
 import { writeCommentThread } from './comment-threads.js'
 import { writeMarkdownBody } from './markdown-body.js'
+import { createWorkspaceDocumentAtPath, documentContainers } from './workspace-tree.js'
 
 const THREAD: CommentThread = {
   id: 't1',
@@ -21,11 +28,13 @@ const THREAD: CommentThread = {
   messages: [{ id: 'm1', body: 'tighten this' }],
 }
 
-/** Seeds the legacy `comments` map the way the pre-threads writer did. */
-function seedLegacy(doc: LoroDoc, comment: Record<string, unknown>): void {
+/** Seeds the retired `comments` map the way the pre-threads writer did. */
+function seedRetired(doc: LoroDoc, comment: Record<string, unknown>): void {
   doc.getMap('comments').set(String(comment.id), comment)
   doc.commit()
 }
+
+const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 describe('readAnnotations', () => {
   it('reads a document that has no canvas at all', () => {
@@ -37,40 +46,40 @@ describe('readAnnotations', () => {
     expect(readAnnotations(doc)).toEqual([THREAD])
   })
 
-  it('lifts an un-migrated legacy comment into the one-message thread it always was', () => {
-    const doc = new LoroDoc()
-    seedLegacy(doc, { id: 'c1', x: 10, y: 20, text: 'from before threads' })
-    const [thread, ...rest] = readAnnotations(doc)
-    expect(rest).toEqual([])
-    expect(thread?.id).toBe('c1')
-    expect(thread?.anchor).toEqual({ kind: 'spatial', x: 10, y: 20 })
-    expect(thread?.messages.map((m) => m.body)).toEqual(['from before threads'])
-  })
-
-  it('prefers the thread over a legacy row that shares its id', () => {
-    // The migration clears the legacy map, but a replica that merged an old
-    // peer's write can hold both. The thread is the newer shape and the one
-    // a reply was written into.
+  it('refuses a document still holding comments in the retired plane, rather than reading none', () => {
     const doc = new LoroDoc()
     writeCommentThread(doc, THREAD)
-    seedLegacy(doc, { id: 't1', x: 0, y: 0, text: 'stale' })
+    seedRetired(doc, { id: 'c1', x: 10, y: 20, text: 'from before threads' })
+    expect(holdsRetiredCommentPlane(doc)).toBe(true)
+    expect(() => readAnnotations(doc)).toThrow(RetiredCommentPlaneError)
+    expect(() => readAnnotations(doc)).toThrow(/1 comment .*older version/)
+  })
+
+  it('reads a document whose retired plane is there and empty', () => {
+    // Every document created before the plane retired had it pre-attached,
+    // so an EMPTY one is the common case and holds nothing to lose.
+    const doc = new LoroDoc()
+    doc.getMap('comments')
+    writeCommentThread(doc, THREAD)
+    expect(holdsRetiredCommentPlane(doc)).toBe(false)
     expect(readAnnotations(doc)).toEqual([THREAD])
   })
 
-  it('puts threads before legacy rows, because that order decides bubble placement', () => {
-    // `composeComments` fans a later bubble out around an earlier one, so the
-    // sequence is behaviour, not presentation. Ids are chosen so that sorting
-    // the union would interleave them and change what the canvas draws.
+  it('looks at a workspace document without opening the retired container on it', () => {
+    // A tree node opens a container by WRITING it, and a read that wrote
+    // would clear the undo manager's redo stack — so the probe must not.
     const doc = new LoroDoc()
-    writeCommentThread(doc, { ...THREAD, id: 'z-thread' })
-    seedLegacy(doc, { id: 'a-legacy', x: 1, y: 1, text: 'older shape' })
-    expect(readAnnotations(doc).map((t) => t.id)).toEqual(['z-thread', 'a-legacy'])
-  })
-
-  it('drops a legacy row the schema rejects rather than the rows beside it', () => {
-    const doc = new LoroDoc()
-    seedLegacy(doc, { id: 'bad', x: 'not a number', text: 'unreadable' })
-    seedLegacy(doc, { id: 'good', x: 5, y: 6, text: 'readable' })
-    expect(readAnnotations(doc).map((t) => t.id)).toEqual(['good'])
+    createWorkspaceDocumentAtPath(doc, {
+      path: 'board',
+      documentId: DOCUMENT_ID,
+      kind: 'spatial',
+      name: 'Board',
+    })
+    doc.commit()
+    const before = doc.oplogVersion().encode()
+    expect(holdsRetiredCommentPlane(documentContainers(doc, DOCUMENT_ID))).toBe(false)
+    expect(readAnnotations(documentContainers(doc, DOCUMENT_ID))).toEqual([])
+    doc.commit()
+    expect(doc.oplogVersion().encode()).toEqual(before)
   })
 })

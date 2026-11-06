@@ -10,7 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { setCommentThreadStatus, writeThreadInto, writeThreadMessage } from './comment-threads.js'
-import { COMMENTS_KEY, type DocumentContainers } from './containers.js'
+import type { DocumentContainers } from './containers.js'
 import { setProposedChangeStatusInto, writeProposal } from './proposals.js'
 import {
   importWithinTextLimits,
@@ -112,27 +112,6 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
         setCommentThreadStatus(doc, 't0', 'resolved')
         writeThreadInto(doc, thread('extra'))
       })
-      expect(judged(base, update)).toBeNull()
-    })
-
-    it('counts a legacy comment row as the thread every reader lifts it into', () => {
-      const base = stored(placement, threads(DOCUMENT_MAX_OPEN_THREADS))
-      const legacy = { id: 'c1', x: 0, y: 0, text: 'from an old peer' }
-      const update = updateFrom(placement, base, (doc) =>
-        doc.getMap(COMMENTS_KEY).set('c1', legacy),
-      )
-      expect(judged(base, update)).toMatchObject({
-        shape: 'open-threads',
-        count: DOCUMENT_MAX_OPEN_THREADS + 1,
-      })
-    })
-
-    it('does not count a resolved legacy comment row', () => {
-      const base = stored(placement, threads(DOCUMENT_MAX_OPEN_THREADS))
-      const legacy = { id: 'c1', x: 0, y: 0, text: 'from an old peer', resolved: true }
-      const update = updateFrom(placement, base, (doc) =>
-        doc.getMap(COMMENTS_KEY).set('c1', legacy),
-      )
       expect(judged(base, update)).toBeNull()
     })
 

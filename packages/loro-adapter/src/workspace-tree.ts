@@ -27,7 +27,7 @@ import {
   documentKindSchema,
   isSelfOrDescendant,
 } from '@kamiazya/whiteboard-model'
-import { LoroDoc, type LoroMap, LoroMovableList, type LoroTreeNode, type TreeID } from 'loro-crdt'
+import { LoroDoc, LoroMap, LoroMovableList, type LoroTreeNode, type TreeID } from 'loro-crdt'
 import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
 import { contentDigestOf } from './content-digest.js'
@@ -1086,6 +1086,10 @@ export function documentContainers(doc: LoroDoc, documentId: string): DocumentCo
   return {
     getMap: (key) => nodeRoots(live().data).map(key),
     getText: (key) => nodeRoots(live().data).text(key),
+    peekMap: (key) => {
+      const held = live().data.get(key)
+      return held instanceof LoroMap ? held : undefined
+    },
     commit: () => doc.commit(),
   }
 }

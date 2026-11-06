@@ -1,13 +1,11 @@
 /**
  * What happens when two replicas open the SAME thread container first.
  *
- * A thread's key is not minted by the writer — it is the caller's comment id
- * (`writeCommentInto` passes it straight through, and `deleteCommentInto`
- * looks the thread up by it). So two keepers can genuinely reach
- * `writeThreadInto` with the same key having never seen each other's: the
- * daemon and this browser's replica each running
- * `migrateCanvasCommentsToThreads` over the same legacy comment, or each
- * applying a `comment.add` for one id.
+ * A thread's key is not always minted by the writer — `thread.add` and the
+ * editor's own create pass a caller's id straight through. So two keepers
+ * can genuinely reach `writeThreadInto` with the same key having never seen
+ * each other's: the daemon and this browser's replica each opening a thread
+ * under one caller-chosen id.
  *
  * Under `getOrCreateContainer` that is silent loss. Measured on loro-crdt
  * 1.13.6: two peers writing distinct entries into a container they each

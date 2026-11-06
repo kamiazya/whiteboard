@@ -1,6 +1,9 @@
-export { readAnnotations } from './annotations.js'
 export {
-  migrateCanvasCommentsToThreads,
+  holdsRetiredCommentPlane,
+  RetiredCommentPlaneError,
+  readAnnotations,
+} from './annotations.js'
+export {
   moveCommentThread,
   readCommentThreads,
   setCommentThreadStatus,

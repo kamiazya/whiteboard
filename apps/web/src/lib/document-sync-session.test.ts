@@ -727,6 +727,25 @@ describe('createDocumentSyncSession', () => {
     unsubscribe()
   })
 
+  it('refuses a record still holding comments in the retired plane, rather than showing it without them', () => {
+    // No reader serves the plane before threads (owner decision 27): read as
+    // usual, the board would open with every comment silently gone.
+    const backend = makeFakeBackend()
+    const deps = makeDeps()
+    const session = createDocumentSyncSession(backend, deps)
+    session.connect()
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, twoNodeCanvas())
+    doc.getMap('comments').set('c1', { id: 'c1', x: 0, y: 0, text: 'from before threads' })
+    doc.commit()
+
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(deps.onBackendError).toHaveBeenCalledWith('retired-comment-plane')
+    expect(deps.onStatusChange).toHaveBeenCalledWith('error')
+    expect(session.getCanvas().nodes).toEqual([])
+  })
+
   it('a thread command is published at once, before the debounced commit lands', async () => {
     // The layer is a plane beside the canvas, so no canvas value carries a
     // new pin: the session publishes the conversations the command leaves

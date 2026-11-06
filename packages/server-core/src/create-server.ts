@@ -1,4 +1,8 @@
-import { ReservedKeyWriteError, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  ReservedKeyWriteError,
+  RetiredCommentPlaneError,
+  SYNC_TEXT_BREACH_CODES,
+} from '@kamiazya/whiteboard-loro-adapter'
 import {
   DisplayNameTakenError,
   DocumentHasDescendantsError,
@@ -593,6 +597,10 @@ const REFUSALS: readonly Refusal[] = [
   // A value holding a key named `__proto__`, refused by the writer before
   // its first op, in the code a sync update carrying one is refused with.
   refusalOf(ReservedKeyWriteError, (err: ReservedKeyWriteError) => err.code, 400),
+  // A document still holding comments in the plane before threads, which no
+  // reader serves (owner decision 27): a conflict with what is stored, and
+  // the message says the data is untouched.
+  refusalOf(RetiredCommentPlaneError, (err: RetiredCommentPlaneError) => err.code, 409),
   // Two display names for one document, which no server choice could settle.
   refusalOf(DocumentNameConflictError, 'document_name_conflict', 400),
   // Deleting a document takes the documents below it only when the caller

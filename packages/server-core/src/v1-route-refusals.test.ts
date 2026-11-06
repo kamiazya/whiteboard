@@ -1,4 +1,4 @@
-import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
+import { ReservedKeyWriteError, RetiredCommentPlaneError } from '@kamiazya/whiteboard-loro-adapter'
 import { SEARCH_QUERY_MAX_CHARS, TAGS_PER_ELEMENT_MAX } from '@kamiazya/whiteboard-model'
 import {
   DocumentNotFoundError,
@@ -272,6 +272,11 @@ describe('DELETE /api/v1 document whose index raises a refusal of its own', () =
       error: () => new ReservedKeyWriteError('facets'),
       status: 400,
       code: 'reserved_map_key',
+    },
+    {
+      error: () => new RetiredCommentPlaneError(2),
+      status: 409,
+      code: 'retired_comment_plane',
     },
   ])('answers $code as $status JSON', async ({ error, status, code }) => {
     const store = new FakeDocumentStore()

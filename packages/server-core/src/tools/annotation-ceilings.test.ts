@@ -6,6 +6,7 @@
  * past its bound, counting what the document already holds open.
  */
 import {
+  RetiredCommentPlaneError,
   writeCommentThread,
   writeDocumentKind,
   writeMarkdownBody,
@@ -113,18 +114,15 @@ describe('wb_thread_edit holds the open-thread ceiling', () => {
     ).rejects.toThrow(pastThreads)
   })
 
-  test('resolving a legacy comment frees no room, since it has no status to set', async () => {
-    // A comment no writer has migrated into the threads plane: read as an
-    // open thread, and left open by a resolve, which finds no thread to write.
-    const legacy = (doc: LoroDoc) =>
+  test('a document still holding comments in the retired plane is refused, not read as having none', async () => {
+    // The flat plane before threads has no reader left. Answered as "no
+    // conversations" every comment in it would be gone without a word.
+    const retired = (doc: LoroDoc) =>
       doc.getMap('comments').set('legacy', { id: 'legacy', x: 0, y: 0, text: 'still here?' })
-    const deps = await seeded('markdown', threads(DOCUMENT_MAX_OPEN_THREADS - 1), legacy)
+    const deps = await seeded('markdown', threads(1), retired)
     await expect(
-      createThreadEditTool(deps).execute({
-        ...target,
-        ops: [{ op: 'thread.resolve', threadId: 'legacy' }, openThread],
-      }),
-    ).rejects.toThrow(pastThreads)
+      createThreadEditTool(deps).execute({ ...target, ops: [openThread] }),
+    ).rejects.toBeInstanceOf(RetiredCommentPlaneError)
   })
 
   test('resolving one in the same batch makes room for another', async () => {
