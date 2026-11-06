@@ -9,9 +9,12 @@
  * not have.
  */
 import '../../index.css'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cdp } from 'vitest/browser'
+import { useReferenceSeams } from '../../hooks/use-reference-seams.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 import { requestNotePrint } from './note-print.js'
 
@@ -118,6 +121,74 @@ describe('a note printed from the browser', () => {
     await emulatePrint(false)
     await expect.poll(() => screen.queryByTestId('note-print-view')).toBeNull()
     expect(getComputedStyle(screen.getByTestId('app-chrome')).display).not.toBe('none')
+  })
+})
+
+const BOARD: SpatialCanvas = {
+  nodes: [textNode({ id: 'cloud', x: 0, y: 0, width: 160, height: 60, text: 'Cloud' })],
+  edges: [],
+}
+
+function ThemedNote({ theme }: { theme: 'light' | 'dark' }) {
+  const value = '## The cycle\n\n![[board]]\n\nRain falls.'
+  const references = useReferenceSeams({
+    body: value,
+    load: async () => ({ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'board', canvas: BOARD }),
+  })
+  return (
+    <MarkdownEditor
+      theme={theme}
+      value={value}
+      onChange={() => {}}
+      initialViewMode="read"
+      previewDebounceMs={0}
+      references={references}
+    />
+  )
+}
+
+/** Every paint an SVG subtree names, as a sorted set: what a palette changes. */
+const paints = (root: Element | null): string[] =>
+  [
+    ...new Set(
+      [...(root?.querySelectorAll('[fill], [stroke]') ?? [])].flatMap((node) => [
+        node.getAttribute('fill') ?? '',
+        node.getAttribute('stroke') ?? '',
+      ]),
+    ),
+  ]
+    .filter((paint) => paint !== '')
+    .sort()
+
+async function printedPaints(): Promise<string[]> {
+  await emulatePrint(true)
+  await expect
+    .poll(() => document.querySelectorAll('[data-testid="note-print-band"] text').length)
+    .toBeGreaterThan(0)
+  const view = screen.getByTestId('note-print-view')
+  return paints(view)
+}
+
+const drawnEmbed = () => drawn()?.textContent?.includes('Cloud') === true
+
+describe('a note printed while the app is dark', () => {
+  it('prints its embedded board in the light palette', async () => {
+    const light = render(<ThemedNote theme="light" />)
+    await expect.poll(drawnEmbed).toBe(true)
+    const lightPrint = await printedPaints()
+    await emulatePrint(false)
+    light.unmount()
+
+    render(<ThemedNote theme="dark" />)
+    await expect.poll(drawnEmbed).toBe(true)
+    const darkScreen = paints(drawn())
+    // The palettes differ on screen, or the comparison below proves nothing.
+    expect(darkScreen).not.toEqual(lightPrint)
+
+    expect(await printedPaints()).toEqual(lightPrint)
+    await emulatePrint(false)
+    await expect.poll(() => screen.queryByTestId('note-print-view')).toBeNull()
+    await expect.poll(() => paints(drawn())).toEqual(darkScreen)
   })
 })
 

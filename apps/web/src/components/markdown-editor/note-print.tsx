@@ -51,8 +51,13 @@ export function useNotePrintRequest(
   }, [setMode])
 }
 
-/** Whether print media applies now, following both the dialog and an emulated medium. */
-function usePrinting(): boolean {
+/**
+ * Whether print media applies now, following both the dialog and an emulated
+ * medium. The preview column asks too: a handout is drawn in the light
+ * palette whatever the screen's theme, so the body is re-rendered light for
+ * the length of the print and the strips are cut from that.
+ */
+export function usePrinting(): boolean {
   const [printing, setPrinting] = useState(false)
   useEffect(() => {
     // A realm with no media queries (jsdom) still has the print events.
@@ -93,20 +98,23 @@ function bandCopies(svg: SVGSVGElement, blocks: readonly PrintBlock[]): SVGSVGEl
 }
 
 /**
- * The note as it prints. Rendered beside the preview, and empty until print
+ * The note as it prints. Rendered AFTER the preview, and empty until print
  * media applies; `hostRef` is the preview column holding the drawn body,
- * `blocksRef` its top-level blocks in the SVG's pixel space.
+ * `blocksRef` its top-level blocks in the SVG's pixel space. After, because
+ * layout effects run in tree order: the preview's re-render in the light
+ * palette has to be patched in before the strips are copied from it.
  */
 export function NotePrintView({
+  printing,
   title,
   hostRef,
   blocksRef,
 }: {
+  printing: boolean
   title: string | undefined
   hostRef: RefObject<HTMLElement | null>
   blocksRef: RefObject<readonly PrintBlock[]> | undefined
 }) {
-  const printing = usePrinting()
   const bandsRef = useRef<HTMLDivElement | null>(null)
   // A layout effect, so the strips are in place inside the same synchronous
   // commit `beforeprint` forces — before the browser takes the print layout.
