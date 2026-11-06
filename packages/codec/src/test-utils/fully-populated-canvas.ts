@@ -85,19 +85,6 @@ export function fullyPopulatedCanvas(): SpatialCanvas {
         to: { kind: 'node', node: 'n1', side: 'bottom' },
       },
     ],
-    comments: [
-      {
-        id: 'c1',
-        x: 0,
-        y: 0,
-        text: 't',
-        author: 'human:a',
-        createdAt: '2026-01-01T00:00:00.000Z',
-        targetNodeId: 'n1',
-        resolved: false,
-      },
-      { id: 'c2', x: 1, y: 1, text: 'u', targetEdgeId: 'e1' },
-    ],
     facets: { 'visual.theme/v0': { theme: 'sketch' } },
     tags: ['phase:design'],
   }

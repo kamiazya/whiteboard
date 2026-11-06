@@ -179,21 +179,6 @@ export const OCIF_PROJECTION: Readonly<Record<string, FieldProjection>> = {
   'lines[].bends[].x': EXTENSION,
   'lines[].bends[].y': EXTENSION,
 
-  // ── The annotation layer (ADR-0024) ──────────────────────────────────
-  // OCIF has no comment concept, so these ride an extension of ours — but
-  // the format REQUIRES a conforming reader to preserve it, so unlike JSON
-  // Canvas's strict mode there is no mode in which the conversation is
-  // dropped on the way through a foreign tool.
-  'comments[].id': EXTENSION,
-  'comments[].x': EXTENSION,
-  'comments[].y': EXTENSION,
-  'comments[].text': EXTENSION,
-  'comments[].author': EXTENSION,
-  'comments[].createdAt': EXTENSION,
-  'comments[].targetNodeId': EXTENSION,
-  'comments[].targetEdgeId': EXTENSION,
-  'comments[].resolved': EXTENSION,
-
   // ── Facets (ADR-0013) ────────────────────────────────────────────────
   // OCIF's `data[]` IS this mechanism: a namespaced, schema'd, versioned
   // attribute group with a `type`, declared in the file's own `schemas`

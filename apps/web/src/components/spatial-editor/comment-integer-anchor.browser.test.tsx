@@ -6,13 +6,17 @@
 // therefore round what `screenToCanvas` hands them. Real browser at a
 // non-integer zoom, which the default-zoom tests never exercise.
 
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import {
+  type CommentBoard,
+  createdComments,
+  makeEditorHost,
+} from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -24,7 +28,7 @@ const FREE: CanvasComment = {
   text: 'free note',
   createdAt: '2026-09-02T00:00:00.000Z',
 }
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [FREE],
@@ -68,11 +72,11 @@ it('a pin dragged at a fractional zoom commits an integer anchor', async () => {
   fireEvent.pointerUp(root, { pointerId: 1, clientX: r.left + 719, clientY: r.top + 534 })
 
   await vi.waitFor(() =>
-    expect(latest.commands.filter((c) => c.kind === 'move-comment')).toHaveLength(1),
+    expect(latest.commands.filter((c) => c.kind === 'move-thread')).toHaveLength(1),
   )
-  const move = latest.commands.find((c) => c.kind === 'move-comment')
-  expect(move?.kind === 'move-comment' && Number.isInteger(move.x)).toBe(true)
-  expect(move?.kind === 'move-comment' && Number.isInteger(move.y)).toBe(true)
+  const move = latest.commands.find((c) => c.kind === 'move-thread')
+  expect(move?.kind === 'move-thread' && Number.isInteger(move.x)).toBe(true)
+  expect(move?.kind === 'move-thread' && Number.isInteger(move.y)).toBe(true)
 })
 
 it('Comment here at a fractional zoom commits an integer anchor', async () => {
@@ -87,10 +91,8 @@ it('Comment here at a fractional zoom commits an integer anchor', async () => {
   await userEvent.keyboard('here')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
-  await vi.waitFor(() =>
-    expect(latest.commands.filter((c) => c.kind === 'create-comment')).toHaveLength(1),
-  )
-  const created = latest.commands.find((c) => c.kind === 'create-comment')
-  expect(created?.kind === 'create-comment' && Number.isInteger(created.comment.x)).toBe(true)
-  expect(created?.kind === 'create-comment' && Number.isInteger(created.comment.y)).toBe(true)
+  await vi.waitFor(() => expect(createdComments(latest.commands)).toHaveLength(1))
+  const [created] = createdComments(latest.commands)
+  expect(Number.isInteger(created?.x)).toBe(true)
+  expect(Number.isInteger(created?.y)).toBe(true)
 })

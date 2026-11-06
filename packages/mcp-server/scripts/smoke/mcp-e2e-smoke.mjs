@@ -1990,24 +1990,20 @@ async function everyThreadAnchorReachesTheProjection({ documentId, viewed }) {
     throw new Error(`thread.add on the canvas did not report: ${JSON.stringify(anchoredOnCanvas)}`)
   }
   const afterAnchors = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
-  const projected = afterAnchors.scene['x-whiteboard']?.comments ?? []
-  const edgeProjected = projected.find((c) => c.id === 'smoke-edge-thread')
-  const passageProjected = projected.find((c) => c.id === 'smoke-passage-thread')
-  if (edgeProjected?.targetEdgeId !== 'link') {
-    throw new Error(`an edge thread did not project with its edge: ${JSON.stringify(projected)}`)
+  // The scene is the board alone (ADR-0026 decision 1b): the widget draws
+  // every pin from the threads beside it, so each anchor has to arrive whole.
+  if (afterAnchors.scene['x-whiteboard']?.comments !== undefined) {
+    throw new Error('canvas_view carried the conversation inside the scene')
   }
-  if (passageProjected?.targetNodeId !== 'lockable') {
-    throw new Error(`a node passage did not project onto its node: ${JSON.stringify(projected)}`)
+  const anchorOf = (id) => (afterAnchors.threads ?? []).find((t) => t.id === id)?.anchor
+  if (anchorOf('smoke-edge-thread')?.edgeId !== 'link') {
+    throw new Error(`an edge thread lost its edge: ${JSON.stringify(afterAnchors.threads)}`)
   }
-  // A region projects to its top-right corner; the document arm projects to
-  // nothing (the panel is its only surface) — and every thread reaches the
-  // widget whole through `threads`, which is what draws the outline.
-  const regionProjected = projected.find((c) => c.id === 'smoke-region-thread')
-  if (regionProjected?.x !== 800 || regionProjected?.y !== 600) {
-    throw new Error(`a region did not project to its corner: ${JSON.stringify(regionProjected)}`)
+  if (anchorOf('smoke-passage-thread')?.nodeId !== 'lockable') {
+    throw new Error(`a node passage lost its node: ${JSON.stringify(afterAnchors.threads)}`)
   }
-  if (projected.some((c) => c.id === 'smoke-document-thread')) {
-    throw new Error('a document-level thread projected onto the canvas')
+  if (anchorOf('smoke-region-thread')?.width !== 200) {
+    throw new Error(`a region lost its rect: ${JSON.stringify(afterAnchors.threads)}`)
   }
   const widgetThreadIds = (afterAnchors.threads ?? []).map((t) => t.id)
   for (const id of ['smoke-set-thread', 'smoke-region-thread', 'smoke-document-thread']) {

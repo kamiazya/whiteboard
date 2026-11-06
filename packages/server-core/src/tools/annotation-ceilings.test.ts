@@ -145,7 +145,7 @@ describe('wb_thread_edit holds the open-thread ceiling', () => {
  * resolved ones included, and neither count is bounded.
  */
 describe("wb_thread_edit's ceiling check, what it costs", () => {
-  test('reads the layer three times for 200 resolve and reopen ops, not once per op', async () => {
+  test('reads the layer twice for 200 resolve and reopen ops, not once per op', async () => {
     const deps = await seeded('markdown', (doc) => {
       for (let t = 0; t < 50; t += 1) {
         writeCommentThread(doc, {
@@ -165,8 +165,10 @@ describe("wb_thread_edit's ceiling check, what it costs", () => {
     try {
       const result = await createThreadEditTool(deps).execute({ ...target, ops })
       expect(result.threads).toHaveLength(50)
-      // A fixed number of whole reads of 1000 messages, whatever the op count.
-      expect(parses).toHaveBeenCalledTimes(3_000)
+      // A fixed number of whole reads of 1000 messages, whatever the op count:
+      // at load and for the answer. A third went with the canvas read's
+      // projection of the layer, which a document read no longer makes.
+      expect(parses).toHaveBeenCalledTimes(2_000)
     } finally {
       parses.mockRestore()
     }

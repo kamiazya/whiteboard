@@ -256,6 +256,15 @@ describe('spatialCanvasSchema', () => {
   const node1 = { ...baseGeometry, id: 'n1', ...text('a') }
   const node2 = { ...baseGeometry, id: 'n2', ...text('b') }
 
+  it('refuses a comments key: a conversation is the annotation layer, not part of the canvas', () => {
+    const result = spatialCanvasSchema.safeParse({
+      nodes: [node1],
+      edges: [],
+      comments: [{ id: 'c1', x: 0, y: 0, text: 'hi' }],
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('accepts distinct node and edge ids', () => {
     const result = spatialCanvasSchema.safeParse({
       nodes: [node1, node2],

@@ -32,7 +32,8 @@ Open the document, then **More actions → Export…**:
   diagrams are not included, and Print / Save as PDF makes a handout with them. A screen
   reader hears the same words once. For a handout, print the note instead (below).
 - **Save as JSON Canvas (.canvas)** — on a canvas: the JSON Canvas source, including the
-  `x-whiteboard` extension.
+  `x-whiteboard` extension. The comments are not in it: a conversation stays with the
+  document in its workspace, and no file carries it.
 
 The browser downloads the file, and a notice confirms it ("Saved as Markdown"). An image on
 a canvas is saved as an `asset:` reference to the workspace's file, not as its pixels, so
@@ -72,3 +73,7 @@ list. Accepted: `.md`, `.markdown` (a note), `.canvas`, `.json` (a canvas, JSON 
   notice saying so; nothing is created and the page stays where it is.
 - Images a canvas references by `asset:` are not carried by the file, so they appear only
   when the workspace already holds them.
+- A `.canvas` file an older version saved with its comments inside (`x-whiteboard.comments`)
+  is refused, and the reason names that key: remove it from the file to import the board.
+  Comments are never read out of a file, so importing one without the refusal would have
+  dropped them without a word.

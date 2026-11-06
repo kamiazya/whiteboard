@@ -196,22 +196,28 @@ export function CommentComposeOverlay({
             })
           } else if (text.length > 0) {
             const { point, targetNodeId, targetEdgeId } = compose
+            const id = (createId ?? defaultCreateId)()
+            const createdAt = new Date().toISOString()
             applyResult({
               state: { kind: 'idle' },
               commands: [
                 {
-                  kind: 'create-comment',
-                  comment: {
-                    id: (createId ?? defaultCreateId)(),
-                    // Rounded for the same reason the pin drag rounds:
-                    // an integer by schema, and a fractional anchor
-                    // is dropped on read rather than rejected here.
-                    x: Math.round(point.x),
-                    y: Math.round(point.y),
-                    text,
-                    createdAt: new Date().toISOString(),
-                    ...(targetNodeId === undefined ? {} : { targetNodeId }),
-                    ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
+                  kind: 'create-thread',
+                  thread: {
+                    id,
+                    anchor: {
+                      kind: 'spatial',
+                      // Rounded for the same reason the pin drag rounds:
+                      // an integer by schema, and a fractional anchor
+                      // is dropped on read rather than rejected here.
+                      x: Math.round(point.x),
+                      y: Math.round(point.y),
+                      ...(targetNodeId === undefined ? {} : { nodeId: targetNodeId }),
+                      ...(targetEdgeId === undefined ? {} : { edgeId: targetEdgeId }),
+                    },
+                    status: 'open',
+                    createdAt,
+                    messages: [{ id: `${id}-m1`, body: text, createdAt }],
                   },
                 } as const,
               ],

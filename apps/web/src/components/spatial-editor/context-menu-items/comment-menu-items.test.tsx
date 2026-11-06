@@ -16,7 +16,7 @@ describe('commentMenuItems', () => {
     expect(items.map(labelOf)).toEqual(['Resolve'])
   })
 
-  it('a resolved comment offers Reopen instead, and either verb writes set-comment-resolved', () => {
+  it('a resolved comment offers Reopen instead, and either verb writes set-thread-status', () => {
     const applyResult = vi.fn()
     const resolved: CanvasComment = { id: 'c1', x: 10, y: 20, text: 'note', resolved: true }
     const items = commentMenuItems({ comment: resolved, applyResult })
@@ -24,7 +24,7 @@ describe('commentMenuItems', () => {
     ;(items[0] as { onSelect: () => void }).onSelect()
     expect(applyResult).toHaveBeenCalledWith({
       state: { kind: 'idle' },
-      commands: [{ kind: 'set-comment-resolved', id: 'c1', resolved: false }],
+      commands: [{ kind: 'set-thread-status', threadId: 'c1', status: 'open' }],
     })
   })
 })

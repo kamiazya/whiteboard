@@ -480,3 +480,46 @@ export function canvasCommentFromThread(
     ...(thread.status === 'resolved' ? { resolved: true } : {}),
   }
 }
+
+/**
+ * Every thread that has a place on this canvas, as the comment its pin is
+ * drawn from — the render-time view of the annotation layer, in the order the
+ * threads arrive (that order decides which bubble yields to which). A thread
+ * with no place on the board (the document, a note's passage, a node that is
+ * gone) has no pin and is the panel's to show.
+ *
+ * The FIRST node with an id answers for it, as a scan from the front would:
+ * two nodes can hold one id only in a record a broken writer left.
+ */
+export function canvasCommentsOf(
+  threads: readonly CommentThread[],
+  nodes: readonly CommentTargetNode[],
+): CanvasComment[] {
+  if (threads.length === 0) return []
+  const byId = new Map<string, CommentTargetNode>()
+  for (const node of nodes) if (!byId.has(node.id)) byId.set(node.id, node)
+  const nodeById = (id: string) => byId.get(id)
+  const comments: CanvasComment[] = []
+  for (const thread of threads) {
+    const projected = canvasCommentFromThread(thread, nodeById)
+    if (projected !== undefined) comments.push(projected)
+  }
+  return comments
+}
+
+/**
+ * Where a thread's anchor goes when its pin is dragged to `point`: a point,
+ * a node or an edge anchor keeps what it names and moves its point (for a
+ * node or an edge, the fallback a pin draws at once its subject is gone). A
+ * node set, a region and a passage have no point a pin drag could honestly
+ * move — the pin stands at the corner of a box or a node — so they keep the
+ * anchor they have, and so does a document thread, which has no pin at all.
+ */
+export function movedAnchor(
+  anchor: AnnotationAnchor,
+  point: { readonly x: number; readonly y: number },
+): AnnotationAnchor {
+  if (anchor.kind !== 'spatial') return anchor
+  if (anchor.nodeIds !== undefined || anchor.width !== undefined) return anchor
+  return { ...anchor, x: point.x, y: point.y }
+}

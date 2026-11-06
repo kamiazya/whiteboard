@@ -99,10 +99,9 @@ export interface RenderCanvasCoreOptions {
   /** canvas-render's `commentLayer`; absent draws the annotation layer, as the editor needs. */
   readonly commentLayer?: boolean
   /**
-   * The document's conversations, for the passages inside text nodes
-   * (canvas-render's `threads`): a highlight behind the quoted words. Pins
-   * still come from the canvas's own projection, which is what the
-   * optimistic state holds.
+   * The document's conversations (canvas-render's `threads`): every pin and
+   * bubble, and a highlight behind the words a passage quotes. The canvas
+   * carries none of them — the layer is a plane beside it.
    */
   readonly threads?: readonly CommentThread[]
   /**

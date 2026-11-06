@@ -1,11 +1,10 @@
 import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
-import { documentIdSchema, nodeIdInputSchema, nodeIdSchema } from './ids.js'
+import { documentIdSchema, nodeIdSchema } from './ids.js'
 import { integerSchema } from './integer.js'
-import { commentMessageInputSchema } from './label-and-comment-text.js'
 import { nodeResourceSchema } from './node-resource.js'
 import { storedTagsSchema } from './tags.js'
-import { okfActorInputSchema, okfActorSchema, okfTimestampSchema } from './trust.js'
+import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
 // six numbered presets or a 6-digit hex string.
@@ -276,8 +275,8 @@ export type EdgeEnd = z.infer<typeof edgeEndSchema>
  * never both and never neither, and `side` means nothing on a point — so the
  * flat shape would need a refinement to say what the type can say itself.
  * That is not only taste: `linePatchFieldsSchema` is `canvasLineSchema
- * .partial()`, and zod refuses `.partial()` over a refined object (the same
- * wall `canvasCommentDraftSchema` hit), so a refinement here would have to be
+ * .partial()`, and zod refuses `.partial()` over a refined object, so a
+ * refinement here would have to be
  * paid for with a second hand-written schema beside this one — the exact
  * drift this package exists to prevent. Measured again for this split: a
  * `discriminatedUnion` has no `.omit()`/`.partial()` AT ALL in zod v4, which
@@ -560,7 +559,10 @@ export const edgeRoutingSchema = z.object({
 })
 
 /**
- * A comment pinned to the canvas — the annotation layer (ADR-0024).
+ * A comment as the canvas DRAWS it: one pin and one bubble. Not stored and not
+ * part of the canvas — the annotation layer is the document's threads plane
+ * (ADR-0026), and this is the render-time view of a thread that has a place on
+ * the board (`canvasCommentFromThread`).
  *
  * `x`/`y` is the ANCHOR: the point the comment is about, in JSON Canvas
  * integer canvas coordinates. It is deliberately not a bounding box — where
@@ -605,30 +607,6 @@ export const canvasCommentSchema = canvasCommentFieldsSchema.refine(namesOneTarg
 
 export type CanvasComment = z.infer<typeof canvasCommentSchema>
 
-/**
- * A comment as a caller DRAFTS it: the id may be minted and the anchor
- * point derived from the node it names, so both are optional here. Declared
- * beside the stored shape because zod refuses `.partial()` over a refined
- * object, and the one-target rule has to hold for a draft too — a draft that
- * escaped it would be stored, become a thread naming two objects, and vanish.
- *
- * Strict here and not on the stored shape: a draft is a WRITE, which must
- * refuse a key it does not know, while the stored comments are read through
- * `.catch(undefined)` — a field a newer writer added must not make every
- * comment in the document unreadable.
- */
-export const canvasCommentDraftSchema = canvasCommentFieldsSchema
-  // The id, the text and the author are held to their write bounds here and
-  // not on the stored shape, which must still read a comment written before them.
-  .extend({
-    id: nodeIdInputSchema,
-    text: commentMessageInputSchema,
-    author: okfActorInputSchema.optional(),
-  })
-  .strict()
-  .partial({ id: true, x: true, y: true })
-  .refine(namesOneTarget, ONE_TARGET)
-
 export const spatialCanvasSchema = z
   .object({
     // JSON Canvas 1.0 declares both top-level arrays optional; a bare `{}`
@@ -639,7 +617,7 @@ export const spatialCanvasSchema = z
     /**
      * The ink an edge is not (ADR-0038 decision 2).
      *
-     * OPTIONAL, like `comments` and unlike `nodes`/`edges`, and the reason is
+     * OPTIONAL, unlike `nodes`/`edges`, and the reason is
      * measured rather than aesthetic: `.default([])` makes the field required
      * on the OUTPUT type, and this repo builds 925 canvas literals across 295
      * files. Adding `lines: []` to every one of them would be the largest part
@@ -650,19 +628,6 @@ export const spatialCanvasSchema = z
      * object.
      */
     lines: z.array(canvasLineSchema).optional(),
-    /**
-     * The comment annotation layer (ADR-0024).
-     *
-     * NOTE the STORAGE shape differs from this one: the Loro bridge keeps each
-     * comment under its own key in a dedicated plane (per-comment CRDT merge,
-     * so two peers commenting concurrently both survive) and projects them
-     * back here — see loro-adapter's `readSpatialCanvas`.
-     *
-     * `.catch(undefined)` per BUCKET rather than over the canvas: a malformed
-     * comment must cost the comments, not the facets beside them, and neither
-     * may cost the board.
-     */
-    comments: z.array(canvasCommentSchema).optional().catch(undefined),
     /** Canvas-target facets (ADR-0013 decision 5). */
     facets: facetsFieldSchema,
     /**

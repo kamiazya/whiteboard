@@ -84,3 +84,33 @@ describe('parseSpatial failure classes (total parser — never throws)', () => {
     expect(result.ok).toBe(true)
   })
 })
+
+describe('a file carrying the conversation it no longer may (ADR-0026 decision 1b)', () => {
+  it('refuses an x-whiteboard.comments key by name rather than dropping it unread', () => {
+    const result = parseSpatial(
+      JSON.stringify({
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+        edges: [],
+        'x-whiteboard': { comments: [{ id: 'c1', x: 1, y: 2, text: 'old export' }] },
+      }),
+    )
+
+    expect(result.ok).toBe(false)
+    if (result.ok) throw new Error('expected failure')
+    expect(result.error.stage).toBe('json-canvas-schema')
+    expect(result.error.message).toMatch(/x-whiteboard\.comments/)
+    expect(result.error.message).toMatch(/remove/i)
+  })
+
+  it('reads the same file without the key, extension and all', () => {
+    const result = parseSpatial(
+      JSON.stringify({
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+        edges: [],
+        'x-whiteboard': { tags: ['kept'] },
+      }),
+    )
+
+    expect(result.ok && result.value.tags).toEqual(['kept'])
+  })
+})

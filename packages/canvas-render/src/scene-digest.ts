@@ -398,10 +398,10 @@ function computeFreeRegions(entries: readonly DigestEntry[]): {
  *
  * A comment pin/bubble (`ShapeSceneNode.commentChrome`) carries an `id` too
  * — the editor needs one to hit-test it — but is excluded here as if that id
- * were absent (ADR-0025 decision 5): `wb_canvas_snapshot.comments` already
- * publishes comments, so counting their chrome again would double-report
- * them as phantom nodes, repeating the six-entries-for-three-nodes mistake
- * this function exists to avoid.
+ * were absent (ADR-0025 decision 5): a comment is the annotation layer, not
+ * a node of the board, so counting its chrome would report it as a phantom
+ * node, repeating the six-entries-for-three-nodes mistake this function
+ * exists to avoid.
  */
 function collectEntries(scene: Scene): {
   readonly id?: string

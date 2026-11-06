@@ -310,9 +310,6 @@ export function toOcif(canvas: SpatialCanvas): OcifDocument {
     .map((entry) => entry.resource)
     .filter((resource): resource is OcifResource => resource !== undefined)
   const canvasData: OcifExtension[] = [...facetEntries(canvas.facets)]
-  if (canvas.comments !== undefined && canvas.comments.length > 0) {
-    canvasData.push({ type: OCIF_TYPE.comments, comments: canvas.comments })
-  }
   const canvasTags = tagsEntry(canvas.tags)
   if (canvasTags !== undefined) canvasData.push(canvasTags)
   return {
@@ -587,7 +584,6 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
 
   const canvasFacets = facetsFrom(ocif.data)
   const canvasTags = tagsFrom(ocif.data)
-  const comments = extensionOf(ocif.data, OCIF_TYPE.comments)?.comments
   return {
     nodes,
     edges,
@@ -595,7 +591,6 @@ function fromOcif(ocif: OcifDocument): SpatialCanvas {
     ...(lines.length === 0 ? {} : { lines }),
     ...(canvasFacets === undefined ? {} : { facets: canvasFacets }),
     ...(canvasTags === undefined ? {} : { tags: canvasTags }),
-    ...(Array.isArray(comments) ? { comments: comments as SpatialCanvas['comments'] } : {}),
   } as SpatialCanvas
 }
 
@@ -626,6 +621,15 @@ export function parseOcif(text: string): CodecParseResult<SpatialCanvas> {
   const parsed = ocifDocumentSchema.safeParse(rawValue)
   if (!parsed.success) {
     return codecFailure('ocif-schema', 'OCIF document failed schema validation', parsed.error)
+  }
+  // An older export wrote the annotation layer here; a file carries content
+  // and not the conversation (ADR-0026 decision 1b), so it is refused by name
+  // rather than imported with every comment silently gone.
+  if (extensionOf(parsed.data.data, OCIF_TYPE.comments) !== undefined) {
+    return codecFailure(
+      'ocif-schema',
+      `this file carries ${OCIF_TYPE.comments}, a conversation an exported file no longer holds: comments live on the document, not in the file. Remove that data entry to import the content`,
+    )
   }
   // The lift casts where the wire schema is loose, so what it builds is only
   // as good as the document it read. The model is the judge of what a canvas

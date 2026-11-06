@@ -59,6 +59,7 @@ import {
 import { PersistenceLedger } from './persistence-ledger.js'
 import { type BodyBinding, bodyBindingFor } from './session-body-binding.js'
 import type { EditorCommand } from './spatial/commands.js'
+import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
 
@@ -1080,6 +1081,15 @@ export function createDocumentSyncSession(
     if (latestNext === null) windowStart = currentCanvas
     currentCanvas = next
     notify(next, 'local')
+    // The conversations a thread command leaves, published as immediately as
+    // the canvas is: the layer is a plane beside the canvas, so a pin opened,
+    // moved or closed would otherwise wait out the commit's debounce. The
+    // commit's own read then answers the same list and publishes nothing.
+    const threads = threadsAfterCommand(currentAnnotations, command)
+    if (threads !== currentAnnotations) {
+      currentAnnotations = threads
+      notifyAnnotations(threads)
+    }
     onCanvasChange(next, command)
   }
 

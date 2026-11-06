@@ -4,7 +4,6 @@
  * what shipped code imports, so a name a test alone needs belongs here
  * rather than keeping a root forward alive.
  */
-export { canvasEditInputSchema } from '../tools/canvas-edit.js'
 export { canvasSnapshotSchema } from '../tools/canvas-snapshot.js'
 export {
   canvasViewInputSchema,

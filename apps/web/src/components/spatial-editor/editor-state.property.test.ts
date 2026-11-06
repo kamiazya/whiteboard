@@ -381,18 +381,14 @@ const COMMAND_COVERAGE = {
   'create-group': 'covered',
   'set-group-label': 'not modelled: group label editor, single-field write',
   'set-group-background': 'not modelled: group inspector, single-field write',
-  'create-comment':
-    'not modelled: written by the compose bubble (comment-create.browser.test.tsx), outside the gesture machine; no gesture or selection coupling to model here — covered at the applyCommand/session layers',
-  'set-comment-resolved':
-    'not modelled: single-field write from the context menu verbs Resolve / Reopen (comment-resolve.browser.test.tsx); no gesture or selection coupling to model here',
-  'move-comment':
-    'not modelled: written by the pin drag (comment-move.browser.test.tsx), a side state beside the gesture machine rather than a GestureState arm; single-field write',
+  'move-thread':
+    'not modelled: written by the pin drag (comment-move.browser.test.tsx), a side state beside the gesture machine rather than a GestureState arm; identity on the canvas, its effect is threadsAfterCommand (thread-commands.test.ts)',
   'create-thread':
-    'not modelled: appends the thread’s canvas projection (a comment at its node or its set’s corner; nothing for a document or a note passage) — a single append written by the catalog’s Comment on a node’s text selection (node-text-comment.browser.test.tsx) and by Comment on selection (multi-select.browser.test.tsx); the thread itself is written by document-sync-session.test.ts',
+    'not modelled: identity on the canvas — a thread is written beside it — and written by the compose bubble (comment-create.browser.test.tsx), the catalog’s Comment on a node’s text selection (node-text-comment.browser.test.tsx) and Comment on selection (multi-select.browser.test.tsx); its effect is threadsAfterCommand (thread-commands.test.ts) and its write is document-sync-session.test.ts',
   'set-thread-status':
-    'not modelled: a one-field patch of the projected comment’s flag when it has a pin, identity otherwise — the same shape set-comment-resolved already models; its write path is document-sync-session.test.ts and its gesture is the rail’s Resolve (CommentsPanel.browser.test.tsx)',
+    'not modelled: identity on the canvas; its effect is threadsAfterCommand (thread-commands.test.ts), its write path is document-sync-session.test.ts and its gestures are Resolve / Reopen on the card, the menu and the rail (comment-resolve.browser.test.tsx, CommentsPanel.browser.test.tsx)',
   'edit-thread-message':
-    'not modelled: a one-field patch of the projected comment’s text for the opening message, identity otherwise; its write path is document-sync-session.test.ts and its gestures are the rail’s and the card’s Edit (CommentsPanel.browser.test.tsx, comment-edit.browser.test.tsx)',
+    'not modelled: identity on the canvas; its effect is threadsAfterCommand (thread-commands.test.ts), its write path is document-sync-session.test.ts and its gestures are the rail’s and the card’s Edit (CommentsPanel.browser.test.tsx, comment-edit.browser.test.tsx)',
   'decide-proposal':
     'not modelled: one press on the proposal card decides a whole proposal — a fold of applyCanvasChange over changes the card carried, with no gesture or selection coupling to model here. Its canvas meaning is commands.test.ts, its two-plane write is document-sync-session.test.ts, and its gesture is proposal-adopt-one.browser.test.tsx',
   'ungroup-ink':

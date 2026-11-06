@@ -1,6 +1,5 @@
 import {
   canvasColorSchema,
-  canvasCommentSchema,
   canvasLineSchema,
   documentIdSchema,
   edgeSideSchema,
@@ -195,14 +194,16 @@ const jsonCanvasEdgeSchema = z.object({
 export type JsonCanvasEdge = z.infer<typeof jsonCanvasEdgeSchema>
 
 /**
- * `x-whiteboard` at the DOCUMENT root — the annotation layer and the canvas's
- * own facets. A consumer that drops it still holds the complete content.
+ * `x-whiteboard` at the DOCUMENT root — the canvas's own facets, tags and
+ * ink. A consumer that drops it still holds the complete content. It does not
+ * carry the conversation about the board: that is the document's annotation
+ * layer, which a file does not hold (ADR-0026 decision 1b), and `parseSpatial`
+ * refuses a file an older export wrote it into.
  *
  * `.catch(undefined)` on each BUCKET, not on the whole extension: a malformed
- * comment must cost the comments, not the preferences beside them.
+ * facet must cost the facets, not the ink beside them.
  */
 export const canvasExtensionSchema = z.object({
-  comments: z.array(canvasCommentSchema).optional().catch(undefined),
   /**
    * The ink an edge is not (ADR-0038 decision 2), carried whole rather than
    * mapped onto the format's edges.
@@ -214,9 +215,8 @@ export const canvasExtensionSchema = z.object({
    * collection rides the extension key and a strict reader gets a board with
    * the ink absent rather than a board with relations nobody asserted.
    *
-   * `.catch(undefined)` per bucket, like the comments beside it: a malformed
-   * line must cost the ink, not the conversation, and neither may cost the
-   * board.
+   * `.catch(undefined)` per bucket, like the facets beside it: a malformed
+   * line must cost the ink, not the facets, and neither may cost the board.
    */
   lines: z.array(canvasLineSchema).optional().catch(undefined),
   facets: extensionFacetsSchema.optional().catch(undefined),

@@ -20,7 +20,12 @@ import type {
   EdgeSides,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
-import { isFrame, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  isFrame,
+  type SpatialCanvas,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { carriedWithDrag } from './drag-preview.js'
 import type { GestureState } from './gestures.js'
@@ -49,8 +54,9 @@ export function carriedByGesture(
 }
 
 /**
- * One synthetic per-layer canvas: the nodes that layer draws, the comments it
- * owns, and the canvas's own facets.
+ * One synthetic per-layer canvas: the nodes that layer draws and the canvas's
+ * own facets. The layer's conversations travel beside it, as every layout's
+ * do (`threadsFor`).
  *
  * The facets are the reason this is a function rather than three object
  * literals. They say how the canvas is DRAWN — its theme, its edge routing —
@@ -58,43 +64,42 @@ export function carriedByGesture(
  * drag, which is a real defect this editor shipped once. Three call sites
  * spreading them by hand is three chances to forget; one is none.
  */
-export function layerCanvas(
-  canvas: SpatialCanvas,
-  nodes: SpatialCanvas['nodes'],
-  comments: SpatialCanvas['comments'],
-): SpatialCanvas {
+export function layerCanvas(canvas: SpatialCanvas, nodes: SpatialCanvas['nodes']): SpatialCanvas {
   return {
     nodes,
     edges: [],
     ...(canvas.facets === undefined ? {} : { facets: canvas.facets }),
-    ...(comments === undefined ? {} : { comments }),
   }
 }
 
+/** The node a thread's pin follows, if it follows one. */
+function riddenNode(thread: CommentThread): string | undefined {
+  return thread.anchor.kind === 'document' ? undefined : thread.anchor.nodeId
+}
+
 /**
- * The canvas extension with only the comments that ride on a CARRIED node
- * (`carried === true`) or only those that do not (`carried === false`).
+ * The threads whose pin rides on a CARRIED node (`carried === true`), or
+ * only those that do not (`carried === false`).
  *
- * A node-anchored comment is drawn at its target's top-right corner, so it
- * belongs to whichever layer draws the target: the ghost/live-node layer
- * while the node travels, the static base otherwise. A point-anchored
- * comment is anchored to the canvas and stays in the base. Splitting it
- * here, rather than letting the base keep every comment, is what stops the
- * base drawing a stale copy at the pre-gesture corner while the ghost draws
- * the live one — `composeComments` falls back to the comment's stored x/y
- * when its target is missing from the nodes it is given, and the base is
- * given the canvas WITHOUT the carried nodes.
+ * A thread about a node — the node itself or a passage of its text — is
+ * drawn at its target's top-right corner, so it belongs to whichever layer
+ * draws the target: the ghost/live-node layer while the node travels, the
+ * static base otherwise. Any other thread is anchored to the canvas and
+ * stays in the base. Splitting it here, rather than letting the base keep
+ * every thread, is what stops the base drawing a stale copy at the
+ * pre-gesture corner while the ghost draws the live one — `composeComments`
+ * falls back to the stored point when its target is missing from the nodes
+ * it is given, and the base is given the canvas WITHOUT the carried nodes.
  */
-export function commentsFor(
-  canvas: SpatialCanvas,
+export function threadsFor(
+  threads: readonly CommentThread[],
   carriedIds: ReadonlySet<string>,
   carried: boolean,
-): SpatialCanvas['comments'] {
-  if (canvas.comments === undefined) return undefined
-  return canvas.comments.filter(
-    (comment) =>
-      (comment.targetNodeId !== undefined && carriedIds.has(comment.targetNodeId)) === carried,
-  )
+): readonly CommentThread[] {
+  return threads.filter((thread) => {
+    const node = riddenNode(thread)
+    return (node !== undefined && carriedIds.has(node)) === carried
+  })
 }
 
 /**
@@ -118,10 +123,11 @@ export function commentsFor(
  */
 export function ghostCommentObstacles(
   canvas: SpatialCanvas,
+  threads: readonly CommentThread[],
   committed: Scene,
   carried: ReadonlySet<string>,
 ): BoundingBox[] {
-  const riding = new Set((commentsFor(canvas, carried, true) ?? []).map((comment) => comment.id))
+  const riding = new Set(threadsFor(threads, carried, true).map((thread) => thread.id))
   return [
     ...canvas.nodes
       .filter((node) => !carried.has(node.id) && !isFrame(node))

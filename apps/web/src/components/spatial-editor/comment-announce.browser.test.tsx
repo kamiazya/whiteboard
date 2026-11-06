@@ -10,7 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { announceOnCanvas, canvasAnnouncement } from '../../lib/canvas-announcer.js'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -35,7 +35,7 @@ const start: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
 }
-const withComment: SpatialCanvas = { ...start, comments: [FREE] }
+const withComment: CommentBoard = { ...start, comments: [FREE] }
 
 function at(root: HTMLElement, x: number, y: number) {
   const r = root.getBoundingClientRect()

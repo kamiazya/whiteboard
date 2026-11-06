@@ -1,22 +1,19 @@
 /**
- * A thread write on a SPATIAL document has to hand `onChange` the canvas the
- * command PRODUCES, not the one it was given.
+ * A thread write on a SPATIAL document goes through the same `onChange` a
+ * canvas edit does, with the canvas the command PRODUCES and the command
+ * itself — which is where the sync session publishes the conversations the
+ * command leaves (`threadsAfterCommand`), so a status written from the rail
+ * reaches the picture at once rather than after a reload.
  *
- * Both document pages built the four writes by hand and both passed the
- * unchanged canvas, so a status written from the rail reached storage and
- * never reached the picture: resolving left the bubble drawn until a
- * reload, and reopening did not bring it back at all — the canvas stayed on
- * whatever the last reducer-run command had left. Measured in a real
- * browser before this existed.
- *
- * The reducer is the only thing that knows a thread status projects onto a
- * flat comment's `resolved`, and that a new thread projects a pin. So the
- * door runs every command through it, in one place both pages call — the
- * duplication was what let the two drift into the same bug twice.
+ * Both document pages built the four writes by hand once and both passed the
+ * unchanged canvas: resolving left the bubble drawn until a reload. The door
+ * is one place both pages call — the duplication was what let the two drift
+ * into the same bug twice.
  */
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from './spatial/commands.js'
+import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { spatialThreadWrite } from './spatial-thread-write.js'
 
 const THREAD: CommentThread = {
@@ -26,57 +23,41 @@ const THREAD: CommentThread = {
   messages: [{ id: 'm1', body: 'Does this hold?' }],
 }
 
-const OPEN: SpatialCanvas = {
-  nodes: [],
-  edges: [],
-  comments: [{ id: 'thread-1', x: 600, y: 450, text: 'Does this hold?' }],
-}
+const BOARD: SpatialCanvas = { nodes: [], edges: [] }
 
 function door(canvas: SpatialCanvas) {
   const onChange = vi.fn<(next: SpatialCanvas, command: EditorCommand) => void>()
   return { onChange, write: spatialThreadWrite(() => canvas, onChange) }
 }
 
-const commentsOf = (canvas: SpatialCanvas) => canvas.comments ?? []
-
 describe('the spatial document’s thread write door', () => {
-  it('resolves onto the canvas it hands back, so the bubble stops being drawn at once', () => {
-    const { onChange, write } = door(OPEN)
+  it('hands on a status command the conversations follow, so the bubble stops being drawn', () => {
+    const { onChange, write } = door(BOARD)
     write.setThreadStatus('thread-1', 'resolved')
     const [next, command] = onChange.mock.calls[0] ?? []
+    expect(next).toBe(BOARD)
     expect(command).toEqual({ kind: 'set-thread-status', threadId: 'thread-1', status: 'resolved' })
-    expect(commentsOf(next as SpatialCanvas)[0]?.resolved).toBe(true)
+    expect(threadsAfterCommand([THREAD], command as EditorCommand)[0]?.status).toBe('resolved')
   })
 
-  it('reopens onto it too — the direction that left a live conversation invisible', () => {
-    const resolved: SpatialCanvas = {
-      ...OPEN,
-      comments: [{ ...commentsOf(OPEN)[0], resolved: true }],
-    } as SpatialCanvas
-    const { onChange, write } = door(resolved)
-    write.setThreadStatus('thread-1', 'open')
-    expect(commentsOf(onChange.mock.calls[0]?.[0] as SpatialCanvas)[0]?.resolved).toBe(false)
-  })
-
-  it('projects a new thread onto the canvas, so its pin appears without a reload', () => {
-    const empty: SpatialCanvas = { nodes: [], edges: [] }
-    const { onChange, write } = door(empty)
+  it('hands on a new thread, so its pin appears without a reload', () => {
+    const { onChange, write } = door(BOARD)
     write.createThread(THREAD)
-    const next = onChange.mock.calls[0]?.[0] as SpatialCanvas
-    expect(commentsOf(next).map((one) => one.id)).toEqual(['thread-1'])
+    const command = onChange.mock.calls[0]?.[1] as EditorCommand
+    expect(threadsAfterCommand([], command).map((one) => one.id)).toEqual(['thread-1'])
   })
 
   it('reads the canvas at press time, never one captured when the door was built', () => {
     let current: SpatialCanvas = { nodes: [], edges: [] }
     const onChange = vi.fn<(next: SpatialCanvas, command: EditorCommand) => void>()
     const write = spatialThreadWrite(() => current, onChange)
-    current = OPEN
+    current = { nodes: [], edges: [], tags: ['now'] }
     write.setThreadStatus('thread-1', 'resolved')
-    expect(commentsOf(onChange.mock.calls[0]?.[0] as SpatialCanvas)[0]?.resolved).toBe(true)
+    expect(onChange.mock.calls[0]?.[0]).toBe(current)
   })
 
   it('carries a reply and an edit through as their own commands', () => {
-    const { onChange, write } = door(OPEN)
+    const { onChange, write } = door(BOARD)
     const message = { id: 'm2', body: 'Still true.' }
     write.replyToThread('thread-1', message)
     write.editMessage('thread-1', { id: 'm1', body: 'Rewritten.' }, true)
@@ -89,9 +70,6 @@ describe('the spatial document’s thread write door', () => {
         opening: true,
       },
     ])
-    // The opening message is the flat comment's text, so an edit shows in
-    // the picture as well as in the rail.
-    expect(commentsOf(onChange.mock.calls[1]?.[0] as SpatialCanvas)[0]?.text).toBe('Rewritten.')
   })
 })
 
@@ -99,7 +77,7 @@ describe('the spatial document’s thread write door', () => {
  * Both pages built these four by hand and both got them wrong the same way,
  * so the door being shared is the fix and this is what keeps it shared: a
  * page that constructs a thread command inline is back to having its own
- * copy of the rule that it goes through the reducer.
+ * copy of the rule that it goes through the editor's own `onChange`.
  *
  * `?raw`, never `node:fs` — apps/web is browser-only and
  * `web-app-boundary.test.ts` enforces it.

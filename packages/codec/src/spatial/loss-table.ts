@@ -154,6 +154,11 @@ export function jsonCanvasLossTable(): string {
     '  different way.',
     '- **`wb_scene_render`.** SVG is an explicitly lossy rendering, not a document format, and has',
     '  never claimed otherwise.',
+    '- **The comments.** A conversation is the document’s annotation layer, kept beside its content',
+    '  rather than in it ([ADR-0026](../contributing/adr/0026-annotation-layer.md) decision 1b), so',
+    '  no export carries it, `extended` included, and it is not a field position here. A file an',
+    '  older version exported with `x-whiteboard.comments` is refused on import, naming the key,',
+    '  rather than read with its comments silently gone.',
     '',
     '← Back to [reference](README.md)',
   )
@@ -252,6 +257,10 @@ export function ocifLossTable(): string {
     '  inheritance and pages are all in the specification and have no position here to lose. A',
     '  document arriving with them keeps them as unread extension data.',
     '- **OKF Markdown.** This is the spatial side only.',
+    '- **The comments.** A conversation is the document’s annotation layer, kept beside its content',
+    '  rather than in it ([ADR-0026](../contributing/adr/0026-annotation-layer.md) decision 1b), so',
+    '  the projection does not carry it. A file an older version wrote with a `@whiteboard/comments`',
+    '  entry is refused on import, naming the entry.',
     '',
     '← Back to [reference](README.md)',
   ]

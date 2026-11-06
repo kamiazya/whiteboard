@@ -21,7 +21,7 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { endIn } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef } from 'react'
@@ -38,20 +38,25 @@ import {
   canReuseCarriedSides,
   carriedByGesture,
   carriedSideCacheKey,
-  commentsFor,
   frozenSidesOf,
   ghostCommentObstacles,
   layerCanvas,
   liveNodesFor,
+  threadsFor,
 } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 import { useDropSettle } from './use-drop-settle.js'
 import type { useFileSeamScene } from './use-file-seam-scene.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
 
+/** One empty list, so a host passing no threads keeps the layers' memos stable. */
+const NO_THREADS: readonly CommentThread[] = []
+
 export interface DragLayersInputs {
   gestureState: GestureState
   canvas: SpatialCanvas
+  /** The document's conversations: each layer draws the pins that ride on what it draws. */
+  threads: readonly CommentThread[] | undefined
   extraIds: ReadonlySet<string>
   /**
    * Closes over `lockEnabled`/`lockedNodeIds`; both ride along so the memo
@@ -114,6 +119,7 @@ function carriedSidesOf(
 export function useDragLayers({
   gestureState: liveGesture,
   canvas: liveCanvas,
+  threads = NO_THREADS,
   livePoint: livePointer,
   sceneCurrent,
   extraIds,
@@ -173,19 +179,20 @@ export function useDragLayers({
     // Same embed options as the committed scene: a ghost that drops an
     // expanded miniature back to a bare card mid-drag reads as data loss.
     // The carried nodes' own comments ride the ghost too (see
-    // `commentsFor`): they are drawn at the node's corner, and the
-    // corner is what is moving.
-    const ghostComments = commentsFor(canvas, carried, true)
+    // `threadsFor`): they are drawn at the node's corner, and the corner is
+    // what is moving.
+    const ghostThreads = threadsFor(threads, carried, true)
     // A riding comment's bubble is placed against what the COMMITTED scene
     // placed it against — the bystander nodes and the bubbles staying
     // behind — so at the press it sits exactly where it was drawn. Rendered
     // alone it would re-place in an empty canvas and jump quadrant.
-    const ghostObstacles = ghostCommentObstacles(canvas, gestureCommitted.scene, carried)
-    const rendered = renderCanvasToSvg(layerCanvas(canvas, nodes, ghostComments), {
+    const ghostObstacles = ghostCommentObstacles(canvas, threads, gestureCommitted.scene, carried)
+    const rendered = renderCanvasToSvg(layerCanvas(canvas, nodes), {
       measure: resolvedMeasure,
       theme,
       ...fileSeamOptions,
       showResolved,
+      threads: ghostThreads,
       commentObstacles: ghostObstacles,
     })
     return {
@@ -197,6 +204,7 @@ export function useDragLayers({
   }, [
     gestureState,
     canvas,
+    threads,
     extraIds,
     lockEnabled,
     lockedNodeIds,
@@ -237,13 +245,11 @@ export function useDragLayers({
   const dragStatic = useMemo(() => {
     if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
     const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
-    const baseComments = commentsFor(canvas, carried, false)
     const base: SpatialCanvas = {
       ...canvas,
       ...layerCanvas(
         canvas,
         canvas.nodes.filter((n) => !carried.has(n.id)),
-        baseComments,
       ),
     }
     const rendered = renderCanvasToSvg(base, {
@@ -251,6 +257,7 @@ export function useDragLayers({
       theme,
       ...fileSeamOptions,
       showResolved,
+      threads: threadsFor(threads, carried, false),
     })
     const metricsCache = new Map<string, TextMetrics>()
     const measure: MeasureText = (text, font) => {
@@ -279,6 +286,7 @@ export function useDragLayers({
   }, [
     gestureState,
     canvas,
+    threads,
     gestureCommitted,
     extraIds,
     lockEnabled,
@@ -444,15 +452,15 @@ export function useDragLayers({
     if (resized === undefined) return undefined
     // The resized node's comments re-anchor to its LIVE corner each frame,
     // for the same reason the move ghost carries them.
-    const liveComments = commentsFor(canvas, dragStatic.carried, true)
-    const rendered = renderCanvasToSvg(layerCanvas(canvas, [resized], liveComments), {
+    const rendered = renderCanvasToSvg(layerCanvas(canvas, [resized]), {
       measure: dragStatic.measure,
       theme,
       ...fileSeamOptions,
       showResolved,
+      threads: threadsFor(threads, dragStatic.carried, true),
     })
     return { svg: rendered.svg, bounds: rendered.bounds }
-  }, [gestureState, dragPreview, dragStatic, canvas, theme, fileSeamOptions])
+  }, [gestureState, dragPreview, dragStatic, canvas, threads, theme, fileSeamOptions])
 
   return { dragContentSvg, dragStatic, dragPreview, liveEdges, liveNode, canvasContentRef }
 }

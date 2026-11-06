@@ -87,13 +87,6 @@ function selectionPicture(
       end.kind === 'node' ? ids.has(end.node) : inside(box, end.point.x, end.point.y),
     ),
   )
-  const comments = canvas.comments?.filter((comment) =>
-    comment.targetNodeId !== undefined
-      ? ids.has(comment.targetNodeId)
-      : comment.targetEdgeId !== undefined
-        ? edgeIds.has(comment.targetEdgeId)
-        : inside(box, comment.x, comment.y),
-  )
   const keptThreads = threads.filter(({ anchor }) => anchorKept(anchor, ids, edgeIds, box))
   return {
     canvas: {
@@ -101,7 +94,6 @@ function selectionPicture(
       nodes,
       edges,
       ...(lines === undefined ? {} : { lines }),
-      ...(comments === undefined ? {} : { comments }),
     },
     threads: keptThreads,
   }

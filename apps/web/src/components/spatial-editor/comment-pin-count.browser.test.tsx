@@ -9,12 +9,12 @@
  * The count is composed into the SCENE by `canvas-render`, not drawn by this
  * app, so the widget, the export and `wb_scene_render` get it for the same
  * reason they get the pin. What only this layer can say is that the editor
- * actually HANDS the layout its threads — the flat projection the canvas
- * stores carries one text and cannot know how many messages there are, so a
- * count on the canvas is a claim about the wiring, not about the renderer.
+ * actually HANDS the layout its threads — the canvas carries no conversation
+ * of its own, so a count on the canvas is a claim about the wiring, not about
+ * the renderer.
  */
 
-import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -22,19 +22,15 @@ import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-const BUSY: CanvasComment = { id: 'thread-busy', x: 600, y: 450, text: 'does this hold?' }
-const LONE: CanvasComment = { id: 'thread-lone', x: 200, y: 200, text: 'one remark' }
-
 const CANVAS: SpatialCanvas = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
-  comments: [BUSY, LONE],
 }
 
-function threadOf(id: string, messages: number): CommentThread {
+function threadOf(id: string, messages: number, at: { x: number; y: number }): CommentThread {
   return {
     id,
-    anchor: { kind: 'spatial', x: 600, y: 450 },
+    anchor: { kind: 'spatial', ...at },
     status: 'open',
     messages: Array.from({ length: messages }, (_, i) => ({ id: `${id}-m${i}`, body: `m${i}` })),
   }
@@ -64,7 +60,10 @@ function digitsOnCanvas(container: HTMLElement): string[] {
 }
 
 it('draws the message count on a busy conversation pin, and none on a lone remark', async () => {
-  const { container } = mount([threadOf('thread-busy', 4), threadOf('thread-lone', 1)])
+  const { container } = mount([
+    threadOf('thread-busy', 4, { x: 600, y: 450 }),
+    threadOf('thread-lone', 1, { x: 200, y: 200 }),
+  ])
 
   await vi.waitFor(
     () => {
@@ -74,18 +73,18 @@ it('draws the message count on a busy conversation pin, and none on a lone remar
   )
 })
 
-it('draws no count at all when the host hands the editor no threads', async () => {
-  // The flat comments the canvas stores carry a text and no conversation, so
-  // a host with no threads plane wired gets the pins it always got rather
-  // than a count invented from nothing.
+it('draws no pin and no count when the host hands the editor no threads', async () => {
+  // The canvas carries no conversation of its own (ADR-0026 decision 1b), so
+  // a host with no threads plane wired draws the board and nothing over it.
   const { container } = mount([])
   await vi.waitFor(
     () => {
       expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
-        'does this hold?',
+        'hello',
       )
     },
     { timeout: 4000 },
   )
+  expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).not.toContain('m0')
   expect(digitsOnCanvas(container)).toEqual([])
 })

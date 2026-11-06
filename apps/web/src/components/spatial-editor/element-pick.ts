@@ -67,8 +67,6 @@ export const ELEMENT_PICK_ROLE = {
   nodes: 'content',
   edges: 'content',
   lines: 'content',
-  comments:
-    'chrome: a comment is not content (ADR-0024) — its pin floats above the document and takes the press before content is contended for, so putting it in this order would make a note under a pin unpressable',
 } satisfies Record<ElementCollection, ElementPickRole>
 
 /** The kinds a press and a band contend for, narrowed from the table above. */

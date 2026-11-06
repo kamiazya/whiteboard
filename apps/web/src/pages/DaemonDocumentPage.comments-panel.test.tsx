@@ -235,6 +235,10 @@ describe('DaemonDocumentPage comments panel', () => {
     // is not the signal either — that happens the moment the click handler
     // runs, before the write has gone anywhere.)
     await waitFor(() => expect(repliesText()).toContain(squashed('decided: ship it')))
+    // The rail shows the reply the moment it is sent (the session publishes
+    // the conversation before its debounced commit), so the write is waited
+    // for on its own.
+    await waitFor(() => expect(backend.pushed.length).toBeGreaterThan(0))
 
     // The write travelled the session's own path — replaying every update
     // the FakeDocumentBackend recorded onto a copy of the seed reproduces the same

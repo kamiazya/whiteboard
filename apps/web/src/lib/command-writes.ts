@@ -7,6 +7,7 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   markThreadPassages,
+  moveCommentThread,
   readCoreFacets,
   reconcileCoreFacets,
   reconcileSpatialCanvas,
@@ -14,7 +15,6 @@ import {
   setCommentThreadStatus,
   withDocumentBatch,
   withSpatialBatch,
-  writeCanvasComment,
   writeCommentThread,
   writeMarkdownBody,
   writeSpatialEdge,
@@ -49,15 +49,12 @@ export function commandTargetKey(command: EditorCommand): string {
       return `edge:${command.edgeId}`
     case 'create-node':
       return `node:${command.node.id}`
-    case 'create-comment':
-      return `comment:${command.comment.id}`
-    case 'set-comment-resolved':
-    case 'move-comment':
-      return `comment:${command.id}`
+    case 'move-thread':
+      return `thread-anchor:${command.threadId}`
     case 'reply-to-thread':
       // Keyed by MESSAGE, not by thread. Every other key here dedupes to the
       // last value for one target, which is right when the target holds one
-      // value — a node's position, a comment's text. A reply APPENDS: two
+      // value — a node's position, a thread's status. A reply APPENDS: two
       // replies to the same thread inside one debounce window are two
       // messages, and a `thread:` key would silently commit only the second.
       return `message:${command.message.id}`
@@ -173,15 +170,11 @@ function writeCommandTarget(
       writeSpatialNode(doc, node)
       return 'written'
     }
-    case 'create-comment':
-    case 'set-comment-resolved':
-    case 'move-comment': {
-      const id = command.kind === 'create-comment' ? command.comment.id : command.id
-      const comment = next.comments?.find((c) => c.id === id)
-      if (!comment) return 'target-missing'
-      writeCanvasComment(doc, comment)
+    case 'move-thread':
+      // The threads plane, for `reply-to-thread`'s reason below; a thread
+      // this replica does not hold is left alone, as a reply to one is.
+      moveCommentThread(doc, command.threadId, command)
       return 'written'
-    }
     case 'reply-to-thread':
       // Always "handled", like set-body below and for the same reason: the
       // fallback writes the whole SpatialCanvas, and a conversation lives in
@@ -287,11 +280,6 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): Write
       return next.edges.some((e) => e.id === command.edgeId) ? 'written' : 'target-missing'
     case 'create-edge':
       return next.edges.some((e) => e.id === command.edge.id) ? 'written' : 'target-missing'
-    case 'create-comment':
-      return next.comments?.some((c) => c.id === command.comment.id) ? 'written' : 'target-missing'
-    case 'set-comment-resolved':
-    case 'move-comment':
-      return next.comments?.some((c) => c.id === command.id) ? 'written' : 'target-missing'
     case 'delete-node':
     case 'delete-edge':
       // Deletes are no-ops for absent ids — always writable.
@@ -327,14 +315,6 @@ function writeSubCommand(
     case 'create-edge': {
       const edge = next.edges.find((e) => e.id === command.edge.id)
       if (edge) writer.writeEdge(edge)
-      return
-    }
-    case 'create-comment':
-    case 'set-comment-resolved':
-    case 'move-comment': {
-      const id = command.kind === 'create-comment' ? command.comment.id : command.id
-      const comment = next.comments?.find((c) => c.id === id)
-      if (comment) writer.writeComment(comment)
       return
     }
     case 'delete-node':

@@ -48,7 +48,7 @@ describe('censusSpatialModel', () => {
     // would under-report the model by exactly the arm that makes ink ink.
     expect(census.paths).toContain('lines[].from.node')
     expect(census.paths).toContain('lines[].from.point.x')
-    expect(census.paths).toContain('comments[].text')
+    expect(census.paths.some((path) => path.startsWith('comments'))).toBe(false)
     expect(census.paths).toContain('nodes[].embed.documentId')
   })
 

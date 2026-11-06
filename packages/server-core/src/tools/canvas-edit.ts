@@ -371,7 +371,6 @@ function editedCanvas(canvas: SpatialCanvas, s: CanvasEditSession): SpatialCanva
     ...(canvas.facets !== undefined && { facets: canvas.facets }),
     ...(canvas.tags !== undefined && { tags: canvas.tags }),
     ...(s.lines.length > 0 && { lines: s.lines }),
-    ...(canvas.comments !== undefined && { comments: canvas.comments }),
   }
 }
 

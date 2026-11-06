@@ -117,19 +117,6 @@ const ELEMENT_SURFACES = {
     'selection highlight':
       'not modelled: rendered geometry, as above. freehand-ink.browser.test.tsx reads the real overlay',
   },
-  comments: {
-    press:
-      'not modelled: a comment is CHROME rather than content (`ELEMENT_PICK_ROLE`) — its pin takes the press before content is contended for, so it is not in this contention at all. comment-create.browser.test.tsx drives its press',
-    'shift-press':
-      'not modelled: a comment is not content (ADR-0024) — it is never part of a selection a verb acts on, so there is nothing for shift to add it to',
-    marquee: 'not modelled: the same reason — a band gathers content, and a comment is not content',
-    'context menu':
-      'not modelled: a comment HAS its own menu, and it is JSX like the others. comment-edit.browser.test.tsx drives it',
-    delete:
-      'not modelled: a thread is RESOLVED rather than deleted, and the annotation layer is never tidied (see .claude/rules/vocabulary.md). Its verb is set-comment-resolved',
-    lock: 'not modelled: the lock is about who may change the document; a comment is beside it',
-    'selection highlight': 'not modelled: nothing selects a comment, so nothing highlights one',
-  },
 } satisfies Record<ElementCollection, Record<EditorSurface, SurfaceCoverage>>
 
 /** Flattened for `assertLedger`, whose contract is one dimension. */
@@ -580,9 +567,10 @@ describe('every element kind, through every surface that has to know about it', 
   )
 
   it('asks the question of every pair', () => {
-    // 4 collections x 7 surfaces. A vacuous table is the failure mode a
-    // ledger has, so the count is asserted rather than assumed.
-    expect(Object.keys(flatLedger)).toHaveLength(28)
+    // 3 collections x 7 surfaces — comments left the canvas's collections
+    // (ADR-0026 decision 1). A vacuous table is the failure mode a ledger
+    // has, so the count is asserted rather than assumed.
+    expect(Object.keys(flatLedger)).toHaveLength(21)
   })
 
   it('drives every kind the role table calls content, and no kind it does not', () => {

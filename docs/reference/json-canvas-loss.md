@@ -8,8 +8,8 @@ A whiteboard document is not a JSON Canvas file. JSON Canvas 1.0 is a **projecti
 tested projection rather than an identity: a round-trip property over the expressible subset,
 and this table for everything else.
 
-The model can hold **59** field positions. **22** of them are something the format
-can state; **37** reach a reader only through the single extension key, or not at all.
+The model can hold **50** field positions. **22** of them are something the format
+can state; **28** reach a reader only through the single extension key, or not at all.
 
 Two export modes, and the difference between them is exactly the `x-whiteboard` rows below:
 
@@ -54,21 +54,12 @@ The format has the field and cannot hold the value. What a reader gets instead i
 | `nodes[].x` | crosses as the nearest integer pixel |
 | `nodes[].y` | crosses as the nearest integer pixel |
 
-## Carried on `x-whiteboard` — 37
+## Carried on `x-whiteboard` — 28
 
 Survives the `extended` export and disappears from the `strict` one, which emits plain JSON Canvas 1.0. A reader that drops the key keeps the whole of what the format can state.
 
 | field | what a reader gets |
 | --- | --- |
-| `comments[].author` | dropped by `strict` |
-| `comments[].createdAt` | dropped by `strict` |
-| `comments[].id` | dropped by `strict` |
-| `comments[].resolved` | dropped by `strict` |
-| `comments[].targetEdgeId` | dropped by `strict` |
-| `comments[].targetNodeId` | dropped by `strict` |
-| `comments[].text` | dropped by `strict` |
-| `comments[].x` | dropped by `strict` |
-| `comments[].y` | dropped by `strict` |
 | `edges[].bends[].x` | dropped by `strict` |
 | `edges[].bends[].y` | dropped by `strict` |
 | `edges[].facets/*` | dropped by `strict` |
@@ -114,5 +105,10 @@ _None today._
   different way.
 - **`wb_scene_render`.** SVG is an explicitly lossy rendering, not a document format, and has
   never claimed otherwise.
+- **The comments.** A conversation is the document’s annotation layer, kept beside its content
+  rather than in it ([ADR-0026](../contributing/adr/0026-annotation-layer.md) decision 1b), so
+  no export carries it, `extended` included, and it is not a field position here. A file an
+  older version exported with `x-whiteboard.comments` is refused on import, naming the key,
+  rather than read with its comments silently gone.
 
 ← Back to [reference](README.md)

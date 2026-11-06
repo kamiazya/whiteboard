@@ -29,12 +29,6 @@ const board: SpatialCanvas = {
       to: { kind: 'node', node: 'in1' },
     },
   ],
-  comments: [
-    { id: 'on-in1', x: 30, y: 50, text: 'Who owns this?', targetNodeId: 'in1' },
-    { id: 'on-out', x: 610, y: 50, text: 'Later', targetNodeId: 'out' },
-    { id: 'spot-in', x: 300, y: 200, text: 'Here' },
-    { id: 'spot-out', x: 800, y: 800, text: 'There' },
-  ],
 }
 
 const thread = (id: string, anchor: CommentThread['anchor']): CommentThread => ({
@@ -57,10 +51,9 @@ describe('pictureSubject of a selection', () => {
     expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
   })
 
-  it('keeps the ink and the comments that belong to the selection, and nothing else', () => {
+  it('keeps the ink that belongs to the selection, and nothing else', () => {
     const { canvas } = pictureSubject(board, { threads: [], selection: ['frame'] })
     expect((canvas.lines ?? []).map((line) => line.id)).toEqual(['ink-in'])
-    expect((canvas.comments ?? []).map((comment) => comment.id)).toEqual(['on-in1', 'spot-in'])
   })
 
   it('keeps the conversations anchored inside the selection', () => {

@@ -95,9 +95,9 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
   showResolvedComments:
     'not modelled: a per-user view toggle (ADR-0025 decision 2) read by the render paths only; it writes nothing. Covered by comment-resolve.browser.test.tsx',
   commentDrag:
-    'not modelled: an in-flight pin drag beside the gesture machine (start anchor + live pointer); its release writes move-comment, covered by comment-move.browser.test.tsx',
+    'not modelled: an in-flight pin drag beside the gesture machine (start anchor + live pointer); its release writes move-thread, covered by comment-move.browser.test.tsx',
   openCommentId:
-    'not modelled: which conversation is open in place — a comment id, gated on finding both that thread and its drawn bubble in the render, so a stale one draws nothing. The card writes reply-to-thread / set-comment-resolved, covered by comment-reply.browser.test.tsx',
+    'not modelled: which conversation is open in place — a comment id, gated on finding both that thread and its drawn bubble in the render, so a stale one draws nothing. The card writes reply-to-thread / set-thread-status, covered by comment-reply.browser.test.tsx',
   openProposalId:
     'not modelled: which proposal is open in place — a proposal id, gated on finding both that proposal and its drawn bubble in the render, so a stale one draws nothing (openCommentId’s shape). The card writes decide-proposal, covered by proposal-adopt-one.browser.test.tsx, and the panel row that opens it by proposal-open-in-place.browser.test.tsx',
   linkDialog:

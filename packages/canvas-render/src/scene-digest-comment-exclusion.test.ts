@@ -3,16 +3,16 @@
 // needs hit-testable pin/bubble ids (suffixed, mirroring the shipped
 // `${commentId}/leader` convention), and without a rule those ids would
 // surface as phantom node entries — double-reporting what
-// `wb_canvas_snapshot.comments` already publishes. This pins the invariant
+// the annotation layer `wb_document_get` publishes. This pins the invariant
 // through a real canvas + comment layout, so it stays green whether the
 // pin/bubble ids exist or not.
 
-import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { Proposal } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
-import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneDigest } from './scene-digest.js'
+import { type CommentBoard, layoutBoard } from './test-utils/comment-board.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './theme/spatial-appearance.js'
 
@@ -42,15 +42,15 @@ const parseBody = (text: string): MdastRoot => ({
   children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
 })
 
-const canvasWithOneCommentedNode: SpatialCanvas = {
+const canvasWithOneCommentedNode: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
   edges: [],
   comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
 }
 
-const digestOf = (canvas: SpatialCanvas, proposals?: readonly Proposal[]) =>
+const digestOf = (canvas: CommentBoard, proposals?: readonly Proposal[]) =>
   sceneDigest(
-    layoutSpatialCanvas(canvas, {
+    layoutBoard(canvas, {
       measure: createFakeMeasure(),
       parseBody,
       appearance,
@@ -74,7 +74,7 @@ it('keeps the positional fallback for a comment-only canvas — excluded chrome 
   // changing behaviour for a canvas that never had an identified node at
   // all. Positional naming (n0, n1, ...) is unaffected either way, so this
   // is the same fallback a pre-ids scene already produced.
-  const commentOnly: SpatialCanvas = {
+  const commentOnly: CommentBoard = {
     nodes: [],
     edges: [],
     comments: [{ id: 'c1', x: 400, y: 60, text: 'stray note' }],

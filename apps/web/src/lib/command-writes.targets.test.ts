@@ -132,9 +132,9 @@ describe('commandTargetKey', () => {
     ).not.toBe(commandTargetKey({ kind: 'move-node', id: 'x', x: 0, y: 0 }))
   })
 
-  it('keys two comments apart by their ids', () => {
-    expect(commandTargetKey({ kind: 'set-comment-resolved', id: 'c1', resolved: true })).not.toBe(
-      commandTargetKey({ kind: 'move-comment', id: 'c2', x: 1, y: 1 }),
+  it('keys a pin move apart from the status of the same thread', () => {
+    expect(commandTargetKey({ kind: 'move-thread', threadId: 't1', x: 1, y: 1 })).not.toBe(
+      commandTargetKey({ kind: 'set-thread-status', threadId: 't1', status: 'resolved' }),
     )
   })
 

@@ -5,13 +5,13 @@
 // the context menu over hit-tested chrome, and the toggle crosses to the
 // layout worker on a large canvas.
 
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -31,7 +31,7 @@ const DONE: CanvasComment = {
   createdAt: '2026-09-02T00:00:00.000Z',
   resolved: true,
 }
-const start: SpatialCanvas = {
+const start: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 100, y: 100, width: 200, height: 100, text: 'hello' })],
   edges: [],
   comments: [OPEN, DONE],
@@ -42,7 +42,7 @@ function pinOf(container: HTMLElement, id: string): SVGGElement | null {
 }
 
 function resolvesOf(commands: readonly EditorCommand[]) {
-  return commands.filter((c) => c.kind === 'set-comment-resolved')
+  return commands.filter((c) => c.kind === 'set-thread-status')
 }
 
 async function waitForPin(container: HTMLElement, id: string, present: boolean, timeout = 1000) {
@@ -55,7 +55,7 @@ async function waitForPin(container: HTMLElement, id: string, present: boolean, 
   )
 }
 
-it('"Resolve" on a comment writes set-comment-resolved and the comment leaves the canvas', async () => {
+it('"Resolve" on a comment writes set-thread-status and the comment leaves the canvas', async () => {
   const { Host, latest } = makeEditorHost({ initial: start })
   const { container } = render(<Host />)
   const root = rootOf(container)
@@ -69,13 +69,13 @@ it('"Resolve" on a comment writes set-comment-resolved and the comment leaves th
 
   await vi.waitFor(() => expect(resolvesOf(latest.commands)).toHaveLength(1))
   expect(resolvesOf(latest.commands)[0]).toEqual({
-    kind: 'set-comment-resolved',
-    id: 'c-open',
-    resolved: true,
+    kind: 'set-thread-status',
+    threadId: 'c-open',
+    status: 'resolved',
   })
   await waitForPin(container, 'c-open', false)
   // Closed, not erased: the record is still in the document.
-  expect(latest.canvas.comments?.find((c) => c.id === 'c-open')).toMatchObject({
+  expect(latest.comments?.find((c) => c.id === 'c-open')).toMatchObject({
     resolved: true,
     text: 'still open',
   })
@@ -101,9 +101,9 @@ it('"Show resolved comments" draws resolved ones muted, and "Reopen" brings one 
   await userEvent.click(page.getByRole('menuitem', { name: 'Reopen' }))
   await vi.waitFor(() => expect(resolvesOf(latest.commands)).toHaveLength(1))
   expect(resolvesOf(latest.commands)[0]).toEqual({
-    kind: 'set-comment-resolved',
-    id: 'c-done',
-    resolved: false,
+    kind: 'set-thread-status',
+    threadId: 'c-done',
+    status: 'open',
   })
   await vi.waitFor(() =>
     expect(

@@ -7,11 +7,10 @@
  * right and the picture was not — a status resolved from the rail left the
  * bubble drawn until a reload, and reopening never brought it back.
  *
- * The reducer is the only thing that knows a thread's status projects onto
- * a flat comment's `resolved`, that a new thread projects a pin, and that
- * an opening message is that comment's text. So every command goes through
- * it here, and a fifth member of `CommentsRailWrite` is added once, in a
- * file whose whole subject is getting this right.
+ * Every command goes through the same `onChange` the canvas's own edits do,
+ * which is where the sync session publishes the conversations a command
+ * leaves (`threadsAfterCommand`) — so a fifth member of `CommentsRailWrite`
+ * is added once, in a file whose whole subject is getting this right.
  *
  * `canvasNow` is a getter, not a value: a rail press happens long after the
  * door is built, and a captured canvas would write an edit onto a stale one.
@@ -58,7 +57,7 @@ export function editThreadMessageCommand(
     threadId: thread.id,
     message: { ...message, body, editedAt: new Date().toISOString() },
     // Only the opening message is drawn on the canvas, so only its edit
-    // repaints the pin.
+    // repaints the bubble.
     opening: thread.messages[0]?.id === messageId,
   }
 }

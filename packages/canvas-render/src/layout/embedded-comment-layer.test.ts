@@ -9,11 +9,11 @@
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { type LoadedReference, layoutMdastBlocks, referenceSeams } from '../index.js'
+import { type LoadedReference, referenceSeams } from '../index.js'
+import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
@@ -24,7 +24,6 @@ const COMMENT = 'should we add snow here'
 const board: SpatialCanvas = {
   nodes: [textNode({ id: 'b1', x: 0, y: 0, width: 300, height: 120, text: 'Evaporation' })],
   edges: [],
-  comments: [{ id: 'c1', x: 320, y: 40, text: COMMENT }],
 }
 
 const references = referenceSeams(
@@ -58,65 +57,42 @@ const base = {
   appearance: createSpatialTheme({ mode: 'light' }),
 }
 
-describe('a canvas embedded in another document draws no comment layer', () => {
-  it('draws the comment on the board itself, so the fixture has one to hide', () => {
-    const drawn = walk(layoutSpatialCanvas(board, base).nodes)
+/** Comment chrome found BELOW a top-level node — inside what it embeds. */
+function nestedCommentChrome(nodes: readonly SceneNode[]): number {
+  return nodes.reduce((count, node) => {
+    const entry = node as { runs?: readonly SceneNode[]; children?: readonly SceneNode[] }
+    return count + walk([...(entry.runs ?? []), ...(entry.children ?? [])]).chrome
+  }, 0)
+}
+
+describe('a canvas embedded in another document draws none of the host’s comment layer', () => {
+  // A board embedded twice, and the host's threads: one about a node only the
+  // EMBEDDED board holds — the case where drawing the host's layer inside the
+  // embed would land a pin on content the host does not own — and one on a
+  // point of the host's own.
+  const host: SpatialCanvas = {
+    nodes: [
+      fileNode({ id: 'f', x: 0, y: 0, width: 600, height: 400, file: BOARD }),
+      textNode({ id: 't', x: 0, y: 500, width: 600, height: 400, text: `![[${BOARD}]]` }),
+    ],
+    edges: [],
+  }
+  const threads = threadsOf([
+    { id: 'k', x: 320, y: 40, text: COMMENT, targetNodeId: 'b1' },
+    { id: 'h1', x: 700, y: 40, text: 'host remark' },
+  ])
+  const laid = () =>
+    layoutSpatialCanvas(host, { ...base, references, threads, expandFileNode: () => true }).nodes
+
+  it('draws the host’s own threads, so the fixture has a layer to keep out', () => {
+    const drawn = walk(laid())
+    expect(drawn.text).toContain('Evaporation')
     expect(drawn.chrome).toBeGreaterThan(0)
-    expect(drawn.text.join(' ')).toContain('snow')
-  })
-
-  it('leaves it out of a note embedding the board', () => {
-    const body: MdastRoot = {
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'embed', documentId: BOARD }] }],
-    }
-    const scene = layoutMdastBlocks(body, {
-      measure: createFakeMeasure(),
-      maxWidth: 600,
-      fontFamily: 'sans-serif',
-      references,
-    })
-    const drawn = walk(scene.nodes)
-    expect(drawn.text).toContain('Evaporation')
-    expect(drawn.chrome).toBe(0)
-    expect(drawn.text.join(' ')).not.toContain('snow')
-  })
-
-  it('leaves it out of a text node embedding the board', () => {
-    const host: SpatialCanvas = {
-      nodes: [textNode({ id: 't', x: 0, y: 0, width: 600, height: 400, text: `![[${BOARD}]]` })],
-      edges: [],
-    }
-    const drawn = walk(layoutSpatialCanvas(host, { ...base, references }).nodes)
-    expect(drawn.text).toContain('Evaporation')
-    expect(drawn.chrome).toBe(0)
-    expect(drawn.text.join(' ')).not.toContain('snow')
-  })
-
-  it('leaves it out of a file node showing the board', () => {
-    const host: SpatialCanvas = {
-      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 600, height: 400, file: BOARD })],
-      edges: [],
-    }
-    const drawn = walk(
-      layoutSpatialCanvas(host, { ...base, references, expandFileNode: () => true }).nodes,
-    )
-    expect(drawn.text).toContain('Evaporation')
-    expect(drawn.chrome).toBe(0)
-    expect(drawn.text.join(' ')).not.toContain('snow')
-  })
-
-  it('keeps the host canvas’s own comments', () => {
-    const host: SpatialCanvas = {
-      nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 600, height: 400, file: BOARD })],
-      edges: [],
-      comments: [{ id: 'h1', x: 700, y: 40, text: 'host remark' }],
-    }
-    const drawn = walk(
-      layoutSpatialCanvas(host, { ...base, references, expandFileNode: () => true }).nodes,
-    )
     expect(drawn.text.join(' ')).toContain('remark')
-    expect(drawn.text.join(' ')).not.toContain('snow')
+  })
+
+  it('draws none of them again inside a file node or a text node showing the board', () => {
+    expect(nestedCommentChrome(laid())).toBe(0)
   })
 })
 

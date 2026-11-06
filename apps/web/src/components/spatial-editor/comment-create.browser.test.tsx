@@ -1,17 +1,16 @@
 // ADR-0025 decision 1: a comment is created from the context menu — on a
 // node ("Comment on this", anchored at its top-right corner like the MCP
 // op) or on empty space ("Comment here", anchored at the click) — through an
-// inline compose bubble that commits one `create-comment`. Real pointer
+// inline compose bubble that commits one `create-thread`. Real pointer
 // and keyboard input: the compose bubble's focus/Esc/commit behaviour is
 // exactly what jsdom cannot vouch for.
 
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from '../../lib/spatial/commands.js'
-import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
+import { createdComments, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
@@ -24,10 +23,6 @@ const start: SpatialCanvas = {
 function rightClick(el: HTMLElement, x: number, y: number) {
   const r = el.getBoundingClientRect()
   fireEvent.contextMenu(el, { clientX: r.left + x, clientY: r.top + y, button: 2 })
-}
-
-function createdComments(commands: readonly EditorCommand[]): CanvasComment[] {
-  return commands.flatMap((command) => (command.kind === 'create-comment' ? [command.comment] : []))
 }
 
 it('Comment on this: composes at the node and commits a node-anchored comment', async () => {
@@ -50,7 +45,7 @@ it('Comment on this: composes at the node and commits a node-anchored comment', 
   const [comment] = createdComments(latest.commands)
   expect(comment).toMatchObject({ targetNodeId: 'n1', x: 300, y: 100, text: 'looks off' })
   expect(comment?.id.length).toBeGreaterThan(0)
-  expect(latest.canvas.comments).toHaveLength(1)
+  expect(latest.comments).toHaveLength(1)
   expect(container.querySelector('[data-testid="comment-compose"]')).toBeNull()
 })
 
@@ -94,7 +89,7 @@ it('Escape abandons the draft; an empty commit creates nothing', async () => {
   )
 
   expect(createdComments(latest.commands)).toHaveLength(0)
-  expect(latest.canvas.comments).toBeUndefined()
+  expect(latest.comments).toHaveLength(0)
 })
 
 it('a locked node still offers Comment on this beside Unlock — a comment does not edit the node', async () => {

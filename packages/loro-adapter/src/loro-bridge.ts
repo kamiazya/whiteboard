@@ -1,6 +1,5 @@
 import {
   anchoredOnAny,
-  type CanvasComment,
   type CanvasEdge,
   type CanvasLine,
   canvasEdgeSchema,
@@ -10,9 +9,6 @@ import {
   spatialNodeSchema,
   storedTagsSchema,
 } from '@kamiazya/whiteboard-model'
-import { readCanvasComments } from './annotations.js'
-import { deleteCommentInto, writeCommentInto } from './canvas-comment-write.js'
-import { migrateCanvasCommentsToThreads } from './comment-threads.js'
 import {
   CANVAS_KEY,
   CANVAS_TAGS_FIELD,
@@ -143,10 +139,8 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
   // returned to the default must stop rendering a preference the author
-  // turned off. Comments are split OUT of the envelope value first — see
-  // COMMENTS_KEY for why they must not ride the whole-value LWW write.
+  // turned off.
   const canvasMap = doc.getMap(CANVAS_KEY)
-  const { comments } = canvas
   writeOptionalField(canvasMap, CANVAS_FACETS_FIELD, canvas.facets)
   writeOptionalField(canvasMap, TAGS_FIELD, canvas.tags)
   // A write converges the record — but only when there is something to
@@ -157,17 +151,8 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
     canvasMap.delete(LEGACY_EXTENSION_FIELD)
   }
 
-  // Before the incoming set is applied, so a legacy entry the resync omits is
-  // migrated and THEN dropped by the sweep below rather than surviving it.
-  migrateCanvasCommentsToThreads(doc)
-  const threadsMap = doc.getMap(THREADS_KEY)
-  const existingCommentIds = new Set<string>(threadsMap.keys())
-  for (const comment of comments ?? []) {
-    existingCommentIds.delete(comment.id)
-    writeCommentInto(doc, comment)
-  }
-  // A resync states the whole truth, comments included.
-  for (const id of existingCommentIds) threadsMap.delete(id)
+  // A resync states the whole truth of the CANVAS. The annotation layer is a
+  // plane beside it (ADR-0026 decision 1), so no canvas write reaches it.
 
   // Two phases, in this order, because the op order is part of the bytes:
   // every collection's writes first, then every collection's removals.
@@ -189,9 +174,9 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
 
 /**
  * Removes every node, edge and line, with their locks, and nothing else. Not
- * the resync with an empty canvas: that states the whole truth, so it would
- * also delete every comment thread and the canvas's own tags and facets. A
- * map with nothing in it costs no op.
+ * the resync with an empty canvas: that states the whole truth of the canvas,
+ * so it would also delete the canvas's own tags and facets. A map with
+ * nothing in it costs no op.
  */
 export function clearSpatialElementsInto(doc: DocumentContainers): void {
   const nodesMap = doc.getMap(NODES_KEY)
@@ -453,7 +438,6 @@ export function reconcileSpatialCanvasInto(
   reconcileById(prev.nodes, next.nodes, writer.writeNode, writer.deleteNode)
   reconcileById(prev.edges, next.edges, writer.writeEdge, writer.deleteEdge)
   reconcileById(prev.lines ?? [], next.lines ?? [], writer.writeLine, writer.deleteLine)
-  reconcileById(prev.comments ?? [], next.comments ?? [], writer.writeComment, writer.deleteComment)
   settle()
 
   const facetsMoved = !sameValue(prev.facets, next.facets)
@@ -475,10 +459,6 @@ export interface SpatialBatchWriter {
   /** Ink counterpart of writeEdge/deleteEdge; a line's lock shares the edge plane. */
   writeLine(line: CanvasLine): void
   deleteLine(lineId: string): void
-  /** Comment counterpart of writeNode/writeEdge — create AND update (an
-   * id-keyed rewrite), matching `writeCanvasComment`. */
-  writeComment(comment: CanvasComment): void
-  deleteComment(commentId: string): void
 }
 
 /**
@@ -529,15 +509,6 @@ function spatialBatchWriter(
     deleteLine(lineId) {
       settle()
       if (deleteLineInto(doc, lineId)) markWrote()
-    },
-    writeComment(comment) {
-      settle()
-      writeCommentInto(doc, comment)
-      markWrote()
-    },
-    deleteComment(commentId) {
-      settle()
-      if (deleteCommentInto(doc, commentId)) markWrote()
     },
   }
   return { writer, settle }
@@ -676,18 +647,8 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
     readNodes.skipped + readEdges.skipped + readLines.skipped + countUnreadableCanvasFacets(doc)
   const tags = readCanvasTags(doc)
 
-  // The annotation layer is document-level and format-agnostic, so reading it
-  // is not this reader's job — `readAnnotations` answers it for a markdown
-  // document too. What stays here is only the lossy projection into the flat
-  // shape the canvas renderer still takes.
-  // With the nodes in hand: a passage of a node's text projects as a comment
-  // on that node, which needs the node's corner to stand at.
-  // The FIRST node with an id wins, as a scan from the front would answer: two
-  // stored keys can hold one id only in a record a broken writer left.
-  const nodeById = new Map<string, SpatialNode>()
-  for (const node of nodes) if (!nodeById.has(node.id)) nodeById.set(node.id, node)
-  const comments = readCanvasComments(doc, (id) => nodeById.get(id))
-
+  // The annotation layer is document-level and format-agnostic, so it is not
+  // part of the canvas: `readAnnotations` answers it for any document kind.
   const canvas: SpatialCanvas = {
     nodes,
     edges,
@@ -696,29 +657,8 @@ export function readSpatialCanvasWithSkipped(doc: DocumentContainers): {
     ...(lines.length > 0 && { lines }),
     ...(facets !== undefined && { facets }),
     ...(tags !== undefined && { tags }),
-    ...(comments.length > 0 && { comments }),
   }
   return { canvas, skipped }
-}
-
-/**
- * Writes exactly one comment's entry, leaving every other comment (and the
- * canvas envelope) untouched — the comment-level counterpart of
- * `writeSpatialNode`, and the write shape a "two peers comment concurrently"
- * merge depends on. Also the UPDATE path: resolving a comment is a rewrite
- * of the same id with `resolved: true`.
- */
-export function writeCanvasComment(doc: DocumentContainers, comment: CanvasComment): void {
-  writeCommentInto(doc, comment)
-  doc.commit()
-}
-
-/**
- * Removes exactly one comment. Idempotent and a no-op (no commit) for an id
- * absent from the doc, matching `deleteSpatialEdge`.
- */
-export function deleteCanvasComment(doc: DocumentContainers, commentId: string): void {
-  if (deleteCommentInto(doc, commentId)) doc.commit()
 }
 
 /**
