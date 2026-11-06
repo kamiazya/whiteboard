@@ -34,7 +34,6 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeKind, nodeText, RESOURCE_KINDS } from '@kamiazya/whiteboard-model'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { freehandLine } from '../../lib/spatial/freehand.js'
 import {
   type Box,
   type ResizeHandleKind,
@@ -42,6 +41,7 @@ import {
   scaleBoxWithin,
 } from '../../lib/spatial/geometry.js'
 import { moveInkCommand } from '../../lib/spatial/ink-commands.js'
+import type { PenStyle } from '../../lib/spatial/pen-style.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import {
   type BendSnapshot,
@@ -52,6 +52,15 @@ import {
 } from './gesture-bends.js'
 import type { EndSnapshot } from './gesture-ends.js'
 import { connectRelease, endCommands, endTargetExists } from './gesture-ends.js'
+import {
+  type DrawSnapshot,
+  type EraseSnapshot,
+  eraseOver,
+  eraseRelease,
+  eraseStart,
+  strokeRelease,
+  strokeStart,
+} from './gesture-ink-tools.js'
 
 interface MoveSnapshot {
   readonly kind: 'moving'
@@ -103,28 +112,6 @@ interface EditTextSnapshot {
 }
 
 /**
- * A freehand stroke in progress: every sample the pointer has emitted since
- * it went down, in canvas coordinates.
- *
- * The one gesture that keeps intermediate points, and it has to — see the
- * `pointermove` arm. `zoom` rides along because what counts as jitter, and
- * what counts as a tap, are screen distances, and the release has no viewport
- * to ask.
- */
-interface DrawSnapshot {
-  readonly kind: 'drawing'
-  /**
-   * The mark this stroke joins, decided at the PRESS and carried to the
-   * release. Decided there because that is where the timing and the starting
-   * point are, and by the caller because the decision reads a clock — see
-   * `stroke-group.ts`.
-   */
-  readonly group?: string
-  readonly points: readonly Point[]
-  readonly zoom: number
-}
-
-/**
  * Strokes travelling under the pointer.
  *
  * Its own state rather than an arm of `MoveSnapshot`, and the difference is
@@ -153,6 +140,7 @@ export type GestureState =
   | EditTextSnapshot
   | BendSnapshot
   | DrawSnapshot
+  | EraseSnapshot
   | MoveInkSnapshot
   | EndSnapshot
 
@@ -225,7 +213,12 @@ export type GestureEvent =
       readonly point: Point
       readonly zoom: number
       readonly group?: string
+      readonly pen?: PenStyle
     }
+  /** The eraser went down, over the drawings named (none, over empty board). */
+  | { readonly type: 'pointerdown-erase'; readonly point: Point; readonly ids: readonly string[] }
+  /** The eraser moved to `point` over these drawings; only an erasing gesture listens. */
+  | { readonly type: 'erase-over'; readonly point: Point; readonly ids: readonly string[] }
   | { readonly type: 'dblclick-empty'; readonly point: Point }
   | { readonly type: 'delete-selection'; readonly nodeId: string }
   | { readonly type: 'pointermove'; readonly point: Point }
@@ -312,8 +305,10 @@ function targetsStillValid(state: GestureState, canvas: SpatialCanvas): boolean 
       // whole scribble because a collaborator erased one stroke of it.
       return state.ids.some((id) => (canvas.lines ?? []).some((line) => line.id === id))
     case 'drawing':
+    case 'erasing':
       // A stroke is drawn ON the board, not on anything in it, so no
-      // element arriving or leaving can invalidate it.
+      // element arriving or leaving can invalidate it; an erase drops at its
+      // release whatever already went.
       return true
   }
 }
@@ -680,11 +675,10 @@ function reducePointerUp(
       const commands = endCommands(canvas, state, event.point, event.targetNodeId)
       return commands.length === 0 ? idle : { state: { kind: 'idle' }, commands }
     }
-    case 'drawing': {
-      const line = freehandLine(createId(), [...state.points, event.point], state.zoom, state.group)
-      if (line === undefined) return idle
-      return { state: { kind: 'idle' }, commands: [{ kind: 'create-line', line }] }
-    }
+    case 'drawing':
+      return { state: { kind: 'idle' }, commands: strokeRelease(state, event.point, createId()) }
+    case 'erasing':
+      return { state: { kind: 'idle' }, commands: eraseRelease(state, canvas) }
     case 'editing-text':
       // A double-press opens the editor on the SECOND pointerdown; that
       // press's own pointerup arrives afterwards and must not tear the
@@ -794,15 +788,11 @@ export function reduceGesture(
     case 'delete-selection':
       return reduceDeleteSelection(state, event.nodeId)
     case 'pointerdown-draw':
-      return withPendingTextCommit(
-        state,
-        stateOnly({
-          kind: 'drawing',
-          points: [event.point],
-          zoom: event.zoom,
-          ...(event.group === undefined ? {} : { group: event.group }),
-        }),
-      )
+      return withPendingTextCommit(state, stateOnly(strokeStart(event)))
+    case 'pointerdown-erase':
+      return withPendingTextCommit(state, stateOnly(eraseStart(event)))
+    case 'erase-over':
+      return stateOnly(state.kind === 'erasing' ? eraseOver(state, event.point, event.ids) : state)
     case 'pointerdown':
       return withPendingTextCommit(state, reducePointerDown(event, canvas))
     case 'pointerdown-handle':

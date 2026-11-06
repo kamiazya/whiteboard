@@ -85,7 +85,12 @@ function membershipMessage(prev: SpatialCanvas, next: SpatialCanvas): string | u
  * a text edit, a move that stays in its frame). A node change outranks the edges
  * that went with it, and both outrank a move across a frame's edge.
  */
-export function canvasChangeMessage(prev: SpatialCanvas, next: SpatialCanvas): string | undefined {
+export function canvasChangeMessage(
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+  /** The eraser is what removed them, so drawings are said to be erased. */
+  erasing = false,
+): string | undefined {
   const prevIds = new Set(prev.nodes.map((node) => node.id))
   const nextIds = new Set(next.nodes.map((node) => node.id))
   const added = next.nodes.filter((node) => !prevIds.has(node.id))
@@ -107,19 +112,24 @@ export function canvasChangeMessage(prev: SpatialCanvas, next: SpatialCanvas): s
   if (goneEdges.length > 0 && newEdges.length === 0) {
     return `Deleted ${plural(goneEdges.length, 'edge', 'edges')}`
   }
-  return goneLinesMessage(prev, next) ?? membershipMessage(prev, next)
+  return goneLinesMessage(prev, next, erasing) ?? membershipMessage(prev, next)
 }
 
 /**
  * Ink taken away, said as a node deletion is: "Deleted 1 drawing" for strokes
- * somebody drew, "Deleted 2 lines" once any ruled line is among them.
+ * somebody drew, "Deleted 2 lines" once any ruled line is among them — and
+ * "Erased 2 drawings" when the eraser took them, the verb the person used.
  */
-function goneLinesMessage(prev: SpatialCanvas, next: SpatialCanvas): string | undefined {
+function goneLinesMessage(
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+  erasing: boolean,
+): string | undefined {
   const kept = new Set((next.lines ?? []).map((line) => line.id))
   const gone = (prev.lines ?? []).filter((line) => !kept.has(line.id))
   if (gone.length === 0) return undefined
   return gone.every(isFreehandStroke)
-    ? `Deleted ${plural(gone.length, 'drawing', 'drawings')}`
+    ? `${erasing ? 'Erased' : 'Deleted'} ${plural(gone.length, 'drawing', 'drawings')}`
     : `Deleted ${plural(gone.length, 'line', 'lines')}`
 }
 

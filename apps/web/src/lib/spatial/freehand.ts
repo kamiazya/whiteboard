@@ -26,7 +26,9 @@ import {
   resolveEdgeOwnStyle,
   VISUAL_EDGES_KEY,
   VISUAL_INK_KEY,
+  VISUAL_STROKE_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
+import type { PenStyle } from './pen-style.js'
 import type { Point } from './viewport.js'
 
 /**
@@ -213,6 +215,22 @@ export function freehandLine(
       // an id on every scribble for nothing.
       ...(group === undefined ? {} : { [VISUAL_INK_KEY]: { group } }),
     },
+  }
+}
+
+/**
+ * The stroke as the pen it was drawn with paints it: the pen's colour as the
+ * line's own `color`, and its weight as `visual.stroke/v0`. The default pen
+ * writes neither — no colour is the theme's ink and `thin` is the absent
+ * weight — so ink drawn with an untouched pen stays bare.
+ */
+export function withPen(line: CanvasLine, pen: PenStyle): CanvasLine {
+  const color = pen.color === undefined ? {} : { color: pen.color }
+  if (pen.width === 'thin') return { ...line, ...color }
+  return {
+    ...line,
+    ...color,
+    facets: { ...line.facets, [VISUAL_STROKE_KEY]: { width: pen.width } },
   }
 }
 

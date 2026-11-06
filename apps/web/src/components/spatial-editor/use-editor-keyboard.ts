@@ -54,12 +54,30 @@ const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
   ArrowDown: { dx: 0, dy: 1 },
 }
 
+/**
+ * Escape with the eraser armed and no sweep in flight puts it down. An
+ * eraser left armed turns the next press on a drawing into a deletion, so
+ * the key that means "stop" must reach it the way it reaches a gesture.
+ */
+function leaveEraserWithEscape(
+  e: React.KeyboardEvent<HTMLDivElement>,
+  tool: EditorTool,
+  gesture: string,
+  changeTool: (tool: EditorTool) => void,
+): boolean {
+  if (e.key !== 'Escape' || tool !== 'erase' || gesture !== 'idle') return false
+  e.preventDefault()
+  changeTool('select')
+  return true
+}
+
 /** The catalog rows that arm a tool, and the tool each arms. */
 const TOOL_SHORTCUTS: Partial<Record<ShortcutId, EditorTool>> = {
   'tool-select': 'select',
   'tool-hand': 'hand',
   'tool-connect': 'connect',
   'tool-draw': 'draw',
+  'tool-erase': 'erase',
 }
 
 const ATTACH_TARGET_STEP: Record<string, 1 | -1> = {
@@ -665,6 +683,7 @@ export function useEditorKeyboard({
       clearInkSelection(e) ||
       deleteInkSelection(e) ||
       cancelWithEscape(e) ||
+      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool) ||
       releaseSelectionWithEscape(e) ||
       armSpacePan(e) ||
       nudgeSelection(e) ||

@@ -7,9 +7,14 @@ import type { Appearance, RoutableElement } from '@kamiazya/whiteboard-scene'
  * A multiple rather than a pixel width, so a theme that draws its lines
  * heavier draws every weight heavier and the three stay three. `thin` is 1:
  * it is the weight every line had before weights existed, and a stroke that
- * names none must draw byte-identically to how it always did.
+ * names none must draw byte-identically to how it always did. Exported so the
+ * editor's draft under the pen grows by the same steps the drawn stroke will.
  */
-const WEIGHT_FACTOR: Readonly<Record<StrokeWidth, number>> = { thin: 1, medium: 2.5, thick: 5 }
+export const STROKE_WEIGHT_FACTOR: Readonly<Record<StrokeWidth, number>> = {
+  thin: 1,
+  medium: 2.5,
+  thick: 5,
+}
 
 /**
  * SVG's initial `stroke-width`, which is what an edge whose theme names no
@@ -22,7 +27,7 @@ export function weighStroke(
   appearance: Appearance | undefined,
   element: RoutableElement,
 ): Appearance | undefined {
-  const factor = WEIGHT_FACTOR[resolveStrokeWidth(element)]
+  const factor = STROKE_WEIGHT_FACTOR[resolveStrokeWidth(element)]
   if (factor === 1) return appearance
   const base = appearance?.strokeWidth ?? SVG_INITIAL_STROKE_WIDTH
   return { ...appearance, strokeWidth: base * factor }

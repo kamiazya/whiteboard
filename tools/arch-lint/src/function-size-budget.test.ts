@@ -200,7 +200,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1750, // +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle; +1: the orphaned-conversation flag on the comment card; +3: the Connect tool hint mount
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1752, // +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle; +1: the orphaned-conversation flag on the comment card; +3: the Connect tool hint mount; +2: the Draw tool's pen and the eraser's announcement verb
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -211,7 +211,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.runNavigation': 55,
   // +1: the label bound's prop; its draft and notice are `useLimitedDraft` / `LengthLimitNotice`.
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 117, // +1: the exit strip told the field is one line; +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
-  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 269,
+  'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 270, // +1: the eraser's dock button
   // +9: the exit hint follows the bubble as it grows.
   'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 107, // +1: the editor's accessible name
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
@@ -235,7 +235,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
   // that used to sit beside its `return`.
-  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 620, // +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node; +4: F6 and Shift+F6 leave the canvas keeping the selection
+  'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard': 621, // +1: Escape puts the eraser down; +41: C arms a connect from the selection and the arrows walk its targets; +14: Tab's walk reaches connections and lines (use-keyboard-walk.ts), Enter edits a selected connection's label, Escape on one steps back to its node; +4: F6 and Shift+F6 leave the canvas keeping the selection
   'apps/web/src/components/spatial-editor/use-editor-keyboard.ts#useEditorKeyboard.handleResizeHandleKeyDown': 74,
   // The press and release paths are claimant chains, and the reasons live on the
   // claimants. The comment, proposal, ink and context-menu claimants live in

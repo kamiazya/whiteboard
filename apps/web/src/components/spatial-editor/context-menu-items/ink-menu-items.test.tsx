@@ -4,7 +4,7 @@
 // row writes needs no DOM.
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasEdge, CanvasLine, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { VISUAL_INK_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import { VISUAL_INK_KEY, VISUAL_STROKE_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import { deleteInkCommand } from '../../../lib/spatial/ink-commands.js'
@@ -117,5 +117,40 @@ describe('inkMenuItems', () => {
     const canvas: SpatialCanvas = { nodes: [], edges: [], lines: [stroke('l1')] }
     const { items } = itemsFor(canvas, stroke('l1'), { isEdgeLocked: () => true })
     expect(items.map((item) => ('label' in item ? item.label : item.kind))).toEqual(['Unlock'])
+  })
+})
+
+describe('inkMenuItems Width', () => {
+  const widthRow = (items: readonly ContextMenuItem[]) => {
+    const row = items.find((item) => item.kind === 'options' && item.label === 'Width')
+    if (row === undefined || row.kind !== 'options') throw new Error('no Width row')
+    return row
+  }
+
+  it('marks the weight the stroke is drawn at, thin when it names none', () => {
+    const canvas: SpatialCanvas = { nodes: [], edges: [], lines: [stroke('l1')] }
+    const row = widthRow(itemsFor(canvas, stroke('l1')).items)
+    expect(row.options.map((o) => [o.ariaLabel, o.selected])).toEqual([
+      ['Thin', true],
+      ['Medium', false],
+      ['Thick', false],
+    ])
+  })
+
+  it('writes the weight across the whole mark, and removes the facet for thin', () => {
+    const marked = [stroke('l1', 'g'), stroke('l2', 'g')]
+    const canvas: SpatialCanvas = { nodes: [], edges: [], lines: marked }
+    const thick = itemsFor(canvas, marked[0] as CanvasLine)
+    widthRow(thick.items).options[2]?.onSelect()
+    expect(thick.commands).toEqual([
+      { kind: 'set-line-facet', id: 'l1', key: VISUAL_STROKE_KEY, payload: { width: 'thick' } },
+      { kind: 'set-line-facet', id: 'l2', key: VISUAL_STROKE_KEY, payload: { width: 'thick' } },
+    ])
+    const thin = itemsFor(canvas, marked[0] as CanvasLine)
+    widthRow(thin.items).options[0]?.onSelect()
+    expect(thin.commands.map((c) => c.kind === 'set-line-facet' && c.payload)).toEqual([
+      undefined,
+      undefined,
+    ])
   })
 })

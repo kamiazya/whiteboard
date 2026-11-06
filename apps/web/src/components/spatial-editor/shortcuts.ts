@@ -39,6 +39,7 @@ export type ShortcutId =
   | 'tool-connect'
   | 'connect-pick-target'
   | 'tool-draw'
+  | 'tool-erase'
   | 'new-note'
   | 'select-next-node'
   | 'select-previous-node'
@@ -137,6 +138,13 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['d'],
     display: 'D',
     description: 'Draw tool',
+  },
+  {
+    id: 'tool-erase',
+    section: 'Tools',
+    keys: ['e'],
+    display: 'E',
+    description: 'Eraser: drag over drawings to remove them',
   },
   {
     id: 'new-note',
@@ -444,7 +452,7 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     keys: ['Escape'],
     display: 'Esc',
     description:
-      'Cancel the gesture or clear the selection; on a connection reached with Tab, back to its node; discards text being edited',
+      'Cancel the gesture or clear the selection; on a connection reached with Tab, back to its node; discards text being edited; puts the eraser down',
     handledInline: true,
   },
   {

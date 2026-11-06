@@ -21,7 +21,6 @@ import {
   VISUAL_EDGES_KEY,
   VISUAL_INK_KEY,
   VISUAL_SHAPE_KEY,
-  VISUAL_STROKE_KEY,
   VISUAL_SYMBOL_KEY,
   VISUAL_TEXT_KEY,
   VISUAL_THEME_KEY,
@@ -29,6 +28,7 @@ import {
   visualShapeFacetSchema,
   visualSymbolFacetSchema,
 } from './data.js'
+import { VISUAL_STROKE_KEY } from './stroke.js'
 
 const registry = createFacetRegistry(bundledPlugins)
 

@@ -59,6 +59,22 @@ describe('what a canvas change sounds like', () => {
     expect(canvasChangeMessage({ ...empty, lines: [ruled] }, empty)).toBe('Deleted 1 line')
   })
 
+  it('drawings the eraser took are said to be erased', () => {
+    const drawn = (id: string) =>
+      freehandLine(
+        id,
+        [
+          { x: 0, y: 0 },
+          { x: 20, y: 30 },
+          { x: 40, y: 10 },
+        ],
+        1,
+      ) as CanvasLine
+    expect(canvasChangeMessage({ ...empty, lines: [drawn('s'), drawn('t')] }, empty, true)).toBe(
+      'Erased 2 drawings',
+    )
+  })
+
   it('several nodes at once are counted, not itemised', () => {
     expect(canvasChangeMessage(empty, { nodes: [a, b, c], edges: [] })).toBe('3 nodes added')
   })
