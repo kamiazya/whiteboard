@@ -87,9 +87,7 @@ describe('the two dependency-free copies are one definition', () => {
     )
   })
 
-  it.each(
-    Array.from({ length: SLICES }, (_, k) => [k]),
-  )('answer what the parser answers on source slice %i', (k) => {
+  it.each([...Array(SLICES).keys()])('answer what the parser answers on source slice %i', (k) => {
     const disagreeing = sliceOf(k)
       .filter((path) => {
         const raw = readFileSync(path, 'utf8')

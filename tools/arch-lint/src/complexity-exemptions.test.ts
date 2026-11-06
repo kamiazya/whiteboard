@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { REPO_ROOT } from './scan-roots.js'
 import { toolCommand } from './tool-bin.js'
 
@@ -104,10 +104,6 @@ function exemptions(): string[] {
 }
 
 describe('the cognitive-complexity exemption list', () => {
-  afterEach(() => {
-    vi.mocked(execFileSync).mockClear()
-  })
-
   it('names no more files than the ceiling', () => {
     expect(exemptions().length).toBeLessThanOrEqual(EXEMPT_CEILING)
   })
