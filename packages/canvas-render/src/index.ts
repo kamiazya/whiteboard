@@ -63,6 +63,7 @@ export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edg
 export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
+export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
 export {
   SKETCH_INK_REACH_PX,
@@ -118,7 +119,6 @@ export {
   paintOrderOf,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
-export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export { translateScene } from './layout/translate-scene.js'
 export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
