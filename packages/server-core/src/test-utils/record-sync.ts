@@ -13,7 +13,7 @@ import { unusedLiveDocuments } from './unused-live-documents.js'
 import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
 
 /** The one document a `recordHolding` record holds. */
-export const RECORD_DOCUMENT_ID = '01BRWAAAAAAAAAAAAAAAAAAAB0'
+const RECORD_DOCUMENT_ID = '01BRWAAAAAAAAAAAAAAAAAAAB0'
 
 /** A workspace record holding one document at `doc`, its content written by `fill`. */
 export function recordHolding(
