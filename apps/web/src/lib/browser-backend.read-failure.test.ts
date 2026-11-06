@@ -27,22 +27,9 @@
  */
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
-import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
-import type { LoroStore } from './loro-store.js'
-
-// jsdom has no IndexedDB, so the startup fold cannot run here: it throws, the
-// production path catches it and continues, and that guarded continue is
-// exactly what these tests already run under. Mocked to the same outcome
-// rather than left to throw, because the warn it logs on the way is noise in a
-// channel that has to stay readable — `vitest.setup.ts`'s act guard and
-// `web-browser`'s wider one both live there. Measured: 36 of the project's 78
-// console records were this one line.
-vi.mock('./fold-workspace.js', () => ({
-  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
-}))
 
 const TARGET = {
   documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
@@ -63,8 +50,7 @@ function docsFailingWith(error: unknown): WorkspaceDocs {
 
 function connectAgainst(error: unknown): { reasons: string[] } {
   const reasons: string[] = []
-  const legacy = { load: async () => ({ kind: 'not-found' }) as const } as unknown as LoroStore
-  const backend = new BrowserBackend(TARGET, docsFailingWith(error), legacy)
+  const backend = new BrowserBackend(TARGET, docsFailingWith(error))
   backend.connect({
     onConnected: () => {},
     onSnapshot: (_snapshot: Uint8Array) => {},
@@ -99,39 +85,5 @@ describe('what a failed workspace read is reported as', () => {
     const { reasons } = connectAgainst(new DOMException('transaction aborted', 'AbortError'))
     await vi.waitFor(() => expect(reasons).toEqual(['read-unavailable']))
     await expectLoggedFailure('opening the workspace record failed')
-  })
-})
-
-describe('a legacy record that could not be read is not shadowed', () => {
-  it('refuses rather than placing an empty node over a document that may be intact', async () => {
-    // The workspace opens fine and simply has no node for this document. The
-    // legacy read then answers `read-unavailable` — it knows NOTHING about
-    // the stored bytes — so placing an empty node here would shadow a
-    // document that may be sitting on disk intact, reached by nothing worse
-    // than a transient IndexedDB failure.
-    const saved: unknown[] = []
-    const docs = {
-      open: async () => new LoroDoc(),
-      create: async () => new LoroDoc(),
-      save: async (...args: unknown[]) => {
-        saved.push(args)
-      },
-      readCursor: async () => undefined,
-      catchUp: async () => undefined,
-    } as unknown as WorkspaceDocs
-    const legacy = {
-      load: async () => ({ kind: 'read-unavailable' }) as const,
-    } as unknown as LoroStore
-
-    const reasons: string[] = []
-    const backend = new BrowserBackend(TARGET, docs, legacy)
-    backend.connect({
-      onConnected: () => {},
-      onSnapshot: (_snapshot: Uint8Array) => {},
-      onError: (reason: string) => reasons.push(reason),
-    } as never)
-
-    await vi.waitFor(() => expect(reasons).toEqual(['read-unavailable']))
-    expect(saved).toEqual([])
   })
 })

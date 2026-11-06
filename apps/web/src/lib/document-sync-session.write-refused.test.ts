@@ -26,13 +26,9 @@ import {
   createGenerationCounters,
   type DocumentSyncSession,
 } from './document-sync-session.js'
-import type { LoroStore } from './loro-store.js'
 
-// jsdom has no IndexedDB, so the startup fold and the timestamp touch are
-// replaced by their outcome; see browser-backend.read-failure.test.ts.
-vi.mock('./fold-workspace.js', () => ({
-  foldOrServeTheTree: async () => ({ folded: 0, skipped: 0 }),
-}))
+// jsdom has no IndexedDB, so the timestamp touch is replaced by its
+// outcome; see browser-backend.read-failure.test.ts.
 vi.mock('./loro-store.js', () => ({ LoroStore: class {}, touchContentTimestamp: async () => {} }))
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -55,9 +51,7 @@ function openOnBrowserKeeper(body: string) {
     create: async () => record,
     save: async () => null,
   } as unknown as WorkspaceDocs
-  const backend = new BrowserBackend({ documentId: ID, path: 'notes', kind: 'markdown' }, docs, {
-    load: async () => ({ kind: 'missing' }),
-  } as unknown as LoroStore)
+  const backend = new BrowserBackend({ documentId: ID, path: 'notes', kind: 'markdown' }, docs)
 
   const refusals: SyncWriteRefusal[] = []
   const persistence: BrowserPersistenceState['kind'][] = []

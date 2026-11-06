@@ -39,6 +39,7 @@ import {
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { type ContentClock, idbContentClock } from './browser-document-summary.js'
 import { createTagBearersCache, type ReadDocument } from './browser-files-source-tags.js'
 import { writeImportedContent } from './browser-import-content.js'
@@ -58,7 +59,6 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from './files-source.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-store.js'
 import {
   type ContentRecord,
@@ -228,8 +228,8 @@ async function searchableOf(
 }
 
 /**
- * Present exactly when the index names folders — the tree index does, the
- * legacy row index has no folder to name.
+ * Present exactly when the index names folders — the tree index does; a test
+ * double over the bare port may not.
  */
 function folderMembers(
   index: DocumentIndex,
@@ -316,10 +316,8 @@ export function createBrowserFilesSource(
     files?: Pick<DocumentFileStore, 'read'>
   } = {},
 ): WorkspaceFilesSource {
-  // The default matches what production injects (App.tsx): the tree index
-  // behind the startup fold. Defaulting to the legacy row index would list
-  // a store the app no longer writes to.
-  const index = deps.index ?? new FoldingBrowserIndex()
+  // The default matches what production injects: the tree index.
+  const index = deps.index ?? new BrowserDocumentIndex()
   const loro = deps.loro ?? new LoroStore()
   const clock = deps.clock ?? idbContentClock()
   const files = deps.files ?? new DocumentFileStore()

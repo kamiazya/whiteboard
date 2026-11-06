@@ -13,9 +13,9 @@ import { userEvent } from 'vitest/browser'
 import { STORAGE_KEY as RECENT_KEY } from '../lib/recent-documents.js'
 import { STORAGE_KEY as SEEN_KEY } from '../lib/seen-documents.js'
 import '../index.css'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
@@ -25,8 +25,8 @@ claimIsolatedWhiteboardDb('browserindexpage-folder-names')
 // A cold IndexedDB fold plus the lazy panel outlasts the default find window.
 const LOAD = { timeout: 10_000 }
 
-async function seed(): Promise<FoldingBrowserIndex> {
-  const index = new FoldingBrowserIndex()
+async function seed(): Promise<BrowserDocumentIndex> {
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   await index.createDocument({
     workspaceId: getBrowserWorkspaceId(),
@@ -37,7 +37,7 @@ async function seed(): Promise<FoldingBrowserIndex> {
   return index
 }
 
-function mount(index: FoldingBrowserIndex, folder: string) {
+function mount(index: BrowserDocumentIndex, folder: string) {
   return render(
     <MemoryRouter initialEntries={[`/?folder=${folder}`]}>
       <BrowserIndexPage index={index} onOpenDocument={() => {}} />
@@ -85,7 +85,7 @@ describe('a named folder in a browser-kept workspace', () => {
     )
     first.unmount()
 
-    mount(new FoldingBrowserIndex(), 'class')
+    mount(new BrowserDocumentIndex(), 'class')
     const tree = await screen.findByRole('tree', { name: 'Workspace folders' }, LOAD)
     expect(
       await within(tree).findByRole('button', { name: 'Open folder Week 6' }, LOAD),

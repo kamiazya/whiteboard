@@ -252,8 +252,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the longest an edit waits; the sustained-edit test asserts the write lands inside it',
   'apps/web/src/lib/search-query-memory.ts#forgetSearchQueries':
     'the remembered search query is module state that outlives a page by design, so an index-page suite forgets it between tests',
-  'apps/web/src/lib/fold-workspace.ts#startupFoldsSettled':
-    'the one await a test has over a startup fold an unmount left running, so clearing the database cannot land between its listing and its record open; production never deletes storage under a running fold',
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
     'the one await a test has over a flush an unmount released, so clearing the database cannot race the checkpoint being taken; production never deletes storage under a page it just left',
   'packages/daemon-client/src/api-contracts/document.ts#updateDocumentResponseSchema':

@@ -1,6 +1,6 @@
 /**
  * Duplicate through the browser's PRODUCTION index, on real IndexedDB: the
- * path every browser surface takes once a page holds `FoldingBrowserIndex`,
+ * path every browser surface takes once a page holds `BrowserDocumentIndex`,
  * where the copy is one write to the workspace record.
  */
 import {
@@ -14,11 +14,11 @@ import {
 import { beforeEach, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { idbContentClock } from './browser-document-summary.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { duplicateBrowserDocument } from './duplicate-browser-document.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('duplicate-browser-document')
@@ -27,7 +27,7 @@ beforeEach(async () => {
   await clearWhiteboardDb()
 })
 
-async function seedRoadmap(index: FoldingBrowserIndex): Promise<void> {
+async function seedRoadmap(index: BrowserDocumentIndex): Promise<void> {
   const workspaceId = getBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId })
   await index.createDocument({
@@ -60,7 +60,7 @@ async function threadIdsAt(path: string): Promise<string[]> {
 }
 
 it('copies beside the source, named after it, with its content and a last-edited time', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await seedRoadmap(index)
 
   const copy = await duplicateBrowserDocument({
@@ -83,7 +83,7 @@ it('copies beside the source, named after it, with its content and a last-edited
 // What only the keeper-side operation can promise: the copy's path is chosen
 // inside the write that makes it, so two presses at once cannot both pick it.
 it('lands two duplicates started together on two paths', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await seedRoadmap(index)
   const duplicate = () =>
     duplicateBrowserDocument({
@@ -101,7 +101,7 @@ it('lands two duplicates started together on two paths', async () => {
 })
 
 it('copies without the comment threads when asked, and the source keeps them', async () => {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await seedRoadmap(index)
 
   const copy = await duplicateBrowserDocument({

@@ -1,7 +1,7 @@
 import { cleanup, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { STUCK_AFTER_MS } from '../lib/storage-health.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
@@ -29,7 +29,7 @@ describe('typing a note without pausing, then creating a note from a link', () =
   })
 
   it('never draws a problem while the keystrokes keep coming', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'note', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
     const editable = await waitFor(() => {

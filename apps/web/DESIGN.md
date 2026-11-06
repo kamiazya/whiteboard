@@ -399,10 +399,10 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   was broken — neither says anything about REACHABILITY, and the consequence
   narrated from them ("visiting the document list undoes a rename") turned out
   to be false. An A/B of the built bundle before and after refuted it: the
-  segment survived on both, because `FoldingBrowserIndex` then sent
+  segment survived on both, because `BrowserDocumentIndex` then sent
   `createWorkspace` to the tree index alone and no caller reached the
   overwrite. That has since changed, which is what makes the rule
-  load-bearing rather than debt: `FoldingBrowserIndex.createWorkspace` now
+  load-bearing rather than debt: `BrowserDocumentIndex.createWorkspace` now
   writes a workspace's registry half through `IdbDocumentIndex.createWorkspace`,
   and `ensureBrowserWorkspace` calls it bare on every first-touch path — so
   an overwrite there would clear the identity `renameWorkspace` writes on that

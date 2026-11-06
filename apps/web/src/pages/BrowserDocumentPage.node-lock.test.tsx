@@ -24,10 +24,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
@@ -66,7 +66,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 async function mountPage(): Promise<void> {
-  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
   await waitFor(() => expect(latestOnChange).not.toBeNull())
 }

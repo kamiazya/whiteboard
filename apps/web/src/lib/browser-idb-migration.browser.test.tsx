@@ -16,8 +16,9 @@
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. browser-document-summary.test.tsx.
 import {
-  adoptWorkspaceDocument,
+  createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
+  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, type SnapshotChunk } from '@kamiazya/whiteboard-ports'
@@ -500,11 +501,13 @@ describe("IndexedDB v13 -> v14 (re-keys the 'local' workspace)", () => {
     // real Loro bytes, not a placeholder, so "the workspace tree opens under
     // the new key" is an actual read, not a shape assertion.
     const workspaceDoc = new Loro()
-    adoptWorkspaceDocument(
-      workspaceDoc,
-      { path: 'design/login', documentId: V13_DOCUMENT_ID, kind: 'spatial', name: 'Login' },
-      contentDoc,
-    )
+    createWorkspaceDocumentAtPath(workspaceDoc, {
+      path: 'design/login',
+      documentId: V13_DOCUMENT_ID,
+      kind: 'spatial',
+      name: 'Login',
+    })
+    writeWorkspaceDocumentContent(workspaceDoc, V13_DOCUMENT_ID, contentDoc)
     const workspaceTreeSnapshot = workspaceDoc.export({ mode: 'snapshot' })
 
     await seedV13Fixture({

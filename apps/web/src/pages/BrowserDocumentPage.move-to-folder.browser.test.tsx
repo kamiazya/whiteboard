@@ -7,9 +7,9 @@ import { cleanup, screen, waitFor, within } from '@testing-library/react'
 import { useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -33,7 +33,7 @@ describe('BrowserDocumentPage Move to folder (real IndexedDB)', () => {
   })
 
   it('moves the open document into a folder from its menu and follows it', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     renderPage(
       <>
         <AddressProbe />

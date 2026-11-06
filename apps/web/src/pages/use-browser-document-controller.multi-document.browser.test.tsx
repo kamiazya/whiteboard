@@ -1,15 +1,15 @@
 /**
  * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createSeededDocument /
- * switchDocument against the production FoldingBrowserIndex, proving id-addressed
+ * switchDocument against the production BrowserDocumentIndex, proving id-addressed
  * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
 
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer, idbContentClock } from '../lib/browser-document-summary.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { loadDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -28,7 +28,7 @@ function snapshotWithElements(elements: unknown[]): Uint8Array {
 }
 
 /** The production create path over the same stores the controller defaults to. */
-function createSeeded(index: FoldingBrowserIndex, name: string) {
+function createSeeded(index: BrowserDocumentIndex, name: string) {
   return createSeededDocument(index, new LoroStore(), idbContentClock(), name)
 }
 
@@ -43,7 +43,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('createSeededDocument twice persists both, and listDocuments returns both by their real id', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const { result } = renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
 
@@ -70,7 +70,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('two documents hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const loro = new LoroStore()
     renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
@@ -102,7 +102,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('switchDocument swaps the current snapshot and the persisted default pointer, A -> B -> A', async () => {
-    const store = new FoldingBrowserIndex()
+    const store = new BrowserDocumentIndex()
     const { result } = renderHook(() => useBrowserDocumentController(store))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
     const idA = result.current.snapshot!.documentId
@@ -129,7 +129,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   // was — is the DocumentDuplicates conformance suite's, which this index
   // answers to.
   it('duplicate switches onto the copy the production index made', async () => {
-    const index = new FoldingBrowserIndex()
+    const index = new BrowserDocumentIndex()
     const { result } = renderHook(() => useBrowserDocumentController(index))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
     const source = result.current.snapshot!

@@ -22,14 +22,14 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
-import { seedWorkspaceDocumentContent } from '../test-utils/seed-workspace-content.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { readCarriedPlanes } from './carried-planes.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { promoteWorkspace } from './promote-workspace.js'
 
@@ -93,17 +93,17 @@ async function storePicture(id: string) {
 }
 
 async function newWorkspace() {
-  const index = new FoldingBrowserIndex()
+  const index = new BrowserDocumentIndex()
   await ensureBrowserWorkspace(index)
   return { index, workspaceId: getBrowserWorkspaceId() }
 }
 
 /** A canvas at `path` drawing `imageId`, then moved to the trash. */
-async function trashedCanvas(index: FoldingBrowserIndex, path: string, imageId: string) {
+async function trashedCanvas(index: BrowserDocumentIndex, path: string, imageId: string) {
   const workspaceId = getBrowserWorkspaceId()
   const created = await index.createDocument({ workspaceId, path, kind: 'spatial' })
   await storePicture(imageId)
-  expect(await seedWorkspaceDocumentContent(created.documentId, canvasWith(imageId))).toBe(true)
+  await seedTreeContent(created.documentId, canvasWith(imageId))
   await index.deleteDocument({ workspaceId, path })
   return created
 }
@@ -139,13 +139,11 @@ describe('promoteWorkspace, the planes beside the record', () => {
     const docs = new BrowserWorkspaceDocs()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
     await storePicture('only-in-a-version')
-    expect(
-      await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('only-in-a-version')),
-    ).toBe(true)
+    await seedTreeContent(sketch.documentId, canvasWith('only-in-a-version'))
     const drafted = await new BrowserVersionStore({ docs, index }).save(workspaceId, 'sketch', {
       label: 'as drafted',
     })
-    expect(await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('redrawn'))).toBe(true)
+    await seedTreeContent(sketch.documentId, canvasWith('redrawn'))
     // The live canvas now draws a picture this browser never stored, so the
     // one upload is the picture only the version still draws.
     const daemon = daemonStub({ confirms: true })
@@ -165,7 +163,7 @@ describe('promoteWorkspace, the planes beside the record', () => {
     await trashedCanvas(index, 'gone', 'only-in-the-trash')
     const docs = new BrowserWorkspaceDocs()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
-    expect(await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('live'))).toBe(true)
+    await seedTreeContent(sketch.documentId, canvasWith('live'))
     await new BrowserVersionStore({ docs, index }).save(workspaceId, 'sketch', { label: 'one' })
     const record = await docs.open(workspaceId)
     const entry = record === null ? undefined : readTrashEntries(record)[0]
@@ -345,9 +343,7 @@ describe('promoteWorkspace failure reasons', () => {
     const { index, workspaceId } = await newWorkspace()
     const sketch = await index.createDocument({ workspaceId, path: 'sketch', kind: 'spatial' })
     await storePicture('unreadable-here')
-    expect(
-      await seedWorkspaceDocumentContent(sketch.documentId, canvasWith('unreadable-here')),
-    ).toBe(true)
+    await seedTreeContent(sketch.documentId, canvasWith('unreadable-here'))
     // The record names its bytes; the read of those bytes is what fails.
     vi.spyOn(IdbBlobStore.prototype, 'get').mockRejectedValue(
       new DOMException('the read was refused', 'NotReadableError'),

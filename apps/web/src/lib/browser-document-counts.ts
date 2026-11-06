@@ -19,25 +19,20 @@
  */
 import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { getAppLogger } from './app-logger.js'
-import { FoldingBrowserIndex } from './folding-browser-index.js'
+import { BrowserDocumentIndex } from './browser-document-index.js'
 
 const log = getAppLogger('browser-document-counts')
 
 /** `dbName`: only tests pass this, exactly as the stores it opens do. */
 export async function browserDocumentCounts(dbName?: string): Promise<ReadonlyMap<string, number>> {
-  // Counted by the LISTING, not by the tree it mostly reads: the listing also
-  // serves a document the fold left behind, and a count of tree nodes alone
-  // read one lower than the list the same workspace opens to. The index also
-  // folds before its first read, which this needs because the shell can be a
-  // session's FIRST surface — someone deep-links to a page and opens the
-  // switcher before anything else has read, and a document an older build
-  // wrote is not in the tree until then. A fold that fails degrades to the
-  // tree as it stands, which the index logs.
-  const index = new FoldingBrowserIndex(dbName)
+  // Counted by the LISTING, so a count is the number the same workspace
+  // opens to, and a workspace the index refuses (its documents predate the
+  // tree) is not counted at all rather than counted as empty.
+  const index = new BrowserDocumentIndex(dbName)
   const counts = new Map<string, number>()
   const countOne = async (workspaceId: string): Promise<void> => {
-    // Per workspace, so one unreadable record costs its own row and not the
-    // whole popover. A workspace with no record yet is 0 rather than absent:
+    // Per workspace, so one unreadable or refused record costs its own row
+    // and not the whole popover. A workspace with no record yet is 0 rather than absent:
     // it exists and holds nothing, which is the row a person needs to see.
     try {
       const rows = await index.listDocuments({ workspaceId })

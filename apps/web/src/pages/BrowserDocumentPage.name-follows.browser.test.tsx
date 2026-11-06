@@ -20,10 +20,10 @@ import type { SetDocumentNameInput } from '@kamiazya/whiteboard-ports'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { listBrowserDocuments } from '../lib/browser-document-summary.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { announceDocumentRenamed } from '../lib/workspace-broadcast.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
@@ -44,7 +44,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 const titleValue = () => (screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement).value
 
 const markdownRow = async () =>
-  (await listBrowserDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+  (await listBrowserDocuments(new BrowserDocumentIndex())).find((r) => r.kind === 'markdown')
 
 async function typeIntoBody(text: string): Promise<void> {
   const resolveEditable = () => document.querySelector('[contenteditable="true"]')
@@ -54,7 +54,7 @@ async function typeIntoBody(text: string): Promise<void> {
 }
 
 /** The page's index, holding each rename until the test lets it land. */
-class HeldRenames extends FoldingBrowserIndex {
+class HeldRenames extends BrowserDocumentIndex {
   readonly #release = Promise.withResolvers<void>()
   readonly #entered = Promise.withResolvers<void>()
   readonly entered = this.#entered.promise
@@ -106,7 +106,7 @@ describe('BrowserDocumentPage title follows the record', () => {
       makeDefault: true,
     })
     // The index production renames through: the workspace record's own.
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
 
     await typeIntoBody('# Weekly review')
 
@@ -120,7 +120,7 @@ describe('BrowserDocumentPage title follows the record', () => {
       makeDefault: true,
     })
     // The index production renames through: the workspace record's own.
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
 
     await typeIntoBody('# Draft')
     await waitFor(() => expect(titleValue()).toBe('Draft'), { timeout: 10_000 })
@@ -152,11 +152,11 @@ describe('BrowserDocumentPage title follows the record', () => {
       kind: 'markdown',
       makeDefault: true,
     })
-    renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
     await waitFor(() => expect(titleValue()).toBe('Weekly review'), { timeout: 10_000 })
 
     // Another tab's index: the page hears of it only through the record.
-    await new FoldingBrowserIndex().setDocumentName({
+    await new BrowserDocumentIndex().setDocumentName({
       workspaceId: getBrowserWorkspaceId(),
       documentId,
     })

@@ -5,9 +5,8 @@ import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import shippedHeaders from '../../public/_headers?raw'
+import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { DocumentFileStore } from '../lib/document-file-store.js'
-import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
@@ -16,6 +15,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { selectAt } from '../test-utils/spatial-editor-pointer.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
@@ -46,7 +46,7 @@ function captureExportedBlobs(): { blobs: Blob[] } {
 }
 
 async function renderLoaded(): Promise<void> {
-  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -54,7 +54,7 @@ async function renderLoaded(): Promise<void> {
 
 /** The page on a markdown note: loaded once its source pane has mounted. */
 async function renderNoteLoaded(): Promise<void> {
-  renderPage(<BrowserDocumentPage store={new FoldingBrowserIndex()} />)
+  renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
   await waitFor(() => expect(document.querySelector('.cm-content')).not.toBeNull(), {
     timeout: 10_000,
   })
@@ -248,7 +248,7 @@ describe('BrowserDocumentPage export options', () => {
 async function seedContent(documentId: string, write: (doc: Loro) => void): Promise<void> {
   const doc = new Loro()
   write(doc)
-  await new LoroStore().save(documentId, doc.export({ mode: 'snapshot' }))
+  await seedTreeContent(documentId, doc.export({ mode: 'snapshot' }))
 }
 
 /** Exports SVG through the menu and answers the downloaded document's text. */

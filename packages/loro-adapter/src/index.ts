@@ -108,7 +108,6 @@ export {
   WORKSPACE_TRASH_KEY,
 } from './workspace-trash.js'
 export {
-  adoptWorkspaceDocument,
   type CreateWorkspaceDocumentInput,
   createWorkspaceDocument,
   createWorkspaceDocumentAtPath,
