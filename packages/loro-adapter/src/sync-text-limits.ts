@@ -661,16 +661,17 @@ function largestBoard(doc: LoroDoc): number {
   return largest
 }
 
-const RESERVED_KEY_BYTES = new TextEncoder().encode(RESERVED_MAP_KEY)
-
 /**
- * The keys a retired shape is written under: a node's, edge's or canvas's
- * `x-whiteboard`, the flat `comments` plane, the `elements` list and the
- * `okf-body` node. Not a node's `type`: that value sits in a value no key
- * names, so a short write of the old node-kind union is left to the daemon's
- * judge, which has no short path, and to the reader's refusal on arrival.
+ * The keys whose write no short update may skip the full judge for: the
+ * reserved map key, and the keys a retired shape is written under — a node's,
+ * edge's or canvas's `x-whiteboard`, the flat `comments` plane, the `elements`
+ * list and the `okf-body` node. Not a node's `type`: that sits in a value no
+ * key names, so a short write of the old node-kind union is left to the
+ * daemon's judge, which has no short path, and to the reader's refusal on
+ * arrival.
  */
-const RETIRED_KEY_BYTES = [
+const JUDGED_KEY_BYTES = [
+  RESERVED_MAP_KEY,
   PRE_ADR_0037_EXTENSION_KEY,
   RETIRED_COMMENTS_KEY,
   RETIRED_ELEMENTS_KEY,
@@ -691,15 +692,12 @@ function holdsBytes(update: Uint8Array, needle: Uint8Array): boolean {
 }
 
 /**
- * Whether the bytes hold `RESERVED_MAP_KEY` anywhere — they carry every key
- * and root name whole, so an update that does not cannot write it. Text that
- * merely spells it is judged in full and let through there.
+ * Whether the bytes hold a `JUDGED_KEY_BYTES` entry anywhere — they carry
+ * every key and root name whole, so an update that does not cannot write it.
+ * Text that merely spells one is judged in full and let through there.
  */
-const mayNameReservedKey = (update: Uint8Array): boolean => holdsBytes(update, RESERVED_KEY_BYTES)
-
-/** Whether the bytes hold any key a retired shape is written under; as `mayNameReservedKey`. */
-const mayNameRetiredKey = (update: Uint8Array): boolean =>
-  RETIRED_KEY_BYTES.some((key) => holdsBytes(update, key))
+const mayNameJudgedKey = (update: Uint8Array): boolean =>
+  JUDGED_KEY_BYTES.some((key) => holdsBytes(update, key))
 
 /** No update this short can take a board past either per-canvas bound from where `largestBoard` found it. */
 const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
@@ -755,7 +753,7 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
   const mostOpenAtMost = heldBound(record, mostOpenAnnotations)
   return (update) => {
     const most = update.byteLength
-    if (most <= SMALLEST_VALUE_BOUND && !mayNameReservedKey(update) && !mayNameRetiredKey(update)) {
+    if (most <= SMALLEST_VALUE_BOUND && !mayNameJudgedKey(update)) {
       const bodyFits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
       const boardFits = (walk: boolean) => largestBoardAtMost(walk) + most <= SMALLEST_CANVAS_BOUND
       const openFits = (walk: boolean) => mostOpenAtMost(walk) + most <= SMALLEST_ANNOTATION_BOUND

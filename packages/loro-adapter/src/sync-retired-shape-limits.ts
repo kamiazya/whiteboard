@@ -128,8 +128,7 @@ class State {
   constructor(readonly doc: LoroDoc) {}
 
   hasRoot(name: string): boolean {
-    this.roots ??= this.doc.getShallowValue()
-    return name in this.roots
+    return this.rootId(name) !== undefined
   }
 
   rootId(name: string): ContainerID | undefined {
@@ -150,6 +149,13 @@ function refuseOpening(): never {
   throw new Error('judging a retired shape opens no container')
 }
 
+/** What a tree-node host's own meta map holds at `key`. */
+const treeNodeMeta = (state: State, path: readonly (string | number)[], key: string): unknown =>
+  state.doc
+    .getTree(WORKSPACE_TREE_KEY)
+    .getNodeByID(path[1] as TreeID)
+    ?.data.get(key)
+
 /**
  * The document a content container belongs to, as the readers see it: a
  * document root resolves a key only through the roots the state lists, a tree
@@ -158,14 +164,9 @@ function refuseOpening(): never {
  */
 function hostOf(state: State, path: readonly (string | number)[]): DocumentContainers {
   const fetch = (key: string): unknown => {
-    if (path.length === 1) {
-      const cid = state.rootId(key)
-      return cid === undefined ? undefined : state.doc.getContainerById(cid)
-    }
-    return state.doc
-      .getTree(WORKSPACE_TREE_KEY)
-      .getNodeByID(path[1] as TreeID)
-      ?.data.get(key)
+    if (path.length > 1) return treeNodeMeta(state, path, key)
+    const cid = state.rootId(key)
+    return cid === undefined ? undefined : state.doc.getContainerById(cid)
   }
   return {
     getMap: refuseOpening,
@@ -190,11 +191,7 @@ function documentIsSpatial(
   const stated = documentKindSchema.safeParse(host.peekMap?.(DOCUMENT_KEY)?.get('kind'))
   if (stated.success) return stated.data === 'spatial'
   if (path.length === 1) return false
-  const meta = state.doc
-    .getTree(WORKSPACE_TREE_KEY)
-    .getNodeByID(path[1] as TreeID)
-    ?.data.get('kind')
-  return documentKindSchema.safeParse(meta).data === 'spatial'
+  return documentKindSchema.safeParse(treeNodeMeta(state, path, 'kind')).data === 'spatial'
 }
 
 function readKey(
@@ -245,7 +242,15 @@ function read(state: State, suspect: RetiredShapeSuspect): Reading | null {
   return found === null ? null : { found, weight: 1, rows: map.size }
 }
 
-function readAll(doc: LoroDoc, suspects: readonly RetiredShapeSuspect[]): (Reading | null)[] {
+/**
+ * What each suspect holds in `doc`'s current state. Read while the document is
+ * still the one before the update, a shape stored earlier is not the update's
+ * doing; read after, it is the state the judgement compares against.
+ */
+export function retiredHeld(
+  doc: LoroDoc,
+  suspects: readonly RetiredShapeSuspect[],
+): (Reading | null)[] {
   const state = new State(doc)
   return suspects.map((suspect) => {
     try {
@@ -257,25 +262,13 @@ function readAll(doc: LoroDoc, suspects: readonly RetiredShapeSuspect[]): (Readi
   })
 }
 
-/**
- * What each suspect held in `doc`'s current state: read while the document is
- * still the one before the update, so a shape stored earlier is not the
- * update's doing.
- */
-export function retiredHeld(
-  doc: LoroDoc,
-  suspects: readonly RetiredShapeSuspect[],
-): (Reading | null)[] {
-  return readAll(doc, suspects)
-}
-
 /** The first shape the update left standing that the state before it did not hold. */
 export function retiredShapeBreach(
   doc: LoroDoc,
   suspects: readonly RetiredShapeSuspect[],
   before: readonly (Reading | null)[],
 ): RetiredShapeBreach | null {
-  const after = readAll(doc, suspects)
+  const after = retiredHeld(doc, suspects)
   for (const [index, now] of after.entries()) {
     const was = before[index]
     if (now === null || (was !== null && was !== undefined && now.weight <= was.weight)) continue
