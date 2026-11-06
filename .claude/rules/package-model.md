@@ -122,7 +122,7 @@ paths:
   - **`lines` is OPTIONAL, not `.default([])`.** The default makes the field required on the OUTPUT
     type, and this repo builds 925 canvas literals across 295 files; every one would have gained a
     `lines: []` saying nothing, and a diff a reviewer cannot read is a diff nobody reviews. Readers
-    spell `canvas.lines ?? []`, as they already do for `comments`.
+    spell `canvas.lines ?? []`.
   - **Both end schemas are REGISTERED** (`EdgeEnd`, `LineEnd`), and the edge one had to be. Measured
     when the split landed: leaving `edgeEndSchema` unregistered took the visible tool table
     37,796 -> 38,317 bytes and `parameters` 273 -> 285 — a regression on a strictly simpler schema,
@@ -138,7 +138,8 @@ paths:
 - **This package no longer spells `x-whiteboard` anywhere.** ADR-0037 moved the interchange
   format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
   format's extension key is three ordinary fields:
-  - `comments` and `facets` on the canvas,
+  - `facets` on the canvas (a canvas carries no comments: ADR-0026 decision 1b
+    keeps the annotation layer beside content),
   - `embed` and `facets` on a node — INDEPENDENT fields, where the format makes them two arms of
     one union; a node carrying both was spelled as the embed arm with facets inside it, and
     every writer that wanted to change one had to preserve the other by hand,
@@ -297,7 +298,8 @@ paths:
   each at half, a self-loop on one edge in seven (endpoints are drawn as a
   distinct pair seven times in eight — two independent draws over four ids
   made two edges in five a loop), `x-whiteboard` on 84% of canvases with
-  `edgeRouting` on 40% and canvas facets on 41%, comments on 32%; the
+  `edgeRouting` on 40% and canvas facets on 41% (comments on 32%, measured
+  before the canvas stopped carrying them); the
   anchor union at a third per arm with every reference reached. mdast text
   values (`markdownTextArbitrary`, on every `value`/`alt`/`title`/`label`
   /`identifier`/`lang`/`meta`) carry a space in 40%, markdown punctuation in
@@ -312,9 +314,9 @@ paths:
   comment naming both `targetNodeId` and `targetEdgeId` was accepted by
   `canvasCommentSchema`, written, and dropped by every reader — the thread
   it becomes carries both onto one spatial anchor, which
-  `annotationAnchorSchema` refuses. The schema now refines (and
-  `canvasCommentDraftSchema` beside it, since zod refuses `.partial()` over
-  a refined object), and loro-adapter refuses the write loudly.
+  `annotationAnchorSchema` refuses. The schema now refines; the canvas no
+  longer carries comments at all, so `canvasCommentSchema` is the render-time
+  view `canvasCommentsOf` answers.
 
 ## Tests
 
