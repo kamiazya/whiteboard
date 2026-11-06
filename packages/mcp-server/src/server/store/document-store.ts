@@ -402,8 +402,9 @@ export async function getDoc(
   // reaches it only through the record. So the record is asked first —
   // reading it through is what evicts the projections a foreign write
   // outdated — and the cache then serves what is left. No per-document
-  // delta replay runs here: replaying a legacy oplog into a projection would
-  // resurrect pre-fold state over current content.
+  // delta replay runs here: the workspace record is the document's whole
+  // history, and a per-document oplog replayed over it would only lay older
+  // state over current content.
   validateWorkspaceId(workspaceId)
   await openWorkspaceDocIfStored(workspaceId, scope)
   return getOrLoad(workspaceId, path, () => loadPlacedDocument(workspaceId, path, scope), scope)
@@ -718,9 +719,8 @@ export async function renameDocumentPath(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const workspaceDoc = await openWorkspaceDocIfStored(workspaceId, scope)
     const entry = workspaceDoc === null ? null : resolveWorkspaceDocument(workspaceDoc, oldPath)
-    // A path only the rows know is a pre-fold legacy document; renaming one
-    // before the boot fold has absorbed it is not a supported operation —
-    // the fold will place it, and the rename can happen after.
+    // The tree is the only place a document is placed: a path it does not
+    // hold names nothing, and "already gone" is the answer.
     if (entry === null) return null
     const documentId = entry.documentId
     if (oldPath === newPath) return { documentId }
