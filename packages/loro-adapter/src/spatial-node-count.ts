@@ -11,8 +11,10 @@ import { readSpatialCanvas } from './loro-bridge.js'
  *   deleted whenever either endpoint node is removed) means an edge can never
  *   outlive both of its nodes, so a nodes-only count is never 0 for a
  *   non-empty scene.
- * - The retired 'elements' movable list is not counted: nothing converts it
- *   into nodes and no reader draws it.
+ * - The retired 'elements' list is not counted: nothing converts it into
+ *   nodes and no reader draws it. A document holding entries there is refused
+ *   by `readSpatialCanvas`, so the soft-fail below answers 0 for it: advisory,
+ *   not a statement that the canvas is empty.
  * - Soft-failing: a count is advisory, so a document whose canvas cannot be
  *   read (a markdown document has none) counts 0 rather than failing the save
  *   or response that asked.

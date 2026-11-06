@@ -58,7 +58,7 @@ const RESERVED: ReadonlyArray<readonly [string, (doc: LoroDoc) => void]> = [
   ],
   ['a root container', (doc) => doc.getMap('__proto__').set('nodes', { n1: {} })],
   ['a key inside a value', (doc) => doc.getMap('nodes').set('n2', proto({ text: 'x' }))],
-  ['a key inside a listed value', (doc) => doc.getList('elements').insert(0, proto({ a: 1 }))],
+  ['a key inside a listed value', (doc) => doc.getList('rows').insert(0, proto({ a: 1 }))],
   ['a text mark key', (doc) => markBody(doc, '__proto__', true)],
   ['a key inside a text mark value', (doc) => markBody(doc, 'note', proto({ a: 1 }))],
 ]

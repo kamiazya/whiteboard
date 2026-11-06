@@ -41,6 +41,7 @@ const keyOf = (name: ContainerKeyName): string => String(Reflect.get(containers,
  */
 const KIND = {
   RETIRED_COMMENTS_KEY: 'map',
+  RETIRED_ELEMENTS_KEY: 'list',
   THREADS_KEY: 'map',
   PROPOSALS_KEY: 'map',
   NODES_KEY: 'map',
@@ -54,7 +55,7 @@ const KIND = {
   TRUST_KEY: 'map',
   DOCUMENT_KEY: 'map',
   MARKDOWN_BODY_KEY: 'text',
-} as const satisfies Record<ContainerKeyName, 'map' | 'text'>
+} as const satisfies Record<ContainerKeyName, 'map' | 'text' | 'list'>
 
 /**
  * Containers a write into which is deliberately NOT a change to the document,
@@ -65,6 +66,8 @@ const KIND = {
 const EXEMPT: Partial<Record<ContainerKeyName, string>> = {
   RETIRED_COMMENTS_KEY:
     'nothing writes the plane before threads, and a document holding rows there is refused on every read of its annotation layer, so no listing ever shows its content as current',
+  RETIRED_ELEMENTS_KEY:
+    'nothing writes the list, and a document holding entries there is refused on every canvas read, so no listing ever shows its content as current',
 }
 
 const listedKeys = new Set(CONTENT_CONTAINER_KEYS.map((c) => c.key))
