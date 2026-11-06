@@ -107,7 +107,7 @@ Hooks are a local safety net, **not** a replacement for CI (the authoritative ga
 - README / AGENTS.md updated if the public surface changed
 - No secrets, `.env`, or large binaries committed
 
-CI runs the full matrix on every push, so a local full run repeats its work; `pnpm test` stays available as the run-everything command when you want one.
+CI runs the full matrix on every push to `main`, and on a pull request every suite the change reaches (fail-closed: a root config, the lockfile or `ci.yml` runs everything), so a local full run repeats its work. `pnpm test:affected` runs that pull-request selection locally against `origin/main`; `pnpm test` stays available as the run-everything command when you want one.
 
 ## Release / Publish
 
