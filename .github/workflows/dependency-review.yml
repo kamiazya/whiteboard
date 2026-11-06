@@ -34,3 +34,8 @@ jobs:
           # A summary comment needs pull-requests: write; the job summary
           # carries the same table without it.
           comment-summary-in-pr: never
+          # Advisories suppressed as not exploitable, with the reason for each
+          # in .github/security/whiteboard.openvex.json. Must equal
+          # pnpm-workspace.yaml's auditConfig.ignoreGhsas
+          # (vex-audit-ignores.test.ts).
+          allow-ghsas: GHSA-qwww-vcr4-c8h2, GHSA-hp3w-g68c-fv3c
