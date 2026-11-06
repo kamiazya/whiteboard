@@ -696,7 +696,7 @@ export function useEditorKeyboard({
       clearInkSelection(e) ||
       deleteInkSelection(e) ||
       cancelWithEscape(e) ||
-      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser) ||
+      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser.current) ||
       releaseSelectionWithEscape(e) ||
       armSpacePan(e) ||
       nudgeSelection(e) ||
