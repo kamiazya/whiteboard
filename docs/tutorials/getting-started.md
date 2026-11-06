@@ -89,7 +89,7 @@ A fresh canvas starts empty, with a one-line hint ("Double-click or press N to a
 and start typing immediately (this works in Hand mode too, and never moves the
 view), or open the **+** menu in the bottom dock: tap
 an entry to place it in the middle of the view, or drag one onto the canvas
-to drop it exactly where you want it. **Frame** makes a new, empty frame in a free
+to drop it exactly where you want it. **Frame** makes a new, empty frame — to the right of the frames already there, when there are any — in a free
 spot, with room above it for its name and the usual gap from the boxes around it when the view has room for one, and opens that name for typing; an empty frame is drawn with a faint tint
 so it can be found. To frame nodes you have already made, select them,
 right-click one and choose **Frame selection**, which also opens the new

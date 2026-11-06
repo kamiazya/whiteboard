@@ -6,7 +6,7 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { Box } from './geometry.js'
-import { boxContains, indexNodeBoxes } from './geometry.js'
+import { boxContains, boxesIntersect, indexNodeBoxes } from './geometry.js'
 import type { Point } from './viewport.js'
 
 /** How far above a frame's top edge its name starts (the renderer's label band). */
@@ -51,15 +51,21 @@ export const PLACEMENT_GAP_PX = 32
 /**
  * Where the next box of `size` goes INSIDE `frame`: the first cell, reading
  * row by row, a gap clear of the frame's edges and of everything already
- * there. A full frame answers the spot below its lowest content and the
- * height it has to grow to so the box fits — a note asked for inside a frame
- * belongs to it, and one placed outside would not.
+ * there. A full frame answers a spot just past its own content and the box it
+ * has to grow to so the note fits — a note asked for inside a frame belongs to
+ * it, and one placed outside would not.
+ *
+ * Growing reaches into space the frame did not cover, so it goes the first
+ * way, of down, right and left, whose new strip is a gap clear of every
+ * neighbour: a frame grown over another frame's notes would take them, and one
+ * grown through a neighbour frame's border reads as one shape with it. Only a
+ * frame boxed in on all three sides grows down regardless.
  */
 export function nextSpotInFrame(
   frame: SpatialNode,
   nodes: readonly SpatialNode[],
   size: { readonly width: number; readonly height: number },
-): { readonly center: Point; readonly grownHeight?: number } {
+): { readonly center: Point; readonly grow?: Box } {
   const gap = PLACEMENT_GAP_PX
   // What is inside the frame, or reaches into it; the frames around it hold
   // it rather than block it.
@@ -86,21 +92,83 @@ export function nextSpotInFrame(
   })
   const left = frame.x + gap
   const right = frame.x + frame.width - gap
-  for (
-    let y = frame.y + gap;
-    y + size.height + gap <= frame.y + frame.height;
-    y += size.height + gap
-  ) {
+  const top = frame.y + gap
+  const bottom = frame.y + frame.height
+  for (let y = top; y + size.height + gap <= bottom; y += size.height + gap) {
     for (let x = left; x === left || x + size.width <= right; x += size.width + gap) {
       if (clear(x, y)) return { center: center(x, y) }
     }
   }
-  const lowest = Math.max(frame.y, ...blockers.map((b) => b.y + b.height))
-  const y = lowest + gap
-  const needed = y + size.height + gap - frame.y
-  return needed > frame.height
-    ? { center: center(left, y), grownHeight: needed }
-    : { center: center(left, y) }
+
+  // The frame's own content: a neighbour frame merely reaching in is not
+  // something to stack under.
+  const content = blockers.filter((b) => !isFrame(b) || frameHolds(frame, b))
+  const contentRight = Math.max(left - gap, ...content.map((b) => b.x + b.width))
+  const contentLeft = Math.min(right + gap, ...content.map((b) => b.x))
+  const contentBottom = Math.max(frame.y, ...content.map((b) => b.y + b.height))
+  // Everything the frame neither is, sits in, nor holds — a frame reaching
+  // in from beside it included.
+  const outside = nodes.filter(
+    (node) => node.id !== frame.id && !frameHolds(node, frame) && !frameHolds(frame, node),
+  )
+  const reachable = (strip: Box) => outside.every((node) => !boxesIntersect(strip, node))
+  /** The first row, top down, where a box at `x` is clear — within the frame's height. */
+  const rowAt = (x: number) => {
+    for (let y = top; y + size.height + gap <= bottom; y += size.height + gap) {
+      if (clear(x, y)) return y
+    }
+    return undefined
+  }
+
+  const downY = contentBottom + gap
+  const downHeight = downY + size.height + gap - frame.y
+  const down = {
+    center: center(left, downY),
+    grow: {
+      x: frame.x,
+      y: frame.y,
+      width: frame.width,
+      height: Math.max(frame.height, downHeight),
+    },
+  }
+  const downStrip = {
+    x: frame.x,
+    y: bottom,
+    width: frame.width,
+    height: downHeight - frame.height + gap,
+  }
+  if (downHeight <= frame.height) return { center: down.center }
+  if (reachable(downStrip)) return down
+
+  const rightX = contentRight + gap
+  const rightY = rowAt(rightX)
+  if (rightY !== undefined) {
+    const width = rightX + size.width + gap - frame.x
+    const strip = {
+      x: frame.x + frame.width,
+      y: frame.y,
+      width: width - frame.width + gap,
+      height: frame.height,
+    }
+    if (reachable(strip))
+      return {
+        center: center(rightX, rightY),
+        grow: { x: frame.x, y: frame.y, width, height: frame.height },
+      }
+  }
+
+  const leftX = contentLeft - gap - size.width
+  const leftY = rowAt(leftX)
+  if (leftY !== undefined) {
+    const x = leftX - gap
+    const strip = { x: x - gap, y: frame.y, width: frame.x - x + gap, height: frame.height }
+    if (reachable(strip))
+      return {
+        center: center(leftX, leftY),
+        grow: { x, y: frame.y, width: frame.x + frame.width - x, height: frame.height },
+      }
+  }
+  return down
 }
 
 /**
