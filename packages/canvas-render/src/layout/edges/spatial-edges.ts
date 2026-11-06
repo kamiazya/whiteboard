@@ -266,6 +266,7 @@ interface Trial {
  */
 function createConfigScore(
   nodes: readonly SpatialNode[],
+  labels: readonly Rect[],
   edges: readonly RoutableElement[],
   styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
@@ -318,7 +319,7 @@ function createConfigScore(
     const key = routeCacheKey(edge, a)
     const hit = cache.get(key)
     if (hit !== undefined) return hit
-    const path = routeEdge(nodes, edge, styleOf(edge), a, othersFor[i], budget).path
+    const path = routeEdge(nodes, edge, styleOf(edge), a, othersFor[i], budget, labels).path
     cache.set(key, path)
     return path
   }
@@ -360,7 +361,10 @@ function createConfigScore(
     const endpoints = [nodeAtEnd(e.from, byId), nodeAtEnd(e.to, byId)]
       .filter((n): n is SpatialNode => n !== undefined)
       .map(rectOf)
-    return othersFor[i]!.filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
+    return [
+      ...othersFor[i]!.filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint))),
+      ...labels,
+    ]
   })
   // Every node's border, INCLUDING an edge's own endpoints — border-tracing
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
@@ -617,6 +621,7 @@ function trialEdgesFor(
  */
 function optimizeSideChoices(
   nodes: readonly SpatialNode[],
+  labels: readonly Rect[],
   edges: readonly RoutableElement[],
   styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
@@ -649,7 +654,18 @@ function optimizeSideChoices(
   budget: RoutingBudget = createRoutingBudget(),
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
-  const score = createConfigScore(nodes, edges, styleOf, initial, align, pins, cache, byId, budget)
+  const score = createConfigScore(
+    nodes,
+    labels,
+    edges,
+    styleOf,
+    initial,
+    align,
+    pins,
+    cache,
+    byId,
+    budget,
+  )
   const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
   // The realized-bends tier is deliberately ABSENT from the short-circuit
   // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
@@ -730,6 +746,7 @@ function bestRepairedPair(
     edge: RoutableElement
     edgeIndex: number
     nodes: readonly SpatialNode[]
+    labels: readonly Rect[]
     ctx: AnchorContext
     repaired: ReadonlyMap<string, SidePair>
     placement: AnchorGroups
@@ -742,7 +759,7 @@ function bestRepairedPair(
     budget: RoutingBudget
   },
 ): (RepairScore & { placement: AnchorGroups }) | 'exhausted' | undefined {
-  const { edge, edgeIndex, nodes, repaired, placement, align, pins, styleOf } = ctx
+  const { edge, edgeIndex, nodes, labels, repaired, placement, align, pins, styleOf } = ctx
   const { fromRect, toRect, coincides, budget } = ctx
   let best: (RepairScore & { placement: AnchorGroups }) | undefined
   for (const pair of candidates) {
@@ -759,7 +776,7 @@ function bestRepairedPair(
     const trialAnchors = computeAnchorsFor(ctx.ctx, trial, align, pins, trialPlacement)
     if (coincides(trialAnchors, edge.id)) continue
     const anchors = trialAnchors.get(edge.id)
-    const { path } = routeEdge(nodes, edge, styleOf(edge), anchors, undefined, budget)
+    const { path } = routeEdge(nodes, edge, styleOf(edge), anchors, undefined, budget, labels)
     const scored = scoreRepairedRoute(sided, path, fromRect, toRect)
     if (best === undefined || betterRepair(scored, best)) {
       best = { ...scored, placement: trialPlacement }
@@ -822,6 +839,7 @@ function betterRepair(a: RepairScore, b: RepairScore): boolean {
  */
 function anchorsWithoutCoincidentEnds(
   nodes: readonly SpatialNode[],
+  labels: readonly Rect[],
   edges: readonly RoutableElement[],
   sides: ReadonlyMap<string, SidePair>,
   styleOf: EdgeStyleOf,
@@ -866,6 +884,7 @@ function anchorsWithoutCoincidentEnds(
       edge,
       edgeIndex: edgeIndexById.get(edge.id) ?? -1,
       nodes,
+      labels,
       ctx,
       repaired,
       placement,
@@ -918,6 +937,7 @@ function anchorsWithoutCoincidentEnds(
  */
 function optimizeAcrossRegions(
   nodes: readonly SpatialNode[],
+  labels: readonly Rect[],
   edges: readonly RoutableElement[],
   styleOf: EdgeStyleOf,
   initial: ReadonlyMap<string, SidePair>,
@@ -940,6 +960,7 @@ function optimizeAcrossRegions(
     const routeCache = new Map<string, readonly Point[]>()
     const unaligned = optimizeSideChoices(
       nodes,
+      labels,
       regionEdges,
       styleOf,
       seed,
@@ -951,6 +972,7 @@ function optimizeAcrossRegions(
     )
     return optimizeSideChoices(
       nodes,
+      labels,
       regionEdges,
       styleOf,
       unaligned,
@@ -1049,12 +1071,16 @@ export function assignEdgeAnchors(
   // The layout's routing account (`routing-budget.ts`); a caller routing the
   // edges again afterwards passes the same one.
   budget: RoutingBudget = createRoutingBudget(),
+  // Text outside every node a route must not cross (a frame's title), the
+  // same list the caller hands `routeEdge` — a search that prices different
+  // obstacles from the router's trades real quality for imaginary savings.
+  labels: readonly Rect[] = [],
 ): ReadonlyMap<string, EdgeAnchorPair> {
   const edges = allEdges.filter((edge) => !marksContact(nodes, edge))
   const styleOf: EdgeStyleOf = typeof style === 'function' ? style : () => style
   let sides: ReadonlyMap<string, SidePair> = initialSideChoices(nodes, edges)
   const optimize = (seed: ReadonlyMap<string, SidePair>, locked?: ReadonlySet<string>) =>
-    optimizeAcrossRegions(nodes, edges, styleOf, seed, locked, sideOverrides, budget)
+    optimizeAcrossRegions(nodes, labels, edges, styleOf, seed, locked, sideOverrides, budget)
   if (sideOverrides !== undefined) {
     const merged = new Map(sides)
     const locked = new Set<string>()
@@ -1086,5 +1112,14 @@ export function assignEdgeAnchors(
     // own box); a clean one short-circuits after one scoring sweep.
     sides = optimize(sides)
   }
-  return anchorsWithoutCoincidentEnds(nodes, edges, sides, styleOf, true, sideOverrides, budget)
+  return anchorsWithoutCoincidentEnds(
+    nodes,
+    labels,
+    edges,
+    sides,
+    styleOf,
+    true,
+    sideOverrides,
+    budget,
+  )
 }

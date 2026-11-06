@@ -242,26 +242,26 @@ const routedOnly = (testCase: RoutingCase) => ({ paths: routeStraight(testCase),
 //   leg on from a corner beside the target can arrive nearly along its
 //   side — which is what the stubs are for; they cost bends (persona
 //   8 -> 9, lattice 1422 -> 1434, generated 841 -> 864).
-// - `titleCrossings` 114 -> 82 on the generated boards and still 1 on the
-//   persona board. The router does not know where a frame's title is — the
-//   title is text, measured, and routing is measure-free — so this column
-//   falls only as a side effect of shorter routes. Making it zero means
-//   handing the measured title boxes to the router and to the side search's
-//   cost model alike.
+// - `titleCrossings` 114 -> 0 on the generated boards and 1 -> 0 on the
+//   persona board, once the layout handed the measured title boxes to the
+//   router and to the side search's cost model alike (the title is text,
+//   and routing is measure-free, so neither could see it on its own). Going
+//   round a title is longer: on the generated boards long detours 5 -> 16,
+//   worst ratio 1.58 -> 2.37, bends 864 -> 1008, crossings 107 -> 109.
 describe('straight routing quality', () => {
   it('reports the stacked-frames board', () => {
     expect(score([{ name: 'stacked frames', ...stackedFramesBoard() }], layoutStraight)).toEqual({
       violations: { foreign: 0, 'own-endpoint': 0 },
       interiorInk: 0,
-      titleCrossings: 1,
+      titleCrossings: 0,
       // 2618/1860 (1.408), worst 1.69 before the corner detours.
-      length: 2074,
-      direct: 1683,
-      ratio: 1.232,
+      length: 2065,
+      direct: 1673,
+      ratio: 1.234,
       worstRatio: 1.42,
       longDetours: 0,
       grazingEnds: 1,
-      bends: 9,
+      bends: 12,
       crossings: 3,
       borderInk: 0,
     })
@@ -271,16 +271,16 @@ describe('straight routing quality', () => {
     expect(score(stackedFrameLayouts(200), layoutStraight)).toEqual({
       violations: { foreign: 0, 'own-endpoint': 0 },
       interiorInk: 0,
-      titleCrossings: 82,
+      titleCrossings: 0,
       // ratio 1.194, worst 1.91, 66 long detours before.
-      length: 273505,
-      direct: 248787,
-      ratio: 1.099,
-      worstRatio: 1.58,
-      longDetours: 5,
-      grazingEnds: 110,
-      bends: 864,
-      crossings: 107,
+      length: 279816,
+      direct: 249756,
+      ratio: 1.12,
+      worstRatio: 2.37,
+      longDetours: 16,
+      grazingEnds: 114,
+      bends: 1008,
+      crossings: 109,
       borderInk: 0,
     })
   })

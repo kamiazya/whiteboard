@@ -126,6 +126,7 @@ function composeEdge(
   routingStyle: EdgeRoutingStyle | undefined,
   anchors: EdgeAnchorPair | undefined,
   routingBudget: RoutingBudget,
+  titles: readonly LabelObstacle[],
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
   // documented contract — nothing further to catch here.
@@ -139,7 +140,7 @@ function composeEdge(
   // written against another deployment's plugins still draws.
   const routed = pullEdgeOntoOutlines(
     contributedRoute(canvas, edge, options, anchors) ??
-      routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget),
+      routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget, titles),
     canvas,
     edge,
     options.nodeOutlines,
@@ -637,9 +638,13 @@ function composeEdgesAndLabels(
   // One routing account for the side pass and the final routes together.
   const budget = createRoutingBudget()
   const overrides = resolved.edgeSideOverrides
-  const anchors = assignEdgeAnchors(canvas.nodes, routable, styleOf, overrides, budget)
+  // A frame's title is drawn outside the frame's box, so no node rect stands
+  // for it; the side pass and the router are both handed it, so they agree
+  // on what is in a route's way.
+  const titles = frameTitleBoxes(canvas.nodes, resolved)
+  const anchors = assignEdgeAnchors(canvas.nodes, routable, styleOf, overrides, budget, titles)
   const routedEdges = routable.map((edge) =>
-    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id), budget),
+    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id), budget, titles),
   )
   // A jump is drawn on the LATER edge of a crossing pair, so "does this edge
   // hop" is asked of the edge that would draw the arc. Crossings are still
@@ -658,7 +663,7 @@ function composeEdgesAndLabels(
           if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
           return { ...edge, jumps }
         })
-  const obstacles = labelObstacles(canvas.nodes, frameTitleBoxes(canvas.nodes, resolved))
+  const obstacles = labelObstacles(canvas.nodes, titles)
   const labelContent = routable
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)

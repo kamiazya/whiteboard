@@ -114,12 +114,11 @@ describe('drawing quality across the corpus', () => {
         sharedInkPx: 0,
         crossings: 0,
         // api->auth, Auth overlapping API gateway, is drawn as its contact
-        // mark rather than as a loop under both boxes. The one bend is price
-        // the corner detours paid: with the two edges into API gateway's top
-        // now drawn straight to it, the side search moves cli->api to the
-        // gateway's left side, one turn (edge length 2495 -> 2635).
-        bends: 1,
-        edgeLengthPx: 2635,
+        // mark rather than as a loop under both boxes. The corner detours
+        // moved cli->api to the gateway's left side for one turn (2495 ->
+        // 2635); with frame titles known to the router it is straight again.
+        bends: 0,
+        edgeLengthPx: 2495,
         // The Clients row's gaps differ by 14px; the Services row has an
         // overlap where a gap should be.
         unevenGaps: 2,
@@ -128,7 +127,7 @@ describe('drawing quality across the corpus', () => {
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0,
-        bendsPerEdge: 0.13,
+        bendsPerEdge: 0,
         overlapsPerPair: 0.04,
         density: 0.2,
       },

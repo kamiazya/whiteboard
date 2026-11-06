@@ -631,6 +631,9 @@ function selfLoopRoute(
  * neighbour's margin band, `bestCandidate`'s second tier accepts a band
  * crossing to escape rather than tunnelling through the node itself.
  *
+ * `labels` (a frame's title) join the list on the same terms as a node: text
+ * drawn outside every box is as much in the way as a box.
+ *
  * `others` is the caller's O(nodes) list handed over intact — the
  * side-choice search routes each edge many times per layout, and the ends do
  * not change inside it.
@@ -641,12 +644,16 @@ function routeObstacles(
   start: Point,
   end: Point,
   others: readonly Rect[] | undefined,
+  labels: readonly Rect[],
 ): { obstacles: Rect[]; rawObstacles: Rect[] } {
   const fromId = endNode(edge.from)
   const toId = endNode(edge.to)
-  const rawObstacles = (
-    others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
-  ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  const boxes = others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
+  // Concatenated only when there is something to add: this runs per trial
+  // routing, and copying the whole node list for nothing showed in the bench.
+  const rawObstacles = (labels.length === 0 ? boxes : [...boxes, ...labels]).filter(
+    (rect) => !containsPoint(rect, start) && !containsPoint(rect, end),
+  )
   return {
     rawObstacles,
     obstacles: rawObstacles.map((rect) => ({
@@ -732,6 +739,10 @@ export function routeEdge(
   // The layout's account for grid searches (`routing-budget.ts`); omitted,
   // this route's grid search is unbounded.
   budget?: RoutingBudget,
+  // Text drawn outside every node rect that a route must not cross — a
+  // frame's title sits above the frame's border. Measured by the layout,
+  // since routing itself is measure-free.
+  labels: readonly Rect[] = [],
 ): ResolvedEdgeNode {
   const fromRect = rectAtEnd(nodes, edge.from)
   const toRect = rectAtEnd(nodes, edge.to)
@@ -756,7 +767,7 @@ export function routeEdge(
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
-  const { obstacles, rawObstacles } = routeObstacles(nodes, edge, start, end, others)
+  const { obstacles, rawObstacles } = routeObstacles(nodes, edge, start, end, others, labels)
   const ends: RouteEnds = {
     start,
     end,
