@@ -48,12 +48,14 @@ function readVex(): VexDocument {
 
 function dependencyReviewAllowList(): string[] {
   const workflow = parseYaml(
-    readFileSync(join(REPO_ROOT, '.github/workflows/dependency-review.yml'), 'utf-8'),
+    readFileSync(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8'),
   ) as { jobs?: Record<string, { steps?: { uses?: string; with?: Record<string, unknown> }[] }> }
   const step = Object.values(workflow.jobs ?? {})
     .flatMap((job) => job.steps ?? [])
     .find((s) => (s.uses ?? '').startsWith('actions/dependency-review-action@'))
-  return String(step?.with?.['allow-ghsas'] ?? '')
+  // A missing step must fail the comparison, not equal an empty list.
+  if (step === undefined) throw new Error('ci.yml has no dependency-review-action step')
+  return String(step.with?.['allow-ghsas'] ?? '')
     .split(/[\s,]+/)
     .filter((id) => id !== '')
 }

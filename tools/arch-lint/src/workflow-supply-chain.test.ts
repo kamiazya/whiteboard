@@ -9,10 +9,11 @@
 //   - every third-party action is pinned to a full commit SHA
 //     (Scorecard Pinned-Dependencies). release.yml and the setup-pnpm action
 //     had this guard alone; a tag on any other workflow was invisible to it.
-//   - the Scorecard and dependency-review workflows exist, and keep the shape
-//     their consumers require: the Scorecard API rejects published results
-//     from a workflow that breaks its restrictions, and a dependency review
-//     that only comments blocks nothing (OSPS-VM-05.03).
+//   - the Scorecard workflow and ci.yml's dependency-review and zizmor jobs
+//     exist, and keep the shape their consumers require: the Scorecard API
+//     rejects published results from a workflow that breaks its restrictions,
+//     and a dependency review that only comments blocks nothing
+//     (OSPS-VM-05.03). The two jobs are also ci-gate needs, so a failure blocks.
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -29,6 +30,8 @@ interface Step {
   with?: Record<string, unknown>
 }
 interface Job {
+  if?: string
+  needs?: string[]
   'runs-on'?: string
   permissions?: Permissions
   env?: unknown
@@ -229,21 +232,26 @@ describe('scorecard.yml — publishes OpenSSF Scorecard results the API accepts'
   })
 })
 
-describe('dependency-review.yml — a pull request adding a vulnerable dependency fails', () => {
-  const workflow = readOptionalWorkflow('dependency-review.yml')
-  const steps = Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
-  const review = steps.find((step) =>
+const ciWorkflow = readWorkflow('ci.yml')
+const ciJob = (id: string): Job | undefined => ciWorkflow.jobs?.[id]
+const gateNeeds = (): string[] => ciJob('ci-gate')?.needs ?? []
+
+describe('ci.yml dependency-review job — a pull request adding a vulnerable dependency fails', () => {
+  const job = ciJob('dependency-review')
+  const review = (job?.steps ?? []).find((step) =>
     (step.uses ?? '').startsWith('actions/dependency-review-action@'),
   )
 
-  it('exists', () => {
-    expect(existsSync(join(WORKFLOWS_DIR, 'dependency-review.yml'))).toBe(true)
+  it('exists and is a ci-gate need', () => {
+    expect(job).toBeDefined()
+    expect(gateNeeds()).toContain('dependency-review')
   })
 
-  it('runs on pull_request, never on a base-token trigger', () => {
-    const triggers = Object.keys((workflow.on as Record<string, unknown>) ?? {})
+  it('runs only on pull_request, never on a base-token trigger', () => {
+    const triggers = Object.keys((ciWorkflow.on as Record<string, unknown>) ?? {})
     expect(triggers).toContain('pull_request')
     expect(triggers.filter((t) => t === 'pull_request_target' || t === 'workflow_run')).toEqual([])
+    expect(job?.if).toBe("github.event_name == 'pull_request'")
   })
 
   it('fails the check on a vulnerability rather than only reporting it', () => {
@@ -253,13 +261,10 @@ describe('dependency-review.yml — a pull request adding a vulnerable dependenc
   })
 
   it('holds a read-only token', () => {
-    const jobs = Object.values(workflow.jobs ?? {})
-    expect(jobs.length, 'the walk must reach a job').toBeGreaterThan(0)
-    expect(workflow.permissions, 'the root must declare its permissions').toBeDefined()
-    expect(writeScopes(workflow.permissions)).toEqual([])
-    for (const job of jobs) {
-      expect(writeScopes(job.permissions)).toEqual([])
-    }
+    expect(job, 'the walk must reach the job').toBeDefined()
+    expect(ciWorkflow.permissions, 'the root must declare its permissions').toBeDefined()
+    expect(writeScopes(ciWorkflow.permissions)).toEqual([])
+    expect(writeScopes(job?.permissions)).toEqual([])
   })
 })
 
@@ -268,17 +273,20 @@ describe('dependency-review.yml — a pull request adding a vulnerable dependenc
 // gates only while it FAILS on a finding: with advanced-security on, the
 // action uploads SARIF and exits 0, and with its default `latest` the rules
 // judging a PR move without one.
-describe('zizmor.yml — workflow findings fail the pull request', () => {
-  const workflow = readOptionalWorkflow('zizmor.yml')
-  const steps = Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
-  const audit = steps.find((step) => (step.uses ?? '').startsWith('zizmorcore/zizmor-action@'))
+describe('ci.yml zizmor job — workflow findings fail the pull request', () => {
+  const job = ciJob('zizmor')
+  const audit = (job?.steps ?? []).find((step) =>
+    (step.uses ?? '').startsWith('zizmorcore/zizmor-action@'),
+  )
 
-  it('exists', () => {
-    expect(existsSync(join(WORKFLOWS_DIR, 'zizmor.yml'))).toBe(true)
+  it('exists, is a ci-gate need, and runs on every event', () => {
+    expect(job).toBeDefined()
+    expect(gateNeeds()).toContain('zizmor')
+    expect(job?.if).toBeUndefined()
   })
 
   it('runs on pull_request and on the default branch, never on a base-token trigger', () => {
-    const on = (workflow.on ?? {}) as Record<string, { branches?: string[] } | null>
+    const on = (ciWorkflow.on ?? {}) as Record<string, { branches?: string[] } | null>
     expect(Object.hasOwn(on, 'pull_request')).toBe(true)
     expect(on.push?.branches).toEqual(['main'])
     expect(
@@ -294,12 +302,9 @@ describe('zizmor.yml — workflow findings fail the pull request', () => {
 
   it('reads the repository config and holds a read-only token', () => {
     expect(existsSync(join(REPO_ROOT, '.github/zizmor.yml'))).toBe(true)
-    const jobs = Object.values(workflow.jobs ?? {})
-    expect(jobs.length, 'the walk must reach a job').toBeGreaterThan(0)
-    expect(workflow.permissions, 'the root must declare its permissions').toBeDefined()
-    expect(writeScopes(workflow.permissions)).toEqual([])
-    for (const job of jobs) {
-      expect(writeScopes(job.permissions)).toEqual([])
-    }
+    expect(job, 'the walk must reach the job').toBeDefined()
+    expect(ciWorkflow.permissions, 'the root must declare its permissions').toBeDefined()
+    expect(writeScopes(ciWorkflow.permissions)).toEqual([])
+    expect(writeScopes(job?.permissions)).toEqual([])
   })
 })
