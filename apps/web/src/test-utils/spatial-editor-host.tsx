@@ -82,6 +82,27 @@ const DEFAULT_SIZE = { width: 800, height: 600 }
  * back in and recording the command. One definition, so a change to how the
  * editor is mounted in tests is made once.
  */
+/** Threads a case hands over explicitly win by id over its inline comments. */
+function seededThreads(
+  inline: readonly CommentThread[],
+  given: readonly CommentThread[],
+): CommentThread[] {
+  return [...given, ...inline.filter((thread) => !given.some((held) => held.id === thread.id))]
+}
+
+function freshLatest(canvas: SpatialCanvas, threads: readonly CommentThread[]): EditorHostLatest {
+  return {
+    canvas,
+    threads,
+    get comments() {
+      return canvasCommentsOf(this.threads, this.canvas.nodes)
+    },
+    commands: [],
+    kinds: [],
+    handle: null,
+  }
+}
+
 export function makeEditorHost(options: EditorHostOptions) {
   const {
     initial,
@@ -92,22 +113,8 @@ export function makeEditorHost(options: EditorHostOptions) {
     editorProps,
   } = options
   const seeded = splitBoard(initial)
-  // Threads a case hands over explicitly win by id over its inline comments.
-  const given = editorProps?.threads ?? []
-  const initialThreads = [
-    ...given,
-    ...seeded.threads.filter((thread) => !given.some((held) => held.id === thread.id)),
-  ]
-  const latest: EditorHostLatest = {
-    canvas: seeded.canvas,
-    threads: initialThreads,
-    get comments() {
-      return canvasCommentsOf(this.threads, this.canvas.nodes)
-    },
-    commands: [],
-    kinds: [],
-    handle: null,
-  }
+  const initialThreads = seededThreads(seeded.threads, editorProps?.threads ?? [])
+  const latest = freshLatest(seeded.canvas, initialThreads)
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(seeded.canvas)
     const [threads, setThreads] = useState<readonly CommentThread[]>(initialThreads)

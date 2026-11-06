@@ -3,7 +3,7 @@
  *
  * A thread's key is not always minted by the writer — `thread.add` and the
  * editor's own create pass a caller's id straight through. So two keepers
- * can genuinely reach `writeThreadInto` with the same key having never seen
+ * can genuinely reach `writeCommentThread` with the same key having never seen
  * each other's: the daemon and this browser's replica each opening a thread
  * under one caller-chosen id.
  *

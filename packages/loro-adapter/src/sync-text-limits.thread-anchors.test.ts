@@ -5,7 +5,7 @@
 import { CANVAS_MAX_NODES, type CommentThread } from '@kamiazya/whiteboard-model'
 import { LoroDoc, type LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { writeThreadInto } from './comment-threads.js'
+import { writeCommentThread } from './comment-threads.js'
 import { type DocumentContainers, THREADS_KEY } from './containers.js'
 import {
   importWithinTextLimits,
@@ -76,7 +76,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   it('refuses a resolved thread naming more nodes than one canvas may hold', () => {
     const base = stored(placement)
     const update = updateFrom(placement, base, (doc) =>
-      writeThreadInto(doc, setThread('t1', ids(CANVAS_MAX_NODES + 1))),
+      writeCommentThread(doc, setThread('t1', ids(CANVAS_MAX_NODES + 1))),
     )
     expect(judged(base, update)).toEqual({
       shape: 'thread-anchor',
@@ -89,13 +89,15 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   it('takes a thread naming exactly the bound', () => {
     const base = stored(placement)
     const update = updateFrom(placement, base, (doc) =>
-      writeThreadInto(doc, setThread('t1', ids(CANVAS_MAX_NODES))),
+      writeCommentThread(doc, setThread('t1', ids(CANVAS_MAX_NODES))),
     )
     expect(judged(base, update)).toBeNull()
   })
 
   it('refuses growing a held anchor past the bound', () => {
-    const base = stored(placement, (doc) => writeThreadInto(doc, setThread('t1', ids(2), 'open')))
+    const base = stored(placement, (doc) =>
+      writeCommentThread(doc, setThread('t1', ids(2), 'open')),
+    )
     const update = updateFrom(placement, base, (doc) =>
       overwriteAnchor(doc, 't1', setThread('t1', ids(CANVAS_MAX_NODES + 1)).anchor),
     )
@@ -104,7 +106,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 
   it('still takes an edit that does not grow an anchor stored past the bound', () => {
     const base = stored(placement, (doc) =>
-      writeThreadInto(doc, setThread('t1', ids(CANVAS_MAX_NODES + 10))),
+      writeCommentThread(doc, setThread('t1', ids(CANVAS_MAX_NODES + 10))),
     )
     const update = updateFrom(placement, base, (doc) =>
       overwriteAnchor(doc, 't1', setThread('t1', ids(CANVAS_MAX_NODES + 5)).anchor),
@@ -115,7 +117,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
   it('does not read a message body as an anchor', () => {
     // The bound is on the thread's own `anchor` key; a message map one level
     // down holding a long list under another name is not one.
-    const base = stored(placement, (doc) => writeThreadInto(doc, setThread('t1', ids(2))))
+    const base = stored(placement, (doc) => writeCommentThread(doc, setThread('t1', ids(2))))
     const update = updateFrom(placement, base, (doc) =>
       (doc.getMap(THREADS_KEY).get('t1') as LoroMap).set('note', {
         nodeIds: ids(CANVAS_MAX_NODES + 1),
@@ -127,7 +129,7 @@ describe.each(Object.keys(PLACEMENTS) as Placement[])('a document in %s', (place
 
 it('refuses an over-bound anchor that a record holds into an empty document', () => {
   const record = stored("a document's own root", (doc) =>
-    writeThreadInto(doc, setThread('t1', ids(CANVAS_MAX_NODES + 1))),
+    writeCommentThread(doc, setThread('t1', ids(CANVAS_MAX_NODES + 1))),
   )
   expect(
     importWithinTextLimits(new LoroDoc(), record.export({ mode: 'snapshot' })).breach,
@@ -141,7 +143,7 @@ it('takes an update whose bytes are at least as many as the anchor ids it writes
   const base = stored("a document's own root")
   for (const nodeIds of [Array(5_000).fill(''), Array(5_000).fill('x')]) {
     const update = updateFrom("a document's own root", base, (doc) =>
-      writeThreadInto(doc, setThread('t1', nodeIds)),
+      writeCommentThread(doc, setThread('t1', nodeIds)),
     )
     expect(update.byteLength).toBeGreaterThanOrEqual(nodeIds.length)
   }

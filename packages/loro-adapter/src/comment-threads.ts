@@ -67,16 +67,6 @@ function assertFiniteAnchor(thread: CommentThread): void {
  * conversation. `writeThreadMessage` returns without writing instead.
  */
 export function writeCommentThread(doc: DocumentContainers, thread: CommentThread): void {
-  writeThreadInto(doc, thread)
-  doc.commit()
-}
-
-/**
- * The same write without the commit, for a caller that owns the commit
- * boundary — `withDocumentBatch`, where an extra commit would split one user
- * action into two undo steps.
- */
-export function writeThreadInto(doc: DocumentContainers, thread: CommentThread): void {
   assertFiniteAnchor(thread)
   const container = openMergeableMap(doc.getMap(THREADS_KEY), thread.id)
   container.set(ANCHOR_FIELD, thread.anchor)
@@ -84,6 +74,7 @@ export function writeThreadInto(doc: DocumentContainers, thread: CommentThread):
   if (thread.createdAt !== undefined) container.set(CREATED_AT_FIELD, thread.createdAt)
   const messages = openMergeableMap(container, MESSAGES_KEY)
   for (const message of thread.messages) messages.set(message.id, messageToFields(message))
+  doc.commit()
 }
 
 /**

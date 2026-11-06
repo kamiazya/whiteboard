@@ -458,7 +458,7 @@ function commentPlace(
  * threads plane alone) still projects every spatial thread; it then answers
  * `undefined` for a node passage, the same as for a node that is gone.
  */
-export function canvasCommentFromThread(
+function canvasCommentFromThread(
   thread: CommentThread,
   nodeById?: (id: string) => CommentTargetNode | undefined,
 ): CanvasComment | undefined {

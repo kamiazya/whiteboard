@@ -200,7 +200,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // function in the repo. The entries below are functions inside it, so their
   // keys carry its name.
   // +13: the comment reveal hook, its handle entry and the pulse ring; +1: the shortcut help hook.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1753, // +1: the Tab hand-off state and the Draw tool's pen both thread through; +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle; +1: the orphaned-conversation flag on the comment card; +3: the Connect tool hint mount; +2: the Draw tool's pen and the eraser's announcement verb
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor': 1756, // +1: the Tab hand-off state and the Draw tool's pen both thread through; +6: N with a frame selected asks for the note inside it, net of the dock's Group inputs it no longer passes; +14: the canvas's accessibility projection, its active descendant and the controls' subject; +5: the empty cue's description id and the tool announcement; +2: the viewportKey prop reaches the viewport controls; +2: the viewport's panel insets reach the comment reveal; +10: the locked-press notice mount and its hook call; +3: the dock's Group inputs; +4: the resolved-view source and setter on the handle; +1: the orphaned-conversation flag on the comment card; +3: the Connect tool hint mount; +2: the Draw tool's pen and the eraser's announcement verb; +3: pins are drawn from the threads the editor is handed, which reach the comment state and the drag layers
   // Its gesture and reach overlays live in `gesture-overlays.tsx`.
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.canvasSpaceLayers': 92,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx#SpatialEditor.screenSpaceOverlays': 54,
@@ -213,7 +213,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/TextNodeEditor.tsx#TextNodeEditor': 117, // +1: the exit strip told the field is one line; +4: the singleLine prop; +12: an explicit exit returns the keyboard to the canvas; +2: the placeholder prop; +6: the editor's accessible name, its exit description and its discard announcement
   'apps/web/src/components/spatial-editor/ToolPalette.tsx#ToolPalette': 224, // the tools are a table now
   // +9: the exit hint follows the bubble as it grows.
-  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 108, // +1: a posted comment is announced; +1: the editor's accessible name
+  'apps/web/src/components/spatial-editor/comment-compose-overlay.tsx#CommentComposeOverlay': 114, // +1: a posted comment is announced; +1: the editor's accessible name; +6: a new pin opens a thread with a spatial anchor rather than writing a flat comment
   'apps/web/src/components/spatial-editor/context-menu-items/canvas-menu-items.tsx#canvasMenuItems': 91,
   'apps/web/src/components/spatial-editor/context-menu-items/color-row.tsx#colorRow': 55,
   'apps/web/src/components/spatial-editor/context-menu-items/edge-menu-items.tsx#edgeMenuItems': 93,
@@ -230,7 +230,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/pointer-release.ts#releaseMarquee': 78,
   'apps/web/src/components/spatial-editor/use-canvas-replacement.ts#useCanvasReplacement': 86,
   'apps/web/src/components/spatial-editor/use-clipboard-actions.ts#useClipboardActions': 197,
-  'apps/web/src/components/spatial-editor/use-comment-state.ts#useCommentState': 124,
+  'apps/web/src/components/spatial-editor/use-comment-state.ts#useCommentState': 138, // +14: the pins are derived from the threads plane against the canvas nodes, and held in a ref for the gesture handlers
   'apps/web/src/components/spatial-editor/use-drag-layers.ts#useDragLayers': 357,
   'apps/web/src/components/spatial-editor/use-edit-session-state.ts#useEditSessionState': 132, // +2: the resolved-view source
   // `handleKeyDown` is a claimant chain, and each claimant carries the reason
@@ -330,13 +330,13 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by twenty-six for `documentRemoved`: the open document deleted
   // elsewhere is seen by the session alone, which stops writing and says so.
   // Raised by two more for a trash restore bringing it back, which resumes it.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 904,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession': 910, // +6: a snapshot holding the retired comment plane is refused rather than shown without its comments
   // Both raised for the refused write: one more backend message in the
   // handler table, and the snapshot that answers it ending the wait. Both
   // raised by one more for a reconnect whose snapshot no longer holds the
   // document, which is the same delete rather than unreadable bytes.
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 195,
-  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 90,
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect': 201, // +6: a snapshot holding the retired comment plane is refused rather than shown without its comments
+  'apps/web/src/lib/document-sync-session.ts#createDocumentSyncSession.connect.onSnapshot': 96, // +6: a snapshot holding the retired comment plane is refused rather than shown without its comments
   'apps/web/src/lib/command-writes.ts#writeCommandTarget': 119,
   'apps/web/src/lib/idb-document-store.ts#loadSnapshot': 60,
   'apps/web/src/lib/keyed-svg-patcher.ts#mountKeyedSvg': 76,
@@ -508,7 +508,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-viewer/src/widget/comment-control.ts#createCommentControl': 76,
   'packages/codec/src/markdown/from-remark.ts#toFlow': 57,
   'packages/codec/src/markdown/from-remark.ts#toPhrasing': 59,
-  'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 52,
+  'packages/codec/src/spatial/loss-table.ts#jsonCanvasLossTable': 57, // +5: the table says no export carries a conversation, and that a file carrying the retired comments key is refused
   'packages/codec/src/spatial/projection.ts#liftNode': 55,
   'packages/codec/src/test-utils/fully-populated-canvas.ts#fullyPopulatedCanvas': 92,
   'packages/daemon-client/src/replica-session-key.ts#sessionKey': 52,
@@ -622,7 +622,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // workspace or document before parsing — two lines each, the refusal
   // itself being a helper above the function.
   'packages/server-core/src/create-server.ts#createServer': 238,
-  'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 73,
+  'packages/server-core/src/test-utils/seeded-workspace.ts#seededServer': 78, // +5: the board comment is seeded as a thread in the annotation layer, not on the canvas
   // The tool bodies left `execute` for module functions when the write
   // lock became the operation's own: `execute` takes the lock and calls
   // them. Moved, not grown — recorded at the measurement.

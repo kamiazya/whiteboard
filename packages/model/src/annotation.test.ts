@@ -9,8 +9,8 @@ import {
   type AnnotationAnchor,
   annotationAnchorInputSchema,
   annotationAnchorSchema,
+  type CommentTargetNode,
   type CommentThread,
-  canvasCommentFromThread,
   canvasCommentsOf,
   commentCornerOf,
   commentMessageSchema,
@@ -27,6 +27,14 @@ import { CANVAS_MAX_NODES } from './canvas-size.js'
 import type { CanvasComment } from './spatial.js'
 import { annotationAnchorArbitrary } from './test-utils/arbitraries.js'
 import { fc } from './test-utils/fast-check.js'
+
+/** One thread through the board's projection, over `nodes` (none by default). */
+function projectOne(
+  thread: CommentThread,
+  nodes: readonly CommentTargetNode[] = [],
+): CanvasComment | undefined {
+  return canvasCommentsOf([thread], nodes)[0]
+}
 
 const SPATIAL: AnnotationAnchor = { kind: 'spatial', x: 10, y: 20 }
 
@@ -348,7 +356,7 @@ describe('the generator covers every arm the schema declares', () => {
   })
 })
 
-describe('canvasCommentFromThread', () => {
+describe("a thread's pin on the board", () => {
   const opened = (anchor: AnnotationAnchor): CommentThread => ({
     id: 't1',
     anchor,
@@ -359,7 +367,7 @@ describe('canvasCommentFromThread', () => {
     ['n1', { id: 'n1', x: 100, y: 200, width: 50, height: 30 }],
     ['n2', { id: 'n2', x: 300, y: 100, width: 40, height: 20 }],
   ])
-  const nodeById = (id: string) => nodes.get(id)
+  const board = [...nodes.values()]
 
   it('projects a node set at the top-right corner of the box its LIVE nodes occupy', () => {
     // The stored rect is where the set stood when commented on; the nodes
@@ -372,7 +380,7 @@ describe('canvasCommentFromThread', () => {
       width: 10,
       height: 10,
     })
-    const projected = canvasCommentFromThread(set, nodeById)
+    const projected = projectOne(set, board)
     expect(projected).toMatchObject({ x: 340, y: 100 })
     expect(projected).not.toHaveProperty('targetNodeId')
   })
@@ -386,46 +394,45 @@ describe('canvasCommentFromThread', () => {
       width: 100,
       height: 50,
     })
-    expect(canvasCommentFromThread(orphan, nodeById)).toMatchObject({ x: 110, y: 20 })
+    expect(projectOne(orphan, board)).toMatchObject({ x: 110, y: 20 })
     const region = opened({ kind: 'spatial', x: 10, y: 20, width: 100, height: 50 })
-    expect(canvasCommentFromThread(region)).toMatchObject({ x: 110, y: 20 })
+    expect(projectOne(region)).toMatchObject({ x: 110, y: 20 })
   })
 
   it('projects nothing for the document itself: the panel is its only surface', () => {
-    expect(canvasCommentFromThread(opened({ kind: 'document' }), nodeById)).toBeUndefined()
+    expect(projectOne(opened({ kind: 'document' }), board)).toBeUndefined()
   })
 
   it('projects a spatial anchor with its node or edge reference', () => {
-    expect(
-      canvasCommentFromThread(opened({ kind: 'spatial', nodeId: 'n1', x: 1, y: 2 })),
-    ).toMatchObject({ id: 't1', x: 1, y: 2, targetNodeId: 'n1', text: 'look here' })
-    expect(
-      canvasCommentFromThread(opened({ kind: 'spatial', edgeId: 'e1', x: 1, y: 2 })),
-    ).toMatchObject({ targetEdgeId: 'e1' })
+    expect(projectOne(opened({ kind: 'spatial', nodeId: 'n1', x: 1, y: 2 }))).toMatchObject({
+      id: 't1',
+      x: 1,
+      y: 2,
+      targetNodeId: 'n1',
+      text: 'look here',
+    })
+    expect(projectOne(opened({ kind: 'spatial', edgeId: 'e1', x: 1, y: 2 }))).toMatchObject({
+      targetEdgeId: 'e1',
+    })
   })
 
   it("projects a passage of a node's text as a comment on that node, at its corner", () => {
-    const projected = canvasCommentFromThread(
+    const projected = projectOne(
       opened({ kind: 'text', nodeId: 'n1', quote: { exact: 'here' }, start: 5, end: 9 }),
-      nodeById,
+      board,
     )
     expect(projected).toMatchObject({ x: 150, y: 200, targetNodeId: 'n1' })
   })
 
   it('projects nothing for a passage whose node is gone, or a passage of a note', () => {
     const gone = opened({ kind: 'text', nodeId: 'n-gone', quote: { exact: 'x' }, start: 0, end: 1 })
-    expect(canvasCommentFromThread(gone, nodeById)).toBeUndefined()
+    expect(projectOne(gone, board)).toBeUndefined()
     // Without a lookup a node passage is unplaceable too — not a wrong place.
     expect(
-      canvasCommentFromThread(
-        opened({ kind: 'text', nodeId: 'n1', quote: { exact: 'x' }, start: 0, end: 1 }),
-      ),
+      projectOne(opened({ kind: 'text', nodeId: 'n1', quote: { exact: 'x' }, start: 0, end: 1 })),
     ).toBeUndefined()
     expect(
-      canvasCommentFromThread(
-        opened({ kind: 'text', quote: { exact: 'x' }, start: 0, end: 1 }),
-        nodeById,
-      ),
+      projectOne(opened({ kind: 'text', quote: { exact: 'x' }, start: 0, end: 1 }), board),
     ).toBeUndefined()
   })
 
@@ -436,7 +443,7 @@ describe('canvasCommentFromThread', () => {
         // project to a corner and come back as a point, by construction.
         if (anchor.kind !== 'spatial' || anchor.nodeIds !== undefined || anchor.width !== undefined)
           return true
-        const back = canvasCommentFromThread(opened(anchor))
+        const back = projectOne(opened(anchor))
         return (
           back !== undefined &&
           threadFromCanvasComment(back).anchor.kind === 'spatial' &&
@@ -503,14 +510,14 @@ describe('commentCornerOf', () => {
 
   it('is where a node comment projects to, so the pin and the projection agree', () => {
     const node = { id: 'n', x: 12, y: 7, width: 100, height: 40 }
-    const projected = canvasCommentFromThread(
+    const projected = projectOne(
       {
         id: 't',
         anchor: { kind: 'text', nodeId: 'n', quote: { exact: 'q' }, start: 0, end: 1 },
         status: 'open',
         messages: [{ id: 'm', body: 'b' }],
       },
-      (id) => (id === 'n' ? node : undefined),
+      [node],
     )
     expect(projected && { x: projected.x, y: projected.y }).toEqual(commentCornerOf(node))
   })
