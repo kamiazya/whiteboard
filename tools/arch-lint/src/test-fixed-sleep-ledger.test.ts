@@ -108,7 +108,7 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/src/server/store/auto-version.test.ts': 1,
   'packages/mcp-server/src/server/routes/document/restore-race.test.ts': 2,
   'packages/mcp-server/src/server/routes/document/versions.test.ts': 2,
-  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 2,
+  'packages/mcp-server/src/server/routes/document/workspaces.test.ts': 1,
   'packages/mcp-server/src/server/store/backup-blob-mirror.test.ts': 2,
   'packages/mcp-server/src/server/store/backup-in-progress.test.ts': 1,
   'packages/mcp-server/src/server/store/backup-scheduler.test.ts': 2,
