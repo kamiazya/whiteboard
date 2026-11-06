@@ -396,9 +396,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // (moving a route's end along its side, from `edge-router.ts`) and
     // `layout/edges/coincident-ends.ts` (scoring a repaired pair, from
     // `spatial-edges.ts`). Same code, same tests, same answer as before.
+    //
+    // 123 with `layout/edges/around-ledger.ts`, the side search's record of
+    // which stepping-round choices it priced, split out of `spatial-edges.ts`
+    // (which the lane does not mutate) under the size budget. Outside the
+    // lane for the same reason: its two recordings and its drop are each
+    // pinned by an example in `edge-straight-detour.test.ts` and mutated by
+    // hand against them.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 24,
-      production: 122,
+      production: 123,
     })
   })
 
