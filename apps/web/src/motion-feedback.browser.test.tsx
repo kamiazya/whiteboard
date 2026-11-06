@@ -31,7 +31,8 @@ afterEach(cleanup)
 describe('feedback micro-motion', () => {
   it('update toast enters with an animation on the token duration', () => {
     render(<UpdateToast onReload={vi.fn()} onDismiss={vi.fn()} />)
-    const toast = document.querySelector('[role="status"]') as HTMLElement
+    // The surface animates; the live region is only its message.
+    const toast = document.querySelector('[role="status"]')?.parentElement as HTMLElement
     const cs = getComputedStyle(toast)
     expect(cs.animationName).not.toBe('none')
     expect(cs.animationDuration).toBe('0.22s')
