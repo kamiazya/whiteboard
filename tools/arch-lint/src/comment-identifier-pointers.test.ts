@@ -106,10 +106,6 @@ const PROSE_SHAPE =
 
 /** Names that are SUPPOSED to resolve to nothing, each with the sentence that makes it so. */
 const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
-  '.claude/rules/vocabulary.md#importFsBlobs':
-    'the migration that defined it was folded into the 0001 baseline; the rule sentence naming it is owed an edit, and this entry goes with it',
-  '.claude/rules/vocabulary.md#canvasId':
-    'its last spelling went with the retired migrations; the rule sentence naming it is owed an edit, and this entry goes with it',
   '.claude/skills/measured-change/SKILL.md#HeaderBranchChip':
     'a measured component that has since been deleted; the sentence records what was measured of it',
   '.claude/skills/testing-techniques/resources/configuration.md#HeaderBranchChip':

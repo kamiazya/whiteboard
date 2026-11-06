@@ -114,8 +114,6 @@ function isBareSourcePointer(name: string, line: string, previous: string): bool
  * bare exemption is the omission with a word in front of it.
  */
 const DELIBERATE: Record<string, string> = {
-  '.claude/rules/tool-arch-lint.md#server/purge-legacy-trust-file.ts':
-    'the purge was deleted (an old trust store is refused at boot now); the rule sentence naming it is owed an edit, and this entry goes with it',
   'apps/web/src/lib/keeper-parity.test.ts#src/hooks/useBranches.ts':
     'the comment is about its ABSENCE — it stopped reaching the daemon and the ledger refuses an entry naming a module that no longer does',
   'tools/arch-lint/src/stryker-targets.test.ts#api-contracts/libraries.ts':
