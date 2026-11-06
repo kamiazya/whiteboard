@@ -44,7 +44,6 @@ import {
   DocumentNameTooLongError,
   FolderNameRefusedError,
   OffGrammarPathError,
-  RootNoDocumentHoldsError,
   type SyncWriteRefusalError,
   syncWriteAnswer,
   TooManyDocumentsError,
@@ -59,7 +58,6 @@ const MAP = 'cid:0@1:Map'
 const SAMPLES: Readonly<Record<string, () => SyncWriteRefusalError>> = {
   OffGrammarPathError: () => new OffGrammarPathError(['Meeting notes']),
   UnreadableDocumentMetaError: () => new UnreadableDocumentMetaError(['0@1']),
-  RootNoDocumentHoldsError: () => new RootNoDocumentHoldsError(['nameChosen']),
   DocumentNameTooLongError: () => new DocumentNameTooLongError(['notes']),
   FolderNameRefusedError: () =>
     new FolderNameRefusedError(['week'], 'A folder name cannot be blank.'),
@@ -115,13 +113,11 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
 
 /**
- * Text-breach classes answering a refusal another class already gives: the
- * workspace record's judge finds, as an operation, what the per-document
- * route finds as a root — a content key of the wrong kind — and a write into
- * a container it does not build on is a change sent before what it builds on.
+ * Text-breach classes answering a refusal another class already gives: a
+ * write into a container it does not build on is a change sent before what
+ * it builds on.
  */
 const SAME_ANSWER_AS: Readonly<Record<string, string>> = {
-  ContentRootKindError: 'RootNoDocumentHoldsError',
   UnattachedContainerError: 'CausalGapError',
 }
 

@@ -1,16 +1,15 @@
 /**
  * Every daemon route that places a NEW document refuses at the workspace's
  * document ceiling with the 413 `too_many_documents` the workspace-record
- * sync update answers: the per-document update's lazy create, a duplicate,
- * a restore from the trash, and a version restored to a new path. An update to a document that already exists
- * is not a new document and is still taken.
+ * sync update answers: a duplicate, a restore from the trash, and a version
+ * restored to a new path.
  */
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { documentDuplicateApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resolveTestServerDeps,
@@ -80,14 +79,6 @@ async function fillTo(total: number): Promise<void> {
   await saveWorkspaceDoc(WS, record)
 }
 
-function elementUpdate(id: string): Uint8Array<ArrayBuffer> {
-  const client = new LoroDoc()
-  const from = client.version()
-  client.getMovableList('elements').insertContainer(0, new LoroMap()).set('id', id)
-  client.commit()
-  return client.export({ mode: 'update', from }) as Uint8Array<ArrayBuffer>
-}
-
 function post(url: string, body?: Uint8Array<ArrayBuffer>) {
   const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
   return app.request(url, {
@@ -98,38 +89,13 @@ function post(url: string, body?: Uint8Array<ArrayBuffer>) {
   })
 }
 
-const postUpdate = (path: string, body: Uint8Array<ArrayBuffer>) =>
-  post(`/api/w/${WS}/document/${path}/update`, body)
-
 async function expectRefusedAtCeiling(res: Response): Promise<void> {
   expect(res.status).toBe(413)
   expect(((await res.json()) as { error: string }).error).toBe('too_many_documents')
   expect(await serverDeps.documentIndex.listDocuments({ workspaceId: WS })).toHaveLength(CEILING)
 }
 
-describe('POST …/document/:path/update at the document ceiling', () => {
-  it('refuses to create a document at a new path, and the workspace keeps what it held', async () => {
-    await fillTo(CEILING)
-
-    const res = await postUpdate('fresh', elementUpdate('e1'))
-
-    expect(res.status).toBe(413)
-    expect(((await res.json()) as { error: string }).error).toBe('too_many_documents')
-    const listed = await serverDeps.documentIndex.listDocuments({ workspaceId: WS })
-    expect(listed).toHaveLength(CEILING)
-    expect(listed.some((entry) => entry.path === 'fresh')).toBe(false)
-  })
-
-  it('still takes an update to a document the workspace already holds', async () => {
-    await saveDocument(WS, 'canvas-a', new LoroDoc())
-    await fillTo(CEILING)
-
-    const res = await postUpdate('canvas-a', elementUpdate('e2'))
-
-    expect(res.status).toBe(200)
-    expect(await serverDeps.documentIndex.listDocuments({ workspaceId: WS })).toHaveLength(CEILING)
-  })
-
+describe('a keeper-side create at the document ceiling', () => {
   it('refuses a duplicate', async () => {
     await saveDocument(WS, 'source', new LoroDoc())
     await fillTo(CEILING)

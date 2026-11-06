@@ -166,17 +166,21 @@ export const pastNamespaceCeiling: ErrorAnswer = (err) => {
 
 /** A conflicting workspace segment: another workspace already holds it. */
 export const segmentTaken: ErrorAnswer = (err) =>
-  err instanceof WorkspaceSegmentTakenError ? { status: 409, body: { title: err.message } } : null
+  err instanceof WorkspaceSegmentTakenError
+    ? { status: 409, body: errorBody('workspace_segment_taken', err.message) }
+    : null
 
 /**
  * A move into the document's own subtree is an unusable TARGET, not a race
  * with another document — 400, not 409.
  */
 export const moveIntoSelf: ErrorAnswer = (err) =>
-  err instanceof DocumentMoveIntoSelfError ? { status: 400, body: { title: err.message } } : null
+  err instanceof DocumentMoveIntoSelfError
+    ? { status: 400, body: errorBody('document_move_into_self', err.message) }
+    : null
 
 /**
- * A path collision. The TITLE is the caller's, because the two routes that
+ * A path collision. The MESSAGE is the caller's, because the two routes that
  * answer this mean different things by it: creating at a path the caller
  * named can say so, while a subtree MOVE collides on a path the mover
  * PRODUCED — naming the one the caller asked for sends them to retry the
@@ -184,15 +188,17 @@ export const moveIntoSelf: ErrorAnswer = (err) =>
  * message instead.
  */
 export const pathTakenAs =
-  (title?: string): ErrorAnswer =>
+  (message?: string): ErrorAnswer =>
   (err) =>
     err instanceof DocumentPathTakenError
-      ? { status: 409, body: { title: title ?? err.message } }
+      ? { status: 409, body: errorBody('document_path_taken', message ?? err.message) }
       : null
 
 /** A refusal, not a failure: the caller has to name what it destroys. */
 export const hasDescendants: ErrorAnswer = (err) =>
-  err instanceof DocumentHasDescendantsError ? { status: 409, body: { title: err.message } } : null
+  err instanceof DocumentHasDescendantsError
+    ? { status: 409, body: errorBody('document_has_descendants', err.message) }
+    : null
 
 /**
  * An absent workspace has two spellings that reach a route: the index's own
@@ -215,14 +221,16 @@ export const workspaceNotFound: ErrorAnswer = (err) =>
     : null
 
 /**
- * Nothing at that address: an absent DOCUMENT answers the title the caller
+ * Nothing at that address: an absent DOCUMENT answers the message the caller
  * supplies (only the route knows which path it was asked for), an absent
  * WORKSPACE answers as every other route does.
  */
 export const notFoundAs =
-  (title: string): ErrorAnswer =>
+  (message: string): ErrorAnswer =>
   (err) =>
-    isDocumentNotFoundError(err) ? { status: 404, body: { title } } : workspaceNotFound(err)
+    isDocumentNotFoundError(err)
+      ? { status: 404, body: errorBody('not_found', message) }
+      : workspaceNotFound(err)
 
 /**
  * Refuses an unknown workspace before any `/api/workspaces/:workspaceId/*`
@@ -237,8 +245,7 @@ export const notFoundAs =
  * not without threading deps into it.
  *
  * A malformed handle passes through: an address no workspace can have is the
- * caller's mistake, and each route family words that 400 in its own voice (the
- * document routes speak Problem Details, the rest `{ error, message }`). In
+ * caller's mistake, and each route words that 400 itself. In
  * server mode the membership gate sits in front and answers a stranger the same
  * refusal for an unknown workspace as for a real one, so this cannot be used to
  * learn which workspaces exist.
@@ -317,12 +324,7 @@ export const corruptStored: ErrorAnswer = (err) => handleCorruptStoredData(err)
  * reads as one now. The RETHROW is the part worth keeping explicit: a
  * validator that fails for some other reason is a fault, not a 400.
  *
- * It answers the RAW refusal rather than a body, because the routes here do
- * not agree on what a refusal looks like on the wire: three answer Problem
- * Details (`{ title }`) and two answer the legacy `{ error, message }`. That
- * drift is real and is not this helper's to decide — a route that wants
- * Problem Details writes `{ title: refusal.message }` itself, and pinning
- * which is which is `workspaces.test.ts`'s job.
+ * The refusal it answers is already a body in the error contract.
  */
 export function refusedBy(validate: () => void): { error: string; message: string } | null {
   try {
@@ -352,12 +354,7 @@ export function refusalReason(error: z.ZodError, fallback: string): string {
   return unknown.length === 0 ? fallback : unknown.map(issueText).join('; ')
 }
 
-/** `refusalReason` as the Problem Details body the `{ title }` routes answer with. */
-export const titleRefusal = (error: z.ZodError, fallback: string): ApiErrorBody => ({
-  title: refusalReason(error, fallback),
-})
-
-/** `refusalReason` as the `{ error, message }` body the metadata routes answer with. */
+/** `refusalReason` as the `invalid_body` refusal a strict request body answers. */
 export const invalidBodyRefusal = (
   error: z.ZodError,
   fallback: string,

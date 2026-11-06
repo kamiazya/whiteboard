@@ -1,9 +1,8 @@
 /**
  * A malformed workspace address answers the same 400 on every route that
  * takes one: the address is refused before the store is touched, in the
- * `{ error, message }` family — except the page-facing workspace-document
- * surface, which speaks Problem Details and is pinned here so the difference
- * stays deliberate.
+ * `{ error, message }` family, the page-facing workspace-document surface
+ * included.
  *
  * `workspace-handle.test.ts` pins the helper; this is the per-route half, so
  * a handler that stops calling it fails by name.
@@ -83,7 +82,7 @@ describe('a malformed workspace handle', () => {
     })
   }
 
-  it('is Problem Details { title } on the page-facing workspace-document surface', async () => {
+  it('is the shared refusal on the page-facing workspace-document surface', async () => {
     const app = createDocumentRouter({
       scope: testStoreScope(),
       serverDeps,
@@ -92,6 +91,6 @@ describe('a malformed workspace handle', () => {
     })
     const res = await app.request(`/api/w/${MALFORMED}/workspace-document/snapshot`)
     expect(res.status).toBe(400)
-    expect(await res.json()).toEqual({ title: REFUSAL.message })
+    expect(await res.json()).toEqual(REFUSAL)
   })
 })

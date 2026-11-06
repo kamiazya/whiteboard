@@ -1,0 +1,12 @@
+[package]
+name = "whiteboard-log"
+description = "RFC 5424 log levels and the logging facade core code writes through."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true

@@ -70,7 +70,6 @@ const READS_NO_BODY: Readonly<Record<string, string>> = {
 /** Writes whose body is content or a snapshot rather than fields, so a megabyte is not too much for them. */
 const TAKES_CONTENT: Readonly<Record<string, string>> = {
   'POST /api/v1/workspaces/:workspaceId/documents': 'a markdown document created from its content',
-  'POST /api/w/:workspaceId/document/*/update': 'a Loro update for a document',
   'POST /api/w/:workspaceId/workspace-document/update': "a Loro update for a workspace's record",
   'POST /api/w/:workspaceId/workspace-document/promote': "a workspace's whole record, base64url",
   'PUT /api/w/:workspaceId/document/*/file/:fileId': 'an uploaded file',

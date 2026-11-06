@@ -5,6 +5,10 @@ import type { ServerModeRecordReadResult } from '../server/security/server-mode-
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
+import {
+  IncompatibleDatabaseError,
+  retiredStorageMessage,
+} from '../server/store/db/incompatible-database.js'
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { isPidAlive as defaultIsPidAlive } from '../shared/process-alive.js'
@@ -104,12 +108,20 @@ export async function runServerRestore(
     await doRestore(backupDir, targetDir, {
       allowedRoots: [dirname(backupDir), dirname(targetDir)],
     })
-  } catch {
-    return { kind: 'error', message: 'restore failed' }
+  } catch (err) {
+    return { kind: 'error', message: restoreFailureMessage(err) }
   }
 
   return {
     kind: 'ok',
     result: { schemaVersion: 1, ok: true, operation: 'restore' },
   }
+}
+
+// The one refusal worth its words is what to do instead; it is named without
+// the path, like every other outcome here.
+function restoreFailureMessage(err: unknown): string {
+  return err instanceof IncompatibleDatabaseError
+    ? retiredStorageMessage('The backup')
+    : 'restore failed'
 }

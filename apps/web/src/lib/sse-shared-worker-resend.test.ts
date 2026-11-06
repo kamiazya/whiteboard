@@ -86,7 +86,7 @@ const server = setupServer(
       failSnapshots -= 1
       return new HttpResponse('restarting', { status: 503 })
     }
-    return HttpResponse.json({ title: 'Canvas not found' }, { status: 404 })
+    return HttpResponse.json({ error: 'refused', message: 'Canvas not found' }, { status: 404 })
   }),
   http.post(`${BASE}/api/w/:workspaceId/workspace-document/update`, async ({ request, params }) => {
     const attempted = `workspace:${String(params.workspaceId)}`

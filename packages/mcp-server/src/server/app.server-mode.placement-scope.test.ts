@@ -1,6 +1,6 @@
 /**
  * Adding, removing and moving documents is `workspace:write`'s, on the raw
- * sync routes as on the document API: a grant holding `canvas:write` alone
+ * sync route as on the document API: a grant holding `canvas:write` alone
  * edits what documents say and changes nothing about which documents a
  * workspace holds. Driven through server mode's whole `/api`, so the scope
  * the route is entered with and the one the update is judged by are both the
@@ -11,12 +11,14 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   documentContainers,
   readSpatialCanvas,
   resolveWorkspaceDocument,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -51,10 +53,10 @@ const EDITOR_SCOPES: readonly AuthScope[] = ['canvas:read', 'canvas:write']
 const contentOnlyBearer: AsyncAuthStrategy = {
   async authorize({ authorizationHeader, requiredScopes }) {
     if (authorizationHeader !== `Bearer ${SUBJECT}`) {
-      return { ok: false, status: 401, code: 'auth.required', wwwAuthenticate: 'Bearer' }
+      return { ok: false, status: 401, code: 'auth_required', wwwAuthenticate: 'Bearer' }
     }
     if (!hasRequiredScopes(EDITOR_SCOPES, requiredScopes)) {
-      return { ok: false, status: 403, code: 'auth.forbidden' }
+      return { ok: false, status: 403, code: 'auth_forbidden' }
     }
     return {
       ok: true,
@@ -97,15 +99,7 @@ afterEach(async () => {
 
 const BEARER = { authorization: `Bearer ${SUBJECT}` }
 
-function canvasUpdate(ids: readonly string[]): Uint8Array<ArrayBuffer> {
-  const doc = new LoroDoc()
-  const from = doc.version()
-  writeSpatialCanvas(doc, {
-    nodes: ids.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
-    edges: [],
-  })
-  return new Uint8Array(doc.export({ mode: 'update', from }))
-}
+const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })
 
 function post(path: string, headers: Record<string, string>, body: Uint8Array<ArrayBuffer>) {
   return app.request(`${PUBLIC_URL}${path}`, {
@@ -132,9 +126,13 @@ async function workspaceWithNotes() {
   expect(created.status).toBe(201)
   const { workspaceId } = (await created.json()) as { workspaceId: string }
   const made = await post(
-    `/api/w/${workspaceId}/document/notes/update`,
+    `/api/w/${workspaceId}/workspace-document/update`,
     session,
-    canvasUpdate(['a']),
+    await recordUpdate(workspaceId, (replica) => {
+      const documentId = generateDocumentId()
+      createWorkspaceDocumentAtPath(replica, { path: 'notes', documentId, kind: 'spatial' })
+      writeSpatialCanvas(documentContainers(replica, documentId), { nodes: [box('a')], edges: [] })
+    }),
   )
   expect(made.status).toBe(200)
   return workspaceId
@@ -178,65 +176,30 @@ describe('server mode — a canvas:write grant without workspace:write', () => {
     expect(resolveWorkspaceDocument(await workspaceRecord(workspaceId), 'notes')).not.toBeNull()
   })
 
-  it('cannot mint a document by updating a path nobody holds', async () => {
+  it('cannot mint a document through the workspace-document update', async () => {
     const workspaceId = await workspaceWithNotes()
-
-    const res = await post(
-      `/api/w/${workspaceId}/document/fresh/update`,
-      BEARER,
-      canvasUpdate(['b']),
+    const update = await recordUpdate(workspaceId, (replica) =>
+      createWorkspaceDocumentAtPath(replica, {
+        path: 'fresh',
+        documentId: generateDocumentId(),
+        kind: 'spatial',
+      }),
     )
+
+    const res = await post(`/api/w/${workspaceId}/workspace-document/update`, BEARER, update)
 
     expect(res.status).toBe(403)
     expect(resolveWorkspaceDocument(await workspaceRecord(workspaceId), 'fresh')).toBeNull()
   })
 
-  // A document's content and its node's own meta share one map on the tree
-  // node, so a root named after a meta key would rewrite the node from a
-  // grant that may only edit content.
-  it.each([
-    ['a map named nameChosen', (doc: LoroDoc) => doc.getMap('nameChosen').set('x', 1)],
-    ['a text named name', (doc: LoroDoc) => doc.getText('name').insert(0, 'n'.repeat(5000))],
-    ['a text named kind', (doc: LoroDoc) => doc.getText('kind').insert(0, 'markdown')],
-    ['a text where content holds a map', (doc: LoroDoc) => doc.getText('nodes').insert(0, 'x')],
-  ])('refuses a per-document update adding %s, and the document stays listed', async (_, add) => {
+  it('still edits a document’s content through the workspace-document update', async () => {
     const workspaceId = await workspaceWithNotes()
-    const doc = new LoroDoc()
-    add(doc)
-    doc.commit()
-
-    const res = await post(
-      `/api/w/${workspaceId}/document/notes/update`,
-      BEARER,
-      new Uint8Array(doc.export({ mode: 'update' })),
-    )
-
-    expect(res.status).toBe(400)
-    expect(await res.json()).toMatchObject({ error: 'invalid_document_root' })
-    const entry = resolveWorkspaceDocument(await workspaceRecord(workspaceId), 'notes')
-    expect(entry).not.toBeNull()
-    expect(entry?.name).toBeUndefined()
-    expect(entry?.kind).toBe('spatial')
-  })
-
-  it('still edits a document’s content through either update route', async () => {
-    const workspaceId = await workspaceWithNotes()
-
-    const perDocument = await post(
-      `/api/w/${workspaceId}/document/notes/update`,
-      BEARER,
-      canvasUpdate(['b']),
-    )
-    expect(perDocument.status).toBe(200)
 
     const update = await recordUpdate(workspaceId, (replica) => {
       const canvas = readSpatialCanvas(documentContainers(replica, notesId(replica)))
       writeSpatialCanvas(documentContainers(replica, notesId(replica)), {
         ...canvas,
-        nodes: [
-          ...canvas.nodes,
-          textNode({ id: 'c', text: 'c', x: 0, y: 0, width: 10, height: 10 }),
-        ],
+        nodes: [...canvas.nodes, box('c')],
       })
     })
     const whole = await post(`/api/w/${workspaceId}/workspace-document/update`, BEARER, update)
@@ -246,6 +209,6 @@ describe('server mode — a canvas:write grant without workspace:write', () => {
     const ids = readSpatialCanvas(documentContainers(record, notesId(record))).nodes.map(
       (n) => n.id,
     )
-    expect(ids.sort()).toEqual(['a', 'b', 'c'])
+    expect(ids.sort()).toEqual(['a', 'c'])
   })
 })

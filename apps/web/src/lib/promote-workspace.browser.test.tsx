@@ -337,7 +337,10 @@ describe('promoteWorkspace', () => {
       kind: 'markdown',
     })
     const fetch404 = (async () =>
-      jsonResponse({ title: 'Workspace "ws-gone" not found' }, 404)) as typeof globalThis.fetch
+      jsonResponse(
+        { error: 'workspace_not_found', message: 'Workspace "ws-gone" not found' },
+        404,
+      )) as typeof globalThis.fetch
 
     const result = await promoteWorkspace({
       fetch: fetch404,

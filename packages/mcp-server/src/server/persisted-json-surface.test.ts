@@ -130,8 +130,7 @@ const PERSISTED_JSON_COVERAGE: Record<string, PersistedJsonCoverage> = {
   'server/security/member-profile-store.ts': notModelled(
     "a passkey binding's subject, the [origin, credentialId] pair the same store writes with " +
       'JSON.stringify and reads back: member-profile-store.test.ts round-trips ensureProfile ' +
-      'through profileForBinding, and 0032-accounts.test.ts pins the encoding ' +
-      'the migration wrote for existing credentials',
+      'through profileForBinding',
   ),
   'server/store/version-store.ts': notModelled(
     "a version row's attestation column, written and read by the same store: " +

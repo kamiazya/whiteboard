@@ -1,0 +1,13 @@
+# Worktrees (`.claude/worktrees/*`) each build the whole workspace from
+# scratch unless they share a target directory. To share one, export
+# CARGO_TARGET_DIR before building, for example
+#
+#     export CARGO_TARGET_DIR="$HOME/.cache/whiteboard-target"
+#
+# Cargo locks the directory, so concurrent builds in two worktrees serialize
+# rather than corrupt each other. It is NOT set here: a path in this file is
+# resolved relative to the checkout, which would defeat the sharing, and an
+# absolute path would be one machine's.
+
+[alias]
+xtask = "run --quiet --package xtask --"

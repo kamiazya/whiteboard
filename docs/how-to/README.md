@@ -23,6 +23,8 @@ Guides:
 - **[connect-to-local-daemon](connect-to-local-daemon.md)** — install the `whiteboard` command,
   start the daemon, connect the web app to it through the browser extension, and move a whole
   workspace kept in your browser onto it.
+- **[export-a-canvas-from-the-daemon](export-a-canvas-from-the-daemon.md)** — render a canvas to
+  PNG or SVG with the daemon, from a script, with `curl` over its socket.
 - **[install-fonts-for-export](install-fonts-for-export.md)** — stop exports rendering Japanese,
   Chinese, Korean and other scripts as empty boxes.
 - **[report-a-gesture-problem](report-a-gesture-problem.md)** — copy the built-in pointer-event

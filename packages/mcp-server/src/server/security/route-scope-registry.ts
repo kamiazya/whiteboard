@@ -106,7 +106,7 @@ function decodeHandle(raw: string | undefined): string | null | undefined {
 }
 
 // The /api/w/:handle/... family (document file, workspace-document,
-// document update/export, document (rest)).
+// document export, document (rest)).
 const wHandlePattern = /^\/api\/w\/([^/]+)\//
 const wHandle = (path: string): string | null | undefined =>
   decodeHandle(wHandlePattern.exec(path)?.[1])
@@ -148,7 +148,7 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // answer a caller holding no credential, and it carries no secret.
   { name: 'runtime/proof', claims: exactly('/api/runtime/proof'), decide: publicRoute },
 
-  // A file whose id is spelled like a document action (`…/a/file/update`) is
+  // A file whose id is spelled like a document action (`…/a/file/export`) is
   // also that action on the document `a/file`, and which of the two answers
   // is decided by which router is mounted first. It asks for both, so neither
   // a files grant nor a canvas grant reaches the other's half alone.
@@ -174,14 +174,13 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   },
 
   // The workspace-document sync surface: one snapshot/update pair for the
-  // whole workspace document. Same tier as the per-document equivalents —
-  // a workspace-granularity update is still a document mutation, just scoped
-  // wider, and the snapshot answers the same content canvas:read grants.
+  // whole workspace document. A workspace-granularity update is a document
+  // mutation, just scoped wide, and the snapshot answers the same content
+  // canvas:read grants.
   // An update that adds, removes or moves a document needs workspace:write as
   // well, which is judged of the update itself rather than here: the gate sees
   // a path, and only the operations say what kind of change they make
-  // (`DocumentRouterOptions.mayPlaceDocuments`). The per-document update's
-  // lazy create below is judged the same way.
+  // (`DocumentRouterOptions.mayPlaceDocuments`).
   // Promotion merges a whole record in — documents, content AND explicit
   // checkpoints (ADR-0039) — so it needs what each of those needs.
   {
@@ -197,10 +196,10 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
     workspace: wHandle,
   },
 
-  // Document write operations that arrive as POST but mutate state.
+  // An export writes a file into the data dir, so it is a write.
   {
-    name: 'document update/export',
-    claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/, 'POST'),
+    name: 'document export',
+    claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/export$/, 'POST'),
     decide: always('canvas:write'),
     workspace: wHandle,
   },
@@ -458,7 +457,7 @@ export function restoreScopes(
 /**
  * What a document create needs beyond the `workspace:write` that places a
  * document: a create carrying a markdown body writes content, which is
- * `canvas:write` on every other surface — the per-document update, the body
+ * `canvas:write` on every other surface — the workspace-record update, the body
  * edit, the linkify rewrite. A create with no body, or a spatial one, writes
  * none. Judged after the body is parsed, as `restoreScopes` is.
  */

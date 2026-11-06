@@ -227,7 +227,7 @@ run, a body, node text, a location, a label, a thread message, an element's tags
 by a `TextBreachRefusalError` built only by `textBreachRefusal(breach, at?)`,
 which promote also uses to name the document; into an empty document no run is
 judged, since nothing is replayed there.
-`importWithinSyncLimits` adds the workspace record's placement checks
+`importWithinSyncLimits` (`operations/sync-update-limit.ts`) adds the workspace record's placement checks
 (`placementRefusal`): a node left unreadable — any write to a tree node's own
 map is node meta, timestamps and folder keys included
 (`UnreadableDocumentMetaError`), a document moved off the path grammar or past
@@ -247,9 +247,6 @@ documents are answered as `edited`, which the daemon's route checkpoints.
 A document the update REMOVES is evacuated first (`evacuateRemoved`, over
 loro-adapter's `documentsRemovedSince`): its blob and a trash entry are written
 before the save, so a sync delete stays restorable like a route delete.
-`applyDocumentUpdate`
-does not seed itself; the per-document save goes through loro-adapter's
-`writeDocumentContentAndName`, which does.
 
 ## Common mistakes (append as review finds them)
 

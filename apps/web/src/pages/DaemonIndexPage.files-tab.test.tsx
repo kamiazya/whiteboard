@@ -255,7 +255,7 @@ describe('DaemonIndexPage tree view', () => {
   it('shows the server’s refusal when the new path collides', async () => {
     installFetchMock(undefined, {
       onRenameDocumentPath: () =>
-        jsonResponse({ title: 'Path "archive/design/x" already exists' }, 409),
+        jsonResponse({ error: 'refused', message: 'Path "archive/design/x" already exists' }, 409),
     })
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={() => {}} />)
@@ -383,7 +383,7 @@ describe('DaemonIndexPage tree view', () => {
       onCreateDocument: () => {
         if (!failNext) return undefined
         failNext = false
-        return jsonResponse({ title: 'nope' }, 500)
+        return jsonResponse({ error: 'refused', message: 'nope' }, 500)
       },
     })
 

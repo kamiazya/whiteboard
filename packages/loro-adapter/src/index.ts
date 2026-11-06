@@ -27,7 +27,6 @@ export {
   writeTrustFacets,
 } from './document-envelope.js'
 export { reconcileCoreFacets, reconcileFacets } from './document-envelope-reconcile.js'
-export { rootsNoDocumentNodeHolds } from './document-node-roots.js'
 export { isEngineTrap } from './engine-trap.js'
 export { type EnvelopeKindBreach, envelopeKindBreach, statedKindSplit } from './envelope-kind.js'
 export {

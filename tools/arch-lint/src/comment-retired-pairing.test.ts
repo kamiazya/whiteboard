@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { commentLinesOf } from './rust-source.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { trackedFiles } from './tracked-files.js'
 
@@ -127,8 +128,14 @@ const isComment = (line: string): boolean => /^\s*(?:\/\/|\*|\/\*)/.test(line)
 
 const hasRetiredPairing = (line: string): boolean => isComment(line) && RETIRED_PAIRING.test(line)
 
+/** The comment lines of a file that describe the flow, a Rust file's read through its lexer. */
+const retiredPairingLines = (file: string, text: string): number =>
+  commentLinesOf(file, text).filter((comment) => comment !== '' && RETIRED_PAIRING.test(comment))
+    .length
+
 const isScanned = (path: string): boolean =>
-  /^(?:packages\/[^/]+|apps\/web)\/src\/.+\.(?:tsx?|mjs)$/.test(path) &&
+  (/^(?:packages\/[^/]+|apps\/web)\/src\/.+\.(?:tsx?|mjs)$/.test(path) ||
+    /^crates\/.+\.rs$/.test(path)) &&
   !path.includes('/migrations/') &&
   path !== 'tools/arch-lint/src/comment-retired-pairing.test.ts'
 
@@ -147,9 +154,7 @@ describe('a source comment does not describe the retired pairing flow', () => {
   const hits = new Map<string, number>()
   const files = trackedFiles(REPO_ROOT).filter(isScanned)
   for (const file of files) {
-    const count = readFileSync(join(REPO_ROOT, file), 'utf8')
-      .split('\n')
-      .filter(hasRetiredPairing).length
+    const count = retiredPairingLines(file, readFileSync(join(REPO_ROOT, file), 'utf8'))
     if (count > 0) hits.set(file, count)
   }
 
@@ -158,6 +163,14 @@ describe('a source comment does not describe the retired pairing flow', () => {
     expect(files.length).toBeGreaterThan(1_500)
     expect(files).toContain('apps/web/src/lib/daemon-fetch.ts')
     expect(hits.size).toBeGreaterThan(5)
+    expect(files.filter((file) => file.endsWith('.rs')).length).toBeGreaterThan(10)
+  })
+
+  it('reads a Rust file by its comments, not by the literals that look like one', () => {
+    const planted = (name: string) =>
+      readFileSync(join(import.meta.dirname, '__fixtures__/rust', name), 'utf8')
+    expect(retiredPairingLines('planted.rs', planted('comment-violations.rs'))).toBe(1)
+    expect(retiredPairingLines('planted.rs', planted('comment-clean.rs'))).toBe(0)
   })
 
   it('finds the flow in no comment outside the ledger', () => {

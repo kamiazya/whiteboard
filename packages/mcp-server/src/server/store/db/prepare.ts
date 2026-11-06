@@ -4,8 +4,8 @@ import { isOccupying, parseDaemonRecord } from '../../../daemon/daemon-record.js
 import { describeDaemonVersionSkew } from '../../../daemon/version-skew.js'
 import { PACKAGE_VERSION } from '../../../shared/package-version.js'
 import { getLogger } from '../../log.js'
-import { moveLegacyDataDirUnderTenant } from '../../tenant/data-layout.js'
-import { SELF_HOST_TENANT_ID } from '../../tenant/id.js'
+import { retiredLayoutEntries } from '../../tenant/data-layout.js'
+import { IncompatibleDatabaseError, retiredStorageMessage } from './incompatible-database.js'
 import { getRawDb } from './index.js'
 import { resolveDatabaseLocation } from './location.js'
 import { withMigrationLock } from './migration-lock.js'
@@ -101,6 +101,16 @@ async function liveNeighbour(dataDir: string): Promise<Neighbour | null> {
   }
 }
 
+// Before the database is opened, so a refused directory gains no
+// `whiteboard.db` beside what it already holds.
+async function refuseRetiredLayout(dataDir: string): Promise<void> {
+  const found = await retiredLayoutEntries(dataDir)
+  if (found.length === 0) return
+  throw new IncompatibleDatabaseError(
+    retiredStorageMessage(`The data directory ${dataDir} (it holds ${found.join(', ')})`),
+  )
+}
+
 // Memoized startup hook. Idempotent across repeated calls per dataDir, so
 // daemon entry, createApp, smoke tests, and unit tests can all call it
 // without coordinating who runs the migrations first.
@@ -110,16 +120,13 @@ export function prepareDataDir(dataDir: string): Promise<void> {
   const existing = ready.get(dataDir)
   if (existing) return existing
   const pending = (async () => {
+    await refuseRetiredLayout(dataDir)
     const db = await getRawDb(dataDir)
     await warnOnDaemonVersionSkew(dataDir)
     // Held across processes, not only this one: a second server opening the
     // same data dir waits here and then finds nothing pending.
     await withMigrationLock(dataDir, async () => {
       await runMigrations(db, describeDatabase(dataDir))
-      // AFTER the database migrations: 0008 and 0012 rewrite file names under
-      // the pre-tenant layout, so the directories have to still be where those
-      // migrations left them when they run.
-      await moveLegacyDataDirUnderTenant(dataDir, SELF_HOST_TENANT_ID)
     })
   })()
   ready.set(dataDir, pending)

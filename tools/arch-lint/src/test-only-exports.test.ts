@@ -260,7 +260,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
   'apps/web/src/pages/use-auto-checkpoint.ts#settleAutoCheckpoints':
     'the one await a test has over a flush an unmount released, so clearing the database cannot race the checkpoint being taken; production never deletes storage under a page it just left',
   'packages/daemon-client/src/api-contracts/document.ts#updateDocumentResponseSchema':
-    'the contract the per-document update route answers with, which UpdateDocumentResponse derives from; no app surface calls that route, and the route fuzz rules hold the real response to it',
+    'the contract the workspace-document update route answers with, which UpdateDocumentResponse derives from; the app reads only the status, and the route fuzz rules hold the real response to it',
   'packages/daemon-client/src/api-contracts/document.ts#restoreVersionResponseSchema':
     'the contract the restore route answers with, which RestoreVersionResponse derives from; the route fuzz rules hold the real response to it',
   'packages/mcp-server/src/server/routes/document.ts#DocumentRouterOptions':
@@ -339,8 +339,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the restorability invariant the retention property tests assert, written once beside the functions it holds to account',
   'packages/mcp-server/src/server/store/db/schema-ledger.ts#LEDGER':
     'the schema the migrations are held to, read by the schema-ledger test',
-  'packages/mcp-server/src/server/store/db/schema-ledger.ts#NULLABLE_IN_DATABASE':
-    'deliberate NOT-NULL gaps, each with its reason and checked from the other side by the schema-ledger test',
   'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts#InMemoryBlobStore':
     'the in-memory BlobStore double, the differential oracle for the fs blob store; no-production-wiring.test.ts keeps it out of production',
   'packages/model/src/facets.ts#CoreFacets':

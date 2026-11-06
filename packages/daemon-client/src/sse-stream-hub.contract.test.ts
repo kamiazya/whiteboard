@@ -11,7 +11,7 @@ import { sseStreamSourceContract } from './test-utils/sse-stream-source-contract
 const BASE = 'http://d'
 
 /**
- * The daemon's canvas snapshot route: the state seeded for a document, 404
+ * The daemon's workspace-document snapshot route: the state seeded for a workspace key, 404
  * for one it does not know, 503 once for a read set to fail. `null` for a URL
  * that is not this route.
  */
@@ -19,10 +19,9 @@ function snapshotRoute() {
   const state = new Map<string, Uint8Array>()
   const failing = new Set<string>()
   const answer = (url: string): Response | null => {
-    const match = /\/api\/w\/([^/]+)\/document\/(.+)\/snapshot$/.exec(url)
+    const match = /\/api\/w\/([^/]+)\/workspace-document\/snapshot$/.exec(url)
     if (!match) return null
-    const [, workspaceId, path] = match
-    const doc = `${decodeURIComponent(workspaceId as string)}/${decodeURIComponent(path as string)}`
+    const doc = `workspace:${decodeURIComponent(match[1] as string)}`
     if (failing.delete(doc)) return new Response('{"title":"unavailable"}', { status: 503 })
     const bytes = state.get(doc)
     if (!bytes) return new Response('{"title":"Canvas not found"}', { status: 404 })
@@ -75,14 +74,13 @@ function createHarness(): SseStreamSourceHarness {
         { status: 200 },
       )
     }
-    // The canvas update route, which is where a push lands. Matched before the
-    // JSON parse below: its body is raw update bytes, not JSON.
+    // The workspace-document update route, which is where a push lands.
+    // Matched before the JSON parse below: its body is raw update bytes.
     const snapshot = snapshots.answer(url)
     if (snapshot !== null) return snapshot
-    const canvasUpdate = /\/api\/w\/([^/]+)\/document\/(.+)\/update$/.exec(url)
-    if (canvasUpdate) {
-      const [, handle, path] = canvasUpdate
-      const doc = `${decodeURIComponent(handle as string)}/${decodeURIComponent(path as string)}`
+    const workspaceUpdate = /\/api\/w\/([^/]+)\/workspace-document\/update$/.exec(url)
+    if (workspaceUpdate) {
+      const doc = `workspace:${decodeURIComponent(workspaceUpdate[1] as string)}`
       if (refusedPushes.has(doc)) return forbidden()
       daemonWrites.push({ doc, body: new Uint8Array(init?.body as ArrayBuffer) })
       return new Response('{}', { status: 200 })

@@ -92,7 +92,7 @@ export interface AuthAuthorizeInput {
 // challenge, because re-asking with the same credentials won't help.
 //
 // The discriminated shape below pins this 1:1 — the type system
-// rejects `{ status: 401, code: 'auth.forbidden' }` and
+// rejects `{ status: 401, code: 'auth_forbidden' }` and
 // `{ status: 403, wwwAuthenticate: 'Bearer' }`, so the middleware
 // (and any future server-mode strategy) cannot accidentally drift
 // from the contract.
@@ -116,12 +116,12 @@ export type AuthDecision =
   | {
       ok: false
       status: 401
-      code: 'auth.required'
+      code: 'auth_required'
       wwwAuthenticate: 'Bearer'
     }
   | {
       ok: false
       status: 403
-      code: 'auth.forbidden'
+      code: 'auth_forbidden'
       wwwAuthenticate?: never
     }

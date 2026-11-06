@@ -25,6 +25,7 @@ import {
 import { BackupManifestUnusableError, readBackupBlobManifest } from './backup-blob-mirror.js'
 import { isBackupDirName } from './backup-dir-name.js'
 import { collectableFromBackup } from './backup-retention.js'
+import { IncompatibleDatabaseError } from './db/incompatible-database.js'
 
 const log = getLogger('backup-mirror-retention')
 
@@ -50,6 +51,19 @@ const STORES = [
 ] as const
 
 /**
+ * A manifest that is there but unusable says nothing about what its backup
+ * needs, the same as no manifest: the pass stands down. One an earlier release
+ * wrote is refused rather than read, so it says nothing either.
+ */
+async function manifestOrSilence(backupDir: string): Promise<Manifest> {
+  return await readBackupBlobManifest(backupDir).catch((err: unknown) => {
+    if (err instanceof BackupManifestUnusableError) return null
+    if (err instanceof IncompatibleDatabaseError) return null
+    throw err
+  })
+}
+
+/**
  * Delete from the mirror everything no retained backup references.
  *
  * Answers how many entries were removed. Runs after the scheduler has pruned
@@ -73,14 +87,7 @@ export async function collectMirroredBlobs(backupRoot: string): Promise<number> 
 
   const retained = entries.filter((name) => isBackupDirName(name))
   const manifests = await Promise.all(
-    retained.map((name) =>
-      // A manifest that is there but unusable says nothing about what its
-      // backup needs, the same as no manifest: this pass stands down.
-      readBackupBlobManifest(join(backupRoot, name)).catch((err: unknown) => {
-        if (err instanceof BackupManifestUnusableError) return null
-        throw err
-      }),
-    ),
+    retained.map((name) => manifestOrSilence(join(backupRoot, name))),
   )
   const silent = retained.filter((_name, index) => manifests[index] === null)
   if (silent.length > 0) {

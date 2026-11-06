@@ -20,8 +20,7 @@
  * `Set` of them, inline or bound to a name. POSIX names carry no underscore, which is
  * what keeps Node's own `ERR_*` codes out of it.
  *
- * Migrations are allowlisted, as history: their text is not edited after
- * the fact. Beside them, two sites read a driver's non-errno code next to a
+ * Two sites read a driver's non-errno code next to a
  * sibling field the helper does not answer, each null-safe and each with its
  * reason. Every other site in the daemon package goes through the helper,
  * and an entry that stops matching fails as stale, like every allowlist here.
@@ -37,16 +36,7 @@ const SCANNED = 'packages/mcp-server/src'
 const HELPER = 'packages/mcp-server/src/shared/errno.ts'
 
 /** Relative path -> why this file may still spell it. Both-sided. */
-const MIGRATION_HISTORY =
-  "a migration's text is what it ran with, and a step already recorded as applied is not edited after the fact"
 const ALLOWLIST: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/store/db/migrations/0008-ulid-legacy-canvas-ids.ts':
-    MIGRATION_HISTORY,
-  'packages/mcp-server/src/server/store/db/migrations/0011-import-fs-blobs.ts': MIGRATION_HISTORY,
-  'packages/mcp-server/src/server/store/db/migrations/0012-ulid-remaining-document-ids.ts':
-    MIGRATION_HISTORY,
-  'packages/mcp-server/src/server/store/db/migrations/0019-workspace-canonical-id.ts':
-    MIGRATION_HISTORY,
   // Shape-checked rather than cast, so a null throw cannot raise from it; the
   // code is jose's `ERR_JWT_*`, read in one destructure beside `claim`, which
   // `errnoCode` does not answer.
@@ -173,6 +163,6 @@ describe('an error code is read in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(6)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(2)
   })
 })

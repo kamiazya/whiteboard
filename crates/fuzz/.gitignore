@@ -1,0 +1,6 @@
+# The growing corpus lives in the CI cache, not in git; libFuzzer's
+# crash/timeout/oom files are copied into regressions/ by `pnpm rust:fuzz:*`.
+/corpus/
+/artifacts/
+/coverage/
+/target/

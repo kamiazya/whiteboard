@@ -44,14 +44,11 @@ const send = async (method: string, path: string, body: string) => {
 }
 
 // A body that is not JSON is one mistake whichever route it is sent to, so
-// every route of a voice answers it with the same body.
-const PROBLEM_ROUTES: readonly [string, string, string][] = [
+// every route answers it with the same body.
+const CODE_ROUTES: readonly [string, string, string][] = [
   ['create a workspace', 'POST', '/api/workspaces'],
   ['rename a workspace', 'PATCH', '/api/workspaces/ws1'],
   ['move a document', 'PUT', `${DOCUMENT}/path`],
-]
-
-const CODE_ROUTES: readonly [string, string, string][] = [
   ['name a workspace', 'PUT', '/api/workspaces/ws1/name'],
   ['name a document', 'PUT', `${DOCUMENT}/name`],
   ['pin a document', 'PUT', `${DOCUMENT}/pin`],
@@ -60,16 +57,7 @@ const CODE_ROUTES: readonly [string, string, string][] = [
   ['promote a workspace record', 'POST', '/api/w/ws1/workspace-document/promote'],
 ]
 
-describe('a body that is not JSON, sent to a Problem Details route', () => {
-  it.each(PROBLEM_ROUTES)('answers one title when asked to %s', async (_what, method, path) => {
-    expect(await send(method, path, '{not json')).toEqual({
-      status: 400,
-      json: { title: NOT_JSON_REASON },
-    })
-  })
-})
-
-describe('a body that is not JSON, sent to an { error, message } route', () => {
+describe('a body that is not JSON', () => {
   it.each(
     CODE_ROUTES,
   )('answers one code and message when asked to %s', async (_what, method, path) => {
@@ -84,17 +72,29 @@ describe('a body that is not JSON, sent to an { error, message } route', () => {
 })
 
 // JSON that parses and does not fit is the route's own mistake to name, so
-// each route answers in its own sentence, in the voice its clients read.
+// each route answers in its own sentence.
 const WRONG_SHAPE: readonly [string, string, string, unknown, unknown][] = [
-  ['create a workspace', 'POST', '/api/workspaces', {}, { title: 'displayName is required' }],
+  [
+    'create a workspace',
+    'POST',
+    '/api/workspaces',
+    {},
+    { error: 'invalid_body', message: 'displayName is required' },
+  ],
   [
     'rename a workspace',
     'PATCH',
     '/api/workspaces/ws1',
     { segment: 5 },
-    { title: 'segment or displayName must be valid' },
+    { error: 'invalid_body', message: 'segment or displayName must be valid' },
   ],
-  ['move a document', 'PUT', `${DOCUMENT}/path`, {}, { title: 'path is required' }],
+  [
+    'move a document',
+    'PUT',
+    `${DOCUMENT}/path`,
+    {},
+    { error: 'invalid_body', message: 'path is required' },
+  ],
   [
     'name a workspace',
     'PUT',
