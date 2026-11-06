@@ -228,3 +228,34 @@ describe('scorecard.yml — publishes OpenSSF Scorecard results the API accepts'
     expect(checkout?.with?.['persist-credentials']).toBe(false)
   })
 })
+
+describe('dependency-review.yml — a pull request adding a vulnerable dependency fails', () => {
+  const workflow = readOptionalWorkflow('dependency-review.yml')
+  const steps = Object.values(workflow.jobs ?? {}).flatMap((job) => job.steps ?? [])
+  const review = steps.find((step) =>
+    (step.uses ?? '').startsWith('actions/dependency-review-action@'),
+  )
+
+  it('exists', () => {
+    expect(existsSync(join(WORKFLOWS_DIR, 'dependency-review.yml'))).toBe(true)
+  })
+
+  it('runs on pull_request, never on a base-token trigger', () => {
+    const triggers = Object.keys((workflow.on as Record<string, unknown>) ?? {})
+    expect(triggers).toContain('pull_request')
+    expect(triggers.filter((t) => t === 'pull_request_target' || t === 'workflow_run')).toEqual([])
+  })
+
+  it('fails the check on a vulnerability rather than only reporting it', () => {
+    expect(review).toBeDefined()
+    expect(review?.with?.['fail-on-severity']).toMatch(/^(low|moderate|high|critical)$/)
+    expect(review?.with?.['warn-only']).not.toBe(true)
+  })
+
+  it('holds a read-only token', () => {
+    expect(writeScopes(workflow.permissions)).toEqual([])
+    for (const job of Object.values(workflow.jobs ?? {})) {
+      expect(writeScopes(job.permissions)).toEqual([])
+    }
+  })
+})
