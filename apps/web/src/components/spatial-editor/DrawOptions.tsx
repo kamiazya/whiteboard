@@ -92,9 +92,12 @@ export function DrawOptions({
       data-testid="draw-options"
       aria-label="Draw options"
       // Above the dock (DOCK_OCCLUSION_PX's strip), with the coarse dock's
-      // taller row accounted for. Every option is the touch floor on a coarse
+      // taller row accounted for. `w-max`, because a box centred from
+      // `left: 50%` otherwise shrinks to the half of the editor right of that
+      // line and wraps with the other half empty; one row that scrolls on a
+      // phone, because a wrapped strip strands its divider at a row's end. Every option is the touch floor on a coarse
       // pointer, the same 44px the dock's own buttons step up to.
-      className="m-0 absolute bottom-[calc(3.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border bg-background px-2 py-1 shadow-md pointer-coarse:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] pointer-coarse:[&_label]:min-h-11! pointer-coarse:[&_label]:min-w-11!"
+      className="m-0 absolute bottom-[calc(3.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 flex-nowrap items-center overflow-x-auto gap-x-3 gap-y-1 rounded-lg border bg-background px-2 py-1 shadow-md pointer-coarse:bottom-[calc(4.5rem+env(safe-area-inset-bottom))] pointer-coarse:[&_label]:min-h-11! pointer-coarse:[&_label]:min-w-11!"
     >
       <FacetOptionGroup label={color.label}>
         {color.options.map((option) => (

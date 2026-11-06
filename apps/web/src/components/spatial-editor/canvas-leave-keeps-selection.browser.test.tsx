@@ -73,3 +73,29 @@ it('F6 and Shift+F6 from a dock control leave the canvas region too', async () =
   await userEvent.keyboard('{F6}')
   await expect.element(page.getByRole('button', { name: 'After the canvas' })).toHaveFocus()
 })
+
+it('F6 with nothing after the canvas wraps to the first control in the page', async () => {
+  const host = makeEditorHost({ initial: board })
+  const { container } = render(
+    <>
+      <button type="button">Header control</button>
+      <host.Host />
+    </>,
+  )
+  rootOf(container).focus()
+  await userEvent.keyboard('{F6}')
+  await expect.element(page.getByRole('button', { name: 'Header control' })).toHaveFocus()
+})
+
+it('Shift+F6 with nothing before the canvas wraps to the last control in the page', async () => {
+  const host = makeEditorHost({ initial: board })
+  const { container } = render(
+    <>
+      <host.Host />
+      <button type="button">Footer control</button>
+    </>,
+  )
+  rootOf(container).focus()
+  await userEvent.keyboard('{Shift>}{F6}{/Shift}')
+  await expect.element(page.getByRole('button', { name: 'Footer control' })).toHaveFocus()
+})

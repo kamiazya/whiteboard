@@ -469,8 +469,13 @@ export const duplicateDocumentRequestSchema = z
   .object({ withoutAnnotations: z.boolean().optional() })
   .strict()
 
+// `withoutAnnotations: true` is the keeper confirming it left the layer
+// behind. A daemon from before the option never read the body and copies the
+// whole document, so a client asking for less must see this echo before it
+// tells anyone the comments stayed behind.
 export const duplicateDocumentResponseSchema = z.object({
   document: documentSummarySchema.pick({ documentId: true, path: true, name: true, kind: true }),
+  withoutAnnotations: z.literal(true).optional(),
 })
 
 export type OperatorInfo = z.infer<typeof operatorInfoSchema>

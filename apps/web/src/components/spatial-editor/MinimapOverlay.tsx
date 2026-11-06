@@ -15,7 +15,7 @@
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { Map as MapIcon } from 'lucide-react'
-import { useEffect, useRef, useState } from 'react'
+import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { readMinimapOpen, writeMinimapOpen } from '../../lib/minimap-visibility.js'
 import {
   fitMinimap,
@@ -118,6 +118,64 @@ function useTextEntryFocused(anchor: React.RefObject<HTMLElement | null>): boole
   return focused
 }
 
+/** Room kept between the overview and the bottom chrome it stands clear of. */
+const CHROME_CLEARANCE_PX = 8
+
+/** The bottom-centred chrome the overview shares the bottom edge with: the dock, and the Draw options above it. */
+const BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"]'
+
+/**
+ * How high the overview must stand to clear whatever bottom chrome reaches
+ * under its column — undefined when nothing does. Measured rather than derived
+ * from a breakpoint: the dock is as wide as its tools add up to on this
+ * pointer, and a fixed figure went stale the moment a tool was added. Only the
+ * horizontal spans decide whether something reaches under, so lifting the
+ * overview does not undo the answer that lifted it.
+ */
+function useBottomChromeClearance(
+  active: boolean,
+): readonly [RefObject<HTMLDivElement | null>, number | undefined] {
+  const surface = useRef<HTMLDivElement>(null)
+  const [lift, setLift] = useState<number | undefined>(undefined)
+  useLayoutEffect(() => {
+    const own = surface.current
+    const root = own?.parentElement
+    if (!active || own === null || own === undefined || root === null || root === undefined) {
+      setLift(undefined)
+      return
+    }
+    const resize =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => measure())
+    const measure = () => {
+      const mine = own.getBoundingClientRect()
+      const floor = root.getBoundingClientRect().bottom
+      let needed: number | undefined
+      for (const chrome of root.querySelectorAll<HTMLElement>(BOTTOM_CHROME)) {
+        resize?.observe(chrome)
+        const its = chrome.getBoundingClientRect()
+        const under =
+          its.width > 0 && its.right + CHROME_CLEARANCE_PX > mine.left && its.left < mine.right
+        if (!under) continue
+        const above = floor - its.top + CHROME_CLEARANCE_PX
+        needed = needed === undefined ? above : Math.max(needed, above)
+      }
+      setLift(needed)
+    }
+    measure()
+    resize?.observe(own)
+    // The Draw options come and go with the tool, and a new element is
+    // nothing a ResizeObserver already watching would report.
+    const mutations =
+      typeof MutationObserver === 'undefined' ? null : new MutationObserver(() => measure())
+    mutations?.observe(root, { childList: true })
+    return () => {
+      resize?.disconnect()
+      mutations?.disconnect()
+    }
+  }, [active])
+  return [surface, lift]
+}
+
 export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlayProps) {
   const [open, setOpen] = useState(readMinimapOpen)
   const anchor = useRef<HTMLSpanElement>(null)
@@ -162,6 +220,16 @@ export function MinimapOverlay({ collapsible = false, ...props }: MinimapOverlay
   )
 }
 
+/** Centres the canvas on the overview point under the pointer. */
+function navigateFrom(
+  event: React.PointerEvent<HTMLDivElement>,
+  fit: ReturnType<typeof fitMinimap>,
+  onNavigate: MinimapOverlayProps['onNavigate'],
+): void {
+  const rect = event.currentTarget.getBoundingClientRect()
+  onNavigate(unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, fit))
+}
+
 function MinimapSurface({
   boxes,
   viewportRect,
@@ -172,11 +240,9 @@ function MinimapSurface({
 }: Omit<MinimapOverlayProps, 'collapsible'> & { readonly raised?: boolean }) {
   const fit = fitMinimap(boxes, viewportRect, { width, height }, PADDING_PX)
   const marker = projectBox(viewportRect, fit)
-
-  const navigateTo = (event: React.PointerEvent<HTMLDivElement>) => {
-    const rect = event.currentTarget.getBoundingClientRect()
-    onNavigate(unprojectPoint({ x: event.clientX - rect.left, y: event.clientY - rect.top }, fit))
-  }
+  const [surface, lift] = useBottomChromeClearance(!raised)
+  const navigateTo = (event: React.PointerEvent<HTMLDivElement>) =>
+    navigateFrom(event, fit, onNavigate)
 
   return (
     // Not a <button>: the target is a POSITION, not an action, so the useful
@@ -184,6 +250,7 @@ function MinimapSurface({
     // control whose activation point no keypress can express. Hidden from
     // assistive tech for the same reason — it duplicates the canvas.
     <div
+      ref={surface}
       // The editor root treats a press anywhere outside an opted-in overlay
       // as canvas: without this, pressing the minimap ALSO starts a marquee
       // in Select mode or a pan in Hand mode, underneath the navigation it
@@ -192,7 +259,7 @@ function MinimapSurface({
       data-viewport-corner
       data-testid="minimap"
       aria-hidden="true"
-      style={{ width, height }}
+      style={{ width, height, bottom: lift }}
       // z-10 matches the dock. Without a stacking context of its own the
       // scene paints over the overview — it is later in the DOM and its
       // nodes are positioned, so document order wins.

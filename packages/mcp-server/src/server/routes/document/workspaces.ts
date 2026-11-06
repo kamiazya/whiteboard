@@ -20,6 +20,7 @@ import {
   SINGLE_PERSON_NAMESPACE,
 } from '@kamiazya/whiteboard-model'
 import {
+  type DocumentEntry,
   type DocumentIndex,
   DocumentPathContestedError,
   hasDocumentDuplicates,
@@ -539,6 +540,26 @@ const cannotPlaceCopy: ErrorAnswer = (err) =>
     ? { status: 409, body: { title: err.message } }
     : null
 
+/**
+ * The copy, and — when the layer was left behind — the keeper saying so: a
+ * client asking for a comment-free copy cannot otherwise tell this daemon
+ * from one that ignores the request body.
+ */
+function duplicateAnswer(
+  copy: DocumentEntry,
+  withoutAnnotations: boolean,
+): DuplicateDocumentResponse {
+  return {
+    document: {
+      documentId: copy.documentId,
+      path: copy.path,
+      ...(copy.name === undefined ? {} : { name: copy.name }),
+      ...(copy.kind === undefined ? {} : { kind: copy.kind }),
+    },
+    ...(withoutAnnotations ? { withoutAnnotations: true } : {}),
+  }
+}
+
 export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): Hono {
   const app = new Hono()
 
@@ -556,20 +577,13 @@ export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): H
       const { documentIndex } = serverDeps
       if (!hasDocumentDuplicates(documentIndex)) return c.json(NO_DUPLICATES, 501)
       try {
+        const withoutAnnotations = asked.data.withoutAnnotations === true
         const copy = await documentIndex.duplicateDocument({
           workspaceId,
           path,
-          ...(asked.data.withoutAnnotations === true ? { withoutAnnotations: true } : {}),
+          ...(withoutAnnotations ? { withoutAnnotations: true } : {}),
         })
-        const response: DuplicateDocumentResponse = {
-          document: {
-            documentId: copy.documentId,
-            path: copy.path,
-            ...(copy.name === undefined ? {} : { name: copy.name }),
-            ...(copy.kind === undefined ? {} : { kind: copy.kind }),
-          },
-        }
-        return c.json(response)
+        return c.json(duplicateAnswer(copy, withoutAnnotations))
       } catch (err) {
         const owned = firstOwned(err, [
           notFoundAs(`No document "${path}" to duplicate`),

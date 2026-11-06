@@ -36,16 +36,26 @@ function useCanvasAnnouncements(
 ): void {
   const selectionKey = `${selectedNodeIds.join('\u0000')}\u0001${selectedEdgeId ?? ''}`
   const previous = useRef({ canvas, selectionKey, externalVersion })
+  // Every stroke this board has shown, so one that comes back reads as
+  // restored and an undone erase is not mistaken for a document arriving.
+  const seenLines = useRef<Set<string> | null>(null)
+  seenLines.current ??= new Set((canvas.lines ?? []).map((line) => line.id))
   useEffect(() => {
     const before = previous.current
     previous.current = { canvas, selectionKey, externalVersion }
+    const seen = seenLines.current ?? new Set<string>()
     // A document arriving from outside (opened, synced) onto an empty board is
-    // a load, not something the person just added.
-    const loaded = before.externalVersion !== externalVersion && before.canvas.nodes.length === 0
+    // a load, not something the person just added — unless what arrived is
+    // ink this board already showed, which is an undo.
+    const loaded =
+      before.externalVersion !== externalVersion &&
+      before.canvas.nodes.length === 0 &&
+      !(canvas.lines ?? []).some((line) => seen.has(line.id))
     const changed =
       before.canvas === canvas || loaded
         ? undefined
-        : canvasChangeMessage(before.canvas, canvas, erasing)
+        : canvasChangeMessage(before.canvas, canvas, erasing, seen)
+    for (const line of canvas.lines ?? []) seen.add(line.id)
     const selected =
       before.selectionKey === selectionKey
         ? undefined
