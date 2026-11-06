@@ -13,6 +13,7 @@
 //! raising one is a hand edit whose reason a reviewer reads.
 
 use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 
@@ -88,6 +89,27 @@ pub(crate) fn coverage(ledger: &Ledger, built: &[&str]) -> Vec<String> {
     v
 }
 
+/// The byte size of `name`'s cargo artifact as `cargo xtask dist wasm` wrote
+/// it into `dist_dir`, refusing any file that build did not ship.
+fn shipped_bytes(name: &str, dist_dir: &Path, shipped: &[PathBuf]) -> Result<u64, String> {
+    if name != dist::WASM_PACKAGE {
+        return Err(format!(
+            "{name}: `cargo xtask dist wasm` does not build it, so its shipped bytes cannot be \
+             measured; teach dist to build it"
+        ));
+    }
+    let path = artifact(dist_dir, "release", name);
+    if !shipped.contains(&path) {
+        return Err(format!(
+            "{name}: {} is not a file `cargo xtask dist wasm` ships",
+            path.display()
+        ));
+    }
+    std::fs::metadata(&path)
+        .map(|m| m.len())
+        .map_err(|e| format!("cannot stat {}: {e}", path.display()))
+}
+
 pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
     let metadata = metadata::load()?;
     let ledger_path = metadata.workspace_root.join(LEDGER_PATH);
@@ -98,24 +120,13 @@ pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
     let dist_dir = dist::default_target_dir(&metadata.target_directory);
     let shipped = dist::build(&metadata.workspace_root, &dist_dir, dist::Artifact::Wasm)?;
     for name in WASM_BINDINGS {
-        if *name != dist::WASM_PACKAGE {
-            violations.push(format!(
-                "{name}: `cargo xtask dist wasm` does not build it, so its shipped bytes cannot \
-                 be measured; teach dist to build it"
-            ));
-            continue;
-        }
-        let path = artifact(&dist_dir, "release", name);
-        if !shipped.contains(&path) {
-            violations.push(format!(
-                "{name}: {} is not a file `cargo xtask dist wasm` ships",
-                path.display()
-            ));
-            continue;
-        }
-        let actual = std::fs::metadata(&path)
-            .map_err(|e| vec![format!("cannot stat {}: {e}", path.display())])?
-            .len();
+        let actual = match shipped_bytes(name, &dist_dir, &shipped) {
+            Ok(bytes) => bytes,
+            Err(violation) => {
+                violations.push(violation);
+                continue;
+            }
+        };
         let Some(entry) = ledger.artifacts.get(*name).cloned() else {
             continue;
         };
