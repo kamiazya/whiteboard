@@ -130,7 +130,10 @@ const BOARD: SpatialCanvas = {
 }
 
 function ThemedNote({ theme }: { theme: 'light' | 'dark' }) {
-  const value = '## The cycle\n\n![[board]]\n\nRain falls.'
+  return <EmbedNote theme={theme} value={'## The cycle\n\n![[board]]\n\nRain falls.'} />
+}
+
+function EmbedNote({ theme = 'light', value }: { theme?: 'light' | 'dark'; value: string }) {
   const references = useReferenceSeams({
     body: value,
     load: async () => ({ documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'board', canvas: BOARD }),
@@ -189,6 +192,42 @@ describe('a note printed while the app is dark', () => {
     await emulatePrint(false)
     await expect.poll(() => screen.queryByTestId('note-print-view')).toBeNull()
     await expect.poll(() => paints(drawn())).toEqual(darkScreen)
+  })
+})
+
+describe('a heading before an embed, and a block taller than a page', () => {
+  it('keeps a heading on the strip of the embed it introduces', async () => {
+    render(<EmbedNote value={'## The cycle\n\n![[board]]\n\n## After\n\nRain falls.'} />)
+    await expect.poll(drawnEmbed).toBe(true)
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(2)
+  })
+
+  // Paging itself is not observable here (emulated print media lays out one
+  // long page). What Chromium does with a strip taller than a page was
+  // measured with the headless shell's --print-to-pdf: it slices it across
+  // pages, every line kept, starting on a fresh page. So the strip only has
+  // to arrive whole and uncapped for that to hold.
+  it('draws a code block taller than a page whole, on one uncapped strip', async () => {
+    const code = Array.from({ length: 160 }, (_, i) => `line ${i + 1}`).join('\n')
+    render(<EmbedNote value={`## Long\n\n\`\`\`\n${code}\n\`\`\`\n\nEnd.`} />)
+    await expect.poll(() => drawn()?.textContent?.includes('line 160') === true).toBe(true)
+    await emulatePrint(true)
+    await expect
+      .poll(() => document.querySelectorAll('[data-testid="note-print-band"]').length)
+      .toBe(2)
+    const [tall] = document.querySelectorAll<SVGSVGElement>('[data-testid="note-print-band"]')
+    const box = tall?.viewBox.baseVal
+    const rendered = tall?.getBoundingClientRect()
+    // Over 160 lines of code: three pages' worth on any paper.
+    expect(box?.height ?? 0).toBeGreaterThan(2400)
+    // Drawn at its own aspect, so nothing caps it to a page and clips the rest.
+    expect((rendered?.height ?? 0) / (rendered?.width ?? 1)).toBeCloseTo(
+      (box?.height ?? 0) / (box?.width ?? 1),
+      1,
+    )
   })
 })
 
