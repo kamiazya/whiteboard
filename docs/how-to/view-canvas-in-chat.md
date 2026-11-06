@@ -75,7 +75,7 @@ then injects the comment into the conversation as a message from you — so the
 agent sees the feedback immediately and can act on it, instead of noticing it
 on its next read of the canvas. On hosts without that capability the comment
 still lands in the document; the agent picks it up whenever it next reads the
-board (`wb_canvas_snapshot` carries comments).
+board's threads (`wb_document_get` carries them).
 
 A refused or failed write keeps your text and spot for retry; they clear only
 once the comment is committed. The reason shows in a line under the field —
