@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DESTRUCTIVE_COPY } from '../../lib/destructive-copy.js'
 import { DeleteDocumentsDialog } from './DeleteDocumentsDialog.js'
@@ -100,5 +100,37 @@ describe('the delete confirmation while the delete is in flight', () => {
 
     expect(onConfirm).toHaveBeenCalledTimes(1)
     expect(onCancel).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('dismissing the delete confirmation', () => {
+  it('returns focus to the card of the document it asked about', async () => {
+    const props = {
+      busy: false,
+      error: null,
+      action: 'delete-document' as const,
+      onCancel: noop,
+      onConfirm: noop,
+    }
+    const { rerender } = render(
+      <>
+        <button type="button" data-doc-path="plans/q3">
+          Q3
+        </button>
+        <DeleteDocumentsDialog {...props} pending={{ displayName: 'Q3', path: 'plans/q3' }} />
+      </>,
+    )
+    await screen.findByRole('alertdialog')
+    rerender(
+      <>
+        <button type="button" data-doc-path="plans/q3">
+          Q3
+        </button>
+        <DeleteDocumentsDialog {...props} pending={null} />
+      </>,
+    )
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('data-doc-path')).toBe('plans/q3'),
+    )
   })
 })

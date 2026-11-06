@@ -271,7 +271,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // — the whole of what both layouts draw, counted once.
   // +1: the search box's combobox handle, which makes the list its listbox.
   'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResults': 117,
-  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 102,
+  'apps/web/src/components/workspace-files/SearchResults.tsx#SearchResultCard': 103, // +1: the tag library's badge
   'apps/web/src/components/workspace-files/TrashSection.tsx#TrashSection': 82,
   // The two list effects do not repeat one another on a mount; the lines are the
   // guard plus the paragraph saying which run it skips and which it must not.
@@ -291,7 +291,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/use-debounced-document-search.ts#useDebouncedDocumentSearch': 66, // +2: the results announcement and arrow-key handoff
   'apps/web/src/components/workspace-files/use-device-memory.ts#useDeviceMemory': 62,
   'apps/web/src/components/workspace-files/use-long-press.ts#useLongPressMenu': 65,
-  'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 63,
+  'apps/web/src/components/workspace-files/use-rename-document.ts#useRenameDocument': 70, // +7: a dismissal returns to its opener, and a saved rename is announced
   'apps/web/src/components/workspace-top-bar/BookmarkAction.tsx#BookmarkAction': 112,
   // +11: the reveal request and the anchor chip label.
   'apps/web/src/hooks/use-comments-rail.ts#useCommentsRail': 199,

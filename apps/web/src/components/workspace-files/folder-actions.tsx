@@ -1,6 +1,7 @@
 import {
   createContext,
   type DragEvent,
+  type KeyboardEvent,
   type MouseEvent,
   useContext,
   useMemo,
@@ -22,6 +23,9 @@ export interface FolderActions {
   readonly openFolderMenu: (folder: string, clientX: number, clientY: number) => void
   /** Pick existing documents to move into `folder` — the empty folder's way to be kept. */
   readonly gatherInto: (folder: string) => void
+  /** Ask for `folder`'s new name; nothing for a folder that cannot be renamed here. */
+  readonly renameFolder: (folder: string) => void
+  readonly canRename: (folder: string) => boolean
 }
 
 export const FolderActionsContext = createContext<FolderActions | undefined>(undefined)
@@ -49,9 +53,27 @@ function carriesDocument(event: DragEvent): boolean {
 }
 
 /**
- * Props that make an element a folder: a drop target for documents and the
- * right-click menu. `data-dropping` is the highlight, set only while a
- * document is over it.
+ * A folder's own F2, the rename a document card and a canvas node answer to.
+ * Shift+F10 and the Menu key need nothing here: the browser turns them into
+ * the `contextmenu` the folder already opens its menu on. An event an inner
+ * control already answered is left alone, so a tree item and the button in it
+ * can both carry this without opening twice.
+ */
+export function folderKeyProps(actions: FolderActions, folder: string) {
+  return {
+    'aria-keyshortcuts': actions.canRename(folder) ? 'F2 Shift+F10' : 'Shift+F10',
+    onKeyDown: (event: KeyboardEvent<HTMLElement>) => {
+      if (event.defaultPrevented || event.key !== 'F2' || !actions.canRename(folder)) return
+      event.preventDefault()
+      actions.renameFolder(folder)
+    },
+  }
+}
+
+/**
+ * Props that make an element a folder: a drop target for documents, the
+ * right-click menu and the folder's keys. `data-dropping` is the highlight,
+ * set only while a document is over it.
  */
 export function useFolderProps(folder: string) {
   const actions = useContext(FolderActionsContext)
@@ -59,8 +81,10 @@ export function useFolderProps(folder: string) {
   return useMemo(() => {
     if (actions === undefined) return {}
     return {
+      ...folderKeyProps(actions, folder),
       'data-dropping': dropping ? '' : undefined,
       onContextMenu: (event: MouseEvent) => {
+        if (event.defaultPrevented) return
         event.preventDefault()
         actions.openFolderMenu(folder, event.clientX, event.clientY)
       },
