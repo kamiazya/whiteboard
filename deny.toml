@@ -1,0 +1,48 @@
+# Supply-chain gate for the Rust workspace, run as `cargo deny check`.
+# The license allowlist is what the project's own license (Apache-2.0) can
+# carry and redistribute in the published npm binaries; add a license only
+# with the crate that needs it named beside it.
+
+[graph]
+all-features = true
+
+[advisories]
+# Every RustSec advisory fails, unmaintained and unsound included; an
+# accepted one goes in `ignore` with the reason it does not reach us.
+version = 2
+yanked = "deny"
+ignore = []
+
+[licenses]
+version = 2
+confidence-threshold = 0.93
+allow = [
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "MIT",
+  # unicode-ident's data tables.
+  "Unicode-3.0",
+  # foldhash, through wasmparser's indexmap (xtask only, never shipped).
+  "Zlib",
+]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Crates that reach the OS or a runtime, allowed only as a DIRECT dependency
+# of the bindings or mechanics crates named in `wrappers` (cargo-deny's
+# meaning: permitted when every crate pulling it in is a wrapper). The
+# wrappers are the planned crates of crates/architecture-map.json; a core
+# crate that pulls one in, at any depth, fails here before it fails anywhere
+# else.
+deny = [
+  { crate = "tokio", wrappers = ["whiteboard-daemon"], reason = "an async runtime belongs to the native composition root" },
+  { crate = "hyper", wrappers = ["whiteboard-daemon"], reason = "the HTTP server belongs to the native composition root" },
+  { crate = "rusqlite", wrappers = ["whiteboard-daemon-store"], reason = "SQLite is the daemon store's mechanic" },
+  { crate = "getrandom", wrappers = ["whiteboard-daemon", "whiteboard-worker"], reason = "randomness is a port (IdMint); core is seeded" },
+]
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]

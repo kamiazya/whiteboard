@@ -1,0 +1,4 @@
+{
+  "$comment": "Every entry point that takes UNTRUSTED input (a parser, a sync-frame decoder, an HTTP or MCP JSON-RPC body, a loro import, JSON across the wasm boundary, a font file) declares its caps here, read by `cargo xtask inputs`: maxBytes it will read, maxDepth it will recurse or nest, maxMillis it may run. An entry missing any cap fails. Keys are `<crate>::<path to the entry function>`; the crate must be in crates/architecture-map.json.",
+  "entries": {}
+}

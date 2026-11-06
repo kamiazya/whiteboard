@@ -189,6 +189,10 @@
     // needs one to prove a planted FIFO is refused rather than blocked on. The
     // test probes for it and skips where it is absent.
     "mkfifo",
+    // wasm-bindgen-cli, a cargo-installed binary pinned to the crate's own
+    // version; rust-build-wasm.mjs checks the version and names the install
+    // command when it is missing.
+    "wasm-bindgen",
     // lefthook.yml invokes secretlint via its literal node_modules/.bin path
     // rather than a bare command name, which knip parses as the "binary".
     "node_modules/.bin/secretlint",

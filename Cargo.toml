@@ -1,0 +1,96 @@
+# The Rust half of the repository. Which crates exist, which layer each sits
+# in and what each may depend on is `crates/architecture-map.json`, enforced
+# by `cargo xtask arch-map`; this file only lists the members that exist.
+[workspace]
+resolver = "3"
+members = [
+  "crates/core/det",
+  "crates/core/log",
+  "crates/core/edge-routing",
+  "crates/bindings/wasm",
+  "crates/xtask",
+]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.97"
+license = "Apache-2.0"
+repository = "https://github.com/kamiazya/whiteboard"
+publish = false
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints that fight this codebase's conventions rather than catch a
+# defect. Each is allowed for the reason beside it; add one only with a reason.
+# A `#[must_use]` on every pure getter is noise; the lint fires on nearly
+# every function in a pure core.
+must_use_candidate = "allow"
+# Errors are values with a generated taxonomy (`RefusalCode`), documented once
+# there rather than in an `# Errors` section on every fallible function.
+missing_errors_doc = "allow"
+
+# A panic in a wasm instance poisons it, so core code is total: no unwrap,
+# no expect, no explicit panic. Tests are allowed all three by `clippy.toml`.
+unwrap_used = "deny"
+expect_used = "deny"
+panic = "deny"
+# stdout is the MCP stdio transport's JSON-RPC stream; logging goes through
+# `whiteboard-log`, never a print.
+print_stdout = "deny"
+print_stderr = "deny"
+dbg_macro = "deny"
+# A lint exception is `#[expect(lint, reason = "...")]`: it states why, and
+# fails once the code it excused is gone. A bare `#[allow]` does neither.
+allow_attributes = "deny"
+allow_attributes_without_reason = "deny"
+
+# Only what a member uses. Third-party crates are pinned exactly where the
+# ABI or a lock-step guard depends on the version (wasm-bindgen must equal the
+# wasm-bindgen-cli that post-processes the artifact).
+[workspace.dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+wasm-bindgen = "=0.2.130"
+wasmparser = "0.263.0"
+
+# The release profile is the WASM size profile: the browser and Workers pay
+# for every byte. The native daemon gets its own speed-tuned profile when it
+# lands.
+#
+# opt-level is PROVISIONAL. On the skeleton (one exported function) the
+# artifact is 30522 bytes at "s", 30766 at "z" and 29495 at 3: all within 4%,
+# because what is there is the allocator and std's formatting, not code an
+# optimizer can shrink. Those figures were taken under a full strip; with the
+# name section kept (below) the cargo artifact is 38624 bytes and the
+# wasm-bindgen output that ships is 14995. "s" is the usual winner once real
+# code dominates; re-measure with `cargo xtask size` when the first ported
+# crate is linked in, and record the numbers here.
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+# Debug info only: a full strip also drops the `target_features` section
+# wasm-bindgen reads to decide which wasm features it may assume. The name
+# section survives here and is removed by `wasm-bindgen --remove-name-section`
+# (`pnpm rust:build:wasm`), so it never ships.
+strip = "debuginfo"
+# An overflowing integer is a defect to stop at, not a value to wrap to: the
+# TypeScript oracle has no wrapping integers to agree with. Measured on the
+# skeleton: 30522 -> 30753 bytes (+0.8%); re-measure size and speed when a
+# ported crate with real integer arithmetic is linked in.
+overflow-checks = true
+
+# What `cargo xtask wasm-imports` links each core crate under: release code
+# generation without LTO, which would drop every function nothing exports
+# before the import scan could see it, and unstripped, so the name section
+# shows which functions are the crate's own.
+[profile.wasm-scan]
+inherits = "release"
+lto = false
+strip = false

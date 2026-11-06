@@ -1,0 +1,11 @@
+{
+  "$comment": "Ceilings for every shipped wasm artifact, read by `cargo xtask size` against the cargo release build (before wasm-bindgen and wasm-opt). Shrink-only: a ceiling more than the headroom above its artifact fails until lowered with `cargo xtask size --update`; raising one is a hand edit, and its reason says why the growth is worth it.",
+  "headroomPercent": 5,
+  "headroomMinBytes": 1024,
+  "artifacts": {
+    "whiteboard-wasm": {
+      "ceilingBytes": 39648,
+      "reason": "skeleton: abi_version() alone, so the bytes are the allocator, std formatting and the name section wasm-bindgen strips"
+    }
+  }
+}
