@@ -5,7 +5,6 @@ import type {
 import {
   type DocumentContainers,
   documentContainers,
-  holdsRetiredCommentPlane,
   markThreadPassages,
   type PassageRange,
   readAnnotations,
@@ -19,7 +18,6 @@ import {
   readThreadMarks,
   readWorkspaceDocumentName,
   resolveWorkspaceDocumentById,
-  retiredStoredShapeIn,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -70,6 +68,7 @@ import type { EditorCommand } from './spatial/commands.js'
 import { threadsAfterCommand } from './spatial/thread-commands.js'
 import { createSubscribers } from './subscribers.js'
 import { missingThreadMarks } from './text-anchor.js'
+import { unreadableSnapshot } from './unreadable-snapshot.js'
 
 const log = getAppLogger('document-sync')
 
@@ -512,28 +511,6 @@ export function createDocumentSyncSession(
       : documentContainers(targetDoc, deps.contentDocumentId)
   }
 
-  /**
-   * Why a snapshot's bytes cannot be served, or null when they can. Reported
-   * like any other unreadable content, never thrown into the accessors (which
-   * would take React down with a doc the session cannot serve anyway).
-   */
-  function unreadableSnapshot(arrivingDoc: LoroDoc): BackendErrorReason | null {
-    // A scoped session's contract with its backend: the workspace bytes hold
-    // this document's tree node. Bytes that do not are unreadable FOR THIS
-    // DOCUMENT.
-    if (
-      deps.contentDocumentId !== undefined &&
-      resolveWorkspaceDocumentById(arrivingDoc, deps.contentDocumentId) === null
-    ) {
-      return 'corrupt-snapshot'
-    }
-    const arriving = contentOf(arrivingDoc)
-    if (arriving === null) return null
-    if (holdsRetiredCommentPlane(arriving)) return 'retired-comment-plane'
-    if (retiredStoredShapeIn(arriving) !== null) return 'retired-stored-shape'
-    return null
-  }
-
   // The held doc's content: null before the first snapshot and while removed.
   const liveContent = (): DocumentContainers | null => (doc === null ? null : contentOf(doc))
   function readContent<T>(read: (content: DocumentContainers) => T, empty: T): T {
@@ -893,7 +870,7 @@ export function createDocumentSyncSession(
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
         if (doc !== null && documentRemoved(newDoc)) return
-        const unreadable = unreadableSnapshot(newDoc)
+        const unreadable = unreadableSnapshot(newDoc, deps.contentDocumentId, contentOf)
         if (unreadable !== null) {
           deps.onBackendError(unreadable)
           deps.onStatusChange('error')
