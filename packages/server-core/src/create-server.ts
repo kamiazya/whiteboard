@@ -1,5 +1,4 @@
 import { ReservedKeyWriteError, SYNC_TEXT_BREACH_CODES } from '@kamiazya/whiteboard-loro-adapter'
-import { parseWorkspaceAddress } from '@kamiazya/whiteboard-model'
 import {
   DisplayNameTakenError,
   DocumentHasDescendantsError,
@@ -198,14 +197,7 @@ function resolvesWorkspace(
     const handle = c.req.param('workspaceId')
     const resolved = await resolveWorkspaceFor(deps, handle, c.req)
     const workspaceId = resolved?.workspaceId ?? handle
-    // A create may name a workspace it is about to mint, but a
-    // `<namespace>/<segment>` address names one in a namespace the registry
-    // already answered for: unresolved, it is unknown here as everywhere.
-    // Anything else malformed is left to the route's own 400.
-    const mayMint =
-      MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`) &&
-      parseWorkspaceAddress(handle)?.form !== 'qualified'
-    if (resolved === null && !mayMint) {
+    if (resolved === null && !MAY_MINT_WORKSPACE.test(`${c.req.method} ${c.req.path}`)) {
       const refusal = await unknownWorkspaceRefusal(handle, deps.knownWorkspaceHandles)
       return c.json(errorBody('workspace_not_found', refusal.message), 404)
     }
