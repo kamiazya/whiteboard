@@ -129,8 +129,8 @@ const BOTTOM_CHROME_GAP_PX = 12
 /**
  * The strip along the bottom of `root` that chrome paints over, measured: a
  * dock folded onto two rows on a phone, or the Draw options above it, stand
- * far higher than DOCK_OCCLUSION_PX, which stays the floor — the one-row dock's strip, and
- * the answer wherever nothing can be measured.
+ * far higher than DOCK_OCCLUSION_PX, which stays the floor — the one-row
+ * dock's strip, and the answer wherever nothing can be measured.
  */
 export function bottomChromeOcclusionPx(root: HTMLElement | null): number {
   if (root === null) return DOCK_OCCLUSION_PX
@@ -145,6 +145,10 @@ export function bottomChromeOcclusionPx(root: HTMLElement | null): number {
 }
 
 export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
+
+/** A group of dock controls: transparent to the one-row flex, a grid cell once the dock folds. */
+const STACKED_CELL_CLASS =
+  'contents group-data-stacked:flex group-data-stacked:items-center group-data-stacked:gap-0.5'
 
 /** Whether the tools would have to scroll to share the dock's single row. */
 function toolsCramped(dock: HTMLElement): boolean {
@@ -371,15 +375,18 @@ export function ToolPalette({
         // a box centred from `left: 50%` otherwise shrinks to the half right
         // of that line and wraps again.
         className={cn(
-          'group absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md data-stacked:flex-wrap data-stacked:justify-center data-stacked:gap-y-1',
+          "group absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))] left-1/2 z-10 flex w-max max-w-[calc(100%-1.5rem)] -translate-x-1/2 items-center gap-0.5 rounded-lg border bg-background p-1 shadow-md data-stacked:grid data-stacked:grid-cols-[auto_auto] data-stacked:justify-center data-stacked:gap-y-1 data-stacked:[grid-template-areas:'lead_rest'_'tools_tools']",
           yieldsToFormattingBar && 'hidden',
         )}
       >
+        {/* `contents` on one row; on two, each of these wrappers is one cell
+          of the dock's grid, and the tools take the whole row beneath — so
+          a folded dock is as wide as its widest row, not as the editor. */}
         {leading !== undefined && (
-          <>
+          <div className={cn(STACKED_CELL_CLASS, 'group-data-stacked:[grid-area:lead]')}>
             {leading}
             <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-          </>
+          </div>
         )}
         {/* Hand leads the tool group: it is the DEFAULT (navigation-first,
           user decision 2026-08-08), so it sits leftmost where the active
@@ -393,7 +400,7 @@ export function ToolPalette({
           upward, inside this same container — is not clipped by it. */}
         <div
           data-dock-tools
-          className="flex min-w-0 items-center gap-0.5 overflow-x-auto group-data-stacked:order-last group-data-stacked:basis-full group-data-stacked:justify-center"
+          className="flex min-w-0 items-center gap-0.5 overflow-x-auto group-data-stacked:justify-self-center group-data-stacked:[grid-area:tools]"
         >
           <Tooltip>
             <TooltipTrigger asChild>
@@ -461,27 +468,29 @@ export function ToolPalette({
           </Tooltip>
           <EraserToolButton tool={tool} onToolChange={onToolChange} />
         </div>
-        <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border group-data-stacked:hidden" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              ref={addButtonRef}
-              type="button"
-              data-testid="add-button"
-              aria-label="Add"
-              aria-haspopup="menu"
-              aria-expanded={addOpen}
-              onClick={() => setAddOpen((open) => !open)}
-              className={TOOL_BUTTON_CLASS}
-            >
-              <Plus aria-hidden="true" className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Add</TooltipContent>
-        </Tooltip>
-        <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-        <ZoomStepButtons onZoomStep={onZoomStep} />
-        <ZoomFitButton onZoomToFit={onZoomToFit} />
+        <div className={cn(STACKED_CELL_CLASS, 'group-data-stacked:[grid-area:rest]')}>
+          <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border group-data-stacked:hidden" />
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                ref={addButtonRef}
+                type="button"
+                data-testid="add-button"
+                aria-label="Add"
+                aria-haspopup="menu"
+                aria-expanded={addOpen}
+                onClick={() => setAddOpen((open) => !open)}
+                className={TOOL_BUTTON_CLASS}
+              >
+                <Plus aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Add</TooltipContent>
+          </Tooltip>
+          <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
+          <ZoomStepButtons onZoomStep={onZoomStep} />
+          <ZoomFitButton onZoomToFit={onZoomToFit} />
+        </div>
         {addOpen && (
           <div
             ref={addMenuRef}
