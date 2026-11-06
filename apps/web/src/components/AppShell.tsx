@@ -137,6 +137,9 @@ export interface AppShellProps {
   readonly workspaces?: KeeperWorkspaces
 }
 
+/** The editor chrome along the bottom edge this control may have to stand above. */
+const EDITOR_BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"]'
+
 /**
  * The way back out of fullscreen.
  *
@@ -179,9 +182,6 @@ export interface AppShellProps {
  * also measures the editor chrome under its column and stands above that
  * when it is higher.
  */
-/** The editor chrome along the bottom edge this control may have to stand above. */
-const EDITOR_BOTTOM_CHROME = '[data-testid="tool-palette"], [data-testid="draw-options"]'
-
 function ExitFullscreenControl({
   buttonRef,
   onExit,

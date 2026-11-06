@@ -250,7 +250,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 98, // +3: the lift is recorded, and taken back once nothing is being typed into
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,
   'apps/web/src/components/spatial-editor/use-native-canvas-listeners.ts#useNativeCanvasListeners': 127,
-  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 156, // +4: a new frame from the dock takes the frame search, so its name strip stays clear; +5: Group frames a selection and opens the new frame's name
+  'apps/web/src/components/spatial-editor/use-node-creation.ts#useNodeCreation': 159, // +4: a new frame from the dock takes the frame search, so its name strip stays clear; +5: Group frames a selection and opens the new frame's name; +3: the loose-note row placement and the measured dock occlusion met here from two lanes
   'apps/web/src/components/spatial-editor/use-scene-projection.ts#useSceneProjection': 150,
   'apps/web/src/components/spatial-editor/use-worker-scene.ts#useWorkerScene': 218,
   'apps/web/src/components/tags/TagChipsEditor.tsx#TagChipsEditor': 96,
