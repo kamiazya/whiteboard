@@ -478,7 +478,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 21
 // (~36 KB). The rule keeps each decision's standing statement, the invariants
 // and the names of the guards that hold them; a passage is in one file or the
 // other, never both. Pins only go down on a cut.
-const CANVAS_RENDER_BUDGET = 108
+//
+// 108 -> 107: the contributed edge-router seam was deleted, and the three
+// paragraphs that argued for keeping it went with it.
+const CANVAS_RENDER_BUDGET = 107
 
 // The rule that loads for every edit under `tools/arch-lint/**` — 119-odd test
 // files, so every session that adds a guard reads it, and it grows in exactly
@@ -501,7 +504,10 @@ const CANVAS_RENDER_BUDGET = 108
 // 46 -> 47: the paragraph on the Rust arms — the `.rs` comment lexer and
 // function measure the size, vocabulary and comment guards read through, and
 // the crate-map guard — a new source language, not a new sentence.
-const TOOL_ARCH_LINT_BUDGET = 47
+//
+// 47 -> 48: the two guards the determinism and ADR-status work added
+// (`intl-default-locale-ban`, `adr-index-status`), named in one sentence each.
+const TOOL_ARCH_LINT_BUDGET = 48
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

@@ -55,11 +55,6 @@ export class WorkspaceNotFoundForCallerError extends Error {
  * The alternative reads as success and is not: the workspace would exist,
  * keyed by an id the caller has to fish out of the response, while the
  * address they chose named nothing from their very next request onward.
- *
- * A BACKFILL of already-stored workspaces settles for a NULL segment on the
- * same input (migration 0019), and the difference is principled rather than
- * inconsistent: a backfill has data it must not discard, and a create has
- * nothing yet.
  */
 export class WorkspaceSegmentUnusableError extends Error {
   constructor(readonly handle: string) {

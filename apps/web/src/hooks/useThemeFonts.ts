@@ -23,13 +23,9 @@ export function useThemeFontsGeneration(): number {
  * may already hold it, in which case this is a no-op. Keyed on the FAMILY
  * rather than the canvas, so an edit to the board never re-asks; the loader
  * itself refuses a held or in-flight one.
- *
- * Always the DOCUMENT look. The editor draws a canvas in the theme it
- * names, and no UI overrides that; ADR-0030 decision 6's argument
- * survives a layer down, where a headless caller still asks for `'clean'`.
  */
 export function useThemeFaceFor(canvas: SpatialCanvas): void {
-  const family = themeFamilyFor(canvas, 'document')
+  const family = themeFamilyFor(canvas)
   useEffect(() => {
     if (family === undefined) return
     void loadThemeFontFromSource(family)
@@ -39,11 +35,11 @@ export function useThemeFaceFor(canvas: SpatialCanvas): void {
 /**
  * The family the in-place text editors type in, re-read when a face lands
  * so a draft opened before the fetch finishes still switches hands with
- * the scene. The document look, for the reason above.
+ * the scene.
  */
 export function useEditingFontFamily(canvas: SpatialCanvas): string {
   // Read for its change, not its value: the family below depends on which
   // faces are held, which the generation is the one signal of.
   useThemeFontsGeneration()
-  return editingFontFamilyFor(canvas, 'document')
+  return editingFontFamilyFor(canvas)
 }

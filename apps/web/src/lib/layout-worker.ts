@@ -312,7 +312,6 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
-      style: request.style,
       references,
       resolveReference: overlayReferences({
         content: references?.resolveReference,
@@ -322,9 +321,6 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       expandFileNode: references === undefined ? undefined : fileNodeExpansion(request),
       contentCache: contentCacheFor({
         theme: request.theme,
-        // The look the request asks for is part of what its bodies ARE: a
-        // theme changes their ink even where it changes no metric.
-        ...(request.style === undefined ? {} : { style: request.style }),
         wireKey: JSON.stringify([referencesIdentity(request), fragments.keys]),
       }),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,

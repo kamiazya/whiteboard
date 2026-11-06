@@ -139,32 +139,21 @@ setter, and the chain it fed — `DocumentPage`'s `drawAs` state,
 `SpatialEditorPane`'s and `SpatialEditor`'s prop, `useWorkerScene`'s and
 `use-drag-layers`' option, `CanvasContextMenu`'s swatch palette, and the
 `style` parameter of `useThemeFaceFor` / `useEditingFontFamily` — went with
-it. The argument survives one layer down, at `lib/spatial/scene-render*`,
-`lib/theme-fonts` and `LayoutRequest.style`, where a headless caller still
-asks for `'clean'`; the editor reaches all of them with the `'document'`
-default. `SpatialEditor.theme.test.tsx` pins that the editor draws the theme
+it. The argument is gone from this app too (2026-11-06): nothing asked for
+another look, so `editorLayoutBase` fixes `style: 'document'` and no option,
+request field or helper parameter carries one. `style` survives in
+canvas-render and in `wb_scene_render`. `SpatialEditor.theme.test.tsx` pins that the editor draws the theme
 the canvas names and reads it from the canvas rather than hardcoding one
 look — two themes, because one case passes against a hardcode too.
 
 Three consequences, each with its guard:
 
-- **The render key gains no axis, and the two LAYOUT caches still carry
-  one.** The theme is a canvas facet, so a document's content digest already
-  changes when its theme does, and the registered assets are part of the
-  build id. No surface in this app draws a document in two looks, which is
-  what would need an axis on `render-key.ts`. The caches are the other
-  answer to the same question, and they keep their axis because `style`
-  still crosses below the chrome: the layout worker's body-memo store
-  (`lib/layout-content-caches.ts`) is keyed on the UI mode AND the request's
-  `style` — absent normalised to `'document'`, the default both threads take
-  — and canvas-render's own text-node body key carries the resolved theme id.
-  Without them a `'clean'` request and a `'document'` one of the same node
-  shared an entry, and whichever was laid out first answered the other, so a
-  body could be served painted in the other look's ink. The **Draw as** row
-  that made that reachable from the UI is gone (see above), and the axis
-  stays: a headless caller still asks for `'clean'` through the same
-  composition. An un-themed canvas keys identically under every style, so
-  nothing else's cache churns.
+- **No cache carries a look axis.** The theme is a canvas facet, so a
+  document's content digest changes with it, and canvas-render's text-node
+  body key carries the resolved theme id — which keeps an unthemed body from
+  answering a themed layout of the same node
+  (`layout-worker-theme.browser.test.tsx`). The worker's body-memo store is
+  keyed on UI mode and reference wire only.
 - **The paper is the palette's surface for the UI mode**, painted by
   `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
   The bundled palette's surface IS the page background in both modes, so an

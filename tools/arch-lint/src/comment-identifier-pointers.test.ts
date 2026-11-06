@@ -155,7 +155,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
     'a history sentence about the parallel callbacks the references bundle replaced',
   '.claude/rules/package-facet-engine.md#facetPayloadSamples':
     'names the form-derived sampler the plugin-supplied one replaced',
-  '.claude/rules/package-scene.md#facetPayloadSamples': 'same sentence',
   '.claude/rules/vocabulary.md#OpenCanvas': 'the retired name, spelled in order to retire it',
   '.claude/rules/vocabulary.md#browserLocal':
     'the retired casing, listed so a sweep does not miss it',

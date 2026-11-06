@@ -223,7 +223,9 @@ function snapEnd(value: string, at: number, match: { start: number; end: number 
 const LOOKBACK_UNITS = 1024
 const LOCAL_UNITS = 64
 
-const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+// An explicit locale, never the host's default: the same text must split the
+// same way on every machine (QR-20b).
+const GRAPHEMES = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
 /**
  * Code points that glue themselves to the character AFTER them (UAX #29

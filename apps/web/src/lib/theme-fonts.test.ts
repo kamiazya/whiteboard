@@ -121,7 +121,7 @@ describe('theme fonts', () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
-  it('answers the family a canvas draws in under a style, so a surface can ask for it', async () => {
+  it("answers the family a canvas's own theme draws in, so a surface can ask for it", async () => {
     const mod = await import('./theme-fonts.js')
     const sketched = {
       nodes: [],
@@ -129,13 +129,11 @@ describe('theme fonts', () => {
       facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
     const plain = { nodes: [], edges: [] }
-    expect(mod.themeFamilyFor(sketched, undefined)).toBe('Yomogi')
-    expect(mod.themeFamilyFor(sketched, 'document')).toBe('Yomogi')
-    expect(mod.themeFamilyFor(sketched, 'clean')).toBeUndefined()
-    expect(mod.themeFamilyFor(plain, 'visual.sketch')).toBe('Yomogi')
-    expect(mod.themeFamilyFor(plain, undefined)).toBeUndefined()
+    const neon = { ...plain, facets: { 'visual.theme/v0': { theme: 'visual.neon' } } }
+    expect(mod.themeFamilyFor(sketched)).toBe('Yomogi')
+    expect(mod.themeFamilyFor(plain)).toBeUndefined()
     // Neon names no family: nothing to fetch.
-    expect(mod.themeFamilyFor(plain, 'visual.neon')).toBeUndefined()
+    expect(mod.themeFamilyFor(neon)).toBeUndefined()
   })
 
   it('the family a text edit is typed in is the one the layout would declare', async () => {
@@ -150,11 +148,10 @@ describe('theme fonts', () => {
       facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
     }
     hasLoadedFace.mockReturnValue(false)
-    expect(mod.editingFontFamilyFor(sketched, undefined)).toBe('Roboto')
+    expect(mod.editingFontFamilyFor(sketched)).toBe('Roboto')
     hasLoadedFace.mockReturnValue(true)
-    expect(mod.editingFontFamilyFor(sketched, undefined)).toBe('Yomogi')
-    expect(mod.editingFontFamilyFor(sketched, 'clean')).toBe('Roboto')
-    expect(mod.editingFontFamilyFor({ nodes: [], edges: [] }, undefined)).toBe('Roboto')
+    expect(mod.editingFontFamilyFor(sketched)).toBe('Yomogi')
+    expect(mod.editingFontFamilyFor({ nodes: [], edges: [] })).toBe('Roboto')
     hasLoadedFace.mockReturnValue(false)
   })
 

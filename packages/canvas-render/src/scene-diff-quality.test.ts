@@ -1,7 +1,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { nodeText, withNodeText } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { Scene, ShapeId } from '@kamiazya/whiteboard-scene'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneEntries } from './scene-entry-keys.js'
@@ -175,15 +175,25 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
 })
 
 describe('decorated-scene column (outline decorations vs group reuse)', () => {
-  const layoutWith = (
-    canvas: SpatialCanvas,
-    nodeOutlines: Readonly<Record<string, ShapeId>>,
-  ): Scene =>
-    layoutSpatialCanvas(canvas, {
-      measure: createFakeMeasure(),
-      appearance: createSpatialTheme({ mode: 'light' }),
-      nodeOutlines,
-    })
+  type ShapeKind = 'ellipse' | 'hexagon' | 'diamond'
+  // The silhouette is chosen the way a document chooses it, by the node's
+  // own `visual.shape/v0` facet.
+  const layoutWith = (canvas: SpatialCanvas, shapes: Readonly<Record<string, ShapeKind>>): Scene =>
+    layoutSpatialCanvas(
+      {
+        ...canvas,
+        nodes: canvas.nodes.map((node) => {
+          const kind = shapes[node.id]
+          return kind === undefined
+            ? node
+            : { ...node, facets: { ...node.facets, 'visual.shape/v0': { kind } } }
+        }),
+      },
+      {
+        measure: createFakeMeasure(),
+        appearance: createSpatialTheme({ mode: 'light' }),
+      },
+    )
 
   it("decorating two nodes with outlines touches exactly those nodes' chrome and content", () => {
     // On this grid the neighbours are axis-aligned, so every edge anchor
@@ -194,14 +204,14 @@ describe('decorated-scene column (outline decorations vs group reuse)', () => {
     // would add its edge's group to the count, which is the number to
     // re-pin if the corpus ever gains one.
     const { canvas } = buildCanvas()
-    const decorated = layoutWith(canvas, { n5: 'visual.ellipse', n12: 'visual.hexagon' })
+    const decorated = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
     expect(diffCount(layout(canvas), decorated)).toEqual({ changed: 6, total: 178 })
   })
 
   it("swapping one node's outline kind replaces that node's chrome and repositions its content", () => {
     const { canvas } = buildCanvas()
-    const before = layoutWith(canvas, { n5: 'visual.ellipse', n12: 'visual.hexagon' })
-    const after = layoutWith(canvas, { n5: 'visual.diamond', n12: 'visual.hexagon' })
+    const before = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
+    const after = layoutWith(canvas, { n5: 'diamond', n12: 'hexagon' })
     // The total matches the decorate case: the inscribed box already stands
     // back from the node's edge, so no extra padding is charged on top and
     // n5 keeps every block it kept under the ellipse.

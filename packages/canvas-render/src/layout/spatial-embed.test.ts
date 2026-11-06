@@ -512,18 +512,4 @@ describe('shape facets inside an embedded canvas', () => {
     expect(childShape).toBeDefined()
     expect(childShape?.shape).toBeUndefined()
   })
-
-  it('an explicit root-keyed outline override does not descend into the embedded canvas', () => {
-    const scene = layoutSpatialCanvas(
-      { nodes: [fileNode()], edges: [] },
-      baseOptions({
-        resolveReference: () => ({ canvas: childCanvas }),
-        expandFileNode: () => true,
-        nodeOutlines: { c1: 'visual.diamond' },
-      }),
-    )
-    const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
-    expect(childShape).toBeDefined()
-    expect(childShape?.shape).toBeUndefined()
-  })
 })

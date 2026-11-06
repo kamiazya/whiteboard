@@ -139,7 +139,9 @@ export const VISUAL_AXES_KEY = 'visual.axes/v0'
  * set is canvas-render's, and this package cannot depend on it — a name the
  * renderer does not carry degrades to no badge at draw time.
  */
-const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+// An explicit locale, never the host's default: the same text must split the
+// same way on every machine (QR-20b).
+const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' })
 
 /**
  * ONE grapheme cluster — what "a badge" means. A cluster may be many code

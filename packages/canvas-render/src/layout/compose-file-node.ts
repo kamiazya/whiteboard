@@ -53,9 +53,7 @@ function composeFileEmbed(
     // Silhouettes resolve per CANVAS (in withCanvasTheme), keyed by that
     // canvas's own node ids: spreading the parent's map both drops the
     // child's facets and leaks a same-id root node's shape into the embedded
-    // canvas. Explicit per-node overrides are root-keyed by contract, so
-    // they do not descend.
-    explicitNodeOutlines: undefined,
+    // canvas.
     activeEmbedPath: new Set([...options.activeEmbedPath, file]),
     embedDepth: options.embedDepth + 1,
   })

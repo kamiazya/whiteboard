@@ -321,11 +321,9 @@ the table alone.
 
 7. **`layoutSpatialCanvas` is the single SpatialCanvas -> Scene builder**
    (`layout/spatial-canvas.ts`), replacing two independently-grown builders
-   in mcp-server and canvas-viewer. A markdown parser is an injection seam,
-   the same class as `measure`/`renderMath`: this package never depends on
-   codec, so `parseBody: (text: string) => MdastRoot` is supplied by
-   the caller (both current consumers pass codec's
-   `parseMarkdownBody`). Appearance is likewise injected via a
+   in mcp-server and canvas-viewer. A markdown parser is a seam: `parseBody`
+   defaults to codec's `parseMarkdownBody` (decision #13) and stays
+   overridable, so layout tests can parse with a stub. Appearance is likewise injected via a
    `SpatialAppearanceResolver` (`theme/spatial-appearance.ts`) — a set of
    FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static
    per-kind record, because appearance keys off both `node.type` and an
@@ -415,10 +413,15 @@ the table alone.
       collaborator and every output sees the same look. It threads as an
       explicit per-render-call argument (`SpatialLayoutOptions` → backend),
       never ambient — the same editor-ambient-but-export-explicit shape as
-      theme mode (#8). Export, the MCP render tool, and the viewer widget
-      default to the clean style; a styled render is opt-in per call: the
-      MCP/widget consumer is often an AI agent, for whom jittered
-      multi-stroke geometry is parsing noise it must never pay unasked.
+      theme mode (#8). `layoutSpatialCanvas`'s own default is the clean
+      style, and every HEADLESS surface — `wb_scene_render`, the daemon's
+      export routes, the `canvas_view` widget — takes it by omission; a
+      styled render is opt-in per call there: the MCP/widget consumer is
+      often an AI agent, for whom jittered multi-stroke geometry is parsing
+      noise it must never pay unasked. A human surface opts in once:
+      apps/web's single render composition (`editorLayoutBase`) fixes
+      `'document'` for the editor, drag layers, thumbnails, preview pane and
+      in-app picture export alike.
     - **Geometry variance lives behind ONE shared pure decomposition
       function per primitive** (rect → stroke set, edge path → stroke set)
       in `layout/`, consumed by BOTH the SVG backend and every hit/
@@ -928,31 +931,9 @@ to the origin. Drawing one — the router taking a box-less end — is
 job. Until then the model can STORE an end this renderer will not draw, which
 is the honest state and is pinned by example rather than left to be found.
 
-**An edge's ALGORITHM is still contributable, not only the geometry it draws
-with**, and the seam kept its shape when its first customer left. A
-contribution registers `routers` by bare name and answers `readRouting` for
-the edges it claims; `composeEdge` asks each contribution in turn, composes
-`${namespace}.${name}`, and calls the router it finds — BEFORE `routeEdge`,
-so a claiming router also wins over stored bends. A decline (`null`), a name
-nobody registered, a path under two points, or a missing endpoint all fall
-back to the built-in — never an error, so a document written against another
-deployment's plugins still draws. Nothing bundled claims an edge today.
-
-What crosses the seam is a ROUTE (points, and whether they curve), never a
-scene node: `pullEdgeOntoOutlines`, the arrowheads, the appearance and the
-sketch ink stay here and apply to every edge the same way, so a router
-cannot become a second producer of that geometry. The side pass runs BEFORE
-any router — fan-out needs to see the whole edge set — so it works in the
-built-in vocabulary and a router receives its sides rather than choosing
-them.
-
-Selection is a READER rather than a widened payload, and that was measured
-rather than assumed: making `visual.edges/v0`'s `routing` accept a
-namespaced id put the payload outside `deriveFacetForm`'s vocabulary, so the
-facet produced no derived form — silently costing the routing control the
-inspector renders. A plugin stores its choice in its OWN facet, exactly as a
-plugin adding a silhouette adds it to its own rather than widening
-`visual.shape`.
+**An edge's algorithm is not contributable.** The seam was deleted
+(2026-11-06); `routeEdge` and `bend-route.ts` are the only producers of an
+edge's path.
 
 ## Conventions
 

@@ -28,7 +28,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { BoundingBox, EdgeRouter, RenderContribution, Scene } from '@kamiazya/whiteboard-scene'
+import type { BoundingBox, RenderContribution, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import type { MeasureText } from '../measure.js'
 import type { ResolvedReference } from '../references/resolved.js'
@@ -105,15 +105,6 @@ export interface SpatialLayoutOptions {
    */
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
   /**
-   * Non-rect silhouettes per node id, threaded onto each node's chrome
-   * shape and consulted when finishing edge routes (a terminal on the
-   * bbox border is pulled onto the outline rim via `outlineEntryPoint`).
-   * Plain DATA — a record, never a resolver function — for the same
-   * reason as `ResolvedReference`: it must cross `postMessage` so worker
-   * layout keeps working when outlines are wired.
-   */
-  readonly nodeOutlines?: Readonly<Record<string, string>>
-  /**
    * Documents already on the embed recursion path when this canvas is
    * itself embedded content — a markdown body's `![[canvas]]`. Seeds the
    * depth cap and the path-local cycle check so they span the
@@ -133,7 +124,7 @@ export interface SpatialLayoutOptions {
    * stroke, fill, decorations — still draws, which is what lets that
    * overlay be transparent instead of an opaque rectangle covering a
    * non-rectangular node. Plain data (ids, not a predicate) so it crosses
-   * a worker boundary the way `nodeOutlines` does. Absent or empty means
+   * a worker boundary. Absent or empty means
    * nothing is suppressed.
    */
   readonly suppressedBodyNodeIds?: readonly string[]
@@ -160,6 +151,10 @@ export interface SpatialLayoutOptions {
    * `decorations` accumulated one per increment, none ever had a caller
    * outside this package, and a reader plus text placement would have made
    * five.
+   *
+   * A TEST seam: every surface draws with the default, and only this
+   * package's tests pass another set — a fake plugin, to pin what the
+   * renderer does with a contribution without depending on `visual`'s.
    */
   readonly renderContributions?: readonly RenderContribution[]
   /**
@@ -235,9 +230,9 @@ export interface SpatialLayoutOptions {
    * plain. Supplying it was made an opt-in step, and an opt-in step in four
    * places is a step that gets missed.
    *
-   * Still an option, so a caller can substitute a different tokeniser or pass
-   * a no-op to render plain. What changed is which way round the default
-   * points.
+   * A TEST seam: no surface substitutes a tokeniser — every one draws with
+   * the default — and this package's tests pass a fake or a no-op through it
+   * to pin the wiring and the plain fallback. A port need not expose it.
    */
   readonly highlightCode?: MdastLayoutOptions['highlightCode']
   /**
@@ -395,8 +390,14 @@ export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly contributions: readonly RenderContribution[]
   /** Their shapes, composed to namespaced ids. */
   readonly shapeTable: ShapeTable
-  /** Their edge routers, composed to namespaced ids. */
-  readonly routerTable: Readonly<Record<string, EdgeRouter>>
+  /**
+   * The silhouette each node of the canvas being laid out resolves to, as a
+   * namespaced shape id — from its facets and the theme's default, resolved
+   * per canvas by `withCanvasTheme`. Threaded onto each node's chrome and
+   * consulted when finishing edge routes (a terminal on the bbox border is
+   * pulled onto the outline rim via `outlineEntryPoint`).
+   */
+  readonly nodeOutlines: Readonly<Record<string, string>> | undefined
   /** Their theme assets, by namespaced id. */
   readonly themeTable: Readonly<Record<string, ThemeTokens>>
   /** The caller's resolver — what a canvas without a theme is painted with. */
@@ -407,12 +408,6 @@ export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
    * own facet first and inherits this only when it names none.
    */
   readonly activeTheme?: { readonly id: string; readonly tokens: ThemeTokens }
-  /**
-   * The caller's per-node silhouette overrides, root-keyed by contract, so
-   * they apply to the top-level canvas only. `nodeOutlines` is recomputed
-   * per canvas from these plus that canvas's facets and the theme default.
-   */
-  readonly explicitNodeOutlines: Readonly<Record<string, string>> | undefined
   /**
    * How a NESTED canvas is laid out — the composer's own entry point,
    * settled here once rather than imported by the code that needs it.
