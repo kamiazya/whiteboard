@@ -1,4 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { useRef } from 'react'
 import { DESTRUCTIVE_COPY, type DestructiveActionId } from '../../lib/destructive-copy.js'
 import { kindNoun } from '../../lib/kind-noun.js'
 import { PinnedConfirmDialog } from '../ui/pinned-confirm-dialog.js'
@@ -12,8 +13,12 @@ export interface DeleteDocumentsDialogProps {
    * and there is one rule rather than two competing subjects. A count of one
    * never arrives: the panel routes a single selection to the singular
    * confirmation, which can say which document it means.
+   *
+   * `path` is the single document's, so a dismissal can hand focus back to its
+   * card: the menu item that opened the dialog is gone by then, and with no
+   * Trigger Radix would land on <body>.
    */
-  pending: { displayName: string; kind?: DocumentKind; count?: number } | null
+  pending: { displayName: string; kind?: DocumentKind; count?: number; path?: string } | null
   busy: boolean
   error: string | null
   /**
@@ -36,9 +41,20 @@ export function DeleteDocumentsDialog({
   onCancel,
   onConfirm,
 }: DeleteDocumentsDialogProps) {
+  // The dialog closes by `pending` going null, so the path is read from the
+  // last request it showed.
+  const lastPath = useRef<string | undefined>(undefined)
+  if (pending !== null) lastPath.current = pending.path
   return (
     <PinnedConfirmDialog
       open={pending !== null}
+      onCloseAutoFocus={(event) => {
+        const path = lastPath.current
+        if (path === undefined) return
+        const card = document.querySelector<HTMLElement>(`[data-doc-path="${CSS.escape(path)}"]`)
+        card?.focus()
+        if (card !== null && document.activeElement === card) event.preventDefault()
+      }}
       busy={busy}
       title={
         pending === null
