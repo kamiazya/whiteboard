@@ -412,9 +412,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // contribution seam had no consumer but its own test, and edge routing
     // is this package's alone. It was outside the lane, so the reach is
     // unchanged.
+    // 124 with `layout/fitted-height.ts`, the one fitted text-node height the
+    // editor and wb_canvas_edit both call. Outside the lane: two readings, a
+    // max and the padding, each pinned by name in `fitted-height.test.ts`
+    // (the floor binding, the caller's font binding) and by a parity test at
+    // each call site.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 24,
-      production: 123,
+      production: 124,
     })
   })
 

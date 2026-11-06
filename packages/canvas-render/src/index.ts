@@ -118,6 +118,7 @@ export {
   paintOrderOf,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
+export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export { translateScene } from './layout/translate-scene.js'
 export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'

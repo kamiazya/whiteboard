@@ -12,7 +12,7 @@ import type {
   ResolvedReference,
   SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
-import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import { fittedTextNodeHeight } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
@@ -50,21 +50,15 @@ export interface RenderCanvasOptions {
 }
 
 /**
- * The height a text node needs for its laid-out body, in canvas px.
- *
- * `naturalNodeContentSize` is canvas-render's own answer to "how big must
- * this box be", so this is padding arithmetic and nothing else. Laying the
- * node out at height 1 and reading the scene's bottom edge would work only
- * because a box that small cannot bound anything — layout could not tell
- * that probe apart from a node someone really made 1px tall, so the escape
- * hatch it needed would stay open for every tiny node as well.
+ * The height a text node needs for its laid-out body, in canvas px:
+ * canvas-render's `fittedTextNodeHeight`, the one answer `wb_canvas_edit`
+ * sizes an agent's node with too, under this editor's appearance.
  */
 export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasOptions): number {
-  const content = naturalNodeContentSize(node, {
+  return fittedTextNodeHeight(node, {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
   })
-  return content.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
 }
 
 export function renderCanvasToSvg(
