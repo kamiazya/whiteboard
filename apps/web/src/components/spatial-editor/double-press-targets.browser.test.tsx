@@ -5,7 +5,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { cleanup, render } from '@testing-library/react'
+import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
@@ -27,6 +27,14 @@ const framed: SpatialCanvas = {
 function transformOf(container: HTMLElement): string {
   return (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style
     .transform
+}
+
+/** A mouse press and release at a root-relative point, dispatched synchronously. */
+function pressAt(root: HTMLElement, x: number, y: number) {
+  const r = root.getBoundingClientRect()
+  const at = { clientX: r.left + x, clientY: r.top + y, pointerId: 1, pointerType: 'mouse' }
+  fireEvent.pointerDown(root, { button: 0, ...at })
+  fireEvent.pointerUp(root, at)
 }
 
 function labelEditor(container: HTMLElement): HTMLTextAreaElement | null {
@@ -89,4 +97,28 @@ it('hand tool: a double-click on the name above a frame edits the name', async (
   await userEvent.dblClick(rootOf(container), { position: { x: 230, y: 185 } })
 
   await vi.waitFor(() => expect(labelEditor(container)).not.toBeNull())
+})
+
+it('two quick clicks far apart on empty paper are two clicks, not a double-click', async () => {
+  const { Host, latest } = makeEditorHost({ initial: populated })
+  const { container } = render(<Host />)
+
+  pressAt(rootOf(container), 400, 400)
+  pressAt(rootOf(container), 600, 400)
+
+  expect(latest.kinds).not.toContain('create-node')
+  expect(nodeEditorContent(container)).toBeNull()
+})
+
+it('a double-click whose second click drifts a few pixels still adds a note', async () => {
+  const { Host, latest } = makeEditorHost({ initial: populated })
+  const { container } = render(<Host />)
+
+  // Dispatched together, so a slow machine cannot stretch the pair past the
+  // double-press window and turn the drift case into a timing one.
+  pressAt(rootOf(container), 400, 400)
+  pressAt(rootOf(container), 404, 403)
+
+  await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
+  expect(latest.kinds.filter((kind) => kind === 'create-node')).toHaveLength(1)
 })

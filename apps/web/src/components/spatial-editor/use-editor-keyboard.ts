@@ -17,7 +17,7 @@ import { useRef, useState } from 'react'
 import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { attachTargetName } from '../../lib/spatial/attach-target-label.js'
-import type { EditorCommand, EditorLeafCommand } from '../../lib/spatial/commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
 import {
   type Box,
@@ -25,7 +25,7 @@ import {
   resizeBoxByDelta,
   scaleBoxWithin,
 } from '../../lib/spatial/geometry.js'
-import { deleteInkCommand, moveInkCommand } from '../../lib/spatial/ink-commands.js'
+import { deleteInkCommand } from '../../lib/spatial/ink-commands.js'
 import {
   type Direction,
   nearestInDirection,
@@ -35,9 +35,11 @@ import { isAttachTarget, stepAttachTarget } from './attach-target-walk.js'
 import { focusPastCanvas } from './canvas-focus.js'
 import { withHeldMembers } from './drag-preview.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
+import { nudgeMoves } from './nudge-moves.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
 import { useKeyboardWalk } from './use-keyboard-walk.js'
+import { useNudgeAnnouncement } from './use-nudge-announcement.js'
 import { useToolBeforeEraser } from './use-tool-before-eraser.js'
 
 /**
@@ -56,21 +58,22 @@ const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
 }
 
 /**
- * Escape with the eraser armed and no sweep in flight puts it down, back in
- * the tool it was picked up from. An eraser left armed turns the next press
- * on a drawing into a deletion, so the key that means "stop" must reach it
- * the way it reaches a gesture.
+ * Escape with the eraser armed and no sweep in flight puts it down, back in the
+ * tool it was picked up from; Connect, also a mode, goes back to Select. An
+ * armed eraser turns the next press on a drawing into a deletion, so the key
+ * that means "stop" must reach it the way it reaches a gesture.
  */
-function leaveEraserWithEscape(
+function leaveToolWithEscape(
   e: React.KeyboardEvent<HTMLDivElement>,
   tool: EditorTool,
   gesture: string,
   changeTool: (tool: EditorTool) => void,
   before: EditorTool,
 ): boolean {
-  if (e.key !== 'Escape' || tool !== 'erase' || gesture !== 'idle') return false
+  if (e.key !== 'Escape' || gesture !== 'idle') return false
+  if (tool !== 'erase' && tool !== 'connect') return false
   e.preventDefault()
-  changeTool(before)
+  changeTool(tool === 'erase' ? before : 'select')
   return true
 }
 
@@ -196,6 +199,7 @@ export function useEditorKeyboard({
   // Set by the Escape that let go of the selection: the next Tab is the
   // browser's, which is the keyboard's way from the canvas to the dock.
   const handOffTabRef = useRef(false)
+  const settleNudge = useNudgeAnnouncement(canvasRef)
   const toolBeforeEraser = useToolBeforeEraser(tool)
   // The same fact as state, so the canvas name can say what Tab will do.
   const [handingOffTab, setHandingOffTab] = useState(false)
@@ -531,52 +535,25 @@ export function useEditorKeyboard({
    */
   const nudgeSelection = (e: React.KeyboardEvent<HTMLDivElement>): boolean => {
     const nudge = ARROW_KEY_DELTA[e.key]
-    if (
-      nudge !== undefined &&
-      (selectedNode !== undefined || selectedInkIds.length > 0) &&
-      gestureState.kind === 'idle'
-    ) {
-      e.preventDefault()
-      const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
-      // Positions are read from canvasRef, not the render closure: key
-      // auto-repeat delivers keydowns faster than commits re-render, and a
-      // stale base clobbers the previous nudge.
-      // A frame carries what it holds, as a drag on its border does.
-      const selected = selectedNode === undefined ? [] : [selectedNode.id, ...extraIds]
-      const ids = [...withHeldMembers(canvasRef.current, selected, isLocked)]
-      const moves: EditorLeafCommand[] = ids.flatMap((id) => {
-        const current = canvasRef.current.nodes.find((n) => n.id === id)
-        if (current === undefined) return []
-        return [
-          {
-            kind: 'move-node' as const,
-            id: current.id,
-            x: current.x + nudge.dx * step,
-            y: current.y + nudge.dy * step,
-          },
-        ]
-      })
-      // Ink travels with the rest of the selection rather than in a branch of
-      // its own, for the same reason the node half stopped moving only its
-      // primary: the two would tear apart, and a mixed selection is one press
-      // away now that shift adds a stroke. `moveInkCommand` is the one place
-      // that looks at which collection an id came from — an EDGE answers
-      // nothing, because a relation's path is routed from the boxes it joins
-      // and follows them.
-      moves.push(
-        ...selectedInkIds.flatMap((id) => {
-          const command = moveInkCommand(canvasRef.current, id, nudge.dx * step, nudge.dy * step)
-          return command === undefined ? [] : [command]
-        }),
-      )
-      if (moves.length === 0) return true
-      // ONE batch, not N commands: a multi-node nudge is one user action
-      // and must undo as one step (N separate commits would only group by
-      // the UndoManager's merge-timing heuristic).
-      applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
-      return true
-    }
-    return false
+    if (nudge === undefined || gestureState.kind !== 'idle') return false
+    if (selectedNode === undefined && selectedInkIds.length === 0) return false
+    e.preventDefault()
+    const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
+    const [dx, dy] = [nudge.dx * step, nudge.dy * step]
+    // Positions are read from canvasRef, not the render closure: key
+    // auto-repeat delivers keydowns faster than commits re-render, and a
+    // stale base clobbers the previous nudge.
+    // A frame carries what it holds, as a drag on its border does.
+    const selected = selectedNode === undefined ? [] : [selectedNode.id, ...extraIds]
+    const ids = [...withHeldMembers(canvasRef.current, selected, isLocked)]
+    const moves = nudgeMoves(canvasRef.current, ids, selectedInkIds, dx, dy)
+    if (moves.length === 0) return true
+    // ONE batch, not N commands: a multi-node nudge is one user action
+    // and must undo as one step (N separate commits would only group by
+    // the UndoManager's merge-timing heuristic).
+    applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
+    settleNudge(selected, dx, dy)
+    return true
   }
 
   /** Delete on a multi-selection takes every member. */
@@ -696,7 +673,7 @@ export function useEditorKeyboard({
       clearInkSelection(e) ||
       deleteInkSelection(e) ||
       cancelWithEscape(e) ||
-      leaveEraserWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser.current) ||
+      leaveToolWithEscape(e, tool, gestureState.kind, changeTool, toolBeforeEraser.current) ||
       releaseSelectionWithEscape(e) ||
       armSpacePan(e) ||
       nudgeSelection(e) ||
