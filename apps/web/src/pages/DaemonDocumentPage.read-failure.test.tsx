@@ -20,6 +20,7 @@ import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { FakeDocumentBackend, renderInRouter } from '../test-utils/daemon-page-harness.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) =>
@@ -106,6 +107,7 @@ describe('a daemon-kept document this build cannot read', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    resetShellStatusForTests()
   })
 
   it('a note still holding its body as the okf-body node shows the read-failure screen, not the loading copy', async () => {
@@ -116,6 +118,10 @@ describe('a daemon-kept document this build cannot read', () => {
     expect(screen.queryByTestId('document-opening-notice')).toBeNull()
     expect(screen.queryByTestId('mock-markdown-editor')).toBeNull()
     expect(backend.pushed).toEqual([])
+    // The shell chip reads the same screen: no session was built, and
+    // nothing retries it, so it must not claim to be reconnecting over an
+    // error screen that offers no retry.
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'not-opened' })
   })
 
   it('a board still holding the flat comments plane shows the read-failure screen, not the loading copy', async () => {

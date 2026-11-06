@@ -400,8 +400,18 @@ function useDaemonDocument(
     documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
     refusal: controller.refusal,
   })
+  // The second phase of the page state: what reading the CONTENT said. A
+  // snapshot the session refused (a retired stored shape, corrupt bytes)
+  // binds no editor, and the screen has to say why rather than keep the
+  // loading copy up. The shell and the tab read THIS state, so the chip says
+  // no session was built rather than claiming to reconnect over an error
+  // screen that offers no retry.
+  const renderState = refineForContentReadFailure(
+    pageState,
+    documentReadFailureOf(sync.backendError),
+  )
   // One state feeds the tab and the shell, which raises the badge from it.
-  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(pageState))
+  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(renderState))
   const connection = useMemo((): ConnectionState => ({ keeper: 'daemon', session }), [session])
   useDocumentFavicon({
     settingsStore,
@@ -439,14 +449,6 @@ function useDaemonDocument(
 
   const onNameSettled = usePlaceByName(controller, daemonFetch, daemonBaseUrl, onPathMoved)
 
-  // The second phase of the page state: what reading the CONTENT said. A
-  // snapshot the session refused (a retired stored shape, corrupt bytes)
-  // binds no editor, and the screen has to say why rather than keep the
-  // loading copy up.
-  const renderState = refineForContentReadFailure(
-    pageState,
-    documentReadFailureOf(sync.backendError),
-  )
   const terminal = daemonTerminalAnswer(renderState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 

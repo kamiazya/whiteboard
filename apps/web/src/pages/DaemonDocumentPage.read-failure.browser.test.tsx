@@ -3,6 +3,10 @@
  * composition over the sync session, with the real editors available to
  * mount (none may), and the screen as a person sees it. The jsdom file
  * beside this one pins each reason; this is the one the eye checks.
+ *
+ * A corrupt snapshot is not covered on this page: with an injected backend the
+ * session has no content id, and that is the one path on which
+ * `unreadableSnapshot` answers `corrupt-snapshot`.
  */
 
 import {
@@ -14,7 +18,6 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import '../index.css'
 import { FakeDocumentBackend, renderPage } from '../test-utils/daemon-page-harness.js'
 
@@ -59,18 +62,7 @@ it('a daemon note in a retired shape shows the read-failure screen in place of t
       createBackend={() => backend}
     />,
   )
-  // The capture is of the screen a person is left on: the alert, or, on the
-  // unfixed page, the loading copy that never gives way to it. The alert
-  // arrives within the session's first paint of the refused snapshot
-  // (measured well under 1 s), so the wait is a ceiling, not a delay.
-  await waitFor(() => expect(screen.queryByTestId('document-opening-notice')).not.toBeNull())
-  const alert = await vi
-    .waitFor(() => screen.getByRole('alert'), { timeout: 3000 })
-    .catch(() => null)
-  await page.screenshot({
-    path: `../../../../tmp/screenshots/daemon-read-failure-${alert === null ? 'before' : 'after'}.png`,
-  })
-
+  await waitFor(() => expect(screen.queryByRole('alert')).not.toBeNull())
   expect(screen.getByRole('alert').textContent).toMatch(/form this version no longer reads/i)
   expect(screen.queryByTestId('document-opening-notice')).toBeNull()
   expect(screen.queryByTestId('markdown-source-wrap')).toBeNull()
