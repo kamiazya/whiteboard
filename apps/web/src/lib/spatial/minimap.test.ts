@@ -4,6 +4,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
+import { freehandLine } from './freehand.js'
 import { indexNodeBoxes } from './geometry.js'
 import {
   buildMinimap,
@@ -400,13 +401,78 @@ describe('projectStrokeSegments', () => {
     expect(second?.angle).toBeCloseTo(-Math.PI / 2)
   })
 
-  it('merges samples closer together than a hairline, keeping both ends', () => {
-    // A hundred samples half an overview pixel apart: fifty pixels of run.
+  it('collapses samples along one straight run, keeping both ends', () => {
     const points = Array.from({ length: 100 }, (_, i) => ({ x: i * 10, y: 0 }))
     const segments = projectStrokeSegments({ points }, { scale: 0.05, originX: 0, originY: 0 })
-    expect(segments.length).toBeLessThan(30)
-    expect(segments.length).toBeGreaterThan(10)
-    const last = segments[segments.length - 1]
-    expect((last?.x ?? 0) + (last?.length ?? 0)).toBeCloseTo(99 * 10 * 0.05)
+    expect(segments).toHaveLength(1)
+    expect(segments[0]?.length).toBeCloseTo(99 * 10 * 0.05)
+  })
+
+  it('keeps every sample within half an overview pixel of the drawn runs', () => {
+    // A turn sharper than its samples are long: dropping the sample by
+    // distance alone cuts the corner by over a pixel.
+    const points = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 21, y: 1.5 },
+      { x: 41, y: 1.5 },
+      ...Array.from({ length: 40 }, (_, i) => {
+        const t = (Math.PI * i) / 39
+        return { x: 60 + 15 - 15 * Math.cos(t), y: 1.5 + 15 * Math.sin(t) }
+      }),
+    ]
+    const segments = projectStrokeSegments({ points }, unit)
+    for (const point of points) expect(distanceToRuns(point, segments)).toBeLessThanOrEqual(0.5)
+    // An arc of 15px radius is several runs, not a chevron.
+    expect(segments.length).toBeGreaterThanOrEqual(8)
+  })
+
+  it('caps how many runs one stroke can cost', () => {
+    const points = Array.from({ length: 600 }, (_, i) => ({ x: i * 4, y: i % 2 === 0 ? 0 : 6 }))
+    expect(projectStrokeSegments({ points }, unit).length).toBeLessThanOrEqual(64)
+  })
+})
+
+/** How far `point` is from the nearest of `runs`, in the runs' own space. */
+function distanceToRuns(
+  point: { x: number; y: number },
+  runs: ReturnType<typeof projectStrokeSegments>,
+): number {
+  return Math.min(
+    ...runs.map((run) => {
+      const dx = Math.cos(run.angle) * run.length
+      const dy = Math.sin(run.angle) * run.length
+      const t = Math.max(
+        0,
+        Math.min(1, ((point.x - run.x) * dx + (point.y - run.y) * dy) / (run.length ** 2 || 1)),
+      )
+      return Math.hypot(point.x - (run.x + t * dx), point.y - (run.y + t * dy))
+    }),
+  )
+}
+
+describe('a drawn stroke in the overview', () => {
+  it('follows the curve the canvas draws through its samples, not their corners', () => {
+    const line = freehandLine(
+      'ink',
+      [
+        { x: 0, y: 0 },
+        { x: 100, y: 100 },
+        { x: 200, y: 0 },
+      ],
+      1,
+    )
+    if (line === undefined) throw new Error('no stroke')
+    const [stroke] = buildMinimap(
+      { nodes: [], edges: [], lines: [line] },
+      [],
+      SPATIAL_LIGHT_PALETTE,
+    ).strokes
+    const points = stroke?.points ?? []
+    // The canvas rounds the sample at 100,100 into the quadratic its
+    // neighbours' midpoints define, whose apex is 100,75.
+    expect(points.some((p) => Math.abs(p.x - 100) < 1e-9 && Math.abs(p.y - 75) < 1e-9)).toBe(true)
+    expect(points.some((p) => p.x === 100 && p.y === 100)).toBe(false)
+    expect(points.length).toBeGreaterThan(5)
   })
 })

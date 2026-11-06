@@ -8,6 +8,7 @@
  */
 
 import {
+  flattenRoundedEdgePath,
   type SpatialPalette,
   type SpatialPresetKey,
   withDeclaredColours,
@@ -15,6 +16,7 @@ import {
 import { endNode, isFiniteRect, type LineEnd, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveNodeSymbol } from '@kamiazya/whiteboard-plugin-visual'
+import { isCurvedLine, simplifyStroke } from './freehand.js'
 import type { NodeBox } from './geometry.js'
 
 export interface MinimapBox {
@@ -211,6 +213,11 @@ export interface MinimapStroke {
  * a few pixels, so the side it leaves from is below what the eye resolves.
  * An end whose node has no box (a dangling reference) drops the line rather
  * than inventing a position for it.
+ *
+ * A line drawn as a curve is flattened along the curve the canvas draws
+ * (`flattenRoundedEdgePath`, the renderer's own corners), not passed as its
+ * samples: those are corners only the stored shape has, and three of them
+ * read as a chevron where the board shows an arc.
  */
 function buildMinimapStrokes(
   lines: SpatialCanvas['lines'],
@@ -229,9 +236,9 @@ function buildMinimapStrokes(
     const to = at(line.to)
     if (from === undefined || to === undefined) return []
     const color = accentOf(line.color, palette)
-    return [
-      { points: [from, ...(line.bends ?? []), to], ...(color === undefined ? {} : { color }) },
-    ]
+    const path = [from, ...(line.bends ?? []), to]
+    const points = isCurvedLine(line) ? flattenRoundedEdgePath(path) : path
+    return [{ points, ...(color === undefined ? {} : { color }) }]
   })
 }
 
@@ -248,11 +255,13 @@ export function strokeBounds(stroke: MinimapStroke): MinimapBox {
  * The stroke's straight runs in minimap space, each as where it starts, how
  * long it is and which way it points — what a rotated hairline needs.
  *
- * Thinned at the overview's own scale first: a stroke stores up to
- * `MAX_BENDS` samples, and at a few pixels across most of them sit closer
- * together than a hairline is wide, each of which would otherwise be an
- * element. The last point is always kept, so the stroke still ends where it
- * ends.
+ * Simplified at the overview's own scale first, by how far a sample sits off
+ * the run that would replace it (`simplifyStroke`): a sample within half a
+ * pixel of that run is below what a hairline shows, and one further out is a
+ * turn the overview has to keep. Thinning by the distance BETWEEN samples
+ * instead cut every bend shorter than its threshold, so an arc read as a
+ * chevron. The point budget bounds the elements one stroke can cost; both
+ * ends are always kept.
  */
 export function projectStrokeSegments(
   stroke: MinimapStroke,
@@ -262,13 +271,7 @@ export function projectStrokeSegments(
     x: (p.x - fit.originX) * fit.scale,
     y: (p.y - fit.originY) * fit.scale,
   }))
-  const kept: { x: number; y: number }[] = []
-  for (const [i, point] of projected.entries()) {
-    const last = kept[kept.length - 1]
-    const far =
-      last === undefined || Math.hypot(point.x - last.x, point.y - last.y) >= MINIMAP_STROKE_STEP_PX
-    if (far || i === projected.length - 1) kept.push(point)
-  }
+  const kept = simplifyStroke(projected, MINIMAP_STROKE_TOLERANCE_PX, MINIMAP_STROKE_MAX_POINTS)
   return kept.slice(1).map((b, i) => {
     const a = kept[i] as { x: number; y: number }
     return {
@@ -280,8 +283,11 @@ export function projectStrokeSegments(
   })
 }
 
-/** The shortest run, in overview pixels, worth an element of its own. */
-const MINIMAP_STROKE_STEP_PX = 2
+/** How far off its run, in overview pixels, a sample may sit and be dropped. */
+const MINIMAP_STROKE_TOLERANCE_PX = 0.5
+
+/** The most points one stroke keeps in the overview: 64 runs at most. */
+const MINIMAP_STROKE_MAX_POINTS = 65
 
 /**
  * Everything the overview draws, colour resolved: the node boxes and the ink.
