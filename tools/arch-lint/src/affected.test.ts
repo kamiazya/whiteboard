@@ -9,6 +9,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
+import { parse as parseYaml } from 'yaml'
 import { REPO_ROOT } from './scan-roots.js'
 import { extractWorkflowJobs } from './workflow-jobs.js'
 
@@ -78,6 +79,26 @@ const affected = (await import(
   PACKAGE_JOBS: Record<string, { packages: string[]; why: string }>
   UNSCOPED_JOBS: Record<string, string>
 }
+
+const vitestProjects = (await import(
+  pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
+)) as {
+  deriveSharedLayerProjectNames: (root: string) => string[]
+  readBrowserProjectNames: (root: string) => string[]
+}
+const gate = (await import(
+  pathToFileURL(join(REPO_ROOT, 'tools/checks/src/ci-gate.mjs')).href
+)) as {
+  NOT_AFFECTED_STEP: string
+}
+
+// lazy-import: loaded by path, since a relative import of the root config
+// leaves this workspace and `relative-import-escape` refuses it.
+const rootConfig = (
+  (await import(pathToFileURL(join(REPO_ROOT, 'vitest.config.ts')).href)) as {
+    default: { test?: { globalSetup?: string | string[] } }
+  }
+).default
 
 // ── A synthetic graph: model <- codec <- web, and a dev-only edge ─────────
 
@@ -323,12 +344,9 @@ describe('every package, project and job is reachable by some rule', () => {
   })
 
   it("selects everything for each file the root vitest config's globalSetup names", () => {
-    const config = readFileSync(join(REPO_ROOT, 'vitest.config.ts'), 'utf-8')
-    const setup = [
-      ...(config.match(/globalSetup:\s*\[([^\]]*)\]/)?.[1] ?? '').matchAll(/'\.\/([^']+)'/g),
-    ]
+    const setup = [rootConfig.test?.globalSetup ?? []].flat().map((p) => p.replace(/^\.\//, ''))
     expect(setup.length).toBeGreaterThan(0)
-    for (const [, path] of setup) {
+    for (const path of setup) {
       const result = affected.planScope({
         changes: [{ path, status: 'M' }],
         event: 'pull_request',
@@ -338,13 +356,15 @@ describe('every package, project and job is reachable by some rule', () => {
     }
   })
 
-  it('runs the packaged smoke when a distribution smoke changes', () => {
+  it('runs mcp-server, whose scripts run them, when a distribution smoke changes', () => {
     const result = affected.planScope({
       changes: [{ path: 'tests/e2e/distribution/smoke-helpers.mjs', status: 'M' }],
       event: 'pull_request',
       ...real,
     })
-    expect(result.jobs['packaged-smoke']?.run).toBe(true)
+    expect(result.everything).toBe(false)
+    expect(result.affected).toContain('@kamiazya/whiteboard-mcp')
+    expect(result.projects).toContain('mcp-node')
   })
 
   it("runs mcp-server's release-policy tests when release.yml changes", () => {
@@ -468,5 +488,80 @@ describe('a change to any package selects every package that depends on it', () 
         expect(result.jobs[jobId]?.run, jobId).toBe(true)
       }
     }
+  })
+})
+
+// ── ci.yml wires every scoped job the same way ─────────────────────────────
+
+interface YamlStep {
+  name?: string
+  uses?: string
+  if?: string
+  run?: string
+  with?: Record<string, unknown>
+}
+
+const workflow = parseYaml(readFileSync(join(REPO_ROOT, '.github/workflows/ci.yml'), 'utf-8')) as {
+  jobs: Record<string, { steps?: YamlStep[] }>
+}
+const SCOPED = [...affected.PROJECT_JOBS, ...Object.keys(affected.PACKAGE_JOBS)]
+const NOT_AFFECTED = 'Not affected by this change'
+
+describe('every scoped job skips its work on its own detection, and only then', () => {
+  it.each(SCOPED)('%s', (id) => {
+    const steps = workflow.jobs[id]?.steps ?? []
+    const at = steps.findIndex((step) => step.name === 'Detect change scope')
+    expect(at, `${id} has no Detect change scope step`).toBeGreaterThan(0)
+    // Its own id, so a copied block cannot detect for another job.
+    expect(steps[at]?.run).toMatch(new RegExp(`affected-cli\\.mjs job ${id} --event "\\$EVENT"$`))
+    const checkout = steps.slice(0, at).find((step) => step.uses?.startsWith('actions/checkout@'))
+    expect(Number(checkout?.with?.['fetch-depth']), `${id} needs HEAD^1`).toBeGreaterThanOrEqual(2)
+
+    const skip = steps.find((step) => step.name === NOT_AFFECTED)
+    expect(skip?.if).toBe("steps.scope.outputs.run != 'true'")
+
+    // Every step after detection is gated on it, except the skip notice and
+    // a failure upload (which cannot fire on a job that ran nothing).
+    const ungated = steps
+      .slice(at + 1)
+      .filter((step) => step.name !== NOT_AFFECTED && !(step.if ?? '').includes('failure()'))
+      .filter((step) => !/steps\.scope\.outputs\.(run == 'true'|projects)/.test(step.if ?? ''))
+      .map((step) => step.name ?? step.uses)
+    expect(ungated, `${id}: these steps run even when the change does not reach the job`).toEqual(
+      [],
+    )
+  })
+
+  it('no unscoped job carries a detection or a skip it is never judged by', () => {
+    for (const id of Object.keys(affected.UNSCOPED_JOBS)) {
+      const names = (workflow.jobs[id]?.steps ?? []).map((step) => step.name)
+      expect(names, id).not.toContain('Detect change scope')
+      expect(names, id).not.toContain(NOT_AFFECTED)
+    }
+  })
+
+  it('names its skip step exactly as ci-gate reads it', () => {
+    expect(gate.NOT_AFFECTED_STEP).toBe(NOT_AFFECTED)
+  })
+})
+
+describe('the scoped vitest jobs run the universes the rest of CI names', () => {
+  it("test-shared's universe is the derived shared-layer list", () => {
+    expect(affected.jobUniverse('test-shared', real.projects)).toEqual(
+      vitestProjects.deriveSharedLayerProjectNames(REPO_ROOT),
+    )
+  })
+
+  it("test-browser's universe is every browser-mode project, which test:browser lists", () => {
+    const universe = affected.jobUniverse('test-browser', real.projects)
+    expect(universe).toEqual([...vitestProjects.readBrowserProjectNames(REPO_ROOT)].sort())
+    const script =
+      (
+        JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf-8')) as {
+          scripts: Record<string, string>
+        }
+      ).scripts['test:browser'] ?? ''
+    const listed = [...script.matchAll(/--project (\S+)/g)].map((m) => m[1]).sort()
+    expect(listed).toEqual(universe)
   })
 })

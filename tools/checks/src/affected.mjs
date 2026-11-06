@@ -152,14 +152,6 @@ export const PROJECT_JOBS = ['test-unit', 'test-shared', 'test-jsdom', 'test-bro
  * @type {Record<string, { packages: string[], why: string }>}
  */
 export const PACKAGE_JOBS = {
-  'sbom-npm': {
-    packages: ['@kamiazya/whiteboard-mcp'],
-    why: "the published package's production dependency tree",
-  },
-  'packaged-smoke': {
-    packages: ['@kamiazya/whiteboard-mcp', '@kamiazya/whiteboard-web'],
-    why: "the packaged CLI and daemon, whose dist carries apps/web's build",
-  },
   'widget-smoke': {
     packages: ['@kamiazya/whiteboard-canvas-viewer'],
     why: "canvas-viewer's self-contained widget build",
@@ -184,10 +176,15 @@ export const PACKAGE_JOBS = {
  * @type {Record<string, string>}
  */
 export const UNSCOPED_JOBS = {
+  scope: 'computes the selection itself',
   check: 'lint, typecheck, audit and secret scan read the whole workspace',
   verify: 'knip and the build read the whole workspace; mcp-smoke rides along',
   'stress-changed-tests': 'already selects by the changed test files themselves',
   'dry-run-docker': 'already selects by docker-build-inputs.mjs',
+  'sbom-npm':
+    'a release gate the release-gate matrix pins as unconditional pull-request coverage (gate-isomorphism.test.ts), and off the wall-clock path',
+  'packaged-smoke':
+    'a release gate the release-gate matrix pins as unconditional pull-request coverage (gate-isomorphism.test.ts), and off the wall-clock path',
   'ci-gate': 'the aggregate check',
 }
 

@@ -27,7 +27,7 @@ interface ElsewhereEntry {
 
 // vitest-projects.mjs (tools/checks) is the single source of truth for the
 // project inventory AND the exclusion set (PROJECTS_RUN_ELSEWHERE) — this
-// test and run-shared-layer-tests.mjs (the CI-invoked derivation) both import
+// test and affected-cli.mjs (which runs the CI-invoked derivation) both import
 // it rather than each holding their own copy, which is exactly the drift
 // this task exists to remove. Dynamic import + cast matches the established
 // pattern in release-gate-matrix.test.ts / verify-pack-contents.test.ts.
@@ -96,12 +96,15 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
     expect(text).toContain('whiteboard-web test')
   })
 
-  it('runs the root test:browser script (test-browser job), not a hand-listed subset', () => {
+  it('runs the derived browser universe (test-browser job), not a hand-listed subset', () => {
     // Hand-listing per-package vitest steps let canvas-render-browser drift
     // out of CI silently while package.json's test:browser script (the
-    // documented local command) still listed it. Invoking the root script
-    // instead ties CI to the same single list developers already run.
-    expect(text).toMatch(/pnpm (run )?test:browser\b/)
+    // documented local command) still listed it. The job runs the change's
+    // share of a universe derived from each config's browser mode, which
+    // affected.test.ts holds equal to the test:browser script's list.
+    expect(readCiJob('test-browser')).toMatch(
+      /run:\s*node tools\/checks\/src\/affected-cli\.mjs run test-browser\b/,
+    )
   })
 
   it('the test:browser script covers every browser-enabled vitest project', () => {
@@ -230,7 +233,7 @@ describe('ci.yml runs every node vitest project vitest.projects.json lists', () 
     expect([...derivedNames, ...exemptedNames].sort()).toEqual(nonBrowserNames)
   })
 
-  it('ci.yml invokes the derivation script in the test-shared job', () => {
+  it('ci.yml runs the derived list in the test-shared job', () => {
     // Scoped to the job AND read without comments, because this one step is
     // what runs every derived project: commenting it out, or moving it to a
     // job that does not run on a pull request, silently retires all nine.
@@ -239,7 +242,9 @@ describe('ci.yml runs every node vitest project vitest.projects.json lists', () 
     // one run it was the critical path, 2m14s serial behind mcp-node's
     // shard 2, with every other job finished a minute earlier.
     const testShared = readCiJob('test-shared')
-    expect(testShared).toMatch(/run:\s*node tools\/checks\/src\/run-shared-layer-tests\.mjs/)
+    expect(testShared).toMatch(
+      /run:\s*node tools\/checks\/src\/affected-cli\.mjs run test-shared\b/,
+    )
   })
 
   it('every PROJECTS_RUN_ELSEWHERE exemption is actually covered in ci.yml by its declared mechanism', () => {
@@ -281,8 +286,8 @@ describe('ci.yml runs every node vitest project vitest.projects.json lists', () 
   // actual, unconditional text instead of from the map's bookkeeping.
   it('no derived project is also named by a literal --project=<name> flag elsewhere in ci.yml (would run twice)', () => {
     const withoutComments = readCiWorkflowWithoutComments()
-    // run-shared-layer-tests.mjs's own step has no --project= literal (its
-    // names are computed at run time), so every match found here comes from
+    // The test-shared step has no --project= literal (its names are computed
+    // at run time by affected-cli.mjs), so every match found here comes from
     // some OTHER job's dedicated step.
     const flaggedElsewhere = new Set(
       [...withoutComments.matchAll(/--project[=\s]([^\s]+)/g)].map((m) => m[1]),

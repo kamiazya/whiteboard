@@ -363,6 +363,10 @@ const DOCKERFILE_USES = {
     builds: false,
     reason: 'reads the Dockerfile to derive which diffs can affect a build; never runs one',
   },
+  'tools/checks/src/affected-replay.mjs': {
+    builds: false,
+    reason: "prices dry-run-docker's skip through docker-build-inputs.mjs; never runs a build",
+  },
   'tools/arch-lint/src/repo-root-files.test.ts': {
     builds: false,
     reason: 'asserts the file is an allowed repo-root entry',

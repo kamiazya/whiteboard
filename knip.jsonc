@@ -44,17 +44,16 @@
         // statically imported within this workspace.
         "src/verify-pack-contents.mjs",
         "src/release-gate-matrix-schema.mjs",
-        // run-shared-layer-tests.mjs itself is NOT listed here: knip's
-        // GitHub Actions plugin already detects it as an entry from ci.yml's
-        // `run: node tools/checks/src/run-shared-layer-tests.mjs` step, and
-        // listing it again trips knip's "redundant entry pattern" hint.
-        // vitest-projects.mjs, its dependency, still needs a listing of its
-        // own: it is also reached by a dynamically-built path
-        // (`join(ROOT, 'tools/checks/src/...')`) from arch-lint's tests, which
-        // the GitHub Actions plugin has no way to see.
+        // affected-cli.mjs itself is NOT listed here: knip's GitHub Actions
+        // plugin already detects it as an entry from ci.yml's
+        // `run: node tools/checks/src/affected-cli.mjs` steps, and listing it
+        // again trips knip's "redundant entry pattern" hint. Its
+        // dependencies still need a listing of their own: they are also
+        // reached by a dynamically-built path (`join(ROOT,
+        // 'tools/checks/src/...')`) from arch-lint's tests, which the GitHub
+        // Actions plugin has no way to see.
         "src/vitest-projects.mjs",
         "src/affected.mjs",
-        "src/affected-cli.mjs",
         // The benefit instrument: run by hand, never by CI.
         "src/affected-replay.mjs"
       ],

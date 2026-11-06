@@ -24,11 +24,20 @@
  */
 import { existsSync, readFileSync } from 'node:fs'
 import { join, posix } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { collectRelativeImportEdges } from './cycle-check.js'
 import { REPO_ROOT, relativeToRepo, walk, workspaceDirs } from './scan-roots.js'
 import { isShippedPath } from './source-scan.js'
 import { resolveRelativeSource, sourceCandidates } from './value-import-closure.js'
+
+const scopeModule = (await import(
+  pathToFileURL(join(REPO_ROOT, 'tools/checks/src/affected.mjs')).href
+)) as {
+  readGraph: (root: string) => { id: string; dir: string; deps: string[] }[]
+  CROSS_PACKAGE_READS: { reader: string; target: string }[]
+  TEST_INVENTORY_READERS: Record<string, string>
+}
 
 /**
  * Relative imports that deliberately leave their workspace, each as
@@ -261,5 +270,65 @@ describe('the relative edges no resolver can follow are a known set', () => {
       .filter(([key, reason]) => !real.has(key) || reason.trim().length <= 20)
       .map(([key]) => key)
     expect(stale, 'drop the entry, or give it a reason').toEqual([])
+  })
+})
+
+// A test reaching into another workspace by a relative path is a dependency
+// no manifest records, so the change scope (tools/checks/src/affected.mjs)
+// would not run the reader when only the target changed. Every such escape
+// is either already an edge of the manifest graph, or a CROSS_PACKAGE_READS
+// or TEST_INVENTORY_READERS entry.
+describe('the change scope knows every escape into another workspace', () => {
+  const graph = scopeModule.readGraph(REPO_ROOT)
+  const nodeAt = (path: string) =>
+    graph
+      .filter((node) => path === node.dir || path.startsWith(`${node.dir}/`))
+      .sort((a, b) => b.dir.length - a.dir.length)[0]
+  const dependsOn = (from: string, to: string): boolean => {
+    const seen = new Set<string>()
+    const stack = [from]
+    while (stack.length > 0) {
+      const id = stack.pop() as string
+      if (id === to && id !== from) return true
+      if (seen.has(id)) continue
+      seen.add(id)
+      stack.push(...(graph.find((node) => node.id === id)?.deps ?? []))
+    }
+    return false
+  }
+
+  const crossings = Object.keys(ESCAPES).flatMap((key) => {
+    const [from = '', target = ''] = key.split(' -> ')
+    const reader = nodeAt(from)
+    const owner = nodeAt(staticPrefix(target))
+    return reader && owner && reader.id !== owner.id
+      ? [{ key, reader: reader.id, owner: owner.id }]
+      : []
+  })
+
+  it('finds the escapes that cross into another workspace', () => {
+    expect(crossings.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it('records each one as a dependency the scope follows', () => {
+    const unknown = crossings.filter(
+      ({ reader, owner }) =>
+        !dependsOn(reader, owner) &&
+        !scopeModule.CROSS_PACKAGE_READS.some(
+          (read) => read.reader === reader && read.target === owner,
+        ),
+    )
+    expect(
+      unknown.map(({ key }) => key),
+      'add a CROSS_PACKAGE_READS entry in tools/checks/src/affected.mjs',
+    ).toEqual([])
+  })
+
+  it('records the test-file inventory glob as a TEST_INVENTORY_READERS entry', () => {
+    const globbers = Object.keys(ESCAPES)
+      .filter((key) => /\*\*\/\*\.test\./.test(key))
+      .map((key) => nodeAt(key.split(' -> ')[0] ?? '')?.id)
+    expect(globbers.length).toBeGreaterThan(0)
+    for (const id of globbers) expect(Object.keys(scopeModule.TEST_INVENTORY_READERS)).toContain(id)
   })
 })

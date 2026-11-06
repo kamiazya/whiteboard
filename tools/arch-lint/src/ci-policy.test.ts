@@ -412,6 +412,9 @@ describe('workflows — a job that runs a browser project uploads its traces whe
   /** `cwd` is where the step runs; `--filter` moves the line into its package's directory. */
   function lineRunsBrowser(job: Job, line: string, browser: Browser, cwd: string): boolean {
     if (/\btest:browser\b/.test(line)) return true
+    // The scoped runner: its project names arrive at run time, out of the
+    // job's universe, and test-browser's universe is the browser projects.
+    if (/\baffected-cli\.mjs\s+run\s+test-browser\b/.test(line)) return true
     if (selectsBrowserProject(job, line, browser)) return true
     const pkg = filtered(line)
     const dir = pkg?.dir ?? cwd

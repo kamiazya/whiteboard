@@ -26,7 +26,7 @@ import {
   validateSelection,
 } from './affected.mjs'
 import { isRunAsScript } from './is-run-as-script.mjs'
-import { readVitestProjects } from './vitest-projects.mjs'
+import { buildVitestArgv, readVitestProjects } from './vitest-projects.mjs'
 
 const DEFAULT_REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 
@@ -49,11 +49,11 @@ function readChanges(repoRoot, base, workingTree) {
   return changes
 }
 
-/** @param {Record<string, string>} values */
-function writeOutputs(values) {
+/** @param {Record<string, string | undefined>} env @param {Record<string, string>} values */
+function writeOutputs(env, values) {
   const lines = Object.entries(values).map(([key, value]) => `${key}=${value}`)
   for (const line of lines) process.stderr.write(`[affected] ${line}\n`)
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
+  if (env.GITHUB_OUTPUT) appendFileSync(env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
 }
 
 /** @param {Plan} plan */
@@ -82,9 +82,9 @@ function computePlan(repoRoot, base, event, workingTree = false) {
   return { inputs, plan: planScope({ changes, event, ...inputs }) }
 }
 
-/** @param {string} repoRoot @param {string[]} args */
-function spawnVitest(repoRoot, args) {
-  const result = spawnSync('pnpm', args, { cwd: repoRoot, stdio: 'inherit' })
+/** @param {CommandInput} input @param {string[]} args */
+function spawnVitest({ repoRoot, spawn }, args) {
+  const result = spawn('pnpm', args, { cwd: repoRoot, stdio: 'inherit' })
   if (result.error) {
     process.stderr.write(`[affected] pnpm could not start: ${result.error.message}\n`)
     return 1
@@ -99,10 +99,17 @@ const message = (error) => (error instanceof Error ? error.message : String(erro
  * The scope job: the whole plan, for ci-gate and the run summary. It FAILS
  * rather than guessing, and ci-gate fails with it; each job's own detection
  * fails open independently.
- * @typedef {{ repoRoot: string, rest: string[], base: string, event: string }} CommandInput
+ * @typedef {{
+ *   repoRoot: string,
+ *   rest: string[],
+ *   base: string,
+ *   event: string,
+ *   env: Record<string, string | undefined>,
+ *   spawn: (cmd: string, args: string[], opts: Record<string, unknown>) => { status: number | null, error?: Error },
+ * }} CommandInput
  * @param {CommandInput} input
  */
-function planCommand({ repoRoot, base, event }) {
+function planCommand({ repoRoot, base, event, env }) {
   let plan
   try {
     ;({ plan } = computePlan(repoRoot, base, event))
@@ -111,10 +118,8 @@ function planCommand({ repoRoot, base, event }) {
     return 1
   }
   process.stdout.write(`${JSON.stringify(plan, null, 2)}\n`)
-  writeOutputs({ plan: JSON.stringify({ everything: plan.everything, jobs: plan.jobs }) })
-  if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, summaryMarkdown(plan))
-  }
+  writeOutputs(env, { plan: JSON.stringify({ everything: plan.everything, jobs: plan.jobs }) })
+  if (env.GITHUB_STEP_SUMMARY) appendFileSync(env.GITHUB_STEP_SUMMARY, summaryMarkdown(plan))
   return 0
 }
 
@@ -123,7 +128,7 @@ function planCommand({ repoRoot, base, event }) {
  * computing the selection runs the job's whole universe.
  * @param {CommandInput} input
  */
-function jobCommand({ repoRoot, rest, base, event }) {
+function jobCommand({ repoRoot, rest, base, event, env }) {
   const jobId = rest[0]
   if (!PROJECT_JOBS.includes(jobId) && !(jobId in PACKAGE_JOBS)) {
     process.stderr.write(`[affected] ${jobId} is not a scoped job\n`)
@@ -146,7 +151,7 @@ function jobCommand({ repoRoot, rest, base, event }) {
     }
     job = failOpenJob(jobId, projects, message(error))
   }
-  writeOutputs({
+  writeOutputs(env, {
     run: String(job.run),
     projects: JSON.stringify(job.projects ?? []),
     reason: job.reason.replace(/\n/g, ' '),
@@ -159,13 +164,15 @@ function jobCommand({ repoRoot, rest, base, event }) {
  * through AFFECTED_PROJECTS and are checked before vitest sees them.
  * @param {CommandInput} input
  */
-function runCommand({ repoRoot, rest }) {
+function runCommand(input) {
+  const { repoRoot, rest, env } = input
   const jobId = rest[0]
-  const forwarded = rest.slice(1).filter((arg) => arg !== '--')
+  const forwarded = rest.slice(1)
   let names
   try {
+    if (!PROJECT_JOBS.includes(jobId)) throw new Error(`${jobId} runs no vitest projects`)
     const projects = attributeProjects(readVitestProjects(repoRoot), readGraph(repoRoot))
-    const raw = process.env.AFFECTED_PROJECTS
+    const raw = env.AFFECTED_PROJECTS
     if (raw === undefined) throw new Error('AFFECTED_PROJECTS is unset')
     names = validateSelection(JSON.parse(raw), jobUniverse(jobId, projects))
   } catch (error) {
@@ -173,12 +180,12 @@ function runCommand({ repoRoot, rest }) {
     return 1
   }
   process.stderr.write(`[affected] ${jobId}: ${names.join(', ')}\n`)
-  const args = ['exec', 'vitest', 'run', ...names.map((name) => `--project=${name}`), ...forwarded]
+  const args = buildVitestArgv(names, forwarded)
   // A shard can draw no file when the selection is small; the names were
   // just checked against the inventory, so "no test files" here is the
   // shard split, not a filter that matched nothing.
   if (forwarded.some((arg) => arg.startsWith('--shard'))) args.push('--passWithNoTests')
-  return spawnVitest(repoRoot, args)
+  return spawnVitest(input, args)
 }
 
 /**
@@ -186,7 +193,8 @@ function runCommand({ repoRoot, rest }) {
  * origin/main, working tree and untracked files included.
  * @param {CommandInput} input
  */
-function localCommand({ repoRoot, rest }) {
+function localCommand(input) {
+  const { repoRoot, rest } = input
   const ref = option(rest, '--base', 'origin/main')
   const mergeBase = execFileSync('git', ['merge-base', ref, 'HEAD'], {
     cwd: repoRoot,
@@ -210,15 +218,19 @@ function localCommand({ repoRoot, rest }) {
     process.stdout.write('\nno vitest project is affected\n')
     return 0
   }
-  const args = ['exec', 'vitest', 'run', ...runnable.map((name) => `--project=${name}`)]
+  const args = buildVitestArgv(runnable)
   process.stdout.write(`\npnpm ${args.join(' ')}\n`)
-  return spawnVitest(repoRoot, args)
+  return spawnVitest(input, args)
 }
 
 const COMMANDS = { plan: planCommand, job: jobCommand, run: runCommand, local: localCommand }
 
-/** @param {string[]} argv @param {string} repoRoot */
-export function main(argv, repoRoot = DEFAULT_REPO_ROOT) {
+/**
+ * @param {string[]} argv
+ * @param {{ repoRoot?: string, env?: Record<string, string | undefined>, spawn?: CommandInput['spawn'] }} [options]
+ */
+export function main(argv, options = {}) {
+  const { repoRoot = DEFAULT_REPO_ROOT, env = process.env, spawn = spawnSync } = options
   const [command, ...rest] = argv
   const handler = COMMANDS[/** @type {keyof typeof COMMANDS} */ (command)]
   if (!handler) {
@@ -232,7 +244,7 @@ export function main(argv, repoRoot = DEFAULT_REPO_ROOT) {
   // it selects everything.
   const base = option(rest, '--base', 'HEAD^1')
   const event = option(rest, '--event', 'unspecified')
-  return handler({ repoRoot, rest, base, event })
+  return handler({ repoRoot, rest, base, event, env, spawn })
 }
 
 if (isRunAsScript(import.meta.url)) process.exit(main(process.argv.slice(2)))
