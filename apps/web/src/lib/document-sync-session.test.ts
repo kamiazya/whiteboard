@@ -858,6 +858,31 @@ describe('createDocumentSyncSession', () => {
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
   })
 
+  it('a snapshot refused after the document was loaded drops queued and later edits too', async () => {
+    // A reconnect replays the snapshot; one in a retired shape (an older
+    // peer wrote the record between the two connections) is refused the way
+    // the first was, and the session stops writing the way a refused live
+    // update stops it.
+    const { backend, deps, session } = await sessionWithOneCommittedEdit()
+    const queued: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), queued), queued)
+    const retired = new LoroDoc()
+    writeSpatialCanvas(retired, twoNodeCanvas())
+    retired
+      .getMap('nodes')
+      .set('old', { id: 'old', type: 'text', text: 'hi', x: 0, y: 0, width: 1, height: 1 })
+    retired.commit()
+
+    backend._ctrl.handlers!.onSnapshot(retired.export({ mode: 'snapshot' }))
+    expect(deps.onBackendError).toHaveBeenCalledWith('retired-stored-shape')
+    const after: EditorCommand = { kind: 'delete-node', id: TEXT_NODE_B.id }
+    session.onChange(applyCommand(session.getCanvas(), after), after)
+    await vi.advanceTimersByTimeAsync(COMMIT_DEBOUNCE_MS * 2)
+    expect(session.undo()).toBe(false)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+  })
+
   it('a readable snapshot after a refused one takes writes again', async () => {
     // A reconnect replays the snapshot; one this build reads whole is the
     // document again, and the person's next edit lands on it. The edits
