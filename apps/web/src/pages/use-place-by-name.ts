@@ -18,13 +18,13 @@ const log = getAppLogger('place-by-name')
 export function usePlaceByName(
   controller: Pick<
     DaemonDocumentController,
-    'workspaceId' | 'path' | 'documents' | 'switchDocument' | 'refreshDocuments'
+    'workspaceId' | 'path' | 'documents' | 'followMove' | 'refreshDocuments'
   >,
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
   onPathMoved: ((path: string) => void) | undefined,
 ): (name: string) => void {
-  const { workspaceId, path, documents, switchDocument, refreshDocuments } = controller
+  const { workspaceId, path, documents, followMove, refreshDocuments } = controller
   const existingPaths = useMemo(() => documents.map((document) => document.path), [documents])
   return useCallback(
     (name: string) => {
@@ -38,7 +38,7 @@ export function usePlaceByName(
       }
       renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, documentId, to).then(
         () => {
-          switchDocument(to)
+          followMove(to)
           refreshDocuments()
           onPathMoved?.(to)
         },
@@ -52,7 +52,7 @@ export function usePlaceByName(
       path,
       documents,
       existingPaths,
-      switchDocument,
+      followMove,
       refreshDocuments,
       onPathMoved,
     ],
@@ -68,20 +68,20 @@ export function usePlaceByName(
 export function useMoveByPath(
   controller: Pick<
     DaemonDocumentController,
-    'workspaceId' | 'path' | 'documents' | 'switchDocument' | 'refreshDocuments'
+    'workspaceId' | 'path' | 'documents' | 'followMove' | 'refreshDocuments'
   >,
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
   onPathMoved: ((path: string) => void) | undefined,
 ): (to: string) => Promise<void> {
-  const { workspaceId, path, documents, switchDocument, refreshDocuments } = controller
+  const { workspaceId, path, documents, followMove, refreshDocuments } = controller
   return useCallback(
     async (to: string) => {
       if (workspaceId === null || path === null || to === path) return
       const documentId = documents.find((each) => each.path === path)?.documentId
       if (documentId === undefined) throw new Error('No document is open to move.')
       await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, documentId, to)
-      switchDocument(to)
+      followMove(to)
       refreshDocuments()
       onPathMoved?.(to)
     },
@@ -91,7 +91,7 @@ export function useMoveByPath(
       workspaceId,
       path,
       documents,
-      switchDocument,
+      followMove,
       refreshDocuments,
       onPathMoved,
     ],

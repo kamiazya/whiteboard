@@ -61,6 +61,12 @@ export interface DaemonDocumentController {
   workspaces: WorkspaceSummary[]
   documents: DocumentSummary[]
   switchDocument: (path: string) => void
+  /**
+   * Follow the open document to the path the keeper just moved it to. The
+   * listed row is re-pathed in the same step, so the id lookup by path does
+   * not go dark until the relist arrives.
+   */
+  followMove: (to: string) => void
   createDocument: (path: string) => Promise<void>
   /**
    * Copy the document on screen and FOLLOW the copy.
@@ -249,6 +255,14 @@ export function useDaemonDocumentController(
     setPath(nextPath)
   }, [])
 
+  const followMove = useCallback(
+    (to: string) => {
+      setDocuments((rows) => rows.map((row) => (row.path === path ? { ...row, path: to } : row)))
+      setPath(to)
+    },
+    [path],
+  )
+
   const createDocument = useCallback(
     async (newPath: string): Promise<void> => {
       if (workspaceId === null) return
@@ -311,6 +325,7 @@ export function useDaemonDocumentController(
     workspaces,
     documents,
     switchDocument,
+    followMove,
     createDocument,
     duplicateDocument,
     deleteDocument,

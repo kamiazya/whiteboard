@@ -314,7 +314,8 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Raised by two: the session's refused-write report and its teardown.
   'apps/web/src/hooks/useDocumentSync.ts#useDocumentSync': 349,
   'apps/web/src/lib/browser-version-store.ts#save': 58,
-  'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 59,
+  // Raised by nine: every seam method resolves the document id to the path the store keys by.
+  'apps/web/src/lib/browser-versions-backend.ts#createBrowserVersionsBackend': 68,
   'apps/web/src/lib/spatial/clipboard-fragment.ts#remintClipboardFragment': 55,
   'apps/web/src/lib/daemon-files-source.ts#createDaemonFilesSource': 122,
   'apps/web/src/lib/command-writes.ts#commandTargetKey': 56,
@@ -429,7 +430,9 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // syncs through, the transport rule in front of it, and the auth refusal that
   // belongs to a connection rather than to a page.
   'apps/web/src/pages/use-daemon-document-backend.ts#useDaemonDocumentBackend': 91,
-  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 179,
+  // Raised by five: followMove re-paths the listed row with the page's path so the id lookup
+  // survives the gap before the relist.
+  'apps/web/src/pages/use-daemon-document-controller.ts#useDaemonDocumentController': 184,
   // The document-menu bundle: two hooks, the rows, the dialog and the alert row.
   // It is over the budget because it RETURNS JSX — the rows and the dialog are
   // most of its lines and splitting them out would be a component per row, which

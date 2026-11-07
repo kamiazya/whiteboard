@@ -12,7 +12,7 @@ function controllerOver(path: string, documents: Array<{ documentId: string; pat
     workspaceId: 'w1',
     path,
     documents: documents as never,
-    switchDocument: vi.fn(),
+    followMove: vi.fn(),
     refreshDocuments: vi.fn(),
   }
 }
@@ -39,7 +39,7 @@ describe('useMoveByPath', () => {
     expect(url).toBe(`${BASE}/api/workspaces/w1/documents/${ID}/path`)
     expect(init.method).toBe('PUT')
     expect(JSON.parse(String(init.body))).toEqual({ path: 'boards/mood-2' })
-    expect(controller.switchDocument).toHaveBeenCalledWith('boards/mood-2')
+    expect(controller.followMove).toHaveBeenCalledWith('boards/mood-2')
     expect(controller.refreshDocuments).toHaveBeenCalled()
     expect(onPathMoved).toHaveBeenCalledWith('boards/mood-2')
   })
@@ -60,7 +60,7 @@ describe('useMoveByPath', () => {
     const { result } = renderHook(() => useMoveByPath(controller, fetchFn, BASE, undefined))
     await expect(result.current('elsewhere')).rejects.toThrow('No document is open to move.')
     expect(fetchFn).not.toHaveBeenCalled()
-    expect(controller.switchDocument).not.toHaveBeenCalled()
+    expect(controller.followMove).not.toHaveBeenCalled()
   })
 })
 
@@ -85,7 +85,7 @@ describe('usePlaceByName', () => {
     const { result } = renderHook(() => usePlaceByName(controller, fetchFn, BASE, undefined))
     act(() => result.current('Checkout'))
     expect(fetchFn).not.toHaveBeenCalled()
-    expect(controller.switchDocument).not.toHaveBeenCalled()
+    expect(controller.followMove).not.toHaveBeenCalled()
     await expectLoggedFailure('placing a document by its name found no listed document')
   })
 })
