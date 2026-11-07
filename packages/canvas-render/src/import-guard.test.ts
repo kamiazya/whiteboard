@@ -24,8 +24,14 @@ const FORBIDDEN_PATTERNS: readonly { name: string; pattern: RegExp }[] = [
   { name: 'inversify import', pattern: /from\s+['"]inversify['"]/ },
 ]
 
+// `test-utils/` is test support and never ships, the same line the repo-wide
+// boundary scan draws: its wasm loader reads the artifact with `node:fs`.
 function isProductionSource(path: string): boolean {
-  return !path.includes('.test.') && !path.includes('.browser.test.')
+  return (
+    !path.includes('.test.') &&
+    !path.includes('.browser.test.') &&
+    !path.startsWith('./test-utils/')
+  )
 }
 
 describe('shared-layer import guard', () => {

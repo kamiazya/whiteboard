@@ -1,21 +1,47 @@
+import { existsSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { defineProject } from 'vitest/config'
 
 const here = dirname(fileURLToPath(import.meta.url))
+const wasmDir = resolve(here, '../../target/dist/wasm-bindgen/whiteboard-wasm')
 
-// The TypeScript-against-wasm differential (ADR-0054, QR-21 layer 2). It
-// needs the artifact `pnpm rust:build:wasm` writes, so CI runs it in the
-// `rust` job after that build and nowhere else; the stress lane leaves its
-// files out for the same reason. The directory reaches the tests through the
-// environment so no test counts its way up to the repository root.
+// The TypeScript-against-wasm differential (ADR-0054, QR-21). It needs the
+// artifact `pnpm rust:build:wasm` writes, so CI runs it in the `rust` job
+// after that build and nowhere else.
+//
+// Two layers run here:
+// - layer 2, `*.rust.test.ts`: properties holding a TypeScript function to its
+//   Rust twin, always included, failing on CI when the artifact is absent;
+// - layer 1, the EXISTING layout/edges suites with the grid router swapped for
+//   the Rust port (`./grid-route.js` aliased to the wasm-backed shim), so its
+//   examples, the optimality property and the routing scoreboard judge the
+//   Rust router unchanged. They are included only when the artifact is there,
+//   because a run without it — the stress lane, a fresh checkout — would
+//   otherwise run them against nothing.
+const ported = existsSync(resolve(wasmDir, 'whiteboard_wasm.js'))
+
 export default defineProject({
+  resolve: {
+    alias: [
+      {
+        find: /^\.\/grid-route\.js$/,
+        replacement: resolve(here, 'src/test-utils/wasm/grid-route.ts'),
+      },
+    ],
+  },
   test: {
     name: 'canvas-render-rust',
     environment: 'node',
-    include: ['src/**/*.rust.test.ts'],
-    env: {
-      WHITEBOARD_WASM_DIR: resolve(here, '../../target/dist/wasm-bindgen/whiteboard-wasm'),
-    },
+    include: ['src/**/*.rust.test.ts', ...(ported ? ['src/layout/edges/**/*.test.ts'] : [])],
+    // grid-route.cost.test.ts counts the obstacle READS the TypeScript search
+    // makes; the shim reads each rect once per call, so under Rust its bound
+    // cannot fail and it would judge nothing.
+    exclude: ['src/**/*.browser.test.ts', 'src/layout/edges/grid-route.cost.test.ts'],
+    testTimeout: 20_000,
+    // `vitest bench --project "canvas-render-rust (bench)"`: the spike's
+    // TypeScript-against-Rust measurement.
+    benchmark: { include: ['src/**/*.rust.bench.ts'] },
+    env: { WHITEBOARD_WASM_DIR: wasmDir },
   },
 })

@@ -45,15 +45,60 @@ pub fn cos(x: f64) -> f64 {
     if x.abs() >= REDUCTION_CEILING { f64::NAN } else { libm::cos(x) }
 }
 
+/// `Math.min(a, b)`: NaN if either is NaN, and `-0` below `+0`.
+///
+/// `f64::min` answers the other operand for a NaN and leaves the sign of a
+/// zero unspecified, so a port that called it would disagree with its
+/// TypeScript oracle on exactly the inputs a property draws.
+#[must_use]
+pub fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if a < b {
+        a
+    } else if b < a {
+        b
+    } else if a.is_sign_negative() {
+        a
+    } else {
+        b
+    }
+}
+
+/// `Math.max(a, b)`: NaN if either is NaN, and `+0` above `-0`; see [`js_min`].
+#[must_use]
+pub fn js_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() {
+        f64::NAN
+    } else if b > a || (a <= b && a.is_sign_negative()) {
+        b
+    } else {
+        a
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::hypot;
+    use super::{hypot, js_max, js_min};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
     fn the_reduction_ceiling_is_the_double_det_math_ts_names_by_its_high_word() {
         assert_eq!(super::REDUCTION_CEILING.to_bits(), 0x4139_21fb_0000_0000);
+    }
+
+    #[test]
+    fn js_min_and_max_propagate_nan_and_order_signed_zeros_as_math_does() {
+        assert!(js_min(f64::NAN, 1.0).is_nan() && js_min(1.0, f64::NAN).is_nan());
+        assert!(js_max(f64::NAN, 1.0).is_nan() && js_max(1.0, f64::NAN).is_nan());
+        assert_eq!(js_min(-0.0, 0.0).to_bits(), (-0.0f64).to_bits());
+        assert_eq!(js_min(0.0, -0.0).to_bits(), (-0.0f64).to_bits());
+        assert_eq!(js_max(-0.0, 0.0).to_bits(), 0.0f64.to_bits());
+        assert_eq!(js_max(0.0, -0.0).to_bits(), 0.0f64.to_bits());
+        assert_eq!(js_min(2.0, -3.0).to_bits(), (-3.0f64).to_bits());
+        assert_eq!(js_max(2.0, -3.0).to_bits(), 2.0f64.to_bits());
+        assert_eq!(js_min(f64::NEG_INFINITY, 0.0).to_bits(), f64::NEG_INFINITY.to_bits());
     }
 
     #[test]
