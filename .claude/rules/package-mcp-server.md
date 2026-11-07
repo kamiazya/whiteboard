@@ -29,11 +29,11 @@ scan says.
 - **Every HTTP route the daemon registers is fuzzed from its own schema**
   (`server/app.routes.fuzz.property.test.ts`), the sibling of server-core's
   `/api/v1` lane over everything else `createApp` mounts. Routes are read
-  off `app.routes`; the three wildcard patterns dispatch on the URL's tail,
-  so their actions are read off the `onDocumentAction` /
-  `onDocumentFile` / `onDocumentsRoute` calls in the routes directory and
-  expanded — a route added without a rule fails the ledger, and a rule
-  without a route fails it the other way. A route may answer (2xx, 204 for
+  off `app.routes` — every document route is a concrete
+  `/api/workspaces/:workspaceId/documents/:documentId/<suffix>` pattern, since
+  the path-addressed wildcards left with the path form — so a route added
+  without a rule fails the ledger, and a rule without a route fails it the
+  other way. A route may answer (2xx, 204 for
   a store, 501 when the composition lacks the feature) or refuse with a
   JSON reason (4xx, and 503 for "no browser is connected"), and the body
   parses under `apiErrorBodySchema` — one family, `{ error, message?, hint? }`
@@ -111,12 +111,16 @@ scan says.
   and `createServer` alike: JSON 500 `internal_error`, or 503 `database_busy`
   with `Retry-After` when ports' `isDatabaseBusy` holds. The error reaches the
   log, never the body.
-- **A page-facing write never mints.** `/api/w/:workspaceId/document/*`
-  sits behind `refuseUnknownWorkspace` and `refuseTrashedDocument`
-  (`routes/document.ts`'s `refuseUnaddressable`), so a fixture seeds its
-  workspace with `createWorkspace` / `seedWorkspaceRow` rather than by
-  posting to an unknown handle. Nothing writes a document's content by path
-  over HTTP: a fixture seeds content with `writeDocumentUpdate`
+- **A page-facing write never mints.** Every document route is addressed by
+  id (`/api/workspaces/:workspaceId/documents/:documentId/…`), behind
+  `refuseUnknownWorkspace` and `resolveDocumentAddress`
+  (`routes/document.ts`'s `refuseUnaddressable`): an id the index does not
+  hold live — unknown, another workspace's, in the trash — resolves to nothing
+  and the route answers 404, so a stale tab cannot recreate a deleted document
+  at its old address. A fixture seeds its workspace with `createWorkspace` /
+  `seedWorkspaceRow` and its documents with `createTestDocument`, which answers
+  the id a request needs. Nothing writes a document's content by HTTP outside
+  the sync routes: a fixture seeds content with `writeDocumentUpdate`
   (`routes/_test-helpers.ts`) or edits the record through `postDocumentEdit`.
 
 ## The export reads the workspace's tag library (ADR-0040 decision 5)

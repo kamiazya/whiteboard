@@ -50,6 +50,11 @@ export function documentReadFailureMessage(kind: DocumentReadFailure): string {
  * which the header's save status already reports, and it says nothing about
  * whether the stored document is readable.
  */
-export function isDocumentReadFailure(reason: string | null): reason is DocumentReadFailure {
+function isDocumentReadFailure(reason: string | null): reason is DocumentReadFailure {
   return reason !== null && reason in MESSAGES
+}
+
+/** The read failure a backend reason names, or null when it is not one (a write that did not land, nothing). */
+export function documentReadFailureOf(reason: string | null): DocumentReadFailure | null {
+  return isDocumentReadFailure(reason) ? reason : null
 }

@@ -20,8 +20,8 @@ import { createDaemonVersionsBackend } from './versions-backend.js'
 // The URL each client function put on the wire before its path moved onto the
 // shared builders, written out literally: the move must not change a byte.
 const BASE = 'http://daemon.test'
+const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const WS = 'ws a'
-const PATH = 'notes/a b'
 
 async function urlOf(call: (fetchFn: typeof fetch) => Promise<unknown>): Promise<string> {
   let seen = ''
@@ -37,23 +37,23 @@ describe('daemon-api-client request URLs', () => {
   it.each([
     [
       'renameDocumentPath',
-      (f: typeof fetch) => renameDocumentPath(f, BASE, WS, PATH, 'x'),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b/path`,
+      (f: typeof fetch) => renameDocumentPath(f, BASE, WS, ID, 'x'),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}/path`,
     ],
     [
       'deleteDocument',
-      (f: typeof fetch) => deleteDocument(f, BASE, WS, PATH),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b`,
+      (f: typeof fetch) => deleteDocument(f, BASE, WS, ID),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}`,
     ],
     [
       'setDocumentPinned',
-      (f: typeof fetch) => setDocumentPinned(f, BASE, WS, PATH, true),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b/pin`,
+      (f: typeof fetch) => setDocumentPinned(f, BASE, WS, ID, true),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}/pin`,
     ],
     [
       'setDocumentDisplayName',
-      (f: typeof fetch) => setDocumentDisplayName(f, BASE, WS, PATH, 'n'),
-      `${BASE}/api/workspaces/ws%20a/documents/notes/a%20b/name`,
+      (f: typeof fetch) => setDocumentDisplayName(f, BASE, WS, ID, 'n'),
+      `${BASE}/api/workspaces/ws%20a/documents/${ID}/name`,
     ],
     [
       'getWorkspaceNames',
@@ -106,15 +106,15 @@ describe('daemon-api-client request URLs', () => {
       seen.push(String(input))
       return jsonResponse({}, 500)
     }) as typeof fetch)
-    await capture.list(WS, PATH).catch(() => undefined)
-    await capture.loadPast(WS, PATH, 'v/1').catch(() => undefined)
-    await capture.save(WS, PATH, { label: 'l' }).catch(() => undefined)
-    await capture.restore(WS, PATH, 'v/1').catch(() => undefined)
+    await capture.list(WS, ID).catch(() => undefined)
+    await capture.loadPast(WS, ID, 'v/1').catch(() => undefined)
+    await capture.save(WS, ID, { label: 'l' }).catch(() => undefined)
+    await capture.restore(WS, ID, 'v/1').catch(() => undefined)
     expect(seen).toEqual([
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions',
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions/v%2F1/document',
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions',
-      '/api/workspaces/ws%20a/documents/notes/a%20b/versions/v%2F1/restore',
+      `/api/workspaces/ws%20a/documents/${ID}/versions`,
+      `/api/workspaces/ws%20a/documents/${ID}/versions/v%2F1/document`,
+      `/api/workspaces/ws%20a/documents/${ID}/versions`,
+      `/api/workspaces/ws%20a/documents/${ID}/versions/v%2F1/restore`,
     ])
   })
 })

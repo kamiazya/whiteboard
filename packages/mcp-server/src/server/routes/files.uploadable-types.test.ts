@@ -10,7 +10,12 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { storeMemoryModule } from '../../shared/test-utils/store-memory.module.js'
-import { testDataLayout, withTempDataDir } from './_test-helpers.js'
+import {
+  createTestDocument,
+  documentIdAt,
+  testDataLayout,
+  withTempDataDir,
+} from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-files-uploadable-')
 
@@ -27,11 +32,14 @@ const { createApp } = await import('../app.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')
 
 const TOKEN = 'uploadable-token'
+const WORKSPACE = '01WHWFM81C4RQEK51GAD4T6ATY'
 
 async function app() {
   const serverDeps = resolveServerDeps(createContainer(storeMemoryModule))
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01WHWFM81C4RQEK51GAD4T6ATY' })
-  return createApp({
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: WORKSPACE })
+  await createTestDocument(serverDeps, { workspaceId: WORKSPACE, path: 'board' })
+  const documentId = await documentIdAt(serverDeps, WORKSPACE, 'board')
+  const built = createApp({
     authMode: 'local-daemon' as const,
     token: TOKEN,
     serverDeps,
@@ -39,7 +47,11 @@ async function app() {
     touch: vi.fn(),
     getStatus: vi.fn(),
   } as unknown as Parameters<typeof createApp>[0])
+  return { request: built.request.bind(built), documentId }
 }
+
+const fileUrl = (documentId: string, fileId: string) =>
+  `/api/workspaces/${WORKSPACE}/documents/${documentId}/files/${fileId}`
 
 function put(
   target: Awaited<ReturnType<typeof app>>,
@@ -47,7 +59,7 @@ function put(
   type: string,
   body: Uint8Array<ArrayBuffer>,
 ) {
-  return target.request(`/api/w/01WHWFM81C4RQEK51GAD4T6ATY/document/board/file/${fileId}`, {
+  return target.request(fileUrl(target.documentId, fileId), {
     method: 'PUT',
     headers: { Authorization: `Bearer ${TOKEN}`, 'Content-Type': type },
     body,
@@ -70,12 +82,9 @@ describe('the daemon file route against the declared upload contract', () => {
     const id = `up-${type.replace(/\W/g, '')}`
     const stored = await put(target, id, type, new Uint8Array([1, 2, 3]))
     expect(stored.status).toBe(204)
-    const read = await target.request(
-      `/api/w/01WHWFM81C4RQEK51GAD4T6ATY/document/board/file/${id}`,
-      {
-        headers: { Authorization: `Bearer ${TOKEN}` },
-      },
-    )
+    const read = await target.request(fileUrl(target.documentId, id), {
+      headers: { Authorization: `Bearer ${TOKEN}` },
+    })
     expect(read.status).toBe(200)
     expect(read.headers.get('Content-Type')).toBe(type)
   })

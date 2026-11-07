@@ -90,7 +90,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" documentId="canvas-a" />
       </div>,
     )
 
@@ -128,7 +128,7 @@ describe('VersionTimeline browser mode', () => {
       >
         <VersionTimeline
           workspaceId="sess_1"
-          path="canvas-a"
+          documentId="canvas-a"
           onPreview={(session) => {
             captured.session = session
           }}
@@ -166,7 +166,7 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" documentId="canvas-a" />
       </div>,
     )
 

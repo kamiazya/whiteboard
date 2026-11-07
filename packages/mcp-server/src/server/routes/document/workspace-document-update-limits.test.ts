@@ -14,8 +14,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
-  documentDuplicateApiUrl,
-  documentRecordApiUrl,
+  documentDuplicateByIdApiUrl,
+  documentRecordByIdApiUrl,
   trashRestoreApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { syncWriteRefusalOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/sync-write-refusal'
@@ -192,9 +192,11 @@ describe('a record holding a container under a key past the bound from before it
   }
 
   it('duplicates the document and still opens', async () => {
-    const { app } = await plantedSetup()
+    const { app, documentId } = await plantedSetup()
 
-    const duplicated = await app.request(documentDuplicateApiUrl(WS, 'c'), { method: 'POST' })
+    const duplicated = await app.request(documentDuplicateByIdApiUrl(WS, documentId), {
+      method: 'POST',
+    })
 
     expect(duplicated.status).toBe(200)
     expect(await nodesAfterRestart()).toEqual(['n-a'])
@@ -208,7 +210,9 @@ describe('a record holding a container under a key past the bound from before it
   it('keeps the trash row and still opens when the restore is refused', async () => {
     const { app, documentId } = await plantedSetup()
 
-    const deleted = await app.request(documentRecordApiUrl(WS, 'c'), { method: 'DELETE' })
+    const deleted = await app.request(documentRecordByIdApiUrl(WS, documentId), {
+      method: 'DELETE',
+    })
     expect(deleted.status).toBe(200)
     const restored = await app.request(trashRestoreApiUrl(WS, documentId), { method: 'POST' })
 

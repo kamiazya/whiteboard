@@ -5,6 +5,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -69,7 +70,7 @@ describe('restore points stay bounded', () => {
       nodesModelDocUpdate(['v1-node']),
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -85,11 +86,14 @@ describe('restore points stay bounded', () => {
     )
     // The newest version holds the edit, so restoring v1 really changes the
     // document rather than restating what the history already records.
-    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v2' }),
-    })
+    await app.request(
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v2' }),
+      },
+    )
     return version.id
   }
 
@@ -119,7 +123,7 @@ describe('restore points stay bounded', () => {
     expect(await restorePoints()).toHaveLength(MAX_RESTORE_POINTS_PER_DOCUMENT)
 
     const res = await app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${v1}/restore`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${v1}/restore`,
       { method: 'POST' },
     )
     // The restore itself still lands: only its merge point is dropped.
@@ -132,7 +136,7 @@ describe('restore points stay bounded', () => {
     const v1 = await seedEditedCanvas(app)
     for (let i = 0; i < 3; i += 1) {
       const res = await app.request(
-        `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${v1}/restore`,
+        `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${v1}/restore`,
         { method: 'POST' },
       )
       expect(res.status).toBe(200)

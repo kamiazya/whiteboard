@@ -9,16 +9,16 @@ import {
   type DuplicateDocumentRequest,
   type DuplicateDocumentResponse,
   deleteDocumentResponseSchema,
-  documentApiUrl,
   documentBacklinksApiUrl,
   documentBacklinksResponseSchema,
-  documentDuplicateApiUrl,
-  documentNameApiUrl,
+  documentByIdApiUrl,
+  documentDuplicateByIdApiUrl,
+  documentNameByIdApiUrl,
   documentOkfApiUrl,
   documentOkfV1ResponseSchema,
-  documentPathApiUrl,
-  documentPinApiUrl,
-  documentRecordApiUrl,
+  documentPathByIdApiUrl,
+  documentPinByIdApiUrl,
+  documentRecordByIdApiUrl,
   documentSearchResponseSchema,
   documentsV1ApiUrl,
   documentTagsApiUrl,
@@ -234,9 +234,9 @@ export function createDocument(
 /**
  * Move a document, and everything under it, to a new path.
  *
- * The path being MOVED addresses the request and the destination travels in
- * the body: putting the new one in the URL would address a document that
- * does not exist yet. The store plans the whole subtree, so a 409 names the
+ * The document's id addresses the request and the destination travels in
+ * the body: a path in the URL would name where the document stands now, which
+ * a concurrent move can change under the request. The store plans the whole subtree, so a 409 names the
  * PRODUCED path that collided — often not the one the caller asked for,
  * which is why callers must show the server's message rather than rebuild
  * one around `newPath`.
@@ -245,12 +245,12 @@ export function renameDocumentPath(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  path: string,
+  documentId: string,
   newPath: string,
 ): Promise<RenameDocumentPathResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentPathApiUrl(workspaceId, path)}`,
+    `${daemonBaseUrl}${documentPathByIdApiUrl(workspaceId, documentId)}`,
     renameDocumentPathResponseSchema,
     {
       method: 'PUT',
@@ -264,26 +264,26 @@ export function deleteDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  path: string,
+  documentId: string,
 ): Promise<DeleteDocumentResponse> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentRecordApiUrl(workspaceId, path)}`,
+    `${daemonBaseUrl}${documentRecordByIdApiUrl(workspaceId, documentId)}`,
     deleteDocumentResponseSchema,
     { method: 'DELETE' },
   )
 }
 
-// GET /api/w/:workspaceId/document/:path/snapshot returns raw Loro bytes
+// GET /api/workspaces/:workspaceId/documents/:documentId/snapshot returns raw Loro bytes
 // (application/octet-stream), not JSON — kept separate from fetchAndParse,
 // which reads its body as JSON.
 export async function getDocumentSnapshot(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  path: string,
+  documentId: string,
 ): Promise<Uint8Array> {
-  const url = `${daemonBaseUrl}${documentApiUrl(workspaceId, path, 'snapshot')}`
+  const url = `${daemonBaseUrl}${documentByIdApiUrl(workspaceId, documentId, 'snapshot')}`
   const res = await reach(fetchFn(url))
   if (!res.ok) {
     throw new Error((await parseProblemDetails(res)).message)
@@ -301,12 +301,12 @@ export async function duplicateDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  path: string,
+  documentId: string,
   request: DuplicateDocumentRequest = {},
 ): Promise<DuplicateDocumentResponse> {
   const answered = await fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentDuplicateApiUrl(workspaceId, path)}`,
+    `${daemonBaseUrl}${documentDuplicateByIdApiUrl(workspaceId, documentId)}`,
     duplicateDocumentResponseSchema,
     {
       method: 'POST',
@@ -381,12 +381,12 @@ export function setDocumentPinned(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  path: string,
+  documentId: string,
   pinned: boolean,
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentPinApiUrl(workspaceId, path)}`,
+    `${daemonBaseUrl}${documentPinByIdApiUrl(workspaceId, documentId)}`,
     workspaceNamesSchema,
     {
       method: 'PUT',
@@ -400,12 +400,12 @@ export function setDocumentDisplayName(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
   workspaceId: string,
-  path: string,
+  documentId: string,
   name: string,
 ): Promise<WorkspaceNames> {
   return fetchAndParse(
     fetchFn,
-    `${daemonBaseUrl}${documentNameApiUrl(workspaceId, path)}`,
+    `${daemonBaseUrl}${documentNameByIdApiUrl(workspaceId, documentId)}`,
     workspaceNamesSchema,
     {
       method: 'PUT',

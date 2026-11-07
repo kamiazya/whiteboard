@@ -1,6 +1,10 @@
 import { restorePointOptions } from '@kamiazya/whiteboard-history'
-import { readDocumentContent } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readDocumentContent,
+  resolveWorkspaceDocumentById,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import type { BrowserVersionStore } from './browser-version-store.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -21,6 +25,31 @@ export interface VersionsRecordSeam {
 }
 
 /**
+ * The path the version store keys `documentId`'s rows by: from the live
+ * record when one is held, which knows a placement the stored copy may not
+ * yet, else from the index. An id neither holds throws before any store is
+ * touched.
+ */
+async function documentPathOf(
+  deps: {
+    readonly record: VersionsRecordSeam
+    readonly index: Pick<DocumentIndex, 'resolveDocumentById'>
+  },
+  documentId: string,
+): Promise<string> {
+  const held = deps.record.readRecord((doc) => ({
+    path: resolveWorkspaceDocumentById(doc, documentId)?.path,
+  }))
+  const path =
+    held === null
+      ? (await deps.index.resolveDocumentById({ workspaceId: getBrowserWorkspaceId(), documentId }))
+          ?.path
+      : held.path
+  if (path === undefined) throw new Error(`no such document: ${documentId}`)
+  return path
+}
+
+/**
  * The browser keeper's answer to the versions seam: rows from the
  * IndexedDB store, restores through whichever seam holds the live
  * workspace record — the two halves the daemon keeps in one process, here
@@ -34,6 +63,8 @@ export interface VersionsRecordSeam {
 export function createBrowserVersionsBackend(deps: {
   readonly store: BrowserVersionStore
   readonly record: VersionsRecordSeam
+  /** Where an id is placed while no record is held: before delivery, and while reconnecting after a restore. */
+  readonly index: Pick<DocumentIndex, 'resolveDocumentById'>
   /**
    * What `loadPast` should read a past state AS.
    *
@@ -48,26 +79,32 @@ export function createBrowserVersionsBackend(deps: {
    */
   readonly kind: DocumentKind
 }): VersionsBackend {
+  const pathOf = (documentId: string) => documentPathOf(deps, documentId)
   return {
-    list: (_workspaceId, path) => deps.store.list(getBrowserWorkspaceId(), path),
-    save(_workspaceId, path, { label }) {
-      return deps.store.save(getBrowserWorkspaceId(), path, {
+    list: async (_workspaceId, id) => deps.store.list(getBrowserWorkspaceId(), await pathOf(id)),
+    async save(_workspaceId, documentId, { label }) {
+      return deps.store.save(getBrowserWorkspaceId(), await pathOf(documentId), {
         label,
         // The person at this browser. The daemon names its humans by their
         // sync peer; the browser has one person and no peer to name.
         operator: { kind: 'human' },
       })
     },
-    async loadPast(_workspaceId, path, versionId) {
+    async loadPast(_workspaceId, documentId, versionId) {
       // The store answers a LoroDoc; the seam answers something to draw. The
       // projection happens here so the seam stays free of CRDT types and a
       // keeper that never held one could still implement it.
-      const past = await deps.store.loadPast(getBrowserWorkspaceId(), path, versionId)
+      const past = await deps.store.loadPast(
+        getBrowserWorkspaceId(),
+        await pathOf(documentId),
+        versionId,
+      )
       if (past === null) return null
       return readDocumentContent(past, deps.kind)
     },
-    async restore(_workspaceId, path, versionId) {
+    async restore(_workspaceId, documentId, versionId) {
       const workspaceId = getBrowserWorkspaceId()
+      const path = await pathOf(documentId)
       const past = await deps.store.loadPast(workspaceId, path, versionId)
       if (past === null) throw new Error(`no such version: ${versionId}`)
       const label = (await deps.store.list(workspaceId, path)).find(

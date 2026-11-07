@@ -67,7 +67,7 @@ function backendOf(list: () => Promise<typeof ROWS>): VersionsBackend {
 function renderTimeline(backend: VersionsBackend) {
   return render(
     <VersionsBackendContext.Provider value={backend}>
-      <VersionTimeline workspaceId="ws" path="doc" />
+      <VersionTimeline workspaceId="ws" documentId="doc" />
     </VersionsBackendContext.Provider>,
   )
 }
@@ -124,7 +124,7 @@ describe('a version row is written from the content side', () => {
     const backend = backendOf(async () => ROWS)
     const view = render(
       <VersionsBackendContext.Provider value={backend}>
-        <VersionTimeline workspaceId="ws" path="doc" documentKind="markdown" />
+        <VersionTimeline workspaceId="ws" documentId="doc" documentKind="markdown" />
       </VersionsBackendContext.Provider>,
     )
     const noteRows = await screen.findAllByTestId('version-row')
@@ -156,7 +156,7 @@ describe('a version row is written from the content side', () => {
     })
     const view = render(
       <VersionsBackendContext.Provider value={backend}>
-        <VersionTimeline workspaceId="ws" path="doc" refreshSignal={0} />
+        <VersionTimeline workspaceId="ws" documentId="doc" refreshSignal={0} />
       </VersionsBackendContext.Provider>,
     )
     await screen.findAllByTestId('version-row')
@@ -165,7 +165,7 @@ describe('a version row is written from the content side', () => {
     // Drive the refetch rather than waiting out the 15s poll.
     view.rerender(
       <VersionsBackendContext.Provider value={backend}>
-        <VersionTimeline workspaceId="ws" path="doc" refreshSignal={1} />
+        <VersionTimeline workspaceId="ws" documentId="doc" refreshSignal={1} />
       </VersionsBackendContext.Provider>,
     )
     // A refresh that fails leaves the rows on screen — they are still the

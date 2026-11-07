@@ -24,6 +24,7 @@ import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { resetDataDirForTests, setDataDirForTests } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
+import { documentIdAt } from './routes/_test-helpers.js'
 import { disposeAutoCompact, uninstallAutoCompact } from './store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from './store/db/index.js'
 import { clearDocCacheForTests } from './store/doc-cache.js'
@@ -112,16 +113,18 @@ function json(body: unknown): RequestInit {
 
 describe('createApp over a dir the process global does not name', () => {
   it('lists the versions the served dir holds', async () => {
-    const { app, version } = await bootBoth()
-    const res = await app.request(`/api/workspaces/${WS}/documents/note/versions`)
+    const { app, boot, version } = await bootBoth()
+    const noteId = await documentIdAt(boot.serverDeps, WS, 'note')
+    const res = await app.request(`/api/workspaces/${WS}/documents/${noteId}/versions`)
     const body = (await res.json()) as { versions: { id: string }[] }
     expect(body.versions.map((v) => v.id)).toEqual([version.id])
   })
 
   it('writes a manual save of the served document into the served database only', async () => {
     const { app, boot, other } = await bootBoth()
+    const noteId = await documentIdAt(boot.serverDeps, WS, 'note')
     const res = await app.request(
-      `/api/workspaces/${WS}/documents/note/versions`,
+      `/api/workspaces/${WS}/documents/${noteId}/versions`,
       json({ label: 'manual' }),
     )
     expect(res.status).toBe(200)
@@ -246,8 +249,9 @@ describe('createApp over a dir the process global does not name', () => {
   })
 
   it('exports the served document, not the ambient one of the same address', async () => {
-    const { app } = await bootBoth()
-    const res = await app.request(`/api/w/${WS}/document/note/export-svg`, json({}))
+    const { app, boot } = await bootBoth()
+    const noteId = await documentIdAt(boot.serverDeps, WS, 'note')
+    const res = await app.request(`/api/workspaces/${WS}/documents/${noteId}/export-svg`, json({}))
     expect(res.status).toBe(200)
     const { filePath } = (await res.json()) as { filePath: string }
     expect(await readFile(filePath, 'utf-8')).toContain(MARK)

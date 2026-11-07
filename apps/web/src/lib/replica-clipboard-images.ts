@@ -32,7 +32,7 @@ export function replicaClipboardImages(
     daemonFetch: neverFetched,
     daemonBaseUrl,
     workspaceId,
-    path: '',
+    documentId: undefined,
   })
   return {
     fileScope,

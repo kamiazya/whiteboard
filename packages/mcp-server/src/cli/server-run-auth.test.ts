@@ -50,7 +50,7 @@ function authInput(
 ): AuthAuthorizeInput {
   return {
     method: 'GET',
-    path: '/api/w/ws1/document/test',
+    path: '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot',
     authorizationHeader: jwt ? `Bearer ${jwt}` : undefined,
     requiredScopes: scopes as never,
   }

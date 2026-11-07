@@ -15,6 +15,7 @@ import { type ConnectionState, sessionHealthOf } from '../lib/connection-state.j
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
+import { documentReadFailureOf } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { faviconStatusOf } from '../lib/favicon.js'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
@@ -44,6 +45,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { refineForContentReadFailure } from './document-page-state.js'
 import { connectionsStamp } from './use-connections.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
@@ -75,6 +77,20 @@ export interface DaemonDocumentPageProps {
 }
 
 const pathOf = (document: { readonly path: string }): string => document.path
+
+/**
+ * The listed document a ref names, by id first: a document path may be
+ * spelled like another document's id, and the id is the address.
+ */
+function listedIdOf(
+  listed: readonly { documentId: string; path: string }[],
+  ref: string,
+): string | undefined {
+  return (
+    listed.find((entry) => entry.documentId === ref)?.documentId ??
+    listed.find((entry) => entry.path === ref)?.documentId
+  )
+}
 
 /**
  * A load the daemon refused — on membership of either kind — or that failed
@@ -209,13 +225,19 @@ function useDaemonDocument(
     proposals,
   } = sync
 
+  // Undefined until the list names a row for this path — a refresh in flight
+  // leaves it so, which both the picker's exclusion and the backlinks fetch
+  // read as "not yet".
+  const currentSummary = controller.documents.find((d) => d.path === controller.path)
+  const currentDocumentId = currentSummary?.documentId
+
   // New file nodes store the target's immutable id (ADR-0008: stored
   // references key on ids, so a path rename cannot dangle them); the
-  // daemon's read routes stay path-addressed, so refs resolve to the
-  // CURRENT path through the live documents list. Read through a ref so the
-  // adapter identity survives list refreshes; the lookup itself resolves by
-  // membership, never by format — legacy path refs miss it and pass
-  // through unchanged.
+  // daemon addresses a document by that id, so a ref resolves through the
+  // live documents list: a listed id answers itself, a legacy path its id,
+  // and anything else nothing. Read through a ref so the adapter identity
+  // survives list refreshes; the lookup resolves by membership, never by
+  // format.
   const canvasesRef = useRef(controller.documents)
   canvasesRef.current = controller.documents
 
@@ -223,6 +245,7 @@ function useDaemonDocument(
     (ref: string) => canvasesRef.current.find((entry) => entry.documentId === ref)?.path,
     [],
   )
+  const resolveRefId = useCallback((ref: string) => listedIdOf(canvasesRef.current, ref), [])
 
   // A ref that matches NEITHER a live id nor a live path points at a deleted
   // canvas (or one imported from elsewhere): the editor renders it as a quiet
@@ -237,17 +260,11 @@ function useDaemonDocument(
         daemonFetch,
         daemonBaseUrl,
         workspaceId: canvas?.workspaceId ?? '',
-        path: canvas?.path ?? '',
-        resolveRefPath,
+        documentId: currentDocumentId,
+        resolveRefId,
       }),
-    [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefPath],
+    [daemonFetch, daemonBaseUrl, canvas?.workspaceId, currentDocumentId, resolveRefId],
   )
-
-  // Undefined until the list names a row for this path — a refresh in flight
-  // leaves it so, which both the picker's exclusion and the backlinks fetch
-  // read as "not yet".
-  const currentSummary = controller.documents.find((d) => d.path === controller.path)
-  const currentDocumentId = currentSummary?.documentId
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
@@ -398,8 +415,18 @@ function useDaemonDocument(
     documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
     refusal: controller.refusal,
   })
+  // The second phase of the page state: what reading the CONTENT said. A
+  // snapshot the session refused (a retired stored shape, corrupt bytes)
+  // binds no editor, and the screen has to say why rather than keep the
+  // loading copy up. The shell and the tab read THIS state, so the chip says
+  // no session was built rather than claiming to reconnect over an error
+  // screen that offers no retry.
+  const renderState = refineForContentReadFailure(
+    pageState,
+    documentReadFailureOf(sync.backendError),
+  )
   // One state feeds the tab and the shell, which raises the badge from it.
-  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(pageState))
+  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(renderState))
   const connection = useMemo((): ConnectionState => ({ keeper: 'daemon', session }), [session])
   useDocumentFavicon({
     settingsStore,
@@ -437,7 +464,7 @@ function useDaemonDocument(
 
   const onNameSettled = usePlaceByName(controller, daemonFetch, daemonBaseUrl, onPathMoved)
 
-  const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
+  const terminal = daemonTerminalAnswer(renderState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 
   const labels = daemonDocumentLabels(
@@ -512,10 +539,14 @@ function useDaemonDocument(
     versions: daemonVersionsSlot({
       canvas,
       labels,
+      currentDocumentId,
       backend: versionsBackend,
       onVersionCreated: events.onVersionCreated,
     }),
-    topBar: daemonTopBarSlot(canvas, onNavigateBack, { persistence, connection }),
+    topBar: daemonTopBarSlot(canvas, currentDocumentId, onNavigateBack, {
+      persistence,
+      connection,
+    }),
     spatial: {
       editorRef: spatialEditorRef,
       ...agentTouchedProps(agentActivity),

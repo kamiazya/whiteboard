@@ -1,50 +1,57 @@
 import { Hono } from 'hono'
 import { describe, expect, it } from 'vitest'
-import { matchDocumentsTail, onDocumentAction, onDocumentFile } from './path-route.js'
+import { resolvingDocumentIds } from '../_test-helpers.js'
+import { onDocumentAction, onDocumentFile, onDocumentRoute } from './path-route.js'
+
+const WS = '01TFTP6SMY23MTM63TK63WD2YX'
+const DOC = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const UNKNOWN = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
+
+/** An app whose index holds one document, resolved once per request as the router mounts it. */
+function appOver(held: Record<string, { path: string }>) {
+  return resolvingDocumentIds(new Hono(), held)
+}
+
+const url = (documentId: string, suffix = '') =>
+  `/api/workspaces/${WS}/documents/${documentId}${suffix}`
 
 describe('onDocumentAction', () => {
-  function appWith(action: Parameters<typeof onDocumentAction>[2]) {
-    const app = new Hono()
-    onDocumentAction(app, 'get', action, (c, workspaceId, path) => c.json({ workspaceId, path }))
-    return app
-  }
-
-  it('parses a nested document path with the action suffix anchoring it', async () => {
-    const res = await appWith('snapshot').request('/api/w/ws1/document/notes/2026/plan/snapshot')
+  it('hands the handler the placement the id resolves to', async () => {
+    const app = appOver({ [DOC]: { path: 'notes/2026/plan' } })
+    onDocumentAction(app, 'get', 'snapshot', (c, workspaceId, path) =>
+      c.json({ workspaceId, path }),
+    )
+    const res = await app.request(url(DOC, '/snapshot'))
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ workspaceId: 'ws1', path: 'notes/2026/plan' })
+    expect(await res.json()).toEqual({ workspaceId: WS, path: 'notes/2026/plan' })
   })
 
-  it('keeps a path whose last segment collides with the action unambiguous', async () => {
-    const res = await appWith('snapshot').request('/api/w/ws1/document/a/snapshot/snapshot')
-    expect(await res.json()).toEqual({ workspaceId: 'ws1', path: 'a/snapshot' })
+  it('answers 404 in the error contract for an id the index does not hold', async () => {
+    const app = appOver({})
+    onDocumentAction(app, 'get', 'snapshot', (c) => c.json({ hit: true }))
+    const res = await app.request(url(UNKNOWN, '/snapshot'))
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: 'not_found' })
   })
 
-  it('falls through on a non-matching action so siblings get their turn', async () => {
-    const app = new Hono()
+  it('falls through on a sibling action so the sibling gets its turn', async () => {
+    const app = appOver({ [DOC]: { path: 'doc' } })
     onDocumentAction(app, 'get', 'client-count', (c) => c.json({ hit: 'client-count' }))
     onDocumentAction(app, 'get', 'snapshot', (c) => c.json({ hit: 'snapshot' }))
-    const res = await app.request('/api/w/ws1/document/doc/snapshot')
-    expect(await res.json()).toEqual({ hit: 'snapshot' })
+    expect(await (await app.request(url(DOC, '/snapshot'))).json()).toEqual({ hit: 'snapshot' })
   })
 
-  it('rejects an invalid path segment with 400, not a match failure', async () => {
-    const res = await appWith('client-count').request(
-      '/api/w/ws1/document/has%20space/client-count',
-    )
-    expect(res.status).toBe(400)
+  it('is not the route for a segment that is not a document id', async () => {
+    // The path family that once shared this grammar is retired: a document
+    // path under `/documents/` names nothing and reaches no handler.
+    const app = appOver({ [DOC]: { path: 'snapshot' } })
+    onDocumentAction(app, 'get', 'snapshot', (c) => c.json({ hit: true }))
+    expect((await app.request(url('notes%2Fplan', '/snapshot'))).status).toBe(404)
+    expect((await app.request(url('snapshot', '/snapshot'))).status).toBe(404)
   })
 
-  it('does not swallow a bare action with no document path', async () => {
-    const res = await appWith('client-count').request('/api/w/ws1/document/client-count')
-    expect(res.status).toBe(404)
-  })
-
-  // Every action shares one wildcard, so a middleware the route lists has to
-  // be scoped to its own action: an export's body ceiling must not run for a
-  // sibling action's request.
   it("runs a route's middleware only for its own action", async () => {
-    const app = new Hono()
+    const app = appOver({ [DOC]: { path: 'doc' } })
     const ran: string[] = []
     onDocumentAction(
       app,
@@ -58,30 +65,29 @@ describe('onDocumentAction', () => {
     )
     onDocumentAction(app, 'post', 'export-svg', (c) => c.json({ hit: 'export-svg' }))
 
-    const svg = await app.request('/api/w/ws1/document/doc/export-svg', { method: 'POST' })
+    const svg = await app.request(url(DOC, '/export-svg'), { method: 'POST' })
     expect(await svg.json()).toEqual({ hit: 'export-svg' })
     expect(ran).toEqual([])
 
-    const exported = await app.request('/api/w/ws1/document/doc/export', { method: 'POST' })
+    const exported = await app.request(url(DOC, '/export'), { method: 'POST' })
     expect(await exported.json()).toEqual({ hit: 'export' })
     expect(ran).toEqual(['export middleware'])
   })
 })
 
 describe('onDocumentFile', () => {
-  it('splits the file tail off a nested document path', async () => {
-    const app = new Hono()
+  it('hands the handler the file id beside the resolved placement', async () => {
+    const app = appOver({ [DOC]: { path: 'a/file/b' } })
     onDocumentFile(app, 'get', (c, workspaceId, path, fileId) =>
       c.json({ workspaceId, path, fileId }),
     )
-    const res = await app.request('/api/w/ws1/document/a/file/b/file/c')
+    const res = await app.request(url(DOC, '/files/c'))
     expect(res.status).toBe(200)
-    // Greedy: the LAST /file/<id> is the file tail, the rest is the path.
-    expect(await res.json()).toEqual({ workspaceId: 'ws1', path: 'a/file/b', fileId: 'c' })
+    expect(await res.json()).toEqual({ workspaceId: WS, path: 'a/file/b', fileId: 'c' })
   })
 
-  it("runs a route's middleware only for a file tail", async () => {
-    const app = new Hono()
+  it("runs a route's middleware only for a file address", async () => {
+    const app = appOver({ [DOC]: { path: 'doc' } })
     const ran: string[] = []
     onDocumentFile(
       app,
@@ -94,66 +100,37 @@ describe('onDocumentFile', () => {
     )
     onDocumentAction(app, 'put', 'snapshot', (c) => c.json({ hit: 'snapshot' }))
 
-    const read = await app.request('/api/w/ws1/document/doc/snapshot', { method: 'PUT' })
+    const read = await app.request(url(DOC, '/snapshot'), { method: 'PUT' })
     expect(await read.json()).toEqual({ hit: 'snapshot' })
     expect(ran).toEqual([])
   })
 })
 
-describe('matchDocumentsTail', () => {
-  it('anchors the suffix at the END, so a document named after it stays reachable', () => {
-    expect(
-      matchDocumentsTail('/api/workspaces/ws1/documents/a/versions/versions', ['versions']),
-    ).toEqual({ workspaceId: 'ws1', path: 'a/versions', params: {} })
+describe('onDocumentRoute', () => {
+  it('captures the suffix params beside the placement', async () => {
+    const app = appOver({ [DOC]: { path: 'notes/plan' } })
+    onDocumentRoute(app, 'get', '/versions/:id/document', (c, _ws, path, params) =>
+      c.json({ path, id: params.id }),
+    )
+    const res = await app.request(url(DOC, '/versions/v7/document'))
+    expect(await res.json()).toEqual({ path: 'notes/plan', id: 'v7' })
   })
 
-  it('captures a `:name` suffix segment as a param', () => {
-    expect(
-      matchDocumentsTail('/api/workspaces/ws1/documents/notes/plan/versions/v7/document', [
-        'versions',
-        ':id',
-        'document',
-      ]),
-    ).toEqual({ workspaceId: 'ws1', path: 'notes/plan', params: { id: 'v7' } })
+  it('takes the bare document address for the empty suffix', async () => {
+    const app = appOver({ [DOC]: { path: 'notes/plan' } })
+    onDocumentRoute(app, 'delete', '', (c, _ws, path) => c.json({ deleted: path }))
+    const res = await app.request(url(DOC), { method: 'DELETE' })
+    expect(await res.json()).toEqual({ deleted: 'notes/plan' })
   })
 
-  it('takes the whole tail as the path for an empty pattern', () => {
-    expect(matchDocumentsTail('/api/workspaces/ws1/documents/a/b/c', [])).toEqual({
-      workspaceId: 'ws1',
-      path: 'a/b/c',
-      params: {},
-    })
-  })
-
-  it('decodes each segment, so an encoded slash is part of ONE segment', () => {
-    expect(
-      matchDocumentsTail('/api/workspaces/my%20ws/documents/a%2Fb/versions', ['versions']),
-    ).toEqual({ workspaceId: 'my ws', path: 'a/b', params: {} })
-  })
-
-  it.each([
-    ['a different prefix', '/api/w/ws1/document/a/versions', ['versions']],
-    ['a suffix that does not match', '/api/workspaces/ws1/documents/a/pins', ['versions']],
-    [
-      'no path left once the suffix is taken',
-      '/api/workspaces/ws1/documents/versions',
-      ['versions'],
-    ],
-    ['an empty segment', '/api/workspaces/ws1/documents/a//versions', ['versions']],
-    [
-      'undecodable percent-escapes',
-      '/api/workspaces/ws1/documents/a/%E0%A4%A/versions',
-      ['versions'],
-    ],
-  ])('answers null for %s, so the registration falls through', (_why, path, pattern) => {
-    expect(matchDocumentsTail(path, pattern as string[])).toBeNull()
-  })
-
-  it('ignores one trailing slash', () => {
-    expect(matchDocumentsTail('/api/workspaces/ws1/documents/a/versions/', ['versions'])).toEqual({
-      workspaceId: 'ws1',
-      path: 'a',
-      params: {},
+  it('refuses to serve an id route mounted without the address resolver', async () => {
+    const app = new Hono()
+    onDocumentRoute(app, 'get', '/snapshot', (c) => c.json({ hit: true }))
+    app.onError((err, c) => c.json({ message: err.message }, 500))
+    const res = await app.request(url(DOC, '/snapshot'))
+    expect(res.status).toBe(500)
+    expect(await res.json()).toEqual({
+      message: 'document id route mounted without resolveDocumentAddress',
     })
   })
 })

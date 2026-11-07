@@ -43,6 +43,11 @@ interface Props {
   workspaceId: string
   path: string
   /**
+   * The open document's id, which the daemon addresses a rename by; see
+   * `useDocumentNames`. `undefined` while the keeper has not named it.
+   */
+  documentId?: string | undefined
+  /**
    * Leaves the document for the document browser, which is where finding one
    * happens (user decision 2026-08-22). apps/web has no react-router-dom
    * here, so the page owns the navigation and passes it in. Omitted only by
@@ -108,6 +113,7 @@ interface Props {
 export default function WorkspaceTopBar({
   workspaceId,
   path,
+  documentId,
   onNavigateBack,
   keeper = 'daemon',
   preview,
@@ -120,6 +126,7 @@ export default function WorkspaceTopBar({
     workspaceId,
     keptByBrowser,
     daemonFetch: useDaemonApi(),
+    documentId,
     recorded: { path, name: recordedName },
   })
   const canvasCustomName = effectiveNames.documents[path]
@@ -202,7 +209,7 @@ export default function WorkspaceTopBar({
 
         {titleSlot?.({
           name: documentLabel({ name: canvasCustomName, path }, 'path'),
-          ...(keptByBrowser ? {} : renameFor(path)),
+          ...(keptByBrowser ? {} : renameFor()),
         })}
         {saveState && (
           <SaveStatus indicator={saveIndicatorOf(saveState.persistence, saveState.connection)} />

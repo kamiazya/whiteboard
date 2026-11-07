@@ -405,7 +405,9 @@ const REQUIRED_FLAGS = [
     }
 
     // Protected route with no auth → 401
-    const anonymousResp = await fetch(`${baseUrl}/api/w/test-ws/document/test-canvas/viewport`)
+    const anonymousResp = await fetch(
+      `${baseUrl}/api/workspaces/test-ws/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot`,
+    )
     if (anonymousResp.status !== 401)
       fail(`scenario 8: no-auth protected route expected 401, got ${anonymousResp.status}`)
     const anonymousBody = await anonymousResp.text()
@@ -425,9 +427,12 @@ const REQUIRED_FLAGS = [
         exp: now + 3600,
       },
     )
-    const authResp = await fetch(`${baseUrl}/api/w/test-ws/document/test-canvas/viewport`, {
-      headers: { Authorization: `Bearer ${validJwt}` },
-    })
+    const authResp = await fetch(
+      `${baseUrl}/api/workspaces/test-ws/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot`,
+      {
+        headers: { Authorization: `Bearer ${validJwt}` },
+      },
+    )
     // Authentication passes; the workspace then answers by membership, and it
     // has none (ADR-0046 decision 10: members-only from the start).
     if (authResp.status !== 403)
@@ -450,9 +455,12 @@ const REQUIRED_FLAGS = [
         exp: now + 3600,
       },
     )
-    const scopeResp = await fetch(`${baseUrl}/api/w/test-ws/document/test-canvas/viewport`, {
-      headers: { Authorization: `Bearer ${wrongScopeJwt}` },
-    })
+    const scopeResp = await fetch(
+      `${baseUrl}/api/workspaces/test-ws/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot`,
+      {
+        headers: { Authorization: `Bearer ${wrongScopeJwt}` },
+      },
+    )
     if (scopeResp.status !== 403)
       fail(`scenario 8: wrong scope expected 403, got ${scopeResp.status}`)
 

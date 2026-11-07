@@ -6,8 +6,15 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
-import { testFilesRouterOptions, testStoreScope, withTempDataDir } from './_test-helpers.js'
+import type { StoreScope } from '../store/store-scope.js'
+import {
+  resolvingDocumentIds,
+  testFilesRouterOptions,
+  testStoreScope,
+  withTempDataDir,
+} from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-files-stored-bytes-')
 
@@ -36,14 +43,25 @@ vi.mock('node:fs/promises', async (original) => {
 
 const { createFilesRouter } = await import('./files.js')
 
-const route = (fileId: string) => `/api/w/ws-sb/document/board/file/${fileId}`
+const BOARD = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+
+// The daemon resolves the document id once ahead of its routers; the index here
+// holds one document, at `board`.
+function filesApp(scope: StoreScope) {
+  const app = new Hono()
+  resolvingDocumentIds(app, { [BOARD]: { path: 'board' } })
+  app.route('/', createFilesRouter(testFilesRouterOptions(scope)))
+  return app
+}
+
+const route = (fileId: string) => `/api/workspaces/ws-sb/documents/${BOARD}/files/${fileId}`
 
 async function plant(name: string, bytes: Uint8Array) {
   const scope = testStoreScope(tmp.dir)
   const dir = scope.layout.workspaceFilesDir('ws-sb')
   await mkdir(dir, { recursive: true })
   await writeFile(join(dir, name), bytes)
-  return createFilesRouter(testFilesRouterOptions(scope))
+  return filesApp(scope)
 }
 
 describe('the bytes the file route serves', () => {

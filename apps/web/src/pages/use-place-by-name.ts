@@ -18,22 +18,27 @@ const log = getAppLogger('place-by-name')
 export function usePlaceByName(
   controller: Pick<
     DaemonDocumentController,
-    'workspaceId' | 'path' | 'documents' | 'switchDocument' | 'refreshDocuments'
+    'workspaceId' | 'path' | 'documents' | 'followMove' | 'refreshDocuments'
   >,
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
   onPathMoved: ((path: string) => void) | undefined,
 ): (name: string) => void {
-  const { workspaceId, path, documents, switchDocument, refreshDocuments } = controller
+  const { workspaceId, path, documents, followMove, refreshDocuments } = controller
   const existingPaths = useMemo(() => documents.map((document) => document.path), [documents])
   return useCallback(
     (name: string) => {
       if (workspaceId === null || path === null) return
       const to = pathAfterFirstRename(path, name, existingPaths)
       if (to === null) return
-      renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, to).then(
+      const documentId = documents.find((each) => each.path === path)?.documentId
+      if (documentId === undefined) {
+        log.warn('placing a document by its name found no listed document', { path })
+        return
+      }
+      renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, documentId, to).then(
         () => {
-          switchDocument(to)
+          followMove(to)
           refreshDocuments()
           onPathMoved?.(to)
         },
@@ -45,8 +50,9 @@ export function usePlaceByName(
       daemonBaseUrl,
       workspaceId,
       path,
+      documents,
       existingPaths,
-      switchDocument,
+      followMove,
       refreshDocuments,
       onPathMoved,
     ],
@@ -57,26 +63,37 @@ export function usePlaceByName(
  * Moves the open document to a path the reader chose (Move to folder…), the
  * same way a first rename places it: through the keeper's move, then the
  * controller and the address follow. Rejects with the keeper's refusal, for
- * the picker to show; resolves at once with no document open.
+ * the picker to show (also when the listing does not hold the document); resolves at once with no document open.
  */
 export function useMoveByPath(
   controller: Pick<
     DaemonDocumentController,
-    'workspaceId' | 'path' | 'switchDocument' | 'refreshDocuments'
+    'workspaceId' | 'path' | 'documents' | 'followMove' | 'refreshDocuments'
   >,
   daemonFetch: typeof globalThis.fetch,
   daemonBaseUrl: string,
   onPathMoved: ((path: string) => void) | undefined,
 ): (to: string) => Promise<void> {
-  const { workspaceId, path, switchDocument, refreshDocuments } = controller
+  const { workspaceId, path, documents, followMove, refreshDocuments } = controller
   return useCallback(
     async (to: string) => {
       if (workspaceId === null || path === null || to === path) return
-      await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, to)
-      switchDocument(to)
+      const documentId = documents.find((each) => each.path === path)?.documentId
+      if (documentId === undefined) throw new Error('No document is open to move.')
+      await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, documentId, to)
+      followMove(to)
       refreshDocuments()
       onPathMoved?.(to)
     },
-    [daemonFetch, daemonBaseUrl, workspaceId, path, switchDocument, refreshDocuments, onPathMoved],
+    [
+      daemonFetch,
+      daemonBaseUrl,
+      workspaceId,
+      path,
+      documents,
+      followMove,
+      refreshDocuments,
+      onPathMoved,
+    ],
   )
 }

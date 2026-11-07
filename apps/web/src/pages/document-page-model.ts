@@ -119,24 +119,30 @@ export interface DocumentPageModel {
     readonly registryKey: string | null
   }
   readonly versions: {
-    /** Whether this document has a history to open; gates the column and ⌘S. */
-    readonly enabled: boolean
     readonly workspaceId: string
-    readonly path: string
     readonly save: (
       label: string,
-    ) => Promise<{ workspaceId: string; path: string; versionId: string }>
+    ) => Promise<{ workspaceId: string; documentId: string; versionId: string }>
     /**
      * The beat after a save that re-reads the history column: the daemon
      * keeper raises the page's `onVersionCreated`, the browser keeper's
      * column reads its own store and has nothing to announce.
      */
     readonly announceRefresh: () => void
-  }
+  } & (
+    | {
+        /** This document has a history to open; gates the column and ⌘S. */
+        readonly enabled: true
+        readonly documentId: string
+      }
+    | { readonly enabled: false }
+  )
   /** The merged header row; null while there is no document to name in it. */
   readonly topBar: {
     readonly workspaceId: string
     readonly path: string
+    /** The open document's id; undefined while the keeper's listing has not named it. */
+    readonly documentId: string | undefined
     readonly keeper?: 'daemon' | 'browser'
     readonly onNavigateBack?: () => void
     /** Where an edit stands, for the row's quiet save status; absent draws none. */

@@ -12,8 +12,8 @@
  */
 
 import {
-  documentApiUrl,
-  documentFileApiUrl,
+  documentByIdApiUrl,
+  documentFileByIdApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
@@ -25,20 +25,26 @@ import { readLoadedFileDocument } from './read-loaded-file-document.js'
 
 const log = getAppLogger('daemon-file-adapter')
 
+const NO_OPEN_DOCUMENT = 'no document is open to address files under'
+const NO_OPEN_DOCUMENT_REASON = 'no document is open to keep that picture under'
+
 export interface DaemonFileAdapterOptions {
   readonly daemonFetch: typeof fetch
   readonly daemonBaseUrl: string
   readonly workspaceId: string
-  readonly path: string
   /**
-   * Maps an immutable canvas id to its CURRENT path (undefined when the
-   * ref is not a known id). New file nodes store ids so a path rename
-   * cannot dangle them; the daemon's read routes stay path-addressed, so
-   * resolution happens here. Refs are resolved by LOOKUP, never by format:
-   * the id alphabet overlaps the path charset, so an unknown ref is
-   * treated as a legacy path reference.
+   * The open document the files are kept under. `undefined` means no document
+   * is open: every read and write then refuses without a request, so an
+   * address with an empty id can never be built.
    */
-  readonly resolveRefPath?: (ref: string) => string | undefined
+  readonly documentId: string | undefined
+  /**
+   * Maps a file node's ref to the id of the document it names (undefined when
+   * the ref names no listed document, which answers an absent document with no
+   * request). Refs are resolved by LOOKUP, never by format: the id alphabet
+   * overlaps the path charset, so a legacy path ref is looked up too.
+   */
+  readonly resolveRefId?: (ref: string) => string | undefined
 }
 
 const objectUrlOf = (blob: Blob | undefined) =>
@@ -107,19 +113,55 @@ export async function putDaemonImage(
   }
 }
 
+/**
+ * One upload through the file route. An address that cannot be built (no
+ * document open) answers a refusal without a request, like any rejected
+ * upload: the person is told, and nothing reaches the daemon.
+ */
+async function storeDaemonImage(
+  daemonFetch: typeof fetch,
+  urlFor: (fileId: string) => string,
+  file: File,
+): ReturnType<DocumentFileAdapter['storeImage']> {
+  const id = crypto.randomUUID()
+  let url: string
+  try {
+    url = urlFor(id)
+  } catch {
+    return { ok: false, reason: NO_OPEN_DOCUMENT_REASON }
+  }
+  // The route answers 415 for a Content-Type it has no extension
+  // mapping for, so the picked file's own type has to travel.
+  const put = await putDaemonImage(daemonFetch, url, file, file.type)
+  if (put.ok) return { ok: true, ref: newImageRef(id) }
+  if (put.status === undefined) log.warn('image upload failed', { err: put.error })
+  else log.warn('image upload rejected', { status: put.status })
+  return { ok: false, reason: put.reason }
+}
+
 export function createDaemonFileAdapter({
   daemonFetch,
   daemonBaseUrl,
   workspaceId,
-  path,
-  resolveRefPath,
+  documentId,
+  resolveRefId,
 }: DaemonFileAdapterOptions): DocumentFileAdapter {
+  const addressed = (): string => {
+    if (documentId === undefined) throw new Error(NO_OPEN_DOCUMENT)
+    return documentId
+  }
   const fileUrl = (fileId: string) =>
-    `${daemonBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`
+    `${daemonBaseUrl}${documentFileByIdApiUrl(workspaceId, addressed(), fileId)}`
 
   async function loadImageBlob(ref: string): Promise<Blob | undefined> {
     try {
-      return await readDaemonImage(daemonFetch, daemonBaseUrl, workspaceId, path, imageRefId(ref))
+      return await readDaemonImage(
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId,
+        addressed(),
+        imageRefId(ref),
+      )
     } catch (err) {
       log.warn('image load failed', { ref, err })
       throw err
@@ -132,26 +174,17 @@ export function createDaemonFileAdapter({
     fileScope: `daemon:${daemonBaseUrl}/w/${workspaceId}`,
     isImageRef,
 
-    loadDocument: (ref) =>
-      loadSnapshotDocument(
-        daemonFetch,
-        `${daemonBaseUrl}${documentApiUrl(workspaceId, resolveRefPath?.(ref) ?? ref, 'snapshot')}`,
-        ref,
-      ),
+    loadDocument: (ref) => {
+      const id = resolveRefId?.(ref)
+      if (id === undefined) return Promise.resolve(undefined)
+      const url = `${daemonBaseUrl}${documentByIdApiUrl(workspaceId, id, 'snapshot')}`
+      return loadSnapshotDocument(daemonFetch, url, ref)
+    },
 
     loadImageBlob,
 
     loadImageUrl: async (ref) => objectUrlOf(await loadImageBlob(ref)),
 
-    async storeImage(file) {
-      const id = crypto.randomUUID()
-      // The route answers 415 for a Content-Type it has no extension
-      // mapping for, so the picked file's own type has to travel.
-      const put = await putDaemonImage(daemonFetch, fileUrl(id), file, file.type)
-      if (put.ok) return { ok: true, ref: newImageRef(id) }
-      if (put.status === undefined) log.warn('image upload failed', { err: put.error })
-      else log.warn('image upload rejected', { status: put.status })
-      return { ok: false, reason: put.reason }
-    },
+    storeImage: (file) => storeDaemonImage(daemonFetch, fileUrl, file),
   }
 }

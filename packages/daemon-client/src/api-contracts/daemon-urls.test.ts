@@ -7,9 +7,8 @@ import { signInRefusalSchema } from './sign-in.js'
 // The literal strings the clients built by hand before the builders existed:
 // moving a call onto a builder must not change a byte on the wire.
 const WS = 'ws a'
-const PATH = 'notes/a b/é'
+const DOC = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const ENC_WS = 'ws%20a'
-const ENC_PATH = 'notes/a%20b/%C3%A9'
 
 describe('daemon URL builders keep the bytes clients sent before', () => {
   it.each([
@@ -27,39 +26,49 @@ describe('daemon URL builders keep the bytes clients sent before', () => {
       `/api/workspaces/${ENC_WS}/documents`,
     ],
     [
-      'documentRecordApiUrl',
-      urls.documentRecordApiUrl(WS, PATH),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}`,
+      'documentRecordByIdApiUrl',
+      urls.documentRecordByIdApiUrl(WS, DOC),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}`,
     ],
     [
-      'documentPathApiUrl',
-      urls.documentPathApiUrl(WS, PATH),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/path`,
+      'documentPathByIdApiUrl',
+      urls.documentPathByIdApiUrl(WS, DOC),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/path`,
     ],
     [
-      'documentNameApiUrl',
-      urls.documentNameApiUrl(WS, PATH),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/name`,
+      'documentNameByIdApiUrl',
+      urls.documentNameByIdApiUrl(WS, DOC),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/name`,
     ],
     [
-      'documentPinApiUrl',
-      urls.documentPinApiUrl(WS, PATH),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/pin`,
+      'documentPinByIdApiUrl',
+      urls.documentPinByIdApiUrl(WS, DOC),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/pin`,
     ],
     [
-      'documentVersionsApiUrl',
-      urls.documentVersionsApiUrl(WS, PATH),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/versions`,
+      'documentDuplicateByIdApiUrl',
+      urls.documentDuplicateByIdApiUrl(WS, DOC),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/duplicate`,
     ],
     [
-      'versionDocumentApiUrl',
-      urls.versionDocumentApiUrl(WS, PATH, 'v/1'),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/versions/v%2F1/document`,
+      'documentVersionsByIdApiUrl',
+      urls.documentVersionsByIdApiUrl(WS, DOC),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/versions`,
     ],
     [
-      'versionRestoreApiUrl',
-      urls.versionRestoreApiUrl(WS, PATH, 'v/1'),
-      `/api/workspaces/${ENC_WS}/documents/${ENC_PATH}/versions/v%2F1/restore`,
+      'documentVersionsPageByIdApiUrl',
+      urls.documentVersionsPageByIdApiUrl(WS, DOC, { cursor: '10.1', limit: 5 }),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/versions?cursor=10.1&limit=5`,
+    ],
+    [
+      'versionDocumentByIdApiUrl',
+      urls.versionDocumentByIdApiUrl(WS, DOC, 'v/1'),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/versions/v%2F1/document`,
+    ],
+    [
+      'versionRestoreByIdApiUrl',
+      urls.versionRestoreByIdApiUrl(WS, DOC, 'v/1'),
+      `/api/workspaces/${ENC_WS}/documents/${DOC}/versions/v%2F1/restore`,
     ],
     ['trashApiUrl', urls.trashApiUrl(WS), `/api/workspaces/${ENC_WS}/trash`],
     ['trashEntryApiUrl', urls.trashEntryApiUrl(WS, 'd/1'), `/api/workspaces/${ENC_WS}/trash/d%2F1`],
@@ -223,7 +232,7 @@ describe('server-mode sign-in URLs read back through their own readers', () => {
 describe('daemon URL builders refuse a dot segment', () => {
   it.each([
     ['workspaceApiUrl', () => urls.workspaceApiUrl('..')],
-    ['documentRecordApiUrl', () => urls.documentRecordApiUrl('ws', 'a/..')],
+    ['documentRecordByIdApiUrl', () => urls.documentRecordByIdApiUrl('ws', '..')],
     ['trashEntryApiUrl', () => urls.trashEntryApiUrl('ws', '..')],
     ['tenantPersonApiUrl', () => urls.tenantPersonApiUrl('.')],
   ])('%s', (_name, build) => {

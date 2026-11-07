@@ -24,7 +24,7 @@ import {
   pastWorkspaceCeiling,
   refusedBy,
 } from './_shared.js'
-import { onDocumentsRoute } from './path-route.js'
+import { onDocumentRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
   versionStore: VersionHistory
@@ -162,47 +162,41 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
   const app = new Hono()
   const { versionStore } = options
 
-  onDocumentsRoute(
-    app,
-    'post',
-    ['versions', ':id', 'restore'],
-    async (c, workspaceId, path, params) => {
-      const id = params.id as string
-      const invalidVersionId = refusedBy(() => validateVersionId(id))
-      if (invalidVersionId) return c.json(invalidVersionId, 400)
-      // The body is optional and its absence means in-place: an empty request
-      // is the commonest restore there is, so it must not be a refusal.
-      const asked = await readJsonBody(c, restoreVersionRequestSchema, {
-        optional: true,
-        refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
-      })
-      if ('refusal' in asked) return asked.refusal
-      const outOfScope = scopeRefusal(options.callerScopes, c, asked.data, path)
-      if (outOfScope) return c.json(outOfScope, 403)
-      const { targetPath, overwrite, subtree } = asked.data
-      try {
-        const result = await restoreVersion(
-          { versions: versionStore, liveDocuments: options.serverDeps.liveDocuments },
-          {
-            workspaceId,
-            path,
-            versionId: id,
-            ...(targetPath === undefined ? {} : { targetPath }),
-            overwrite: overwrite === true,
-            subtree: subtree === true,
-          },
-          options.progress,
-        )
-        const answer = restoreAnswer(result, { targetPath })
-        return c.json(answer.body, answer.status)
-      } catch (err) {
-        const issue =
-          handleCorruptStoredData(err) ?? pastWorkspaceCeiling(err) ?? pastSyncLimit(err)
-        if (issue) return c.json(issue.body, issue.status)
-        throw err
-      }
-    },
-  )
+  onDocumentRoute(app, 'post', '/versions/:id/restore', async (c, workspaceId, path, params) => {
+    const id = params.id as string
+    const invalidVersionId = refusedBy(() => validateVersionId(id))
+    if (invalidVersionId) return c.json(invalidVersionId, 400)
+    // The body is optional and its absence means in-place: an empty request
+    // is the commonest restore there is, so it must not be a refusal.
+    const asked = await readJsonBody(c, restoreVersionRequestSchema, {
+      optional: true,
+      refuseShape: (error) => invalidBodyRefusal(error, 'invalid restore options'),
+    })
+    if ('refusal' in asked) return asked.refusal
+    const outOfScope = scopeRefusal(options.callerScopes, c, asked.data, path)
+    if (outOfScope) return c.json(outOfScope, 403)
+    const { targetPath, overwrite, subtree } = asked.data
+    try {
+      const result = await restoreVersion(
+        { versions: versionStore, liveDocuments: options.serverDeps.liveDocuments },
+        {
+          workspaceId,
+          path,
+          versionId: id,
+          ...(targetPath === undefined ? {} : { targetPath }),
+          overwrite: overwrite === true,
+          subtree: subtree === true,
+        },
+        options.progress,
+      )
+      const answer = restoreAnswer(result, { targetPath })
+      return c.json(answer.body, answer.status)
+    } catch (err) {
+      const issue = handleCorruptStoredData(err) ?? pastWorkspaceCeiling(err) ?? pastSyncLimit(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
 
   return app
 }

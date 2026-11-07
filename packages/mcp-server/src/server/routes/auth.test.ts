@@ -16,11 +16,17 @@ describe('requiresDaemonAuth', () => {
     // Reads are gated like writes: a narrower credential is held to its scopes
     // on a read too, and the client already sends its bearer on every read.
     expect(requiresDaemonAuth('/api/workspaces')).toBe(true)
-    expect(requiresDaemonAuth('/api/w/session-1/document/demo/snapshot')).toBe(true)
     expect(
-      requiresDaemonAuth('/api/workspaces/session-1/documents/demo/versions/v1/thumbnail'),
+      requiresDaemonAuth('/api/workspaces/session-1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot'),
     ).toBe(true)
-    expect(requiresDaemonAuth('/api/w/session-1/document/demo/file/f1')).toBe(true)
+    expect(
+      requiresDaemonAuth(
+        '/api/workspaces/session-1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/versions/v1/thumbnail',
+      ),
+    ).toBe(true)
+    expect(
+      requiresDaemonAuth('/api/workspaces/session-1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/files/f1'),
+    ).toBe(true)
   })
 
   it('gates every /api path, leaving which of them are public to the route-scope registry alone', () => {

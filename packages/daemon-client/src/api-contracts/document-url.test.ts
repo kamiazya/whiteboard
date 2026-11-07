@@ -1,18 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
   decodeSegment,
-  documentApiUrl,
-  documentFileApiUrl,
-  documentPathForAction,
-  documentPathForFile,
-  encodeDocumentPath,
-  parseDocumentApiPath,
+  documentByIdApiUrl,
+  documentFileByIdApiUrl,
+  encodePathSegment,
 } from './document-url.js'
 
-// Every URL parser in the apps (web routes, the daemon's document routes, this
-// package's API-path parser) answers a malformed percent sequence with
-// not-a-match rather than a throw, so a hostile address cannot take a render or
-// a request down. They share this one decode for that reason.
+// Every URL parser in the apps (the web routes, the daemon's handle parser)
+// answers a malformed percent sequence with not-a-match rather than a throw,
+// so a hostile address cannot take a render or a request down. They share
+// this one decode for that reason.
 describe('decodeSegment', () => {
   it('decodes a percent-encoded segment', () => {
     expect(decodeSegment('notes%2F2026%20plan')).toBe('notes/2026 plan')
@@ -24,58 +21,20 @@ describe('decodeSegment', () => {
   })
 })
 
-describe('parseDocumentApiPath', () => {
-  it.each([
-    ['an empty tail segment', '/api/w/ws/document/a//snapshot'],
-    ['a malformed workspace segment', '/api/w/w%1/document/a/snapshot'],
-    ['a malformed tail segment', '/api/w/ws/document/a%zz/snapshot'],
-    ['a trailing slash', '/api/w/ws/document/a/snapshot/'],
-  ])('answers not-a-route for %s', (_name, path) => {
-    expect(parseDocumentApiPath(path)).toBeNull()
-  })
-})
-
-describe('documentPathForAction', () => {
-  it('answers null for an action with no document before it', () => {
-    expect(documentPathForAction(['snapshot'], 'snapshot')).toBeNull()
-  })
-
-  it('answers null when the final segment is a different action', () => {
-    expect(documentPathForAction(['a', 'update'], 'snapshot')).toBeNull()
-  })
-})
-
-describe('documentPathForFile', () => {
-  it('answers null for a tail too short to hold a path, marker and file id', () => {
-    expect(documentPathForFile(['file', 'x'])).toBeNull()
-  })
-
-  it('answers null when the second-to-last segment is not the file marker', () => {
-    expect(documentPathForFile(['a', 'b', 'x'])).toBeNull()
-  })
-
-  it('splits a well-formed tail into path and file id', () => {
-    expect(documentPathForFile(['a', 'file', 'x'])).toEqual({ path: 'a', fileId: 'x' })
-  })
-})
-
 // The URL parser resolves a `.` or `..` segment (and `%2e` spelling either)
 // before fetch sends anything, so a URL built from one names a different
-// same-origin `/api` path than the one it was built for. No document path,
-// workspace id or file id the model admits is a dot segment.
+// same-origin `/api` path than the one it was built for. No workspace id,
+// document id or file id the model admits is a dot segment.
 describe('dot segments', () => {
-  it.each(['.', '..', 'a/../b', 'a/./b', 'a/..'])('refuses the document path %j', (path) => {
-    expect(() => encodeDocumentPath(path)).toThrow(/dot segment/)
-    expect(() => documentApiUrl('ws', path, 'snapshot')).toThrow(/dot segment/)
-  })
-
-  it('refuses a dot-segment workspace id or file id', () => {
-    expect(() => documentApiUrl('..', 'a', 'snapshot')).toThrow(/dot segment/)
-    expect(() => documentFileApiUrl('ws', 'a', '..')).toThrow(/dot segment/)
+  it.each(['.', '..'])('refuses the segment %j wherever it is placed', (segment) => {
+    expect(() => encodePathSegment(segment)).toThrow(/dot segment/)
+    expect(() => documentByIdApiUrl(segment, 'doc', 'snapshot')).toThrow(/dot segment/)
+    expect(() => documentByIdApiUrl('ws', segment, 'snapshot')).toThrow(/dot segment/)
+    expect(() => documentFileByIdApiUrl('ws', 'doc', segment)).toThrow(/dot segment/)
   })
 
   it('keeps segments that merely contain dots', () => {
-    expect(encodeDocumentPath('...')).toBe('...')
-    expect(encodeDocumentPath('a.b/%2e')).toBe('a.b/%252e')
+    expect(encodePathSegment('...')).toBe('...')
+    expect(encodePathSegment('a.b%2e')).toBe('a.b%252e')
   })
 })

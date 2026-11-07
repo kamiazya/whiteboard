@@ -12,9 +12,10 @@
  */
 import { listDocumentsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentPins } from '@kamiazya/whiteboard-ports'
+import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { withTempDataDir } from '../_test-helpers.js'
+import { documentIdAt, UNKNOWN_DOCUMENT_ID, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-delete-adapter-')
 
@@ -33,6 +34,16 @@ const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
+const { resolveDocumentAddress } = await import('./path-route.js')
+
+// The composed document router resolves a document id once ahead of every
+// id-addressed route; mounting the workspaces router alone needs the same step.
+function createIdRouter(deps: Parameters<typeof createWorkspacesRouter>[0]['serverDeps']) {
+  const app = new Hono()
+  app.use('/api/workspaces/:workspaceId/documents/:documentId/*', resolveDocumentAddress(deps))
+  app.route('/', createWorkspacesRouter({ serverDeps: deps }))
+  return app
+}
 
 async function depsRecordingTeardown(): Promise<{
   deps: Awaited<ReturnType<typeof resolveServerDeps>>
@@ -273,7 +284,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
   })
 })
 
-describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
+describe('PUT /api/workspaces/:workspaceId/documents/:documentId/path', () => {
   async function depsRecordingMove(): Promise<{
     deps: Awaited<ReturnType<typeof resolveServerDeps>>
     moved: string[]
@@ -300,10 +311,11 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       path: 'plan',
       kind: 'spatial',
     })
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
+    const id = await documentIdAt(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'plan')
 
     const res = await app.request(
-      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/plan/path',
+      `/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${id}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -316,13 +328,13 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
     expect(moved).toEqual(['plan->archive'])
   })
 
-  it('answers 404 for a path that names nothing', async () => {
+  it('answers 404 for an id that names nothing', async () => {
     const { deps, moved } = await depsRecordingMove()
     await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
 
     const res = await app.request(
-      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/absent/path',
+      `/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${UNKNOWN_DOCUMENT_ID}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -352,10 +364,11 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
         kind: 'spatial',
       })
     }
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
+    const id = await documentIdAt(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'plan')
 
     const res = await app.request(
-      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/plan/path',
+      `/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${id}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -376,10 +389,11 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       path: 'plan',
       kind: 'spatial',
     })
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
+    const id = await documentIdAt(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'plan')
 
     const res = await app.request(
-      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/plan/path',
+      `/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${id}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -391,7 +405,7 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   })
 })
 
-describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
+describe('DELETE /api/workspaces/:workspaceId/documents/:documentId', () => {
   beforeEach(async () => {
     await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed', new LoroDoc())
   })
@@ -402,9 +416,10 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
   it('deletes through the injected operation rather than its own sequence', async () => {
     const { deps, entered, cleaned } = await depsRecordingTeardown()
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
 
-    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/doomed', {
+    const id = await documentIdAt(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed')
+    const res = await app.request(`/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${id}`, {
       method: 'DELETE',
     })
 
@@ -420,9 +435,10 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   it('surfaces the descendant refusal as 409 without entering cleanup', async () => {
     await saveDocument('01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed/child', new LoroDoc())
     const { deps, entered, cleaned } = await depsRecordingTeardown()
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
 
-    const res = await app.request('/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/doomed', {
+    const id = await documentIdAt(deps, '01ZVM89A4A1V9FS03Z9J64KEK1', 'doomed')
+    const res = await app.request(`/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${id}`, {
       method: 'DELETE',
     })
 
@@ -435,12 +451,12 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
     expect(cleaned).toEqual([])
   })
 
-  it('still answers 404 for a path that names nothing', async () => {
+  it('still answers 404 for an id that names nothing', async () => {
     const { deps, entered } = await depsRecordingTeardown()
-    const app = createWorkspacesRouter({ serverDeps: deps })
+    const app = createIdRouter(deps)
 
     const res = await app.request(
-      '/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/never-existed',
+      `/api/workspaces/01ZVM89A4A1V9FS03Z9J64KEK1/documents/${UNKNOWN_DOCUMENT_ID}`,
       {
         method: 'DELETE',
       },

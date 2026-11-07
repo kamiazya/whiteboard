@@ -105,8 +105,7 @@ function decodeHandle(raw: string | undefined): string | null | undefined {
   }
 }
 
-// The /api/w/:handle/... family (document file, workspace-document,
-// document export, document (rest)).
+// The /api/w/:handle/... family: the workspace record's own routes.
 const wHandlePattern = /^\/api\/w\/([^/]+)\//
 const wHandle = (path: string): string | null | undefined =>
   decodeHandle(wHandlePattern.exec(path)?.[1])
@@ -120,14 +119,21 @@ const workspacesHandlePattern = /^\/api\/(?:v1\/)?workspaces\/([^/]+)(?:\/|$)/
 const workspacesHandle = (path: string): string | null | undefined =>
   decodeHandle(workspacesHandlePattern.exec(path)?.[1])
 
-const DOCUMENT_FILE = /^\/api\/w\/[^/]+\/document\/.+\/file\/[^/]+$/
-const DOCUMENT_ACTIONS: ReadonlySet<string> = new Set(DOCUMENT_API_ACTIONS)
-
+// A document addressed by id under its workspace: `/documents/:documentId/…`.
 // `/?$`: the router strips one trailing slash before it reads the suffix.
-const DOCUMENT_VERSIONS_READ =
-  /^\/api\/workspaces\/[^/]+\/documents\/.+\/versions(?:\/[^/]+\/document)?\/?$/
-const DOCUMENT_VERSIONS_WRITE =
-  /^\/api\/workspaces\/[^/]+\/documents\/.+\/versions(?:\/[^/]+\/restore)?\/?$/
+const DOCUMENT_BY_ID = String.raw`^\/api\/workspaces\/[^/]+\/documents\/[^/]+`
+const DOCUMENT_FILE = new RegExp(String.raw`${DOCUMENT_BY_ID}\/files\/[^/]+$`)
+const DOCUMENT_EXPORT = new RegExp(String.raw`${DOCUMENT_BY_ID}\/export$`)
+// Every action but the export, which writes a file and has its own rule.
+const DOCUMENT_CONTENT = new RegExp(
+  String.raw`${DOCUMENT_BY_ID}\/(?:${DOCUMENT_API_ACTIONS.filter((a) => a !== 'export').join('|')})$`,
+)
+const DOCUMENT_VERSIONS_READ = new RegExp(
+  String.raw`${DOCUMENT_BY_ID}\/versions(?:\/[^/]+\/document)?\/?$`,
+)
+const DOCUMENT_VERSIONS_WRITE = new RegExp(
+  String.raw`${DOCUMENT_BY_ID}\/versions(?:\/[^/]+\/restore)?\/?$`,
+)
 
 const always =
   (...scopes: readonly AuthScope[]) =>
@@ -148,29 +154,13 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // answer a caller holding no credential, and it carries no secret.
   { name: 'runtime/proof', claims: exactly('/api/runtime/proof'), decide: publicRoute },
 
-  // A file whose id is spelled like a document action (`…/a/file/export`) is
-  // also that action on the document `a/file`, and which of the two answers
-  // is decided by which router is mounted first. It asks for both, so neither
-  // a files grant nor a canvas grant reaches the other's half alone.
-  {
-    name: 'document file/action overlap',
-    claims: (path) =>
-      DOCUMENT_FILE.test(path) && DOCUMENT_ACTIONS.has(path.slice(path.lastIndexOf('/') + 1)),
-    decide: (isWrite) => ({
-      kind: 'scoped',
-      scopes: isWrite ? ['files:write', 'canvas:write'] : ['files:read', 'canvas:read'],
-    }),
-    workspace: wHandle,
-  },
-
-  // File routes: reading/writing a document's attached binary file. The
-  // document path is multi-segment, so the discriminator is the mandatory
-  // `/file/<fileId>` suffix — the same suffix-anchored parse the router uses.
+  // File routes: reading/writing a document's attached binary file. Ahead
+  // of the workspace rules, which would grant them at the workspace bar.
   {
     name: 'document file',
     claims: matching(DOCUMENT_FILE),
     decide: byAccess('files:write', 'files:read'),
-    workspace: wHandle,
+    workspace: workspacesHandle,
   },
 
   // The workspace-document sync surface: one snapshot/update pair for the
@@ -199,19 +189,19 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   // An export writes a file into the data dir, so it is a write.
   {
     name: 'document export',
-    claims: matching(/^\/api\/w\/[^/]+\/document\/.+\/export$/, 'POST'),
+    claims: matching(DOCUMENT_EXPORT, 'POST'),
     decide: always('canvas:write'),
-    workspace: wHandle,
+    workspace: workspacesHandle,
   },
-  // Remaining /api/w/:workspaceId/document/* routes: honor the write/read
-  // split so a mutating POST isn't authorized by
-  // canvas:read alone. The specific write routes above still take
-  // precedence via ordering.
+  // A document's content actions (snapshot, SVG export, client count): the
+  // canvas grants, read or write by verb, so a workspace grant alone never
+  // reads a document's bytes. The placement routes beside them (delete, path,
+  // name, pin, duplicate) stay workspace operations under 'workspaces (rest)'.
   {
-    name: 'document (rest)',
-    claims: matching(/^\/api\/w\/[^/]+\/document\//),
+    name: 'document content',
+    claims: matching(DOCUMENT_CONTENT),
     decide: byAccess('canvas:write', 'canvas:read'),
-    workspace: wHandle,
+    workspace: workspacesHandle,
   },
 
   // SSE sync transport. These are canvas:read even though two of them are
@@ -231,13 +221,9 @@ const API_ROUTE_RULES: readonly RouteScopeRule[] = [
   },
 
   // Version history and restore — version-control operations scoped to a
-  // single document. The router reads these as a suffix matched from the END
-  // of a document path of any depth (`matchDocumentsTail`), and with its verb:
-  // the same tail under another verb is a document operation, e.g. DELETE
-  // `…/documents/a/versions` deletes the document `a/versions`. Read from the
-  // front, a nested document's history would fall to the workspace rule and a
-  // document merely spelled `versions…` would answer to a versions grant.
-  // HEAD is Hono's GET with the body dropped, so it is read the same way.
+  // single document, told apart from the document operations by their suffix
+  // and verb. HEAD is Hono's GET with the body dropped, so it is read the
+  // same way.
   {
     name: 'document versions',
     claims: (path, method) =>

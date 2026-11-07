@@ -17,6 +17,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -77,7 +78,7 @@ describe('rename routes follow references', () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/design%2Flogin/path',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'design/login')}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -99,7 +100,7 @@ describe('rename routes follow references', () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
 
     const res = await app.request(
-      '/api/workspaces/016BN0JHBPPS1DSRVWNNRVDCZ3/documents/folder/path',
+      `/api/workspaces/016BN0JHBPPS1DSRVWNNRVDCZ3/documents/${await documentIdAt(serverDeps, '016BN0JHBPPS1DSRVWNNRVDCZ3', 'folder')}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

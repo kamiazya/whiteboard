@@ -45,6 +45,22 @@ describe('demoteWhenSafe', () => {
       'an image failed to move',
       { blobs: { transferred: [], missing: [], failed: [{ fileId: 'f1', reason: 'too big' }] } },
     ],
+    [
+      'a picture had no live document to go through',
+      {
+        blobs: {
+          transferred: [],
+          missing: [],
+          failed: [
+            {
+              fileId: 'f1',
+              reason:
+                'no live document to send that picture through; restore the document on the daemon and move again',
+            },
+          ],
+        },
+      },
+    ],
     ['an image read as missing', { blobs: { transferred: [], missing: ['f1'], failed: [] } }],
     ['the daemon did not confirm a carried plane', { leftBehind: ['a trash entry'] }],
     // Counted apart from the sentences, so dropped versions keep the copy even unnamed.

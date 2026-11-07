@@ -102,10 +102,10 @@ describe('what each storage category holds on the daemon', () => {
   })
 
   it('files an uploaded image under files, leaving blobs alone', async () => {
-    const { app } = await bootDaemon()
+    const { app, documentId } = await bootDaemon()
     const before = await bytesByCategory()
 
-    const res = await app.request(`/api/w/${WS}/document/note/file/image-1`, {
+    const res = await app.request(`/api/workspaces/${WS}/documents/${documentId}/files/image-1`, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: IMAGE,

@@ -71,9 +71,9 @@ export async function resolveWorkspaceHandleToId(
  * swap of the raw request, as `callerNamespaces` above), so a handle is
  * resolved once no matter how many composed routers and helpers read it.
  * The daemon has no single middleware to hang this on: its handlers reach
- * module-level store state rather than one injected `deps`, and two of the
- * three address families are hand-parsed out of a wildcard path rather than
- * bound as a route param. Resolving twice would be worse than untidy — the
+ * module-level store state rather than one injected `deps`, and the
+ * workspace record's own routes read the handle apart from the document
+ * routes' address resolution. Resolving twice would be worse than untidy — the
  * second answer keys write locks, doc caches and connection registries, and
  * two independent resolutions of the same handle are two chances to disagree.
  */

@@ -105,7 +105,7 @@ const createsPlan = (record: LoroDoc) =>
 
 /** The snapshot reads the page's embed seam made for `plan`. */
 const planLoads = (fetch: ReturnType<typeof vi.fn>) =>
-  fetch.mock.calls.filter(([input]) => /\/plan\b.*snapshot/.test(String(input))).length
+  fetch.mock.calls.filter(([input]) => new RegExp(`/${PLAN}/snapshot`).test(String(input))).length
 
 describe('DaemonDocumentPage document list follows the record', () => {
   let fetch: ReturnType<typeof vi.fn>

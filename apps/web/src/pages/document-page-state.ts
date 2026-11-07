@@ -14,6 +14,11 @@
 //   /local/ URL to the loaded document), so "nothing at this address" and
 //   "no documents at all" both collapse into a successful load there.
 
+import {
+  type DocumentReadFailure,
+  documentReadFailureMessage,
+} from '../lib/document-read-failure.js'
+
 export interface LoadingState {
   kind: 'loading'
 }
@@ -51,4 +56,29 @@ export interface WorkspaceEmptyState {
  */
 export interface EditingState {
   kind: 'editing'
+}
+
+/**
+ * Second phase, for BOTH keepers: what the CONTENT read said, once it has
+ * said anything.
+ *
+ * Separate from each keeper's derive because the data flow is genuinely
+ * two-step and pretending otherwise would be circular — the page needs a
+ * document identity to open the content at all, and it gets that from the
+ * first phase's `editing` state. The failure can only arrive after.
+ *
+ * It has to be a page-level state rather than a banner over the editor.
+ * Rendering the editor for a document whose bytes are intact but unreadable
+ * shows an empty canvas, and the next save overwrites them — so a user whose
+ * app is merely out of date would LOSE the document by opening it. On the
+ * daemon page the session binds no editor on a refused snapshot, so nothing
+ * is overwritten — but a page that never read the refusal left the person on
+ * the loading copy for good.
+ */
+export function refineForContentReadFailure<S extends { kind: string }>(
+  state: S,
+  failure: DocumentReadFailure | null,
+): S | LoadDegradedState {
+  if (failure === null || state.kind !== 'editing') return state
+  return { kind: 'load-degraded', message: documentReadFailureMessage(failure) }
 }

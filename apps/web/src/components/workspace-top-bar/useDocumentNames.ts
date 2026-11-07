@@ -28,6 +28,12 @@ interface UseDocumentNamesOptions {
   keptByBrowser: boolean
   daemonFetch: typeof globalThis.fetch
   /**
+   * The open document's id, which the daemon addresses its name by.
+   * `undefined` while no listing names the document yet: a rename is then
+   * refused without a request.
+   */
+  documentId?: string | undefined
+  /**
    * What the workspace record the page syncs names the open document — the
    * same record `/names` answers from, kept current by its update frames.
    * `name` is `null` for an unnamed document and `undefined` while the record
@@ -56,12 +62,13 @@ function withRecordedName(
 async function writeName(
   daemonFetch: typeof globalThis.fetch,
   workspaceId: string,
-  targetPath: string,
+  documentId: string | undefined,
   name: string,
   setNames: (names: WorkspaceNames) => void,
 ): Promise<string | null> {
+  if (documentId === undefined) return RENAME_REFUSED
   try {
-    setNames(await setDocumentDisplayName(daemonFetch, SAME_BASE, workspaceId, targetPath, name))
+    setNames(await setDocumentDisplayName(daemonFetch, SAME_BASE, workspaceId, documentId, name))
     return null
   } catch (err) {
     return (err instanceof DaemonApiError && apiErrorReason(err.body)) || RENAME_REFUSED
@@ -76,6 +83,7 @@ export function useDocumentNames({
   workspaceId,
   keptByBrowser,
   daemonFetch,
+  documentId,
   recorded,
 }: UseDocumentNamesOptions) {
   const [names, setNames] = useState<WorkspaceNames>(EMPTY_NAMES)
@@ -106,14 +114,14 @@ export function useDocumentNames({
   // Daemon-mode rename commit: null once saved, else why not (the daemon's own
   // reason when it gave one). A browser-kept workspace never reaches it.
   const renameDocument = useCallback(
-    (targetPath: string, name: string): Promise<string | null> =>
-      track(() => writeName(daemonFetch, workspaceId, targetPath, name, setNames)),
-    [workspaceId, daemonFetch, track],
+    (name: string): Promise<string | null> =>
+      track(() => writeName(daemonFetch, workspaceId, documentId, name, setNames)),
+    [workspaceId, documentId, daemonFetch, track],
   )
 
   /** What the title slot is handed to rename this document with, and to wait on those renames. */
-  const renameFor = (path: string) => ({
-    onRename: (next: string) => renameDocument(path, next),
+  const renameFor = () => ({
+    onRename: renameDocument,
     afterRenamesLand,
   })
 

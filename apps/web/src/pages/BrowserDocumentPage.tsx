@@ -39,7 +39,7 @@ import {
 import type { ConnectionState } from '../lib/connection-state.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { documentLabel } from '../lib/document-label.js'
-import { isDocumentReadFailure } from '../lib/document-read-failure.js'
+import { documentReadFailureOf } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { documentHeading } from '../lib/document-title.js'
 import { faviconStatusOf } from '../lib/favicon.js'
@@ -58,7 +58,7 @@ import {
   loadedSnapshotOf,
   withLiveSnapshot,
 } from './browser-document-slots.js'
-import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
+import { derivePageState } from './browser-page-state.js'
 import { DocumentPage } from './DocumentPage.js'
 import type {
   DocumentKeeper,
@@ -66,6 +66,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { refineForContentReadFailure } from './document-page-state.js'
 import { mergePersistence } from './merge-persistence.js'
 import { useAutoCheckpoint } from './use-auto-checkpoint.js'
 import { useBrowserConnections } from './use-browser-connections.js'
@@ -348,18 +349,16 @@ function useBrowserDocument(
         : createBrowserVersionsBackend({
             record: versionsRecord,
             store: versionStore,
+            index: store,
             kind: documentKind,
           }),
-    [versionsRecord, versionStore, documentKind],
+    [versionsRecord, versionStore, store, documentKind],
   )
 
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only
   // arrive after the id it needed came out of that first phase.
-  const renderState = refineForContentReadFailure(
-    pageState,
-    isDocumentReadFailure(backendError) ? backendError : null,
-  )
+  const renderState = refineForContentReadFailure(pageState, documentReadFailureOf(backendError))
 
   // This document's conversations and the rail's write door, both through the
   // session for either kind: a note's threads plane is a peer of its body on
@@ -548,7 +547,7 @@ function useBrowserDocument(
     versions: versionsSlot({
       backend: versionsBackend,
       workspaceId,
-      path: loadedPath,
+      documentId: openDocumentId,
       // The browser keeper's history column reads its own store, so a save
       // has nothing to announce.
       announceRefresh: () => {},
@@ -559,6 +558,7 @@ function useBrowserDocument(
       // the daemon's `/names`, so `title`/`onTitleChange` stay the source.
       workspaceId,
       path: loadedPath,
+      documentId: openDocumentId,
       keeper: 'browser',
       saveState: { persistence: writes, connection },
       // The way out of the editor. This page had none until now — the

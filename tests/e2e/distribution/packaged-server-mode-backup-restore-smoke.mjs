@@ -11,7 +11,7 @@
 //   3.  Start container A with a fresh source data volume.
 //   4.  Seed via valid JWT:
 //         - workspace + canvas, with one node written through /update
-//         - file blob  (PUT /api/w/:ws/document/:path/file/:fileId)
+//         - file blob  (PUT /api/workspaces/:ws/documents/:documentId/files/:fileId)
 //         - manual version
 //         - workspace display name (PUT /api/workspaces/:ws/name)
 //   5.  Capture snapshot bytes from server A for byte-equality check.
@@ -365,6 +365,9 @@ try {
         documentCount: (list?.documents ?? []).length,
       })
     }
+    // The routes address a document by id; the listing is where a path maps to one.
+    const canvasId = (list?.documents ?? []).find((c) => c.path === CANVAS_PATH)?.documentId
+    if (!canvasId) fail('scenario 3: seeded canvas has no documentId in the listing')
 
     // Put real content in the canvas before capturing it. Without this the
     // smoke backed up an EMPTY document and asserted over its bytes, which
@@ -391,7 +394,7 @@ try {
     // Capture Loro snapshot bytes (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/snapshot`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${canvasId}/snapshot`,
       jwt,
     )
     if (!snapshotRes.ok) fail(`scenario 3: snapshot fetch failed with ${snapshotRes.status}`)
@@ -401,7 +404,7 @@ try {
     // Upload file blob (files:write).
     const uploadRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/file/${FILE_ID}`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${canvasId}/files/${FILE_ID}`,
       jwt,
       { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
     )
@@ -410,7 +413,7 @@ try {
     // Save manual version (versions:write).
     const versionRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${canvasId}/versions`,
       jwt,
       {
         method: 'POST',
@@ -548,11 +551,13 @@ try {
         documentCount: (list?.documents ?? []).length,
       })
     }
+    const canvasId = (list?.documents ?? []).find((c) => c.path === CANVAS_PATH)?.documentId
+    if (!canvasId) fail('scenario 7: restored canvas has no documentId in the listing')
 
     // Snapshot byte-equality (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/snapshot`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${canvasId}/snapshot`,
       jwt,
     )
     if (!snapshotRes.ok)
@@ -591,7 +596,7 @@ try {
     // File blob (files:read).
     const fileRes = await authedFetch(
       serverBaseUrl,
-      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/file/${FILE_ID}`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${canvasId}/files/${FILE_ID}`,
       jwt,
     )
     if (!fileRes.ok) fail(`scenario 7: file GET on restored server failed with ${fileRes.status}`)
@@ -606,7 +611,7 @@ try {
     // Version list (versions:read).
     const versionsRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${canvasId}/versions`,
       jwt,
     )
     if (!versionsRes.ok)

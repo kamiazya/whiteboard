@@ -234,7 +234,7 @@ async function webAppRoundTrip(record, appUrl, restartDaemon) {
     // viewport tools do) was told nobody did while only sockets were counted.
     let seen = { count: 0, readyCount: 0 }
     for (let i = 0; i < 40 && seen.readyCount < 1; i += 1) {
-      seen = await clientCount(record, 'bridge-note')
+      seen = await clientCount(record, documentId)
       if (seen.readyCount < 1) await new Promise((later) => setTimeout(later, 250))
     }
     check(

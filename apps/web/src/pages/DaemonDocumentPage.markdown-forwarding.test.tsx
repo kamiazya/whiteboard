@@ -178,7 +178,9 @@ describe('DaemonDocumentPage markdown sync forwarding', () => {
       />,
     )
 
-    await waitFor(() => expect(screen.getByText(/Opening this document/)).toBeTruthy())
+    await waitFor(() =>
+      expect(screen.getByRole('alert').textContent).toMatch(/form this version no longer reads/i),
+    )
     expect(screen.queryByTestId('markdown-source-stub')).toBeNull()
     expect(mounted.views).toEqual([])
     expect(backend.pushed).toEqual([])

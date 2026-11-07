@@ -10,8 +10,8 @@
  * not about anyone using it.
  *
  * A caller is a call whose LAST argument is the action's string literal, in a
- * production file that names `documentApiUrl`. That reads `documentApiUrl(ws,
- * path, 'snapshot')` and a wrapper that fixes the action
+ * production file that names `documentByIdApiUrl`.
+ * That reads `documentByIdApiUrl(ws, id, 'snapshot')` and a wrapper that fixes the action
  * (`documentRouteUrl(base, doc, 'update')`) alike, and it does not read the
  * server's own `onDocumentAction(app, 'get', 'snapshot', …)`, which is a
  * registration and not a use. The source is read as an AST, so prose naming a
@@ -29,6 +29,8 @@ import { describe, expect, it } from 'vitest'
 import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
+
+const DOCUMENT_URL_BUILDERS: ReadonlySet<string> = new Set(['documentByIdApiUrl'])
 
 const ACTIONS_FILE = 'packages/daemon-client/src/api-contracts/document-url.ts'
 
@@ -79,13 +81,13 @@ function declaredActions(): string[] {
   return found
 }
 
-/** Whether `source` names `documentApiUrl` and calls something with `action` last. */
+/** Whether `source` names a document URL builder and calls something with `action` last. */
 function callsWithAction(source: string): Set<string> {
   const file = parse(source, 'scanned.ts')
   let namesBuilder = false
   const literals = new Set<string>()
   const visit = (node: ts.Node): void => {
-    if (ts.isIdentifier(node) && node.text === 'documentApiUrl') namesBuilder = true
+    if (ts.isIdentifier(node) && DOCUMENT_URL_BUILDERS.has(node.text)) namesBuilder = true
     if (ts.isCallExpression(node)) {
       const last = node.arguments.at(-1)
       if (last !== undefined && ts.isStringLiteralLike(last)) literals.add(last.text)
@@ -164,19 +166,19 @@ describe('what the scan counts as a call', () => {
   })
 
   it('reads a call to the builder with the action last', () => {
-    expect([...callsWithAction(`documentApiUrl(ws, path, 'snapshot')`)]).toEqual(['snapshot'])
+    expect([...callsWithAction(`documentByIdApiUrl(ws, id, 'snapshot')`)]).toEqual(['snapshot'])
   })
 
   it('reads a wrapper that fixes the action, in a file that names the builder', () => {
     expect([
       ...callsWithAction(
-        `import { documentApiUrl } from 'x'\ndocumentRouteUrl(base, doc, 'update')`,
+        `import { documentByIdApiUrl } from 'x'\ndocumentRouteUrl(base, doc, 'update')`,
       ),
     ]).toEqual(['update'])
   })
 
   it('does not read prose or a file that never names the builder', () => {
-    expect(callsWithAction(`// documentApiUrl(ws, path, 'export')\nconst a = 1`).size).toBe(0)
+    expect(callsWithAction(`// documentByIdApiUrl(ws, id, 'export')\nconst a = 1`).size).toBe(0)
     expect(callsWithAction(`onDocumentAction(app, 'get', 'snapshot')`).size).toBe(0)
   })
 })

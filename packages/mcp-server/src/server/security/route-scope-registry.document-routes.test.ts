@@ -1,172 +1,132 @@
-// The document routes address a document by a PATH of any depth and tell
-// their actions apart by a suffix matched from the END of it
-// (`matchDocumentsTail`, `documentPathForAction`). A scope rule that reads the
-// same URL from the front instead decides by how the document happens to be
-// spelled: one too narrow sends a nested document's version history to the
-// workspace rule, and one too loose hands a document's own write to a
-// versions grant. These cases ask the registry the question the router
-// answers, for documents whose paths are spelled with the routes' own words.
+// The document routes address a document by its ID and tell their actions
+// apart by the suffix after it. A scope rule that read the suffix from the
+// FRONT of a multi-segment path once decided by how a document was spelled;
+// with one id segment there is no spelling, but the registry still has to put
+// a version suffix under the versions grant and everything else under the
+// document or workspace grant, whatever the verb. These cases ask the
+// registry the question the router answers, for every registered suffix.
 
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
-import { matchDocumentsTail } from '../routes/document/path-route.js'
 import { resolveApiRouteScope, ruleClaiming } from './route-scope-registry.js'
 
 const scoped = (...scopes: string[]) => ({ kind: 'scoped', scopes })
-const documents = (tail: string) => `/api/workspaces/ws1/documents/${tail}`
+const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const document = (suffix: string) => `/api/workspaces/ws1/documents/${ID}${suffix}`
 
-// Every `onDocumentsRoute` registration under /api/workspaces/:ws/documents,
-// as its router mounts it. The version routes are the ones the registry must
-// set apart; every other one is a document operation at the workspace bar.
+// Every `onDocumentRoute` registration under /api/workspaces/:ws/documents/:id,
+// as its routers mount it, by the rule that owns it.
 const VERSION_ROUTES = [
-  ['GET', ['versions']],
-  ['GET', ['versions', ':id', 'document']],
-  ['POST', ['versions']],
-  ['POST', ['versions', ':id', 'restore']],
+  ['GET', '/versions'],
+  ['GET', '/versions/:id/document'],
+  ['POST', '/versions'],
+  ['POST', '/versions/:id/restore'],
 ] as const
-const DOCUMENT_ROUTES = [
-  ['DELETE', []],
-  ['PUT', ['path']],
-  ['POST', ['duplicate']],
-  ['PUT', ['name']],
-  ['PUT', ['pin']],
+const WORKSPACE_ROUTES = [
+  ['DELETE', ''],
+  ['PUT', '/path'],
+  ['POST', '/duplicate'],
+  ['PUT', '/name'],
+  ['PUT', '/pin'],
+] as const
+const CONTENT_ROUTES = [
+  ['GET', '/snapshot'],
+  ['GET', '/client-count'],
+  ['POST', '/export-svg'],
 ] as const
 
-describe('the version routes, for a document at any depth', () => {
+describe('the version routes', () => {
   it.for([
-    ['GET', 'notes/plan/versions', 'versions:read'],
-    ['GET', 'notes/2026/plan/versions/', 'versions:read'],
-    ['GET', 'notes/plan/versions/01ABC/document', 'versions:read'],
-    ['HEAD', 'notes/plan/versions/01ABC/document', 'versions:read'],
-    ['POST', 'notes/plan/versions', 'versions:write'],
-    ['POST', 'notes/plan/versions/01ABC/restore', 'versions:write'],
-    // The document `a/versions`'s own history: the suffix is read from the end.
-    ['GET', 'a/versions/versions', 'versions:read'],
-    ['POST', 'a/versions/versions/01ABC/restore', 'versions:write'],
-  ] as const)('%s %s needs %s', ([method, tail, scope]) => {
-    expect(ruleClaiming(method, documents(tail))).toBe('document versions')
-    expect(resolveApiRouteScope(method, documents(tail))).toEqual(scoped(scope))
+    ['GET', '/versions', 'versions:read'],
+    ['GET', '/versions/', 'versions:read'],
+    ['GET', '/versions/01ABC/document', 'versions:read'],
+    ['HEAD', '/versions/01ABC/document', 'versions:read'],
+    ['POST', '/versions', 'versions:write'],
+    ['POST', '/versions/01ABC/restore', 'versions:write'],
+  ] as const)('%s …%s needs %s', ([method, suffix, scope]) => {
+    expect(ruleClaiming(method, document(suffix))).toBe('document versions')
+    expect(resolveApiRouteScope(method, document(suffix))).toEqual(scoped(scope))
   })
 })
 
-describe('a document whose path is spelled with a version route word', () => {
-  it.for([
-    ['POST', 'notes/versions-2026/duplicate'],
-    ['PUT', 'notes/versions-2026/path'],
-    ['DELETE', 'notes/versions-2026'],
-    // Deleting the document `a/versions`, not anything about a's history.
-    ['DELETE', 'a/versions'],
-    ['DELETE', 'a/versions/01ABC/restore'],
-    ['PUT', 'a/versions/name'],
-    ['POST', 'a/versions/duplicate'],
-  ] as const)('%s %s stays a workspace write', ([method, tail]) => {
-    expect(ruleClaiming(method, documents(tail))).toBe('workspaces (rest)')
-    expect(resolveApiRouteScope(method, documents(tail))).toEqual(scoped('workspace:write'))
+describe('the placement routes stay workspace writes', () => {
+  it.for(WORKSPACE_ROUTES)('%s …%s', ([method, suffix]) => {
+    expect(ruleClaiming(method, document(suffix))).toBe('workspaces (rest)')
+    expect(resolveApiRouteScope(method, document(suffix))).toEqual(scoped('workspace:write'))
   })
 })
 
-// Segments drawn mostly from the routes' own vocabulary, so the generator
-// keeps landing on the spellings that can be read two ways. `%2F` stays
-// encoded in the path a request is scoped by, and the router decodes it
-// INSIDE one segment, so `x%2Fversions` is not a `versions` segment.
-const segment = fc.constantFrom(
-  'notes',
-  'plan',
-  'versions',
-  'versions-2026',
-  'document',
-  'restore',
-  'duplicate',
-  'path',
-  'name',
-  'pin',
-  '01ABC',
-  'x%2Fversions',
-)
-const ROUTES = [...VERSION_ROUTES, ...DOCUMENT_ROUTES]
+describe('the content routes are canvas grants', () => {
+  it.for([
+    ['GET', '/snapshot', 'canvas:read'],
+    ['GET', '/client-count', 'canvas:read'],
+    ['POST', '/export-svg', 'canvas:write'],
+  ] as const)('%s …%s needs %s', ([method, suffix, scope]) => {
+    expect(ruleClaiming(method, document(suffix))).toBe('document content')
+    expect(resolveApiRouteScope(method, document(suffix))).toEqual(scoped(scope))
+  })
+
+  it('the export writes a file, so it is a canvas write of its own', () => {
+    expect(ruleClaiming('POST', document('/export'))).toBe('document export')
+    expect(resolveApiRouteScope('POST', document('/export'))).toEqual(scoped('canvas:write'))
+  })
+})
+
+// With one id segment a file id spelled like an action is unambiguous: under
+// `/files/` it is a file, and only there.
+describe('a file whose id is spelled like a document action', () => {
+  it.for([
+    ['GET', 'snapshot', 'files:read'],
+    ['PUT', 'export', 'files:write'],
+  ] as const)('%s …/files/%s needs %s alone', ([method, fileId, scope]) => {
+    const path = document(`/files/${fileId}`)
+    expect(ruleClaiming(method, path)).toBe('document file')
+    expect(resolveApiRouteScope(method, path)).toEqual(scoped(scope))
+  })
+})
+
+// Suffixes drawn from the routes' own vocabulary, with a verb drawn apart from
+// them, so the generator lands on every (verb, suffix) pair the router does
+// not mount as well as the ones it does.
+const ROUTES = [...VERSION_ROUTES, ...WORKSPACE_ROUTES, ...CONTENT_ROUTES, ['POST', '/export']]
 const request = fc
   .record({
     method: fc.constantFrom('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'),
-    path: fc.array(segment, { minLength: 1, maxLength: 4 }),
     suffix: fc.constantFrom(...ROUTES.map(([, suffix]) => suffix)),
-    id: segment,
+    id: fc.constantFrom('01ABC', 'versions', 'document'),
     trailingSlash: fc.boolean(),
   })
-  .map(({ method, path, suffix, id, trailingSlash }) => {
-    const tail = [...path, ...suffix.map((s) => (s === ':id' ? id : s))].join('/')
-    return { method, url: `${documents(tail)}${trailingSlash ? '/' : ''}` }
-  })
+  .map(({ method, suffix, id, trailingSlash }) => ({
+    method,
+    url: `${document(suffix.replace(':id', id))}${trailingSlash ? '/' : ''}`,
+  }))
 
-// The document a version route would serve this request for, by the router's
-// own parse — or null when no version route takes it. Hono answers HEAD with
-// the GET handler.
-const versionedDocument = ({ method, url }: { method: string; url: string }): string | null => {
+// Which rule the router's own registration would put this request under, or
+// null when no document route takes the verb. Hono answers HEAD with the GET
+// handler.
+const expectedRule = ({ method, url }: { method: string; url: string }): string | null => {
   const routedAs = method === 'HEAD' ? 'GET' : method
-  for (const [m, suffix] of VERSION_ROUTES) {
-    const matched = m === routedAs ? matchDocumentsTail(url, [...suffix]) : null
-    if (matched !== null) return matched.path
+  const suffix = url.slice(document('').length).replace(/\/$/, '')
+  for (const [m, pattern] of VERSION_ROUTES) {
+    const re = new RegExp(`^${pattern.replace(':id', '[^/]+')}$`)
+    if (m === routedAs && re.test(suffix)) return 'document versions'
   }
   return null
 }
 
 fcTest.prop([request], withDefaults())(
-  'the registry scopes a request as versions exactly when the router dispatches it to one',
+  'the registry scopes a request as versions exactly when a version route takes it',
   ({ method, url }) => {
-    const expected =
-      versionedDocument({ method, url }) === null ? 'workspaces (rest)' : 'document versions'
-    expect(ruleClaiming(method, url)).toBe(expected)
+    const expected = expectedRule({ method, url })
+    if (expected !== null) expect(ruleClaiming(method, url)).toBe(expected)
+    else expect(ruleClaiming(method, url)).not.toBe('document versions')
   },
 )
 
-it('the generator reaches nested version routes and their lookalikes', () => {
+it('the generator reaches the version routes and their lookalikes', () => {
   const sample = fc.sample(request, 2000)
-  const nested = sample.filter((r) => versionedDocument(r)?.includes('/'))
-  const lookalikes = sample.filter(
-    (r) => versionedDocument(r) === null && r.url.includes('/versions'),
-  )
-  // Measured at 232-257 and 931-952 of 2000 over five runs.
-  expect(nested.length).toBeGreaterThan(150)
-  expect(lookalikes.length).toBeGreaterThan(700)
-})
-
-describe('a file whose id is spelled like a document action', () => {
-  // The same tail is a file (GET/PUT `<path>/file/<id>`) and a document action
-  // on the document `<path>/file`, and which answers depends on mount order —
-  // so neither scope alone reaches it.
-  it.for([
-    ['POST', 'export', scoped('files:write', 'canvas:write')],
-    ['POST', 'export-svg', scoped('files:write', 'canvas:write')],
-    ['GET', 'snapshot', scoped('files:read', 'canvas:read')],
-    ['GET', 'client-count', scoped('files:read', 'canvas:read')],
-  ] as const)('%s …/a/file/%s needs both scopes', ([method, action, decision]) => {
-    const path = `/api/w/ws1/document/a/file/${action}`
-    expect(ruleClaiming(method, path)).toBe('document file/action overlap')
-    expect(resolveApiRouteScope(method, path)).toEqual(decision)
-  })
-
-  // A file id is one segment, so a document filed under a `file` folder is a
-  // document, and its actions answer to the document's scope alone.
-  it.for([
-    ['POST', 'export', 'document export', 'canvas:write'],
-    ['POST', 'export-svg', 'document (rest)', 'canvas:write'],
-    ['GET', 'snapshot', 'document (rest)', 'canvas:read'],
-  ] as const)('%s on a document under a file folder, …/a/file/b/%s, is %s', ([
-    method,
-    action,
-    rule,
-    scope,
-  ]) => {
-    const path = `/api/w/ws1/document/a/file/b/${action}`
-    expect(ruleClaiming(method, path)).toBe(rule)
-    expect(resolveApiRouteScope(method, path)).toEqual(scoped(scope))
-  })
-
-  it.for([
-    ['GET', 'files:read'],
-    ['PUT', 'files:write'],
-  ] as const)('%s on any other file id still needs %s alone', ([method, scope]) => {
-    const path = '/api/w/ws1/document/notes/plan/file/V1StGXR8_Z5jdHi6B-myT'
-    expect(ruleClaiming(method, path)).toBe('document file')
-    expect(resolveApiRouteScope(method, path)).toEqual(scoped(scope))
-  })
+  const versioned = sample.filter((r) => expectedRule(r) !== null)
+  const lookalikes = sample.filter((r) => expectedRule(r) === null && r.url.includes('/versions'))
+  expect(versioned.length).toBeGreaterThan(200)
+  expect(lookalikes.length).toBeGreaterThan(200)
 })

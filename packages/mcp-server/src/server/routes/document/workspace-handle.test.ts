@@ -7,12 +7,18 @@
  * module state rather than from one injected `deps`, so no single middleware
  * covers them and the resolve is a line per address read. A case per READ
  * MECHANISM is what says the line is actually there — `c.req.param()`, the
- * `/api/workspaces/.../documents/*` hand parse, and the `/api/w/...` one are
+ * `/api/workspaces/.../documents/:documentId` resolve, and the `/api/w/...` one are
  * three separate places to forget.
  */
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { Hono } from 'hono'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { resolveTestServerDeps, testStoreScope, withTempDataDir } from '../_test-helpers.js'
+import {
+  documentIdAt,
+  resolveTestServerDeps,
+  testStoreScope,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspace-handle-')
 
@@ -37,8 +43,21 @@ const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
-const { createDocumentMetadataRouter } = await import('./metadata.js')
+const { createDocumentMetadataRouter: createMetadataRouter } = await import('./metadata.js')
+const { resolveDocumentAddress } = await import('./path-route.js')
 const { createWorkspaceDocumentRouter } = await import('./workspace-document.js')
+
+// The composed document router resolves a document id once ahead of every
+// id-addressed route; mounting the metadata router alone needs the same step.
+function createDocumentMetadataRouter(options: Parameters<typeof createMetadataRouter>[0]): Hono {
+  const app = new Hono()
+  app.use(
+    '/api/workspaces/:workspaceId/documents/:documentId/*',
+    resolveDocumentAddress(serverDeps),
+  )
+  app.route('/', createMetadataRouter(options))
+  return app
+}
 
 const CANONICAL = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const SEGMENT = 'design'
@@ -75,14 +94,15 @@ describe('daemon routes address a workspace by its segment', () => {
   })
 
   it('answers GET /api/workspaces/<segment>/names as it does the canonical id', async () => {
-    await seeded()
+    const deps = await seeded()
+    const specId = await documentIdAt(deps, CANONICAL, 'spec')
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
     // Named through the CANONICAL id first, so the two responses differ from
     // each other unless the segment reached the same workspace. Comparing the
     // bare payloads would pass on two empty ones — which is what an
     // unresolved handle answers here, since names has no absent-workspace
     // refusal to fail on.
-    const named = await app.request(`/api/workspaces/${CANONICAL}/documents/spec/name`, {
+    const named = await app.request(`/api/workspaces/${CANONICAL}/documents/${specId}/name`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'The spec' }),
@@ -99,11 +119,12 @@ describe('daemon routes address a workspace by its segment', () => {
     expect(await bySegment.json()).toEqual(canonical)
   })
 
-  it('resolves the handle inside the /api/workspaces/.../documents/* hand parse', async () => {
-    await seeded()
+  it('resolves the handle inside the /api/workspaces/.../documents/:documentId/* routes', async () => {
+    const deps = await seeded()
+    const specId = await documentIdAt(deps, CANONICAL, 'spec')
     const app = createDocumentMetadataRouter({ scope: testStoreScope() })
 
-    const res = await app.request(`/api/workspaces/${SEGMENT}/documents/spec/name`, {
+    const res = await app.request(`/api/workspaces/${SEGMENT}/documents/${specId}/name`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: 'The spec' }),

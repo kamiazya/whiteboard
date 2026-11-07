@@ -72,7 +72,7 @@ describe('createDaemonFilesSource setDocumentName', () => {
     const source = createDaemonFilesSource(nameFetchStub(calls), BASE, 'ws')
     await source.setDocumentName({ documentId: 'id1', path: 'plans/roadmap' }, 'Roadmap')
     expect(calls).toHaveLength(1)
-    expect(calls[0]?.url).toContain('roadmap')
+    expect(calls[0]?.url).toBe(`${BASE}/api/workspaces/ws/documents/id1/name`)
     expect(calls[0]?.body).toEqual({ name: 'Roadmap' })
   })
 
@@ -708,7 +708,7 @@ describe('createDaemonFilesSource stored pictures', () => {
     const blob = await createDaemonFilesSource(fetchLike, BASE, 'ws').loadImage?.(row, 'asset:f1')
 
     expect(String(fetchLike.mock.calls[0]?.[0])).toBe(
-      `${BASE}/api/w/ws/document/boards/mood/file/f1`,
+      `${BASE}/api/workspaces/ws/documents/d/files/f1`,
     )
     expect(blob?.type).toBe('image/png')
     expect(new Uint8Array((await blob?.arrayBuffer()) ?? new ArrayBuffer(0))).toEqual(

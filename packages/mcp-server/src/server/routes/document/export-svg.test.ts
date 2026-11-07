@@ -10,7 +10,8 @@ import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { exportResponseSchema } from '../../../shared/api-contracts/export.js'
 import { captureLogsForTests } from '../../log.js'
-import { testStoreScope } from '../_test-helpers.js'
+import type { StoreScope } from '../../store/store-scope.js'
+import { resolvingDocumentIds, testStoreScope } from '../_test-helpers.js'
 
 let tempDir: string
 
@@ -23,8 +24,8 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// The route refuses a path that does not exist; the router's LiveDocuments
-// `exists` is stubbed true for every case, and the not-found case overrides it.
+// The router re-checks the live seam after the id resolves; `exists` is stubbed
+// true for every case, and the not-found case overrides it.
 const mockDocumentExists = vi.fn<(workspaceId: string, path: string) => Promise<boolean>>(
   async () => true,
 )
@@ -67,19 +68,25 @@ vi.mock('nanoid', async (importOriginal) => {
 const { createDocumentSvgExportRouter } = await import('./export-svg.js')
 const { nanoid } = await import('nanoid')
 
-function makeApp() {
+const CANVAS_A = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+const svgUrl = (documentId: string, workspaceId = 's1') =>
+  `/api/workspaces/${workspaceId}/documents/${documentId}/export-svg`
+const SVG_URL = svgUrl(CANVAS_A)
+
+function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   const app = new Hono()
+  resolvingDocumentIds(app, { [CANVAS_A]: { path: 'canvas-a' } })
   app.route(
     '/',
     createDocumentSvgExportRouter({
       liveDocuments: { exists: mockDocumentExists },
-      scope: testStoreScope(tempDir),
+      scope,
     }),
   )
   return app
 }
 
-describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
+describe('POST /api/workspaces/:workspaceId/documents/:documentId/export-svg', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-svg-test-'))
     mockExportCanvasHeadlessSvg.mockReset()
@@ -99,7 +106,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   it('renders headlessly and writes a real .svg file to the default exports dir', async () => {
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request(SVG_URL, { method: 'POST' })
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
@@ -119,16 +126,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   it('writes the default export under the layout it is handed, not the process data dir', async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-svg-layout-'))
     try {
-      const app = new Hono()
-      app.route(
-        '/',
-        createDocumentSvgExportRouter({
-          liveDocuments: { exists: mockDocumentExists },
-          scope: testStoreScope(elsewhere),
-        }),
-      )
-
-      const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
+      const res = await makeApp(testStoreScope(elsewhere)).request(SVG_URL, { method: 'POST' })
 
       expect(res.status).toBe(200)
       const { filePath } = (await res.json()) as { filePath: string }
@@ -142,7 +140,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   // The theme drew clean and the answer was 200, so a typo was
   // indistinguishable from the theme asked for.
   it('refuses a style naming no registered theme with the registered ids, and writes nothing', async () => {
-    const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await makeApp().request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ style: 'visual.sktech' }),
@@ -156,10 +154,10 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
-  it('answers 404 for a path that does not exist, rather than an empty SVG', async () => {
+  it('answers 404 for a document the live seam no longer holds, rather than an empty SVG', async () => {
     mockDocumentExists.mockResolvedValue(false)
 
-    const res = await makeApp().request('/api/w/s1/document/no-such-canvas/export-svg', {
+    const res = await makeApp().request(SVG_URL, {
       method: 'POST',
     })
 
@@ -177,7 +175,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
       unresolvedFamilies: [],
     })
 
-    const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await makeApp().request(SVG_URL, {
       method: 'POST',
     })
 
@@ -194,8 +192,8 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
       const [resA, resB] = await Promise.all([
-        app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' }),
-        app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' }),
+        app.request(SVG_URL, { method: 'POST' }),
+        app.request(SVG_URL, { method: 'POST' }),
       ])
       const bodyA = (await resA.json()) as { filePath: string }
       const bodyB = (await resB.json()) as { filePath: string }
@@ -214,7 +212,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
-      const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+      const res = await makeApp().request(SVG_URL, {
         method: 'POST',
       })
 
@@ -232,7 +230,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   it('forwards padding and theme to exportCanvasHeadlessSvg', async () => {
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 24, theme: 'dark' }),
@@ -256,7 +254,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     ['background', '#fff'],
   ])('refuses the undefined field %s by name with 400 invalid_request', async (field, value) => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 24, [field]: value }),
@@ -268,16 +266,16 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
-  it('rejects invalid workspaceId or path with 400', async () => {
+  it('rejects a malformed workspace handle with 400', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/bad.sid/document/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request(svgUrl(CANVAS_A, 'bad.sid'), { method: 'POST' })
     expect(res.status).toBe(400)
     expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
   })
 
   it('rejects a whitespace-only body with 400 invalid_body instead of throwing', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '   ',
@@ -289,7 +287,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
 
   it('rejects an invalid theme with 400 invalid_request', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: 'sepia' }),
@@ -303,7 +301,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'custom.svg')
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -316,7 +314,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
 
   it('rejects an outputPath outside the workspace exports dir with 400 invalid_output_path', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
@@ -332,7 +330,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, '<svg>OLD</svg>')
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -348,7 +346,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, '<svg>OLD</svg>')
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath, overwrite: true }),
@@ -365,7 +363,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   ])('rejects an oversized request body that %s with 413 payload_too_large', async (_name, declared) => {
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', {
+    const res = await app.request(SVG_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -385,7 +383,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     onTestFinished(() => logs.restore())
     mockExportCanvasHeadlessSvg.mockRejectedValue(new Error('boom at /secret/path'))
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request(SVG_URL, { method: 'POST' })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')
@@ -402,7 +400,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     const app = new Hono()
     app.onError(answerUnhandled(() => {}))
     app.route('/', makeApp())
-    const res = await app.request('/api/w/s1/document/canvas-a/export-svg', { method: 'POST' })
+    const res = await app.request(SVG_URL, { method: 'POST' })
     expect(res.status).toBe(503)
     expect(res.headers.get('Retry-After')).toBe('1')
   })
@@ -455,7 +453,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   ])('the refusal for %s', (_name, status, arrange) => {
     it(`answers ${status} with a body inside apiErrorBodySchema and a readable reason`, async () => {
       const request = await arrange()
-      const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+      const res = await makeApp().request(SVG_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         ...request,

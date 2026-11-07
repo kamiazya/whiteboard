@@ -8,7 +8,7 @@ export interface LiveDocRouterOptions {
   serverDeps: ServerDeps
 }
 
-// GET /api/w/:workspaceId/document/*/snapshot
+// GET /api/workspaces/:workspaceId/documents/:documentId/snapshot
 //
 // A translation-only adapter (ADR-0018) over the LiveDocuments seam: one
 // document's content, by path, as Loro snapshot bytes. Nothing writes ONE

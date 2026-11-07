@@ -279,6 +279,11 @@ try {
   if (!seededPaths.includes(SEED_CANVAS_PATH)) {
     throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededPaths)}`)
   }
+  // The routes address a document by id; the listing is where a path maps to one.
+  const seededCanvasId = (seededList?.documents ?? []).find(
+    (c) => c.path === SEED_CANVAS_PATH,
+  )?.documentId
+  if (!seededCanvasId) throw new Error('seeded canvas has no documentId in the listing')
   console.log(
     `[packaged-daemon-backup-restore-smoke] seeded workspaceId → ${seededWorkspaceId} (segment ${WORKSPACE_ID})`,
   )
@@ -294,7 +299,7 @@ try {
   // would no longer match.
   const snapshotARes = await authedDaemonFetch(
     daemonA,
-    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
+    `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${seededCanvasId}/snapshot`,
   )
   if (!snapshotARes.ok) {
     throw new Error(`daemon A snapshot fetch failed: ${snapshotARes.status}`)
@@ -464,7 +469,7 @@ try {
   // actually load and project the restored record.
   const snapshotBRes = await authedDaemonFetch(
     daemonB,
-    `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
+    `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${seededCanvasId}/snapshot`,
   )
   if (!snapshotBRes.ok) {
     throw new Error(`daemon B snapshot fetch failed: ${snapshotBRes.status}`)

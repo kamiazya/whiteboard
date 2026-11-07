@@ -197,6 +197,39 @@ function listingMembers(
   }
 }
 
+/**
+ * The writes that address a document that already exists. The seam names a
+ * path where it names a document; the daemon addresses it by id, so a path
+ * resolves through the listing this source holds, and one the listing does
+ * not hold is refused without a request.
+ */
+function placementMembers(
+  list: { read: () => Promise<Listing> },
+  afterWrite: (write: Promise<unknown>) => Promise<void>,
+  daemon: { daemonFetch: typeof globalThis.fetch; daemonBaseUrl: string; workspaceId: string },
+): Pick<WorkspaceFilesSource, 'renameDocumentPath' | 'setDocumentName' | 'setPinned'> {
+  const { daemonFetch, daemonBaseUrl, workspaceId } = daemon
+  const idAt = async (path: string, verb: string): Promise<string> => {
+    const entry = (await list.read()).entries.find((each) => each.path === path)
+    if (entry === undefined) throw new Error(`No document at "${path}" to ${verb}`)
+    return entry.documentId
+  }
+  const url = [daemonFetch, daemonBaseUrl, workspaceId] as const
+  return {
+    async renameDocumentPath(path, newPath) {
+      const documentId = await idAt(path, 'move')
+      await afterWrite(renameDocumentPath(...url, documentId, newPath))
+    },
+    // The API spells "clear" as an empty string (PUT name deletes on '').
+    setDocumentName: (entry, name) =>
+      afterWrite(setDocumentDisplayName(...url, entry.documentId, name ?? '')),
+    async setPinned(entry, pinned) {
+      const documentId = entry.documentId ?? (await idAt(entry.path, 'pin'))
+      await afterWrite(setDocumentPinned(...url, documentId, pinned))
+    },
+  }
+}
+
 /** Where a create landed, once the write's list bookkeeping has run. */
 async function landedPath(
   afterWrite: (write: Promise<unknown>) => Promise<void>,
@@ -249,6 +282,7 @@ export function createDaemonFilesSource(
       }
     },
     ...listingMembers(list, afterWrite, { daemonFetch, daemonBaseUrl, workspaceId }),
+    ...placementMembers(list, afterWrite, { daemonFetch, daemonBaseUrl, workspaceId }),
 
     createDocument: (...args: Parameters<WorkspaceFilesSource['createDocument']>) =>
       landedPath(afterWrite, createDocument(daemonFetch, daemonBaseUrl, workspaceId, ...args)),
@@ -279,9 +313,6 @@ export function createDaemonFilesSource(
       )
     },
 
-    renameDocumentPath: (path: string, newPath: string) =>
-      afterWrite(renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, newPath)),
-
     async searchDocuments(query, limit = 20) {
       if (query.trim() === '') return []
       const res = await searchWorkspaceDocuments(
@@ -294,15 +325,6 @@ export function createDaemonFilesSource(
       return res.results.map(searchResultOf)
     },
 
-    setDocumentName: (entry, name) =>
-      // The API spells "clear" as an empty string (PUT name deletes on '').
-      afterWrite(
-        setDocumentDisplayName(daemonFetch, daemonBaseUrl, workspaceId, entry.path, name ?? ''),
-      ),
-
-    setPinned: (entry, pinned) =>
-      afterWrite(setDocumentPinned(daemonFetch, daemonBaseUrl, workspaceId, entry.path, pinned)),
-
     async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<LoadedMarkdown> {
       // `body`, not `markdown`: the route answers with both, and `markdown`
       // is the OKF projection — frontmatter block included — which the
@@ -313,11 +335,11 @@ export function createDaemonFilesSource(
     },
 
     loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {
-      return getDocumentSnapshot(daemonFetch, daemonBaseUrl, workspaceId, entry.path)
+      return getDocumentSnapshot(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId)
     },
 
     loadImage: (entry, ref) =>
-      readDaemonImage(daemonFetch, daemonBaseUrl, workspaceId, entry.path, imageRefId(ref)),
+      readDaemonImage(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId, imageRefId(ref)),
 
     listTrash: () => trash.read(),
 

@@ -88,7 +88,7 @@ function daemonStub(
         shadowed: [],
       })
     }
-    if (url.includes('/file/') && init?.method === 'PUT') {
+    if (url.includes('/files/') && init?.method === 'PUT') {
       const headers = init.headers as Record<string, string>
       putFiles?.push({
         url,
@@ -187,7 +187,7 @@ describe('promoteWorkspace', () => {
     // file route under the owning document's path.
     expect(result.blobs).toEqual({ transferred: [FILE_ID], missing: [], failed: [] })
     expect(putFiles).toHaveLength(1)
-    expect(putFiles[0]?.url).toContain(`/file/${FILE_ID}`)
+    expect(putFiles[0]?.url).toContain(`/files/${FILE_ID}`)
     expect(putFiles[0]?.contentType).toBe('image/png')
     expect([...(putFiles[0]?.bytes ?? [])]).toEqual([...imageBytes])
   })
@@ -339,7 +339,7 @@ describe('promoteWorkspace', () => {
     expect(failed.modern).toContain('image/avif')
     expect(failed.huge).toContain('16 MiB')
     // A refusal the daemon is certain to repeat is not attempted.
-    expect(putFiles.map((p) => p.url)).toEqual([expect.stringContaining('/file/fine')])
+    expect(putFiles.map((p) => p.url)).toEqual([expect.stringContaining('/files/fine')])
   })
 
   it("reports the daemon's own refusal of an upload by its status", async () => {
@@ -352,7 +352,7 @@ describe('promoteWorkspace', () => {
     ])
     const stub = daemonStub(new LoroDoc())
     const refusing = (async (input: RequestInfo | URL, init?: RequestInit) =>
-      String(input).includes('/file/') && init?.method === 'PUT'
+      String(input).includes('/files/') && init?.method === 'PUT'
         ? new Response(null, { status: 415 })
         : stub(input, init)) as typeof globalThis.fetch
 

@@ -31,7 +31,6 @@ import { stripComments } from '../../shared/test-utils/strip-comments.js'
 import { serverModeSignIn } from '../_test-server-mode-harness.js'
 import { createApp } from '../app.js'
 import { testDataLayout } from '../routes/_test-helpers.js'
-import { DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD } from '../routes/document/path-route.js'
 import { DENY_ALL_STRATEGY } from '../security/_test-helpers.js'
 import { createAdministratorCheck } from '../security/administrator-check.js'
 import { createInvitationStore } from '../security/invitation-store.js'
@@ -96,6 +95,7 @@ const NOT_A_REQUEST_TARGET = new Set([
   // `daemon-client-urls.routes.test.ts` requests each member against the
   // app; a scan reads the template as one `:p` route no server mounts.
   '/api/w/:p/workspace-document/:p',
+  '/api/workspaces/:p/documents/:p/:p',
 ])
 
 /**
@@ -222,37 +222,28 @@ async function mountedApiRoutes(): Promise<string[]> {
 }
 
 /**
- * The only mounted patterns whose `*` really serves the paths beneath it.
+ * A wildcard entry in `app.routes` is middleware, never a mount.
  *
  * Hono's `app.routes` gives middleware registered with `app.use(pattern)` and
- * endpoints the same shape, so a wildcard entry is not evidence of a mount
- * that serves anything. Most of them are middleware: `/api/*` is the auth and
- * host-guard chain over the whole API, `/api/runtime/*` a runtime guard, and
- * `/api/v1/workspaces/:workspaceId/*` server-core's own `app.use` — the v1
- * endpoints beneath it are listed concretely and match on their own.
+ * endpoints the same shape: `/api/*` is the auth and host-guard chain over
+ * the whole API, `/api/runtime/*` a runtime guard,
+ * `/api/workspaces/:workspaceId/*` the unknown-workspace refusal and
+ * `/api/v1/workspaces/:workspaceId/*` server-core's own `app.use`. Every
+ * endpoint beneath them is listed concretely and matches on its own; the
+ * path-addressed document patterns, whose `*` once WAS the endpoint, are
+ * retired.
  *
- * What is left is the two path-addressed document patterns, where the
- * wildcard IS the endpoint mechanism because a document path is many
- * segments. They are imported rather than restated: a copy here is a second
- * list to keep in step, which is the defect this guard exists for.
- *
- * Treating any other wildcard as a mount is not a small error. `/api/*` covers
- * the entire API, so accepting it makes EVERY path resolve — a guard that
- * cannot fail, reading exactly like one that checked. The first version of
- * this file did precisely that (its `/api/*` case sat after the wildcard
- * branch, unreachable) and reported `/api/user-libraries` as mounted. The
- * control cases below are what catch that class; reading the function again
- * is not.
+ * Treating a wildcard as a mount is not a small error. `/api/*` covers the
+ * entire API, so accepting it makes EVERY path resolve — a guard that cannot
+ * fail, reading exactly like one that checked. The first version of this
+ * file did precisely that (its `/api/*` case sat after the wildcard branch,
+ * unreachable) and reported `/api/user-libraries` as mounted. The control
+ * cases below are what catch that class; reading the function again is not.
  */
-const WILDCARD_ENDPOINTS = [DOCUMENT_WILDCARD, DOCUMENTS_WILDCARD].map(normalize)
-
 function isMounted(webPath: string, routes: readonly string[]): boolean {
   return routes.some((route) => {
     const pattern = normalize(route)
-    if (pattern.endsWith('/*')) {
-      if (!WILDCARD_ENDPOINTS.includes(pattern)) return false
-      return webPath.startsWith(pattern.slice(0, -1))
-    }
+    if (pattern.endsWith('/*')) return false
     return pattern === webPath
   })
 }
@@ -296,11 +287,6 @@ describe('apps/web only asks for /api and /auth routes the daemon mounts', () =>
   // The matcher's own control. Everything above can be right while `isMounted`
   // answers true for anything, and then the assertion below passes over a real
   // defect. A path no route serves must come back unmounted.
-  it('every wildcard endpoint it trusts is actually mounted', () => {
-    const mounted = routes.map(normalize)
-    expect(WILDCARD_ENDPOINTS.filter((pattern) => !mounted.includes(pattern))).toEqual([])
-  })
-
   it('does not report an unserved path as mounted', () => {
     expect(isMounted('/api/definitely-not-a-route', routes)).toBe(false)
     expect(isMounted('/api/runtime/not-a-real-endpoint', routes)).toBe(false)

@@ -92,12 +92,12 @@ async function readIndex(workspaceId: string, key: SealingKey): Promise<ReplicaI
   }
 }
 
-/** Every image the record names, each with the path of a document that names it — the file route's address. */
+/** Every image the record names, each with the id of a document that names it — the file route's address. */
 function namedImages(record: LoroDoc): Map<string, string> {
   const named = new Map<string, string>()
   for (const entry of readWorkspaceDocuments(record)) {
     for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
-      if (!named.has(fileId)) named.set(fileId, entry.path)
+      if (!named.has(fileId)) named.set(fileId, entry.documentId)
     }
   }
   return named
@@ -122,14 +122,14 @@ export interface CacheReplicaImagesOptions {
 async function fetchImage(
   options: CacheReplicaImagesOptions,
   fileId: string,
-  path: string,
+  documentId: string,
 ): Promise<{ bytes: Uint8Array; mimeType: string } | null> {
   try {
     const blob = await readDaemonImage(
       options.fetch,
       options.daemonBaseUrl,
       options.workspaceId,
-      path,
+      documentId,
       fileId,
     )
     if (blob === undefined) return null
@@ -157,9 +157,9 @@ async function nextIndex(
     next[fileId] = kept
     total += kept.bytes
   }
-  for (const [fileId, path] of named) {
+  for (const [fileId, documentId] of named) {
     if (next[fileId] !== undefined) continue
-    const fetched = await fetchImage(options, fileId, path)
+    const fetched = await fetchImage(options, fileId, documentId)
     if (fetched === null || total + fetched.bytes.byteLength > budget) continue
     const sealed = await seal(key, fetched.bytes, imageContext(options.workspaceId, fileId))
     const { ref } = await blobs.put({ bytes: sealed })

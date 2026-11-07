@@ -25,6 +25,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
@@ -186,7 +187,9 @@ it('a PER-DOCUMENT update reaches a workspace-document subscriber', async () => 
     client.import(
       new Uint8Array(
         await (
-          await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/c/snapshot')
+          await app.request(
+            `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'c')}/snapshot`,
+          )
         ).arrayBuffer(),
       ),
     )
@@ -251,8 +254,9 @@ async function editorUpdate(
 }
 
 async function autoVersionsOf(app: ReturnType<typeof createDocumentRouter>, path: string) {
+  const id = await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', path)
   const res = await app.request(
-    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${path}/versions`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${id}/versions`,
   )
   expect(res.status).toBe(200)
   const body = (await res.json()) as { versions: { auto?: boolean }[] }

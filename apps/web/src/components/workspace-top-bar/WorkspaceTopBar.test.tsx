@@ -153,6 +153,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
+          documentId="01ARZ3NDEKTSV4RRFFQ69G5FAV"
           onNavigateBack={() => {}}
           titleSlot={overrides?.titleSlot}
         />
@@ -178,7 +179,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/documents/canvas-a/name'),
+        expect.stringContaining('/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/name'),
         expect.objectContaining({ method: 'PUT' }),
       )
     })
@@ -197,6 +198,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
+          documentId="01ARZ3NDEKTSV4RRFFQ69G5FAV"
           titleSlot={(identity) => (
             <DocumentProperties
               inline

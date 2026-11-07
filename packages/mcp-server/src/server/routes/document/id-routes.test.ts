@@ -1,8 +1,8 @@
 // @vitest-environment node
 /**
- * A document addressed by its id (`/api/workspaces/:ws/documents/:documentId/...`)
- * reaches the handler the path form reaches, with the placement the id
- * resolves to, so an id survives a rename the path does not.
+ * A document is addressed by its id (`/api/workspaces/:ws/documents/:documentId/...`),
+ * and the route hands its handler the placement the id resolves to, so an id
+ * survives a rename and a trashed or unknown one reaches nothing.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -119,54 +119,42 @@ async function daemon() {
 }
 
 const doc = (id: string, tail = '') => `/api/workspaces/ws/documents/${id}${tail}`
-const byPath = (path: string, tail = '') => `/api/workspaces/ws/documents/${path}${tail}`
-const pageDoc = (path: string, action: string) => `/api/w/ws/document/${path}/${action}`
 
 describe('a document addressed by id', () => {
-  it('answers snapshot, client-count, export and export-svg as the path form does', async () => {
+  it('answers snapshot, client-count, export and export-svg', async () => {
     const d = await daemon()
     await createTestDocument(d.deps, { workspaceId: WORKSPACE, path: 'alpha' })
     const id = await d.idOf(WORKSPACE, 'alpha')
 
-    const snapshotByPath = await d.send(pageDoc('alpha', 'snapshot'))
-    const snapshotById = await d.send(doc(id, '/snapshot'))
-    expect(snapshotById.status).toBe(200)
-    expect(new Uint8Array(await snapshotById.arrayBuffer())).toEqual(
-      new Uint8Array(await snapshotByPath.arrayBuffer()),
-    )
+    const snapshot = await d.send(doc(id, '/snapshot'))
+    expect(snapshot.status).toBe(200)
+    expect((await snapshot.arrayBuffer()).byteLength).toBeGreaterThan(0)
 
-    for (const [method, action, body] of [
-      ['GET', 'client-count', undefined],
-      ['POST', 'export', {}],
-      ['POST', 'export-svg', {}],
-    ] as const) {
-      const viaPath = await d.send(pageDoc('alpha', action), method, body)
-      const viaId = await d.send(doc(id, `/${action}`), method, body)
-      expect(viaId.status, action).toBe(viaPath.status)
-      // An export names a timestamped file, so only the shape of the answer is held.
-      const stamp = /alpha-[^"]*\.(png|svg)/g
-      expect((await viaId.text()).replace(stamp, 'alpha.$1'), action).toBe(
-        (await viaPath.text()).replace(stamp, 'alpha.$1'),
-      )
+    const count = await d.send(doc(id, '/client-count'))
+    expect(count.status).toBe(200)
+    expect(await count.json()).toEqual({ count: 0, readyCount: 0 })
+
+    for (const action of ['export', 'export-svg'] as const) {
+      const exported = await d.send(doc(id, `/${action}`), 'POST', {})
+      expect(exported.status, action).toBe(200)
+      // An export names a timestamped file after the document's path.
+      expect(await exported.text(), action).toMatch(/alpha-[^"]*\.(png|svg)/)
     }
   })
 
-  it('stores and reads a file through the id form, and the path form reads it back', async () => {
+  it('stores a file and reads it back through the id', async () => {
     const d = await daemon()
     await createTestDocument(d.deps, { workspaceId: WORKSPACE, path: 'alpha' })
     const id = await d.idOf(WORKSPACE, 'alpha')
 
     const put = await d.send(doc(id, '/files/abc123'), 'PUT', PNG, { 'content-type': 'image/png' })
     expect(put.status).toBe(204)
-    const viaId = await d.send(doc(id, '/files/abc123'))
-    const viaPath = await d.send(`/api/w/ws/document/alpha/file/abc123`)
-    expect(viaId.status).toBe(200)
-    expect(new Uint8Array(await viaId.arrayBuffer())).toEqual(
-      new Uint8Array(await viaPath.arrayBuffer()),
-    )
+    const read = await d.send(doc(id, '/files/abc123'))
+    expect(read.status).toBe(200)
+    expect(new Uint8Array(await read.arrayBuffer())).toEqual(PNG)
   })
 
-  it('lists, saves and previews versions and restores one, as the path form does', async () => {
+  it('lists, saves and previews versions and restores one', async () => {
     const d = await daemon()
     await createTestDocument(d.deps, { workspaceId: WORKSPACE, path: 'alpha' })
     const id = await d.idOf(WORKSPACE, 'alpha')
@@ -174,24 +162,16 @@ describe('a document addressed by id', () => {
     const saved = await d.send(doc(id, '/versions'), 'POST', { label: 'first' })
     expect(saved.status).toBe(200)
     const listedById = await d.send(doc(id, '/versions'))
-    const listedByPath = await d.send(byPath('alpha', '/versions'))
     expect(listedById.status).toBe(200)
-    const listed = (await listedById.json()) as { versions: { id: string }[] }
-    expect(listed).toEqual(await listedByPath.json())
+    const listed = (await listedById.json()) as { versions: { id: string; label?: string }[] }
+    expect(listed.versions.map((v) => v.label)).toEqual(['first'])
 
     const versionId = listed.versions[0]?.id as string
-    const previewById = await d.send(doc(id, `/versions/${versionId}/document`))
-    const previewByPath = await d.send(byPath('alpha', `/versions/${versionId}/document`))
-    expect(previewById.status).toBe(200)
-    expect(await previewById.json()).toEqual(await previewByPath.json())
+    const preview = await d.send(doc(id, `/versions/${versionId}/document`))
+    expect(preview.status).toBe(200)
 
     const restored = await d.send(doc(id, `/versions/${versionId}/restore`), 'POST', {})
-    const restoredByPath = await d.send(
-      byPath('alpha', `/versions/${versionId}/restore`),
-      'POST',
-      {},
-    )
-    expect(restored.status).toBe(restoredByPath.status)
+    expect(restored.status).toBe(200)
   })
 
   it('names, pins, moves and duplicates, and deletes', async () => {
@@ -208,9 +188,8 @@ describe('a document addressed by id', () => {
     expect(moved.status).toBe(200)
     expect(await moved.json()).toEqual({ path: 'moved/alpha' })
 
-    // An id survives the move; the old path does not.
+    // An id survives the move.
     expect((await d.send(doc(id, '/versions'))).status).toBe(200)
-    expect((await d.send(pageDoc('alpha', 'snapshot'))).status).toBe(404)
 
     const deleted = await d.send(doc(id), 'DELETE')
     expect(deleted.status).toBeLessThan(300)
@@ -233,17 +212,24 @@ describe('a document addressed by id', () => {
     }
   })
 
-  it('falls through to the path family for a segment that is not a ULID', async () => {
+  it('answers not_found for a segment that is not a document id — a path names nothing', async () => {
     const d = await daemon()
     await createTestDocument(d.deps, { workspaceId: WORKSPACE, path: 'foo' })
-    // Until the path form leaves, a one-segment path shares this grammar.
-    expect((await d.send(byPath('foo', '/versions'))).status).toBe(200)
+    for (const address of ['foo', 'notes%2Ffoo', 'foo/versions']) {
+      const res = await d.send(`/api/workspaces/ws/documents/${address}/versions`)
+      expect(res.status, address).toBe(404)
+      expect(apiErrorBodySchema.parse(await res.json()), address).toMatchObject({
+        error: 'not_found',
+      })
+    }
   })
 
-  it('keeps a document whose path is ULID-shaped reachable by path', async () => {
+  it('reaches a document whose path is spelled like an id only by its own id', async () => {
     const d = await daemon()
     await createTestDocument(d.deps, { workspaceId: WORKSPACE, path: UNKNOWN_ID })
-    expect((await d.send(byPath(UNKNOWN_ID, '/versions'))).status).toBe(200)
+    const id = await d.idOf(WORKSPACE, UNKNOWN_ID)
+    expect((await d.send(doc(UNKNOWN_ID, '/versions'))).status).toBe(404)
+    expect((await d.send(doc(id, '/versions'))).status).toBe(200)
   })
 
   it('refuses a malformed workspace handle with the handle 400', async () => {
