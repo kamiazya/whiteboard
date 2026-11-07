@@ -84,10 +84,12 @@ job runs `canvas-render-rust` (QR-21 layer 2): canvas-render's
 wasm artifact, exact on every double, and fails on CI if the artifact is absent; the
 `test-utils/wasm/*.rust.test.ts` beside it do the same for each edge module
 ported so far (grid-route, the geometry and ink primitives, edge-rules, the
-router's leaves). The same
+router's leaves, the router). The same
 project re-runs every `layout/edges` suite, scoreboards included, with
-`./grid-route.js` aliased to the Rust port through the wasm (QR-21 layer 1;
-those suites are included only when the artifact exists). Every target runs nightly
+`./grid-route.js` and `./edge-router.js` aliased to the Rust ports through the
+wasm (QR-21 layer 1; those suites are included only when the artifact exists),
+so the side-choice search and the coincident-ends repair already route through
+the Rust router. Every target runs nightly
 in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
 restores read-only. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
 steps and cache paths to the scripts.

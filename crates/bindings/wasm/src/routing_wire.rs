@@ -43,6 +43,10 @@ fn id_of(value: f64) -> Option<u32> {
     count(value).and_then(|n| u32::try_from(n).ok())
 }
 
+/// A wire too short for what it declares.
+#[derive(Debug)]
+pub(crate) struct Malformed;
+
 /// A cursor over the wire, every read checked.
 pub(crate) struct Wire<'a> {
     rest: &'a [f64],
@@ -68,6 +72,19 @@ impl<'a> Wire<'a> {
     pub(crate) fn point(&mut self) -> Option<Point> {
         let [x, y] = self.take::<2>()?;
         Some(Point { x, y })
+    }
+
+    /// A set flag then a number, the number answered only when set; `Err` when
+    /// the wire runs out.
+    pub(crate) fn flagged_number(&mut self) -> Result<Option<f64>, Malformed> {
+        let [set, value] = self.take::<2>().ok_or(Malformed)?;
+        Ok((set != 0.0).then_some(value))
+    }
+
+    /// A set flag then a point, as [`Wire::flagged_number`].
+    pub(crate) fn flagged_point(&mut self) -> Result<Option<Point>, Malformed> {
+        let [set, x, y] = self.take::<3>().ok_or(Malformed)?;
+        Ok((set != 0.0).then_some(Point { x, y }))
     }
 
     pub(crate) fn rest(&self) -> &'a [f64] {
