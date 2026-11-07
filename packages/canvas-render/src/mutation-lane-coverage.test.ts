@@ -420,9 +420,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // 25 of 125 with `det-math.ts`, the pinned hypot/sin/cos layout calls
     // (ADR-0054 decision 11), in the lane because its oracle is a bit-exact
     // table of the Rust libm crate's answers.
+    // 126 with `generated/geometry.zod.ts`, the Point and Rect `cargo xtask
+    // codegen` emits from contracts/geometry. Outside the lane: it is
+    // generated, so an edit to it fails `codegen --check` before any test,
+    // and its refusals are pinned by `geometry-contract.test.ts`.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 125,
+      production: 126,
     })
   })
 

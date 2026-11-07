@@ -13,3 +13,6 @@
 // allow. Test builds are exempt; clippy's non-test pass still checks every
 // line of production code.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
+
+#[path = "generated/geometry.rs"]
+pub mod geometry;

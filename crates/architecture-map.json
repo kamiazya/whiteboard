@@ -130,7 +130,9 @@
       "description": "side choice, anchors, grid search, crossings, jumps, rounding, label anchor, budget, route cache",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-scene"],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "serde": "the derive the generated contract types use (contracts/geometry); no I/O, builds unchanged on wasm32 and native"
+      },
       "absorbs": ["packages/canvas-render/src/layout/edges"]
     },
     "whiteboard-canvas-render": {

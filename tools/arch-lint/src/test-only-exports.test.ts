@@ -218,6 +218,10 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
+    'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
+  'packages/canvas-render/src/generated/geometry.zod.ts#rectSchema':
+    'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
   'packages/mcp-server/src/server/routes/document/path-route.ts#resolvedDocumentOf':
     "the read of the one per-request id resolution, for a route's own middleware; no production middleware needs it yet, and the once-per-request test holds that a second reader costs no second lookup",
   'packages/model/src/utf16-max.ts#UTF16_MAX_PARAM':

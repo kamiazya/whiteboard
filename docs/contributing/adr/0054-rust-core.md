@@ -465,6 +465,40 @@ revise one without reopening decisions 1–25.
 | Browser storage | Stays TypeScript (IndexedDB/OPFS) behind coarse ports | Rust over IndexedDB bindings: no gain, and the ports are coarse enough that the boundary is cheap |
 | Version skew | A protocol version in the daemon-to-web handshake, now | Compatibility shims: the project ships none pre-1.0 |
 
+#### The generator spike (2026-11-07): typify fails, the own emitter it is
+
+The Generator row's condition was measured rather than assumed. `cargo-typify`
+0.10.0-alpha.3, the newest release, was run over the geometry contract
+(`Point`, `Rect`, `Side`, `EdgeRoutingStyle`) and a probe of the restricted
+dialect's other constructs:
+
+| Construct | What typify emits | Verdict |
+|---|---|---|
+| A string enum | A Rust enum with serde renames | correct |
+| `additionalProperties: false` / absent | `deny_unknown_fields` / none | correct for `refuse` and `strip` |
+| `pattern` | A `regress` (ECMAScript regex) check | correct |
+| `minimum` / `maximum` on a number or an integer | A bare `f64` / `i64` | **not enforced** |
+| `maxLength` | A check on `chars().count()` | **the wrong unit**: code points, where Zod's `.max()` counts UTF-16 units |
+| `x-wb-maxUtf16`, `x-wb-check`, `x-wb-unknownKeys` | Nothing | **ignored** |
+| A `prefixItems` tuple of two `$ref`s | `[PairItem; 2]` over an empty `enum PairItem {}` | **broken**: an uninhabited type |
+| Object fields | Alphabetical order | a note, not a blocker: the canonical JSON (RFC 8785) the byte comparison uses sorts keys |
+
+Three of those are exactly the divergences this ADR exists to make
+structural — a bound one side checks and the other does not, and a length in
+two units — and the dialect's own keywords would need a second pass over
+typify's output in any case. So the Rust half is the same `xtask` emitter as
+the Zod half, generated from one walk of each schema, so each construct's two
+meanings are written side by side, and the differential harness still checks
+that they agree.
+
+That emitter is `cargo xtask codegen` (`crates/xtask/src/codegen/`). Its
+dialect is what its typed parse accepts — today closed objects of required
+numbers with an inclusive `minimum` — so a construct it does not implement is
+refused by name rather than dropped from one language's output, and the
+dialect grows with the contract that needs a construct. `codegen --check`
+fails on generated output that differs from its contract and on a file under
+a `generated` directory that no contract produces.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 
