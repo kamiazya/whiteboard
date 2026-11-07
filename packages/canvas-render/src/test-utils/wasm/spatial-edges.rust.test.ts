@@ -135,6 +135,7 @@ const accountDraw = (ample: number) =>
 interface Around {
   readonly cut?: fc.Arbitrary<number | undefined>
   readonly style?: fc.Arbitrary<EdgeRoutingStyle>
+  /** `false`: no overrides, and both accounts ample. */
   readonly frozen?: boolean
 }
 
@@ -146,7 +147,10 @@ const drawn = (canvas: fc.Arbitrary<[SpatialNode[], RoutableElement[]]>, around:
       styles: fc.tuple(...edges.map(() => around.style ?? style)),
       overrides: around.frozen === false ? fc.constant(undefined) : overridesFor(edges),
       labels: fc.array(rect, { maxLength: 2 }),
-      trials: accountDraw(createRoutingBudget().trials),
+      trials:
+        around.frozen === false
+          ? fc.constant(createRoutingBudget().trials)
+          : accountDraw(createRoutingBudget().trials),
       // A fraction of what the search spends with the account ample, so it
       // runs out partway through, after it has adopted something.
       cut:
@@ -177,17 +181,33 @@ function overrideMap(d: Drawn): Map<string, EdgeAnchorOverride> | undefined {
   return map
 }
 
-const reach = { searched: 0, stepped: 0, overridden: 0, cutShort: 0, partway: 0, regions: 0 }
+const reach = {
+  searched: 0,
+  stepped: 0,
+  overridden: 0,
+  pairsShort: 0,
+  cutMattered: 0,
+  fullGate: 0,
+  regionGate: 0,
+  regions: 0,
+}
 
 /** The trials an unconstrained search spends on `d`. */
 function fullSpend(
   d: Drawn,
   styleOf: (e: RoutableElement) => EdgeRoutingStyle,
   overrides: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
-): number {
+): { spent: number; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   const ample = { ...createRoutingBudget(), pairs: d.pairs }
-  assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, ample, d.labels as readonly Rect[])
-  return createRoutingBudget().trials - ample.trials
+  const anchors = assignEdgeAnchors(
+    d.nodes,
+    d.edges,
+    styleOf,
+    overrides,
+    ample,
+    d.labels as readonly Rect[],
+  )
+  return { spent: createRoutingBudget().trials - ample.trials, anchors }
 }
 
 /** The input `edge_assign_anchors` reads for `d`, with `trials` in the account. */
@@ -228,29 +248,42 @@ function wireInput(
   ])
 }
 
-/** What the draw reached, counted for the floors. */
+const sameEntries = (
+  a: ReadonlyMap<string, EdgeAnchorPair>,
+  b: ReadonlyMap<string, EdgeAnchorPair>,
+) => JSON.stringify([...a]) === JSON.stringify([...b])
+
+/**
+ * What the search did, counted for the floors from its own output: an
+ * override re-sides an edge and carries `around` without any search, so
+ * those draws do not count as searched or stepped.
+ */
 function tally(
   d: Drawn,
   ts: ReadonlyMap<string, EdgeAnchorPair>,
   overrides: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
   budget: RoutingBudget,
-  trials: number,
+  ample: ReadonlyMap<string, EdgeAnchorPair> | undefined,
 ): void {
-  const fresh = createRoutingBudget()
-  // Searched: some edge left on sides the first guess did not pick.
   const routed = d.edges.filter((e) => !marksContact(d.nodes, e))
-  const initial = initialSideChoices(d.nodes, routed)
-  const moved = [...ts].some(([id, e]) => {
-    const first = initial.get(id)
-    return first !== undefined && (first.fromSide !== e.fromSide || first.toSide !== e.toSide)
-  })
-  if (moved) reach.searched += 1
-  if ([...ts.values()].some((e) => e.around === true)) reach.stepped += 1
-  if (overrides !== undefined && overrides.size > 0) reach.overridden += 1
-  if (budget.trials < fresh.trials / 2 || budget.pairs < fresh.pairs / 2) reach.cutShort += 1
-  // Cut to part of what an ample run spends, and not to nothing.
-  if (d.cut !== undefined && trials > 0) reach.partway += 1
-  if (routed.length > 200) reach.regions += 1
+  const free = overrides === undefined || overrides.size === 0
+  if (!free) reach.overridden += 1
+  if (free) {
+    // An edge the search left on sides the first guess did not pick.
+    const initial = initialSideChoices(d.nodes, routed)
+    const moved = [...ts].some(([id, e]) => {
+      const first = initial.get(id)
+      return first !== undefined && (first.fromSide !== e.fromSide || first.toSide !== e.toSide)
+    })
+    if (moved) reach.searched += 1
+    if (moved && routed.length > 200) reach.regions += 1
+    if ([...ts.values()].some((e) => e.around === true)) reach.stepped += 1
+  }
+  if (budget.pairs < createRoutingBudget().pairs / 2) reach.pairsShort += 1
+  // The account ran out before the search was done: the cut changed the answer.
+  if (ample !== undefined && !sameEntries(ample, ts)) reach.cutMattered += 1
+  if (routed.length >= 38 && routed.length <= 42) reach.fullGate += 1
+  if (routed.length >= 199 && routed.length <= 201) reach.regionGate += 1
 }
 
 function check(d: Drawn) {
@@ -261,8 +294,8 @@ function check(d: Drawn) {
   const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
   const fresh = createRoutingBudget()
   const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
-  const trials =
-    d.cut === undefined ? d.trials : Math.floor(fullSpend(d, styleOf, overrides) * d.cut)
+  const full = d.cut === undefined ? undefined : fullSpend(d, styleOf, overrides)
+  const trials = full === undefined ? d.trials : Math.floor(full.spent * (d.cut as number))
   const budget: RoutingBudget = { ...fresh, trials, pairs: d.pairs }
   const ts = assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, budget, labels)
   const input = wireInput(d, wire, overrides, trials)
@@ -277,7 +310,7 @@ function check(d: Drawn) {
   ]
   expect(firstDifference(expected, out)).toBeUndefined()
 
-  tally(d, ts, overrides, budget, trials)
+  tally(d, ts, overrides, budget, full?.anchors)
 }
 
 describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same anchors', () => {
@@ -300,11 +333,22 @@ describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same ancho
     withDefaults(),
   )('anchors and the budget left, over an account cut short', check)
 
-  // Past the 200-edge gate the search runs over Morton-ordered regions.
-  fcTest.prop([drawn(board(24, 230, 210))], withDefaults({ numRuns: 5 }))(
-    'anchors and the budget left, over regions',
-    check,
-  )
+  // Either side of the full-search size (40) and of the edge gate (200).
+  fcTest.prop(
+    [fc.oneof(drawn(board(9, 42, 38)), drawn(board(9, 42, 38), { frozen: false }))],
+    withDefaults({ numRuns: 60 }),
+  )('anchors and the budget left, around the full-search size', check)
+  fcTest.prop(
+    [drawn(board(24, 201, 199), { cut: fc.constant(undefined) })],
+    withDefaults({ numRuns: 4 }),
+  )('anchors and the budget left, around the edge gate', check)
+
+  // Past the 200-edge gate the search runs over Morton-ordered regions, with
+  // the account ample so every region is searched.
+  fcTest.prop(
+    [drawn(board(24, 230, 210), { cut: fc.constant(undefined), frozen: false })],
+    withDefaults({ numRuns: 5 }),
+  )('anchors and the budget left, over regions', check)
 
   afterAllFloor(
     [
@@ -312,16 +356,18 @@ describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same ancho
       'anchors and the budget left, over regions',
     ],
     () => {
-      // About half the lowest of five measured runs (searched 211, stepped
-      // 91, overridden 82, cutShort 385, partway 210; regions is every
-      // region run).
+      // About half the lowest of five measured runs (searched 153, stepped
+      // 33, overridden 98, pairsShort 89, cutMattered 208, regions 5). The
+      // gate draws are presence counts: every run of those lands there.
       const floors = {
-        searched: 105,
-        stepped: 45,
-        overridden: 41,
-        cutShort: 192,
-        partway: 105,
-        regions: 5,
+        searched: 76,
+        stepped: 16,
+        overridden: 49,
+        pairsShort: 44,
+        cutMattered: 104,
+        fullGate: 30,
+        regionGate: 2,
+        regions: 3,
       }
       for (const [kind, floor] of Object.entries(floors)) {
         expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
