@@ -10,7 +10,6 @@ const C1 = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 async function open(store: BrowserStoreDouble) {
   const { result, unmount } = renderHook(() =>
     useBrowserDocumentController(store.index, {
-      loro: store.loro,
       pointer: store.pointer,
       clock: store.clock,
     }),

@@ -6,42 +6,28 @@ import { IdbBlobStore } from './idb-blob-store.js'
 import { inTransaction, request } from './idb-tx.js'
 
 /**
- * Versioned envelope for the records in the `documentFiles` IndexedDB object
- * store. Single parse boundary — every read goes through this.
+ * The record in the `documentFiles` IndexedDB object store. Single parse
+ * boundary — every read goes through this.
  *
- * There are two shapes because there were two designs:
+ * It holds a `BlobRef`; the bytes live in the content-addressed `BlobStore`,
+ * so two ids naming the same image share one copy and a reference can be
+ * dropped.
  *
- * - **v1** held the `Blob` itself, keyed by the caller's fileId. Identical
- *   bytes under two ids were two copies, and nothing could be deleted, so the
- *   store grew without bound.
- * - **v2** holds a `BlobRef` instead. The bytes live in the content-addressed
- *   `BlobStore`, so two ids naming the same image share one copy, and a
- *   reference can be dropped.
- *
- * v1 is still READ, and a v1 record read through `read` is rewritten as v2 on
- * the spot — the bytes are already in hand, and `BlobStore.put` is idempotent,
- * so the migration costs one write the first time an old image is displayed.
- *
- * A v1 record nobody ever reads is never converted, and need not be: the
- * reference sweep (`browser-file-sweep.ts`) drops it once nothing names it.
- *
- * An unknown/newer version is a cache miss (`read` answers `{ kind: 'absent' }`)
- * rather than a crash.
+ * The earlier shape (`v: 1`, the `Blob` itself) has no reader. `read` answers
+ * `{ kind: 'retired' }` for one, so the picture can say it was saved in a form
+ * this version no longer reads; the row is neither converted nor deleted, and
+ * `sweep` leaves it where it is. Any other version is a cache miss
+ * (`{ kind: 'absent' }`) rather than a crash.
  */
-export const documentFileRecordSchema = z.union([
-  z.object({
-    v: z.literal(1),
-    mimeType: z.string(),
-    created: z.number(),
-    blob: z.instanceof(Blob),
-  }),
-  z.object({
-    v: z.literal(2),
-    mimeType: z.string(),
-    created: z.number(),
-    ref: blobRefSchema,
-  }),
-])
+export const documentFileRecordSchema = z.object({
+  v: z.literal(2),
+  mimeType: z.string(),
+  created: z.number(),
+  ref: blobRefSchema,
+})
+
+/** The retired `v: 1` envelope: only its version is read, to name it. */
+const retiredDocumentFileRecordSchema = z.object({ v: z.literal(1) }).loose()
 
 type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
 
@@ -49,6 +35,8 @@ type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
 type DocumentFileRead =
   | { kind: 'blob'; blob: Blob }
   | { kind: 'absent' }
+  /** Intact, in the retired `v: 1` shape this build no longer reads. */
+  | { kind: 'retired' }
   | { kind: 'unreadable'; error: unknown }
 
 /**
@@ -121,6 +109,7 @@ export class DocumentFileStore {
    * The stored image for `fileId`, keeping apart the two ways there is none:
    * `absent` when nothing readable is stored under it (an unknown id, a
    * corrupt or unknown-version record, a reference whose bytes are gone),
+   * `retired` when the row is the intact `v: 1` shape this build stopped reading,
    * `unreadable` when opening the store or reading the bytes threw — the
    * bytes may well be there, and this device could not reach them. Never
    * throws. There is deliberately no read that folds the two into one
@@ -128,31 +117,20 @@ export class DocumentFileStore {
    * picture that was only briefly out of reach.
    */
   async read(fileId: string): Promise<DocumentFileRead> {
-    let record: DocumentFileRecord | null
+    let record: DocumentFileRecord | 'retired' | null
     try {
       record = await inTransaction(this.dbName, [DOCUMENT_FILES_STORE], 'readonly', async (tx) => {
         const raw = await request(tx.objectStore(DOCUMENT_FILES_STORE).get(fileId))
         if (raw === undefined) return null
         const parsed = documentFileRecordSchema.safeParse(raw)
-        return parsed.success ? parsed.data : null
+        if (parsed.success) return parsed.data
+        return retiredDocumentFileRecordSchema.safeParse(raw).success ? 'retired' : null
       })
     } catch (error) {
       return { kind: 'unreadable', error }
     }
     if (record === null) return { kind: 'absent' }
-
-    if (record.v === 1) {
-      // Read-through migration: the bytes are in hand, so convert rather than
-      // leave a record that can never be deduplicated or deleted. A failure
-      // here must not cost the caller their image, so the conversion is
-      // best-effort and the original blob is returned either way.
-      void this.put(fileId, {
-        mimeType: record.mimeType,
-        blob: record.blob,
-        created: record.created,
-      }).catch(() => {})
-      return { kind: 'blob', blob: record.blob }
-    }
+    if (record === 'retired') return { kind: 'retired' }
 
     try {
       const stored = await this.blobs.get({ ref: record.ref })
@@ -219,14 +197,14 @@ export class DocumentFileStore {
         if (raw === undefined) return null
         await request(store.delete(fileId))
         const parsed = documentFileRecordSchema.safeParse(raw)
-        if (!parsed.success || parsed.data.v !== 2) return null
+        if (!parsed.success) return null
         const ref: BlobRef = parsed.data.ref
         // Inside the same transaction as the delete, so a concurrent write
         // cannot add a reference between the removal and the count.
         const rest = await request(store.getAll())
         const stillReferenced = rest.some((row: unknown) => {
           const other = documentFileRecordSchema.safeParse(row)
-          return other.success && other.data.v === 2 && other.data.ref.digestHex === ref.digestHex
+          return other.success && other.data.ref.digestHex === ref.digestHex
         })
         return stillReferenced ? null : ref
       },

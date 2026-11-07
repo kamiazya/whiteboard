@@ -32,6 +32,7 @@ import {
   LoroList,
   LoroMap,
   LoroMovableList,
+  LoroText,
   type LoroTreeNode,
   type TreeID,
 } from 'loro-crdt'
@@ -1053,6 +1054,15 @@ export function documentContainers(doc: LoroDoc, documentId: string): DocumentCo
     peekList: (key) => {
       const held = live().data.get(key)
       return held instanceof LoroMovableList || held instanceof LoroList ? held : undefined
+    },
+    // A text root is pre-attached on creation, so this answers `undefined`
+    // only for a node an older writer left without one — exactly the note
+    // whose body still sits in a canvas text node, which the retired-shape
+    // probe reads. `getText` there would open the container: a write, which
+    // clears redo (measured: 433 -> 438 bytes, canRedo true -> false).
+    peekText: (key) => {
+      const held = live().data.get(key)
+      return held instanceof LoroText ? held : undefined
     },
     commit: () => doc.commit(),
   }

@@ -69,10 +69,7 @@ import type { DocumentPageModel } from './document-page-model.js'
 import { mergePersistence } from './merge-persistence.js'
 import { useAutoCheckpoint } from './use-auto-checkpoint.js'
 import { useBrowserConnections } from './use-browser-connections.js'
-import {
-  type LoroStoreLike,
-  useBrowserDocumentController,
-} from './use-browser-document-controller.js'
+import { useBrowserDocumentController } from './use-browser-document-controller.js'
 import { useBrowserRouteSync } from './use-browser-route-sync.js'
 import { connectionsStamp } from './use-connections.js'
 import { useDocumentActions } from './use-document-actions.js'
@@ -91,10 +88,6 @@ export interface BrowserDocumentPageProps {
    */
   pointer?: DefaultDocumentPointer
   clock?: ContentClock
-  // Injectable so tests can avoid the real LoroStore's IndexedDB dependency
-  // (jsdom does not implement IndexedDB); production callers rely on the
-  // controller hook's own default.
-  loro?: LoroStoreLike
   // A document path requested by the URL at mount (e.g. a bookmarked
   // /local/:path deep link), read once — see
   // useBrowserDocumentController's own contract for the same parameter.
@@ -116,7 +109,6 @@ function useBrowserDocument(
     // than in App keeps loro-crdt off the entry chunk
     // (entry-graph-loro-free.test.ts).
     store = sharedBrowserDocumentIndex(),
-    loro,
     initialPath,
     pointer,
     clock,
@@ -124,7 +116,6 @@ function useBrowserDocument(
   events: DocumentKeeperEvents,
 ): DocumentKeeperAnswer {
   const {
-    loro: resolvedLoro,
     snapshot,
     workspaceEmpty,
     persistence,
@@ -137,7 +128,7 @@ function useBrowserDocument(
     listDocuments,
     switchDocument,
     duplicateDocument,
-  } = useBrowserDocumentController(store, { loro, initialPath, pointer, clock })
+  } = useBrowserDocumentController(store, { initialPath, pointer, clock })
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -167,10 +158,7 @@ function useBrowserDocument(
   // The workspace's tag vocabulary (ADR-0040 decision 5), read through the
   // same files source the document browser uses over the same stores, once
   // per page — the browser keeper answers it by opening every document.
-  const tagsSource = useMemo(
-    () => createBrowserFilesSource({ index: store, loro: resolvedLoro }),
-    [store, resolvedLoro],
-  )
+  const tagsSource = useMemo(() => createBrowserFilesSource({ index: store }), [store])
   const tagVocabulary = useTagVocabulary(tagsSource)
   const facetRegistry = useStencilRegistry(tagsSource)
   const currentUpdatedAt = loaded.updatedAt
@@ -487,7 +475,6 @@ function useBrowserDocument(
   const openDocumentId = documentId ?? undefined
   const { connections, linkify } = useBrowserConnections({
     index: store,
-    loro: resolvedLoro,
     documentId: openDocumentId,
     path: documentPath,
     stamp: connectionsStamp(documents, openDocumentId),

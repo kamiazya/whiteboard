@@ -68,6 +68,18 @@ describe('what a failed workspace read is reported as', () => {
     await expectLoggedFailure('opening the workspace record failed')
   })
 
+  it('names a retired envelope instead of calling intact data corrupt', async () => {
+    // `corrupt-snapshot` is what the page offers Start fresh for, which deletes.
+    const { reasons } = connectAgainst(
+      new StoredDocumentUnreadableError(
+        'retired-envelope',
+        'written in retired envelope version 2',
+      ),
+    )
+    await vi.waitFor(() => expect(reasons).toEqual(['retired-stored-shape']))
+    await expectLoggedFailure('opening the workspace record failed')
+  })
+
   it('reports a read that never completed as unavailable, not as damage', async () => {
     // The exact rejection `openWhiteboardDb` produces when another tab holds
     // an older version. Nothing is known about the stored document here.

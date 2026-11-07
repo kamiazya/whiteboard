@@ -8,8 +8,8 @@
  *
  * The unit this seals is the WORKSPACE RECORD (`workspace-tree:<id>`), not a
  * single document — per-document splitting is explicitly not near-term, and
- * the routing below reflects that: every `document:*` ref is plaintext
- * regardless of which workspace it belongs to.
+ * the routing below reflects that: a `document:*` key names a per-document
+ * record this build no longer reads, and is refused rather than routed.
  *
  * Only this module imports `sessionKey`/`replicaKeyProviderFor` from the
  * daemon-client session-key holder — a second importer would be a second
@@ -83,14 +83,22 @@ function sourceFor(daemonBaseUrl: string): ReplicaSource | undefined {
   return { fetch: connected.daemonFetch, reportDrift: reportDaemonDrift }
 }
 
+/** A stored key naming a per-document record this version no longer reads. */
+class RetiredDocumentKeyError extends Error {
+  constructor(readonly docKey: string) {
+    super(`Stored record key "${docKey}" names a per-document record this version no longer reads`)
+    this.name = 'RetiredDocumentKeyError'
+  }
+}
+
 const routingProvider: ReplicaKeyProvider = {
   async keyFor(docKey) {
     const workspaceId = workspaceIdOfStoredDocKey(docKey)
     // `SealedDocumentStore` only ever asks with a `docRefKey`, so the one shape
-    // that is not a workspace record is a `document:*` key — never sealed, per
-    // the file header. Plaintext is therefore the answer for that shape alone,
-    // and the fallback is deliberate rather than a parse failure read as consent.
-    if (workspaceId === null) return 'plaintext'
+    // that is not a workspace record is a `document:*` key: a per-document
+    // record nothing in this build writes or reads. Answering `plaintext` for
+    // it would be reading it.
+    if (workspaceId === null) throw new RetiredDocumentKeyError(docKey)
     const daemonBaseUrl = replicaDaemonBaseUrl(workspaceId)
     if (daemonBaseUrl === undefined) return 'plaintext'
     const resolved = await replicaKeyProviderFor(

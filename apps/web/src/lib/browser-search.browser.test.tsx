@@ -112,10 +112,7 @@ describe('browser body search', () => {
     const source = createBrowserFilesSource()
     expect(await source.searchDocuments('rewritten')).toEqual([])
 
-    // Edit through the store the app writes to: the first search above
-    // folded this document into the workspace tree, so the edit goes to the
-    // tree node — a raw LoroStore save would be invisible behind the
-    // tree projection, which is the point of the collapse, not a bug.
+    // Edit through the store the app writes to: the workspace tree node.
     const doc = new Loro()
     writeDocumentKind(doc, 'markdown')
     writeMarkdownBody(doc, 'rewritten wording')

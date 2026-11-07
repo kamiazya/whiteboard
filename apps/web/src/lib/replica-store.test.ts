@@ -88,11 +88,13 @@ describe('openDocumentStore routing', () => {
     expect(await storedText()).toContain(MARKER)
   })
 
-  it('never seals a document ref, even in a workspace marked as a daemon replica', async () => {
+  it('refuses a document ref rather than storing it, even in a workspace marked as a daemon replica', async () => {
     const workspaceId = freshWorkspaceId()
     markReplica(workspaceId, DAEMON)
-    await save({ kind: 'document', workspaceId, documentId: '01JD0ROUTINGTEST00000000001' })
-    expect(await storedText()).toContain(MARKER)
+    await expect(
+      save({ kind: 'document', workspaceId, documentId: '01JD0ROUTINGTEST00000000001' }),
+    ).rejects.toThrow(/no longer reads/)
+    expect(await storedText()).not.toContain(MARKER)
   })
 
   // The holder maps drift to a withheld key of its own and never throws it, so

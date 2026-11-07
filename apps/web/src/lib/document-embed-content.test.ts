@@ -9,12 +9,13 @@ import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
 import { MAX_FILE_UPLOAD_BYTES } from '@kamiazya/whiteboard-daemon-client/api-contracts/files'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { generateDocumentId, type SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { generateDocumentId, newImageRef, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
+import { seedRetiredFileRecord } from '../test-utils/seed-retired-sync-row.js'
 import { seedTreeContent, seedTreeDocument } from '../test-utils/seed-workspace-content.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -25,8 +26,8 @@ import {
   loadBrowserReference,
   resetEmbedIndexForTests,
 } from './document-embed-content.js'
+import { RETIRED_PICTURE } from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('document-embed-content')
 
@@ -65,23 +66,6 @@ describe('loadBrowserReference', () => {
     expect(source).toEqual({ documentId: entry.documentId, body: 'legacy body', name: 'Old Note' })
   })
 
-  it('a document no index row names reads as spatial, the kind every pre-kind document was', async () => {
-    // Conformance with the daemon's readers: a kind recorded nowhere is
-    // spatial on every keeper, so a pre-kind canvas is drawn as a canvas.
-    const documentId = '01ARZ3NDEKTSV4RRFFQ69G5FBZ'
-    const doc = new Loro()
-    writeSpatialCanvas(doc, {
-      nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 10, height: 10, text: 'a canvas' })],
-      edges: [],
-    })
-    await new LoroStore().save(documentId, doc.export({ mode: 'snapshot' }))
-
-    const source = await loadBrowserReference(documentId)
-    await expectLoggedFailure('document entry load failed')
-    expect(source?.canvas?.nodes.map((node) => node.id)).toEqual(['n1'])
-    expect(source?.body).toBeUndefined()
-  })
-
   it('a workspace that could not be OPENED is not a document with no content', async () => {
     // The other half of the same lie: the tree read failed, so the legacy
     // row's "no record here" is the only answer left — and on its own it
@@ -101,46 +85,6 @@ describe('loadBrowserReference', () => {
       await expectLoggedFailure('referenced document load failed')
     } finally {
       unreadableTree.mockRestore()
-    }
-  })
-
-  it("re-throws the store's own read-unavailable, which is a RESULT and not a throw", async () => {
-    // The shape that matters most, and the one a first pass missed: this
-    // store reports a transient read as `{ kind: 'read-unavailable' }` — a
-    // variant that exists to say "the read failed and this says nothing
-    // about the document" — so a fix that only handled REJECTIONS left the
-    // designed signal folded into "no content" exactly as before.
-    // Held by no tree node, so the read under test is the per-document
-    // store's: a tree-held document answers from the projection.
-    const documentId = generateDocumentId()
-    const unavailable = vi
-      .spyOn(LoroStore.prototype, 'load')
-      .mockResolvedValue({ kind: 'read-unavailable' })
-    try {
-      await expect(loadBrowserReference(documentId)).rejects.toThrow(/could not be read/)
-      await expectLoggedFailure('referenced document load failed')
-    } finally {
-      unavailable.mockRestore()
-    }
-  })
-
-  it('re-throws a store read that FAILED, rather than answering "no content"', async () => {
-    // The two answers are opposite instructions to the prefetch above:
-    // `undefined` is the document's own ("nothing here", cached as
-    // terminal), a rejection is the database's ("could not read", asked
-    // again). Reporting a failed read as the first is what left an embed
-    // blank for the life of the page, with nothing logged.
-    // Held by no tree node, so the read under test is the per-document
-    // store's: a tree-held document answers from the projection.
-    const documentId = generateDocumentId()
-    const failing = vi
-      .spyOn(LoroStore.prototype, 'load')
-      .mockRejectedValue(new Error('the store could not be read'))
-    try {
-      await expect(loadBrowserReference(documentId)).rejects.toThrow('the store could not be read')
-      await expectLoggedFailure('referenced document load failed')
-    } finally {
-      failing.mockRestore()
     }
   })
 
@@ -191,15 +135,12 @@ describe('BROWSER_FILE_ADAPTER, referenced documents', () => {
   it('re-throws a store read that FAILED, so the canvas seam asks again', async () => {
     // The canvas's embeds read through this door, not `loadBrowserReference`,
     // and the contract is the same: `undefined` is cached as terminal.
-    // Held by no tree node, so the read under test is the per-document
-    // store's: a tree-held document answers from the projection.
-    const documentId = generateDocumentId()
     const failing = vi
-      .spyOn(LoroStore.prototype, 'load')
-      .mockRejectedValue(new Error('the store could not be read'))
+      .spyOn(BrowserWorkspaceDocs.prototype, 'open')
+      .mockRejectedValue(new Error('the workspace record could not be opened'))
     try {
-      await expect(BROWSER_FILE_ADAPTER.loadDocument(documentId)).rejects.toThrow(
-        'the store could not be read',
+      await expect(BROWSER_FILE_ADAPTER.loadDocument(generateDocumentId())).rejects.toThrow(
+        /could not be read/,
       )
       await expectLoggedFailure('embedded document load failed')
     } finally {
@@ -320,5 +261,17 @@ describe('BROWSER_FILE_ADAPTER, the upload policy', () => {
     } finally {
       put.mockRestore()
     }
+  })
+})
+
+describe('BROWSER_FILE_ADAPTER, a picture saved in a retired form', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('answers the retired literal for the slot to label, and no bytes for a copy', async () => {
+    const ref = newImageRef('old-picture')
+    await seedRetiredFileRecord(ref, new Uint8Array([1, 2, 3]))
+
+    await expect(BROWSER_FILE_ADAPTER.loadImageUrl(ref)).resolves.toBe(RETIRED_PICTURE)
+    await expect(BROWSER_FILE_ADAPTER.loadImageBlob(ref)).resolves.toBeUndefined()
   })
 })

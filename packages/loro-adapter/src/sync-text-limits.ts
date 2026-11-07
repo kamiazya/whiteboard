@@ -24,10 +24,18 @@ import {
   type VersionVector,
 } from 'loro-crdt'
 import { heldBefore, longNameBreach, type NameSuspect, nameSuspectsOf } from './container-names.js'
-import { EDGES_KEY, LINES_KEY, MARKDOWN_BODY_KEY, NODES_KEY } from './containers.js'
+import {
+  EDGES_KEY,
+  LINES_KEY,
+  MARKDOWN_BODY_KEY,
+  NODES_KEY,
+  RETIRED_COMMENTS_KEY,
+  RETIRED_ELEMENTS_KEY,
+} from './containers.js'
 import { isEngineTrap } from './engine-trap.js'
 import { heldBound } from './held-bound.js'
 import { isNodeMetaContainer } from './node-meta-containers.js'
+import { PRE_ADR_0037_EXTENSION_KEY, RETIRED_BODY_NODE_ID } from './retired-stored-shape.js'
 import {
   type AnnotationCountBreach,
   annotationBreach,
@@ -35,6 +43,12 @@ import {
   mostOpenAnnotations,
   SMALLEST_ANNOTATION_BOUND,
 } from './sync-annotation-limits.js'
+import {
+  type RetiredShapeBreach,
+  retiredHeld,
+  retiredShapeBreach,
+  retiredShapeSuspects,
+} from './sync-retired-shape-limits.js'
 import {
   type ContentRootBreach,
   contentKeyWrites,
@@ -118,6 +132,7 @@ export type SyncTextBreach =
   | ContentRootBreach
   | UnattachedContainerBreach
   | ReservedMapKeyBreach
+  | RetiredShapeBreach
 
 /**
  * The refusal code each breach is answered with, by either keeper. One table,
@@ -142,6 +157,8 @@ export const SYNC_TEXT_BREACH_CODES = {
   'thread-messages': 'too_many_thread_messages',
   'content-root': 'invalid_document_root',
   'reserved-map-key': 'reserved_map_key',
+  'retired-shape': 'retired_stored_shape',
+  'retired-comment-plane': 'retired_comment_plane',
   // Sent built on the change that creates the container, it is an ordinary write.
   'unattached-container': 'causal_gap',
 } as const satisfies Record<SyncTextBreach['shape'], SyncWriteRefusalCode>
@@ -517,6 +534,33 @@ export class UnjudgedImportError extends Error {
   }
 }
 
+/**
+ * What the judgement compares the state after an update against, read while
+ * `doc` is still detached and so shows the state before it. An empty document
+ * had no node, entry or shape before the update.
+ */
+function stateBefore(
+  doc: LoroDoc,
+  writes: UpdateWrites,
+  retiredSuspects: ReturnType<typeof retiredShapeSuspects>,
+  replays: boolean,
+) {
+  return {
+    lengths: new Map(
+      replays ? [...writes.longValues].map(([id, value]) => [id, lengthIn(doc, value)]) : [],
+    ),
+    named: replays ? heldBefore(doc, writes.names) : new Set<ContainerID>(),
+    entries: new Map(
+      [...writes.mapsWritten].map((container) => [
+        container,
+        replays ? entriesIn(doc, container) : 0,
+      ]),
+    ),
+    annotations: replays ? annotationCounts(doc, writes.mapsWritten) : new Map(),
+    retired: replays ? retiredHeld(doc, retiredSuspects) : [],
+  }
+}
+
 function judgeImported(
   doc: LoroDoc,
   from: VersionVector,
@@ -529,6 +573,7 @@ function judgeImported(
     return { breach: structural, touchesNodeMeta: true, kindWrittenIn: new Set() }
   }
   const writes = readWrites(doc, json)
+  const retiredSuspects = retiredShapeSuspects(json)
   const judged = (breach: SyncTextBreach | null): Omit<SyncTextJudgement, 'pending'> => ({
     breach,
     touchesNodeMeta: writes.touchesNodeMeta,
@@ -542,28 +587,17 @@ function judgeImported(
   if (replays && cost.squared > RUN_COST_BUDGET && container !== null) {
     return judged({ shape: 'runs', chars: cost.units, runs: cost.runs, container })
   }
-  // While detached, the state read is the one before the update; an empty
-  // document had no node before it.
-  const before = new Map(
-    replays ? [...writes.longValues].map(([id, value]) => [id, lengthIn(doc, value)]) : [],
-  )
-  const namedBefore = replays ? heldBefore(doc, writes.names) : new Set<ContainerID>()
-  const entriesBefore = new Map(
-    [...writes.mapsWritten].map((container) => [
-      container,
-      replays ? entriesIn(doc, container) : 0,
-    ]),
-  )
-  const annotationsBefore = replays ? annotationCounts(doc, writes.mapsWritten) : new Map()
+  const earlier = stateBefore(doc, writes, retiredSuspects, replays)
   if (replays) doc.attach()
-  const longName = longNameBreach(doc, writes.names, namedBefore)
+  const longName = longNameBreach(doc, writes.names, earlier.named)
   return judged(
     longName === null
       ? (contentRootBreach(doc, contentKeyWrites(json)) ??
           bodyBreach(doc, writes.net) ??
-          valueBreach(doc, writes.longValues, before) ??
-          canvasBreach(doc, writes.setInto, entriesBefore) ??
-          annotationBreach(doc, writes.mapsWritten, annotationsBefore))
+          valueBreach(doc, writes.longValues, earlier.lengths) ??
+          canvasBreach(doc, writes.setInto, earlier.entries) ??
+          annotationBreach(doc, writes.mapsWritten, earlier.annotations) ??
+          retiredShapeBreach(doc, retiredSuspects, earlier.retired))
       : { shape: 'container-name', ...longName },
   )
 }
@@ -627,24 +661,43 @@ function largestBoard(doc: LoroDoc): number {
   return largest
 }
 
-const RESERVED_KEY_BYTES = new TextEncoder().encode(RESERVED_MAP_KEY)
-
 /**
- * Whether `update`'s bytes hold `RESERVED_MAP_KEY` anywhere — they carry every
- * key and root name whole, so one that does not cannot write it. Text that
- * merely spells it is judged in full and let through there.
+ * The keys whose write no short update may skip the full judge for: the
+ * reserved map key, and the keys a retired shape is written under — a node's,
+ * edge's or canvas's `x-whiteboard`, the flat `comments` plane, the `elements`
+ * list and the `okf-body` node. Not a node's `type`: that sits in a value no
+ * key names, so a short write of the old node-kind union is left to the
+ * daemon's judge, which has no short path, and to the reader's refusal on
+ * arrival.
  */
-function mayNameReservedKey(update: Uint8Array): boolean {
-  const [first] = RESERVED_KEY_BYTES
+const JUDGED_KEY_BYTES = [
+  RESERVED_MAP_KEY,
+  PRE_ADR_0037_EXTENSION_KEY,
+  RETIRED_COMMENTS_KEY,
+  RETIRED_ELEMENTS_KEY,
+  RETIRED_BODY_NODE_ID,
+].map((key) => new TextEncoder().encode(key))
+
+/** Whether `update` holds `needle` anywhere in its bytes. */
+function holdsBytes(update: Uint8Array, needle: Uint8Array): boolean {
+  const [first] = needle
   for (
     let at = update.indexOf(first as number);
     at !== -1;
     at = update.indexOf(first as number, at + 1)
   ) {
-    if (RESERVED_KEY_BYTES.every((byte, offset) => update[at + offset] === byte)) return true
+    if (needle.every((byte, offset) => update[at + offset] === byte)) return true
   }
   return false
 }
+
+/**
+ * Whether the bytes hold a `JUDGED_KEY_BYTES` entry anywhere — they carry
+ * every key and root name whole, so an update that does not cannot write it.
+ * Text that merely spells one is judged in full and let through there.
+ */
+const mayNameJudgedKey = (update: Uint8Array): boolean =>
+  JUDGED_KEY_BYTES.some((key) => holdsBytes(update, key))
 
 /** No update this short can take a board past either per-canvas bound from where `largestBoard` found it. */
 const SMALLEST_CANVAS_BOUND = Math.min(...CANVAS_BOUNDS.map(({ max }) => max))
@@ -700,7 +753,7 @@ export function syncTextLimitJudge(record: LoroDoc): (update: Uint8Array) => Syn
   const mostOpenAtMost = heldBound(record, mostOpenAnnotations)
   return (update) => {
     const most = update.byteLength
-    if (most <= SMALLEST_VALUE_BOUND && !mayNameReservedKey(update)) {
+    if (most <= SMALLEST_VALUE_BOUND && !mayNameJudgedKey(update)) {
       const bodyFits = (walk: boolean) => longestBodyAtMost(walk) + most <= MARKDOWN_MAX_CHARS
       const boardFits = (walk: boolean) => largestBoardAtMost(walk) + most <= SMALLEST_CANVAS_BOUND
       const openFits = (walk: boolean) => mostOpenAtMost(walk) + most <= SMALLEST_ANNOTATION_BOUND

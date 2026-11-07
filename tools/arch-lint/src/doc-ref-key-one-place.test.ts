@@ -46,11 +46,6 @@ const ALLOWLIST: Readonly<Record<string, { readonly count: number; readonly reas
     reason:
       'a test fixture listing the raw store keys strips the document prefix back to ids, because ports exports no inverse for the document arm of the key',
   },
-  'apps/web/src/test-utils/seed-sync-document.ts': {
-    count: 1,
-    reason:
-      'writes a raw malformed value straight into the object store, bypassing the store on purpose, so it cannot go through a DocRef',
-  },
   'packages/mcp-server/src/server/store/workspace-doc-cache.ts': {
     count: 1,
     reason:

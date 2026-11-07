@@ -36,7 +36,6 @@ describe('the New canvas launcher shortcut on the list', () => {
         <LocationProbe />
         <BrowserIndexPage
           index={store.index}
-          loro={store.loro}
           pointer={store.pointer}
           clock={store.clock}
           onOpenDocument={onOpenDocument}

@@ -93,8 +93,8 @@ describe('switchDocument supersession', () => {
     let docA: DocumentSnapshot | undefined
     let docB: DocumentSnapshot | undefined
     await act(async () => {
-      docA = await createSeededDocument(store.index, store.loro, store.clock, 'A')
-      docB = await createSeededDocument(store.index, store.loro, store.clock, 'B')
+      docA = await createSeededDocument(store.index, store.clock, 'A')
+      docB = await createSeededDocument(store.index, store.clock, 'B')
     })
     return { hook, a: docA as DocumentSnapshot, b: docB as DocumentSnapshot }
   }
@@ -103,7 +103,6 @@ describe('switchDocument supersession', () => {
     const store = new BrowserStoreDouble()
     const held = gate(async (id: string) => (await store.clock([id])).get(id))
     const { hook, a, b } = await twoMoreDocuments(store, {
-      loro: store.loro,
       pointer: store.pointer,
       clock: async (ids) =>
         new Map(
@@ -139,7 +138,6 @@ describe('switchDocument supersession', () => {
       return id
     })
     const { hook, a, b } = await twoMoreDocuments(store, {
-      loro: store.loro,
       pointer: {
         get: () => store.pointer.get(),
         clear: () => store.pointer.clear(),
@@ -178,7 +176,6 @@ describe('switchDocument supersession', () => {
       return (await store.clock([id])).get(id)
     })
     const { hook, a, b } = await twoMoreDocuments(store, {
-      loro: store.loro,
       pointer: store.pointer,
       clock: async (ids) =>
         new Map(

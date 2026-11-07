@@ -85,12 +85,18 @@ export interface PromoteWorkspaceOptions {
  */
 export async function countBrowserWorkspaceDocuments(
   workspaceDocs: WorkspaceDocs,
-  registry: Pick<IdbDocumentIndex, 'holdsPreTreeRecords'> = new IdbDocumentIndex(),
+  registry: Pick<
+    IdbDocumentIndex,
+    'holdsPreTreeRecords' | 'holdsPreTreeContentRecords'
+  > = new IdbDocumentIndex(),
 ): Promise<number> {
   const workspaceId = getBrowserWorkspaceId()
   // Documents older builds wrote outside the record are not in it, so a count
   // of the record would offer "nothing to move" over a workspace full of them.
-  if (await registry.holdsPreTreeRecords(workspaceId)) {
+  if (
+    (await registry.holdsPreTreeRecords(workspaceId)) ||
+    (await registry.holdsPreTreeContentRecords())
+  ) {
     throw new BrowserStorageRefusedError('pre-tree-records', workspaceId)
   }
   const record = await workspaceDocs.open(workspaceId)
@@ -230,6 +236,15 @@ async function readImage(
   const stored = await fileStore.read(newImageRef(fileId))
   if (stored.kind === 'blob') return stored.blob
   if (stored.kind === 'absent') return null
+  // Held back like an unreadable one, never `null`: `null` claims the image
+  // is gone, which lets the demote delete the bytes this build cannot read.
+  if (stored.kind === 'retired') {
+    log.warn('image is saved in a form this version no longer reads, so it was not moved', {
+      workspaceId,
+      fileId,
+    })
+    return undefined
+  }
   log.warn('image could not be read for the move', {
     workspaceId,
     fileId,

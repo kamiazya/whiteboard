@@ -2,7 +2,6 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
 import { createSeededDocumentAt } from '../lib/create-seeded-document.js'
-import { LoroStore } from '../lib/loro-store.js'
 
 /**
  * Seeds one empty document in the real browser stores, through the same
@@ -22,7 +21,7 @@ export async function seedIdbDocument({
   kind?: DocumentKind
   makeDefault?: boolean
 }): Promise<string> {
-  const entry = await createSeededDocumentAt(new BrowserDocumentIndex(), new LoroStore(), {
+  const entry = await createSeededDocumentAt(new BrowserDocumentIndex(), {
     path,
     kind,
     ...(name === undefined ? {} : { name }),

@@ -28,7 +28,7 @@ import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-follow-rename')
@@ -147,6 +147,7 @@ describe('browser rename follows references', () => {
 
     await createBrowserFilesSource({ index }).renameDocumentPath('legacy/target', 'legacy/moved')
 
-    expect((await new LoroStore().load(sourceId)).kind).toBe('not-found')
+    expect(await new IdbDocumentIndex().holdsPreTreeContentRecords()).toBe(false)
+    expect(await loadDocumentContent(sourceId)).not.toBeNull()
   })
 })

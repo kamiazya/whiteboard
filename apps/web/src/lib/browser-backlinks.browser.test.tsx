@@ -11,7 +11,6 @@ import { browserBacklinksReader } from './browser-backlinks.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
 
 // The browser keeper answering "what links here" from its own documents,
 // over real IndexedDB and the production tree-backed index — so every listing
@@ -48,7 +47,7 @@ describe('the browser keeper answering what links here', () => {
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
     await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
-    const read = browserBacklinksReader(index, new LoroStore())
+    const read = browserBacklinksReader(index)
 
     const answer = await read(beta)
 
@@ -64,7 +63,7 @@ describe('the browser keeper answering what links here', () => {
     await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const alpha = await note(index, 'alpha', 'Alpha', 'See [[beta]] for the details.')
-    const read = browserBacklinksReader(index, new LoroStore())
+    const read = browserBacklinksReader(index)
     expect((await read(beta)).backlinks.map((entry) => entry.path)).toEqual(['alpha'])
 
     await seedWorkspaceDocumentContent(alpha, markdown('No link any more.'))

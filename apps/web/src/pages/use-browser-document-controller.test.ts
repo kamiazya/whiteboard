@@ -1,49 +1,11 @@
 import { act, renderHook } from '@testing-library/react'
-import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
-import {
-  type LoroStoreLike,
-  useBrowserDocumentController,
-} from './use-browser-document-controller.js'
-
-class FakeLoroStore implements LoroStoreLike {
-  saved: Array<{ id: string; bytes: Uint8Array }> = []
-  shouldThrow = false
-  private byId = new Map<string, Uint8Array>()
-
-  async save(id: string, bytes: Uint8Array): Promise<void> {
-    if (this.shouldThrow) throw new Error('loro save failed')
-    this.saved.push({ id, bytes })
-    this.byId.set(id, bytes)
-  }
-
-  createEmptySnapshot(): Uint8Array {
-    // Fake in-memory bytes — the fake never touches real loro-crdt, matching
-    // the isolation LoroStoreLike is meant to provide to this test file.
-    return new Uint8Array([1, 2, 3])
-  }
-
-  async load(id: string): Promise<LoroLoadResult> {
-    const bytes = this.byId.get(id)
-    if (bytes === undefined) return { kind: 'not-found' }
-    return { kind: 'ok', snapshot: bytes }
-  }
-}
-
-// A test that reads a copy's content back decodes it with real loro-crdt, so
-// it seeds real Loro bytes; the fake's `[1, 2, 3]` would throw on import.
-function realSnapshotWithElements(elements: unknown[]): Uint8Array {
-  const doc = new Loro()
-  const list = doc.getList('elements')
-  for (const el of elements) list.push(el)
-  return doc.export({ mode: 'snapshot' })
-}
+import { useBrowserDocumentController } from './use-browser-document-controller.js'
 
 // ULIDs, because the stored schema validates them. Named, since a 26-character
 // id read six times in one assertion is unreadable.
@@ -77,7 +39,6 @@ describe('useBrowserDocumentController', () => {
     const store = new BrowserStoreDouble()
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -89,7 +50,6 @@ describe('useBrowserDocumentController', () => {
     const store = new BrowserStoreDouble()
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -101,7 +61,6 @@ describe('useBrowserDocumentController', () => {
     const store = new BrowserStoreDouble()
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -117,7 +76,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -132,7 +90,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -163,7 +120,6 @@ describe('useBrowserDocumentController', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(failingStore.index, {
-        loro: failingStore.loro,
         pointer: failingStore.pointer,
         clock: failingStore.clock,
       }),
@@ -197,7 +153,6 @@ describe('useBrowserDocumentController', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -237,7 +192,6 @@ describe('useBrowserDocumentController', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(base.index, {
-        loro: base.loro,
         pointer: base.pointer,
         clock: base.clock,
       }),
@@ -275,7 +229,6 @@ describe('useBrowserDocumentController', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -310,7 +263,6 @@ describe('useBrowserDocumentController', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -345,7 +297,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -364,7 +315,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -390,7 +340,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -417,7 +366,6 @@ describe('useBrowserDocumentController', () => {
     }
     const { result } = renderHook(() =>
       useBrowserDocumentController(base.index, {
-        loro: base.loro,
         pointer: base.pointer,
         clock: base.clock,
       }),
@@ -450,7 +398,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -471,7 +418,6 @@ describe('useBrowserDocumentController', () => {
     const warnSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     const { result, unmount } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -492,7 +438,6 @@ describe('useBrowserDocumentController', () => {
     // A subsequently-mounted controller must see the persisted rename, not a clobbered value.
     const { result: result2 } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -508,7 +453,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(named)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -529,7 +473,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(named)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -547,7 +490,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -571,7 +513,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -594,7 +535,6 @@ describe('useBrowserDocumentController', () => {
     await store.save(snap)
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -632,7 +572,6 @@ describe('useBrowserDocumentController', () => {
 
     const { result } = renderHook(() =>
       useBrowserDocumentController(store.index, {
-        loro: store.loro,
         pointer: store.pointer,
         clock: store.clock,
       }),
@@ -662,12 +601,7 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const created = await createSeededDocument(
-        store.index,
-        new FakeLoroStore(),
-        store.clock,
-        'Second',
-      )
+      const created = await createSeededDocument(store.index, store.clock, 'Second')
       expect(created.workspaceId).toBe(getBrowserWorkspaceId())
     })
 
@@ -677,11 +611,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
-      await loro.save(C1, realSnapshotWithElements([{ id: 'rect-1' }]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -716,7 +647,6 @@ describe('useBrowserDocumentController', () => {
       await store.save(other)
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: store.loro,
           initialPath: other.path,
           pointer: store.pointer,
           clock: store.clock,
@@ -733,7 +663,6 @@ describe('useBrowserDocumentController', () => {
       await store.save(other)
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: store.loro,
           initialPath: other.documentId,
           pointer: store.pointer,
           clock: store.clock,
@@ -750,7 +679,6 @@ describe('useBrowserDocumentController', () => {
       await store.save(other)
       renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: store.loro,
           initialPath: other.path,
           pointer: store.pointer,
           clock: store.clock,
@@ -766,7 +694,6 @@ describe('useBrowserDocumentController', () => {
       await store.save(snap)
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: store.loro,
           initialPath: 'does-not-exist',
           pointer: store.pointer,
           clock: store.clock,
@@ -792,7 +719,6 @@ describe('useBrowserDocumentController', () => {
       base.index.resolveDocument = () => Promise.reject(new Error('idb blocked'))
       const { result } = renderHook(() =>
         useBrowserDocumentController(base.index, {
-          loro: base.loro,
           initialPath: 'other-canvas',
           pointer: base.pointer,
           clock: base.clock,
@@ -809,7 +735,6 @@ describe('useBrowserDocumentController', () => {
       await store.save(snap)
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: store.loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -822,10 +747,8 @@ describe('useBrowserDocumentController', () => {
   describe('multi-canvas: listDocuments / createSeededDocument / switchDocument', () => {
     it('listDocuments reflects the auto-created canvas on first mount', async () => {
       const store = new BrowserStoreDouble()
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -836,14 +759,12 @@ describe('useBrowserDocumentController', () => {
       expect(list[0].documentId).toBe(result.current.snapshot?.documentId)
     })
 
-    it('createSeededDocument returns a fresh snapshot, persists metadata, writes an empty Loro doc, and does not change current snapshot', async () => {
+    it('createSeededDocument returns a fresh snapshot, persists metadata, and does not change current snapshot', async () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -853,7 +774,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
+        created = await createSeededDocument(store.index, store.clock, 'Second canvas')
       })
 
       expect(created).toBeDefined()
@@ -863,7 +784,6 @@ describe('useBrowserDocumentController', () => {
       expect(await store.getDefaultDocumentId()).toBe(C1)
 
       expect(await store.load(created!.documentId)).toEqual(created)
-      expect(loro.saved.some((s) => s.id === created!.documentId)).toBe(true)
     })
 
     it('createSeededDocument with no name places an unnamed document at "untitled"', async () => {
@@ -872,10 +792,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save({ ...snap, path: 'existing', name: 'Existing' })
-      const loro = new FakeLoroStore()
       renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -883,55 +801,23 @@ describe('useBrowserDocumentController', () => {
       await act(async () => {})
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(store.index, loro, store.clock)
+        created = await createSeededDocument(store.index, store.clock)
       })
       expect(created?.path).toBe('untitled')
       expect(created?.name).toBeNull()
     })
 
-    it('createSeededDocument rolls back the metadata row when the Loro write fails', async () => {
-      const store = new BrowserStoreDouble()
-      await store.setDefaultDocumentId(C1)
-      await store.save(snap)
-      const loro = new FakeLoroStore()
-      loro.shouldThrow = true
-      renderHook(() =>
-        useBrowserDocumentController(store.index, {
-          loro: loro,
-          pointer: store.pointer,
-          clock: store.clock,
-        }),
-      )
-      await act(async () => {})
-
-      let thrown: unknown
-      await act(async () => {
-        try {
-          await createSeededDocument(store.index, loro, store.clock, 'Doomed')
-        } catch (err) {
-          thrown = err
-        }
-      })
-      expect(thrown).toBeDefined()
-
-      const list = await store.listDocuments()
-      expect(list).toHaveLength(1)
-      expect(list[0].documentId).toBe(C1)
-    })
-
     it('listDocuments includes documents created via createSeededDocument', async () => {
       const store = new BrowserStoreDouble()
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
       )
       await act(async () => {})
       await act(async () => {
-        await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
+        await createSeededDocument(store.index, store.clock, 'Second canvas')
       })
       const list = await result.current.listDocuments()
       expect(list).toHaveLength(2)
@@ -941,10 +827,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -953,7 +837,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
+        created = await createSeededDocument(store.index, store.clock, 'Second canvas')
       })
 
       act(() => {
@@ -979,10 +863,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -1016,10 +898,8 @@ describe('useBrowserDocumentController', () => {
         if (input.documentId === 'corrupt-1') throw new Error('IndexedDB: record unreadable')
         return resolve(input)
       }
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(base.index, {
-          loro: loro,
           pointer: base.pointer,
           clock: base.clock,
         }),
@@ -1028,7 +908,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(base.index, loro, base.clock, 'Second canvas')
+        created = await createSeededDocument(base.index, base.clock, 'Second canvas')
       })
 
       // Leave a stale degraded banner behind, as a prior corrupt-record
@@ -1055,10 +935,8 @@ describe('useBrowserDocumentController', () => {
         if (input.documentId === 'boom') throw new Error('IndexedDB: read aborted')
         return resolve(input)
       }
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(base.index, {
-          loro: loro,
           pointer: base.pointer,
           clock: base.clock,
         }),
@@ -1082,10 +960,8 @@ describe('useBrowserDocumentController', () => {
       base.pointer.set = async () => {
         throw new Error('IndexedDB: meta write aborted')
       }
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(base.index, {
-          loro: loro,
           pointer: base.pointer,
           clock: base.clock,
         }),
@@ -1094,7 +970,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(base.index, loro, base.clock, 'Second canvas')
+        created = await createSeededDocument(base.index, base.clock, 'Second canvas')
       })
 
       await act(async () => {
@@ -1110,10 +986,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -1122,7 +996,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
+        created = await createSeededDocument(store.index, store.clock, 'Second canvas')
       })
 
       // Intercept the next save() (the one renameDocument's fire-and-forget
@@ -1187,10 +1061,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = new FakeLoroStore()
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -1199,7 +1071,7 @@ describe('useBrowserDocumentController', () => {
 
       let created: DocumentSnapshot | undefined
       await act(async () => {
-        created = await createSeededDocument(store.index, loro, store.clock, 'Second canvas')
+        created = await createSeededDocument(store.index, store.clock, 'Second canvas')
       })
 
       // Intercept the rename write so the test controls exactly when each of
@@ -1272,15 +1144,12 @@ describe('useBrowserDocumentController', () => {
   })
 
   describe('duplicateDocument', () => {
-    it('creates a new canvas named "<name> (copy)", copies the Loro bytes, and switches to it', async () => {
+    it('creates a new canvas named "<name> (copy)" and switches to it', async () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = store.loro
-      await loro.save(C1, realSnapshotWithElements([{ id: 'rect-1' }]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -1297,14 +1166,6 @@ describe('useBrowserDocumentController', () => {
       // switched to the duplicate
       expect(result.current.snapshot?.documentId).toBe(duplicated?.documentId)
       expect(await store.getDefaultDocumentId()).toBe(duplicated?.documentId)
-
-      const copiedLoro = await loro.load(duplicated!.documentId)
-      expect(copiedLoro.kind).toBe('ok')
-      if (copiedLoro.kind === 'ok') {
-        const doc = new Loro()
-        doc.import(copiedLoro.snapshot)
-        expect(doc.getList('elements').toJSON()).toEqual([{ id: 'rect-1' }])
-      }
     })
 
     it('increments the numeric suffix when "(copy)" is already taken', async () => {
@@ -1319,11 +1180,8 @@ describe('useBrowserDocumentController', () => {
         updatedAt: snap.updatedAt,
         kind: 'spatial' as const,
       })
-      const loro = store.loro
-      await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -1342,11 +1200,8 @@ describe('useBrowserDocumentController', () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = store.loro
-      await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
@@ -1365,22 +1220,19 @@ describe('useBrowserDocumentController', () => {
       expect(duplicated?.name).toBe('Renamed before duplicate (copy)')
     })
 
-    it('leaves no copy behind when the copy’s content write fails', async () => {
+    it('stays on the source canvas when the duplicate fails', async () => {
       const store = new BrowserStoreDouble()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
-      const loro = store.loro
-      await loro.save(C1, realSnapshotWithElements([]))
       const { result } = renderHook(() =>
         useBrowserDocumentController(store.index, {
-          loro: loro,
           pointer: store.pointer,
           clock: store.clock,
         }),
       )
       await act(async () => {})
 
-      loro.shouldThrow = true
+      store.index.duplicateDocument = () => Promise.reject(new Error('duplicate failed'))
       let thrown: unknown
       await act(async () => {
         try {
@@ -1396,45 +1248,6 @@ describe('useBrowserDocumentController', () => {
       expect(list[0].documentId).toBe(C1)
       // Never switched away from the source canvas on failure.
       expect(result.current.snapshot?.documentId).toBe(C1)
-    })
-
-    it('duplicating twice never mutates the original: editing the source after duplicating leaves the copy unchanged', async () => {
-      const store = new BrowserStoreDouble()
-      await store.setDefaultDocumentId(C1)
-      await store.save(snap)
-      const loro = store.loro
-      await loro.save(C1, realSnapshotWithElements([{ id: 'original-element' }]))
-      const { result } = renderHook(() =>
-        useBrowserDocumentController(store.index, {
-          loro: loro,
-          pointer: store.pointer,
-          clock: store.clock,
-        }),
-      )
-      await act(async () => {})
-
-      let duplicated: DocumentSnapshot | undefined
-      await act(async () => {
-        duplicated = await result.current.duplicateDocument()
-      })
-
-      // Edit the ORIGINAL's stored Loro bytes directly (simulating further
-      // edits to the source canvas after duplicating) and confirm the
-      // duplicate's already-copied bytes are untouched.
-      const loadedOriginal = await loro.load(C1)
-      if (loadedOriginal.kind !== 'ok') throw new Error('unexpected load failure')
-      const originalDoc = new Loro()
-      originalDoc.import(loadedOriginal.snapshot)
-      originalDoc.getList('elements').push({ id: 'added-after-duplicate' })
-      await loro.save(C1, originalDoc.export({ mode: 'snapshot' }))
-
-      const copiedLoro = await loro.load(duplicated!.documentId)
-      expect(copiedLoro.kind).toBe('ok')
-      if (copiedLoro.kind === 'ok') {
-        const doc = new Loro()
-        doc.import(copiedLoro.snapshot)
-        expect(doc.getList('elements').toJSON()).toEqual([{ id: 'original-element' }])
-      }
     })
   })
 })

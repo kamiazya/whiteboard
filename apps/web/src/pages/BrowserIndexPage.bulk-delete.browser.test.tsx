@@ -65,7 +65,6 @@ it('deletes every selected document behind one confirmation naming the count', a
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={store.index}
-        loro={store.loro}
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={vi.fn()}

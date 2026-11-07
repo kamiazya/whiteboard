@@ -21,33 +21,38 @@ afterEach(() => openWhiteboardDbMock.mockReset())
 
 describe('documentFileRecordSchema', () => {
   const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
+  const ref = { algorithm: 'sha-256', digestHex: 'a'.repeat(64) }
 
-  it('accepts a valid v:1 record', () => {
-    const result = documentFileRecordSchema.safeParse({
-      v: 1,
-      mimeType: 'image/png',
-      created: 123,
-      blob,
-    })
-    expect(result.success).toBe(true)
+  it('accepts a valid v:2 record', () => {
+    expect(
+      documentFileRecordSchema.safeParse({ v: 2, mimeType: 'image/png', created: 123, ref })
+        .success,
+    ).toBe(true)
   })
 
-  it('rejects records missing mimeType/blob/created', () => {
-    expect(documentFileRecordSchema.safeParse({ v: 1, created: 123, blob }).success).toBe(false)
-    expect(documentFileRecordSchema.safeParse({ v: 1, mimeType: 'image/png', blob }).success).toBe(
+  it('refuses the retired v:1 record that holds the Blob itself', () => {
+    expect(
+      documentFileRecordSchema.safeParse({ v: 1, mimeType: 'image/png', created: 123, blob })
+        .success,
+    ).toBe(false)
+  })
+
+  it('rejects records missing mimeType/ref/created', () => {
+    expect(documentFileRecordSchema.safeParse({ v: 2, created: 123, ref }).success).toBe(false)
+    expect(documentFileRecordSchema.safeParse({ v: 2, mimeType: 'image/png', ref }).success).toBe(
       false,
     )
     expect(
-      documentFileRecordSchema.safeParse({ v: 1, mimeType: 'image/png', created: 123 }).success,
+      documentFileRecordSchema.safeParse({ v: 2, mimeType: 'image/png', created: 123 }).success,
     ).toBe(false)
   })
 
   it('rejects records with a wrong/absent v field', () => {
     expect(
-      documentFileRecordSchema.safeParse({ mimeType: 'image/png', created: 123, blob }).success,
+      documentFileRecordSchema.safeParse({ mimeType: 'image/png', created: 123, ref }).success,
     ).toBe(false)
     expect(
-      documentFileRecordSchema.safeParse({ v: 2, mimeType: 'image/png', created: 123, blob })
+      documentFileRecordSchema.safeParse({ v: 3, mimeType: 'image/png', created: 123, ref })
         .success,
     ).toBe(false)
   })

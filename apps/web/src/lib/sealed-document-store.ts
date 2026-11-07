@@ -59,7 +59,7 @@ import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-p
  * daemon-client provider's answer plus the two this layer adds.
  * `'rotated'` is a key generation the daemon has since replaced.
  * `'plaintext'` is `replica-store.ts`'s routing answer for a ref this build
- * never seals — a browser-kept workspace, or any `document:*` ref — so the
+ * never seals — a browser-kept workspace — so the
  * ONE factory can hand every construction the same decorator instead of
  * branching between a sealed and a bare `DocumentStore`.
  */

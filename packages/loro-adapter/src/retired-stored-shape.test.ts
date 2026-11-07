@@ -1,5 +1,5 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { writeDocumentKind } from './document-envelope.js'
 import {
@@ -283,6 +283,39 @@ describe('the retired Excalidraw `elements` list is refused while it holds entri
         readSpatialCanvas(doc)
       } catch {}
       expect(shape(doc)).toEqual(before)
+    })
+
+    it('leaves a tree node still holding its body as the okf-body node, with no body container, unchanged', () => {
+      // The one reader that asks for TEXT. A new document pre-attaches its
+      // `body`, so the case is a node an older writer left without one: the
+      // note whose body still sits in a canvas text node. `getText` there
+      // would open the container, and opening it is a write that clears redo.
+      const source = new LoroDoc()
+      writeSpatialCanvas(source, {
+        nodes: [textNode({ id: 'okf-body', x: 0, y: 0, width: 80, height: 40, text: 'x' })],
+        edges: [],
+      })
+      writeDocumentKind(source, 'markdown')
+      const { ws, host } = treeHost(source)
+      const meta = ws.getTree('tree').roots()[0]?.data
+      if (meta === undefined) throw new Error('no tree node')
+      meta.delete('body')
+      ws.commit()
+      const undo = new UndoManager(ws, { mergeInterval: 0 })
+      meta.set('name', 'n1')
+      ws.commit()
+      undo.undo()
+      expect(undo.canRedo()).toBe(true)
+      const state = () =>
+        JSON.stringify([
+          Object.keys(meta.getShallowValue()).sort(),
+          ws.frontiers(),
+          ws.export({ mode: 'update' }).length,
+        ])
+      const before = state()
+      expect(retiredStoredShapeIn(host)).toMatch(/okf-body/)
+      expect(state()).toBe(before)
+      expect(undo.canRedo()).toBe(true)
     })
 
     it('leaves a tree node without the root unchanged', () => {

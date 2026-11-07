@@ -46,6 +46,6 @@ describe('pages/ never name the CRDT', () => {
     ]) {
       expect(LORO_CRDT.test(line), line).toBe(true)
     }
-    expect(LORO_CRDT.test("import { x } from '../lib/loro-store.js'")).toBe(false)
+    expect(LORO_CRDT.test("import { x } from '../lib/content-timestamp.js'")).toBe(false)
   })
 })

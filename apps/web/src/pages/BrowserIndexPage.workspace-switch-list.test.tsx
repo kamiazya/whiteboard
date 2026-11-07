@@ -39,7 +39,6 @@ function renderPage(store: BrowserStoreDouble) {
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={store.index}
-        loro={store.loro}
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={onOpenDocument}
