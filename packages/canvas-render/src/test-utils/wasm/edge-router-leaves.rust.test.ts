@@ -1,6 +1,6 @@
 import { type EdgeSide, edgeSideSchema } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import {
   outwardNormal,
   type Point,
@@ -222,6 +222,83 @@ const alongABorder = fc
     ],
   ])
 
+/**
+ * A leg across a field of thin, tall walls, staggered so each round of the
+ * corner search meets more of them: the only draw that reaches the search's
+ * two bail-outs, more than 24 blockers and a seventh round. Free and
+ * anchored draws hold at most six boxes, so they cannot. Neither exit is
+ * visible from outside; the mutants of `MAX_BLOCKERS` and `MAX_ROUNDS`
+ * failing this property is what shows the draw reaches them.
+ */
+const wallField = fc
+  .tuple(
+    fc.integer({ min: 40, max: 80 }),
+    fc.array(fc.integer({ min: -60, max: 60 }), { minLength: 80, maxLength: 80 }),
+    fc.array(fc.integer({ min: 40, max: 240 }), { minLength: 80, maxLength: 80 }),
+    fc.constantFrom(8, 16),
+  )
+  .map(([count, offsets, heights, clearance]): [Point, Point, number, DetourObstacle[]] => {
+    const walls = Array.from({ length: count }, (_, k): DetourObstacle => {
+      const h = heights[k] as number
+      const body = { x: 30 + k * 18, y: (offsets[k] as number) - h / 2, w: 4, h }
+      return {
+        block: {
+          x: body.x - clearance / 2,
+          y: body.y - clearance / 2,
+          w: body.w + clearance,
+          h: body.h + clearance,
+        },
+        body,
+        escapable: k % 5 === 0,
+      }
+    })
+    return [{ x: 0, y: 0 }, { x: 30 + count * 18 + 20, y: 0 }, clearance, walls]
+  })
+
+/**
+ * A leg through a lattice of small boxes: every leg out of a corner meets
+ * several at once, so the blocker count passes the cap within the first
+ * rounds, where the wall field runs out of rounds first.
+ */
+function lattice(cols: number, rows: number, pitch: number, clearance: number, dy: number) {
+  const boxes: DetourObstacle[] = []
+  for (let c = 0; c < cols; c++) {
+    for (let r = 0; r < rows; r++) {
+      const body = {
+        x: 20 + c * pitch,
+        y: -(rows * pitch) / 2 + r * pitch,
+        w: pitch / 2,
+        h: pitch / 2,
+      }
+      boxes.push({
+        block: {
+          x: body.x - clearance / 4,
+          y: body.y - clearance / 4,
+          w: body.w + clearance / 2,
+          h: body.h + clearance / 2,
+        },
+        body,
+        escapable: false,
+      })
+    }
+  }
+  return [{ x: 0, y: dy }, { x: 40 + cols * pitch, y: -dy }, clearance, boxes] as [
+    Point,
+    Point,
+    number,
+    DetourObstacle[],
+  ]
+}
+
+const boxLattice = fc
+  .tuple(
+    fc.integer({ min: 6, max: 10 }),
+    fc.integer({ min: 6, max: 10 }),
+    fc.integer({ min: 18, max: 30 }),
+    fc.constantFrom(8, 16),
+  )
+  .map(([cols, rows, pitch, clearance]) => lattice(cols, rows, pitch, clearance, 3))
+
 describe.runIf(built)(
   'side-slides.ts, straight-detour.ts and their Rust port answer the same',
   () => {
@@ -298,13 +375,54 @@ describe.runIf(built)(
     })
 
     fcTest.prop(
-      [fc.oneof({ weight: 3, arbitrary: detourCase }, { weight: 1, arbitrary: alongABorder })],
+      [
+        fc.oneof(
+          { weight: 3, arbitrary: detourCase },
+          { weight: 1, arbitrary: alongABorder },
+          { weight: 1, arbitrary: wallField },
+          { weight: 2, arbitrary: boxLattice },
+        ),
+      ],
       withDefaults(),
     )('corner detour', ([start, end, clearance, obstacles]) => {
       const route = cornerDetour(start, end, obstacles, clearance)
       if (route === undefined) reach.noDetour += 1
       else if (route.length === 2) reach.straight += 1
       else reach.around += 1
+      const input = Float64Array.from([
+        start.x,
+        start.y,
+        end.x,
+        end.y,
+        clearance,
+        obstacles.length,
+        ...obstacles.flatMap((o) => [
+          o.block.x,
+          o.block.y,
+          o.block.w,
+          o.block.h,
+          o.body.x,
+          o.body.y,
+          o.body.w,
+          o.body.h,
+          o.escapable ? 1 : 0,
+        ]),
+      ])
+      expect(
+        firstDifference(routeOut(route), requireWasm().edge_corner_detour(input)),
+      ).toBeUndefined()
+    })
+
+    // The corner search's two bail-outs, each pinned by a lattice where it
+    // changes the answer. Found by scanning lattices against the Rust build
+    // with MAX_BLOCKERS lifted to 1000 (cap) and MAX_ROUNDS to 100 (rounds):
+    // the draws reach these exits, but at the cap the best route so far is
+    // usually the final one, so a mutant of either survives most runs.
+    it.each([
+      { exit: 'the blocker cap', at: lattice(6, 5, 14, 16, 7) },
+      { exit: 'the last round', at: lattice(4, 6, 14, 8, 3) },
+    ])('takes $exit where the TypeScript does', ({ at: [start, end, clearance, obstacles] }) => {
+      const route = cornerDetour(start, end, obstacles, clearance)
       const input = Float64Array.from([
         start.x,
         start.y,
@@ -358,8 +476,9 @@ describe.runIf(built)(
     })
 
     afterAllFloor(['side slides', 'zero-bend slide', 'corner detour', 'square ends'], () => {
-      // Each answer's every branch is reached. Floors at about half of what
-      // three runs measured.
+      // Each answer's branches are reached; the corner search's two
+      // bail-outs by the wall field, which its mutants show (see
+      // `wallField`). Floors at about half of what three runs measured.
       expect(reach.slid).toBeGreaterThan(55)
       expect(reach.approachMoved).toBeGreaterThan(11)
       expect(reach.deepened).toBeGreaterThan(11)

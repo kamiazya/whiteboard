@@ -1,11 +1,28 @@
-import { type EdgeSide, edgeSideSchema, type SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type EdgeSide,
+  edgeSideSchema,
+  endSide,
+  isSelfLoop,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { describe, expect } from 'vitest'
 import { type BendRouteEnds, bendRoute } from '../../layout/edges/bend-route.js'
 import { contactRoute, marksContact } from '../../layout/edges/edge-contact.js'
-import { type Point, rectAtEnd } from '../../layout/edges/edge-geometry.js'
-import { initialSideChoices, selfEdgeLoopControlPoints } from '../../layout/edges/edge-sides.js'
+import {
+  centerOf,
+  type Point,
+  rectAtEnd,
+  rectOf,
+  sidePoint,
+} from '../../layout/edges/edge-geometry.js'
+import {
+  deriveDefaultSides,
+  initialSideChoices,
+  rankedSidePairs,
+  selfEdgeLoopControlPoints,
+} from '../../layout/edges/edge-sides.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
 import { coordinate, firstDifference, point, rect } from './edge-arbitraries.js'
 import { built, requireWasm } from './glue.js'
@@ -35,8 +52,9 @@ const canvas = fc
       maxLength: 6,
     }),
     fc.option(fc.tuple(fc.constantFrom('right', 'below'), coordinate), { freq: 2 }),
+    fc.option(fc.constantFrom(...edgeSideSchema.options), { freq: 2 }),
   )
-  .map(([drawn, touching]) => {
+  .map(([drawn, touching, occluded]) => {
     const nodes = drawn.map(
       ([id, r]) =>
         ({ id, type: 'text', text: '', x: r.x, y: r.y, width: r.w, height: r.h }) as SpatialNode,
@@ -50,6 +68,19 @@ const canvas = fc
         id: 'touching',
         x: where === 'right' ? first.x + first.width : first.x + along,
         y: where === 'right' ? first.y + along : first.y + first.height,
+      } as SpatialNode)
+    }
+    if (occluded !== null) {
+      // A bystander over the midpoint of one of the first box's sides, so
+      // the default side choice has to move off it.
+      const p = sidePoint(rectOf(first), occluded)
+      nodes.push({
+        ...first,
+        id: 'occluder',
+        x: p.x - 10,
+        y: p.y - 10,
+        width: 20,
+        height: 20,
       } as SpatialNode)
     }
     return nodes
@@ -151,12 +182,50 @@ const routeOut = (route: readonly Point[] | undefined) =>
 
 const reach = {
   choices: 0,
-  namedKept: 0,
+  namedFromKept: 0,
+  namedToKept: 0,
+  partnerMoved: 0,
   contacts: 0,
   marked: 0,
   bent: 0,
   refusedBends: 0,
   missingRect: 0,
+}
+
+const unnamed = (end: RoutableElement['from']) => {
+  const { side: _side, ...rest } = end as { side?: EdgeSide }
+  return rest as RoutableElement['from']
+}
+
+/**
+ * Reach only: a named side kept where the derived one would differ (each
+ * end), and the departure moved off an occluded side, which re-derives the
+ * arrival from the facing axis. Read with the exported functions, not the
+ * answer compared.
+ */
+function countNamedAndMoved(
+  nodes: readonly SpatialNode[],
+  edges: readonly RoutableElement[],
+  choices: ReadonlyMap<string, { fromSide: EdgeSide; toSide: EdgeSide }>,
+): void {
+  const stripped = edges.map(
+    (e) => ({ ...e, from: unnamed(e.from), to: unnamed(e.to) }) as RoutableElement,
+  )
+  const derived = initialSideChoices(nodes, stripped)
+  for (const e of edges) {
+    const chosen = choices.get(e.id)
+    const free = derived.get(e.id)
+    if (chosen === undefined || free === undefined) continue
+    if (endSide(e.from) !== undefined && chosen.fromSide !== free.fromSide) reach.namedFromKept += 1
+    if (endSide(e.to) !== undefined && chosen.toSide !== free.toSide) reach.namedToKept += 1
+    const from = rectAtEnd(nodes, e.from)
+    const to = rectAtEnd(nodes, e.to)
+    if (from === undefined || to === undefined || isSelfLoop(e)) continue
+    const [fc0, tc0] = [centerOf(from), centerOf(to)]
+    const ranked = rankedSidePairs(tc0.x - fc0.x, tc0.y - fc0.y, from, to, () => 0)
+    if (deriveDefaultSides(nodes, e, from, to).fromSide !== ranked[0]?.fromSide)
+      reach.partnerMoved += 1
+  }
 }
 
 describe.runIf(built)(
@@ -170,8 +239,7 @@ describe.runIf(built)(
         ts.push(wire.edgeIds.indexOf(id), sideIndex(pair.fromSide), sideIndex(pair.toSide))
       }
       reach.choices += choices.size
-      if (edges.some((e) => 'side' in e.from && e.from.side !== undefined && choices.has(e.id)))
-        reach.namedKept += 1
+      countNamedAndMoved(nodes, edges, choices)
       expect(
         firstDifference(ts, requireWasm().edge_initial_sides(Float64Array.from(wire.values))),
       ).toBeUndefined()
@@ -264,7 +332,9 @@ describe.runIf(built)(
     afterAllFloor(['initial side choices', 'contacts', 'bend routes'], () => {
       // Floors at about half of what three runs measured.
       expect(reach.choices).toBeGreaterThan(230)
-      expect(reach.namedKept).toBeGreaterThan(65)
+      expect(reach.namedFromKept).toBeGreaterThan(90)
+      expect(reach.namedToKept).toBeGreaterThan(90)
+      expect(reach.partnerMoved).toBeGreaterThan(11)
       expect(reach.contacts).toBeGreaterThan(40)
       expect(reach.marked).toBeGreaterThan(33)
       expect(reach.bent).toBeGreaterThan(120)
