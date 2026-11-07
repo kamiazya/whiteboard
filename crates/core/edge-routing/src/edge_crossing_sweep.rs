@@ -286,4 +286,36 @@ mod tests {
         let b = [15.0, -100.0, 15.0, 200.0];
         assert_eq!(score_quantized_segment_pair(a, b), [0.0, 0.0, 1.0]);
     }
+
+    /// A segment whose ends are both NaN overlaps nothing: Math.min and
+    /// Math.max carry the NaN through, where `f64::min`/`max` would drop it
+    /// and read the other segment's span as the overlap. The TypeScript
+    /// answers `[0, 0, 0]` here (measured).
+    #[test]
+    fn a_nan_span_overlaps_nothing() {
+        let nan = f64::NAN;
+        assert_eq!(
+            score_quantized_segment_pair([nan, 0.0, nan, 0.0], [0.0, 0.0, 40.0, 0.0]),
+            [0.0; 3]
+        );
+    }
+
+    /// Two paths turning at the same point, one at `-0` and one at `0`,
+    /// share that corner: the TypeScript keys a vertex by its printed
+    /// string, which spells both zeros `0`. Its sweep answers one entry,
+    /// pair key 1, `[0, 0, 1]` (measured); the segments themselves only
+    /// meet at their ends and score nothing.
+    #[test]
+    fn a_corner_at_negative_zero_is_the_corner_at_zero() {
+        use super::build_pairwise_scores;
+        use crate::geometry::Point;
+        let p = |x, y| Point { x, y };
+        let paths = vec![
+            vec![p(-10.0, 0.0), p(0.0, 0.0), p(0.0, -10.0)],
+            vec![p(10.0, 0.0), p(-0.0, 0.0), p(0.0, 10.0)],
+        ];
+        let scores = build_pairwise_scores(&paths, None).unwrap_or_default();
+        let entries: Vec<(usize, [f64; 3])> = scores.iter().map(|(k, v)| (*k, *v)).collect();
+        assert_eq!(entries, vec![(1, [0.0, 0.0, 1.0])]);
+    }
 }

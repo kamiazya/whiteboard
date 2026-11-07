@@ -75,23 +75,29 @@ describe.runIf(built)('edge-crossing-sweep.ts and its Rust port score the same p
 
     if (scores === undefined) reach.refused += 1
     else reach.built += 1
-    for (const [o, i, c] of scores?.values() ?? []) {
+    const n = d.paths.length
+    for (const [key, [o, i, c]] of scores ?? []) {
       if (o > 0) reach.overlap += 1
       if (i > 0) reach.illegible += 1
-      if (c > 0) reach.crossing += 1
+      // A crossing beyond the pair's shared corners, which the same column
+      // also counts: a proper transversal one.
+      const a = d.paths[Math.floor(key / n)] as Point[]
+      const b = d.paths[key % n] as Point[]
+      if (c > sharedCorners(a, b)) reach.crossing += 1
     }
     if (shared.some((n) => n > 0)) reach.shared += 1
   })
 
   afterAllFloor(['pair scores, spend and shared corners'], () => {
     // About half the lowest of five measured runs (built 147, refused 44,
-    // overlap 107, illegible 65, crossing 385, shared 194).
+    // overlap 107, illegible 65, shared 194; crossing, counted beyond each
+    // pair's shared corners, 297).
     const floors = {
       built: 73,
       refused: 22,
       overlap: 53,
       illegible: 32,
-      crossing: 190,
+      crossing: 145,
       shared: 97,
     }
     for (const [kind, floor] of Object.entries(floors)) {
