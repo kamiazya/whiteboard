@@ -507,28 +507,36 @@ ported structure for structure to `whiteboard-edge-routing`
 (`grid_route.rs`, `min_heap.rs`). Three places needed work to give the same
 answer:
 - `Math.min`/`Math.max` propagate NaN and order the zeros (`det::math::js_min`/`js_max`);
-- a `Set<number>` dedups by `SameValueZero` and keeps the first value;
+- a `Set<number>` dedups by `SameValueZero` in insertion order and stores `-0` as `+0`;
 - the heap's tie order, which picks among equal-cost routes, is the TypeScript's own sift.
 
 The port is exported to wasm as `edge_route_on_grid` over typed arrays.
 
 Layer 1 of the harness ran on it. `canvas-render-rust` re-runs every
-`layout/edges` suite (65 files, 475 tests) with `./grid-route.js` aliased to
-the wasm-backed shim. That includes the optimality property against its
+`layout/edges` suite with `./grid-route.js` aliased to the wasm-backed shim,
+except `grid-route.cost.test.ts`, which counts the TypeScript search's own
+obstacle reads. That includes the optimality property against its
 independent Dijkstra, and the routing and grid-route scoreboards. Every pinned
 number held with no expectation edited. A bend cost of 81 in the Rust port
 fails the grid-route scoreboard, and a `<=` in its heap's sift fails the
 routing scoreboard's clustered canvas.
+
+Layer 2 found what layer 1 could not. `grid-route.rust.test.ts` holds the two
+to the same path and spent budget on one draw, every coordinate by
+`Object.is`, and its first run failed. The cause was the `-0` above: the port
+kept `-0` as given, which no example of the TypeScript's draws.
 
 Measured on one machine, interleaved:
 
 | What ran | TypeScript | Rust through wasm |
 |---|---|---|
 | `routeOnGrid`, 200 clustered queries (both agree on all 200) | 16.4–17.9 Hz | 33.5–35.9 Hz |
-| `assignEdgeAnchors`, 60 nodes / 200 edges, mean | 326–333 ms | 429–446 ms |
-| `routeEdge` over 200 edges, straight, mean | 37–39 ms | 58 ms |
+| `assignEdgeAnchors`, 60 nodes / 200 edges, mean | 332–339 ms | 444–480 ms |
+| `routeEdge` over 200 edges, straight, mean | 41–43 ms | 57–62 ms |
 
-The search itself is about twice as fast. The layout is 20–50% slower, because
+The layout rows were taken with the shim's ABI check made once rather than
+per call, so they charge the routing export alone. The search itself is about
+twice as fast. The layout is 30–45% slower, because
 every grid call crosses the boundary and copies its obstacles into a typed
 array, and most calls in a layout are small. That is QR-22b measured on this
 code rather than argued: the port moves `layout/edges` as a whole, behind one

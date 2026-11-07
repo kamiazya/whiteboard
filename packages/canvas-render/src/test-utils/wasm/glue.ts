@@ -39,14 +39,22 @@ export const wasm: WasmGlue | undefined = built
     })()
   : undefined
 
+// Checked once: the shim calls requireWasm per grid query, and a String
+// export per call would be boundary cost the spike's timings then charge to
+// the routing export.
+let abiChecked = false
+
 /** The glue, failing loudly for a caller that only runs when it is built. */
 export function requireWasm(): WasmGlue {
   if (wasm === undefined)
     throw new Error(`no wasm artifact at ${gluePath}; run \`pnpm rust:build:wasm\``)
-  if (wasm.abi_version() !== EXPECTED_ABI) {
-    throw new Error(
-      `the wasm artifact speaks ABI ${wasm.abi_version()}, these tests ${EXPECTED_ABI}; rebuild it`,
-    )
+  if (!abiChecked) {
+    const abi = wasm.abi_version()
+    if (abi !== EXPECTED_ABI)
+      throw new Error(
+        `the wasm artifact speaks ABI ${abi}, these tests ${EXPECTED_ABI}; rebuild it`,
+      )
+    abiChecked = true
   }
   return wasm
 }
