@@ -101,7 +101,7 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
   }
 
   return {
-    backend: createBrowserVersionsBackend({ store, record: backend, kind: 'spatial' }),
+    backend: createBrowserVersionsBackend({ store, record: backend, index, kind: 'spatial' }),
     workspaceId,
     documentId,
     write,

@@ -49,9 +49,18 @@ const seamOver = (
   applyRestore,
 })
 
+/** An index that places exactly `held`, by id; the live record is asked first, so most cases never reach it. */
+const indexHolding = (held: Record<string, string> = {}) => ({
+  resolveDocumentById: vi.fn(async ({ documentId }: { documentId: string }) =>
+    held[documentId] === undefined
+      ? null
+      : ({ documentId, path: held[documentId], kind: 'spatial' } as never),
+  ),
+})
+
 function backendOf(kind: DocumentKind) {
   const store = { loadPast: async () => pastState() } as unknown as BrowserVersionStore
-  return createBrowserVersionsBackend({ store, record: seamOver(), kind })
+  return createBrowserVersionsBackend({ store, record: seamOver(), index: indexHolding(), kind })
 }
 
 describe('the browser versions backend reads a past state as the entry kind says', () => {
@@ -88,6 +97,7 @@ function recordingBackend({ bookmarkFails = false } = {}) {
   const backend = createBrowserVersionsBackend({
     store,
     record: seamOver(applyRestore),
+    index: indexHolding(),
     kind: 'spatial',
   })
   return { backend, save, applyRestore }
@@ -136,13 +146,48 @@ describe('the browser versions backend resolves the id it is given', () => {
     expect(save).not.toHaveBeenCalled()
   })
 
-  it('refuses before the record has been delivered', async () => {
-    const store = { list: vi.fn() } as unknown as BrowserVersionStore
+  // Before the session delivers the record, and while it reconnects after a
+  // restore, the record answers nothing; the index places the id instead.
+  it('places an id through the index while no record is held', async () => {
+    const list = vi.fn(async () => [])
+    const index = indexHolding({ [SKETCH_ID]: 'sketch' })
     const backend = createBrowserVersionsBackend({
-      store,
+      store: { list } as unknown as BrowserVersionStore,
       record: { readRecord: () => null, applyRestore: async () => {} },
+      index,
+      kind: 'spatial',
+    })
+    await backend.list('ignored', SKETCH_ID)
+    expect(list).toHaveBeenCalledWith('ws-browser', 'sketch')
+    expect(index.resolveDocumentById).toHaveBeenCalledWith({
+      workspaceId: 'ws-browser',
+      documentId: SKETCH_ID,
+    })
+  })
+
+  it('asks the index nothing while the record is held', async () => {
+    const index = indexHolding({ [SKETCH_ID]: 'stale-path' })
+    const list = vi.fn(async () => [])
+    const backend = createBrowserVersionsBackend({
+      store: { list } as unknown as BrowserVersionStore,
+      record: seamOver(),
+      index,
+      kind: 'spatial',
+    })
+    await backend.list('ignored', SKETCH_ID)
+    expect(list).toHaveBeenCalledWith('ws-browser', 'sketch')
+    expect(index.resolveDocumentById).not.toHaveBeenCalled()
+  })
+
+  it('refuses an id neither the record nor the index holds, touching no store', async () => {
+    const list = vi.fn()
+    const backend = createBrowserVersionsBackend({
+      store: { list } as unknown as BrowserVersionStore,
+      record: { readRecord: () => null, applyRestore: async () => {} },
+      index: indexHolding(),
       kind: 'spatial',
     })
     await expect(backend.list('ignored', SKETCH_ID)).rejects.toThrow('no such document')
+    expect(list).not.toHaveBeenCalled()
   })
 })

@@ -79,6 +79,20 @@ export interface DaemonDocumentPageProps {
 const pathOf = (document: { readonly path: string }): string => document.path
 
 /**
+ * The listed document a ref names, by id first: a document path may be
+ * spelled like another document's id, and the id is the address.
+ */
+function listedIdOf(
+  listed: readonly { documentId: string; path: string }[],
+  ref: string,
+): string | undefined {
+  return (
+    listed.find((entry) => entry.documentId === ref)?.documentId ??
+    listed.find((entry) => entry.path === ref)?.documentId
+  )
+}
+
+/**
  * A load the daemon refused — on membership of either kind — or that failed
  * builds no session, and nothing retries it: the shell reads sync-off, never
  * reconnecting, since only the person acting can get past it — but as
@@ -231,12 +245,7 @@ function useDaemonDocument(
     (ref: string) => canvasesRef.current.find((entry) => entry.documentId === ref)?.path,
     [],
   )
-  const resolveRefId = useCallback(
-    (ref: string) =>
-      canvasesRef.current.find((entry) => entry.documentId === ref || entry.path === ref)
-        ?.documentId,
-    [],
-  )
+  const resolveRefId = useCallback((ref: string) => listedIdOf(canvasesRef.current, ref), [])
 
   // A ref that matches NEITHER a live id nor a live path points at a deleted
   // canvas (or one imported from elsewhere): the editor renders it as a quiet

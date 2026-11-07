@@ -127,9 +127,11 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await writeContent(documentId, 'first')
 
     const view = await openPage()
+    // The History control appears once the record is delivered (the version
+    // backend maps the id to its path by reading it), so it is waited for.
     // Panel open BEFORE the save, so the row has to arrive through the
     // refresh the save announces — not through the panel's mount fetch.
-    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }))
     const panel = await screen.findByTestId('history-panel')
     // The empty-state copy, which says a checkpoint is coming — because for
     // this keeper one now is. It used to point only at the save button, and
@@ -202,7 +204,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // History takes the one inspector slot from it: the rail leaves as the
     // column arrives, and its opener reads released. Two panels beside one
     // editor was the phone screenshot the header retune started from.
-    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }))
     const reopened = await screen.findByTestId('history-panel')
     expect(screen.queryByTestId('comments-panel')).toBeNull()
     expect(screen.getByRole('button', { name: /comments/i })).toHaveAttribute(
@@ -281,7 +283,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
     const view = await openNotePage()
     // The same opener a canvas has, in the same segment: a version is a
     // frontier of the workspace record, and a note lives in that record too.
-    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }))
     const panel = await screen.findByTestId('history-panel')
     await userEvent.click(within(panel).getByRole('button', { name: 'Bookmark this point' }))
     await userEvent.fill(
@@ -300,7 +302,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
     expect(await storedBody(documentId)).toBe('# second')
     await openNotePage()
 
-    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }))
     const reopened = await screen.findByTestId('history-panel')
     await waitFor(() => expect(within(reopened).getAllByTestId('version-row').length).toBe(1), {
       timeout: 5000,
@@ -349,7 +351,7 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await waitFor(() => expect(transform()).not.toBe(before))
     const panned = transform()
 
-    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'History' }))
     const panel = await screen.findByTestId('history-panel')
     const row = await within(panel).findByTestId('version-row')
     const target = row.querySelector('button')

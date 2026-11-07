@@ -349,9 +349,10 @@ function useBrowserDocument(
         : createBrowserVersionsBackend({
             record: versionsRecord,
             store: versionStore,
+            index: store,
             kind: documentKind,
           }),
-    [versionsRecord, versionStore, documentKind],
+    [versionsRecord, versionStore, store, documentKind],
   )
 
   // The second phase of the page state. `pageState` above is derived from what
