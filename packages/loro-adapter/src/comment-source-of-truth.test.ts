@@ -89,6 +89,12 @@ describe('moveCommentThread', () => {
     expect(doc.version().toJSON()).toEqual(before)
   })
 
+  it('refuses a fractional point before anything is stored, since the reader would drop it', () => {
+    const doc = seeded()
+    expect(() => moveCommentThread(doc, 't1', { x: 7.5, y: 8 })).toThrow(/non-integer x/)
+    expect(readCommentThreads(doc)).toEqual([THREAD])
+  })
+
   it('refuses a non-finite point before anything is stored', () => {
     const doc = seeded()
     expect(() => moveCommentThread(doc, 't1', { x: Number.NaN, y: 0 })).toThrow(/non-finite x/)

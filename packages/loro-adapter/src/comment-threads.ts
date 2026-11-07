@@ -51,6 +51,13 @@ function assertFiniteAnchor(thread: CommentThread): void {
         `comment thread "${thread.id}" has a non-finite ${field} (${value}); the anchor must be finite`,
       )
     }
+    // The schema stores whole pixels, so a fractional anchor is dropped on
+    // read exactly as a non-finite one is.
+    if (!Number.isInteger(value)) {
+      throw new TypeError(
+        `comment thread "${thread.id}" has a non-integer ${field} (${value}); the anchor must be whole pixels`,
+      )
+    }
   }
 }
 
