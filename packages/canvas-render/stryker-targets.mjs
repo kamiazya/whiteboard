@@ -256,6 +256,41 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // `scene-digest.ts`: four families, each verified by applying the edit and
+  // running the file's five test files, which stay green, and each with its
+  // invariant beside the code. (1) Union-find bookkeeping — which id becomes
+  // a root, path compression, union by rank — changes no cluster, since the
+  // clusters are sorted before they reach the digest. (2) A pair loop's
+  // outer bound one past the end runs the inner loop zero times. (3) An
+  // occupancy row or cell past `rows` x `cols` is never read, and an empty
+  // span's four difference marks cancel. (4) Past the entry cap no overlap
+  // scan runs, so its `capped` flag is unobservable beside `partial`; and
+  // the containment sort's tie branch is unreachable, one entry per child.
+  'src/scene-digest.ts': {
+    'BooleanLiteral: false -> true': 1,
+    'EqualityOperator: i < entries.length -> i <= entries.length': 2,
+    'ConditionalExpression: a.child === b.child -> false': 1,
+    'ArrayDeclaration: [id, 0] -> []': 1,
+    'ConditionalExpression: current !== root -> false': 1,
+    'ConditionalExpression: rootA === rootB -> false': 1,
+    'ConditionalExpression: rankA < rankB -> false': 1,
+    'ConditionalExpression: rankA < rankB -> true': 1,
+    'EqualityOperator: rankA < rankB -> rankA <= rankB': 1,
+    'EqualityOperator: rankA < rankB -> rankA >= rankB': 1,
+    'ConditionalExpression: rankA > rankB -> false': 1,
+    'ConditionalExpression: rankA > rankB -> true': 1,
+    'EqualityOperator: rankA > rankB -> rankA <= rankB': 1,
+    'EqualityOperator: rankA > rankB -> rankA >= rankB': 1,
+    'ArithmeticOperator: rankA + 1 -> rankA - 1': 1,
+    'ConditionalExpression: !(c0 <= c1 && r0 <= r1) -> false': 1,
+    'ConditionalExpression: c0 <= c1 && r0 <= r1 -> true': 1,
+    'ConditionalExpression: c0 <= c1 -> true': 1,
+    'ConditionalExpression: r0 <= r1 -> true': 1,
+    'LogicalOperator: c0 <= c1 && r0 <= r1 -> c0 <= c1 || r0 <= r1': 1,
+    'EqualityOperator: r < rows -> r <= rows': 1,
+    'ArrayDeclaration: Array<boolean>(cols) -> Array()': 1,
+    'EqualityOperator: c < cols -> c <= cols': 1,
+  },
   // `mostlyInside`'s span check: `area` is positive there, so `w * h * 2 >
   // area` already implies `w * h > 0`, and at `w === 0` the product is 0 and
   // fails the majority test whichever comparison admitted it. The reasoning

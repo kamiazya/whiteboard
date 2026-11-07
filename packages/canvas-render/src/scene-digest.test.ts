@@ -307,6 +307,22 @@ describe('sceneDigest', () => {
     expect(parsed).toEqual(digest)
   })
 
+  // `count` boxes on the 20px grid itself, to the right of the interacting
+  // three: 50 wide, so 2000 of them fill 1000 x 800px with one box a cell —
+  // 4000 grid cells for the union and under a hundred free runs — and the
+  // ONLY cap a fixture built from this can reach is the entry cap. Spaced
+  // out along one axis instead, 2000 boxes spanned two million px, the cell
+  // budget tripped first, and `partial` was true for a reason these tests
+  // are not about; on a 30px pitch every row split into fifty free runs and
+  // the REGION cap tripped instead.
+  const compactGrid = (count: number) =>
+    Array.from({ length: count }, (_, i) => ({
+      x: 1000 + (i % 50) * 20,
+      y: Math.floor(i / 50) * 20,
+      w: 10,
+      h: 10,
+    }))
+
   it('bounds pairwise overlap/containment/cluster derivation for scenes with very many nodes', () => {
     // The first three boxes overlap, nest and sit adjacent ON PURPOSE: every
     // assertion below has to be able to FAIL if the cap is removed, and this
@@ -319,18 +335,15 @@ describe('sceneDigest', () => {
       { x: 50, y: 50, w: 100, h: 100 },
       { x: 10, y: 10, w: 10, h: 10 },
     ]
-    const spacedOut = Array.from({ length: 1998 }, (_, i) => ({
-      x: 100_000 + i * 1000,
-      y: 0,
-      w: 10,
-      h: 10,
-    }))
-    const digest = sceneDigest(scene(...interacting, ...spacedOut))
+    const digest = sceneDigest(scene(...interacting, ...compactGrid(1998)))
 
     expect(digest.nodes).toHaveLength(2001)
     expect(digest.overlaps).toEqual([])
     expect(digest.containment).toEqual([])
     expect(digest.clusters).toEqual([])
+    // The three empties above are the cap's doing, and the digest has to say
+    // so: `overlaps: []` with `partial: false` reads as "nothing overlaps".
+    expect(digest.partial).toBe(true)
   })
 
   it('still derives at exactly the cap — the bound is a maximum, not a limit', () => {
@@ -342,17 +355,13 @@ describe('sceneDigest', () => {
       { x: 50, y: 50, w: 100, h: 100 },
       { x: 10, y: 10, w: 10, h: 10 },
     ]
-    const spacedOut = Array.from({ length: 1997 }, (_, i) => ({
-      x: 100_000 + i * 1000,
-      y: 0,
-      w: 10,
-      h: 10,
-    }))
-    const digest = sceneDigest(scene(...interacting, ...spacedOut))
+    const digest = sceneDigest(scene(...interacting, ...compactGrid(1997)))
 
     expect(digest.nodes).toHaveLength(2000)
     expect(digest.overlaps.length).toBeGreaterThan(0)
     expect(digest.containment.length).toBeGreaterThan(0)
+    expect(digest.clusters.length).toBeGreaterThan(0)
+    expect(digest.partial).toBe(false)
   })
 
   it('derives all three for the same fixture once it is under the cap', () => {

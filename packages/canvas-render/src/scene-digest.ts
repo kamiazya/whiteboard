@@ -137,8 +137,13 @@ function computeOverlaps(entries: readonly DigestEntry[]): {
   readonly pairs: [string, string][]
   readonly capped: boolean
 } {
+  // `capped` says the SCAN stopped short; past the entry cap no scan ran, and
+  // `partial` reads the entry count itself, so the flag's value here is
+  // unobservable either way.
   if (entries.length > PAIRWISE_MAX_ENTRIES) return { pairs: [], capped: false }
   const pairs: [string, string][] = []
+  // Each pair once: `j` starts past `i`, so the last `i` runs the inner loop
+  // zero times and an `i` one past the end would read nothing at all.
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       if (overlapArea(entries[i].bbox, entries[j].bbox) > 0) {
@@ -309,6 +314,8 @@ function occupiedCells(
     diff[(r1 + 1) * stride + c0] -= 1
     diff[(r1 + 1) * stride + c1 + 1] += 1
   }
+  // `freeRunsIn` reads exactly `rows` x `cols` of this; a trailing row or
+  // cell past either bound would never be read.
   const occupied: boolean[][] = []
   const above = new Int32Array(cols)
   for (let r = 0; r < rows; r++) {
@@ -356,8 +363,12 @@ function freeRunsIn(
   return regions
 }
 
-const byPosition = (a: BoundingBox, b: BoundingBox): number =>
-  a.y === b.y ? (a.x === b.x ? (a.w === b.w ? a.h - b.h : a.w - b.w) : a.x - b.x) : a.y - b.y
+/**
+ * Row first, then column. Every region is one free run of one row, and two
+ * runs of a row never start at the same column, so no two regions tie on
+ * both axes and a finer tie-break would be unreachable code.
+ */
+const byPosition = (a: BoundingBox, b: BoundingBox): number => a.y - b.y || a.x - b.x
 
 /**
  * Maximal empty axis-aligned rectangles over the union bounding box, on a
@@ -371,10 +382,11 @@ function computeFreeRegions(entries: readonly DigestEntry[]): {
   if (entries.length === 0) return { regions: [], capped: false }
   const grid = freeRegionGrid(entries)
   if (grid === null) return { regions: [], capped: true }
+  // `freeRunsIn` walks rows top-down and runs left to right, which IS
+  // `byPosition` order; only the capped path below re-sorts, after the
+  // area sort has shuffled it.
   const regions = freeRunsIn(occupiedCells(entries, grid), grid)
-  if (regions.length <= FREE_REGION_MAX_REGIONS) {
-    return { regions: regions.sort(byPosition), capped: false }
-  }
+  if (regions.length <= FREE_REGION_MAX_REGIONS) return { regions, capped: false }
   const largest = regions
     .sort((a, b) => area(b) - area(a) || byPosition(a, b))
     .slice(0, FREE_REGION_MAX_REGIONS)
