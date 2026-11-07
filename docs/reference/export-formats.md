@@ -132,7 +132,18 @@ not:
   workspace document's `update` and `promote` refuse, with
   `400 {"error":"reserved_map_key"}`, an update or record that writes a key
   named `__proto__` — a map entry, a root container, or a key inside a stored
-  value; deleting one a record already holds lands. The workspace document's `update` also refuses, with
+  value; deleting one a record already holds lands. The workspace document's
+  `update` and `promote` refuse, with `400 {"error":"retired_stored_shape"}`, an
+  update or record that newly writes a shape an older version stored and this
+  one no longer reads — a node, edge or canvas setting under `x-whiteboard`, a
+  node in the node-kind union before `file`, `link` and `group` were reworked,
+  a markdown body stored as an `okf-body` text node, or entries in the
+  Excalidraw `elements` list — and, with `400 {"error":"retired_comment_plane"}`,
+  a row in the flat `comments` plane. Deleting one a record already holds
+  lands, so does an edit to a document that already holds one and adds none,
+  and a promote into a workspace with no documents yet is refused naming the
+  document, since there every shape the record holds is new. The workspace
+  document's `update` also refuses, with
   `400 {"error":"document_name_too_long"}`, an update that gives a document a
   name longer than 200 characters. A name stored longer before that bound can
   still be kept or shortened. It refuses, with

@@ -345,6 +345,39 @@ describe('promoteWorkspace, a carried version past a sync limit', () => {
   })
 })
 
+it('refuses a carried version holding a retired shape, merging nothing', async () => {
+  // The judge refuses a sync write of one, and a carried state is judged as
+  // though written whole, so it cannot ride in beside a record that repaired it.
+  const target = daemon()
+  const build = recordWithOversizedPast(
+    (doc) => {
+      createWorkspaceDocumentAtPath(doc, {
+        path: 'roadmap',
+        documentId: ROADMAP_ID,
+        kind: 'spatial',
+      })
+      documentContainers(doc, ROADMAP_ID)
+        .getMap('nodes')
+        .set('old', { id: 'old', 'x-whiteboard': {} })
+      doc.commit()
+    },
+    (doc) => {
+      documentContainers(doc, ROADMAP_ID).getMap('nodes').delete('old')
+      doc.commit()
+    },
+  )
+
+  const refused = await promoteWorkspace(target.deps, {
+    workspaceId: WS,
+    operator,
+    ...build,
+  }).catch((err: unknown) => err)
+
+  expect(refused).toMatchObject({ code: 'retired_stored_shape', status: 400 })
+  expect(target.saves()).toBe(0)
+  expect(target.deps.versions.adopted.size).toBe(0)
+})
+
 it('refuses a carried version whose envelope names another kind than its node, merging nothing', async () => {
   // A restore writes the version's envelope back onto the node, so the split
   // it names would come back with it.

@@ -516,7 +516,12 @@ Bearer tokens with server-mode JWTs; they are not interchangeable.**
   `wb_facet_set`, a `wb_canvas_edit` op or frontmatter `facets:` — is refused
   naming the facet, and a write that reaches storage holding one anyway is
   refused there, answered through `/api/v1` as
-  `400 {"error":"reserved_map_key"}`. A
+  `400 {"error":"reserved_map_key"}`. A live-sync update (or a workspace
+  promote) that newly writes a shape an older version stored and this one no
+  longer reads is likewise refused, with `400 {"error":"retired_stored_shape"}`
+  (or `400 {"error":"retired_comment_plane"}` for the flat `comments` plane),
+  rather than kept as bytes no reader serves; the shapes are listed in the
+  export-formats reference. A
   live-sync update is judged after it is taken into the keeper's working
   copy, so one the keeper cannot finish judging — a check that fails rather
   than answering, or a save that fails — is dropped with that copy unsaved,

@@ -1,8 +1,12 @@
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeMarkdownBody,
+  writeSpatialCanvas,
+  writeSpatialNode,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { apiErrorReason, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
@@ -66,6 +70,8 @@ describe('restore router', () => {
   })
 })
 
+const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })
+
 // Builds a doc holding one text node per id and exports its full update from
 // the empty version vector, so a caller can POST the whole doc as one update.
 function nodesModelDocUpdate(nodeIds: string[]): Uint8Array<ArrayBuffer> {
@@ -75,6 +81,14 @@ function nodesModelDocUpdate(nodeIds: string[]): Uint8Array<ArrayBuffer> {
     nodes: nodeIds.map((id) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })),
     edges: [],
   })
+  return doc.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>
+}
+
+// A doc holding a markdown body, exported from the empty version vector.
+function markdownBodyUpdate(body: string): Uint8Array<ArrayBuffer> {
+  const doc = new LoroDoc()
+  const vv0 = doc.version()
+  writeMarkdownBody(doc, body)
   return doc.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>
 }
 
@@ -160,10 +174,10 @@ describe('restore router (real node counts)', () => {
 describe('restore router (kind propagation)', () => {
   it("stamps the source's kind on a brand-new target so it opens in the right editor", async () => {
     const app = createRouter()
-    // A markdown document: its OKF body is a text node, so the restored
+    // A markdown document: its body is a text container, so the restored
     // content alone cannot say which editor should open it.
     await saveDocument(SESSION1, 'note-a', new LoroDoc(), { kind: 'markdown' })
-    await seed('note-a', nodesModelDocUpdate(['okf-body']))
+    await seed('note-a', markdownBodyUpdate('# a note'))
     const saveRes = await app.request(
       '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/note-a/versions',
       {
@@ -223,10 +237,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     // Step 1: Write the initial one-element state through /update.
     const initial = new LoroDoc()
     const vv0 = initial.version()
-    const list = initial.getMovableList('elements')
-    const m0 = list.insertContainer(list.length, new LoroMap())
-    m0.set('id', 'keep-me')
-    m0.set('type', 'rectangle')
+    writeSpatialNode(initial, box('keep-me'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
 
@@ -241,12 +252,8 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
     // Step 3: Add two more elements after v1.
     const vv1 = initial.version()
-    const m1 = list.insertContainer(list.length, new LoroMap())
-    m1.set('id', 'added-1')
-    m1.set('type', 'ellipse')
-    const m2 = list.insertContainer(list.length, new LoroMap())
-    m2.set('id', 'added-2')
-    m2.set('type', 'diamond')
+    writeSpatialNode(initial, box('added-1'))
+    writeSpatialNode(initial, box('added-2'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv1 }) as Uint8Array<ArrayBuffer>)
 
@@ -264,9 +271,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     // Step 1: seed with keep-me.
     const initial = new LoroDoc()
     const vv0 = initial.version()
-    const list = initial.getMovableList('elements')
-    const m0 = list.insertContainer(0, new LoroMap())
-    m0.set('id', 'keep-me')
+    writeSpatialNode(initial, box('keep-me'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
 
@@ -280,8 +285,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
     // Step 3: add a second element after v1, so restoring v1 would tombstone it.
     const vv1 = initial.version()
-    const m1 = list.insertContainer(list.length, new LoroMap())
-    m1.set('id', 'added-after-v1')
+    writeSpatialNode(initial, box('added-after-v1'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv1 }) as Uint8Array<ArrayBuffer>)
 
@@ -307,9 +311,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     expect(peekDoc(SESSION1, 'canvas-a')).toBeUndefined()
 
     const reloaded = await getDoc(SESSION1, 'canvas-a')
-    const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>)
-      .map((el) => el.id)
-      .sort()
+    const ids = Object.keys(reloaded.getMap('nodes').toJSON()).sort()
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
@@ -318,9 +320,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
     const initial = new LoroDoc()
     const vv0 = initial.version()
-    const list = initial.getMovableList('elements')
-    const m0 = list.insertContainer(0, new LoroMap())
-    m0.set('id', 'keep-me')
+    writeSpatialNode(initial, box('keep-me'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
@@ -334,8 +334,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     const vv1 = initial.version()
-    const m1 = list.insertContainer(list.length, new LoroMap())
-    m1.set('id', 'added-after-v1')
+    writeSpatialNode(initial, box('added-after-v1'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv1 }) as Uint8Array<ArrayBuffer>)
 
@@ -361,9 +360,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     expect(peekDoc(SESSION1, 'canvas-a')).toBeUndefined()
 
     const reloaded = await getDoc(SESSION1, 'canvas-a')
-    const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>)
-      .map((el) => el.id)
-      .sort()
+    const ids = Object.keys(reloaded.getMap('nodes').toJSON()).sort()
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
@@ -399,9 +396,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     // v1: one element.
     const initial = new LoroDoc()
     const vv0 = initial.version()
-    const list = initial.getMovableList('elements')
-    const m0 = list.insertContainer(0, new LoroMap())
-    m0.set('id', 'keep-me')
+    writeSpatialNode(initial, box('keep-me'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
@@ -416,8 +411,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
 
     // Add a second element after v1.
     const vv1 = initial.version()
-    const m1 = list.insertContainer(list.length, new LoroMap())
-    m1.set('id', 'added-after-v1')
+    writeSpatialNode(initial, box('added-after-v1'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv1 }) as Uint8Array<ArrayBuffer>)
 
@@ -460,9 +454,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
 
     const initial = new LoroDoc()
     const vv0 = initial.version()
-    const list = initial.getMovableList('elements')
-    const m0 = list.insertContainer(0, new LoroMap())
-    m0.set('id', 'keep-me')
+    writeSpatialNode(initial, box('keep-me'))
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
@@ -494,9 +486,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     // Source canvas-a: v1 has only "keep-me".
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
-    const sourceList = sourceDoc.getMovableList('elements')
-    const sm0 = sourceList.insertContainer(0, new LoroMap())
-    sm0.set('id', 'keep-me')
+    writeSpatialNode(sourceDoc, box('keep-me'))
     sourceDoc.commit()
     await seed(
       'canvas-a',
@@ -515,9 +505,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     // Target canvas-b already exists with an unrelated element.
     const targetDoc = new LoroDoc()
     const tvv0 = targetDoc.version()
-    const targetList = targetDoc.getMovableList('elements')
-    const tm0 = targetList.insertContainer(0, new LoroMap())
-    tm0.set('id', 'b-only')
+    writeSpatialNode(targetDoc, box('b-only'))
     targetDoc.commit()
     await seed(
       'canvas-b',
@@ -690,9 +678,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
 
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
-    const sourceList = sourceDoc.getMovableList('elements')
-    const sm0 = sourceList.insertContainer(0, new LoroMap())
-    sm0.set('id', 'keep-me')
+    writeSpatialNode(sourceDoc, box('keep-me'))
     sourceDoc.commit()
     await seed(
       'canvas-a',

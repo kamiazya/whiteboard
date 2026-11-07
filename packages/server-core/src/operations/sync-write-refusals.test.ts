@@ -108,6 +108,14 @@ const TEXT_SAMPLES: Readonly<Record<SyncTextBreach['shape'], () => SyncWriteRefu
   'unattached-container': () =>
     textBreachRefusal({ shape: 'unattached-container', container: MAP }),
   'reserved-map-key': () => textBreachRefusal({ shape: 'reserved-map-key', container: MAP }),
+  'retired-shape': () =>
+    textBreachRefusal({
+      shape: 'retired-shape',
+      found: 'a node under x-whiteboard',
+      container: MAP,
+    }),
+  'retired-comment-plane': () =>
+    textBreachRefusal({ shape: 'retired-comment-plane', rows: 2, container: MAP }),
 }
 
 const ALL_SAMPLES = [...Object.values(SAMPLES), ...Object.values(TEXT_SAMPLES)]
@@ -126,6 +134,9 @@ const TEXT_STATUS: Partial<Record<SyncTextBreach['shape'], number>> = {
   'content-root': 400,
   'unattached-container': 409,
   'reserved-map-key': 400,
+  // 400, not 409: a client retries a 409, and would resend the retired bytes.
+  'retired-shape': 400,
+  'retired-comment-plane': 400,
 }
 
 /** The concrete error classes the module exports, found rather than listed. */

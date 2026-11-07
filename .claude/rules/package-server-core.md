@@ -228,6 +228,17 @@ run, a body, node text, a location, a label, a thread message, an element's tags
 by a `TextBreachRefusalError` built only by `textBreachRefusal(breach, at?)`,
 which promote also uses to name the document; into an empty document no run is
 judged, since nothing is replayed there.
+A retired STORED SHAPE a CRDT update newly writes is judged in the same place, last in
+`judgeImported`'s chain: op-scoped (Map and List inserts only; a delete is the repair),
+peek-only, refusing a `(container, key)` pair retired after the update and not before —
+answered 400 `retired_stored_shape` / `retired_comment_plane` by `RetiredShapeWrittenError` /
+`RetiredCommentPlaneWrittenError`, beside content-root and reserved-map-key. 400 and not 409,
+because daemon-client's `isPermanentWriteRefusal` retries a 409 and the SharedWorker would
+resend the retired bytes forever. Restore and promote inherit it through
+`judgeStateWithinTextLimits`. The browser's short-update fast path skips the judge only for an
+update naming none of `x-whiteboard`, `comments`, `elements`, `okf-body` (not `type`: a short
+pre-ADR-0038 kind write is let through by decision); the daemon's judge has no fast path and is
+the authority for every browser push.
 `importWithinSyncLimits` (`operations/sync-update-limit.ts`) adds the workspace record's placement checks
 (`placementRefusal`): a node left unreadable — any write to a tree node's own
 map is node meta, timestamps and folder keys included

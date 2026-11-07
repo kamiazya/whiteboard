@@ -458,6 +458,50 @@ class ReservedMapKeyError extends TextBreachRefusalError {
   }
 }
 
+/**
+ * A write of a shape an older version stored and no reader serves any more.
+ * 400, not 409: a client treats 409 as a write to retry, and would send the
+ * same retired bytes until it rebuilt its replica.
+ */
+class RetiredShapeWrittenError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['retired-shape']
+  override readonly status = 400
+
+  constructor(
+    readonly breach: BreachOf<'retired-shape'>,
+    readonly at?: RefusedIn,
+  ) {
+    const what =
+      at === undefined
+        ? 'This update would write'
+        : `The document at ${JSON.stringify(at.path)} holds in its history`
+    super(
+      `${what} ${breach.found}, a form an older version stored and this one no longer reads, so nothing of it was kept`,
+    )
+    this.name = 'RetiredShapeWrittenError'
+  }
+}
+
+/** A write of a row in the comment plane before threads, which no reader serves any more. */
+class RetiredCommentPlaneWrittenError extends TextBreachRefusalError {
+  readonly code = SYNC_TEXT_BREACH_CODES['retired-comment-plane']
+  override readonly status = 400
+
+  constructor(
+    readonly breach: BreachOf<'retired-comment-plane'>,
+    readonly at?: RefusedIn,
+  ) {
+    const what =
+      at === undefined
+        ? 'This update would write'
+        : `The document at ${JSON.stringify(at.path)} holds in its history`
+    super(
+      `${what} a comment in the flat comments plane an older version kept comments in (${breach.rows} there now), which this one no longer reads, so nothing of it was kept`,
+    )
+    this.name = 'RetiredCommentPlaneWrittenError'
+  }
+}
+
 /** The one refusal each way a write can break a text bound is answered with, naming `at` once known. */
 export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextBreachRefusalError {
   switch (breach.shape) {
@@ -491,6 +535,10 @@ export function textBreachRefusal(breach: SyncTextBreach, at?: RefusedIn): TextB
       return new UnattachedContainerError(breach, at)
     case 'reserved-map-key':
       return new ReservedMapKeyError(breach, at)
+    case 'retired-shape':
+      return new RetiredShapeWrittenError(breach, at)
+    case 'retired-comment-plane':
+      return new RetiredCommentPlaneWrittenError(breach, at)
     case 'run':
     case 'runs':
     case 'body':
