@@ -74,7 +74,10 @@ list the steps. CI's `rust` job runs both plus `pnpm rust:build:wasm`, and
 `rust-fuzz-pr` runs `pnpm rust:fuzz:pr`; both are scoped by PATH
 (`PATH_JOBS` in `tools/checks/src/affected.mjs`), so a change to the Cargo
 root files, `.cargo/` or `crates/` runs them and not the vitest matrix, and
-any other change skips them as a declared skip. Every target runs nightly
+any other change skips them as a declared skip. After the wasm build the `rust`
+job runs `canvas-render-rust` (QR-21 layer 2): canvas-render's
+`det-math.rust.test.ts` holds `det-math.ts` to `whiteboard-det` through the
+wasm artifact, exact on every double, and fails on CI if the artifact is absent. Every target runs nightly
 in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
 restores read-only. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
 steps and cache paths to the scripts.

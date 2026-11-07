@@ -322,6 +322,24 @@ jobs:
       # from each config's browser mode — the set the root test:browser
       # script lists (ci-verify-coverage.test.ts holds the two equal), so a
       # new browser-mode project is covered the moment it is registered.
+      # A shard has died part-way with VITEST_BROWSER_CONNECTION_CLOSED, a
+      # different file each time and never locally, where the same shard
+      # holds Chrome flat at 2-3 GB. Memory is sampled for the length of the
+      # run so a death says whether the runner was out of it; the step after
+      # the tests prints the samples and the kernel's OOM lines on failure.
+      - name: Sample memory during the browser run
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          sample() {
+            while true; do
+              used=$(free -m | awk '/Mem:/ {print $3 "/" $2 " MB used, " $7 " MB available"}')
+              chrome=$(ps -eo rss=,comm= | awk '/chrom/ {s += $1} END {print int(s / 1024) " MB in chrome"}')
+              echo "$(date -u +%T) $used, $chrome"
+              sleep 10
+            done
+          }
+          sample > "$RUNNER_TEMP/memory.log" 2>&1 &
+
       - name: Test browser projects (shard ${{ matrix.shard }}/2)
         if: steps.scope.outputs.run == 'true'
         timeout-minutes: 12
@@ -338,6 +356,14 @@ jobs:
       # off linux gets a linux pixel baseline (pixel-golden-scenes.ts); the
       # directory is hidden, so it needs `include-hidden-files`. Held by
       # ci-policy.test.ts for every job that runs a browser project.
+      - name: Memory and kernel log of a failed browser run
+        if: failure() && steps.scope.outputs.run == 'true'
+        run: |
+          echo "--- memory, every 10s ---"
+          cat "$RUNNER_TEMP/memory.log" || true
+          echo "--- kernel: out-of-memory and killed processes ---"
+          sudo dmesg -T | grep -iE 'out of memory|oom|killed process' | tail -20 || true
+
       - name: Upload browser traces of failed tests
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -446,7 +472,9 @@ jobs:
         id: changed
         # `.claude/**` is excluded: its test-NAMED files (biome-plugin lint
         # fixtures) belong to no vitest project, and vitest exits 1 on a file
-        # list that matches no project.
+        # list that matches no project. `*.rust.test.ts` is excluded too: it
+        # needs the wasm artifact only the rust job builds, and that job runs
+        # it on every change in its path scope.
         #
         # HEAD^1 rather than a merge base against a fetched `origin/$BASE_REF`.
         # On a pull_request event the checked-out ref is the merge commit, so
@@ -472,7 +500,7 @@ jobs:
         # retired sixteen test files.
         run: |
           set -o pipefail
-          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done | tr '\n' ' ')
+          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' ':(exclude)**/*.rust.test.ts' | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 
@@ -1055,6 +1083,11 @@ jobs:
       - name: Wasm release build (cargo xtask dist wasm)
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:build:wasm
+
+      # QR-21 layer 2: TypeScript against the wasm just built, exact equality.
+      - name: TypeScript-against-wasm differential (canvas-render-rust)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm exec vitest run --project=canvas-render-rust
 
       - name: Rust release gates (dist native, harden-check, repro-check, notices)
         if: steps.scope.outputs.run == 'true'

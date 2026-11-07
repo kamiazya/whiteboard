@@ -18,25 +18,41 @@ pub fn hypot(dx: f64, dy: f64) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
-/// The sine of `x`, as fdlibm computes it (the `libm` crate, pinned).
+/// The first magnitude [`sin`] and [`cos`] refuse: the double whose high word
+/// is `0x413921fb`, about 2^20 * pi/2.
+///
+/// Past it fdlibm needs its multi-precision argument reduction, which
+/// canvas-render's `det-math.ts` does not port (no layout angle comes near
+/// it) and answers NaN for instead. Its twin answers NaN from the same
+/// double, so the two agree on every input rather than only below it.
+const REDUCTION_CEILING: f64 = 1_647_099.0;
+
+/// The sine of `x`, as fdlibm computes it (the `libm` crate, pinned), for
+/// `|x|` below [`REDUCTION_CEILING`]; NaN at or past it.
 ///
 /// canvas-render's `det-math.ts` is a port of the same algorithm and is held
 /// to the same table (`det-math.oracle.txt`, produced by this crate's libm)
-/// bit for bit, so the two agree wherever the layout calls them.
+/// bit for bit, and to this function by a property differential through the
+/// wasm build.
 #[must_use]
 pub fn sin(x: f64) -> f64 {
-    libm::sin(x)
+    if x.abs() >= REDUCTION_CEILING { f64::NAN } else { libm::sin(x) }
 }
 
 /// The cosine of `x`, as fdlibm computes it; see [`sin`].
 #[must_use]
 pub fn cos(x: f64) -> f64 {
-    libm::cos(x)
+    if x.abs() >= REDUCTION_CEILING { f64::NAN } else { libm::cos(x) }
 }
 
 #[cfg(test)]
 mod tests {
     use super::hypot;
+
+    #[test]
+    fn the_reduction_ceiling_is_the_double_det_math_ts_names_by_its_high_word() {
+        assert_eq!(super::REDUCTION_CEILING.to_bits(), 0x4139_21fb_0000_0000);
+    }
 
     #[test]
     fn pythagorean_triple_is_exact() {

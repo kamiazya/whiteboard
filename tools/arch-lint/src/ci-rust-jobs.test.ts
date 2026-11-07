@@ -67,6 +67,7 @@ describe('the rust job runs every Rust gate', () => {
   it.each([
     'pnpm rust:check',
     'pnpm rust:build:wasm',
+    'pnpm exec vitest run --project=canvas-render-rust',
     'pnpm rust:release:check',
   ])('runs %s, gated on its own scope', (command) => {
     const step = stepsOf(ci, 'rust').find((s) => s.run?.trim() === command)

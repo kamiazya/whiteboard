@@ -4,6 +4,6 @@ import { defineConfig } from 'vitest/config'
 // project rather than only the last command of a chained script.
 export default defineConfig({
   test: {
-    projects: ['./vitest.node.config.ts', './vitest.browser.config.ts'],
+    projects: ['./vitest.node.config.ts', './vitest.browser.config.ts', './vitest.rust.config.ts'],
   },
 })

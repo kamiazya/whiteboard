@@ -453,7 +453,9 @@ describe('every package, project and job is reachable by some rule', () => {
     const jobIds = new Set(ciJobs.map((job) => job.id))
     for (const p of real.projects) {
       expect(jobIds.has(p.job), `${p.name} -> ${p.job}`).toBe(true)
-      expect([...affected.PROJECT_JOBS, 'verify']).toContain(p.job)
+      // `verify` runs mcp-smoke after a build; `rust` runs the wasm
+      // differential after the wasm build, scoped by path like the job.
+      expect([...affected.PROJECT_JOBS, 'verify', 'rust']).toContain(p.job)
     }
   })
 

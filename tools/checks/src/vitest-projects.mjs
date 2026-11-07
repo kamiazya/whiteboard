@@ -108,6 +108,13 @@ export const PROJECTS_RUN_ELSEWHERE = {
     mechanism: 'flag',
     marker: '--project=mcp-smoke',
   },
+  // The TypeScript-against-wasm differential reads the artifact
+  // `pnpm rust:build:wasm` writes, so it runs in the rust job after that build.
+  'packages/canvas-render/vitest.rust.config.ts': {
+    job: 'rust',
+    mechanism: 'flag',
+    marker: '--project=canvas-render-rust',
+  },
   // Small but given its own test-unit step so canvas-viewer coverage reads as
   // one block in CI logs; not folded into the shared-layer step.
   'packages/canvas-viewer/vitest.node.config.ts': {
