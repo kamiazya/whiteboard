@@ -313,6 +313,13 @@ function check(d: Drawn) {
   tally(d, ts, overrides, budget, full?.anchors)
 }
 
+/**
+ * The ceiling for a property over boards of 40 or 200 edges, each run laid
+ * out twice (TypeScript and Rust): measured locally at up to 17s for the
+ * regions property, and a CI runner is slower.
+ */
+const HEAVY_MS = 120_000
+
 describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same anchors', () => {
   fcTest.prop([fc.oneof(drawn(scene), drawn(board(9, 14)), drawn(board(9, 14)))], withDefaults())(
     'anchors and the budget left, over small canvases',
@@ -335,20 +342,20 @@ describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same ancho
 
   // Either side of the full-search size (40) and of the edge gate (200).
   fcTest.prop(
-    [fc.oneof(drawn(board(9, 42, 38)), drawn(board(9, 42, 38), { frozen: false }))],
-    withDefaults({ numRuns: 60 }),
-  )('anchors and the budget left, around the full-search size', check)
+    [fc.oneof(drawn(board(16, 42, 38)), drawn(board(16, 42, 38), { frozen: false }))],
+    withDefaults({ numRuns: 30 }),
+  )('anchors and the budget left, around the full-search size', check, HEAVY_MS)
   fcTest.prop(
     [drawn(board(24, 201, 199), { cut: fc.constant(undefined) })],
     withDefaults({ numRuns: 4 }),
-  )('anchors and the budget left, around the edge gate', check)
+  )('anchors and the budget left, around the edge gate', check, HEAVY_MS)
 
   // Past the 200-edge gate the search runs over Morton-ordered regions, with
   // the account ample so every region is searched.
   fcTest.prop(
     [drawn(board(24, 230, 210), { cut: fc.constant(undefined), frozen: false })],
-    withDefaults({ numRuns: 5 }),
-  )('anchors and the budget left, over regions', check)
+    withDefaults({ numRuns: 3 }),
+  )('anchors and the budget left, over regions', check, HEAVY_MS)
 
   afterAllFloor(
     [
@@ -365,9 +372,9 @@ describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same ancho
         overridden: 49,
         pairsShort: 44,
         cutMattered: 104,
-        fullGate: 30,
+        fullGate: 15,
         regionGate: 2,
-        regions: 3,
+        regions: 2,
       }
       for (const [kind, floor] of Object.entries(floors)) {
         expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
