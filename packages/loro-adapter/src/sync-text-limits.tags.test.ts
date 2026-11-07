@@ -131,7 +131,7 @@ describe('tags written through a sync update', () => {
   it('judges only the canvas key the board reads its tags from', () => {
     const base = record()
     const update = updateFrom(base, (board) =>
-      board.getMap(CANVAS_KEY).set('x-whiteboard', { tags: tagsOf(TAGS_PER_ELEMENT_MAX + 1) }),
+      board.getMap(CANVAS_KEY).set('settings', { tags: tagsOf(TAGS_PER_ELEMENT_MAX + 1) }),
     )
     expect(judged(base, update)).toBeNull()
   })

@@ -48,6 +48,10 @@ const WHY: Record<SyncWriteRefusalCode, string> = {
     'It would add a part to a document under a name the workspace keeps for itself, or of a kind that name cannot hold.',
   reserved_map_key:
     'It would add a part to a document under the name "__proto__", which no document may hold.',
+  retired_stored_shape:
+    "It would write part of this document in a form an older version of the app used and this one no longer reads. Reload to take the keeper's copy; if this keeps happening, the other app writing here needs updating.",
+  retired_comment_plane:
+    "It would add a comment in the form an older version of the app kept comments in, which this one no longer reads. Reload to take the keeper's copy; the app writing it needs updating.",
   document_kind_changed:
     'It would change what kind of document this is. A board stays a board and a note stays a note; make a new document of the other kind instead.',
   too_many_documents:

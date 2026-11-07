@@ -1,5 +1,7 @@
+import { writeSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resolveTestServerDeps,
@@ -9,6 +11,8 @@ import {
 } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-restore-race-')
+
+const box = (id: string) => textNode({ id, text: id, x: 0, y: 0, width: 10, height: 10 })
 
 // The deps a router is handed by its root; here, the test wiring over the
 // temp data dir.
@@ -73,9 +77,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     // Source canvas-a with a saved version to restore from.
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
-    const sourceList = sourceDoc.getMovableList('elements')
-    const sm0 = sourceList.insertContainer(0, new LoroMap())
-    sm0.set('id', 'keep-me')
+    writeSpatialNode(sourceDoc, box('keep-me'))
     sourceDoc.commit()
     await writeDocumentUpdate(
       serverDeps,
@@ -96,9 +98,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     // Target canvas-b already exists.
     const targetDoc = new LoroDoc()
     const tvv0 = targetDoc.version()
-    const targetList = targetDoc.getMovableList('elements')
-    const tm0 = targetList.insertContainer(0, new LoroMap())
-    tm0.set('id', 'b-only')
+    writeSpatialNode(targetDoc, box('b-only'))
     targetDoc.commit()
     await writeDocumentUpdate(
       serverDeps,
@@ -181,9 +181,7 @@ describe('restore in-place vs delete race', () => {
     // Single canvas with a saved version to restore onto itself (no targetPath).
     const sourceDoc = new LoroDoc()
     const svv0 = sourceDoc.version()
-    const sourceList = sourceDoc.getMovableList('elements')
-    const sm0 = sourceList.insertContainer(0, new LoroMap())
-    sm0.set('id', 'keep-me')
+    writeSpatialNode(sourceDoc, box('keep-me'))
     sourceDoc.commit()
     await writeDocumentUpdate(
       serverDeps,

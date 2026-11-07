@@ -325,11 +325,10 @@ describe('promoteWorkspace', () => {
   })
 
   /**
-   * The merge sees only a container and a key; the promoted record is what
-   * can say which document holds it, and a person fixing the record needs
-   * the document, not a key they never see. One case per breach shape, keyed
-   * by the table every keeper answers them from, so a shape added there
-   * without a case here fails to compile.
+   * The merge sees only a container and a key; the promoted record is what can say
+   * which document holds it, and a person fixing the record needs the document, not
+   * a key they never see. One case per breach shape, keyed by the table every keeper
+   * answers them from, so a shape added there without a case here fails to compile.
    */
   type Board = ReturnType<typeof documentContainers>
   const nodeDataOf = (record: LoroDoc, documentId: string): LoroTreeNode['data'] => {
@@ -340,6 +339,7 @@ describe('promoteWorkspace', () => {
     if (node === undefined) throw new Error(`no node holds ${documentId}`)
     return node.data
   }
+  const writeRetired = (map: string) => (b: Board) => b.getMap(map).set('r', { 'x-whiteboard': 1 })
   const breachCases = {
     run: {
       at: 'notes/roadmap',
@@ -526,6 +526,8 @@ describe('promoteWorkspace', () => {
       status: 400,
       write: (board: Board) => board.getMap('nodes').set('__proto__', { id: 'n2' }),
     },
+    'retired-shape': { at: 'sketch', status: 400, write: writeRetired('nodes') },
+    'retired-comment-plane': { at: 'sketch', status: 400, write: writeRetired('comments') },
     'unattached-container': {
       at: 'sketch',
       status: 409,

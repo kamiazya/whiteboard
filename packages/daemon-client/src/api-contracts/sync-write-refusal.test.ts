@@ -22,6 +22,18 @@ describe('syncWriteRefusalOf', () => {
     })
   })
 
+  it.each([
+    'retired_stored_shape',
+    'retired_comment_plane',
+  ])('reads %s with its sentence, as a refusal that is final', (code) => {
+    expect(syncWriteRefusalOf({ error: code, message: 'old shape' })).toEqual({
+      code,
+      message: 'old shape',
+    })
+    // A retried 409 would resend the retired bytes forever.
+    expect(isPermanentWriteRefusal(400)).toBe(true)
+  })
+
   it('keeps the sentence of a code this client does not know', () => {
     expect(syncWriteRefusalOf({ error: 'newer_rule', message: 'why' })).toEqual({
       code: null,
