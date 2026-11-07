@@ -3,8 +3,6 @@
 // composition. The compositions themselves (what to seed, how to authenticate)
 // are each lane's own, so a route is requested only with credentials that can
 // reach it. Test support only: excluded from the build by its `_test-` prefix.
-import { readdirSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
 import { signInRefusalSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/sign-in'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { apiErrorBodySchema } from '@kamiazya/whiteboard-server-core'
@@ -15,10 +13,10 @@ import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
 import { IDP } from './_test-server-mode-harness.js'
 
 // ---------------------------------------------------------------------------
-// What each route may do, keyed by `METHOD pattern` as the app registers it
-// (wildcards expanded with their action). `answers` is what a 2xx carries;
-// `refuses-only:` says why the seeding cannot reach one and is checked to
-// still be true; `skip:` says why the lane does not request it at all.
+// What each route may do, keyed by `METHOD pattern` as the app registers it.
+// `answers` is what a 2xx carries; `refuses-only:` says why the seeding cannot
+// reach one and is checked to still be true; `skip:` says why the lane does
+// not request it at all.
 // ---------------------------------------------------------------------------
 export type Rule =
   | {
@@ -109,56 +107,21 @@ function bodyArb(method: string, rule: Rule, override: Override): fc.Arbitrary<B
 }
 
 // ---------------------------------------------------------------------------
-// The registered surface: plain routes off `app.routes`, wildcard actions off
-// the registration calls in the source.
+// The registered surface: every requestable route off `app.routes`.
 // ---------------------------------------------------------------------------
-const ROUTES_DIR = join(import.meta.dirname, 'routes')
 
-function wildcardKeysIn(source: string): string[] {
-  const keys: string[] = []
-  for (const m of source.matchAll(/onDocumentAction\(\s*app,\s*'(\w+)',\s*'([\w-]+)'/g)) {
-    keys.push(`${m[1]!.toUpperCase()} /api/w/:workspaceId/document/*/${m[2]}`)
-  }
-  for (const m of source.matchAll(/onDocumentFile\(\s*app,\s*'(\w+)'/g)) {
-    keys.push(`${m[1]!.toUpperCase()} /api/w/:workspaceId/document/*/file/:fileId`)
-  }
-  for (const m of source.matchAll(/onDocumentsRoute\(\s*app,\s*'(\w+)',\s*\[([^\]]*)\]/g)) {
-    const suffix = [...m[2]!.matchAll(/'([^']+)'/g)].map((s) => s[1]).join('/')
-    keys.push(
-      `${m[1]!.toUpperCase()} /api/workspaces/:workspaceId/documents/*${suffix === '' ? '' : `/${suffix}`}`,
-    )
-  }
-  return keys
-}
-
-function sourcesUnder(dir: string): string[] {
-  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = join(dir, entry.name)
-    if (entry.isDirectory()) return sourcesUnder(full)
-    return entry.name.endsWith('.ts') && !entry.name.includes('.test.') ? [full] : []
-  })
-}
-
-const WILDCARDS = new Set([
-  '/api/w/:workspaceId/document/*',
-  '/api/workspaces/:workspaceId/documents/*',
-])
-
-/** A route a lane requests: not a catch-all, not server-core's own mount, not a wildcard pattern. */
+/** A route a lane requests: not a catch-all, not middleware, not server-core's own mount. */
 function isRequestable(route: { method: string; path: string }): boolean {
   if (route.method === 'ALL') return false
-  if (route.path === '*' || route.path === '/*') return false
+  if (route.path === '*' || route.path === '/*' || route.path.endsWith('/*')) return false
   // server-core's mount, fuzzed by its own lane against its own seed.
-  return !route.path.startsWith('/api/v1/') && !WILDCARDS.has(route.path)
+  return !route.path.startsWith('/api/v1/')
 }
 
 export function registeredKeys(app: {
   routes: readonly { method: string; path: string }[]
 }): string[] {
   const keys = new Set(app.routes.filter(isRequestable).map((r) => `${r.method} ${r.path}`))
-  for (const file of sourcesUnder(ROUTES_DIR)) {
-    for (const key of wildcardKeysIn(readFileSync(file, 'utf8'))) keys.add(key)
-  }
   return [...keys].sort()
 }
 

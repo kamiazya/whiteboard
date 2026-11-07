@@ -99,7 +99,9 @@ describe('agent and daemon over one data dir', () => {
 
     // Then what the browser reads, on its first request rather than a retry.
     const record = await daemon.fetch(`/api/w/${workspaceId}/workspace-document/snapshot`)
-    const projection = await daemon.fetch(`/api/w/${workspaceId}/document/sketch/snapshot`)
+    const projection = await daemon.fetch(
+      `/api/workspaces/${workspaceId}/documents/${documentId}/snapshot`,
+    )
     expect({
       workspaceRecordHasTheDrawing: readsAs(record.bytes).includes(DRAWN),
       documentSnapshotHasTheDrawing: readsAs(projection.bytes).includes(DRAWN),

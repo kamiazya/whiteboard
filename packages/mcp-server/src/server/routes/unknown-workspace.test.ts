@@ -24,7 +24,7 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createSelfHostStoreLocalModule } from '../../di/store-local.module.js'
 import { createWorkspaceReplicaKeyStore } from '../security/workspace-replica-key-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../store/db/test-helpers.js'
-import { testDataLayout } from './_test-helpers.js'
+import { testDataLayout, UNKNOWN_DOCUMENT_ID } from './_test-helpers.js'
 
 let dataDir = ''
 vi.mock('../config.js', () => ({
@@ -93,7 +93,7 @@ const ROUTES: readonly Probe[] = [
   probe('GET', '/names'),
   probe('PUT', '/name', { name: 'x' }),
   probe('GET', '/documents'),
-  probe('GET', '/documents/some/versions'),
+  probe('GET', `/documents/${UNKNOWN_DOCUMENT_ID}/versions`),
   probe('POST', '/documents/optimize-all'),
   probe('POST', '/versions/prune-sandwiched'),
   probe('POST', '/files/purge-dangling'),
@@ -101,13 +101,13 @@ const ROUTES: readonly Probe[] = [
   probe('POST', '/trash/d1/restore'),
   probe('DELETE', '/trash/d1'),
   probe('PATCH', '', { displayName: 'x' }),
-  probe('PUT', '/documents/a/name', { name: 'x' }),
-  probe('PUT', '/documents/a/pin', { pinned: true }),
-  probe('PUT', '/documents/a/path', { path: 'b' }),
-  probe('DELETE', '/documents/a'),
-  probe('POST', '/documents/a/versions', { label: 'x' }),
-  probe('GET', '/documents/a/versions/v1/document'),
-  probe('POST', '/documents/a/versions/v1/restore'),
+  probe('PUT', `/documents/${UNKNOWN_DOCUMENT_ID}/name`, { name: 'x' }),
+  probe('PUT', `/documents/${UNKNOWN_DOCUMENT_ID}/pin`, { pinned: true }),
+  probe('PUT', `/documents/${UNKNOWN_DOCUMENT_ID}/path`, { path: 'b' }),
+  probe('DELETE', `/documents/${UNKNOWN_DOCUMENT_ID}`),
+  probe('POST', `/documents/${UNKNOWN_DOCUMENT_ID}/versions`, { label: 'x' }),
+  probe('GET', `/documents/${UNKNOWN_DOCUMENT_ID}/versions/v1/document`),
+  probe('POST', `/documents/${UNKNOWN_DOCUMENT_ID}/versions/v1/restore`),
   probe('POST', '/replica-key'),
   probe('POST', '/replica-key/rotate'),
   probe('PUT', '/replica-tier', { tier: 'offline' }),
@@ -186,7 +186,11 @@ describe('a malformed workspace address', () => {
   })
 
   it('is still the route’s own 400 on a document route', async () => {
-    const res = await call(await app(), probe('DELETE', '/documents/a'), 'bad.handle')
+    const res = await call(
+      await app(),
+      probe('DELETE', `/documents/${UNKNOWN_DOCUMENT_ID}`),
+      'bad.handle',
+    )
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({

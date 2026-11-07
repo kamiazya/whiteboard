@@ -8,6 +8,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { type ServerDeps, wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
+import type { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach } from 'vitest'
 import { getDataDir } from '../config.js'
@@ -16,6 +17,7 @@ import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { createDataLayout } from '../tenant/data-layout.js'
 import type { DataLayout } from '../tenant/data-layout-seam.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
+import { resolveDocumentAddress } from './document/path-route.js'
 import type { DocumentRouterOptions } from './document.js'
 import type { createFilesRouter } from './files.js'
 
@@ -116,6 +118,49 @@ export async function createTestDocument(
     ...(input.name === undefined ? {} : { name: input.name }),
   })
 }
+
+/**
+ * The id the index holds for the document at `path` — what every document
+ * route is addressed by. A fixture seeds by path (`saveDocument`,
+ * `writeDocumentUpdate`) and requests by id, so this is the one translation a
+ * route test needs; a path nothing holds is a fixture mistake and throws.
+ */
+export async function documentIdAt(
+  deps: Pick<ServerDeps, 'documentIndex'>,
+  workspaceId: string,
+  path: string,
+): Promise<string> {
+  const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+  if (entry === null) throw new Error(`no document at ${JSON.stringify(path)} in ${workspaceId}`)
+  return entry.documentId
+}
+
+/**
+ * Mounts the one middleware every id-addressed route needs ahead of a router
+ * under test, over an index that holds exactly `held` — so a router can be
+ * exercised alone, the way `createDocumentRouter` composes it, without a
+ * store. Keyed by document id; a `kind` left out is `spatial`.
+ */
+export function resolvingDocumentIds(
+  app: Hono,
+  held: Readonly<Record<string, { path: string; kind?: 'spatial' | 'markdown' }>>,
+): Hono {
+  const documentIndex = {
+    resolveDocumentById: async ({ documentId }: { documentId: string }) => {
+      const entry = held[documentId]
+      return entry === undefined
+        ? null
+        : { documentId, path: entry.path, kind: entry.kind ?? ('spatial' as const) }
+    },
+  }
+  const resolve = resolveDocumentAddress({ documentIndex } as never)
+  app.use('/api/workspaces/:workspaceId/documents/:documentId/*', resolve)
+  app.use('/api/workspaces/:workspaceId/documents/:documentId', resolve)
+  return app
+}
+
+/** A canonical ULID no fixture ever mints: the id routes answer it 404. */
+export const UNKNOWN_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 /**
  * Imports a Loro update into the document at `path` and saves it, creating

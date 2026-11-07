@@ -1,11 +1,12 @@
 import { mkdir, mkdtemp, readdir, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { storeScope } from '../store/store-scope.js'
+import { type StoreScope, storeScope } from '../store/store-scope.js'
 import { workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { testFilesRouterOptions, testStoreScope } from './_test-helpers.js'
+import { resolvingDocumentIds, testFilesRouterOptions, testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -52,7 +53,20 @@ const { prepareDataDir } = await import('../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')
 const { createSelfHostStoreLocalModule } = await import('../../di/store-local.module.js')
 
-describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
+const CANVAS_A = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+const fileUrl = (fileId: string, workspaceId = 'session1') =>
+  `/api/workspaces/${workspaceId}/documents/${CANVAS_A}/files/${fileId}`
+
+// The daemon resolves the document id once ahead of its routers; the index here
+// holds one document, at `canvas-a`.
+function filesApp(scope: StoreScope) {
+  const app = new Hono()
+  resolvingDocumentIds(app, { [CANVAS_A]: { path: 'canvas-a' } })
+  app.route('/', createFilesRouter(testFilesRouterOptions(scope)))
+  return app
+}
+
+describe('PUT /api/workspaces/:workspaceId/documents/:documentId/files/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(join(tempDir, 'session1'), { recursive: true })
@@ -65,8 +79,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('saves image binary data and returns 204', async () => {
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47]) // PNG magic bytes
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: imageData,
@@ -85,8 +99,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   // type would otherwise leave two files with one stem and the GET would
   // answer whichever `readdir` lists first.
   it('replaces a re-uploaded file of another type, leaving one stored file for the id', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const url = '/api/w/session1/document/canvas-a/file/retyped1'
+    const app = filesApp(testStoreScope(tempDir))
+    const url = fileUrl('retyped1')
     const png = await app.request(url, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
@@ -113,8 +127,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   it('stores an upload under the data layout it is handed, not the process data dir', async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-files-layout-'))
     try {
-      const app = createFilesRouter(testFilesRouterOptions(storeScope(elsewhere, 'other-tenant')))
-      const res = await app.request('/api/w/session1/document/canvas-a/file/file-009', {
+      const app = filesApp(storeScope(elsewhere, 'other-tenant'))
+      const res = await app.request(fileUrl('file-009'), {
         method: 'PUT',
         headers: { 'Content-Type': 'image/png' },
         body: new Uint8Array([0x89, 0x50]),
@@ -126,7 +140,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
         join(workspaceFilesDir(elsewhere, 'other-tenant', 'session1'), 'file-009.png'),
       )
       expect(saved[0]).toBe(0x89)
-      const read = await app.request('/api/w/session1/document/canvas-a/file/file-009')
+      const read = await app.request(fileUrl('file-009'))
       expect(read.status).toBe(200)
       expect(
         await readFile(
@@ -147,8 +161,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     ['an encoded NUL', 'file%00id'],
     ['an id past the length limit', 'x'.repeat(129)],
   ])('refuses an upload under %s and stores no image', async (_name, fileId) => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request(`/api/w/session1/document/canvas-a/file/${fileId}`, {
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl(fileId), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -161,8 +175,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('refuses an empty upload with 400 rather than storing a zero-byte file', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-002', {
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-002'), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
     })
@@ -174,8 +188,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     withWorkspaceWriteLockMock.mockClear()
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001', {
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: imageData,
@@ -204,8 +218,8 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     })
 
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const responsePromise = app.request('/api/w/session1/document/canvas-a/file/file-001', {
+    const app = filesApp(testStoreScope(tempDir))
+    const responsePromise = app.request(fileUrl('file-001'), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: imageData,
@@ -233,7 +247,7 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 })
 
-describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
+describe('GET /api/workspaces/:workspaceId/documents/:documentId/files/:fileId', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-test-'))
     await mkdir(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), { recursive: true })
@@ -251,8 +265,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       imageData,
     )
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'))
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('image/png')
 
@@ -265,16 +279,16 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   // touch, but a top-level navigation to the URL would run it in the app's
   // origin — which in server mode carries the session.
   it('serves an uploaded SVG sandboxed with no script allowed and as an attachment', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const app = filesApp(testStoreScope(tempDir))
     const svg = '<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>'
-    const put = await app.request('/api/w/session1/document/canvas-a/file/file-svg', {
+    const put = await app.request(fileUrl('file-svg'), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/svg+xml' },
       body: svg,
     })
     expect(put.status).toBe(204)
 
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-svg')
+    const res = await app.request(fileUrl('file-svg'))
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('image/svg+xml')
     const csp = res.headers.get('Content-Security-Policy') ?? ''
@@ -304,8 +318,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     ['image/png', new Uint8Array([0x89, 0x50, 0x4e, 0x47])],
     ['image/jpeg', new Uint8Array([0xff, 0xd8, 0xff, 0xe0])],
   ])('serves a %s answer sandboxed, inline', async (type, bytes) => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const url = '/api/w/session1/document/canvas-a/file/raster1'
+    const app = filesApp(testStoreScope(tempDir))
+    const url = fileUrl('raster1')
     const put = await app.request(url, {
       method: 'PUT',
       headers: { 'Content-Type': type },
@@ -323,8 +337,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   // A JSON 404, like every other refusal on this surface: the browser
   // client reads the body, and a plain-text one is a refusal it cannot read.
   it('returns a JSON 404 for a missing fileId', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/nonexistent')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('nonexistent'))
     expect(res.status).toBe(404)
     expect(res.headers.get('Content-Type')).toContain('json')
     expect(await res.json()).toMatchObject({ error: 'not_found' })
@@ -336,8 +350,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       force: true,
     })
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'))
 
     expect(res.status).toBe(404)
     expect(await res.json()).toMatchObject({ error: 'not_found' })
@@ -351,8 +365,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     const { writeFile } = await import('node:fs/promises')
     await writeFile(workspaceFilesDir(tempDir, SELF_HOST_TENANT_ID, 'session1'), 'not-a-directory')
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'))
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -366,8 +380,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       recursive: true,
     })
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'))
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
@@ -389,8 +403,8 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
       new Uint8Array([0x02]),
     )
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(fileUrl('file-001'))
     expect(res.status).toBe(200)
 
     const buf = await res.arrayBuffer()
@@ -399,12 +413,12 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
   })
 
   it('returns 400 for invalid workspaceId / fileId', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const app = filesApp(testStoreScope(tempDir))
 
-    const badSession = await app.request('/api/w/bad.sid/document/canvas-a/file/file-001')
+    const badSession = await app.request(fileUrl('file-001', 'bad.sid'))
     expect(badSession.status).toBe(400)
 
-    const badFileId = await app.request('/api/w/session1/document/canvas-a/file/bad.id')
+    const badFileId = await app.request(fileUrl('bad.id'))
     expect(badFileId.status).toBe(400)
   })
 })
@@ -434,9 +448,9 @@ describe('a document file addressed by workspace segment', () => {
   })
 
   it('stores an upload by segment under the canonical id, readable by either handle', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const app = filesApp(testStoreScope(tempDir))
     withWorkspaceWriteLockMock.mockClear()
-    const put = await app.request(`/api/w/${SEGMENT}/document/canvas-a/file/file-seg`, {
+    const put = await app.request(fileUrl('file-seg', SEGMENT), {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
@@ -450,10 +464,10 @@ describe('a document file addressed by workspace segment', () => {
       'file-seg.png',
     )
 
-    const byId = await app.request(`/api/w/${CANONICAL}/document/canvas-a/file/file-seg`)
+    const byId = await app.request(fileUrl('file-seg', CANONICAL))
     expect(byId.status).toBe(200)
     expect(new Uint8Array(await byId.arrayBuffer())[0]).toBe(0x89)
-    const bySegment = await app.request(`/api/w/${SEGMENT}/document/canvas-a/file/file-seg`)
+    const bySegment = await app.request(fileUrl('file-seg', SEGMENT))
     expect(bySegment.status).toBe(200)
   })
 })
@@ -481,7 +495,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
       ]),
     )
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const app = filesApp(testStoreScope(tempDir))
     const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
       method: 'POST',
     })
@@ -503,7 +517,7 @@ describe('POST /api/workspaces/:workspaceId/files/purge-dangling', () => {
       ),
     )
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
+    const app = filesApp(testStoreScope(tempDir))
     const res = await app.request('/api/workspaces/session1/files/purge-dangling', {
       method: 'POST',
     })

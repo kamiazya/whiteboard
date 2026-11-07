@@ -264,7 +264,7 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
 /**
  * How a module is recognised as reaching the daemon: it builds one of the
  * daemon's URLs from the shared helpers (`documentsApiUrl`,
- * `documentFileApiUrl`, `trashApiUrl`, … — any `*ApiUrl(` call), it holds one
+ * `documentFileByIdApiUrl`, `trashApiUrl`, … — any `*ApiUrl(` call), it holds one
  * of the two fetches that reach it, it writes an `/api/` path by hand, or it
  * calls the daemon client's request functions. A keeper's own `/auth/` routes
  * count too, spelled by hand or built by an `auth*Url(` helper: sign-in is a thing only a server-mode keeper has, and a module

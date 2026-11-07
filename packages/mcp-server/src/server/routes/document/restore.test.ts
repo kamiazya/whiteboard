@@ -10,6 +10,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -110,7 +111,7 @@ describe('restore router (real node counts)', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -120,7 +121,7 @@ describe('restore router (real node counts)', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +139,7 @@ describe('restore router (real node counts)', () => {
     // Source canvas with one node, saved as a version.
     await seed('canvas-a', nodesModelDocUpdate(['keep-me']))
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -151,7 +152,7 @@ describe('restore router (real node counts)', () => {
     await seed('canvas-b', nodesModelDocUpdate(['b-only']))
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -179,7 +180,7 @@ describe('restore router (kind propagation)', () => {
     await saveDocument(SESSION1, 'note-a', new LoroDoc(), { kind: 'markdown' })
     await seed('note-a', markdownBodyUpdate('# a note'))
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/note-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'note-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -189,7 +190,7 @@ describe('restore router (kind propagation)', () => {
     const { version } = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/note-a/versions/${version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'note-a')}/versions/${version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -210,15 +211,18 @@ describe('restore router (kind propagation)', () => {
     await seed('unknown-a', nodesModelDocUpdate(['n1']))
     expect(await getDocumentKind(SESSION1, 'unknown-a')).toBe('spatial')
 
-    const saveRes = await app.request(`/api/workspaces/${SESSION1}/documents/unknown-a/versions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
+    const saveRes = await app.request(
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'unknown-a')}/versions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      },
+    )
     const { version } = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/unknown-a/versions/${version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'unknown-a')}/versions/${version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -230,7 +234,7 @@ describe('restore router (kind propagation)', () => {
   })
 })
 
-describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore', () => {
+describe('POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/restore', () => {
   it('restores the past-state element set through POST /versions/:id/restore', async () => {
     const app = createRouter()
 
@@ -242,11 +246,14 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
 
     // Step 2: Save the current one-element state as v1.
-    const saveRes = await app.request(`/api/workspaces/${SESSION1}/documents/canvas-a/versions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
+    const saveRes = await app.request(
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      },
+    )
     const saveBody = (await saveRes.json()) as { version: { id: string } }
     const v1id = saveBody.version.id
 
@@ -259,7 +266,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
     // Step 4: Restore v1. The CRDT merge imports the past snapshot.
     const resRestore = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${v1id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${v1id}/restore`,
       { method: 'POST' },
     )
     expect(resRestore.status).toBe(200)
@@ -276,11 +283,14 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
 
     // Step 2: save v1.
-    const saveRes = await app.request(`/api/workspaces/${SESSION1}/documents/canvas-a/versions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ label: 'v1' }),
-    })
+    const saveRes = await app.request(
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label: 'v1' }),
+      },
+    )
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     // Step 3: add a second element after v1, so restoring v1 would tombstone it.
@@ -300,7 +310,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
       .mockRejectedValueOnce(new Error('simulated snapshot failure'))
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       { method: 'POST' },
     )
     saveSpy.mockRestore()
@@ -324,7 +334,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -351,7 +361,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     })
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       { method: 'POST' },
     )
     commitSpy.mockRestore()
@@ -366,8 +376,9 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
   it('returns 404 when restoring a missing version id', async () => {
     const app = createRouter()
+    await seed('canvas-a', nodesModelDocUpdate(['n1']))
     const res = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/nonexistent/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/nonexistent/restore`,
       { method: 'POST' },
     )
     expect(res.status).toBe(404)
@@ -378,8 +389,9 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
   it('returns 400 for an invalid version id', async () => {
     const app = createRouter()
+    await seed('canvas-a', nodesModelDocUpdate(['n1']))
     const res = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/bad.id/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/bad.id/restore`,
       { method: 'POST' },
     )
     expect(res.status).toBe(400)
@@ -400,7 +412,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -428,7 +440,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     let restoreRes: Response
     try {
       restoreRes = await app.request(
-        `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+        `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -458,7 +470,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -468,7 +480,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -493,7 +505,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -520,7 +532,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     let restoreRes: Response
     try {
       restoreRes = await app.request(
-        `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+        `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -556,7 +568,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -566,7 +578,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -597,7 +609,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -607,7 +619,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -646,7 +658,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -656,7 +668,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const saveBody = (await saveRes.json()) as { version: { id: string } }
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -685,7 +697,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -700,7 +712,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     )
 
     const restoreRes = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -734,7 +746,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     initial.commit()
     await seed('canvas-a', initial.export({ mode: 'update', from: vv0 }) as Uint8Array<ArrayBuffer>)
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -747,7 +759,7 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const announce = vi.spyOn(syncAudience, 'sendRestoreEvent')
 
     const res = await app.request(
-      `/api/workspaces/${SESSION1}/documents/canvas-a/versions/${version.id}/restore`,
+      `/api/workspaces/${SESSION1}/documents/${await documentIdAt(serverDeps, SESSION1, 'canvas-a')}/versions/${version.id}/restore`,
       { method: 'POST' },
     )
     expect(res.status).toBe(200)

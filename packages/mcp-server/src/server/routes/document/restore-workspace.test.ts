@@ -20,6 +20,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
@@ -79,11 +80,14 @@ async function push(_app: ReturnType<typeof createDocumentRouter>, doc: LoroDoc,
 }
 
 async function saveVersion(app: ReturnType<typeof createDocumentRouter>): Promise<string> {
-  const res = await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ label: 'v1' }),
-  })
+  const res = await app.request(
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'c')}/versions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    },
+  )
   const { version } = (await res.json()) as { version: { id: string } }
   return version.id
 }
@@ -101,7 +105,7 @@ it('in-place restore makes the document equal the past state — a later-added n
   await push(app, client, ['n-a', 'n-b'])
 
   const res = await app.request(
-    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions/${versionId}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'c')}/versions/${versionId}/restore`,
     { method: 'POST' },
   )
   expect(res.status).toBe(200)
@@ -128,7 +132,7 @@ it('a version of a tree-served document restores correctly after a simulated res
   _clearWorkspaceDocCacheForTests()
 
   const res = await app.request(
-    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions/${versionId}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'c')}/versions/${versionId}/restore`,
     { method: 'POST' },
   )
   expect(res.status).toBe(200)
@@ -183,7 +187,7 @@ it('subtree rollback reverts the document AND its descendants, and evacuates doc
   )
 
   const res = await app.request(
-    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/c/versions/${versionId}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'c')}/versions/${versionId}/restore`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

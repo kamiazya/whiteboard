@@ -38,7 +38,7 @@ afterAll(() => {
 })
 
 const DAEMON_TOKEN = 'the-daemon-token-for-macaroon-wiring'
-const READ_PATH = '/api/w/ws-alpha/document/board'
+const READ_PATH = '/api/workspaces/ws-alpha/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot'
 
 describe('startHttpServer macaroon wiring (ADR-0043)', () => {
   let running: RunningServer | undefined

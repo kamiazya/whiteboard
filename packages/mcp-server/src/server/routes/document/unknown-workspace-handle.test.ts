@@ -1,13 +1,13 @@
 // @vitest-environment node
 /**
- * `/api/w/:workspaceId/document/*` answers a handle no workspace holds with the
- * refusal `/api/v1` and the legacy `/api/workspaces/:workspaceId/*` routes give
- * (404 `workspace_not_found`), and creates nothing on the way.
+ * `/api/workspaces/:workspaceId/documents/:documentId/*` answers a handle no
+ * workspace holds with the refusal `/api/v1` gives (404 `workspace_not_found`),
+ * and creates nothing on the way.
  *
  * These routes take their handle through a resolve-or-pass-through, so an
- * unknown one used to arrive at the store as a workspace id: an update minted a
- * workspace row under whatever the caller typed, and an upload created its
- * files directory. A workspace comes from the workspaces route and nowhere else.
+ * unknown one would arrive at the store as a workspace id: an upload would
+ * create its files directory. A workspace comes from the workspaces route and
+ * nowhere else.
  *
  * The routes are read off the registered surface rather than listed here, so a
  * document action added tomorrow is held to the same answer or fails this file.
@@ -30,7 +30,7 @@ import {
 import { SESSION_COOKIE } from '../../security/sign-in-session-store.js'
 import { createWorkspaceReplicaKeyStore } from '../../security/workspace-replica-key-store.js'
 import { createIsolatedDb, type IsolatedDbHandle } from '../../store/db/test-helpers.js'
-import { testDataLayout } from '../_test-helpers.js'
+import { documentIdAt, testDataLayout, UNKNOWN_DOCUMENT_ID } from '../_test-helpers.js'
 
 let dataDir = ''
 vi.mock('../../config.js', () => ({
@@ -66,6 +66,8 @@ async function daemon() {
     createContainer(createSelfHostStoreLocalModule(handle.db, dataDir)),
   )
   await serverDeps.documentIndex.createWorkspace({ workspaceId: KNOWN, segment: KNOWN_SEGMENT })
+  await serverDeps.liveDocuments.save(KNOWN, 'doc', new LoroDoc(), { kind: 'spatial' })
+  const documentId = await documentIdAt(serverDeps, KNOWN, 'doc')
   const app = createApp({
     authMode: 'local-daemon',
     token: TOKEN,
@@ -75,7 +77,7 @@ async function daemon() {
     dataLayout: testDataLayout(),
     replicaKeys: createWorkspaceReplicaKeyStore(handle.db, { defaultTier: 'offline' }),
   })
-  return { app, serverDeps }
+  return { app, serverDeps, documentId }
 }
 
 type Daemon = Awaited<ReturnType<typeof daemon>>
@@ -86,12 +88,13 @@ interface Probe {
   readonly init: { headers: Record<string, string>; body?: BodyInit }
 }
 
-const PROBE_PATTERN = /^(\w+) \/api\/w\/:workspaceId\/document\/\*\/(.+)$/
+const PROBE_PATTERN =
+  /^(GET|POST|PUT|PATCH|DELETE) \/api\/workspaces\/:workspaceId\/documents\/:documentId(\/.+)?$/
 
 /** What a request to one action carries: enough that nothing but the workspace can refuse it. */
-function probeFor(method: string, action: string): Probe {
-  const suffix = `/document/doc/${action.replace(':fileId', 'abc')}`
-  if (action.startsWith('file/')) {
+function probeFor(method: string, action: string, documentId = UNKNOWN_DOCUMENT_ID): Probe {
+  const suffix = `/documents/${documentId}${action === '' ? '' : `/${action.replace(/:\w+/g, 'abc')}`}`
+  if (action.startsWith('files/')) {
     return method === 'PUT'
       ? {
           method,
@@ -100,7 +103,7 @@ function probeFor(method: string, action: string): Probe {
         }
       : { method, suffix, init: { headers: {} } }
   }
-  if (method === 'POST') {
+  if (method === 'POST' || method === 'PUT' || method === 'PATCH') {
     return {
       method,
       suffix,
@@ -110,16 +113,15 @@ function probeFor(method: string, action: string): Probe {
   return { method, suffix, init: { headers: {} } }
 }
 
-async function documentProbes(): Promise<Probe[]> {
-  const { app } = await daemon()
+function documentProbes({ app }: Daemon): Probe[] {
   return registeredKeys(app).flatMap((key) => {
     const match = PROBE_PATTERN.exec(key)
-    return match === null ? [] : [probeFor(match[1] as string, match[2] as string)]
+    return match === null ? [] : [probeFor(match[1] as string, (match[2] ?? '').replace(/^\//, ''))]
   })
 }
 
 function send(d: Daemon, probe: Probe, workspace: string) {
-  return d.app.request(`/api/w/${workspace}${probe.suffix}`, {
+  return d.app.request(`/api/workspaces/${workspace}${probe.suffix}`, {
     method: probe.method,
     ...probe.init,
     headers: { Authorization: `Bearer ${TOKEN}`, ...probe.init.headers },
@@ -137,18 +139,20 @@ async function directories(): Promise<string[]> {
 
 describe('a handle no workspace holds, on the document routes', () => {
   it('is probed on every action the router registers', async () => {
-    const probes = await documentProbes()
+    const probes = documentProbes(await daemon())
     const labels = probes.map((p) => `${p.method} ${p.suffix}`)
 
-    // snapshot, client-count, export, export-svg and the file pair.
-    expect(probes.length).toBeGreaterThanOrEqual(6)
-    expect(labels).toContain('POST /document/doc/export')
-    expect(labels).toContain('PUT /document/doc/file/abc')
+    // snapshot, client-count, export, export-svg, the file pair, the metadata
+    // writers, duplicate, delete and the version routes.
+    expect(probes.length).toBeGreaterThanOrEqual(12)
+    expect(labels).toContain(`POST /documents/${UNKNOWN_DOCUMENT_ID}/export`)
+    expect(labels).toContain(`PUT /documents/${UNKNOWN_DOCUMENT_ID}/files/abc`)
+    expect(labels).toContain(`DELETE /documents/${UNKNOWN_DOCUMENT_ID}`)
   })
 
   it('is 404 workspace_not_found on each, and nothing is created', async () => {
     const d = await daemon()
-    const probes = await documentProbes()
+    const probes = documentProbes(d)
     const workspacesBefore = await d.serverDeps.documentIndex.listWorkspaces()
     const directoriesBefore = await directories()
 
@@ -170,7 +174,7 @@ describe('a handle no workspace holds, on the document routes', () => {
 
   it('lists no workspace afterwards on GET /api/workspaces', async () => {
     const d = await daemon()
-    await send(d, probeFor('PUT', 'file/:fileId'), GONE)
+    await send(d, probeFor('PUT', 'files/:fileId'), GONE)
 
     const res = await d.app.request('/api/workspaces', {
       headers: { Authorization: `Bearer ${TOKEN}` },
@@ -191,7 +195,7 @@ describe('a workspace that exists, on the document routes', () => {
   ])('takes an upload addressed by %s', async (_label, address) => {
     const d = await daemon()
 
-    const upload = await send(d, probeFor('PUT', 'file/:fileId'), address)
+    const upload = await send(d, probeFor('PUT', 'files/:fileId', d.documentId), address)
 
     expect(upload.status).toBe(204)
   })
@@ -199,7 +203,7 @@ describe('a workspace that exists, on the document routes', () => {
   it('answers client-count with zeros rather than refusing a document nobody has open', async () => {
     const d = await daemon()
 
-    const res = await send(d, probeFor('GET', 'client-count'), KNOWN)
+    const res = await send(d, probeFor('GET', 'client-count', d.documentId), KNOWN)
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ count: 0, readyCount: 0 })
@@ -213,17 +217,16 @@ describe('a workspace that exists, on the document routes', () => {
     expect(res.status).toBe(404)
     expect(apiErrorBodySchema.parse(await res.json())).toEqual({
       error: 'not_found',
-      message: expect.stringContaining('doc'),
+      message: expect.stringContaining(UNKNOWN_DOCUMENT_ID),
     })
   })
 })
 
-// A tab that still holds a document someone deleted keeps writing to it. The
-// write must not reach the path while the original sits in Trash.
+// A tab that still holds a document someone deleted keeps writing to it. A
+// trashed id resolves to nothing, so the write is refused and recreates nothing.
 describe('a document in the trash, on the document routes', () => {
-  async function trashed(d: Daemon, address: string): Promise<void> {
-    await d.serverDeps.liveDocuments.save(address, 'doc', new LoroDoc(), { kind: 'spatial' })
-    const gone = await d.app.request(`/api/workspaces/${address}/documents/doc`, {
+  async function trashed(d: Daemon): Promise<void> {
+    const gone = await d.app.request(`/api/workspaces/${KNOWN}/documents/${d.documentId}`, {
       method: 'DELETE',
       headers: { Authorization: `Bearer ${TOKEN}` },
     })
@@ -234,43 +237,26 @@ describe('a document in the trash, on the document routes', () => {
 
   it('refuses an upload and recreates nothing', async () => {
     const d = await daemon()
-    await trashed(d, KNOWN)
+    await trashed(d)
 
-    const res = await send(d, probeFor('PUT', 'file/:fileId'), KNOWN)
+    const res = await send(d, probeFor('PUT', 'files/:fileId', d.documentId), KNOWN)
 
     expect(res.status).toBe(404)
     expect(apiErrorBodySchema.parse(await res.json())).toEqual({
       error: 'not_found',
-      message: expect.stringContaining('doc'),
+      message: expect.stringContaining(d.documentId),
     })
     expect(await liveDocuments(d)).toEqual([])
   })
 
-  // The refusal is about the path the trash names, so a trashed neighbour
-  // must not stop a new document beginning anywhere else.
-  it('takes an upload under another path while the trash holds this one', async () => {
+  it('keeps refusing the trashed id once another document is created at its old path', async () => {
     const d = await daemon()
-    await trashed(d, KNOWN)
-    const upload = probeFor('PUT', 'file/:fileId')
-    const elsewhere = {
-      ...upload,
-      suffix: upload.suffix.replace('/document/doc/', '/document/other/'),
-    }
-
-    const res = await send(d, elsewhere, KNOWN)
-
-    expect(res.status).toBe(204)
-    expect(await liveDocuments(d)).toEqual([])
-  })
-
-  it('takes writes again once a document is created at the path the trash entry names', async () => {
-    const d = await daemon()
-    await trashed(d, KNOWN)
+    await trashed(d)
     await d.serverDeps.liveDocuments.save(KNOWN, 'doc', new LoroDoc(), { kind: 'spatial' })
 
-    const res = await send(d, probeFor('PUT', 'file/:fileId'), KNOWN)
+    const res = await send(d, probeFor('PUT', 'files/:fileId', d.documentId), KNOWN)
 
-    expect(res.status).toBe(204)
+    expect(res.status).toBe(404)
   })
 })
 
@@ -278,22 +264,10 @@ describe('a malformed workspace address, on the document routes', () => {
   it('is still the route’s own 400', async () => {
     const d = await daemon()
 
-    const res = await send(d, probeFor('PUT', 'file/:fileId'), 'bad.handle')
+    const res = await send(d, probeFor('PUT', 'files/:fileId'), 'bad.handle')
 
     expect(res.status).toBe(400)
     expect(await res.json()).toMatchObject({ error: 'invalid_workspace_id' })
-  })
-
-  it('leaves a malformed document path to the route’s own 400 on a workspace that exists', async () => {
-    const d = await daemon()
-
-    const res = await d.app.request(`/api/w/${KNOWN}/document/bad.path/file/abc`, {
-      method: 'PUT',
-      headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'image/png' },
-      body: new Uint8Array([1, 2, 3]),
-    })
-
-    expect(res.status).toBe(400)
   })
 })
 
@@ -333,9 +307,9 @@ describe('server mode, on the document routes', () => {
       body: JSON.stringify({ displayName: 'Plans' }),
     })
     const { workspaceId } = (await created.json()) as { workspaceId: string }
-    const upload = probeFor('PUT', 'file/:fileId')
+    const upload = probeFor('PUT', 'files/:fileId')
     const asEve = (workspace: string) =>
-      app.request(`${PUBLIC_URL}/api/w/${workspace}${upload.suffix}`, {
+      app.request(`${PUBLIC_URL}/api/workspaces/${workspace}${upload.suffix}`, {
         method: 'PUT',
         headers: { ...eve, ...upload.init.headers },
         ...(upload.init.body === undefined ? {} : { body: upload.init.body }),

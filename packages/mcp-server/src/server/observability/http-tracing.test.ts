@@ -36,8 +36,8 @@ function buildApp() {
   const app = new Hono()
   app.use('*', tracingMiddleware())
   app.get('/api/runtime/storage', (c) => c.json({ ok: true }))
-  app.post('/api/workspaces/:wid/documents/:path/compact', (c) =>
-    c.json({ path: c.req.param('path') }),
+  app.post('/api/workspaces/:wid/documents/:documentId/compact', (c) =>
+    c.json({ documentId: c.req.param('documentId') }),
   )
   app.get('/health', (c) => c.text('ok'))
   return app
@@ -58,19 +58,22 @@ describe('tracingMiddleware http.route attribute', () => {
     expect(span.attributes['url.path']).toBe('/api/runtime/storage')
   })
 
-  it('captures parameterised routes verbatim (preserves :wid / :path)', async () => {
+  it('captures parameterised routes verbatim (preserves :wid / :documentId)', async () => {
     const app = buildApp()
-    const res = await app.request('/api/workspaces/ws_a/documents/design%2Flogin/compact', {
-      method: 'POST',
-    })
+    const res = await app.request(
+      '/api/workspaces/ws_a/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/compact',
+      {
+        method: 'POST',
+      },
+    )
     expect(res.status).toBe(200)
     const span = exporter.getFinishedSpans()[0]
     // The whole point of low-cardinality http.route is that all
     // ws_a, ws_b, … collapse onto the same template.
-    expect(span.attributes['http.route']).toBe('/api/workspaces/:wid/documents/:path/compact')
+    expect(span.attributes['http.route']).toBe('/api/workspaces/:wid/documents/:documentId/compact')
     // url.path stays high-cardinality so debugging single requests still works.
     expect(span.attributes['url.path']).toBe(
-      '/api/workspaces/ws_a/documents/design%2Flogin/compact',
+      '/api/workspaces/ws_a/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/compact',
     )
   })
 

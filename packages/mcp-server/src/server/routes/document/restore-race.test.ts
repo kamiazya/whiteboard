@@ -4,6 +4,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -86,7 +87,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -127,7 +128,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
     })
 
     const restorePromise = app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -139,7 +140,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
 
     // Fire the delete of the overwrite target while the restore is stalled mid-flight.
     const deletePromise = app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b')}`,
       {
         method: 'DELETE',
       },
@@ -190,7 +191,7 @@ describe('restore in-place vs delete race', () => {
       sourceDoc.export({ mode: 'update', from: svv0 }) as Uint8Array<ArrayBuffer>,
     )
     const saveRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -219,7 +220,7 @@ describe('restore in-place vs delete race', () => {
     })
 
     const restorePromise = app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${saveBody.version.id}/restore`,
       {
         method: 'POST',
       },
@@ -230,7 +231,7 @@ describe('restore in-place vs delete race', () => {
     // Fire the delete of the canvas being restored while the restore is
     // stalled mid-flight.
     const deletePromise = app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}`,
       {
         method: 'DELETE',
       },

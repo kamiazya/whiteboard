@@ -12,6 +12,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -83,7 +84,8 @@ describe('placing a new document at the folder ceiling', () => {
   it('refuses a version restored to a new path under a missing folder', async () => {
     await saveDocument(WS, 'canvas-a', new LoroDoc())
     const app = router()
-    const saved = await app.request(`/api/workspaces/${WS}/documents/canvas-a/versions`, {
+    const canvasId = await documentIdAt(serverDeps, WS, 'canvas-a')
+    const saved = await app.request(`/api/workspaces/${WS}/documents/${canvasId}/versions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -92,7 +94,7 @@ describe('placing a new document at the folder ceiling', () => {
     await fillTo(CEILING)
 
     const res = await app.request(
-      `/api/workspaces/${WS}/documents/canvas-a/versions/${version.id}/restore`,
+      `/api/workspaces/${WS}/documents/${canvasId}/versions/${version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

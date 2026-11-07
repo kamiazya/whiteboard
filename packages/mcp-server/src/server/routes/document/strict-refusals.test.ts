@@ -4,6 +4,7 @@ import { apiErrorReason, type ServerDeps } from '@kamiazya/whiteboard-server-cor
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -45,7 +46,12 @@ afterEach(() => {
 // take effect. The refusal is only worth that if it names the field: a newer
 // page posting a field this daemon does not know must not be told that a field
 // it HAD sent was missing, which sends the person to the wrong place.
-const DOC = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a'
+// `{id}` is filled with the seeded document's id when the request is sent.
+const DOC = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/{id}'
+let canvasId = ''
+beforeEach(async () => {
+  canvasId = await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
+})
 
 const routes: readonly [name: string, method: string, path: string, valid: object][] = [
   ['create a workspace', 'POST', '/api/workspaces', { displayName: 'Y' }],
@@ -76,7 +82,7 @@ describe('a strict request refuses with the key it did not recognise', () => {
       }),
     )
 
-    const res = await app.request(path, {
+    const res = await app.request(path.replace('{id}', canvasId), {
       method,
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...valid, zzz: 1 }),
@@ -94,7 +100,7 @@ describe('a strict request refuses with the key it did not recognise', () => {
       }),
     )
 
-    const res = await app.request(`${DOC}/versions`, {
+    const res = await app.request(`${DOC.replace('{id}', canvasId)}/versions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'l', operator: { kind: 'human', zzz: 1 } }),

@@ -35,10 +35,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: st
     count: 1,
     why: 'splits a scene node id (`<thread>/<part>`), not a document path',
   },
-  'packages/mcp-server/src/server/security/route-scope-registry.ts': {
-    count: 1,
-    why: 'splits an HTTP route path to read its action segment',
-  },
 }
 
 const files: string[] = []

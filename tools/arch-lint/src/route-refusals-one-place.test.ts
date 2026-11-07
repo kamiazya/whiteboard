@@ -31,8 +31,6 @@ const HANDLE_VALIDATOR_NAMES = ['validateWorkspaceHandle', 'validateWorkspaceId'
 
 /** Files under routes/ that validate a handle by hand, each with why. */
 const HANDLE_VALIDATION_ALLOWLIST: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/routes/document/path-route.ts':
-    'validates the workspace handle and the document path in ONE try, and picks the 400 shape (legacy or Problem Details) per route; it does not resolve the handle',
   'packages/mcp-server/src/server/routes/document/workspace-document.ts':
     'a page-facing surface: its 400 is Problem Details `{ title }`, not `{ error, message }`',
   'packages/mcp-server/src/server/routes/replica-key.ts':
@@ -108,7 +106,7 @@ describe('route refusals are written in one place', () => {
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(HANDLE_VALIDATION_ALLOWLIST)).toHaveLength(3)
+    expect(Object.keys(HANDLE_VALIDATION_ALLOWLIST)).toHaveLength(2)
   })
 
   it('recognises the hand-built 413 code in any quote and passes prose through', () => {

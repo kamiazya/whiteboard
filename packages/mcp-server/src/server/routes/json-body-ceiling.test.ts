@@ -61,8 +61,6 @@ const READS_NO_BODY: Readonly<Record<string, string>> = {
   'POST /api/fonts/:id/install': 'installs a catalogued font by id; the request carries nothing',
   'POST /api/workspaces/:workspaceId/documents/optimize-all': 'a maintenance action, no options',
   'POST /api/workspaces/:workspaceId/files/purge-dangling': 'a maintenance action, no options',
-  'POST /api/workspaces/:workspaceId/documents/*/duplicate':
-    'the URL names the source; the keeper derives the rest',
   'POST /api/workspaces/:workspaceId/trash/:documentId/restore': 'the URL names the document',
   'POST /api/workspaces/:workspaceId/versions/prune-sandwiched': 'a maintenance action, no options',
 }
@@ -72,7 +70,6 @@ const TAKES_CONTENT: Readonly<Record<string, string>> = {
   'POST /api/v1/workspaces/:workspaceId/documents': 'a markdown document created from its content',
   'POST /api/w/:workspaceId/workspace-document/update': "a Loro update for a workspace's record",
   'POST /api/w/:workspaceId/workspace-document/promote': "a workspace's whole record, base64url",
-  'PUT /api/w/:workspaceId/document/*/file/:fileId': 'an uploaded file',
 }
 
 type App = ReturnType<typeof createApp>
@@ -141,8 +138,9 @@ async function serverMode(): Promise<Composition> {
 
 /**
  * A document addressed by id is resolved before its handler reads the body, so
- * this walk's placeholder id (which names nothing) is answered 404 first. The
- * body ceiling those handlers apply is the path form's, which is walked.
+ * this walk's placeholder id (which names nothing) is answered 404 first, so
+ * the walk cannot reach their ceilings; `payload-too-large.test.ts` holds the
+ * ones that take a body, against a document that exists.
  */
 const ID_ROUTE = '/documents/:documentId'
 const resolvesBeforeTheBody = (key: string) =>

@@ -19,7 +19,7 @@ import {
   serverModePeople,
 } from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
-import { resolveTestServerDeps, testDataLayout } from './routes/_test-helpers.js'
+import { documentIdAt, resolveTestServerDeps, testDataLayout } from './routes/_test-helpers.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './security/sign-in-session-store.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
@@ -101,8 +101,10 @@ describe('server mode — a version row names the member who saved it', () => {
     const workspaceId = await createWorkspace(ada)
     await serverDeps.documentIndex.createDocument({ workspaceId, path: 'plan', kind: 'markdown' })
 
+    const planId = await documentIdAt(serverDeps, workspaceId, 'plan')
+
     const res = await app.request(
-      `${PUBLIC_URL}/api/workspaces/${workspaceId}/documents/plan/versions`,
+      `${PUBLIC_URL}/api/workspaces/${workspaceId}/documents/${planId}/versions`,
       {
         method: 'POST',
         headers: { ...ada, ...json },
@@ -120,10 +122,11 @@ describe('server mode — a version row names the member who saved it', () => {
   it('stamps the caller’s profile name on a promote checkpoint', async () => {
     const ada = await signedIn('ada-sub', 'Ada Lovelace')
     const workspaceId = await createWorkspace(ada)
+    const sketchId = '01BRWAAAAAAAAAAAAAAAAAAAA1'
     const record = new LoroDoc()
     createWorkspaceDocumentAtPath(record, {
       path: 'sketch',
-      documentId: '01BRWAAAAAAAAAAAAAAAAAAAA1',
+      documentId: sketchId,
       kind: 'spatial',
     })
     record.commit()
@@ -138,7 +141,7 @@ describe('server mode — a version row names the member who saved it', () => {
     expect(res.status).toBe(200)
 
     const listed = await app.request(
-      `${PUBLIC_URL}/api/workspaces/${workspaceId}/documents/sketch/versions`,
+      `${PUBLIC_URL}/api/workspaces/${workspaceId}/documents/${sketchId}/versions`,
       { headers: ada },
     )
     const { versions } = (await listed.json()) as { versions: { operator?: Operator }[] }

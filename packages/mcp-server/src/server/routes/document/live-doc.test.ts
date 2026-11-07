@@ -5,8 +5,10 @@ import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
+  UNKNOWN_DOCUMENT_ID,
   withTempDataDir,
 } from '../_test-helpers.js'
 
@@ -51,7 +53,10 @@ describe('live-doc router', () => {
   })
 })
 
-describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
+const WS = '01M8BBN7JS60N0ZAR13NP8SXBF'
+const snapshotUrl = (documentId: string) => `/api/workspaces/${WS}/documents/${documentId}/snapshot`
+
+describe('GET /api/workspaces/:workspaceId/documents/:documentId/snapshot', () => {
   it('returns the Loro snapshot binary', async () => {
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
@@ -61,7 +66,7 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', doc)
 
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/snapshot')
+    const res = await app.request(snapshotUrl(await documentIdAt(serverDeps, WS, 'canvas-a')))
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toContain('application/octet-stream')
 
@@ -75,34 +80,25 @@ describe('GET /api/w/:workspaceId/document/:path/snapshot', () => {
     expect(elements[0].id).toBe('elem-001')
   })
 
-  it('returns 400 for an invalid path', async () => {
+  it('returns 404 { error, message } for an id no document holds', async () => {
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/bad.path/snapshot')
-    expect(res.status).toBe(400)
-  })
-
-  it('returns 404 { error, message } for a canvas that was never created', async () => {
-    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const res = await app.request(
-      '/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/never-created/snapshot',
-    )
+    const res = await app.request(snapshotUrl(UNKNOWN_DOCUMENT_ID))
     expect(res.status).toBe(404)
     // The same body family as the workspace refusal in front of this route;
-    // a document of either kind lives at this path, so the message names none.
+    // a document of either kind lives behind an id, so the message names none.
     expect(await res.json()).toEqual({
       error: 'not_found',
-      message: 'Document "never-created" not found',
+      message: `Document "${UNKNOWN_DOCUMENT_ID}" not found`,
     })
   })
 
   it('returns 404 for a canvas that existed and was deleted', async () => {
-    await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a', new LoroDoc())
+    await saveDocument(WS, 'canvas-a', new LoroDoc())
+    const documentId = await documentIdAt(serverDeps, WS, 'canvas-a')
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a', {
-      method: 'DELETE',
-    })
+    await app.request(`/api/workspaces/${WS}/documents/${documentId}`, { method: 'DELETE' })
 
-    const res = await app.request('/api/w/01M8BBN7JS60N0ZAR13NP8SXBF/document/canvas-a/snapshot')
+    const res = await app.request(snapshotUrl(documentId))
     expect(res.status).toBe(404)
   })
 })

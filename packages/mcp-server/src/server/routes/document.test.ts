@@ -2,6 +2,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   testStoreScope,
@@ -58,44 +59,21 @@ describe('createDocumentRouter composition', () => {
     expect(options).not.toHaveProperty('versionStore')
   })
 
-  it('serves a nested document path at /api/w/:workspaceId/document/*', async () => {
-    // The path-addressed shape: the document path is the URL tail, one
-    // segment per path segment, with the action suffix anchoring the parse.
-    // A nested path is exactly what the old :path param could never match.
+  it('drives the whole documents family by id for a document at a nested path', async () => {
+    // snapshot, versions, restore, name, pin, rename, delete: one scenario,
+    // so a regression in ANY of them for a nested-path document is loud.
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     await createTestDocument(serverDeps, {
       workspaceId: 'ws1',
       path: 'notes/2026/plan',
       kind: 'spatial',
     })
+    // 'ws1' is a segment; the index is asked by the canonical id it minted.
+    const workspace = await serverDeps.documentIndex.resolveWorkspace('ws1')
+    const id = await documentIdAt(serverDeps, workspace?.workspaceId ?? 'ws1', 'notes/2026/plan')
+    const P = `/api/workspaces/ws1/documents/${id}`
 
-    const snapshot = await app.request('/api/w/ws1/document/notes/2026/plan/snapshot')
-    expect(snapshot.status).toBe(200)
-
-    // A document whose LAST segment is an action name stays unambiguous,
-    // because the action suffix is mandatory: /a/snapshot/snapshot is the
-    // document a/snapshot.
-    await createTestDocument(serverDeps, {
-      workspaceId: 'ws1',
-      path: 'a/snapshot',
-      kind: 'spatial',
-    })
-    const collideSnapshot = await app.request('/api/w/ws1/document/a/snapshot/snapshot')
-    expect(collideSnapshot.status).toBe(200)
-  })
-
-  it('drives the whole documents family against a nested document path', async () => {
-    // The second legacy family (already workspace-first, but :path could not
-    // match a nested path): versions, restore, compact, name, pin, rename,
-    // delete. One scenario, so a regression in ANY of them on a nested path
-    // is loud.
-    const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    await createTestDocument(serverDeps, {
-      workspaceId: 'ws1',
-      path: 'notes/2026/plan',
-      kind: 'spatial',
-    })
-    const P = '/api/workspaces/ws1/documents/notes/2026/plan'
+    expect((await app.request(`${P}/snapshot`)).status).toBe(200)
 
     // name + pin (PUT with suffix)
     expect(
@@ -133,7 +111,7 @@ describe('createDocumentRouter composition', () => {
     const restore = await app.request(`${P}/versions/${versionId}/restore`, { method: 'POST' })
     expect(restore.status).toBe(200)
 
-    // rename moves the whole subtree address
+    // rename moves the document's address, not its id
     const renamed = await app.request(`${P}/path`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -141,8 +119,8 @@ describe('createDocumentRouter composition', () => {
     })
     expect(renamed.status).toBe(200)
 
-    // delete at the NEW nested path
-    const del = await app.request('/api/workspaces/ws1/documents/notes/2027/plan', {
+    // the id still addresses the document at its new path
+    const del = await app.request(P, {
       method: 'DELETE',
     })
     expect(del.status).toBe(200)

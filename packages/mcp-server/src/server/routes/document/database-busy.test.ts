@@ -9,7 +9,11 @@
 import { answerUnhandled } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
-import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
+import {
+  testDocumentRouterOptions,
+  UNKNOWN_DOCUMENT_ID,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-database-busy-test-')
 
@@ -31,7 +35,13 @@ const { getDb } = await import('../../store/db/index.js')
 /** The shape libsql raises: recognised by its code, as `isDatabaseBusy` reads it. */
 const busy = (): Error => Object.assign(new Error('database is locked'), { code: 'SQLITE_BUSY' })
 
-const BUSY_METHODS = new Set(['resolveDocument', 'listTrash', 'restoreDocument', 'purgeTrashEntry'])
+const BUSY_METHODS = new Set([
+  'resolveDocument',
+  'resolveDocumentById',
+  'listTrash',
+  'restoreDocument',
+  'purgeTrashEntry',
+])
 
 async function appOverABusyIndex() {
   await prepareDataDir(tmp.dir)
@@ -60,13 +70,13 @@ describe('a busy database escapes the route catch-alls to the 503 answer', () =>
     [
       'deleting a document',
       'DELETE',
-      '/api/workspaces/016WCJMZ760J092YN9AJMX142M/documents/a',
+      `/api/workspaces/016WCJMZ760J092YN9AJMX142M/documents/${UNKNOWN_DOCUMENT_ID}`,
       undefined,
     ],
     [
       'renaming a document',
       'PUT',
-      '/api/workspaces/016WCJMZ760J092YN9AJMX142M/documents/a/path',
+      `/api/workspaces/016WCJMZ760J092YN9AJMX142M/documents/${UNKNOWN_DOCUMENT_ID}/path`,
       JSON.stringify({ path: 'b' }),
     ],
     ['listing the trash', 'GET', '/api/workspaces/016WCJMZ760J092YN9AJMX142M/trash', undefined],

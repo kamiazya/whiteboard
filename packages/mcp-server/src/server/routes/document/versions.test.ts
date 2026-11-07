@@ -14,6 +14,7 @@ import { Hono } from 'hono'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   postDocumentEdit,
   resolveTestServerDeps,
   testDocumentRouterOptions,
@@ -106,7 +107,7 @@ describe('versions API', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     const resList = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
     )
     expect(resList.status).toBe(200)
     const body = (await resList.json()) as {
@@ -125,7 +126,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -146,7 +147,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
       },
@@ -166,7 +167,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -192,7 +193,7 @@ describe('versions API', () => {
     })
 
     const listRes = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
     )
     const listBody = (await listRes.json()) as {
       versions: Array<{
@@ -210,7 +211,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -247,7 +248,7 @@ describe('versions API', () => {
     )
     const save = async () => {
       const res = await app.request(
-        '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+        `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -283,7 +284,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -311,7 +312,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -344,7 +345,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -377,7 +378,7 @@ describe('versions API', () => {
       }),
     )
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -412,7 +413,7 @@ describe('versions API', () => {
     await new Promise((r) => setTimeout(r, 50))
 
     const resList = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
     )
     const body = (await resList.json()) as {
       versions: Array<{ operator?: { kind: string; actor?: string; displayName?: string } }>
@@ -431,25 +432,31 @@ describe('versions API', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions', {
-      method: 'POST',
-      body: JSON.stringify({ label: 'a1' }),
-      headers: { 'Content-Type': 'application/json' },
-    })
-    await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b/versions', {
-      method: 'POST',
-      body: JSON.stringify({ label: 'b1' }),
-      headers: { 'Content-Type': 'application/json' },
-    })
+    await app.request(
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ label: 'a1' }),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
+    await app.request(
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b')}/versions`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ label: 'b1' }),
+        headers: { 'Content-Type': 'application/json' },
+      },
+    )
 
     const resA = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
     )
     const bodyA = (await resA.json()) as { versions: Array<{ label?: string }> }
     expect(bodyA.versions.map((v) => v.label)).toEqual(['a1'])
 
     const resB = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b')}/versions`,
     )
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
@@ -460,13 +467,16 @@ describe('versions API', () => {
       testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
     )
     for (const label of ['one', 'two', 'three']) {
-      await app.request('/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions', {
-        method: 'POST',
-        body: JSON.stringify({ label }),
-        headers: { 'Content-Type': 'application/json' },
-      })
+      await app.request(
+        `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ label }),
+          headers: { 'Content-Type': 'application/json' },
+        },
+      )
     }
-    const url = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions'
+    const url = `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`
     const first = listVersionsResponseSchema.parse(
       await (await app.request(`${url}?limit=2`)).json(),
     )
@@ -486,7 +496,7 @@ describe('versions API', () => {
     )
     await carryManualRows(versionStore, 'canvas-a', VERSIONS_PAGE_MAX + 1)
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
     )
     const body = listVersionsResponseSchema.parse(await res.json())
     expect(body.versions).toHaveLength(VERSIONS_PAGE_MAX)
@@ -497,7 +507,7 @@ describe('versions API', () => {
     const app = createDocumentRouter(
       testDocumentRouterOptions({ serverDeps, autoVersionQuietMs: 60_000 }),
     )
-    const url = '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions'
+    const url = `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`
     for (const query of [`limit=${VERSIONS_PAGE_MAX + 1}`, 'limit=0', 'cursor=x', 'after=1']) {
       const res = await app.request(`${url}?${query}`)
       expect(res.status, query).toBe(400)
@@ -512,7 +522,7 @@ describe('versions API', () => {
     )
     await carryManualRows(versionStore, 'canvas-a', MAX_MANUAL_PER_DOCUMENT)
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         body: JSON.stringify({ label: 'one too many' }),
@@ -592,7 +602,7 @@ describe('GET /versions/:id/document', () => {
     })
 
     const saved = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -619,7 +629,7 @@ describe('GET /versions/:id/document', () => {
     })
 
     const res = await app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${version.id}/document`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions/${version.id}/document`,
     )
     expect(res.status).toBe(200)
     const body = (await res.json()) as { kind: string; canvas: { nodes: { id: string }[] } }
@@ -639,7 +649,7 @@ describe('GET /versions/:id/document', () => {
     note.commit()
     await saveDocument('01M8BBN7JS60N0ZAR13NP8SXBF', 'note', note, { kind: 'markdown' })
     const saved = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/note/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'note')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -649,7 +659,7 @@ describe('GET /versions/:id/document', () => {
     const { version } = (await saved.json()) as { version: { id: string } }
 
     const res = await app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/note/versions/${version.id}/document`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'note')}/versions/${version.id}/document`,
     )
     expect(await res.json()).toEqual({ kind: 'markdown', body: '# the plan' })
   })
@@ -662,7 +672,7 @@ describe('GET /versions/:id/document', () => {
       }),
     )
     const saved = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -674,7 +684,7 @@ describe('GET /versions/:id/document', () => {
     // The id alone would otherwise read one document's history through
     // another's path.
     const res = await app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-b/versions/${version.id}/document`,
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-b')}/versions/${version.id}/document`,
     )
     expect(res.status).toBe(404)
   })

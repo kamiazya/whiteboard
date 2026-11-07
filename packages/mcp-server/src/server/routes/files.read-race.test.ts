@@ -7,10 +7,12 @@
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { StoreScope } from '../store/store-scope.js'
 import { workspaceFilesDir } from '../tenant/data-layout.js'
 import { SELF_HOST_TENANT_ID } from '../tenant/id.js'
-import { testFilesRouterOptions, testStoreScope } from './_test-helpers.js'
+import { resolvingDocumentIds, testFilesRouterOptions, testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 let staleListing: { dir: string; names: string[] } | null = null
@@ -40,6 +42,17 @@ vi.mock('node:fs/promises', async () => {
 
 const { createFilesRouter } = await import('./files.js')
 
+const CANVAS_A = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+
+// The daemon resolves the document id once ahead of its routers; the index here
+// holds one document, at `canvas-a`.
+function filesApp(scope: StoreScope) {
+  const app = new Hono()
+  resolvingDocumentIds(app, { [CANVAS_A]: { path: 'canvas-a' } })
+  app.route('/', createFilesRouter(testFilesRouterOptions(scope)))
+  return app
+}
+
 describe('GET of a file replaced between its listing and its read', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-files-race-'))
@@ -56,8 +69,8 @@ describe('GET of a file replaced between its listing and its read', () => {
     await writeFile(join(dir, 'raced1.webp'), new Uint8Array([0x52, 0x49, 0x46, 0x46]))
     staleListing = { dir, names: ['raced1.png'] }
 
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tempDir)))
-    const res = await app.request('/api/w/session1/document/canvas-a/file/raced1')
+    const app = filesApp(testStoreScope(tempDir))
+    const res = await app.request(`/api/workspaces/session1/documents/${CANVAS_A}/files/raced1`)
 
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('image/webp')

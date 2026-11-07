@@ -141,8 +141,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/mcp-server/src/server/replica-env.ts#parseReplicaTier',
   'packages/mcp-server/src/server/routes/auth.ts#grantCoversRoute',
   'packages/mcp-server/src/server/routes/auth.ts#requiresDaemonAuth',
-  'packages/mcp-server/src/server/routes/document/path-route.ts#DOCUMENTS_WILDCARD',
-  'packages/mcp-server/src/server/routes/document/path-route.ts#matchDocumentsTail',
   'packages/mcp-server/src/server/security/credential-resolver.ts#CredentialResolverConfig',
   'packages/mcp-server/src/server/security/macaroon.ts#hmacSha256',
   'packages/mcp-server/src/server/security/macaroon.ts#parseMacaroon',
@@ -220,30 +218,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentRecordApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPathApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentNameApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPinApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentDuplicateApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/document-url.ts#documentApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/document-url.ts#documentFileApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsPageApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionDocumentApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionRestoreApiUrl':
-    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
-  'packages/mcp-server/src/server/routes/document/path-route.ts#onDocumentRoute':
-    'production reaches it through onDocumentAction, onDocumentFile and onDocumentsRoute, which register the id form beside the path form; exported so a probe route can be registered directly to hold what its middleware and handler share',
   'packages/mcp-server/src/server/routes/document/path-route.ts#resolvedDocumentOf':
     "the read of the one per-request id resolution, for a route's own middleware; no production middleware needs it yet, and the once-per-request test holds that a second reader costs no second lookup",
   'packages/model/src/utf16-max.ts#UTF16_MAX_PARAM':
@@ -377,7 +351,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 141
+const DEBT_CEILING = 139
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 14

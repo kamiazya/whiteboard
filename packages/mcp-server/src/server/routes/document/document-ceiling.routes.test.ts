@@ -6,12 +6,13 @@
  */
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { documentDuplicateApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { documentDuplicateByIdApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { readWorkspaceDocuments, WORKSPACE_TREE_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -100,7 +101,9 @@ describe('a keeper-side create at the document ceiling', () => {
     await saveDocument(WS, 'source', new LoroDoc())
     await fillTo(CEILING)
 
-    await expectRefusedAtCeiling(await post(documentDuplicateApiUrl(WS, 'source')))
+    await expectRefusedAtCeiling(
+      await post(documentDuplicateByIdApiUrl(WS, await documentIdAt(serverDeps, WS, 'source'))),
+    )
   })
 
   it('refuses a restore from the trash', async () => {
@@ -120,7 +123,8 @@ describe('a keeper-side create at the document ceiling', () => {
   it('refuses a version restored to a new path', async () => {
     await saveDocument(WS, 'canvas-a', new LoroDoc())
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-    const saved = await app.request(`/api/workspaces/${WS}/documents/canvas-a/versions`, {
+    const canvasA = await documentIdAt(serverDeps, WS, 'canvas-a')
+    const saved = await app.request(`/api/workspaces/${WS}/documents/${canvasA}/versions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ label: 'v1' }),
@@ -129,7 +133,7 @@ describe('a keeper-side create at the document ceiling', () => {
     await fillTo(CEILING)
 
     const res = await app.request(
-      `/api/workspaces/${WS}/documents/canvas-a/versions/${version.id}/restore`,
+      `/api/workspaces/${WS}/documents/${canvasA}/versions/${version.id}/restore`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
