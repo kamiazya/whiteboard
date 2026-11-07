@@ -458,6 +458,31 @@ revise one without reopening decisions 1–25.
 | Errors | Generated `RefusalCode` (Seams, 4) | Hand-written per language: the drift `v1-refusals-cover-errors` exists to catch |
 | Async | `MaybeSend` ports (Seams, 7) | `async-trait` boxing everywhere, or `Send` everywhere, which wasm cannot satisfy |
 | Daemon SQLite | rusqlite, bundled; migration log keys kept identical | libSQL client: only if a libSQL-specific feature is in use |
+
+#### The generator spike (2026-11-07): typify fails, the own emitter it is
+
+The Generator row's condition was measured rather than assumed. `cargo-typify`
+0.10.0-alpha.3, the newest release, was run over the geometry contract
+(`Point`, `Rect`, `Side`, `EdgeRoutingStyle`) and a probe of the restricted
+dialect's other constructs:
+
+| Construct | What typify emits | Verdict |
+|---|---|---|
+| A string enum | A Rust enum with serde renames | correct |
+| `additionalProperties: false` / absent | `deny_unknown_fields` / none | correct for `refuse` and `strip` |
+| `pattern` | A `regress` (ECMAScript regex) check | correct |
+| `minimum` / `maximum` on a number or an integer | A bare `f64` / `i64` | **not enforced** |
+| `maxLength` | A check on `chars().count()` | **the wrong unit**: code points, where Zod's `.max()` counts UTF-16 units |
+| `x-wb-maxUtf16`, `x-wb-check`, `x-wb-unknownKeys` | Nothing | **ignored** |
+| A `prefixItems` tuple of two `$ref`s | `[PairItem; 2]` over an empty `enum PairItem {}` | **broken**: an uninhabited type |
+| Object fields | Alphabetical order | a note, not a blocker: the canonical JSON (RFC 8785) the byte comparison uses sorts keys |
+
+Three of those are exactly the divergences this ADR exists to make
+structural — a bound one side checks and the other does not, and a length in
+two units — and the dialect's own keywords would need a second pass over
+typify's output in any case. So the Rust half is the same `xtask` emitter as
+the Zod half, generated from one walk of each schema, so each construct's two meanings are
+written side by side, and the differential harness still checks that they agree.
 | Daemon shape | Plain binary under biome-style `optionalDependencies` plus GitHub release binaries; static musl on Linux (decision 19) | napi-rs addon (decision 1) |
 | Workers MCP | `rmcp`-on-wasm spike before planning it | Assuming rmcp works without tokio |
 | Scene across the boundary | Decided before the composer is ported (Seams, 8) | Deciding it during the port |
