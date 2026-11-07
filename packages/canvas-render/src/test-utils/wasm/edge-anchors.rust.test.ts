@@ -79,20 +79,40 @@ const pinOf = (sides: SidePair) =>
  */
 const lanePair = fc
   .record({
-    gap: fc.integer({ min: 0, max: 80 }),
+    // Negative overlaps the boxes, which the forward-facing test refuses.
+    // Overlapping, abutting exactly (the forward test's boundary), or apart.
+    gap: fc.oneof(
+      fc.integer({ min: -30, max: -1 }),
+      fc.constant(0),
+      fc.integer({ min: 1, max: 80 }),
+    ),
     h1: fc.integer({ min: 10, max: 240 }),
     h2: fc.integer({ min: 10, max: 240 }),
-    dy: fc.integer({ min: -200, max: 200 }),
+    dy: fc.integer({ min: -120, max: 120 }),
     vertical: fc.boolean(),
+    // b before a, so the left- and top-facing arms are drawn too.
+    flip: fc.boolean(),
   })
-  .map(({ gap, h1, h2, dy, vertical }) => {
+  .map(({ gap, h1, h2, dy, vertical, flip }) => {
     const box = (id: string, x: number, y: number, w: number, h: number) =>
       (vertical
         ? { id, type: 'text', text: '', x: y, y: x, width: h, height: w }
         : { id, type: 'text', text: '', x, y, width: w, height: h }) as SpatialNode
-    const nodes = [box('lane-a', 0, 0, 40, h1), box('lane-b', 40 + gap, dy, 40, h2)]
+    const nodes = [
+      box('lane-a', 0, 0, 40, h1),
+      box('lane-b', flip ? -40 - gap : 40 + gap, dy, 40, h2),
+    ]
     const edge = { id: 'lane', from: { node: 'lane-a' }, to: { node: 'lane-b' } } as RoutableElement
-    return { nodes, edge }
+    // The pair facing along the axis the boxes were laid out on: centres
+    // would pick the other axis once the boxes overlap.
+    const facing: SidePair = vertical
+      ? flip
+        ? { fromSide: 'top', toSide: 'bottom' }
+        : { fromSide: 'bottom', toSide: 'top' }
+      : flip
+        ? { fromSide: 'left', toSide: 'right' }
+        : { fromSide: 'right', toSide: 'left' }
+    return { nodes, edge, facing }
   })
 
 const drawn = fc
@@ -171,10 +191,11 @@ const reach = {
   entries: 0,
   laned: 0,
   slid: 0,
+  crowded: 0,
   pinned: 0,
   around: 0,
   patched: 0,
-  patchMoved: 0,
+  patchedSided: 0,
 }
 
 type Draw = typeof drawn extends fc.Arbitrary<infer T> ? T : never
@@ -184,22 +205,64 @@ type Draw = typeof drawn extends fc.Arbitrary<infer T> ? T : never
  * the slide, its clamp to the lane window, and the rule that a pinned edge
  * is not slid, each of which the whole-canvas draw reaches a few times.
  */
+/** A lane pair's boxes and edge renamed by `suffix` and moved `dx` along x. */
+function relabel(lane: LanePair, suffix: string, dx: number): LanePair {
+  const id = (s: string) => `${s}${suffix}`
+  return {
+    nodes: lane.nodes.map((n) => ({ ...n, id: id(n.id), x: n.x + dx })),
+    edge: {
+      ...lane.edge,
+      id: id(lane.edge.id),
+      from: { node: id('lane-a') },
+      to: { node: id('lane-b') },
+    } as RoutableElement,
+    facing: lane.facing,
+  }
+}
+
+type LanePair = typeof lanePair extends fc.Arbitrary<infer T> ? T : never
+
+/** A box the first pair's from box also connects to, through the same side. */
+const crowdOf = (fromSide: EdgeSide, toSide: EdgeSide) => ({
+  node: {
+    id: 'lane-c',
+    type: 'text',
+    text: '',
+    x: 300,
+    y: 300,
+    width: 30,
+    height: 30,
+  } as SpatialNode,
+  edge: { id: 'lane-crowd', from: { node: 'lane-a' }, to: { node: 'lane-c' } } as RoutableElement,
+  pair: { fromSide, toSide } as SidePair,
+})
+
+/**
+ * Three lane pairs at a time, far apart so they never share a lane: each is
+ * an independent chance at the slide, its clamp and the forward-facing test,
+ * which a canvas of one pair drew too rarely to pin. The first is sometimes
+ * half-pinned, and sometimes crowded by a second edge leaving its from box
+ * through the same side, where it must keep its fan-out instead.
+ */
 const lone: fc.Arbitrary<Draw> = fc
   .tuple(
-    lanePair,
+    fc.array(lanePair, { minLength: 3, maxLength: 3 }),
     fc.option(fc.oneof(fc.record({ from: point }), fc.record({ to: point })), { nil: undefined }),
+    fc.option(side, { nil: undefined, freq: 2 }),
   )
-  .map(([{ nodes, edge }, half]) => {
-    const sides = facingPair(nodes, edge)
+  .map(([lanes, half, crowdTo]) => {
+    const pairs = lanes.map((lane, i) => relabel(lane, i === 0 ? '' : `${i}`, 2000 * i))
+    const first = pairs[0] as LanePair
+    const crowd = crowdTo === undefined ? [] : [crowdOf(first.facing.fromSide, crowdTo)]
     return {
-      nodes,
-      edges: [edge],
-      sides: [sides],
+      nodes: [...pairs.flatMap((p) => p.nodes), ...crowd.map((c) => c.node)],
+      edges: [...pairs.map((p) => p.edge), ...crowd.map((c) => c.edge)],
+      sides: [...pairs.map((p) => p.facing), ...crowd.map((c) => c.pair)],
       align: true,
       pins:
         half === undefined
           ? undefined
-          : [[0, { ...sides, ...half }] as [number, EdgeAnchorOverride]],
+          : [[0, { ...first.facing, ...half }] as [number, EdgeAnchorOverride]],
       patch: undefined,
     }
   })
@@ -270,7 +333,7 @@ function tally(
     if (e.around === true) reach.around += 1
     if (pins?.has(id) === true) reach.pinned += 1
     const before = unaligned?.get(id)
-    const moved = before?.from?.x !== e.from?.x || before?.from?.y !== e.from?.y
+    const moved = !Object.is(before?.from?.x, e.from?.x) || !Object.is(before?.from?.y, e.from?.y)
     if (before !== undefined && pins?.has(id) !== true && moved) reach.slid += 1
   }
 }
@@ -283,13 +346,16 @@ function check(d: Draw) {
   const { work, anchors } = tsAnchors(d, ctx, maps)
   if (d.patch !== undefined) {
     reach.patched += 1
-    if (work > 0) reach.patchMoved += 1
+    // A patch of an edge the base already placed leaves its old groups
+    // before joining the new ones; an unsided one only joins.
+    if (maps.sides.has((d.edges[d.patch[0]] as RoutableElement).id)) reach.patchedSided += 1
   }
   const out = requireWasm().edge_compute_anchors(wireInput(d, wire, maps))
   const idOf = (id: string) => wire.edgeIds.indexOf(id)
   const ts = [work, anchors.size, ...[...anchors].flatMap(([id, e]) => entryValues(idOf(id), e))]
   expect(firstDifference(ts, out)).toBeUndefined()
   tally(d, ctx, maps, anchors)
+  if (d.align && d.edges.some((e) => e.id === 'lane-crowd')) reach.crowded += 1
 }
 
 describe.runIf(built)('edge-anchors.ts and its Rust port place the same anchors', () => {
@@ -299,16 +365,17 @@ describe.runIf(built)('edge-anchors.ts and its Rust port place the same anchors'
   afterAllFloor(
     ['fan-out, lanes, slide, pins and patch', 'a lone facing pair: slide, clamp and pins'],
     () => {
-      // About half the lowest of five measured runs (entries 714, laned 212,
-      // slid 20, pinned 269, around 132, patched 89, patchMoved 60).
+      // About half the lowest of five measured runs (entries 1210, laned 272,
+      // slid 111, crowded 90, pinned 253, around 139, patched 98, patchedSided 84).
       const floors = {
-        entries: 350,
-        laned: 100,
-        slid: 10,
-        pinned: 130,
+        entries: 600,
+        laned: 135,
+        slid: 55,
+        crowded: 45,
+        pinned: 125,
         around: 65,
-        patched: 44,
-        patchMoved: 30,
+        patched: 49,
+        patchedSided: 42,
       }
       for (const [kind, floor] of Object.entries(floors)) {
         expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)

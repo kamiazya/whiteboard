@@ -409,3 +409,77 @@ pub fn compute_anchors_for(
     apply_pins(&mut anchors, sides, pins);
     anchors
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{AnchorGroups, anchor_context, build_anchor_groups, patch_anchor_groups};
+    use crate::edge_geometry::Side;
+    use crate::edge_rules::SidePair;
+    use crate::geometry::Rect;
+    use crate::js_map::JsMap;
+    use crate::routing_input::{RoutableEdge, RoutingEnd, RoutingNode};
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn node(id: u32, x: f64, y: f64) -> RoutingNode {
+        RoutingNode { id, rect: Rect { x, y, w: 40.0, h: 30.0 } }
+    }
+
+    fn edge(id: u32, from: u32, to: u32) -> RoutableEdge {
+        let end = |node| RoutingEnd::Node { node, side: None, arrowhead: None };
+        RoutableEdge { id, from: end(from), to: end(to), bends: None }
+    }
+
+    fn pair(from_side: Side, to_side: Side) -> SidePair {
+        SidePair { from_side, to_side, around: false }
+    }
+
+    /// A partition as a set, members included: order is the one thing a
+    /// patch may differ in, since a joining end is appended and a group
+    /// emptied and joined again moves to the end.
+    fn as_set(g: &AnchorGroups) -> (Vec<String>, Vec<String>) {
+        let mut groups: Vec<String> = g
+            .groups
+            .iter()
+            .map(|(key, members)| {
+                let mut members = members.clone();
+                members.sort_by_key(|m| (m.edge_index, m.role));
+                format!("{key:?} {members:?}")
+            })
+            .collect();
+        let mut entries: Vec<String> = g.entries.iter().map(|e| format!("{e:?}")).collect();
+        groups.sort();
+        entries.sort();
+        (groups, entries)
+    }
+
+    /// `patchAnchorGroups` is a second producer of the partition
+    /// `buildAnchorGroups` produces, so the two must agree, as the
+    /// TypeScript's `anchor-groups.properties.test.ts` holds them. Each case
+    /// re-sides one edge: off a crowded side, onto one, and off a side it
+    /// held alone (emptying that group).
+    #[test]
+    fn a_patched_partition_is_the_rebuilt_one() {
+        let nodes = [node(0, 0.0, 0.0), node(1, 200.0, 0.0), node(2, 200.0, 120.0)];
+        let edges = [edge(0, 0, 1), edge(1, 0, 2), edge(2, 1, 2)];
+        let ctx = anchor_context(&nodes, &edges);
+        let base: JsMap<u32, SidePair> = [
+            (0, pair(Side::Right, Side::Left)),
+            (1, pair(Side::Right, Side::Left)),
+            (2, pair(Side::Bottom, Side::Top)),
+        ]
+        .into_iter()
+        .collect();
+        let placed = build_anchor_groups(&ctx, &base);
+        for (index, re_sided) in [
+            (1, pair(Side::Bottom, Side::Top)),
+            (2, pair(Side::Left, Side::Right)),
+            (0, pair(Side::Top, Side::Top)),
+        ] {
+            let mut next = base.clone();
+            next.set(u32::try_from(index).unwrap_or(0), re_sided);
+            let patched = patch_anchor_groups(&ctx, &placed, &next, index);
+            assert_eq!(as_set(&patched), as_set(&build_anchor_groups(&ctx, &next)), "{index}");
+        }
+    }
+}
