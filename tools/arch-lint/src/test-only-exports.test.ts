@@ -78,7 +78,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/layout-worker-pool.ts#createLayoutWorkerPool',
   'apps/web/src/lib/layout-worker-pool.ts#defaultPoolSize',
   'apps/web/src/lib/loro-codemirror-sync.ts#loroTextSync',
-  'apps/web/src/lib/loro-store.ts#LoroLoadResult',
   'apps/web/src/lib/open-proposals.ts#isOpenProposal',
   'apps/web/src/lib/provider.ts#resolveProviderState',
   'apps/web/src/lib/recent-documents.ts#recordRecentId',
@@ -378,7 +377,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 142
+const DEBT_CEILING = 141
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 14

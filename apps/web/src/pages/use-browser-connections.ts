@@ -9,18 +9,15 @@ import { useCallback, useMemo } from 'react'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { browserBacklinksReader } from '../lib/browser-backlinks.js'
 import { linkifyBrowserMentions } from '../lib/browser-linkify.js'
-import type { LoroStoreLike } from '../lib/loro-store.js'
 import { type UseConnectionsResult, useConnections } from './use-connections.js'
 
 export function useBrowserConnections({
   index,
-  loro,
   documentId,
   path,
   stamp,
 }: {
   readonly index: DocumentIndex
-  readonly loro: LoroStoreLike
   readonly documentId: string | undefined
   readonly path: string | null
   /** The followed list's `connectionsStamp`; a change re-reads. */
@@ -30,8 +27,8 @@ export function useBrowserConnections({
   readonly linkify: (mention: ConnectionsBacklink) => void
 } {
   // One reader — and so one facts cache — for as long as the page keeps its
-  // index and store, which is across every document it switches between.
-  const read = useMemo(() => browserBacklinksReader(index, loro), [index, loro])
+  // index, which is across every document it switches between.
+  const read = useMemo(() => browserBacklinksReader(index), [index])
   const connections = useConnections({ read, documentId, path, stamp })
   const { refresh } = connections
   // A failed link is swallowed on purpose, as on the daemon: the panel keeps

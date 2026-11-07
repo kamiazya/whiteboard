@@ -15,13 +15,23 @@ import {
   resolveWorkspaceDocumentById,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { base64UrlToBytes, imageRefId, newImageRef } from '@kamiazya/whiteboard-model'
+import {
+  base64UrlToBytes,
+  generateDocumentId,
+  imageRefId,
+  newImageRef,
+} from '@kamiazya/whiteboard-model'
 import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { jsonResponse } from '../test-utils/json-response.js'
+import {
+  seedPreTreeContentRow,
+  seedRetiredFileRecord,
+} from '../test-utils/seed-retired-sync-row.js'
 import {
   seedTreeContent,
   seedWorkspaceDocumentContent,
@@ -231,6 +241,40 @@ describe('promoteWorkspace', () => {
     expect(result.blobs).toEqual({ transferred: [], missing: ['gone-image'], failed: [] })
   })
 
+  it('holds back an image saved in a retired form, neither uploading it nor calling it missing', async () => {
+    const logged = expectLoggedFailures()
+    const index = new BrowserDocumentIndex()
+    await ensureBrowserWorkspace(index)
+    const sketch = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'sketch',
+      kind: 'spatial',
+    })
+    await seedRetiredFileRecord(newImageRef('old-image'), new Uint8Array([1, 2, 3]))
+    const content = new LoroDoc()
+    writeSpatialCanvas(content, {
+      nodes: [
+        fileNode({ id: 'img', file: newImageRef('old-image'), x: 0, y: 0, width: 5, height: 5 }),
+      ],
+      edges: [],
+    })
+    await seedTreeContent(sketch.documentId, new Uint8Array(content.export({ mode: 'snapshot' })))
+    const putFiles: Array<{ url: string; contentType: string; bytes: Uint8Array }> = []
+
+    const result = await promoteWorkspace({
+      fetch: daemonStub(new LoroDoc(), putFiles),
+      keeperBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.blobs.missing).toEqual([])
+    expect(result.blobs.failed.map((f) => f.fileId)).toEqual(['old-image'])
+    expect(putFiles).toEqual([])
+    expect(logged.some((line) => line.includes('no longer reads'))).toBe(true)
+  })
+
   /** A spatial document referencing one stored image per entry, each with its own type and bytes. */
   async function seedImages(images: ReadonlyArray<{ id: string; type: string; blob: Blob }>) {
     const index = new BrowserDocumentIndex()
@@ -388,5 +432,14 @@ describe('promoteWorkspace', () => {
       workspaceDocs: new BrowserWorkspaceDocs(),
     })
     expect(result.kind).toBe('failed')
+  })
+
+  it('refuses to count a workspace that still holds a per-document content record', async () => {
+    await seedPreTreeContentRow(generateDocumentId())
+
+    await expect(countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())).rejects.toMatchObject({
+      name: 'BrowserStorageRefusedError',
+      reason: 'pre-tree-records',
+    })
   })
 })

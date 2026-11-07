@@ -31,7 +31,7 @@
  * The same blindness holds for a CLASS in the browser keeper (`apps/web/src/lib`)
  * and the daemon's stores: a public method outlives its last caller, and its
  * implementation, its fencing and the tests written against it read as proof it
- * is needed. `BrowserBackend.mutateRecord` and `LoroStore.appendDelta` each sat
+ * is needed. `BrowserBackend.mutateRecord` and a per-document store's `appendDelta` each sat
  * that way, the second with eighty lines of cross-tab fencing, while production
  * wrote through another path. So every public method of such a class needs a
  * shipped caller OUTSIDE its own class body (a method only its siblings call
@@ -283,10 +283,10 @@ describe('every store interface method has a production caller', () => {
 describe('every public class method has a caller outside its class', () => {
   it('reads the declared class surface and a real production population', () => {
     expect(classMethods.length).toBeGreaterThan(80)
-    expect(classMethods.map(classKey)).toContain('LoroStore.load')
-    // Private members are not API: LoroStore's `#serialise` and `#loadInner`.
-    expect(classMethods.map(classKey)).not.toContain('LoroStore.#serialise')
-    expect(uses.some((use) => use.name === 'load' && use.file.endsWith('.tsx'))).toBe(true)
+    expect(classMethods.map(classKey)).toContain('IdbDocumentStore.loadSnapshot')
+    // Private members are not API: a `#`-named member is never a class method here.
+    expect(classMethods.map(classKey).filter((id) => id.includes('.#'))).toEqual([])
+    expect(uses.some((use) => use.name === 'loadSnapshot')).toBe(true)
   })
 
   it('has a caller for each, or says in CLASS_METHOD_LEDGER why it has none', () => {

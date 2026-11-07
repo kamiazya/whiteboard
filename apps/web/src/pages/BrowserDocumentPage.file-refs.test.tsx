@@ -12,7 +12,7 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { BrowserStoreDouble, InMemoryLoroStore } from '../test-utils/browser-store-fixture.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import {
   latestEditorProps,
   resetCapturedEditorProps,
@@ -66,7 +66,6 @@ async function mountPage(store: BrowserStoreDouble) {
             store={store.index}
             pointer={store.pointer}
             clock={store.clock}
-            loro={new InMemoryLoroStore()}
             initialPath="here"
           />
         ),

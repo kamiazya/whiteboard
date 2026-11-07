@@ -7,7 +7,6 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // Statically imported so the chunk's transform-and-load happens in the
@@ -20,7 +19,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // unused by name on purpose — being in the module graph is the fix.
 import '../components/workspace-top-bar/WorkspaceTopBar.js'
 import { writeLastTool } from '../lib/initial-tool.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
 import { nothingHeldInTab } from '../lib/nothing-held-in-tab.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -29,26 +27,6 @@ import { openDocumentOpsMenu, renderInRouter } from '../test-utils/daemon-page-h
 import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
-import type { LoroStoreLike } from './use-browser-document-controller.js'
-
-// createDocument seeds an empty Loro doc; the real LoroStore touches IndexedDB,
-// which jsdom does not implement. A fake keeps these page-level tests scoped
-// to the switcher/create UI wiring, matching the controller test's own fake.
-class FakeLoroStore implements LoroStoreLike {
-  private byId = new Map<string, Uint8Array>()
-
-  async save(id: string, bytes: Uint8Array): Promise<void> {
-    this.byId.set(id, bytes)
-  }
-  createEmptySnapshot(): Uint8Array {
-    return new Uint8Array([1, 2, 3])
-  }
-  async load(id: string): Promise<LoroLoadResult> {
-    const bytes = this.byId.get(id)
-    if (bytes === undefined) return { kind: 'not-found' }
-    return { kind: 'ok', snapshot: bytes }
-  }
-}
 
 // The real backend does IndexedDB + the startup fold; the double delivers
 // the same workspace-shaped snapshot (the page's session is scoped to the
@@ -93,12 +71,7 @@ describe('BrowserDocumentPage', () => {
   it('renders loading state before canvas is loaded', () => {
     const store = new BrowserStoreDouble()
     renderInRouter(
-      <BrowserDocumentPage
-        loro={store.loro}
-        store={store.index}
-        pointer={store.pointer}
-        clock={store.clock}
-      />,
+      <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
     )
     expect(screen.getByRole('status')).toBeTruthy()
   })
@@ -109,12 +82,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     expect(screen.getByRole('main')).toBeTruthy()
@@ -131,12 +99,7 @@ describe('BrowserDocumentPage', () => {
     )
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     expect(screen.getByRole('alert')).toBeTruthy()
@@ -157,12 +120,7 @@ describe('BrowserDocumentPage', () => {
     )
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     // The degraded banner must not be a dead end: a recovery action mints a fresh canvas.
@@ -190,12 +148,7 @@ describe('BrowserDocumentPage', () => {
     }
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     const startFresh = screen.getByRole('button', { name: /start fresh/i })
@@ -216,12 +169,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     // The kebab lives in the LAZY WorkspaceTopBar: findByRole inside act()
@@ -246,12 +194,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await openDeleteConfirm()
@@ -270,18 +213,9 @@ describe('BrowserDocumentPage', () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
-    const loro = store.loro
-    const seed = new Loro()
-    seed.getList('elements').push({ id: 'rect-1' })
-    await loro.save('069CFJNRVY147ADGKPSWZ258BE', seed.export({ mode: 'snapshot' }))
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={loro}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await openDocumentOpsMenu()
@@ -297,15 +231,9 @@ describe('BrowserDocumentPage', () => {
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
     const asked = vi.spyOn(store.index, 'duplicateDocument')
-    await store.loro.save('069CFJNRVY147ADGKPSWZ258BE', new Loro().export({ mode: 'snapshot' }))
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={store.loro}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await openDocumentOpsMenu()
@@ -321,10 +249,6 @@ describe('BrowserDocumentPage', () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
-    const loro = store.loro
-    const seed = new Loro()
-    seed.getList('elements').push({ id: 'rect-1' })
-    await loro.save('069CFJNRVY147ADGKPSWZ258BE', seed.export({ mode: 'snapshot' }))
     // Hold the copy so the in-flight window is observable and long enough
     // for a second click to land before the first duplicate resolves.
     let releaseCopy: (() => void) | undefined
@@ -337,12 +261,7 @@ describe('BrowserDocumentPage', () => {
     }
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={loro}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await openDocumentOpsMenu()
@@ -372,25 +291,18 @@ describe('BrowserDocumentPage', () => {
     const store = new BrowserStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await store.save(snap)
-    const loro = store.loro
-    await loro.save('069CFJNRVY147ADGKPSWZ258BE', new Loro().export({ mode: 'snapshot' }))
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={loro}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
-    // Break the content write only once the canvas has loaded, so the
-    // operations kebab is offered and the refused copy surfaces as an alert
-    // on an otherwise healthy page.
-    loro.shouldThrow = true
+    // Break the copy only once the canvas has loaded, so the operations kebab
+    // is offered and the refused copy surfaces as an alert on an otherwise
+    // healthy page.
+    store.index.duplicateDocument = () => Promise.reject(new Error('duplicate failed'))
     await openDocumentOpsMenu()
     fireEvent.pointerUp(await documentOpsItem('Duplicate'))
-    expect((await screen.findByRole('alert')).textContent).toContain('loro save failed')
+    expect((await screen.findByRole('alert')).textContent).toContain('duplicate failed')
     // No switch happened — still on the source canvas. (Asserted before
     // reopening the menu: Radix's modal dropdown aria-hides the page.)
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Untitled')
@@ -414,12 +326,7 @@ describe('BrowserDocumentPage', () => {
     })
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await openDocumentOpsMenu()
@@ -437,12 +344,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     // One object, one action menu (ADR-0006). Counted BEFORE opening: an open
@@ -468,12 +370,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     // No save state is drawn for a document whose writes land: neither a
@@ -491,12 +388,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     // No save state in the row: the shell mark answers for the keeper, and
@@ -541,12 +433,7 @@ describe('BrowserDocumentPage', () => {
     }
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={base.loro}
-          store={base.index}
-          pointer={base.pointer}
-          clock={base.clock}
-        />,
+        <BrowserDocumentPage store={base.index} pointer={base.pointer} clock={base.clock} />,
       )
     })
     // A real save-failure round trip through SpatialEditor's onChange needs a
@@ -577,12 +464,7 @@ describe('BrowserDocumentPage', () => {
     observer.observe(document.body, { childList: true, subtree: true })
     try {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={base.loro}
-          store={base.index}
-          pointer={base.pointer}
-          clock={base.clock}
-        />,
+        <BrowserDocumentPage store={base.index} pointer={base.pointer} clock={base.clock} />,
       )
       const title = await screen.findByRole('textbox', { name: /title/i })
       fireEvent.change(title, { target: { value: 'Renamed while the store is down' } })
@@ -604,12 +486,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await openDeleteConfirm()
@@ -631,12 +508,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     const heading = screen.getByRole('heading', { level: 1 })
@@ -654,12 +526,7 @@ describe('BrowserDocumentPage', () => {
     await store.save({ ...snap, path: 'chosen' })
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
@@ -683,12 +550,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     const heading = () => screen.getByRole('heading', { level: 1 }).textContent
@@ -716,12 +578,7 @@ describe('BrowserDocumentPage', () => {
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          loro={store.loro}
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     expect(screen.queryByRole('button', { name: /add rectangle/i })).toBeNull()
@@ -752,7 +609,6 @@ describe('BrowserDocumentPage', () => {
             store={store.index}
             pointer={store.pointer}
             clock={store.clock}
-            loro={new FakeLoroStore()}
             initialPath="deep-linked"
           />
         </MemoryRouter>,
@@ -777,12 +633,7 @@ describe('BrowserDocumentPage', () => {
 
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     await act(async () => {
@@ -829,12 +680,7 @@ describe('BrowserDocumentPage', () => {
       })
       await act(async () => {
         renderInRouter(
-          <BrowserDocumentPage
-            store={store.index}
-            pointer={store.pointer}
-            clock={store.clock}
-            loro={new FakeLoroStore()}
-          />,
+          <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
         )
       })
       assertNoSetStateInRenderWarning(errorSpy)
@@ -852,12 +698,7 @@ describe('BrowserDocumentPage', () => {
       await store.save(snap)
       await act(async () => {
         renderInRouter(
-          <BrowserDocumentPage
-            loro={store.loro}
-            store={store.index}
-            pointer={store.pointer}
-            clock={store.clock}
-          />,
+          <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
         )
       })
       // No sentence-length CTA sits in the page chrome...
@@ -884,12 +725,7 @@ describe('BrowserDocumentPage', () => {
       await store.save(snap)
       await act(async () => {
         renderInRouter(
-          <BrowserDocumentPage
-            loro={store.loro}
-            store={store.index}
-            pointer={store.pointer}
-            clock={store.clock}
-          />,
+          <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
         )
       })
       expect(screen.queryByRole('switch')).toBeNull()
@@ -905,12 +741,7 @@ describe('BrowserDocumentPage', () => {
       await store.save(snap)
       await act(async () => {
         renderInRouter(
-          <BrowserDocumentPage
-            loro={store.loro}
-            store={store.index}
-            pointer={store.pointer}
-            clock={store.clock}
-          />,
+          <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
         )
       })
       expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1)
@@ -933,12 +764,7 @@ describe('BrowserDocumentPage', () => {
       })
       await act(async () => {
         renderInRouter(
-          <BrowserDocumentPage
-            store={store.index}
-            pointer={store.pointer}
-            clock={store.clock}
-            loro={new FakeLoroStore()}
-          />,
+          <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
         )
       })
       await screen.findByRole('button', { name: 'More actions' })
@@ -952,12 +778,7 @@ describe('a plain load', () => {
   it('does not create extras on a plain load', async () => {
     const store = new BrowserStoreDouble()
     renderInRouter(
-      <BrowserDocumentPage
-        store={store.index}
-        pointer={store.pointer}
-        clock={store.clock}
-        loro={new FakeLoroStore()}
-      />,
+      <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
     )
     await waitFor(async () => {
       expect((await store.listDocuments()).length).toBe(1)
@@ -976,12 +797,7 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     expect(
@@ -996,12 +812,7 @@ describe('BrowserDocumentPage — initial tool follows the canvas shape', () => 
     await store.save(snap)
     await act(async () => {
       renderInRouter(
-        <BrowserDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
+        <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
       )
     })
     expect(

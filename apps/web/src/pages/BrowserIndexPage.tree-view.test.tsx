@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { ensureBrowserWorkspace } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { touchIfWorkspaceBacked } from '../lib/workspace-content.js'
+import { touchContentTimestamp } from '../lib/content-timestamp.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
@@ -28,7 +28,7 @@ async function seedRoadmap(): Promise<void> {
     name: 'Roadmap',
     kind: 'markdown',
   })
-  await touchIfWorkspaceBacked(entry.documentId)
+  await touchContentTimestamp(entry.documentId)
 }
 
 function renderPage() {

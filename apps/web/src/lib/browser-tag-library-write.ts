@@ -13,9 +13,8 @@ import {
   saveAndAnnounce,
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
-import type { LoroStoreLike } from './loro-store.js'
-import { touchContentTimestamp } from './loro-store.js'
 
 /**
  * Writes the workspace's tag library into the document at `tags`, creating
@@ -28,7 +27,6 @@ import { touchContentTimestamp } from './loro-store.js'
  */
 export async function writeTagLibraryDocument(
   index: DocumentIndex,
-  loro: LoroStoreLike,
   library: TagLibrary,
   dbName?: string,
 ): Promise<void> {
@@ -42,8 +40,7 @@ export async function writeTagLibraryDocument(
   )
   const documentId =
     existing?.documentId ??
-    (await createSeededDocumentAt(index, loro, { path: TAG_LIBRARY_PATH, kind: 'markdown' }))
-      .documentId
+    (await createSeededDocumentAt(index, { path: TAG_LIBRARY_PATH, kind: 'markdown' })).documentId
   const docs = new BrowserWorkspaceDocs(dbName)
   const workspace = await openWorkspaceOrNull(docs)
   if (workspace === null) throw new Error('The workspace could not be opened to write the tags.')

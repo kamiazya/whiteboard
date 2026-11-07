@@ -18,7 +18,6 @@ import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { idbContentClock } from '../lib/browser-document-summary.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserIndexPage } from './BrowserIndexPage.js'
@@ -33,7 +32,7 @@ afterEach(cleanup)
 const titles = () => screen.queryAllByTestId('card-title').map((each) => each.textContent)
 
 const seed = (index: BrowserDocumentIndex) =>
-  createSeededDocument(index, new LoroStore(), idbContentClock(), undefined, 'markdown')
+  createSeededDocument(index, idbContentClock(), undefined, 'markdown')
 
 /** Tab A on the list, after tab B has written one document it can see. */
 async function openTabs() {

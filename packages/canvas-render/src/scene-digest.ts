@@ -166,8 +166,12 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
   if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const result: { parent: string; child: string }[] = []
   for (const child of entries) {
-    // No entry is its own candidate: a parent's area must exceed its child's.
-    const candidates = entries.filter((parent) => strictlyContains(parent.bbox, child.bbox))
+    // `strictlyContains` already refuses an entry's own bbox (the parent's
+    // area must exceed the child's); the id check refuses a SECOND entry
+    // wearing the child's id, which a hand-built scene can hold.
+    const candidates = entries.filter(
+      (parent) => parent.id !== child.id && strictlyContains(parent.bbox, child.bbox),
+    )
     if (candidates.length === 0) continue
     const smallest = [...candidates].sort((a, b) => {
       const areaDiff = area(a.bbox) - area(b.bbox)
@@ -308,8 +312,9 @@ function occupiedCells(
       Math.ceil((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX) - 1,
       rows - 1,
     )
-    // An empty span (a zero-size box on a grid line) covers nothing. Its four
-    // marks would cancel anyway; the test keeps a NaN bound from indexing.
+    // An empty span (a zero-size box on a grid line; a size is never
+    // negative) covers nothing. Its four marks would cancel anyway; the test
+    // keeps a NaN bound from indexing.
     if (!(c0 <= c1 && r0 <= r1)) continue
     diff[r0 * stride + c0] += 1
     diff[r0 * stride + c1 + 1] -= 1

@@ -12,6 +12,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { putRawSyncRow } from '../test-utils/seed-retired-sync-row.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
@@ -57,6 +58,23 @@ describe('IdbDocumentIndex.holdsPreTreeRecords', () => {
         )
       })
       expect(await index.holdsPreTreeRecords('0104Y7DY19FTA30KQYKDRRMNBN')).toBe(true)
+    } finally {
+      await clearNamedDb(DB_NAME)
+    }
+  })
+})
+
+describe('IdbDocumentIndex.holdsPreTreeContentRecords', () => {
+  it('is true only for a per-document content key, not for a workspace record', async () => {
+    await clearNamedDb(DB_NAME)
+    try {
+      const index = new IdbDocumentIndex(DB_NAME)
+      await index.createWorkspace({ workspaceId: '0104Y7DY19FTA30KQYKDRRMNBN' })
+      expect(await index.holdsPreTreeContentRecords()).toBe(false)
+      await putRawSyncRow('workspace-tree:0104Y7DY19FTA30KQYKDRRMNBN', { v: 3 }, DB_NAME)
+      expect(await index.holdsPreTreeContentRecords()).toBe(false)
+      await putRawSyncRow(`document:${generateDocumentId()}`, { v: 3 }, DB_NAME)
+      expect(await index.holdsPreTreeContentRecords()).toBe(true)
     } finally {
       await clearNamedDb(DB_NAME)
     }

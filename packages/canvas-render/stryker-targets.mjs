@@ -256,16 +256,16 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
-  // `scene-digest.ts`: four families, each verified by applying the edit and
-  // running the file's five test files, which stay green, and each with its
+  // `scene-digest.ts`: five families, each verified by applying the edit and
+  // running the file's test files, which stay green, and each with its
   // invariant beside the code. (1) Union-find bookkeeping — which id becomes
   // a root, path compression, union by rank — changes no cluster, since the
   // clusters are sorted before they reach the digest. (2) A pair loop's
   // outer bound one past the end runs the inner loop zero times. (3) An
   // occupancy row or cell past `rows` x `cols` is never read, and an empty
-  // span's four difference marks cancel. (4) Past the entry cap no overlap
-  // scan runs, so its `capped` flag is unobservable beside `partial`; and
-  // the containment sort's tie branch is unreachable, one entry per child.
+  // span's four difference marks cancel (a size is never negative). (4) Past
+  // the entry cap no overlap scan runs, so its `capped` flag is unobservable
+  // beside `partial` — the one `false -> true` below is that early return's.
   // (5) The occupancy clamps never bind: the grid is sized from the same
   // union the boxes are read against.
   'src/scene-digest.ts': {
@@ -273,7 +273,6 @@ export const KNOWN_EQUIVALENT = {
     'ArithmeticOperator: rows - 1 -> rows + 1': 1,
     'BooleanLiteral: false -> true': 1,
     'EqualityOperator: i < entries.length -> i <= entries.length': 2,
-    'ConditionalExpression: a.child === b.child -> false': 1,
     'ArrayDeclaration: [id, 0] -> []': 1,
     'ConditionalExpression: current !== root -> false': 1,
     'ConditionalExpression: rootA === rootB -> false': 1,

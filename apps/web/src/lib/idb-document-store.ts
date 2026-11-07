@@ -71,38 +71,6 @@ const chunkSchema = z.object({
 /** One document's chunks, as they come back out of their store. */
 const chunksSchema = z.array(chunkSchema)
 
-// The v2 envelope, kept only to be READ. ADR-0020 added the fencing
-// generation, and the outer object is `.strict()`, so a v3 record is not a v2
-// record with a field — an older cached bundle would report it malformed.
-// Reading v2 and writing v3 is what stops a tab that has not picked up the
-// new build from turning a live document into an unreadable one.
-const syncRecordV2Schema = z
-  .object({
-    v: z.literal(2),
-    snapshot: z
-      .object({
-        manifest: z.object({
-          chunkCount: z.number().int().min(0),
-          totalBytes: z.number().int().min(0),
-          maxChunkBytes: z.number().int().positive(),
-        }),
-      })
-      .strict()
-      .nullable(),
-    frontier: storedBytesSchema.nullable(),
-    deltas: z.array(storedBytesSchema),
-  })
-  .strict()
-  // One direction only. A SNAPSHOT with no frontier is a record
-  // `loadSnapshot` can answer nothing but `null` for — indistinguishable from
-  // a document that was never saved, which is the distinction this store
-  // exists to keep. The reverse is ordinary: `appendDeltas` on a document
-  // with no snapshot yet is explicitly legal, and leaves a frontier and a log
-  // with nothing to anchor them.
-  .refine((record) => record.snapshot === null || record.frontier !== null, {
-    message: 'a stored snapshot must carry the frontier it was saved with',
-  })
-
 const syncRecordSchema = z
   .object({
     v: z.literal(3),
@@ -172,23 +140,16 @@ function chunkRange(key: string): IDBKeyRange {
 function parseRecord(key: string, raw: unknown): SyncRecord {
   const parsed = syncRecordSchema.safeParse(raw)
   if (parsed.success) return parsed.data
-  // A v2 record is a v3 record that has never been folded under a fence.
-  // Lifted on READ rather than by a sweep: the next write emits v3, and a
-  // document nobody opens costs nothing by staying as it is.
-  const legacy = syncRecordV2Schema.safeParse(raw)
-  if (legacy.success) {
-    // Its existing log gets seqs 1..n, which is what a v3 record that had
-    // appended them would hold. Nothing has read a position out of a v2
-    // record, so no cursor can disagree with the one invented here.
-    return {
-      ...legacy.data,
-      v: 3,
-      generation: 1,
-      nextSeq: legacy.data.deltas.length + 1,
-    }
-  }
   const version = (raw as { v?: unknown } | null)?.v
-  if (typeof version === 'number' && version !== 2 && version !== 3) {
+  if (typeof version === 'number' && version < 3) {
+    // Intact data in an envelope this build no longer lifts; the caller
+    // refuses it by name and the bytes stay where they are.
+    throw new StoredDocumentUnreadableError(
+      'retired-envelope',
+      `Stored document ${key} was written in retired envelope version ${version}`,
+    )
+  }
+  if (typeof version === 'number' && version > 3) {
     throw new StoredDocumentUnreadableError(
       'unsupported-version',
       `Stored document ${key} was written in envelope version ${version}`,

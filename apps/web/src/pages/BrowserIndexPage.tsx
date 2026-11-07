@@ -24,7 +24,7 @@ import {
 } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import { browserKeeperCapacity, type KeeperCapacity } from '../lib/browser-keeper-capacity.js'
-import { isBrowserStorageRefusedError } from '../lib/browser-storage-refusal.js'
+import { refusalSentence } from '../lib/browser-storage-refusal.js'
 import {
   browserWorkspaceIdentitySnapshot,
   browserWorkspaceIdOrNull,
@@ -37,21 +37,17 @@ import { documentLabel } from '../lib/document-label.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { duplicateLanded } from '../lib/duplicate-landed.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { NEW_CANVAS_SHORTCUT } from '../lib/new-canvas-shortcut.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
 import { deleteRequestsFor, type PendingDelete } from './pending-delete.js'
-import type { LoroStoreLike } from './use-browser-document-controller.js'
 import { useDeleteDocuments } from './use-delete-documents.js'
 import { useFollowOtherTabs } from './use-follow-workspace-writes.js'
 
 export interface BrowserIndexPageProps {
   /** Defaults to the shared production index; injected by tests. */
   index?: DocumentIndex
-  /** Seeds a content record for a newly created document; see handleCreate. */
-  loro?: LoroStoreLike
   pointer?: DefaultDocumentPointer
   clock?: ContentClock
   onOpenDocument: (path: string) => void
@@ -82,7 +78,6 @@ export interface BrowserIndexPageProps {
 // new array, the render mints another clock, and the effect runs again without
 // end. Measured on the production wiring (index + onOpenDocument only): 464
 // index reads and still climbing after half a second.
-const defaultLoroStore = /* @__PURE__ */ new LoroStore()
 const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
@@ -159,7 +154,6 @@ function useBrowserWorkspaceName(
 /** The subscribed workspace identity, and the files source scoped to it. */
 function useBrowserFilesSource(
   index: BrowserIndexPageProps['index'] & {},
-  loro: BrowserIndexPageProps['loro'] & {},
   clock: BrowserIndexPageProps['clock'] & {},
 ) {
   // The workspace this page is listing. Subscribed, not read: ADR-0019's
@@ -185,11 +179,11 @@ function useBrowserFilesSource(
   // card menu's Delete carries a PATH, which this page then resolves against
   // whichever workspace is active NOW.
   const filesSource = useMemo(
-    () => createBrowserFilesSource({ index, loro, clock }),
+    () => createBrowserFilesSource({ index, clock }),
     // `activeWorkspace` is not read by the factory — the source reads the
     // accessor at call time. It is here as the switch SIGNAL the panel keys
     // on, which is the whole point of the memo.
-    [index, loro, clock, activeWorkspace],
+    [index, clock, activeWorkspace],
   )
   return { activeWorkspace, filesSource }
 }
@@ -215,14 +209,12 @@ interface BrowserDocumentsLoadInput {
  */
 function loadFailed(err: unknown, listed: string | undefined, props: BrowserDocumentsLoadInput) {
   if (isWorkspaceRemovedError(err) && listed !== undefined) props.onRemoved(listed)
-  else if (isBrowserStorageRefusedError(err)) props.setError(err.message)
-  else props.setError('Failed to load documents from this browser.')
+  else props.setError(refusalSentence(err) ?? 'Failed to load documents from this browser.')
 }
 
 /** What a refused create says: the storage's own sentence, or the generic one. */
 function createFailureMessage(err: unknown, kind: DocumentKind): string {
-  if (isBrowserStorageRefusedError(err)) return err.message
-  return `Failed to create a ${kindNoun(kind)} in this browser.`
+  return refusalSentence(err) ?? `Failed to create a ${kindNoun(kind)} in this browser.`
 }
 
 function useBrowserDocumentsLoad(props: BrowserDocumentsLoadInput): void {
@@ -301,7 +293,6 @@ function useLeaveRemovedWorkspace(activeId: string | null) {
 
 interface BrowserIndexListingInput {
   index: BrowserIndexPageProps['index'] & {}
-  loro: BrowserIndexPageProps['loro'] & {}
   clock: BrowserIndexPageProps['clock'] & {}
   revision: BrowserIndexPageProps['revision']
 }
@@ -321,11 +312,7 @@ function useBrowserIndexListing(props: BrowserIndexListingInput) {
   // the list. Failure degrades to 0 — onboarding — never to an error.
   const [trashCount, setTrashCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const { activeWorkspace, filesSource } = useBrowserFilesSource(
-    props.index,
-    props.loro,
-    props.clock,
-  )
+  const { activeWorkspace, filesSource } = useBrowserFilesSource(props.index, props.clock)
   // Deletions happen in this page's dialog, behind the panel's back — the
   // panel re-reads whenever this identity changes, exactly as on the daemon
   // page.
@@ -477,7 +464,6 @@ function WorkspaceMovedNotice() {
 
 interface BrowserCreateInput {
   index: NonNullable<BrowserIndexPageProps['index']>
-  loro: NonNullable<BrowserIndexPageProps['loro']>
   clock: NonNullable<BrowserIndexPageProps['clock']>
   pointer: NonNullable<BrowserIndexPageProps['pointer']>
   onOpenDocument: BrowserIndexPageProps['onOpenDocument']
@@ -489,7 +475,6 @@ interface BrowserCreateInput {
 /** This page's create: a seeded document, opened, or a refusal said in place. */
 function useBrowserCreate({
   index,
-  loro,
   clock,
   pointer,
   onOpenDocument,
@@ -517,7 +502,7 @@ function useBrowserCreate({
         // The editor's create path, not a second one beside it: numbering,
         // the content seed, and the rollback on a failed seed are all things
         // a second create path would do differently or not at all.
-        const created = await createSeededDocument(index, loro, clock, undefined, kind)
+        const created = await createSeededDocument(index, clock, undefined, kind)
         // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.
         await pointer.set(created.documentId)
@@ -533,7 +518,7 @@ function useBrowserCreate({
         setCreating(false)
       }
     },
-    [index, loro, clock, pointer, onOpenDocument, setFilesRevision, setError, onRemoved],
+    [index, clock, pointer, onOpenDocument, setFilesRevision, setError, onRemoved],
   )
   return { creating, handleCreate }
 }
@@ -592,7 +577,6 @@ export function BrowserIndexPage({
   // index lives behind this lazy page, not in App, to keep loro-crdt off the
   // entry chunk (entry-graph-loro-free.test.ts).
   index = sharedBrowserDocumentIndex(),
-  loro = defaultLoroStore,
   pointer = defaultPointer,
   clock = defaultClock,
   onOpenDocument,
@@ -613,7 +597,7 @@ export function BrowserIndexPage({
     activeWorkspace,
     moved,
     onRemoved,
-  } = useBrowserIndexListing({ index, loro, clock, revision })
+  } = useBrowserIndexListing({ index, clock, revision })
   // Re-read after a delete settled, with the dialog still open after a
   // partial failure: the ones that went are gone, and a list still showing
   // them behind the dialog contradicts the count above it.
@@ -678,7 +662,6 @@ export function BrowserIndexPage({
 
   const { creating, handleCreate } = useBrowserCreate({
     index,
-    loro,
     clock,
     pointer,
     onOpenDocument,

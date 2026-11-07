@@ -22,7 +22,6 @@ async function openNamed(name: string) {
   })
   const { result } = renderHook(() =>
     useBrowserDocumentController(store.index, {
-      loro: store.loro,
       pointer: store.pointer,
       clock: store.clock,
     }),

@@ -310,11 +310,9 @@ describe('sceneDigest', () => {
   // `count` boxes on the 20px grid itself, to the right of the interacting
   // three: 50 wide, so 2000 of them fill 1000 x 800px with one box a cell —
   // 4000 grid cells for the union and under a hundred free runs — and the
-  // ONLY cap a fixture built from this can reach is the entry cap. Spaced
-  // out along one axis instead, 2000 boxes spanned two million px, the cell
-  // budget tripped first, and `partial` was true for a reason these tests
-  // are not about; on a 30px pitch every row split into fifty free runs and
-  // the REGION cap tripped instead.
+  // ONLY cap a fixture built from this can reach is the entry cap. A fixture
+  // that trips the cell or region budget first makes `partial` true for a
+  // reason these tests are not about.
   const compactGrid = (count: number) =>
     Array.from({ length: count }, (_, i) => ({
       x: 1000 + (i % 50) * 20,

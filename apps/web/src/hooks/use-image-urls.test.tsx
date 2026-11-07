@@ -5,6 +5,7 @@
  */
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { RETIRED_PICTURE } from '../lib/document-file-contract.js'
 import { useImageUrls } from './use-image-urls.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
@@ -13,6 +14,17 @@ afterEach(() => {
 })
 
 describe('useImageUrls', () => {
+  it('settles a retired picture once and never asks for it again', async () => {
+    const load = vi.fn(async (_ref: string) => RETIRED_PICTURE)
+    const { result, rerender } = renderHook(({ refs }) => useImageUrls(refs, load), {
+      initialProps: { refs: ['asset:old'] },
+    })
+    await waitFor(() => expect(result.current.get('asset:old')).toBe(RETIRED_PICTURE))
+    rerender({ refs: ['asset:old', 'asset:other'] })
+    await waitFor(() => expect(load).toHaveBeenCalledTimes(2))
+    expect(load.mock.calls.filter(([ref]) => ref === 'asset:old')).toHaveLength(1)
+  })
+
   it('installs the loads that succeeded even when one rejects', async () => {
     // `Promise.all` rejects on the first rejection, so the callback installed
     // NONE of the successful URLs and the rejection went unhandled. A loader

@@ -1,5 +1,5 @@
-// Pins for what the mutation lane found nobody held in `scene-digest.ts`
-// (46 survivors, 2026-11-06): the schema's inner shapes, the gap's symmetry,
+// Pins for what the mutation lane found nobody held in `scene-digest.ts`:
+// the schema's inner shapes, the gap's symmetry,
 // the pairwise and cell-cap boundaries, the containment tie-breaks, the
 // free-run order, the empty scene, and a shape without an id beside one with.
 // Each case names the edit that leaves every other digest test green.
@@ -91,19 +91,50 @@ describe('sceneDigest, the pins the mutation lane asked for', () => {
   })
 
   it('orders containment by child, not by parent', () => {
-    // Children in one order, their parents in the other, so sorting by the
-    // wrong key reverses the list.
+    // Children visited b, c, a; parents x, y, z in yet another order — so the
+    // unsorted list, the parent-sorted list and the child-sorted list are
+    // three different lists.
     const digest = sceneDigest(
       shapes(
         { id: 'z', bbox: box(0, 0, 20, 20) },
-        { id: 'a', bbox: box(5, 5, 2, 2) },
-        { id: 'y', bbox: box(100, 0, 20, 20) },
-        { id: 'b', bbox: box(105, 5, 2, 2) },
+        { id: 'b', bbox: box(5, 5, 2, 2) },
+        { id: 'x', bbox: box(100, 0, 20, 20) },
+        { id: 'c', bbox: box(105, 5, 2, 2) },
+        { id: 'y', bbox: box(200, 0, 20, 20) },
+        { id: 'a', bbox: box(205, 5, 2, 2) },
       ),
     )
     expect(digest.containment).toEqual([
-      { parent: 'z', child: 'a' },
-      { parent: 'y', child: 'b' },
+      { parent: 'y', child: 'a' },
+      { parent: 'z', child: 'b' },
+      { parent: 'x', child: 'c' },
+    ])
+  })
+
+  it('never names a box the parent of a second box wearing its own id', () => {
+    // A hand-built scene can repeat an id; the larger box strictly contains
+    // the smaller, and only the id check keeps `{ parent: 'a', child: 'a' }`
+    // out of the digest.
+    const digest = sceneDigest(
+      shapes({ id: 'a', bbox: box(0, 0, 20, 20) }, { id: 'a', bbox: box(5, 5, 2, 2) }),
+    )
+    expect(digest.containment).toEqual([])
+  })
+
+  it('orders two containments of one child id by parent', () => {
+    // Two boxes wearing the same id, each inside a different parent, visited
+    // q's first: the child tie is the only thing that puts p's ahead.
+    const digest = sceneDigest(
+      shapes(
+        { id: 'q', bbox: box(100, 0, 20, 20) },
+        { id: 'a', bbox: box(105, 5, 2, 2) },
+        { id: 'p', bbox: box(0, 0, 20, 20) },
+        { id: 'a', bbox: box(5, 5, 2, 2) },
+      ),
+    )
+    expect(digest.containment).toEqual([
+      { parent: 'p', child: 'a' },
+      { parent: 'q', child: 'a' },
     ])
   })
 

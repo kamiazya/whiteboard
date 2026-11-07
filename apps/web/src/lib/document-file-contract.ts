@@ -32,6 +32,17 @@ export type ImageStoreResult =
   | { readonly ok: true; readonly ref: string }
   | { readonly ok: false; readonly reason: string }
 
+/**
+ * `loadImageUrl`'s answer for a picture the keeper holds intact in a form this
+ * version no longer reads. Terminal like `undefined`, but not absent: the slot
+ * says so (`RETIRED_PICTURE_LABEL`) rather than staying silent about data that
+ * is still stored.
+ */
+export const RETIRED_PICTURE = 'retired' as const
+
+/** What the slot of a picture answered `RETIRED_PICTURE` says. */
+export const RETIRED_PICTURE_LABEL = 'Picture saved in a form this version no longer reads'
+
 /** What a backend must supply for the seams to work against it. */
 export interface DocumentFileAdapter {
   /**
@@ -60,9 +71,10 @@ export interface DocumentFileAdapter {
    * mean what they do for `loadDocument`: `undefined` asserts the picture is
    * ABSENT and is terminal, while a REJECTION is a failed read and is asked
    * again. Folding a failure into `undefined` leaves the picture on its card
-   * for the life of the page.
+   * for the life of the page. `RETIRED_PICTURE` is terminal too, and asks the
+   * slot to say the picture is stored in a form this version no longer reads.
    */
-  loadImageUrl(ref: string): Promise<string | undefined>
+  loadImageUrl(ref: string): Promise<string | undefined | typeof RETIRED_PICTURE>
   /**
    * A stored image's bytes, on `loadImageUrl`'s terms for its non-answers. A
    * copy reads these rather than fetching the URL above: the app's policy

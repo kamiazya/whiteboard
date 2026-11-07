@@ -25,6 +25,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { describeWorkspaceFilesSourceConformance } from '../test-utils/files-source.conformance.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { seedRetiredFileRecord } from '../test-utils/seed-retired-sync-row.js'
 import {
   seedTreeContent,
   seedTreeDocument,
@@ -41,10 +42,23 @@ import {
 } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('browser-files-source')
+
+// The document ids each content read asked for, to prove a stamp that stands
+// still costs no read. Hoisted because `vi.mock` is.
+const reads = vi.hoisted(() => [] as string[])
+vi.mock('./workspace-content.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./workspace-content.js')>()
+  return {
+    ...actual,
+    projectDocumentContent: (...args: Parameters<typeof actual.projectDocumentContent>) => {
+      reads.push(args[1])
+      return actual.projectDocumentContent(...args)
+    },
+  }
+})
 
 describe('createBrowserFilesSource', () => {
   beforeEach(clearWhiteboardDb)
@@ -108,9 +122,8 @@ describe('createBrowserFilesSource', () => {
     const documentId = entries[0]?.documentId ?? ''
     expect(entries[0]?.updatedAt).toBeDefined()
     expect(await loadDocumentContent(documentId)).not.toBeNull()
-    // And nothing in the retired per-document store, where a second copy
-    // would outlive the document's delete and answer reads for it.
-    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    // And no per-document record, which this build refuses rather than reads.
+    expect(await new IdbDocumentIndex().holdsPreTreeContentRecords()).toBe(false)
   })
 
   it('renames through the index, so the subtree moves with it', async () => {
@@ -469,37 +482,19 @@ describe('createBrowserFilesSource board tags and the vocabulary in use', () => 
 describe('createBrowserFilesSource tag cache', () => {
   beforeEach(clearWhiteboardDb)
 
-  /**
-   * Two tagged notes over an index with no workspace tree behind it, so every
-   * content read falls through to the per-document store — and through the
-   * counting one this hands the source.
-   */
+  /** Two tagged notes in the workspace tree, with every content read counted. */
   async function twoTaggedNotes() {
-    const index = new InMemoryDocumentIndex()
-    await ensureBrowserWorkspace(index)
-    const real = new LoroStore()
-    const loads: string[] = []
-    const loro = {
-      save: (id: string, snapshot: Uint8Array) => real.save(id, snapshot),
-      createEmptySnapshot: () => real.createEmptySnapshot(),
-      load: (id: string) => {
-        loads.push(id)
-        return real.load(id)
-      },
-    }
+    const index = new BrowserDocumentIndex()
+    reads.length = 0
+    const loads = reads
     const ids: Record<string, string> = {}
     for (const path of ['one', 'two']) {
-      const entry = await index.createDocument({
-        workspaceId: getBrowserWorkspaceId(),
-        path,
-        kind: 'markdown',
-      })
-      ids[path] = entry.documentId
+      ids[path] = (await seedTreeDocument({ path, kind: 'markdown' })).documentId
     }
     const write = async (path: string, tags: string[]) => {
       const doc = new Loro()
       writeCoreFacets(doc, { type: 'note', tags })
-      await real.save(ids[path] as string, doc.export({ mode: 'snapshot' }))
+      await seedTreeContent(ids[path] as string, doc.export({ mode: 'snapshot' }))
     }
     await write('one', ['q3'])
     await write('two', ['q4'])
@@ -507,7 +502,7 @@ describe('createBrowserFilesSource tag cache', () => {
       [ids.one as string, 'stamp-1'],
       [ids.two as string, 'stamp-1'],
     ])
-    const source = createBrowserFilesSource({ index, loro, clock: async () => new Map(stamps) })
+    const source = createBrowserFilesSource({ index, clock: async () => new Map(stamps) })
     return { source, loads, ids, stamps, write }
   }
 
@@ -552,17 +547,12 @@ describe('createBrowserFilesSource tag cache', () => {
     // A document that records no kind is whatever its row says, so what it
     // bears depends on the row as well as on the content.
     const rowKind: { value: DocumentKind } = { value: 'spatial' }
-    const index = new (class extends InMemoryDocumentIndex {
+    const index = new (class extends BrowserDocumentIndex {
       override async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
         return (await super.listDocuments(input)).map((row) => ({ ...row, kind: rowKind.value }))
       }
     })()
-    await ensureBrowserWorkspace(index)
-    const entry = await index.createDocument({
-      workspaceId: getBrowserWorkspaceId(),
-      path: 'shape-shifter',
-      kind: 'spatial',
-    })
+    const entry = await seedTreeDocument({ path: 'shape-shifter', kind: 'spatial' })
     const doc = new Loro()
     writeSpatialCanvas(doc, {
       nodes: [
@@ -570,7 +560,7 @@ describe('createBrowserFilesSource tag cache', () => {
       ],
       edges: [],
     })
-    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+    await seedTreeContent(entry.documentId, doc.export({ mode: 'snapshot' }))
     const source = createBrowserFilesSource({
       index,
       clock: async () => new Map([[entry.documentId, 'stamp-1']]),
@@ -725,6 +715,13 @@ describe('createBrowserFilesSource stored pictures', () => {
       new Uint8Array([1, 2, 3]),
     )
     await expect(source.loadImage?.(row, 'asset:never-stored')).resolves.toBeUndefined()
+  })
+
+  it('draws nothing for a picture saved in a retired form, as for one it does not hold', async () => {
+    await seedRetiredFileRecord('asset:old', new Uint8Array([1, 2, 3]))
+    const source = createBrowserFilesSource()
+
+    await expect(source.loadImage?.(row, 'asset:old')).resolves.toBeUndefined()
   })
 
   it('rejects when the file store cannot be read', async () => {

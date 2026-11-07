@@ -10,8 +10,8 @@ import {
   saveAndAnnounce,
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 import type { ImportedDocument } from './document-import.js'
-import { touchContentTimestamp } from './loro-store.js'
 
 /**
  * Writes an imported file's content into the node a create just made, as one

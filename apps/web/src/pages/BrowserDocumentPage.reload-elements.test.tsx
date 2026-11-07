@@ -18,7 +18,7 @@
 // jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
 // persistence with the spatial editor mocked — no browser layout or input
 // fidelity at stake. The real-IDB contract stays pinned by the four
-// browser-mode keeper suites (see loro-store.browser.test.tsx).
+// browser-mode keeper suites (see idb-document-store.browser.test.tsx).
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, configure, screen, waitFor } from '@testing-library/react'

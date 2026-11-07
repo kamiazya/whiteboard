@@ -52,10 +52,10 @@ import { BrowserStorageRefusedError } from './browser-storage-refusal.js'
 import { deleteVersionRowsOfDocument } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { browserWorkspaceIdOrNull } from './browser-workspace-id.js'
+import { forgetContentTimestamp, touchContentTimestamp } from './content-timestamp.js'
 import { sweepAfterPurge } from './file-sweep-schedule.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { forgetContentTimestamp, touchContentTimestamp } from './loro-store.js'
 import { indexWritesSettled } from './pending-index-writes.js'
 import {
   announceDocumentCreated,
@@ -163,6 +163,11 @@ export class BrowserDocumentIndex
       throw new BrowserStorageRefusedError('pre-tree-records', workspaceId)
     }
     if (workspaceId !== browserWorkspaceIdOrNull()) return
+    // A content record carries no workspace id and was only ever minted in
+    // the browser's own, so only that workspace is refused over one.
+    if (await this.registry.holdsPreTreeContentRecords()) {
+      throw new BrowserStorageRefusedError('pre-tree-records', workspaceId)
+    }
     const registered = (await this.registry.listWorkspaces()).some(
       (entry) => entry.workspaceId === workspaceId,
     )

@@ -23,7 +23,6 @@ import { BrowserDocumentIndex } from './browser-document-index.js'
 import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('cold-walk-open-count')
 
@@ -106,7 +105,7 @@ describe('a cold walk over a browser workspace', () => {
     timeout: SEEDED_WALK_TIMEOUT_MS,
   }, async () => {
     const { index, documentIds } = await seedWorkspace()
-    const read = browserBacklinksReader(index, new LoroStore())
+    const read = browserBacklinksReader(index)
     let backlinks = 0
 
     const walkOpens = await opensForTheColdWalk(async () => {
@@ -123,7 +122,7 @@ describe('a cold walk over a browser workspace', () => {
     timeout: SEEDED_WALK_TIMEOUT_MS,
   }, async () => {
     const { index, documentIds } = await seedWorkspace()
-    const read = browserBacklinksReader(index, new LoroStore())
+    const read = browserBacklinksReader(index)
     expect((await read(documentIds[0] as string)).backlinks).toHaveLength(DOCUMENTS - 1)
     const unlinked = new Loro()
     writeDocumentKind(unlinked, 'markdown')

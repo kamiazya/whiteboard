@@ -5,7 +5,6 @@ import {
   ContentFactsCache,
 } from '@kamiazya/whiteboard-reference-graph'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import type { LoroStoreLike } from './loro-store.js'
 import { lazyContentRecord, projectDocumentContent } from './workspace-content.js'
 
 /**
@@ -22,10 +21,7 @@ import { lazyContentRecord, projectDocumentContent } from './workspace-content.j
  * One cache per reader: a page makes one and keeps it across the documents
  * it switches between, which is where the reuse is.
  */
-export function browserBacklinksReader(
-  index: DocumentIndex,
-  loro: LoroStoreLike,
-): (documentId: string) => Promise<{
+export function browserBacklinksReader(index: DocumentIndex): (documentId: string) => Promise<{
   backlinks: BacklinkEntry[]
   unlinkedMentions: BacklinkEntry[]
 }> {
@@ -37,7 +33,7 @@ export function browserBacklinksReader(
     // The workspace is the browser's active one — the only one this keeper
     // holds open — so the port's workspace argument has nothing to select.
     loadDocument: async (_workspaceId, documentId) =>
-      projectDocumentContent(await record(), documentId, { loro }),
+      projectDocumentContent(await record(), documentId),
   })
   return async (documentId) => {
     record = lazyContentRecord()
