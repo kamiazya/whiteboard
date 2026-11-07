@@ -32,7 +32,7 @@ export const coordinate = fc.oneof(
   { weight: 1, arbitrary: fc.double({ min: -200, max: 200 }) },
   { weight: 1, arbitrary: fc.constantFrom(-0, Number.NaN, Number.POSITIVE_INFINITY, -1e300) },
 )
-const size = fc.oneof(
+export const size = fc.oneof(
   { weight: 8, arbitrary: fc.integer({ min: 1, max: 24 }).map((k) => k * 2.5) },
   { weight: 1, arbitrary: fc.constantFrom(0, -0, -10, Number.NaN) },
 )

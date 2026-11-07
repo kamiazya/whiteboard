@@ -4,8 +4,8 @@
   "headroomMinBytes": 1024,
   "artifacts": {
     "whiteboard-wasm": {
-      "ceilingBytes": 150000,
-      "reason": "abi_version(), the batched det exports, edge_route_on_grid from the routing spike, and the batched layer-2 test surface of each edge module ported so far (ADR-0054 step 5): the geometry and ink primitives (edge_segment_tests, edge_path_measures) and edge-rules (edge_side_pairs, edge_lane_windows, edge_self_penalty, edge_cost_ops): 143429 bytes measured. Nothing in the product loads this artifact yet (the core-wasm shim does not exist); the per-module exports go when the one-call-per-layout export replaces them, which is when this ceiling is re-measured"
+      "ceilingBytes": 251000,
+      "reason": "abi_version(), the batched det exports, edge_route_on_grid from the routing spike, and the batched layer-2 test surface of each edge module ported so far (ADR-0054 step 5): the geometry and ink primitives, edge-rules, and the router's leaves (side-slides, straight-detour, edge-sides, edge-contact, bend-route over the routing wire): 239601 bytes measured, the leaves adding about 96 KB (the BTree collections the corner search and the side choice need, and eight exports). Nothing in the product loads this artifact yet (the core-wasm shim does not exist); the per-module exports go when the one-call-per-layout export replaces them, which is when this ceiling is re-measured, and if the test surface keeps growing this fast it moves behind a cargo feature first"
     }
   }
 }

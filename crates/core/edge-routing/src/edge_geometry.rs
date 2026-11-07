@@ -21,7 +21,7 @@ use whiteboard_det::math::{hypot, js_max, js_min};
 /// Declared here rather than generated because the model's contract is not
 /// emitted yet. ponytail: a local enum; it is replaced by the generated
 /// `EdgeSide` when `whiteboard-model` lands.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Side {
     Top,
     Bottom,

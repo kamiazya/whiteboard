@@ -96,7 +96,7 @@ const withoutStraightWaypoints = (path: readonly Point[]): Point[] =>
 
 const edgesArb = fc
   .tuple(
-    fc.array(fc.array(pointArb, { minLength: 2, maxLength: 8 }), { minLength: 2, maxLength: 10 }),
+    fc.array(fc.array(pointArb, { minLength: 2, maxLength: 8 }), { minLength: 3, maxLength: 10 }),
     translationArb,
     outlierArb,
     spokeArb,

@@ -24,10 +24,18 @@ export interface WasmGlue {
   edge_lane_windows(cases: Float64Array): Float64Array
   edge_self_penalty(input: Float64Array): Float64Array
   edge_cost_ops(cases: Float64Array): Float64Array
+  edge_side_slides(cases: Float64Array): Float64Array
+  edge_zero_bend_slide(input: Float64Array): Float64Array
+  edge_corner_detour(input: Float64Array): Float64Array
+  edge_square_ends(input: Float64Array): Float64Array
+  edge_initial_sides(input: Float64Array): Float64Array
+  edge_contacts(input: Float64Array): Float64Array
+  edge_bend_routes(input: Float64Array): Float64Array
+  edge_self_loop_points(cases: Float64Array): Float64Array
 }
 
 /** The surface these tests were written against; a stale artifact fails on this, not on its first mismatched call. */
-export const EXPECTED_ABI = '5'
+export const EXPECTED_ABI = '7'
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 
