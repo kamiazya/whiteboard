@@ -10,7 +10,6 @@
 
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import {
@@ -19,13 +18,13 @@ import {
   listBrowserDocuments,
 } from './browser-document-summary.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 
 const DB_NAME = 'whiteboard-summary-test'
 
 /**
  * The index answers placement only; what this layer adds is read from the
- * content stores under `DB_NAME`, so an in-memory index keeps the subject
+ * content clock under `DB_NAME`, so an in-memory index keeps the subject
  * to that layer alone.
  */
 async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
@@ -39,10 +38,9 @@ async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
   return index
 }
 
+/** The listing's content clock is all this layer reads of a content write. */
 async function writeContent(documentId: string): Promise<void> {
-  const doc = new Loro()
-  doc.getList('elements').push({ id: 'el' })
-  await new LoroStore(DB_NAME).save(documentId, doc.export({ mode: 'snapshot' }))
+  await touchContentTimestamp(documentId, DB_NAME)
 }
 
 describe('browser document summary', () => {

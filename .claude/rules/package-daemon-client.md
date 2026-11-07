@@ -39,7 +39,8 @@ paths:
   `PRF_OUTPUT_BYTES`, `DERIVED_KEY_BITS`).
 - The one document backend the browser drives a daemon with (ADR-0050
   retired the WebSocket): `sse-backend` over `sse-stream-hub`, and the
-  `document-backend-contract` types it implements. The SSE wire itself is
+  `document-backend-contract` types it implements (`onError`'s reason union carries
+  `'retired-stored-shape'`, emitted by the browser backend alone). The SSE wire itself is
   `sync-sse-contract`, and `sync-frames` / `sync-frame-text` are the text
   frames that stream carries inside its `message` events.
   A subscriber reads state only once the stream carries its document: the

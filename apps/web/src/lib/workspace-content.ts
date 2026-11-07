@@ -3,19 +3,13 @@
  * workspace document being the source of truth.
  *
  * Every reader of a document's content goes through
- * `loadDocumentContent`: the workspace document's tree node answers first
- * (that is where the editor persists), and the legacy per-document record
- * stays as the fallback for a document nothing has folded yet — including
- * jsdom tests whose injected store double is the only storage there is.
+ * `loadDocumentContent`: the workspace document's tree node is the content
+ * record, and there is no other place a document's content is read from.
  */
-import {
-  projectWorkspaceDocument,
-  resolveWorkspaceDocumentById,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { Loro, type LoroDoc } from 'loro-crdt'
-import { BrowserWorkspaceDocs, openWorkspaceOrNull } from './browser-workspace-docs.js'
+import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
+import type { LoroDoc } from 'loro-crdt'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-store.js'
 
 /**
  * The read did not complete, so nothing is known about the document — as
@@ -33,50 +27,32 @@ class DocumentContentUnreadableError extends Error {
 
 /**
  * A document's CURRENT content as a standalone Loro document (a value
- * projection — fresh oplog, current state), or null when neither the
- * workspace tree nor the legacy store HOLDS it.
+ * projection — fresh oplog, current state), or null when the
+ * workspace tree does not HOLD it.
  *
  * The ONE read for a browser-kept document nothing has open: the files
- * source, an embed and the reference graph all come through
- * here, so what "current" means — tree first, legacy record after — is
- * decided once.
+ * source, an embed and the reference graph all come through here, so what
+ * "current" means is decided once.
  *
  * A read that did not COMPLETE is a different answer and propagates as
  * `DocumentContentUnreadableError`, rather than being folded into "no
- * content" — a thrown read caught here and reported as `not-found`, or the
- * store's own `read-unavailable`, which exists to say "the read failed and
- * this says nothing about the document", falling into the same `!== 'ok'`
- * branch. Every caller above reads that as "this document has no content",
- * and the prefetch caches it as terminal, so ONE transient IndexedDB failure
+ * content": every caller reads that as "this document has no content", and
+ * the prefetch caches it as terminal, so ONE transient IndexedDB failure
  * would blank a body's embed for the life of the page — with nothing logged,
  * because the catch would be silent.
- *
- * `corrupt-snapshot` / `corrupt-delta` / `unsupported-version` stay `null`:
- * those are verdicts on the stored bytes, so asking again cannot change the
- * answer. Only the one that says nothing about the bytes is retryable.
  */
 export async function loadDocumentContent(
   documentId: string,
-  options: ProjectOptions = {},
+  options: { readonly dbName?: string } = {},
 ): Promise<LoroDoc | null> {
-  return projectDocumentContent(await openContentRecord(options.dbName), documentId, options)
-}
-
-interface ProjectOptions {
-  /**
-   * The legacy per-document store to fall back on. Injected by a surface
-   * that was handed one (a page's store double in a test); the default is
-   * the real one.
-   */
-  readonly loro?: LoroStoreLike
-  readonly dbName?: string
+  return projectDocumentContent(await openContentRecord(options.dbName), documentId)
 }
 
 /**
  * The workspace record as one read found it, AND whether it could be read at
  * all — the distinction `projectDocumentContent` needs and its callers must
  * not be given: a workspace that did not open says nothing about a document,
- * so "the legacy row has no record" must not become "no content" beneath it.
+ * so a missing tree must not become "no content" beneath it.
  */
 export interface ContentRecord {
   readonly workspace: LoroDoc | null
@@ -117,26 +93,17 @@ export function lazyContentRecord(dbName?: string): () => Promise<ContentRecord>
 
 /**
  * `loadDocumentContent` over a record the caller already opened: the tree's
- * projection first, the legacy record after, with the same verdicts.
+ * projection, with the same verdicts. A tree that could not be read is the
+ * unreadable answer, never `null`.
  */
 export async function projectDocumentContent(
   record: ContentRecord,
   documentId: string,
-  options: ProjectOptions = {},
 ): Promise<LoroDoc | null> {
   const tree = treeProjection(record, documentId)
   if (tree.doc !== null) return tree.doc
-  const treeUnread = !tree.read
-  const result = await (options.loro ?? new LoroStore(options.dbName)).load(documentId)
-  if (result.kind === 'read-unavailable') throw new DocumentContentUnreadableError(documentId)
-  if (result.kind !== 'ok') {
-    if (treeUnread) throw new DocumentContentUnreadableError(documentId)
-    return null
-  }
-  const doc = new Loro()
-  doc.import(result.snapshot)
-  for (const delta of result.deltas ?? []) doc.import(delta)
-  return doc
+  if (!tree.read) throw new DocumentContentUnreadableError(documentId)
+  return null
 }
 
 /** The tree's answer for one document; a projection that throws is a tree that could not be read. */
@@ -154,20 +121,4 @@ function treeProjection(
   } catch {
     return { doc: null, read: false }
   }
-}
-
-/**
- * True — after stamping the listing clock — exactly when the tree holds this
- * document, i.e. when its node's containers already ARE the (empty) content
- * record and a create has nothing else to seed.
- */
-export async function touchIfWorkspaceBacked(
-  documentId: string,
-  dbName?: string,
-): Promise<boolean> {
-  const workspace = await openWorkspaceOrNull(new BrowserWorkspaceDocs(dbName))
-  if (workspace === null) return false
-  if (resolveWorkspaceDocumentById(workspace, documentId) === null) return false
-  await touchContentTimestamp(documentId, dbName)
-  return true
 }

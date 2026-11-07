@@ -1,3 +1,6 @@
+import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
+import { documentReadFailureMessage } from './document-read-failure.js'
+
 /**
  * The browser keeper's answer to stored data this build does not read.
  *
@@ -42,4 +45,18 @@ export class BrowserStorageRefusedError extends Error {
 
 export function isBrowserStorageRefusedError(err: unknown): err is BrowserStorageRefusedError {
   return err instanceof BrowserStorageRefusedError
+}
+
+/**
+ * The sentence for a load that threw because the stored data is in a shape
+ * this build no longer reads, or `null` for any other failure. Two errors
+ * qualify: the keeper's own refusal, and a record in a retired envelope —
+ * intact data, so it is named and never offered for deletion.
+ */
+export function refusalSentence(err: unknown): string | null {
+  if (isBrowserStorageRefusedError(err)) return err.message
+  if (isStoredDocumentUnreadableError(err) && err.code === 'retired-envelope') {
+    return documentReadFailureMessage('retired-stored-shape')
+  }
+  return null
 }

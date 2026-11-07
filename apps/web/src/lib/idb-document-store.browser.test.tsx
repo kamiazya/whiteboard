@@ -79,6 +79,16 @@ describe('IdbDocumentStore layout', () => {
     }
   }
 
+  /** Writes through the app's own open, so the database is at the baseline version. */
+  async function seedRow(value: unknown): Promise<void> {
+    const db = await openWhiteboardDb(DB_NAME)
+    try {
+      await put(db, SYNC_DOCUMENTS_STORE, value, docRefKey(docRef))
+    } finally {
+      db.close()
+    }
+  }
+
   function get(db: IDBDatabase, store: string, key: IDBValidKey): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const req = db.transaction([store], 'readonly').objectStore(store).get(key)
@@ -142,37 +152,42 @@ describe('IdbDocumentStore layout', () => {
     await expect(store.loadSnapshot({ docRef })).rejects.toThrow(/chunks/)
   })
 
-  // A v2 record is lifted on read and its first append is permanent, so the
-  // seq the lift invents for the next delta has to follow the log it holds.
-  for (const held of [0, 1, 2]) {
-    it(`a v2 record holding ${held} deltas takes an append and reads every delta back`, async () => {
-      const deltas = Array.from({ length: held }, (_, i) => new Uint8Array([i + 1]))
-      const db = await openWhiteboardDb(DB_NAME)
-      try {
-        await put(
-          db,
-          SYNC_DOCUMENTS_STORE,
-          { v: 2, snapshot: null, frontier: null, deltas },
-          docRefKey(docRef),
-        )
-      } finally {
-        db.close()
-      }
-      const store = new IdbDocumentStore(DB_NAME)
+  // A retired envelope is refused by name and left as written: lifting it
+  // would convert, and answering null or malformed would offer to delete data
+  // that is sitting there intact.
+  it('a v2 envelope is refused by name and the row is left as written', async () => {
+    const seed = { v: 2, snapshot: null, frontier: null, deltas: [new Uint8Array([1])] }
+    await seedRow(seed)
+    const store = new IdbDocumentStore(DB_NAME)
 
-      await store.appendDeltas({
+    for (const read of [
+      () => store.loadSnapshot({ docRef }),
+      () => store.loadDeltas({ docRef, afterSeq: null }),
+      () => store.readFrontier({ docRef }),
+    ]) {
+      await expect(read()).rejects.toMatchObject({
+        name: 'StoredDocumentUnreadableError',
+        code: 'retired-envelope',
+      })
+    }
+    await expect(
+      store.appendDeltas({
         docRef,
         deltaBatch: { updates: [new Uint8Array([9])], newFrontier: new Uint8Array() },
         requireSnapshot: false,
-      })
+      }),
+    ).rejects.toMatchObject({ code: 'retired-envelope' })
 
-      const loaded = await store.loadDeltas({ docRef, afterSeq: null })
-      expect(loaded.updates.map((update) => [...update])).toEqual([
-        ...deltas.map((delta) => [...delta]),
-        [9],
-      ])
-      // The log held seqs 1..n, so the append is n+1 and a tail resumes after it.
-      expect(loaded.lastSeq).toBe(held + 1)
+    expect(await withRaw((db) => get(db, SYNC_DOCUMENTS_STORE, docRefKey(docRef)))).toEqual(seed)
+  })
+
+  it('a newer envelope stays unsupported-version and a non-object stays malformed', async () => {
+    await seedRow({ v: 4, snapshot: null })
+    const store = new IdbDocumentStore(DB_NAME)
+    await expect(store.loadSnapshot({ docRef })).rejects.toMatchObject({
+      code: 'unsupported-version',
     })
-  }
+    await seedRow('nonsense')
+    await expect(store.loadSnapshot({ docRef })).rejects.toMatchObject({ code: 'malformed' })
+  })
 })

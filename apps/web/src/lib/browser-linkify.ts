@@ -7,7 +7,7 @@ import {
   saveAndAnnounce,
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { touchContentTimestamp } from './loro-store.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 
 /**
  * The browser keeper's half of the Connections panel's **Link**: turn the

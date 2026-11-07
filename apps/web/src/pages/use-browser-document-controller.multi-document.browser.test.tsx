@@ -4,32 +4,36 @@
  * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
 
+import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
 import { IdbDefaultDocumentPointer, idbContentClock } from '../lib/browser-document-summary.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { loadDocumentContent } from '../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedTreeContent } from '../test-utils/seed-workspace-content.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
 
 // The claim seeds the db-name seam every opener in this page resolves;
 // nothing here needs the name itself now that clearWhiteboardDb reads it.
 claimIsolatedWhiteboardDb('use-browser-document-controller-multi-document')
 
-function snapshotWithElements(elements: unknown[]): Uint8Array {
+function snapshotWithNode(id: string): Uint8Array {
   const doc = new Loro()
-  const list = doc.getList('elements')
-  for (const el of elements) list.push(el)
+  writeSpatialCanvas(doc, {
+    nodes: [textNode({ id, x: 0, y: 0, width: 80, height: 40, text: id })],
+    edges: [],
+  })
   return doc.export({ mode: 'snapshot' })
 }
 
 /** The production create path over the same stores the controller defaults to. */
 function createSeeded(index: BrowserDocumentIndex, name: string) {
-  return createSeededDocument(index, new LoroStore(), idbContentClock(), name)
+  return createSeededDocument(index, idbContentClock(), name)
 }
 
 describe('multi-canvas foundation (real IndexedDB)', () => {
@@ -69,9 +73,8 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     await expect(loadDocumentContent(idB)).resolves.not.toBeNull()
   })
 
-  it('two documents hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
+  it('two documents hold independent content — writing to one never leaks into the other', async () => {
     const store = new BrowserDocumentIndex()
-    const loro = new LoroStore()
     renderHook(() => useBrowserDocumentController(store))
     await act(async () => {})
 
@@ -84,21 +87,14 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
       idB = (await createSeeded(store, 'Canvas B')).documentId
     })
 
-    await loro.save(idA, snapshotWithElements([{ id: 'rect-a', type: 'rectangle' }]))
-    await loro.save(idB, snapshotWithElements([{ id: 'rect-b', type: 'rectangle' }]))
+    await seedTreeContent(idA, snapshotWithNode('node-a'))
+    await seedTreeContent(idB, snapshotWithNode('node-b'))
 
-    const loadedA = await loro.load(idA)
-    const loadedB = await loro.load(idB)
-    expect(loadedA.kind).toBe('ok')
-    expect(loadedB.kind).toBe('ok')
-    if (loadedA.kind === 'ok' && loadedB.kind === 'ok') {
-      const docA = new Loro()
-      docA.import(loadedA.snapshot)
-      const docB = new Loro()
-      docB.import(loadedB.snapshot)
-      expect(docA.getList('elements').toJSON()).toEqual([{ id: 'rect-a', type: 'rectangle' }])
-      expect(docB.getList('elements').toJSON()).toEqual([{ id: 'rect-b', type: 'rectangle' }])
-    }
+    const docA = await loadDocumentContent(idA)
+    const docB = await loadDocumentContent(idB)
+    if (docA === null || docB === null) throw new Error('content did not load')
+    expect(readSpatialCanvas(docA).nodes.map((n) => n.id)).toEqual(['node-a'])
+    expect(readSpatialCanvas(docB).nodes.map((n) => n.id)).toEqual(['node-b'])
   })
 
   it('switchDocument swaps the current snapshot and the persisted default pointer, A -> B -> A', async () => {

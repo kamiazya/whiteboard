@@ -23,9 +23,9 @@ export function docRefKey(docRef: DocRef): string {
     case 'document':
       // Deliberately NOT `document:<workspaceId>:<documentId>` even though
       // the ref now carries the workspace: a documentId is a ULID and
-      // already globally unique, and the boot fold must keep reading and
-      // sweeping legacy per-document rows written under exactly this key on
-      // any not-yet-folded database.
+      // already globally unique. The daemon still mints this kind for
+      // `deleteDoc`; the browser keeper mints none and refuses a stored row
+      // under this key by name.
       return `document:${docRef.documentId}`
     case 'workspace-tree':
       return `workspace-tree:${docRef.workspaceId}`

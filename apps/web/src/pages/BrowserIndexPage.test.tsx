@@ -28,7 +28,6 @@ function renderPage(store: BrowserStoreDouble, revision?: unknown) {
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={store.index}
-        loro={store.loro}
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={onOpenDocument}
@@ -698,7 +697,6 @@ describe('the workspace names the page', () => {
       <MemoryRouter initialEntries={['/']}>
         <BrowserIndexPage
           index={flakyIndex}
-          loro={store.loro}
           pointer={store.pointer}
           clock={store.clock}
           onOpenDocument={vi.fn()}

@@ -15,12 +15,18 @@
  * times. Waiting for the refs to change instead left the picture on its card
  * for the life of the page, since an open board's pictures do not change on
  * their own; the bound is what keeps a read that always fails from spinning.
+ *
+ * `RETIRED_PICTURE` is a third, terminal answer: it is installed in the map
+ * under the ref, as the value, so the caller can label the slot, and it is
+ * never asked for again. It is not an object URL and is never revoked.
  */
 import { useEffect, useRef, useState } from 'react'
+import { RETIRED_PICTURE } from '../lib/document-file-contract.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
-export type LoadImageUrl = (ref: string) => Promise<string | undefined>
+export type LoadImageUrl = (ref: string) => Promise<string | undefined | typeof RETIRED_PICTURE>
 
+// `url` is an object URL or `RETIRED_PICTURE`: both install under the ref as-is.
 type Outcome =
   | { readonly ref: string; readonly kind: 'url'; readonly url: string }
   | { readonly ref: string; readonly kind: 'absent' | 'failed' }
@@ -29,7 +35,7 @@ type Installed = Extract<Outcome, { kind: 'url' }>
 export function useImageUrls(
   refs: readonly string[],
   load: LoadImageUrl | undefined,
-): ReadonlyMap<string, string> {
+): ReadonlyMap<string, string | typeof RETIRED_PICTURE> {
   const [urls, setUrls] = useState<ReadonlyMap<string, string>>(new Map())
   const urlsRef = useRef<ReadonlyMap<string, string>>(urls)
   urlsRef.current = urls
@@ -46,7 +52,7 @@ export function useImageUrls(
 
   useEffect(
     () => () => {
-      for (const url of urlsRef.current.values()) URL.revokeObjectURL(url)
+      revokeAll(urlsRef.current.values())
     },
     [],
   )
@@ -72,7 +78,7 @@ export function useImageUrls(
         // A URL minted after cleanup is in nobody's map, so the unmount
         // revoke below can never reach it. Dropping it leaks the decoded
         // image for the tab's lifetime.
-        for (const outcome of loaded) if (outcome.kind === 'url') URL.revokeObjectURL(outcome.url)
+        revokeAll(loaded.filter((o): o is Installed => o.kind === 'url').map((o) => o.url))
         return
       }
       recordSettled(settled.current, loaded)
@@ -91,6 +97,11 @@ export function useImageUrls(
   }, [key, round])
 
   return urls
+}
+
+/** Releases every object URL; a retired picture holds none. */
+function revokeAll(urls: Iterable<string>): void {
+  for (const url of urls) if (url !== RETIRED_PICTURE) URL.revokeObjectURL(url)
 }
 
 type Settled = Map<string, 'absent' | number>

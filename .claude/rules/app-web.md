@@ -372,10 +372,15 @@ back; until then the worker writes nothing for that document.
 
 `lib/idb-stored-shapes.property.browser.test.tsx` writes through each
 production writer and reads through its reader, against the real
-IndexedDB: the blob store, the document-file store (its v2 record and the
-v1 record it rewrites on read), the document index's workspace rows (a
+IndexedDB: the blob store, the document-file store (its v2 record; a v1
+record is refused, not read), the document index's workspace rows (a
 per-document row is not read: a workspace holding one is refused,
-`holdsPreTreeRecords`), the document store's snapshot and delta log, and the
+`holdsPreTreeRecords`, and the per-document CONTENT record — a `document:*` key in
+syncDocuments — is the third thing `pre-tree-records` refuses, through
+`holdsPreTreeContentRecords`, which the file sweep's stand-down shares; a v2 sync envelope
+and a v1 file record are refused by name rather than lifted: `'retired-envelope'` becomes the
+retired-stored-shape screen with no Start fresh, `{ kind: 'retired' }` becomes the picture's
+"saved in a form this version no longer reads" label), the document store's snapshot and delta log, and the
 version store's rows. Inputs are drawn from the writer's input space, or
 from the port's schema where the writer takes one; a `z.custom` /
 `z.instanceof` field is overridden by path, since the walk cannot know

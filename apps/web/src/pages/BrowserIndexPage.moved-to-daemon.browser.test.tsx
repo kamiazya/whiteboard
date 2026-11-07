@@ -25,7 +25,6 @@ import {
   switchBrowserWorkspace,
 } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
-import { LoroStore } from '../lib/loro-store.js'
 import { announceWorkspaceRemoved } from '../lib/workspace-broadcast.js'
 import { TOMBSTONE_STORE, writeTombstone } from '../lib/workspace-tombstone.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -50,7 +49,7 @@ async function seedTwoWorkspaces(): Promise<string> {
   const index = new BrowserDocumentIndex()
   const movedId = await resolveBrowserWorkspaceId()
   await index.createWorkspace({ workspaceId: movedId })
-  await createSeededDocument(index, new LoroStore(), idbContentClock(), undefined, 'markdown')
+  await createSeededDocument(index, idbContentClock(), undefined, 'markdown')
   await index.createWorkspace({ workspaceId: NEIGHBOUR })
   await index.createDocument({ workspaceId: NEIGHBOUR, path: 'kept', kind: 'markdown' })
   return movedId

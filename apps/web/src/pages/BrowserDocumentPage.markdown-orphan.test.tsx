@@ -101,12 +101,7 @@ it('marks the conversation whose passage is gone, and only that one', async () =
   await store.save(note)
 
   renderInRouter(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   await waitFor(() => expect(screen.getByRole('button', { name: /comments/i })).toBeTruthy())

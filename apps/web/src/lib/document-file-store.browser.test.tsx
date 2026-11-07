@@ -3,7 +3,7 @@
  *
  * Real browser context required for IndexedDB.
  */
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BLOBS_STORE, openWhiteboardDb } from './browser-idb.js'
@@ -165,17 +165,13 @@ describe('DocumentFileStore over the blob store', () => {
     expect(await blobCount()).toBe(0)
   })
 
-  it('reads a v1 record and converts it in place', async () => {
-    // Records written before the blob store existed hold the Blob itself.
-    // They still have to display — and a read is the moment their bytes are
-    // in hand, so it is also the cheapest moment to move them.
+  /** A v1 row, as a build that held the Blob itself wrote it. */
+  async function seedV1(fileId: string): Promise<unknown> {
+    const row = { v: 1, mimeType: 'image/png', created: 7, blob: new Blob([PNG]) }
     const db = await openWhiteboardDb()
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('documentFiles', 'readwrite')
-      tx.objectStore('documentFiles').put(
-        { v: 1, mimeType: 'image/png', created: 7, blob: new Blob([PNG]) },
-        'legacy',
-      )
+      tx.objectStore('documentFiles').put(row, fileId)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -185,15 +181,51 @@ describe('DocumentFileStore over the blob store', () => {
         reject(tx.error)
       }
     })
+    return row
+  }
 
+  async function rawRow(fileId: string): Promise<unknown> {
+    const db = await openWhiteboardDb()
+    try {
+      return await new Promise<unknown>((resolve, reject) => {
+        const req = db
+          .transaction('documentFiles', 'readonly')
+          .objectStore('documentFiles')
+          .get(fileId)
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+      })
+    } finally {
+      db.close()
+    }
+  }
+
+  // Answering absent would tell the owner the picture is gone, and converting
+  // it would be a reader for a shape this build stopped reading.
+  it('answers a v1 record as retired and leaves it as written', async () => {
+    await seedV1('legacy')
     const store = new DocumentFileStore()
-    expect(await bytesOf(store, 'legacy')).toEqual(PNG.buffer)
 
-    // Converted: the bytes are in the blob store, and the record now points
-    // at them. Polled, because the conversion is deliberately not awaited —
-    // it must not delay the image the caller asked for.
-    await vi.waitFor(async () => expect(await blobCount()).toBe(1), { timeout: 3000 })
-    expect(await bytesOf(store, 'legacy')).toEqual(PNG.buffer)
+    expect(await store.read('legacy')).toEqual({ kind: 'retired' })
+    expect(await store.read('legacy')).toEqual({ kind: 'retired' })
+    const row = (await rawRow('legacy')) as { v: number; blob?: Blob }
+    expect(row.v).toBe(1)
+    expect(row.blob).toBeInstanceOf(Blob)
+    expect(await blobCount()).toBe(0)
+  })
+
+  it('leaves a row that does not parse where it is when it sweeps', async () => {
+    await seedV1('legacy')
+    await new DocumentFileStore().put('current', {
+      mimeType: 'image/png',
+      blob: new Blob([PNG]),
+      created: 1,
+    })
+
+    const swept = await new DocumentFileStore().sweep(() => false, Date.now() + 1000)
+
+    expect(swept).toEqual(['current'])
+    expect(((await rawRow('legacy')) as { v: number }).v).toBe(1)
   })
 
   it('reads a reference whose bytes are gone as absent, not unreadable', async () => {

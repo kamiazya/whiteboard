@@ -50,6 +50,7 @@ import {
   saveAndAnnounce,
 } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 import { createSeededDocumentAt } from './create-seeded-document.js'
 import { optional, type WorkspaceDocumentEntry } from './document-entry.js'
 import { DocumentFileStore } from './document-file-store.js'
@@ -59,7 +60,6 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from './files-source.js'
-import { LoroStore, type LoroStoreLike, touchContentTimestamp } from './loro-store.js'
 import {
   type ContentRecord,
   lazyContentRecord,
@@ -74,14 +74,13 @@ type ReadableEntry = { documentId: string; path: string; kind?: DocumentKind }
  * opened once, so N documents cost one open; a lone read opens its own.
  */
 async function loadCurrentDocFrom(
-  loro: LoroStoreLike,
   entry: WorkspaceDocumentEntry,
   record?: () => Promise<ContentRecord>,
 ): Promise<LoroDoc> {
   const doc =
     record === undefined
-      ? await loadDocumentContent(entry.documentId, { loro })
-      : await projectDocumentContent(await record(), entry.documentId, { loro })
+      ? await loadDocumentContent(entry.documentId)
+      : await projectDocumentContent(await record(), entry.documentId)
   if (doc === null) throw new Error(`document ${entry.documentId} holds no readable content`)
   return doc
 }
@@ -100,19 +99,12 @@ async function loadCurrentDocFrom(
  * The workspace record is opened once for the walk, and only if a document is
  * read at all.
  */
-async function* readDocumentsFrom(
-  loro: LoroStoreLike,
-  entries: readonly ReadableEntry[],
-): AsyncGenerator<ReadDocument> {
+async function* readDocumentsFrom(entries: readonly ReadableEntry[]): AsyncGenerator<ReadDocument> {
   const record = lazyContentRecord()
   for (const entry of entries) {
     let doc: LoroDoc
     try {
-      doc = await loadCurrentDocFrom(
-        loro,
-        { documentId: entry.documentId, path: entry.path },
-        record,
-      )
+      doc = await loadCurrentDocFrom({ documentId: entry.documentId, path: entry.path }, record)
     } catch {
       continue
     }
@@ -299,7 +291,7 @@ function capabilityMembers(index: DocumentIndex) {
  * lets the three-pane document browser serve a browser-kept workspace, which is what the
  * seam exists for.
  *
- * Reads go through the same `DocumentIndex`/`LoroStore` pair the editor
+ * Reads go through the same `DocumentIndex`/workspace-record pair the editor
  * uses, so the browser and the editor cannot disagree about what exists or
  * what it currently says.
  */
@@ -311,14 +303,12 @@ export function createBrowserFilesSource(
     // the panel silently reading a different store than the page is exactly
     // the split this parameter closes.
     index?: DocumentIndex
-    loro?: LoroStoreLike
     clock?: ContentClock
     files?: Pick<DocumentFileStore, 'read'>
   } = {},
 ): WorkspaceFilesSource {
   // The default matches what production injects: the tree index.
   const index = deps.index ?? new BrowserDocumentIndex()
-  const loro = deps.loro ?? new LoroStore()
   const clock = deps.clock ?? idbContentClock()
   const files = deps.files ?? new DocumentFileStore()
 
@@ -375,8 +365,8 @@ export function createBrowserFilesSource(
   }
 
   const loadCurrentDoc = (entry: WorkspaceDocumentEntry, record?: () => Promise<ContentRecord>) =>
-    loadCurrentDocFrom(loro, entry, record)
-  const readableDocuments = (entries: readonly ReadableEntry[]) => readDocumentsFrom(loro, entries)
+    loadCurrentDocFrom(entry, record)
+  const readableDocuments = (entries: readonly ReadableEntry[]) => readDocumentsFrom(entries)
 
   const bearersByDocument = createTagBearersCache(readableDocuments)
 
@@ -415,7 +405,7 @@ export function createBrowserFilesSource(
     // nothing here can ask the index which document carries a facet either,
     // and the two keepers must agree on where a library lives.
     readTagLibrary: () => readLibrary(index, loadCurrentDoc, TAG_LIBRARY_PATH, readTagLibrary),
-    writeTagLibrary: (library) => writeTagLibraryDocument(index, loro, library),
+    writeTagLibrary: (library) => writeTagLibraryDocument(index, library),
     readStencilLibrary: () =>
       readLibrary(index, loadCurrentDoc, STENCIL_LIBRARY_PATH, readStencilLibrary),
     async listTagsInUse() {
@@ -466,7 +456,7 @@ export function createBrowserFilesSource(
     },
 
     async createDocument(path: string, kind: DocumentKind, name?: string): Promise<string> {
-      const entry = await createSeededDocumentAt(index, loro, {
+      const entry = await createSeededDocumentAt(index, {
         path,
         kind,
         ...(name === undefined ? {} : { name }),
@@ -475,7 +465,7 @@ export function createBrowserFilesSource(
     },
 
     async importDocument(path: string, imported: ImportedDocument): Promise<void> {
-      const entry = await createSeededDocumentAt(index, loro, {
+      const entry = await createSeededDocumentAt(index, {
         path,
         kind: imported.kind,
         ...(imported.name === undefined ? {} : { name: imported.name }),

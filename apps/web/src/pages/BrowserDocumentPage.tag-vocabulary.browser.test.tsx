@@ -9,11 +9,15 @@ import { cleanup, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
+import { IdbDefaultDocumentPointer } from '../lib/browser-document-summary.js'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedTreeDocument } from '../test-utils/seed-workspace-content.js'
 import '../index.css'
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { setViewport } from '../test-utils/viewport.js'
+
+claimIsolatedWhiteboardDb('browserdocumentpage-tag-vocabulary')
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: () => <div data-testid="mock-spatial-editor" style={{ height: '100%' }} />,
@@ -26,30 +30,8 @@ vi.mock('../lib/browser-backend.js', async () => {
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
-const board: DocumentSnapshot = {
-  documentId: '0W16BGNTZ49EKRX27CHPV05AFM',
-  workspaceId: 'local',
-  path: 'notes/board',
-  name: 'Board',
-  updatedAt: '2026-09-03T00:00:00.000Z',
-  kind: 'spatial' as const,
-}
-const note: DocumentSnapshot = {
-  ...board,
-  documentId: '0W16BGNTZ49EKRX27CHPV05AFN',
-  path: 'notes/ops',
-  name: 'Ops',
-  kind: 'markdown' as const,
-}
-const library: DocumentSnapshot = {
-  ...board,
-  documentId: '0W16BGNTZ49EKRX27CHPV05AFP',
-  path: 'tags',
-  name: 'Tags',
-  kind: 'markdown' as const,
-}
-
 beforeEach(async () => {
+  await clearWhiteboardDb()
   await setViewport(1024, 780)
 })
 
@@ -60,28 +42,28 @@ const offered = () =>
   [...document.querySelectorAll('datalist option')].map((option) => option.getAttribute('value'))
 
 it('the board tag row offers a note’s tag and the library’s values, and refuses what the library forbids', async () => {
-  const store = new BrowserStoreDouble()
-  await store.setDefaultDocumentId(board.documentId)
-  await store.save(board)
-  await store.save(note)
+  const board = await seedTreeDocument({ path: 'notes/board', name: 'Board', kind: 'spatial' })
+  await new IdbDefaultDocumentPointer().set(board.documentId)
   const noteDoc = new LoroDoc()
   writeCoreFacets(noteDoc, { type: 'note', tags: ['ops'] })
-  await store.loro.save(note.documentId, noteDoc.export({ mode: 'snapshot' }))
-  await store.save(library)
+  await seedTreeDocument({
+    path: 'notes/ops',
+    name: 'Ops',
+    kind: 'markdown',
+    content: noteDoc.export({ mode: 'snapshot' }),
+  })
   const libraryDoc = new LoroDoc()
   writeFacets(libraryDoc, {
     'visual.tags/v0': { keys: { health: { exclusive: true, values: { ok: {}, failing: {} } } } },
   } as never)
-  await store.loro.save(library.documentId, libraryDoc.export({ mode: 'snapshot' }))
+  await seedTreeDocument({
+    path: 'tags',
+    name: 'Tags',
+    kind: 'markdown',
+    content: libraryDoc.export({ mode: 'snapshot' }),
+  })
 
-  renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      loro={store.loro}
-      pointer={store.pointer}
-      clock={store.clock}
-    />,
-  )
+  renderPage(<BrowserDocumentPage />)
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
   await userEvent.click(await screen.findByRole('button', { name: /^display$/i }))
   await screen.findByTestId('display-panel', undefined, { timeout: 15_000 })

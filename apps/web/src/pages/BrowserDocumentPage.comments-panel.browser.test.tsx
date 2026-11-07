@@ -314,12 +314,7 @@ it('lists a markdown document conversations, which no session is there to delive
   seededNotes.set(note.documentId, noteHoldingOneThread())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   // The count too: it is read off the same list, so a rail that fills while
@@ -344,12 +339,7 @@ it('replies on a markdown document, where a reply has no session to travel throu
   seededNotes.set(note.documentId, noteHoldingOneThread())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
   await userEvent.click(await screen.findByText('is this still true?'))
@@ -381,12 +371,7 @@ it('opens a conversation from the markdown body, end to end', async () => {
   seededNotes.set(note.documentId, noteHoldingABody())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   // Through the resolver-taking helper rather than a held element: the
@@ -448,12 +433,7 @@ it('moves the reader into the conversation it opens, and Escape puts them back i
   seededNotes.set(note.documentId, noteHoldingABody())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   await focusEditable(sourceEditable)
@@ -510,12 +490,7 @@ it('keeps the body highlight through an edit inside its own passage', async () =
   seededNotes.set(note.documentId, noteHoldingAMarkedPassage())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   const highlight = () => document.querySelector('.cm-annotation[data-thread-id="t-note"]')
@@ -668,12 +643,7 @@ it('reaches a note thread from the body: its gutter marker opens the rail on tha
   seededNotes.set(note.documentId, noteHoldingAPlacedThread())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   const marker = await waitFor(
@@ -710,12 +680,7 @@ it('starts a conversation about the whole document from the rail, on a note', as
   seededNotes.set(note.documentId, noteHoldingOneThread())
 
   renderPage(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
   await userEvent.click(await screen.findByTestId('comment-on-document'))

@@ -5,6 +5,7 @@
  * refusal answers), and the sentence that says why and what to do.
  */
 import 'fake-indexeddb/auto'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { cleanup, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { BrowserDocumentIndex } from '../lib/browser-document-index.js'
@@ -14,6 +15,7 @@ import { clearWhiteboardDb, registerTestWorkspace } from '../test-utils/browser-
 import { renderPage } from '../test-utils/daemon-page-harness.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedLegacyRow } from '../test-utils/seed-legacy-row.js'
+import { seedPreTreeContentRow } from '../test-utils/seed-retired-sync-row.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 
 claimIsolatedWhiteboardDb('browserdocumentpage-storage-refused')
@@ -43,6 +45,23 @@ describe('a workspace whose documents predate the tree', () => {
         {...(initialPath === undefined ? {} : { initialPath })}
       />,
     )
+
+    await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(MESSAGE))
+    expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Start fresh' })).toBeNull()
+  })
+})
+
+describe('a workspace holding a per-document content record', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+    await registerTestWorkspace()
+    await seedPreTreeContentRow(generateDocumentId())
+  })
+  afterEach(cleanup)
+
+  it('refuses it by name, with no editor and nothing to start fresh', async () => {
+    renderPage(<BrowserDocumentPage store={new BrowserDocumentIndex()} />)
 
     await waitFor(() => expect(screen.getByRole('alert').textContent).toContain(MESSAGE))
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()

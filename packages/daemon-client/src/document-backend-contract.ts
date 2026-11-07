@@ -126,6 +126,9 @@ export interface DocumentBackendHandlers {
    * 'corrupt-snapshot': the persisted snapshot bytes are not valid Loro bytes.
    * 'corrupt-delta': one of the persisted delta bytes is not valid Loro bytes.
    * 'unsupported-version': the envelope version number is not supported.
+   * 'retired-stored-shape': the record is intact in a shape this keeper once
+   *   wrote and no longer reads; it is refused, never offered for deletion.
+   *   Only the browser backend emits it.
    * 'read-unavailable': the LOAD did not complete, so nothing is known about
    *   the stored bytes — a blocked IDB open (another tab at an older
    *   version), an aborted transaction, storage that went away. Distinct from
@@ -144,6 +147,7 @@ export interface DocumentBackendHandlers {
       | 'corrupt-snapshot'
       | 'corrupt-delta'
       | 'unsupported-version'
+      | 'retired-stored-shape'
       | 'read-unavailable'
       | 'storage-failure',
   ) => void
