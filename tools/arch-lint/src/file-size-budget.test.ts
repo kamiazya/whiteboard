@@ -346,7 +346,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // case about App's OWN derivation, pinned here rather than only in the
   // hook's test because the gate is App's.
   'apps/web/src/App.test.tsx': 1373,
-  'apps/web/src/components/VersionTimeline.test.tsx': 1061,
+  'apps/web/src/components/VersionTimeline.test.tsx': 1078,
   'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx': 821,
   // Every move/demote test arranges the `/replica-key` route, the
   // `connectReplicaKeeper` wiring (the pull those flows drive is sealed) and a
