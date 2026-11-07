@@ -1,6 +1,6 @@
 [package]
 name = "xtask"
-description = "Repository tasks for the Rust workspace: code generation, architecture map, wasm import scan, size and unsafe ledgers, fuzz registry, and the release gates (binary hardening, reproducible builds)."
+description = "Repository tasks for the Rust workspace: code generation, architecture map, wasm import scan, cross-target tests, size and unsafe ledgers, fuzz registry, and the release gates (binary hardening, reproducible builds)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

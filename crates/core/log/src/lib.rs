@@ -58,6 +58,8 @@ impl Level {
 #[cfg(test)]
 mod tests {
     use super::Level;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
     fn order_runs_from_least_to_most_severe() {

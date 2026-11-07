@@ -15,15 +15,27 @@
     },
     "cc": {
       "ceiling": 34,
-      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: compiles libFuzzer's C++; process and job-server plumbing"
+      "reason": "build time only, never shipped: libfuzzer-sys's build (fuzz) and minicov's (wasm test harness): compiles libFuzzer's C++; process and job-server plumbing"
     },
     "find-msvc-tools": {
       "ceiling": 55,
-      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: cc's MSVC discovery (Windows registry FFI)"
+      "reason": "build time only, never shipped: libfuzzer-sys's build (fuzz) and minicov's (wasm test harness): cc's MSVC discovery (Windows registry FFI)"
     },
     "foldhash": {
       "ceiling": 10,
       "reason": "xtask only, never shipped: hasher under wasmparser's indexmap"
+    },
+    "futures-core": {
+      "ceiling": 5,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: the Future and Stream traits under futures-util"
+    },
+    "futures-task": {
+      "ceiling": 64,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: waker plumbing under futures-util"
+    },
+    "futures-util": {
+      "ceiling": 136,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: future combinators under js-sys's promise bridge"
     },
     "getrandom": {
       "ceiling": 113,
@@ -45,6 +57,10 @@
       "ceiling": 40,
       "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: make job-server client used by cc (fds, signals)"
     },
+    "js-sys": {
+      "ceiling": 28,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: bindings to the JS globals the test runner reports through"
+    },
     "libc": {
       "ceiling": 800,
       "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: libc bindings under cc/jobserver/getrandom"
@@ -61,9 +77,25 @@
       "ceiling": 333,
       "reason": "xtask only, never shipped: SIMD byte search inside serde_json"
     },
+    "minicov": {
+      "ceiling": 12,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: coverage counters, compiled only under the unstable test-coverage cfg"
+    },
+    "nu-ansi-term": {
+      "ceiling": 1,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: colouring of the runner's output (Windows console FFI)"
+    },
+    "num-traits": {
+      "ceiling": 1,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: numeric traits under the harness's statistics"
+    },
     "object": {
       "ceiling": 14,
       "reason": "xtask only, never shipped: zero-copy casts of header structs from file bytes (the Pod trait, alignment- and length-checked) and a read-cache lifetime transmute; harden-check reads ELF headers through it"
+    },
+    "pin-project-lite": {
+      "ceiling": 46,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: pin projection in futures-util and tokio"
     },
     "proc-macro2": {
       "ceiling": 6,
@@ -76,6 +108,10 @@
     "rustversion": {
       "ceiling": 2,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: version-conditional attributes used by wasm-bindgen"
+    },
+    "same-file": {
+      "ceiling": 3,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: walkdir's same-file check (Windows handle FFI)"
     },
     "semver": {
       "ceiling": 47,
@@ -95,11 +131,19 @@
     },
     "shlex": {
       "ceiling": 6,
-      "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: shell-word splitting inside cc"
+      "reason": "build time only, never shipped: libfuzzer-sys's build (fuzz) and minicov's (wasm test harness): shell-word splitting inside cc"
+    },
+    "slab": {
+      "ceiling": 6,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: futures-util's slab allocator"
     },
     "syn": {
       "ceiling": 78,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: Rust parser of every derive; mostly the `unsafe` keyword as a TOKEN it parses, not unsafe code"
+    },
+    "tokio": {
+      "ceiling": 1153,
+      "reason": "resolved in the lockfile only, never built here: wasm-bindgen-futures names it for emscripten under an unstable cfg, and it arrives with wasm-bindgen-test (a wasm32 dev-dependency); deny.toml records the same wrapper"
     },
     "unicode-ident": {
       "ceiling": 2,
@@ -112,6 +156,18 @@
     "wasm-bindgen-macro-support": {
       "ceiling": 50,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: #[wasm_bindgen] expansion; mostly `unsafe` inside the code it GENERATES, which wasm-bindgen's count stands for"
+    },
+    "wasm-bindgen-test": {
+      "ceiling": 14,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: the harness itself: the test registry and panic hook it installs"
+    },
+    "winapi-util": {
+      "ceiling": 22,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: walkdir's Windows file-handle helpers (FFI)"
+    },
+    "windows-sys": {
+      "ceiling": 12530,
+      "reason": "wasm test harness only (wasm-bindgen-test, a wasm32 dev-dependency of the core crates for QR-21 layer 3), never shipped: Windows API bindings, resolved for Windows targets under nu-ansi-term and winapi-util and built for no target here"
     },
     "zmij": {
       "ceiling": 70,

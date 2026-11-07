@@ -48,6 +48,8 @@ pub fn cos(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::hypot;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
     fn the_reduction_ceiling_is_the_double_det_math_ts_names_by_its_high_word() {

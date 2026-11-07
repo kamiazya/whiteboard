@@ -2,6 +2,7 @@
 
 mod arch_map;
 mod codegen;
+mod cross_target;
 mod dist;
 mod harden;
 mod inputs;
@@ -21,6 +22,7 @@ const USAGE: &str = "usage: cargo xtask <task>
 tasks:
   codegen [--check] Zod and serde types from contracts/; --check fails on drift
   arch-map          crates follow crates/architecture-map.json
+  cross-target      every core crate's tests pass on wasm32 (Node) as natively, same count
   inputs            untrusted-input entries declare caps in crates/input-caps.json
   wasm-imports      core crates built for wasm32 import nothing
   size [--update]   wasm artifacts fit crates/wasm-size-ledger.json
@@ -43,6 +45,7 @@ fn main() -> ExitCode {
         ["codegen"] => codegen::run(codegen::Mode::Write),
         ["codegen", "--check"] => codegen::run(codegen::Mode::Check),
         ["arch-map"] => arch_map::run(),
+        ["cross-target"] => cross_target::run(),
         ["inputs"] => inputs::run(),
         ["wasm-imports"] => wasm_imports::run(),
         ["size"] => size::run(size::Mode::Check),

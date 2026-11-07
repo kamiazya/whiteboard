@@ -2,6 +2,9 @@
 //! same refusals `rectSchema` makes on the TypeScript side.
 
 use whiteboard_edge_routing::geometry::{Point, Rect};
+// On wasm32 the same tests run under Node (QR-21 layer 3).
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 #[test]
 fn a_rect_within_bounds_parses() {

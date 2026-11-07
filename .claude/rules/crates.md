@@ -58,11 +58,15 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-worker` | bindings | planned | the workers-rs app: router, MCP over HTTP, edge store, alarms |
 | `whiteboard-daemon` | bindings | planned | the native daemon binary: UDS server, MCP stdio, native messaging |
 | `whiteboard-native-fixture` | bindings | present | a minimal native binary built with the dist-native profile, so the hardening and reproducibility gates have a subject before the daemon exists |
-| `xtask` | tooling | present | repository tasks: codegen, arch-map, wasm-imports, size, inputs, unsafe-ledger, harden-check, dist, repro-check, notices |
+| `xtask` | tooling | present | repository tasks: codegen, arch-map, wasm-imports, cross-target, size, inputs, unsafe-ledger, harden-check, dist, repro-check, notices |
 | `whiteboard-fuzz` | tooling | present | cargo-fuzz targets, one per untrusted-input entry |
 
 Core crates are pure: no I/O, `forbid(unsafe_code)`, unchanged on wasm32 and
-native. `cargo xtask wasm-imports` fails a core crate whose wasm32 build
+native. `cargo xtask cross-target` runs each core crate's tests on both
+(wasm32 under Node through `wasm-bindgen-test-runner`, `.cargo/config.toml`)
+and fails when the two pass different counts, so a test module needs
+`#[cfg(target_arch = "wasm32")] use wasm_bindgen_test::wasm_bindgen_test as test;`
+to count (QR-21 layer 3). `cargo xtask wasm-imports` fails a core crate whose wasm32 build
 imports ANYTHING, with a presence guard on the crate's own function count
 (an artifact holding only std passes vacuously; the first LTO'd version did).
 

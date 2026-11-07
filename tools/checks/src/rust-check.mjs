@@ -2,7 +2,7 @@
 // `pnpm rust:check`: every gate the Rust workspace has, in the order a
 // failure is cheapest to read — formatting, lints, tests, then the xtask
 // guards (architecture map, input caps and the fuzz registry, wasm import
-// scan, size ledger, dependency-unsafe ledger) and the supply-chain check
+// scan, the core crates' tests on wasm32, size ledger, dependency-unsafe ledger) and the supply-chain check
 // over both workspaces. Stops at the first failing step.
 //
 // crates/fuzz is a workspace of its own (its targets need nightly), so its
@@ -34,6 +34,7 @@ const STEPS = [
   ['cargo', ['xtask', 'arch-map']],
   ['cargo', ['xtask', 'inputs']],
   ['cargo', ['xtask', 'wasm-imports']],
+  ['cargo', ['xtask', 'cross-target']],
   ['cargo', ['xtask', 'size']],
   ['cargo', ['xtask', 'unsafe-ledger']],
   ['cargo', ['deny', '--locked', 'check']],

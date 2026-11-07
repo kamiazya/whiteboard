@@ -14,6 +14,8 @@ pub fn without_negative_zero(x: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::without_negative_zero;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
     fn negative_zero_loses_its_sign() {

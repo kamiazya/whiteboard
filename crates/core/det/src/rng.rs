@@ -14,6 +14,8 @@ pub fn unit_interval(state: u32) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::unit_interval;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
     fn spans_zero_inclusive_to_one_exclusive() {

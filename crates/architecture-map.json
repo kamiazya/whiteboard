@@ -413,7 +413,7 @@
       "path": "crates/xtask",
       "layer": "tooling",
       "status": "present",
-      "description": "repository tasks: codegen, architecture map, wasm import scan, size and unsafe ledgers, fuzz registry, release gates (harden-check, repro-check, dist)",
+      "description": "repository tasks: codegen, architecture map, wasm import scan, the core crates' cross-target tests, size and unsafe ledgers, fuzz registry, release gates (harden-check, repro-check, dist)",
       "targets": ["native"],
       "allowedInternalDeps": [],
       "allowedThirdParty": {

@@ -11,3 +11,9 @@
 
 [alias]
 xtask = "run --quiet --package xtask --"
+
+# `cargo test --target wasm32-unknown-unknown` runs the tests under Node with
+# the runner wasm-bindgen-cli installs (QR-21 layer 3: the same fixtures on
+# both targets).
+[target.wasm32-unknown-unknown]
+runner = "wasm-bindgen-test-runner"
