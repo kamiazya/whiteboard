@@ -19,6 +19,7 @@ import {
   replicaKeyRefusalFetch,
 } from '../test-utils/replica-key-fetch.js'
 import { disconnectFromDaemon } from './disconnect-daemon.js'
+import { IdbDocumentStore } from './idb-document-store.js'
 import {
   connectReplicaKeeper,
   forgetDaemonKeys,
@@ -99,6 +100,25 @@ describe('replica-store', () => {
     const dump = await getAllRaw(DB_NAME)
     const found = dump.flatMap((s) => collectStrings(s.records)).some((s) => s.includes(marker))
     expect(found).toBe(true)
+  })
+
+  it('refuses a per-document record key rather than routing it to plaintext', async () => {
+    const docRef: DocRef = {
+      kind: 'document',
+      workspaceId: freshWorkspaceId(),
+      documentId: '01JD000000000000000000000A',
+    }
+    const { manifest, chunks } = chunkSnapshot(new TextEncoder().encode(marker), 200)
+    await new IdbDocumentStore(DB_NAME).saveSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier: new Uint8Array(4),
+    })
+
+    await expect(openDocumentStore(DB_NAME).loadSnapshot({ docRef })).rejects.toThrow(
+      /document:01JD000000000000000000000A.*no longer reads/,
+    )
   })
 
   it('markReplica seals the FIRST pull even before the registry entry exists', async () => {

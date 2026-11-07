@@ -32,10 +32,12 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useLayoutEffect, useMemo, useRef } from 'react'
 import type { ClipboardImageSeams } from '../lib/clipboard-images.js'
-import type {
-  DocumentFileAdapter,
-  ImageStoreResult,
-  LoadedFileDocument,
+import {
+  type DocumentFileAdapter,
+  type ImageStoreResult,
+  type LoadedFileDocument,
+  RETIRED_PICTURE,
+  RETIRED_PICTURE_LABEL,
 } from '../lib/document-file-contract.js'
 import { useImageUrls } from './use-image-urls.js'
 import { TRANSIENT_LOAD_ATTEMPTS, usePrefetchedEntries } from './use-prefetched-cache.js'
@@ -240,7 +242,12 @@ export function useDocumentFileSeams({
   // anyway; a document with readable facets carries its card.
   const extras = useMemo(() => {
     const out = new Map<string, ReferenceExtra>()
-    for (const [ref, href] of imageUrls) out.set(ref, { image: { href } })
+    for (const [ref, href] of imageUrls) {
+      out.set(
+        ref,
+        href === RETIRED_PICTURE ? { label: RETIRED_PICTURE_LABEL } : { image: { href } },
+      )
+    }
     for (const [ref, document] of embedContent) {
       if (document === null || out.has(ref)) continue
       const facets = toFacetCard(ref, document.facets, document.name)

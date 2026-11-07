@@ -17,10 +17,11 @@ import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import type {
-  DocumentFileAdapter,
-  ImageStoreResult,
-  LoadedFileDocument,
+import {
+  type DocumentFileAdapter,
+  type ImageStoreResult,
+  type LoadedFileDocument,
+  RETIRED_PICTURE,
 } from './document-file-contract.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { imageRefusal } from './image-upload-policy.js'
@@ -152,24 +153,41 @@ async function storeImageAsset(file: File): Promise<ImageStoreResult> {
 }
 
 /**
- * A stored image asset's bytes, or undefined when the store holds none. A
- * store that could not be READ rejects instead — reported here, where the
- * reference is known — because the seam caching this keeps `undefined` as
- * terminal and asks again only on a rejection.
+ * What the store holds under an image reference. A store that could not be
+ * READ rejects instead — reported here, where the reference is known —
+ * because the seam caching this keeps `undefined` as terminal and asks again
+ * only on a rejection.
  */
-async function loadImageAssetBlob(ref: string): Promise<Blob | undefined> {
+async function readImageAsset(ref: string) {
   const read = await new DocumentFileStore().read(ref)
   if (read.kind === 'unreadable') {
     log.warn('image asset load failed', { ref, err: read.error })
     throw read.error
   }
+  return read
+}
+
+/**
+ * A stored image asset's bytes, or undefined when the store holds none —
+ * which includes a picture saved in a retired form: a copy skips it as it
+ * skips an absent one, and the slot that displays it is what says why.
+ */
+async function loadImageAssetBlob(ref: string): Promise<Blob | undefined> {
+  const read = await readImageAsset(ref)
   return read.kind === 'blob' ? read.blob : undefined
 }
 
-/** Loads a stored image asset as an object URL the caller revokes, on `loadImageAssetBlob`'s terms. */
-async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
-  const blob = await loadImageAssetBlob(ref)
-  return blob === undefined ? undefined : URL.createObjectURL(blob)
+/**
+ * Loads a stored image asset as an object URL the caller revokes, on
+ * `loadImageAssetBlob`'s terms, or `RETIRED_PICTURE` for one saved in a form
+ * this version no longer reads.
+ */
+async function loadImageAssetUrl(
+  ref: string,
+): Promise<string | undefined | typeof RETIRED_PICTURE> {
+  const read = await readImageAsset(ref)
+  if (read.kind === 'retired') return RETIRED_PICTURE
+  return read.kind === 'blob' ? URL.createObjectURL(read.blob) : undefined
 }
 
 /**

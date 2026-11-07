@@ -32,16 +32,15 @@ import {
 import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, createWorkspaceInputSchema } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
+import { afterAll, beforeAll, describe, expect } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
-import { DOCUMENT_FILES_STORE, openWhiteboardDb } from './browser-idb.js'
 import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { DocumentFileStore, documentFileRecordSchema } from './document-file-store.js'
+import { DocumentFileStore } from './document-file-store.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { IdbDocumentStore } from './idb-document-store.js'
@@ -93,28 +92,11 @@ afterAllFloor(
   [
     'gives back the bytes and content type that were put',
     'gives back the image that was put, typed as the browser types it',
-    'reads a v1 record and rewrites it as v2 with its bytes in the blob store',
   ],
   () => {
     expect(emptyTypeDraws).toBeGreaterThanOrEqual(3)
   },
 )
-
-/** Raw access to one object store, for seeding a legacy record and reading what a rewrite left. */
-async function raw<T>(
-  storeName: string,
-  mode: IDBTransactionMode,
-  body: (store: IDBObjectStore) => IDBRequest<T>,
-): Promise<T> {
-  const db = await openWhiteboardDb()
-  return new Promise<T>((resolve, reject) => {
-    const tx = db.transaction(storeName, mode)
-    const request = body(tx.objectStore(storeName))
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
-    tx.oncomplete = () => db.close()
-  })
-}
 
 describe('IdbBlobStore', () => {
   fcTest.prop(
@@ -156,41 +138,6 @@ describe('DocumentFileStore', () => {
       expect(got.type).toBe(new Blob([], { type: mimeType }).type)
     },
   )
-
-  fcTest.prop(
-    [bytesArb, mimeTypeArb, fc.nat()],
-    withDefaults<[Uint8Array<ArrayBuffer>, string, number]>({
-      numRuns: 8,
-      examples: [[new Uint8Array([1, 2, 3]), '', 0]],
-    }),
-  )(
-    'reads a v1 record and rewrites it as v2 with its bytes in the blob store',
-    async (bytes, mimeType, created) => {
-      recordMimeType(mimeType)
-      const fileId = `legacy-${generateDocumentId()}`
-      const blob = new Blob([bytes], { type: mimeType })
-      await raw(DOCUMENT_FILES_STORE, 'readwrite', (files) =>
-        files.put({ v: 1, mimeType, created, blob }, fileId),
-      )
-      const store = new DocumentFileStore()
-      const got = await blobRead(store, fileId)
-      expect(asList(new Uint8Array(await got.arrayBuffer()))).toEqual(asList(bytes))
-
-      const rewritten = await vi.waitFor(async () => {
-        const record = documentFileRecordSchema.parse(
-          await raw(DOCUMENT_FILES_STORE, 'readonly', (files) => files.get(fileId)),
-        )
-        expect(record.v).toBe(2)
-        return record
-      })
-      if (rewritten.v !== 2) throw new Error('unreachable')
-      expect(rewritten).toMatchObject({ mimeType, created })
-      expect(await new IdbBlobStore().has({ ref: rewritten.ref })).toEqual({ exists: true })
-      // And the image still reads, now through the blob store.
-      const again = await blobRead(store, fileId)
-      expect(asList(new Uint8Array(await again.arrayBuffer()))).toEqual(asList(bytes))
-    },
-  )
 })
 
 describe('IdbDocumentIndex', () => {
@@ -227,11 +174,11 @@ describe('IdbDocumentStore', () => {
     'gives back the snapshot and the delta log as they were saved',
     async (snapshot, maxChunkBytes, frontier, updates, newFrontier) => {
       const store = new IdbDocumentStore()
-      const docRef: DocRef = {
-        kind: 'document',
-        workspaceId: generateDocumentId(),
-        documentId: generateDocumentId(),
-      }
+      // The browser keeper mints workspace-tree refs alone: a `document:*` row
+      // is the retired per-document record, which `BrowserDocumentIndex`
+      // refuses the whole workspace over — so a draw spelled that way would
+      // trip the describe below, not the store under test.
+      const docRef: DocRef = { kind: 'workspace-tree', workspaceId: generateDocumentId() }
       const { manifest, chunks } = chunkSnapshot(snapshot, maxChunkBytes)
       await store.saveSnapshot({ docRef, manifest, chunks, frontier })
 

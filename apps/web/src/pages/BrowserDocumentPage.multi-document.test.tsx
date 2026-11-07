@@ -18,7 +18,7 @@
 // jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
 // persistence with the spatial editor mocked — no browser layout or input
 // fidelity at stake. The real-IDB contract stays pinned by the four
-// browser-mode keeper suites (see loro-store.browser.test.tsx).
+// browser-mode keeper suites (see idb-document-store.browser.test.tsx).
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -32,7 +32,6 @@ import {
   idbContentClock,
   listBrowserDocuments,
 } from '../lib/browser-document-summary.js'
-import { LoroStore } from '../lib/loro-store.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { BROWSER_DEFAULT_ADDRESS } from '../test-utils/browser-default-address.js'
 import {
@@ -70,10 +69,9 @@ const render = (ui: ReactElement) => renderPage(ui, { probe: true })
  */
 async function seedTwoDocuments(store: BrowserDocumentIndex): Promise<[string, string]> {
   const { createSeededDocument } = await import('../lib/create-seeded-document.js')
-  const loro = new LoroStore()
   const clock = idbContentClock()
-  const a = await createSeededDocument(store, loro, clock)
-  const b = await createSeededDocument(store, loro, clock)
+  const a = await createSeededDocument(store, clock)
+  const b = await createSeededDocument(store, clock)
   await new IdbDefaultDocumentPointer().set(a.documentId)
   return [a.path, b.path]
 }

@@ -10,24 +10,7 @@ import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
 import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
-import type { LoroStoreLike } from './use-browser-document-controller.js'
-
-class FakeLoroStore implements LoroStoreLike {
-  private byId = new Map<string, Uint8Array>()
-  async save(id: string, bytes: Uint8Array): Promise<void> {
-    this.byId.set(id, bytes)
-  }
-  createEmptySnapshot(): Uint8Array {
-    return new Uint8Array([1, 2, 3])
-  }
-  async load(id: string): Promise<LoroLoadResult> {
-    const bytes = this.byId.get(id)
-    if (bytes === undefined) return { kind: 'not-found' }
-    return { kind: 'ok', snapshot: bytes }
-  }
-}
 
 vi.mock('../lib/browser-backend.js', () => ({
   BrowserBackend: class {
@@ -70,7 +53,6 @@ describe('stale /w/:workspace/d/:path deep link', () => {
               store={store.index}
               pointer={store.pointer}
               clock={store.clock}
-              loro={new FakeLoroStore()}
               initialPath="gone-123"
             />
           ),
@@ -119,7 +101,6 @@ describe('stale /w/:workspace/d/:path deep link', () => {
               store={store.index}
               pointer={store.pointer}
               clock={store.clock}
-              loro={new FakeLoroStore()}
               initialPath="real-canvas"
             />
           ),
@@ -203,7 +184,6 @@ describe('stale /w/:workspace/d/:path deep link', () => {
               store={store.index}
               pointer={store.pointer}
               clock={store.clock}
-              loro={new FakeLoroStore()}
               initialPath="real-canvas"
             />
           ),

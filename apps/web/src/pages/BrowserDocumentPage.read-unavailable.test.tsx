@@ -56,12 +56,7 @@ it('offers a retry and never the delete when the read simply did not complete', 
   await store.save(snap)
 
   renderInRouter(
-    <BrowserDocumentPage
-      store={store.index}
-      pointer={store.pointer}
-      clock={store.clock}
-      loro={store.loro}
-    />,
+    <BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
   )
 
   await waitFor(() => expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy())

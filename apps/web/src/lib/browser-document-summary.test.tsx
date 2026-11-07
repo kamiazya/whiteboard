@@ -10,11 +10,10 @@
 
 // jsdom + fake-indexeddb: this file exercises IndexedDB persistence logic,
 // not browser layout or input fidelity — the real-IDB contract stays pinned
-// by idb-document-index/loro-store/browser-backend/browser-idb
+// by idb-document-index/browser-backend/browser-idb
 // in the browser project.
 import 'fake-indexeddb/auto'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import {
@@ -24,7 +23,7 @@ import {
 } from './browser-document-summary.js'
 import { openWhiteboardDb } from './browser-idb.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 
 const DB_NAME = 'whiteboard-summary-test'
 
@@ -47,7 +46,7 @@ function abortMetaAfter(method: 'put' | 'delete'): void {
 
 /**
  * The index answers placement only; what this layer adds is read from the
- * content stores under `DB_NAME`, so an in-memory index keeps the subject
+ * content clock under `DB_NAME`, so an in-memory index keeps the subject
  * to that layer alone.
  */
 async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
@@ -56,10 +55,9 @@ async function seedWorkspace(): Promise<InMemoryDocumentIndex> {
   return index
 }
 
+/** The listing's content clock is all this layer reads of a content write. */
 async function writeContent(documentId: string): Promise<void> {
-  const doc = new Loro()
-  doc.getList('elements').push({ id: 'el' })
-  await new LoroStore(DB_NAME).save(documentId, doc.export({ mode: 'snapshot' }))
+  await touchContentTimestamp(documentId, DB_NAME)
 }
 
 describe('browser document summary', () => {

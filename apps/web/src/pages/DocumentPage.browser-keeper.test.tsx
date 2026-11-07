@@ -7,7 +7,7 @@ import { act, render as rtlRender, screen, waitFor } from '@testing-library/reac
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { expect, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { BrowserStoreDouble, InMemoryLoroStore } from '../test-utils/browser-store-fixture.js'
+import { BrowserStoreDouble } from '../test-utils/browser-store-fixture.js'
 import {
   type ContractDocument,
   type DocumentPageFixture,
@@ -57,7 +57,6 @@ const browserFixture: DocumentPageFixture = {
               store={seeded.index}
               pointer={seeded.pointer}
               clock={seeded.clock}
-              loro={new InMemoryLoroStore()}
               initialPath={open.path}
             />
           ),

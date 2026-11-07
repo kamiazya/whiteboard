@@ -10,7 +10,12 @@ import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
+import {
+  type DocumentFileAdapter,
+  type LoadedFileDocument,
+  RETIRED_PICTURE,
+  RETIRED_PICTURE_LABEL,
+} from '../lib/document-file-contract.js'
 import { toFacetCard, useDocumentFileSeams } from './use-document-file-seams.js'
 import { TRANSIENT_LOAD_ATTEMPTS } from './use-prefetched-cache.js'
 
@@ -380,6 +385,25 @@ describe('useDocumentFileSeams reaches what a text node embeds', () => {
       image: { href: 'blob:asset:pic' },
     })
     expect(new Map(result.current.references.extras).get('doc-1')?.facets).toBeDefined()
+  })
+})
+
+describe('useDocumentFileSeams over a picture saved in a retired form', () => {
+  it('puts the label where the picture was, never an image href', async () => {
+    const adapter = makeAdapter({ loadImageUrl: vi.fn(async () => RETIRED_PICTURE) })
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({
+        canvas: canvasWith('asset:old'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
+    )
+    await waitFor(() => expect(result.current.references.extras).toHaveLength(1))
+    expect(new Map(result.current.references.extras).get('asset:old')).toEqual({
+      label: RETIRED_PICTURE_LABEL,
+    })
+    expect(adapter.loadImageUrl).toHaveBeenCalledTimes(1)
   })
 })
 

@@ -14,7 +14,6 @@ import { ensureBrowserWorkspace } from './browser-document-summary.js'
 import { createBrowserFilesSource } from './browser-files-source.js'
 import { linkifyBrowserMentions } from './browser-linkify.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { LoroStore } from './loro-store.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 // The browser keeper's **Link**, over real IndexedDB and the production index:
@@ -50,7 +49,7 @@ describe("the browser keeper's Link on a mention", () => {
     await ensureBrowserWorkspace(index)
     const beta = await note(index, 'beta', 'Beta', 'The target.')
     const gamma = await note(index, 'gamma', 'Gamma', 'Beta came up in the review.')
-    const read = browserBacklinksReader(index, new LoroStore())
+    const read = browserBacklinksReader(index)
     expect((await read(beta)).unlinkedMentions.map((entry) => entry.path)).toEqual(['gamma'])
 
     expect(await linkifyBrowserMentions(index, gamma, beta)).toBe(1)

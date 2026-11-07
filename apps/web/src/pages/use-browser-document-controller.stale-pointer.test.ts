@@ -29,7 +29,6 @@ it('an open abandoned while recovering a stale pointer seeds and repoints nothin
     useBrowserDocumentController(store.index, {
       pointer: store.pointer,
       clock: store.clock,
-      loro: store.loro,
     }),
   )
   await arrived

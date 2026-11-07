@@ -18,14 +18,13 @@ import {
 } from '../lib/browser-document-summary.js'
 import { createBrowserFilesSource } from '../lib/browser-files-source.js'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
-import { isBrowserStorageRefusedError } from '../lib/browser-storage-refusal.js'
+import { refusalSentence } from '../lib/browser-storage-refusal.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { createSeededDocument } from '../lib/create-seeded-document.js'
 import { duplicateBrowserDocument } from '../lib/duplicate-browser-document.js'
 import { WorkspaceMissingError } from '../lib/files-source.js'
 import { pathAfterFirstRename } from '../lib/first-rename-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { isWorkspaceRemovedError } from '../lib/workspace-tombstone.js'
@@ -42,18 +41,7 @@ function isGoneError(err: unknown): boolean {
 
 const log = getAppLogger('browser-document-controller')
 
-// Re-exported so the many page-side consumers keep their import path; the
-// type itself lives beside the concrete store.
-export type { LoroStoreLike }
-
 export interface BrowserDocumentController {
-  /**
-   * The resolved Loro store this controller persists through. Exposed so
-   * the page's other readers (the files source, its connections) share the SAME
-   * instance — resolving the optional page prop's default twice would
-   * silently split persistence across two stores.
-   */
-  loro: LoroStoreLike
   snapshot: DocumentSnapshot | null
   persistence: BrowserPersistenceState
   // Resolves once the rename is flushed, rejects if the underlying save
@@ -117,7 +105,6 @@ export interface BrowserDocumentController {
  * the two IndexedDB-backed ones in an order nobody can read back.
  */
 export interface BrowserControllerDeps {
-  loro?: LoroStoreLike
   /**
    * A document PATH requested by the URL (e.g. a bookmarked /local/:path deep
    * link), read once at mount. The URL addresses a document the way the daemon
@@ -141,7 +128,6 @@ export interface BrowserControllerDeps {
 // Module-level rather than per-call defaults: these are stateless handles on
 // the same IndexedDB, and one identity apiece keeps a re-render from minting a
 // new collaborator the effect deps would have to ignore.
-const defaultLoroStore = /* @__PURE__ */ new LoroStore()
 const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
@@ -155,11 +141,11 @@ const STORAGE_REFUSED_REASON = 'storage-refused'
 
 /** What a load that threw leaves the page in. */
 function loadFailure(err: unknown): BrowserPersistenceState {
-  const refused = isBrowserStorageRefusedError(err)
+  const refusal = refusalSentence(err)
   return {
     kind: 'degraded',
-    reason: refused ? STORAGE_REFUSED_REASON : 'load-failed',
-    message: refused ? err.message : 'The canvas could not be loaded.',
+    reason: refusal === null ? 'load-failed' : STORAGE_REFUSED_REASON,
+    message: refusal ?? 'The canvas could not be loaded.',
     lastSavedAt: null,
   }
 }
@@ -178,7 +164,6 @@ interface OpeningStores {
   readonly index: DocumentIndex
   readonly pointer: DefaultDocumentPointer
   readonly clock: ContentClock
-  readonly loro: LoroStoreLike
 }
 
 /**
@@ -232,7 +217,7 @@ async function openPointedAt(
   const id = await stores.pointer.get()
   if (!alive()) return null
   if (id === null) {
-    const created = await createSeededDocument(stores.index, stores.loro, stores.clock)
+    const created = await createSeededDocument(stores.index, stores.clock)
     if (!alive()) return null
     await stores.pointer.set(created.documentId)
     return alive() ? created : null
@@ -258,7 +243,7 @@ async function openWhatIsLeft(
 ): Promise<DocumentSnapshot | null> {
   const [next] = await listBrowserDocuments(stores.index, stores.clock)
   if (!alive()) return null
-  const opened = next ?? (await createSeededDocument(stores.index, stores.loro, stores.clock))
+  const opened = next ?? (await createSeededDocument(stores.index, stores.clock))
   if (!alive()) return null
   await stores.pointer.set(opened.documentId)
   return opened
@@ -348,12 +333,7 @@ export function useBrowserDocumentController(
   index: DocumentIndex,
   deps: BrowserControllerDeps = {},
 ): BrowserDocumentController {
-  const {
-    loro = defaultLoroStore,
-    initialPath,
-    pointer = defaultPointer,
-    clock = defaultClock,
-  } = deps
+  const { initialPath, pointer = defaultPointer, clock = defaultClock } = deps
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [workspaceEmpty, setWorkspaceEmpty] = useState(false)
   const [persistence, setPersistence] = useState<BrowserPersistenceState>({
@@ -368,8 +348,6 @@ export function useBrowserDocumentController(
   pointerRef.current = pointer
   const clockRef = useRef(clock)
   clockRef.current = clock
-  const loroRef = useRef(loro)
-  loroRef.current = loro
   const setPersistenceRef = useRef(setPersistence)
   setPersistenceRef.current = setPersistence
   const persistenceRef = useRef(persistence)
@@ -447,7 +425,6 @@ export function useBrowserDocumentController(
         index: indexRef.current,
         pointer: pointerRef.current,
         clock: clockRef.current,
-        loro: loroRef.current,
       }
       const opened = await openOnMount(stores, initialPath, alive)
       if (!alive()) return
@@ -538,7 +515,6 @@ export function useBrowserDocumentController(
       // `[[path]]` references other documents wrote to the old path.
       await createBrowserFilesSource({
         index: indexRef.current,
-        loro: loroRef.current,
       }).renameDocumentPath(base.path, to)
       const moved = { ...(snapshotRef.current ?? base), path: to }
       snapshotRef.current = moved
@@ -561,7 +537,6 @@ export function useBrowserDocumentController(
       // The files source's move, for the reason `placeByName` gives.
       await createBrowserFilesSource({
         index: indexRef.current,
-        loro: loroRef.current,
       }).renameDocumentPath(base.path, to)
       const moved = { ...(snapshotRef.current ?? base), path: to }
       snapshotRef.current = moved
@@ -626,7 +601,7 @@ export function useBrowserDocumentController(
     try {
       // Create BEFORE repointing, so a failed create never leaves the pointer
       // aimed at a document that does not exist (which would reload degraded).
-      fresh = await createSeededDocument(indexRef.current, loroRef.current, clockRef.current)
+      fresh = await createSeededDocument(indexRef.current, clockRef.current)
       const existingId = await pointerRef.current.get()
       // Order does not matter here: deleting by path has no coupling to the
       // pointer, so the drop need not precede the repoint.
@@ -697,7 +672,7 @@ export function useBrowserDocumentController(
           //
           // There is no third outcome here: the index either holds the
           // document or it does not, and whether its CONTENT reads is
-          // `LoroStore.load`'s answer to give, on the path that actually reads
+          // the backend's answer to give, on the path that actually reads
           // bytes. A degraded branch here would say "could not be switched"
           // about a document that had switched.
           return false
@@ -752,7 +727,6 @@ export function useBrowserDocumentController(
   )
 
   return {
-    loro: loroRef.current,
     snapshot,
     workspaceEmpty,
     persistence,

@@ -10,7 +10,6 @@
  */
 
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
-import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -43,9 +42,6 @@ async function seedOne() {
     updatedAt: '2026-09-01T00:00:00Z',
     kind: 'markdown',
   })
-  // Content for the duplicate to carry over, as a keeper's copy carries its
-  // source's.
-  await store.loro.save(documentId, new Loro().export({ mode: 'snapshot' }))
   await new IdbDocumentIndex().createWorkspace({ workspaceId, segment: 'default' })
   return store
 }
@@ -55,7 +51,6 @@ function renderPage(store: BrowserStoreDouble, index = store.index) {
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={index}
-        loro={store.loro}
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={vi.fn()}

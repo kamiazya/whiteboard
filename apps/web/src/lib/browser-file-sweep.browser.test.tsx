@@ -22,7 +22,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { expectLoggedFailures } from '../test-utils/browser-setup.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { putRawSyncRow } from '../test-utils/seed-retired-sync-row.js'
 import { BrowserDocumentIndex } from './browser-document-index.js'
 import { sweepUnreferencedFiles } from './browser-file-sweep.js'
 import { DOCUMENT_FILES_STORE, openWhiteboardDb, VERSIONS_STORE } from './browser-idb.js'
@@ -256,8 +256,13 @@ describe('sweepUnreferencedFiles', () => {
   it('stands down while a per-document record the fold has not taken remains', async () => {
     await upload('img-legacy')
     await seedDocument('page', [])
-    await seedSyncDocument('01ARZ3NDEKTSV4RRFFQ69G5FAV', {
-      snapshot: new LoroDoc().export({ mode: 'snapshot' }),
+    await putRawSyncRow('document:01ARZ3NDEKTSV4RRFFQ69G5FAV', {
+      v: 3,
+      snapshot: null,
+      frontier: null,
+      deltas: [],
+      generation: 0,
+      nextSeq: 1,
     })
 
     expect(await sweepUnreferencedFiles()).toEqual({

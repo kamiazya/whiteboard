@@ -20,7 +20,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs, saveAndAnnounce } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { touchContentTimestamp } from './loro-store.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 import {
   listenToWorkspace,
   type WorkspaceBroadcast,
@@ -483,9 +483,7 @@ export class BrowserBackend implements DocumentBackend {
       // editor over an empty canvas would be its own lie, and changes what
       // is said and what is offered.
       if (!this.isStale(handlers)) {
-        handlers.onError?.(
-          isStoredDocumentUnreadableError(err) ? 'corrupt-snapshot' : 'read-unavailable',
-        )
+        handlers.onError?.(readFailureReason(err))
       }
       getAppLogger('browser-backend').warn('opening the workspace record failed', err)
       return
@@ -567,4 +565,15 @@ export class BrowserBackend implements DocumentBackend {
     await this.saveAndTellOtherTabs(workspaceId, workspaceDoc)
     return true
   }
+}
+
+/**
+ * A retired envelope is intact data in a shape this build stopped reading, so
+ * it must never take `corrupt-snapshot`, whose recovery deletes the record.
+ */
+function readFailureReason(
+  err: unknown,
+): 'retired-stored-shape' | 'corrupt-snapshot' | 'read-unavailable' {
+  if (!isStoredDocumentUnreadableError(err)) return 'read-unavailable'
+  return err.code === 'retired-envelope' ? 'retired-stored-shape' : 'corrupt-snapshot'
 }

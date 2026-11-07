@@ -45,7 +45,6 @@ async function mount(store: BrowserStoreDouble, url: string, initialPath: string
             store={store.index}
             pointer={store.pointer}
             clock={store.clock}
-            loro={store.loro}
             initialPath={initialPath}
           />
         ),
@@ -57,7 +56,6 @@ async function mount(store: BrowserStoreDouble, url: string, initialPath: string
             index={store.index}
             pointer={store.pointer}
             clock={store.clock}
-            loro={store.loro}
             onOpenDocument={() => {}}
           />
         ),

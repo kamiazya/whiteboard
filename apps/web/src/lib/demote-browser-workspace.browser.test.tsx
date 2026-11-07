@@ -32,10 +32,10 @@ import {
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
 } from './browser-workspace-id.js'
+import { touchContentTimestamp } from './content-timestamp.js'
 import { demoteBrowserWorkspace, replicaCarriesAll } from './demote-browser-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { touchContentTimestamp } from './loro-store.js'
 import { openDocumentStore } from './replica-store.js'
 import { isWorkspaceRemovedError } from './workspace-tombstone.js'
 
