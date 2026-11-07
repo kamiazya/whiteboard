@@ -247,11 +247,24 @@ export const BOUNDED_VALUES: readonly BoundedValue[] = [
 ]
 
 /**
+ * The path of `container` when it is a content container: at a document's
+ * root, or under a workspace-tree node. Its last element is the content key.
+ */
+export function contentPathOf(
+  doc: LoroDoc,
+  container: ContainerID,
+): readonly (string | number)[] | undefined {
+  const path = doc.getPathToContainer(container)
+  if (path === undefined) return undefined
+  return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
+    ? path
+    : undefined
+}
+
+/**
  * Whether `container` is the content container `key` names: at a document's
  * root, or under a workspace-tree node.
  */
 export function isContentContainer(doc: LoroDoc, container: ContainerID, key: string): boolean {
-  const path = doc.getPathToContainer(container)
-  if (path?.at(-1) !== key) return false
-  return path.length === 1 || (path.length === 3 && path[0] === WORKSPACE_TREE_KEY)
+  return contentPathOf(doc, container)?.at(-1) === key
 }

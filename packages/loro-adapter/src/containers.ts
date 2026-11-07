@@ -34,6 +34,8 @@ export interface DocumentContainers {
    * opening none; `peekMap`'s contract for the one root shape that is a list.
    */
   peekList?(key: string): LoroMovableList | LoroList | undefined
+  /** The text at `key` if one is there, opening none; `peekMap`'s contract for a text root. */
+  peekText?(key: string): LoroText | undefined
   /**
    * Part of the seam because the bridge decides where a write ENDS, and that
    * is not something to leave each caller to remember. A tree-node host
@@ -92,7 +94,9 @@ export const LINES_KEY = 'lines'
 
 /**
  * The canvas ENVELOPE — properties of the canvas rather than of anything on
- * it (today: the `x-whiteboard` rendering preferences).
+ * it. Its one live field is `CANVAS_TAGS_FIELD`; the pre-ADR-0037 facets
+ * stored here under `x-whiteboard` are a retired shape, refused on read and
+ * on write (`retired-stored-shape.ts`).
  *
  * A third top-level map rather than a field beside the node entries, because
  * the merge story is different in kind. Nodes and edges are keyed per object

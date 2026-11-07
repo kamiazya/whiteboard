@@ -101,3 +101,38 @@ describe('restoreVersion refuses a saved envelope naming another kind', () => {
     expect(nodeIdsAt(live, 'canvas-a')).toEqual(['p1'])
   })
 })
+
+// The judge refuses a write of a retired shape, and a restore judges the past
+// state as though written whole, so a version holding one cannot be put back.
+describe('restoreVersion refuses a saved state holding a retired shape', () => {
+  function retiredNode(): LoroDoc {
+    const doc = spatialDoc(['p1'])
+    doc.getMap('nodes').set('old', { id: 'old', 'x-whiteboard': {} })
+    doc.commit()
+    return doc
+  }
+
+  it.each([
+    ['in place', {}],
+    ['into a new target', { targetPath: 'canvas-new' }],
+  ] as const)('%s, writing nothing', async (_mode, input) => {
+    const live = new FakeLive()
+    const rootId = live.seed('canvas-a', spatialDoc(['n1']))
+    const workspace = new LoroDoc()
+    createWorkspaceDocumentAtPath(workspace, {
+      path: 'canvas-a',
+      documentId: rootId,
+      kind: 'spatial',
+    })
+    writeWorkspaceDocumentContent(workspace, rootId, retiredNode())
+    const versions = versionsWith({ v1: { doc: retiredNode(), workspace } })
+
+    const refused = await run(live, versions, input).catch((err: unknown) => err)
+
+    expect(refused).toMatchObject({ code: 'retired_stored_shape', status: 400 })
+    const writes = live.calls.map((c) => c.method).filter((m) => m === 'save' || m === 'delete')
+    expect(writes).toEqual([])
+    expect(nodeIdsAt(live, 'canvas-a')).toEqual(['n1'])
+    expect(versions.saved).toEqual([])
+  })
+})

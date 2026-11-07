@@ -243,7 +243,55 @@ function runsRow(count) {
   }
 }
 
+/**
+ * An update writing a retired shape (`x-whiteboard` on a node) into a seeded
+ * workspace record: what the judge spends before it refuses, against the
+ * same update with the key a current node uses.
+ */
+function retiredRow() {
+  const board = '01RSAAAAAAAAAAAAAAAAAAAAA0'
+  const target = new LoroDoc()
+  createWorkspaceDocumentAtPath(target, { path: 'board', documentId: board, kind: 'spatial' })
+  for (let i = 0; i < 200; i += 1) {
+    documentContainers(target, board)
+      .getMap('nodes')
+      .set(`n${i}`, { id: `n${i}`, text: prose(200) })
+  }
+  target.commit()
+  const updateOf = (extra) => {
+    const client = target.fork()
+    const from = client.oplogVersion()
+    documentContainers(client, board)
+      .getMap('nodes')
+      .set('written', { id: 'written', text: 'x', ...extra })
+    client.commit()
+    return client.export({ mode: 'update', from })
+  }
+  const judge = (update) => {
+    const judging = target.fork()
+    const before = process.cpuUsage()
+    const { breach } = importWithinTextLimits(judging, update)
+    const spent = process.cpuUsage(before)
+    return { cpuMs: Math.round((spent.user + spent.system) / 1000), shape: breach?.shape ?? null }
+  }
+  judge(updateOf({})) // warm-up: the first judgement pays for compiling the engine's paths
+  const retired = judge(updateOf({ 'x-whiteboard': {} }))
+  const current = judge(updateOf({}))
+  if (retired.shape !== 'retired-shape' || current.shape !== null) {
+    console.error(`preflight: retired judged as ${retired.shape}, current as ${current.shape}`)
+    process.exit(1)
+  }
+  return {
+    route: 'retired (cpu ms)',
+    judged: retired.cpuMs,
+    judgedCurrent: current.cpuMs,
+    verdict: retired.shape,
+  }
+}
+
 const RUN_COUNTS = (process.env.RUN_COUNTS ?? '1,2,4,8').split(',').map(Number)
+
+console.log(JSON.stringify(retiredRow()))
 
 const rows = []
 for (const chars of CHARS) {
