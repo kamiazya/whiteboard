@@ -18,9 +18,7 @@
 // `!=` on a coordinate here is JavaScript's `===` in grid-route.ts.
 #![expect(clippy::float_cmp, reason = "the TypeScript compares coordinates with ===")]
 
-use std::cmp::Ordering;
-
-use whiteboard_det::math::{js_max, js_min};
+use whiteboard_det::math::{compare_numbers, js_max, js_min};
 
 use crate::geometry::{Point, Rect};
 use crate::min_heap::MinHeap;
@@ -80,17 +78,6 @@ impl Axis {
             Axis::Row => j,
             Axis::Column => i,
         }
-    }
-}
-
-/// JavaScript's `compareNumbers` from `det-math.ts`: NaN last, `-0 == 0`.
-fn compare_numbers(a: f64, b: f64) -> Ordering {
-    if a < b {
-        Ordering::Less
-    } else if a > b {
-        Ordering::Greater
-    } else {
-        a.is_nan().cmp(&b.is_nan())
     }
 }
 

@@ -95,9 +95,35 @@ pub fn js_round(x: f64) -> f64 {
     if rounded == 0.0 && x.is_sign_negative() { -0.0 } else { rounded }
 }
 
+/// `Math.sign(x)`: NaN for NaN, the zero itself for either zero.
+#[must_use]
+pub fn js_sign(x: f64) -> f64 {
+    if x > 0.0 {
+        1.0
+    } else if x < 0.0 {
+        -1.0
+    } else {
+        x
+    }
+}
+
+/// `compareNumbers` from canvas-render's `det-math.ts`: the total order the
+/// TypeScript sorts numbers by, NaN last and `-0` equal to `0`.
+#[must_use]
+pub fn compare_numbers(a: f64, b: f64) -> core::cmp::Ordering {
+    use core::cmp::Ordering;
+    if a < b {
+        Ordering::Less
+    } else if a > b {
+        Ordering::Greater
+    } else {
+        a.is_nan().cmp(&b.is_nan())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{hypot, js_max, js_min, js_round};
+    use super::{compare_numbers, hypot, js_max, js_min, js_round, js_sign};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -133,10 +159,22 @@ mod tests {
         ] {
             assert_eq!(js_round(x).to_bits(), f64::to_bits(js), "Math.round({x})");
         }
-        for x in [-0.5, -0.3, -0.0] {
+        for x in [-0.5, -0.499_999_999_999_999_94, -0.3, -1e-20, -0.0] {
             assert_eq!(js_round(x).to_bits(), (-0.0f64).to_bits(), "Math.round({x}) is -0");
         }
         assert!(js_round(f64::NAN).is_nan());
+    }
+
+    #[test]
+    fn js_sign_keeps_the_zero_it_was_given_and_compare_numbers_puts_nan_last() {
+        use core::cmp::Ordering;
+        assert_eq!(js_sign(-0.0).to_bits(), (-0.0f64).to_bits());
+        assert_eq!(js_sign(-3.0).to_bits(), (-1.0f64).to_bits());
+        assert!(js_sign(f64::NAN).is_nan());
+        assert_eq!(compare_numbers(-0.0, 0.0), Ordering::Equal);
+        assert_eq!(compare_numbers(f64::NAN, 1.0), Ordering::Greater);
+        assert_eq!(compare_numbers(1.0, f64::NAN), Ordering::Less);
+        assert_eq!(compare_numbers(f64::NAN, f64::NAN), Ordering::Equal);
     }
 
     #[test]

@@ -27,14 +27,14 @@ pub fn det_round(xs: &[f64]) -> Vec<f64> {
     xs.iter().map(|&x| whiteboard_det::math::js_round(x)).collect()
 }
 
-fn point(xy: &[f64]) -> Point {
+pub(crate) fn point(xy: &[f64]) -> Point {
     match xy {
         [x, y, ..] => Point { x: *x, y: *y },
         _ => Point { x: f64::NAN, y: f64::NAN },
     }
 }
 
-fn rect(xywh: &[f64]) -> Rect {
+pub(crate) fn rect(xywh: &[f64]) -> Rect {
     match xywh {
         [x, y, w, h, ..] => Rect { x: *x, y: *y, w: *w, h: *h },
         _ => Rect { x: f64::NAN, y: f64::NAN, w: f64::NAN, h: f64::NAN },
@@ -136,9 +136,14 @@ pub fn edge_path_measures(input: &[f64]) -> Vec<f64> {
     out
 }
 
-#[expect(clippy::cast_precision_loss, reason = "a path's point count is far below 2^53")]
 fn points_len(points: &[Point]) -> f64 {
-    points.len() as f64
+    points_len_of(points.len())
+}
+
+/// A length as the TypeScript's `number`.
+#[expect(clippy::cast_precision_loss, reason = "an answer's length is far below 2^53")]
+pub(crate) fn points_len_of(n: usize) -> f64 {
+    n as f64
 }
 
 /// A count as the TypeScript wrote it: a non-negative whole number.
@@ -147,7 +152,7 @@ fn points_len(points: &[Point]) -> f64 {
     clippy::cast_sign_loss,
     reason = "checked whole and non-negative first; a count past the input fails the split"
 )]
-fn count(n: f64) -> Option<usize> {
+pub(crate) fn count(n: f64) -> Option<usize> {
     (n >= 0.0 && n.fract() == 0.0 && n < 1e9).then_some(n as usize)
 }
 

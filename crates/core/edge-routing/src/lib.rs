@@ -17,6 +17,7 @@
 pub mod edge_geometry;
 pub mod edge_ink;
 pub mod edge_rounding;
+pub mod edge_rules;
 #[path = "generated/geometry.rs"]
 pub mod geometry;
 pub mod grid_route;
