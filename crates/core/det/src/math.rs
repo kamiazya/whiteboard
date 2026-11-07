@@ -18,6 +18,22 @@ pub fn hypot(dx: f64, dy: f64) -> f64 {
     (dx * dx + dy * dy).sqrt()
 }
 
+/// The sine of `x`, as fdlibm computes it (the `libm` crate, pinned).
+///
+/// canvas-render's `det-math.ts` is a port of the same algorithm and is held
+/// to the same table (`det-math.oracle.txt`, produced by this crate's libm)
+/// bit for bit, so the two agree wherever the layout calls them.
+#[must_use]
+pub fn sin(x: f64) -> f64 {
+    libm::sin(x)
+}
+
+/// The cosine of `x`, as fdlibm computes it; see [`sin`].
+#[must_use]
+pub fn cos(x: f64) -> f64 {
+    libm::cos(x)
+}
+
 #[cfg(test)]
 mod tests {
     use super::hypot;

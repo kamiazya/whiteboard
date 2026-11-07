@@ -45,7 +45,9 @@
       "description": "JS-compatible number formatting, pinned math, UTF-16 helpers, seeded randomness, ordered collections",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "libm": "fdlibm sin and cos, pure Rust and no_std, so they run unchanged on wasm32 and native; pinned exactly because canvas-render's det-math.ts is held to its bits"
+      },
       "absorbs": []
     },
     "whiteboard-log": {

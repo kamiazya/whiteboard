@@ -53,6 +53,10 @@
       "ceiling": 4,
       "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: the libFuzzer entry symbol and its FFI"
     },
+    "libm": {
+      "ceiling": 21,
+      "reason": "shipped in every core artifact through whiteboard-det (fdlibm sin and cos): read_volatile in force_eval, which keeps an expression raising a floating-point exception from being optimised away, and get_unchecked in the reduction tables' release-mode indexing (debug builds index with checks); the core::intrinsics calls compile only under the `unstable` feature, which is off"
+    },
     "memchr": {
       "ceiling": 333,
       "reason": "xtask only, never shipped: SIMD byte search inside serde_json"
