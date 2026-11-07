@@ -1,11 +1,16 @@
-import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type EdgeRoutingStyle,
+  endSide,
+  isSelfLoop,
+  type SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { describe, expect } from 'vitest'
 import { anchorContext, computeAnchorsFor } from '../../layout/edges/edge-anchors.js'
 import type { Rect } from '../../layout/edges/edge-geometry.js'
 import type { SidePair } from '../../layout/edges/edge-rules.js'
-import type { EdgeAnchorPair } from '../../layout/edges/edge-sides.js'
+import type { EdgeAnchorOverride, EdgeAnchorPair } from '../../layout/edges/edge-sides.js'
 import { createRoutingBudget } from '../../layout/edges/routing-budget.js'
 import { anchorsWithoutCoincidentEnds } from '../../layout/edges/spatial-edges.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
@@ -90,59 +95,106 @@ const memberPair = fc
     return { nodes, pair: { fromSide: s, toSide: s } as SidePair, reverse }
   })
 
+type Named = 'none' | 'from' | 'to' | 'both'
+type Flush = typeof memberPair extends fc.Arbitrary<infer T> ? T : never
+
+/** Each drawn pair placed 1000px apart, its ids numbered, its edge named as drawn. */
+function placeFlush(flush: ReadonlyArray<readonly [Flush, Named]>) {
+  return flush.map(([f, named], i) => {
+    const [a, b] = f.reverse ? ['flush-b', 'flush-a'] : ['flush-a', 'flush-b']
+    const fromSide = named === 'from' || named === 'both' ? { side: f.pair.fromSide } : {}
+    const toSide = named === 'to' || named === 'both' ? { side: f.pair.toSide } : {}
+    return {
+      nodes: f.nodes.map((n) => ({ ...n, id: `${n.id}${i}`, x: n.x + 1000 * (i + 1) })),
+      edge: {
+        id: `flush${i}`,
+        from: { node: `${a}${i}`, ...fromSide },
+        to: { node: `${b}${i}`, ...toSide },
+      } as RoutableElement,
+      pair: f.pair,
+    }
+  })
+}
+
+/** The pin on the first flush edge's from end, now and then on both. */
+const pinDraw = fc.option(
+  fc.record({
+    x: fc.integer({ min: 1000, max: 1300 }),
+    y: fc.integer({ min: 0, max: 220 }),
+    // Both ends pinned to the one point: the edge collides and stays pinned
+    // through every trial.
+    both: fc.boolean(),
+  }),
+  { nil: undefined, freq: 4 },
+)
+
+/**
+ * The repairs account: ample mostly, sometimes nothing, and sometimes a few
+ * repairs' worth around the `edges + nodes` one repair charges, so the
+ * search runs out partway.
+ */
+const repairsDraw = (charge: number) =>
+  fc.oneof(
+    { weight: 2, arbitrary: fc.constant(createRoutingBudget().repairs) },
+    { weight: 1, arbitrary: fc.integer({ min: 0, max: 60 }) },
+    {
+      weight: 3,
+      arbitrary: fc
+        .tuple(fc.integer({ min: 1, max: 6 }), fc.integer({ min: -4, max: 8 }))
+        .map(([n, off]) => Math.max(0, n * charge + off)),
+    },
+  )
+
 const drawn = fc
   .tuple(
     scene.filter(([, edges]) => edges.length > 0),
     fc.array(
       fc.tuple(
         fc.oneof(touchingPair, memberPair, memberPair),
-        // The edge naming none, its from, or both of its sides: a named side
+        // The edge naming none, one, or both of its sides: a named side
         // survives the repair, and a fully named edge is left as authored.
-        fc.constantFrom('none', 'none', 'from', 'both'),
+        fc.constantFrom<Named>('none', 'none', 'from', 'to', 'both'),
       ),
       { minLength: 1, maxLength: 3 },
     ),
+    fc.boolean(),
+    fc.boolean(),
   )
-  .chain(([[nodes, edges], flush]) => {
-    const pairs = flush.map(([f, named], i) => {
-      const [a, b] = f.reverse ? ['flush-b', 'flush-a'] : ['flush-a', 'flush-b']
-      const fromSide = named === 'none' ? {} : { side: f.pair.fromSide }
-      const toSide = named === 'both' ? { side: f.pair.toSide } : {}
-      return {
-        nodes: f.nodes.map((n) => ({ ...n, id: `${n.id}${i}`, x: n.x + 1000 * (i + 1) })),
-        edge: {
-          id: `flush${i}`,
-          from: { node: `${a}${i}`, ...fromSide },
-          to: { node: `${b}${i}`, ...toSide },
-        } as RoutableElement,
-        pair: f.pair,
-      }
-    })
+  .chain(([[nodes, edges], flush, withDup, withCopy]) => {
+    const pairs = placeFlush(flush)
+    const flushNodes = pairs.flatMap((p) => p.nodes)
     // Now and then a later edge reuses the first flush edge's id: a Map by
     // id then answers the LATER edge's index, which the repair patches by.
-    const allEdges = [...edges, ...pairs.map((p) => p.edge)]
-    const dup = edges[0] === undefined ? [] : [{ ...edges[0], id: 'flush0' } as RoutableElement]
-    return fc.boolean().chain((withDup) => {
-      const all = withDup ? [...allEdges, ...dup] : allEdges
-      return fc.record({
-        nodes: fc.constant([...nodes, ...pairs.flatMap((p) => p.nodes)]),
-        edges: fc.constant(all),
-        sides: fc.tuple(
-          ...edges.map(() =>
-            fc.option(fc.record({ fromSide: side, toSide: side }), { nil: undefined, freq: 6 }),
-          ),
-          ...pairs.map((p) => fc.constant(p.pair as SidePair | undefined)),
-          ...(withDup ? dup : []).map(() => fc.constant(undefined as SidePair | undefined)),
+    const dup =
+      edges[0] === undefined || !withDup ? [] : [{ ...edges[0], id: 'flush0' } as RoutableElement]
+    const all = [...edges, ...pairs.map((p) => p.edge), ...dup]
+    // A copy of the first holder, appended far away: a Map by id answers the
+    // LAST node with an id, so the copy is the one the repair reads.
+    const holder = flushNodes.find((n) => n.id === 'flush-b0')
+    const copy =
+      holder === undefined || !withCopy ? [] : [{ ...holder, x: holder.x + 400 } as SpatialNode]
+    // A label across each holder's middle, where a re-sided route runs.
+    const midLabels = flushNodes
+      .filter((n) => n.id.startsWith('flush-b'))
+      .map((n) => ({ x: n.x + n.width / 2 - 10, y: n.y + n.height / 2 - 10, w: 20, h: 20 }))
+    return fc.record({
+      nodes: fc.constant([...nodes, ...flushNodes, ...copy]),
+      edges: fc.constant(all),
+      sides: fc.tuple(
+        ...edges.map(() =>
+          fc.option(fc.record({ fromSide: side, toSide: side }), { nil: undefined, freq: 6 }),
         ),
-        styles: fc.tuple(...all.map(() => style)),
-        align: fc.boolean(),
-        labels: fc.array(rect, { maxLength: 2 }),
-        // Most runs leave the repairs account ample; some cut it short.
-        repairs: fc.oneof(
-          { weight: 3, arbitrary: fc.constant(createRoutingBudget().repairs) },
-          { weight: 1, arbitrary: fc.integer({ min: 0, max: 60 }) },
-        ),
-      })
+        ...pairs.map((p) => fc.constant(p.pair as SidePair | undefined)),
+        ...dup.map(() => fc.constant(undefined as SidePair | undefined)),
+      ),
+      styles: fc.tuple(...all.map(() => style)),
+      align: fc.boolean(),
+      labels: fc.oneof(
+        fc.array(rect, { maxLength: 2 }),
+        midLabels.length === 0 ? fc.constant([]) : fc.subarray(midLabels, { minLength: 1 }),
+      ),
+      pin: pinDraw,
+      repairs: repairsDraw(all.length + nodes.length + flushNodes.length),
     })
   })
 
@@ -166,7 +218,7 @@ function entryValues(id: number, e: EdgeAnchorPair): number[] {
 const coincide = (e: EdgeAnchorPair | undefined) =>
   e?.from !== undefined && e.to !== undefined && e.from.x === e.to.x && e.from.y === e.to.y
 
-const reach = { collided: 0, repaired: 0, unrepaired: 0, cutShort: 0 }
+const reach = { collided: 0, repaired: 0, unrepaired: 0, cutShort: 0, pinned: 0 }
 
 describe.runIf(built)('the coincident-ends repair and its Rust port re-side the same', () => {
   fcTest.prop([drawn], withDefaults())('collisions, re-sided pairs and the budget left', (d) => {
@@ -177,17 +229,32 @@ describe.runIf(built)('the coincident-ends repair and its Rust port re-side the 
       const pair = d.sides[i]
       if (pair !== undefined) sides.set(edge.id, pair)
     })
+    const flush0 = sides.get('flush0')
+    const pins =
+      d.pin === undefined || flush0 === undefined
+        ? undefined
+        : new Map<string, EdgeAnchorOverride>([
+            [
+              'flush0',
+              {
+                ...flush0,
+                from: { x: d.pin.x, y: d.pin.y },
+                ...(d.pin.both ? { to: { x: d.pin.x, y: d.pin.y } } : {}),
+              },
+            ],
+          ])
+    const labels = d.labels as readonly Rect[]
     const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
     const fresh = createRoutingBudget()
     const budget = { ...fresh, repairs: d.repairs }
     const ts = anchorsWithoutCoincidentEnds(
       d.nodes,
-      d.labels as readonly Rect[],
+      labels,
       d.edges,
       sides,
       (e) => styleByEdge.get(e) ?? 'straight',
       d.align,
-      undefined,
+      pins,
       budget,
     )
     const input = Float64Array.from([
@@ -195,10 +262,20 @@ describe.runIf(built)('the coincident-ends repair and its Rust port re-side the 
       sides.size,
       ...[...sides].flatMap(([id, p]) => [idOf(id), sideIndex(p.fromSide), sideIndex(p.toSide), 0]),
       d.align ? 1 : 0,
-      0,
+      pins?.size ?? 0,
+      ...[...(pins ?? [])].flatMap(([id, p]) => [
+        idOf(id),
+        sideIndex(p.fromSide),
+        sideIndex(p.toSide),
+        p.around === true ? 1 : 0,
+        ...flaggedPoint(p.from),
+        ...flagged(p.fromLaneDepth),
+        ...flaggedPoint(p.to),
+        ...flagged(p.toLaneDepth),
+      ]),
       ...d.styles.map((s) => STYLES[s as EdgeRoutingStyle]),
-      d.labels.length,
-      ...d.labels.flatMap((r) => [r.x, r.y, r.w, r.h]),
+      labels.length,
+      ...labels.flatMap((r) => [r.x, r.y, r.w, r.h]),
       fresh.grid,
       fresh.pairs,
       fresh.trials,
@@ -215,22 +292,32 @@ describe.runIf(built)('the coincident-ends repair and its Rust port re-side the 
     ]
     expect(firstDifference(expected, out)).toBeUndefined()
 
-    const unrepaired = computeAnchorsFor(anchorContext(d.nodes, d.edges), sides, d.align)
-    for (const [id, e] of unrepaired) {
-      if (!coincide(e)) continue
+    // Collided as the repair's own filter reads it: not a self-loop, and
+    // not naming both sides.
+    const unrepaired = computeAnchorsFor(anchorContext(d.nodes, d.edges), sides, d.align, pins)
+    const repairable = d.edges.filter(
+      (e) =>
+        !isSelfLoop(e) &&
+        (endSide(e.from) === undefined || endSide(e.to) === undefined) &&
+        coincide(unrepaired.get(e.id)),
+    )
+    for (const e of repairable) {
       reach.collided += 1
-      if (!coincide(ts.get(id))) reach.repaired += 1
+      if (!coincide(ts.get(e.id))) reach.repaired += 1
       else reach.unrepaired += 1
     }
-    // A small account with a collision left standing: the search ran out.
-    const left = [...unrepaired].some(([id, e]) => coincide(e) && coincide(ts.get(id)))
-    if (d.repairs <= 60 && left) reach.cutShort += 1
+    // A collision left standing with too little in the account for another
+    // repair: the search ran out rather than finding nothing.
+    const left = repairable.some((e) => coincide(ts.get(e.id)))
+    if (left && budget.repairs < d.nodes.length + d.edges.length) reach.cutShort += 1
+    if (pins !== undefined) reach.pinned += 1
   })
 
   afterAllFloor(['collisions, re-sided pairs and the budget left'], () => {
-    // About half the lowest of five measured runs (collided 338, repaired
-    // 160, unrepaired 161, cutShort 38).
-    const floors = { collided: 165, repaired: 80, unrepaired: 80, cutShort: 19 }
+    // About half the lowest of five measured runs (collided 240, repaired
+    // 35, unrepaired 174, cutShort 75, pinned 148). `collided` is the
+    // repair's own filter's set, so these count what it saw.
+    const floors = { collided: 120, repaired: 17, unrepaired: 85, cutShort: 37, pinned: 74 }
     for (const [kind, floor] of Object.entries(floors)) {
       expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
     }

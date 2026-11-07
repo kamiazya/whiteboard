@@ -179,8 +179,11 @@ fn repair_collided(
             (from_rect, to_rect),
             budget,
         ) {
-            // Every later repair charges about as much, so continuing would
-            // be refused too; the TypeScript breaks, and so does this.
+            // The account is spent, and the rest keep their collided pairs,
+            // as the TypeScript's. A `continue` would answer the same: an
+            // exhausted edge loses even its best, so a later edge would need
+            // EVERY one of its candidates to fit in less than one of this
+            // edge's charges, which differ by a few re-placed ends.
             Repair::Exhausted => break,
             Repair::Unreached => {}
             Repair::Found(score, best) => {
