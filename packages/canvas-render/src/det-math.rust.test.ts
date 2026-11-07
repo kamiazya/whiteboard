@@ -1,10 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs'
-import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { cos, hypot, sin } from './det-math.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { built, EXPECTED_ABI, gluePath, wasm } from './test-utils/wasm/glue.js'
 
 /**
  * det-math.ts against the Rust `whiteboard-det` it is the oracle for, run
@@ -15,30 +13,6 @@ import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
  * The exports are batched (one boundary call per run), so each property
  * draws an ARRAY of inputs and compares element-wise.
  */
-
-/** What this test reads of the wasm-bindgen glue, declared rather than imported: the glue is a build output. */
-interface WasmGlue {
-  initSync(input: { module: BufferSource }): unknown
-  abi_version(): string
-  det_hypot(dx: Float64Array, dy: Float64Array): Float64Array
-  det_sin(xs: Float64Array): Float64Array
-  det_cos(xs: Float64Array): Float64Array
-}
-
-/** The surface this test was written against; a stale artifact fails here, not on its first mismatched call. */
-const EXPECTED_ABI = '2'
-
-const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
-const gluePath = join(dir, 'whiteboard_wasm.js')
-const built = dir !== '' && existsSync(gluePath)
-
-async function loadGlue(): Promise<WasmGlue> {
-  const glue = (await import(pathToFileURL(gluePath).href)) as WasmGlue
-  glue.initSync({ module: readFileSync(join(dir, 'whiteboard_wasm_bg.wasm')) })
-  return glue
-}
-
-const wasm = built ? await loadGlue() : undefined
 
 /**
  * Equal as IEEE 754 bits, except that any NaN equals any NaN: JavaScript does

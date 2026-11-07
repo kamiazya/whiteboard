@@ -27,6 +27,9 @@ export default defineProject({
     // that full string is what `--project` has to be given (`pnpm bench`).
     benchmark: {
       include: ['src/**/*.bench.ts'],
+      // The TypeScript-against-Rust bench needs the wasm artifact; it runs
+      // under canvas-render-rust instead.
+      exclude: ['src/**/*.rust.bench.ts'],
       // Vite's module runner serves ESM exports through getters, and the
       // edge search calls its own helpers (edge-rules, edge-geometry) tens
       // of millions of times per run, so vitest warns that the getters skew

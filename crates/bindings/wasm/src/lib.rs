@@ -9,7 +9,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
 /// on its first mismatched call.
-pub const ABI_VERSION: &str = "2";
+pub const ABI_VERSION: &str = "3";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]
@@ -44,9 +44,51 @@ pub fn det_cos(xs: &[f64]) -> Vec<f64> {
     xs.iter().map(|&x| whiteboard_det::math::cos(x)).collect()
 }
 
+/// `route_on_grid` over one flat array, the routing spike's boundary
+/// (ADR-0054 step 5).
+///
+/// In: `[start.x, start.y, end.x, end.y, clearance, allowance, then x, y, w,
+/// h per obstacle]`, with `allowance` infinite when the caller has no
+/// budget. Out: `[spent, then x, y per point of the route]`, so a length of
+/// one means no route. Typed arrays rather than JSON: this is called once
+/// per edge, which puts it in ADR-0054's declared fast-path class, and the
+/// spike measures what that boundary costs. A malformed input answers no
+/// route and spends nothing.
+#[wasm_bindgen]
+#[must_use]
+pub fn edge_route_on_grid(input: &[f64]) -> Vec<f64> {
+    use whiteboard_edge_routing::geometry::{Point, Rect};
+    let ([sx, sy, ex, ey, clearance, allowance], rest) = match input.split_first_chunk::<6>() {
+        Some((head, rest)) if rest.len() % 4 == 0 => (*head, rest),
+        _ => return vec![0.0],
+    };
+    let obstacles: Vec<Rect> =
+        rest.chunks_exact(4).map(|r| Rect { x: r[0], y: r[1], w: r[2], h: r[3] }).collect();
+    let route = whiteboard_edge_routing::grid_route::route_on_grid(
+        Point { x: sx, y: sy },
+        Point { x: ex, y: ey },
+        &obstacles,
+        clearance,
+        allowance,
+    );
+    let mut out = vec![route.spent];
+    if let Some(path) = route.path {
+        out.extend(path.iter().flat_map(|p| [p.x, p.y]));
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{ABI_VERSION, abi_version, det_cos, det_hypot, det_sin};
+    use super::{ABI_VERSION, abi_version, det_cos, det_hypot, det_sin, edge_route_on_grid};
+
+    #[test]
+    fn the_grid_export_flattens_the_route_and_refuses_a_malformed_input() {
+        let straight = edge_route_on_grid(&[0.0, 0.0, 100.0, 0.0, 16.0, f64::INFINITY]);
+        assert_eq!(straight, vec![0.0, 0.0, 0.0, 100.0, 0.0]);
+        assert_eq!(edge_route_on_grid(&[0.0, 0.0]), vec![0.0]);
+        assert_eq!(edge_route_on_grid(&[0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 5.0]), vec![0.0]);
+    }
 
     #[test]
     fn the_det_exports_answer_each_input_in_order() {

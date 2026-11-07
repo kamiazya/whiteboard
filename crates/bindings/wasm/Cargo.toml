@@ -14,6 +14,7 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 wasm-bindgen.workspace = true
 whiteboard-det = { path = "../../core/det" }
+whiteboard-edge-routing = { path = "../../core/edge-routing" }
 
 [lints]
 workspace = true

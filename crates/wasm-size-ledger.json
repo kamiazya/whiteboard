@@ -4,8 +4,8 @@
   "headroomMinBytes": 1024,
   "artifacts": {
     "whiteboard-wasm": {
-      "ceilingBytes": 56000,
-      "reason": "abi_version() plus the batched det exports (hypot, sin, cos) the property differential holds to canvas-render's det-math.ts: 53536 bytes measured, the growth from 37.8k being fdlibm's argument-reduction tables and the slice marshalling. Worth it because it is the first code the TypeScript-against-wasm harness runs, and every later port adds its exports beside these"
+      "ceilingBytes": 96000,
+      "reason": "abi_version(), the batched det exports, and edge_route_on_grid, the routing spike's port of grid-route.ts (ADR-0054 step 5): 92124 bytes measured. The grid router is the subject of the layer-1 harness, whose existing edge suites and routing scoreboards judge it; the per-edge export is a measuring scaffold the spike's own result says to replace with one call per layout, which is when this ceiling is re-measured"
     }
   }
 }

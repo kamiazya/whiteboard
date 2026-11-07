@@ -30,6 +30,7 @@
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
+import { RUST_SCOPE } from './rust-scope.mjs'
 import { PROJECTS_RUN_ELSEWHERE, readVitestProjects } from './vitest-projects.mjs'
 
 // ── What selects everything ────────────────────────────────────────────────
@@ -171,27 +172,6 @@ export const PACKAGE_JOBS = {
     packages: ['@kamiazya/whiteboard-extension', '@kamiazya/whiteboard-mcp'],
     why: "the native host and the daemon's named pipe on Windows",
   },
-}
-
-/**
- * The Cargo workspace's files at the root and the trees under it. A change
- * here builds and tests no pnpm package, so it is attributed to the Rust jobs
- * instead of selecting everything. The Rust CI scripts
- * (tools/checks/src/rust-*.mjs) are not listed: tools/checks selects
- * everything, the Rust jobs with it.
- */
-const RUST_SCOPE = {
-  files: [
-    'Cargo.toml',
-    'Cargo.lock',
-    'rust-toolchain.toml',
-    'rustfmt.toml',
-    'deny.toml',
-    'packages/canvas-render/src/det-math.ts',
-    'packages/canvas-render/src/det-math.rust.test.ts',
-    'packages/canvas-render/vitest.rust.config.ts',
-  ],
-  trees: ['.cargo', 'crates', 'contracts', 'packages/canvas-render/src/generated'],
 }
 
 /**
