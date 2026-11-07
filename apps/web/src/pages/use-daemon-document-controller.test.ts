@@ -211,6 +211,30 @@ describe('useDaemonDocumentController', () => {
     expect(result.current.path).toBe('b')
   })
 
+  it('followMove keeps the open document listed under its new path before any relist', async () => {
+    mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
+    mockListDocuments.mockResolvedValue({
+      documents: [
+        { path: 'a', documentId: 'id-a', updatedAt: '2026-01-01', kind: 'spatial' },
+        { path: 'b', documentId: 'id-b', updatedAt: '2026-01-02', kind: 'spatial' },
+      ],
+    })
+
+    const { result } = renderHook(() =>
+      useDaemonDocumentController({ daemonBaseUrl: DAEMON_BASE_URL, daemonFetch: fetchFn }),
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    act(() => {
+      result.current.followMove('a-renamed')
+    })
+    expect(result.current.path).toBe('a-renamed')
+    expect(result.current.documents.map((row) => [row.path, row.documentId])).toEqual([
+      ['a-renamed', 'id-a'],
+      ['b', 'id-b'],
+    ])
+  })
+
   it('createDocument creates via the daemon and switches to the new canvas', async () => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValueOnce({ documents: [] })

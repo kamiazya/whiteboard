@@ -137,11 +137,11 @@ describe('DaemonDocumentPage first rename', () => {
     )
     const sent = calls()
     const move = sent.findIndex(
-      (c) => c.startsWith('PUT') && c.endsWith('/documents/untitled/path'),
+      (c) => c.startsWith('PUT') && c.endsWith(`/documents/${DOCUMENT_ID}/path`),
     )
     expect(move).toBeGreaterThan(-1)
     // Every name write went to the address that still held the document.
-    const lastNameWrite = sent.map((c) => c.endsWith('/untitled/name')).lastIndexOf(true)
+    const lastNameWrite = sent.map((c) => c.endsWith(`/${DOCUMENT_ID}/name`)).lastIndexOf(true)
     expect(lastNameWrite).toBeGreaterThan(-1)
     expect(lastNameWrite).toBeLessThan(move)
   })
@@ -165,7 +165,7 @@ describe('DaemonDocumentPage first rename', () => {
     await openPage()
     fireEvent.focus(titleBox())
     fireEvent.change(titleBox(), { target: { value: 'Ch' } })
-    await waitFor(() => expect(calls().some((c) => c.endsWith('/untitled/name'))).toBe(true))
+    await waitFor(() => expect(calls().some((c) => c.endsWith(`/${DOCUMENT_ID}/name`))).toBe(true))
     expect(onPathMoved).not.toHaveBeenCalled()
     expect(calls().some((c) => c.endsWith('/path'))).toBe(false)
   })

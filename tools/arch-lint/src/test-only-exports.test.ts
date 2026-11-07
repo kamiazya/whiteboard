@@ -220,28 +220,28 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentRecordByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPathByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentNameByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPinByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentDuplicateByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsPageByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionDocumentByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionRestoreByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/document-url.ts#documentByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
-  'packages/daemon-client/src/api-contracts/document-url.ts#documentFileByIdApiUrl':
-    "the id-addressed twin of a path builder; foundation: wired by the apps/web keeper moving its document call sites off the path form onto these builders; daemon-client-urls.routes.test.ts requests it against the daemon's routes until then",
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentRecordApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPathApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentNameApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentPinApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentDuplicateApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/document-url.ts#documentApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/document-url.ts#documentFileApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#documentVersionsPageApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionDocumentApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
+  'packages/daemon-client/src/api-contracts/daemon-urls.ts#versionRestoreApiUrl':
+    'the path twin of an id builder; retired with the path route family in part C; daemon-client-urls.routes.test.ts and the fuzz lane request it until then',
   'packages/mcp-server/src/server/routes/document/path-route.ts#onDocumentRoute':
     'production reaches it through onDocumentAction, onDocumentFile and onDocumentsRoute, which register the id form beside the path form; exported so a probe route can be registered directly to hold what its middleware and handler share',
   'packages/mcp-server/src/server/routes/document/path-route.ts#resolvedDocumentOf':

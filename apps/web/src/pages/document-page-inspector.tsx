@@ -199,7 +199,7 @@ export function inspectorPanelsFor(deps: {
       versions.enabled ? (
         <VersionPanel
           workspaceId={versions.workspaceId}
-          path={versions.path}
+          documentId={versions.documentId}
           documentKind={documentKind}
           onRestored={sync.clearLocalUndo}
           onPreview={setPreview}

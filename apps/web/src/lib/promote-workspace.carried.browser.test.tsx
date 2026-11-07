@@ -55,8 +55,8 @@ function daemonStub(options: { confirms: boolean; judgedLimit?: number }) {
         versionsKept: options.confirms ? (body.versions ?? []).map((each) => each.id) : [],
       })
     }
-    if (url.includes('/file/') && init?.method === 'PUT') {
-      putFiles.push(url.slice(url.lastIndexOf('/file/') + '/file/'.length))
+    if (url.includes('/files/') && init?.method === 'PUT') {
+      putFiles.push(url.slice(url.lastIndexOf('/files/') + '/files/'.length))
       return new Response(null, { status: 204 })
     }
     if (url.endsWith('/documents')) return jsonResponse({ documents: [] })

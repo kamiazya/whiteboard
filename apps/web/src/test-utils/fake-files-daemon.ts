@@ -164,6 +164,11 @@ function setFolderName(state: State, path: string, name: string | undefined): Re
   return jsonResponse({ ok: true })
 }
 
+/** The path of the row carrying `documentId`; an id no row carries is a 404 on the daemon. */
+function pathOfId(state: State, documentId: string): string | undefined {
+  return state.rows.find((row) => row.id === documentId)?.path
+}
+
 function setPinned(state: State, path: string, pinned: boolean): Response {
   const row = state.rows.find((candidate) => candidate.path === path)
   if (row === undefined) return notFound()
@@ -250,25 +255,32 @@ const ROUTES: readonly { method: string; pattern: RegExp; handle: Handler }[] = 
   },
   {
     method: 'PUT',
-    pattern: /\/documents\/(.+)\/path$/,
+    pattern: /\/documents\/([^/]+)\/path$/,
     handle: (state, match, body) => {
-      renameSubtree(state, match[1] ?? '', String(body.path))
-      moveFolderNames(state, match[1] ?? '', String(body.path))
+      const from = pathOfId(state, match[1] ?? '')
+      if (from === undefined) return notFound()
+      renameSubtree(state, from, String(body.path))
+      moveFolderNames(state, from, String(body.path))
       return jsonResponse({ path: body.path })
     },
   },
   {
     method: 'PUT',
-    pattern: /\/documents\/(.+)\/name$/,
+    pattern: /\/documents\/([^/]+)\/name$/,
     handle: (state, match, body) => {
-      setName(state, match[1] ?? '', typeof body.name === 'string' ? body.name : undefined)
+      const path = pathOfId(state, match[1] ?? '')
+      if (path === undefined) return notFound()
+      setName(state, path, typeof body.name === 'string' ? body.name : undefined)
       return jsonResponse(namesAnswer(state))
     },
   },
   {
     method: 'PUT',
-    pattern: /\/documents\/(.+)\/pin$/,
-    handle: (state, match, body) => setPinned(state, match[1] ?? '', body.pinned === true),
+    pattern: /\/documents\/([^/]+)\/pin$/,
+    handle: (state, match, body) => {
+      const path = pathOfId(state, match[1] ?? '')
+      return path === undefined ? notFound() : setPinned(state, path, body.pinned === true)
+    },
   },
   {
     method: 'GET',

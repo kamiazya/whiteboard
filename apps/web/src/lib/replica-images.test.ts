@@ -84,7 +84,7 @@ function daemon(record: LoroDoc, options: DaemonOptions = {}): typeof globalThis
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
-    const file = /\/document\/boards\/photo\/file\/([\w-]+)$/.exec(url)
+    const file = new RegExp(`/documents/${BOARD}/files/([\\w-]+)$`).exec(url)
     if (file?.[1] !== undefined) {
       const fileId = file[1]
       if (options.unreachable?.includes(fileId)) throw new TypeError('Failed to fetch')

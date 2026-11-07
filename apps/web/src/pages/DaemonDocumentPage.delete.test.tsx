@@ -136,7 +136,7 @@ describe('deleting a daemon-kept document from its own page', () => {
         expect.anything(),
         'http://127.0.0.1:3099',
         'w1',
-        'agent-note',
+        DOCUMENT_ID,
       ),
     )
     await waitFor(() => expect(onNavigateBack).toHaveBeenCalledTimes(1))

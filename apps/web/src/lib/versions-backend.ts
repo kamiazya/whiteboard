@@ -1,13 +1,13 @@
 import {
-  documentVersionsApiUrl,
-  documentVersionsPageApiUrl,
+  documentVersionsByIdApiUrl,
+  documentVersionsPageByIdApiUrl,
   listVersionsResponseSchema,
   type saveVersionRequestSchema,
   saveVersionResponseSchema,
   type VersionEntry,
-  versionDocumentApiUrl,
+  versionDocumentByIdApiUrl,
   versionDocumentResponseSchema,
-  versionRestoreApiUrl,
+  versionRestoreByIdApiUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { refusalReasonOf } from '@kamiazya/whiteboard-daemon-client/api-contracts/refusal-reason'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -34,20 +34,20 @@ export type PastDocument =
  * rows (`VersionEntry`, declared once in server-core) and performs the same
  * three acts.
  *
- * `path`-addressed like the routes are, because a version belongs to a
- * document at the name it had. Every method throws on failure — a rejected
+ * Addressed by the document's id, like the routes are, because a version
+ * belongs to the document and not to the path it stood at. Every method throws on failure — a rejected
  * save or restore is the caller's signal to keep its dialog open.
  */
 export interface VersionsBackend {
-  list(workspaceId: string, path: string): Promise<VersionEntry[]>
+  list(workspaceId: string, documentId: string): Promise<VersionEntry[]>
   /**
    * What one version holds, for looking at it before applying it. `null` for
    * a version this document does not own — the refusal restore makes, for
    * the same reason: an id alone must not read another document's history.
    */
-  loadPast(workspaceId: string, path: string, versionId: string): Promise<PastDocument | null>
-  save(workspaceId: string, path: string, input: { label: string }): Promise<VersionEntry>
-  restore(workspaceId: string, path: string, versionId: string): Promise<void>
+  loadPast(workspaceId: string, documentId: string, versionId: string): Promise<PastDocument | null>
+  save(workspaceId: string, documentId: string, input: { label: string }): Promise<VersionEntry>
+  restore(workspaceId: string, documentId: string, versionId: string): Promise<void>
 }
 
 /**
@@ -84,14 +84,14 @@ export class VersionsRequestError extends Error {
 async function listEveryPage(
   fetchFn: typeof globalThis.fetch,
   workspaceId: string,
-  path: string,
+  documentId: string,
 ): Promise<VersionEntry[]> {
   const versions: VersionEntry[] = []
   let cursor: string | undefined
   do {
-    const url = documentVersionsPageApiUrl(
+    const url = documentVersionsPageByIdApiUrl(
       workspaceId,
-      path,
+      documentId,
       cursor === undefined ? {} : { cursor },
     )
     const res = await fetchFn(url)
@@ -107,16 +107,16 @@ async function listEveryPage(
 /** The daemon's history, over its documents routes. */
 export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): VersionsBackend {
   return {
-    list: (workspaceId, path) => listEveryPage(fetchFn, workspaceId, path),
-    async loadPast(workspaceId, path, versionId) {
-      const url = versionDocumentApiUrl(workspaceId, path, versionId)
+    list: (workspaceId, documentId) => listEveryPage(fetchFn, workspaceId, documentId),
+    async loadPast(workspaceId, documentId, versionId) {
+      const url = versionDocumentByIdApiUrl(workspaceId, documentId, versionId)
       const res = await fetchFn(url)
       if (res.status === 404) return null
       if (!res.ok) throw new VersionsRequestError(res.status, 'version document request')
       return readDaemonJson(url, res, versionDocumentResponseSchema)
     },
-    async save(workspaceId, path, { label }) {
-      const url = documentVersionsApiUrl(workspaceId, path)
+    async save(workspaceId, documentId, { label }) {
+      const url = documentVersionsByIdApiUrl(workspaceId, documentId)
       const res = await fetchFn(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -130,8 +130,8 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       }
       return (await readDaemonJson(url, res, saveVersionResponseSchema)).version
     },
-    async restore(workspaceId, path, versionId) {
-      const res = await fetchFn(versionRestoreApiUrl(workspaceId, path, versionId), {
+    async restore(workspaceId, documentId, versionId) {
+      const res = await fetchFn(versionRestoreByIdApiUrl(workspaceId, documentId, versionId), {
         method: 'POST',
       })
       if (!res.ok) {

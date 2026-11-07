@@ -121,7 +121,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
         expect.anything(),
         'http://127.0.0.1:3099',
         'w1',
-        'agent-note',
+        DOCUMENT_ID,
         undefined,
       ),
     )
@@ -156,7 +156,7 @@ describe('duplicating a daemon-kept document from its own page', () => {
         expect.anything(),
         'http://127.0.0.1:3099',
         'w1',
-        'agent-note',
+        DOCUMENT_ID,
         { withoutAnnotations: true },
       ),
     )

@@ -240,6 +240,7 @@ function DocumentHeader({
             )}
             workspaceId={topBar.workspaceId}
             path={topBar.path}
+            documentId={topBar.documentId}
             recordedName={model.sync.documentName}
             {...(topBar.keeper === undefined ? {} : { keeper: topBar.keeper })}
             {...(topBar.saveState === undefined ? {} : { saveState: topBar.saveState })}

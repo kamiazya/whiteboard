@@ -75,7 +75,7 @@ function daemon(record: LoroDoc, serves: readonly string[]): typeof globalThis.f
     if (url.endsWith(`/api/w/${DAEMON_WS}/workspace-document/snapshot`)) {
       return new Response(record.export({ mode: 'snapshot' }) as BodyInit, { status: 200 })
     }
-    const file = /\/document\/photo\/file\/([\w-]+)$/.exec(url)?.[1]
+    const file = new RegExp(`/documents/${BOARD}/files/([\\w-]+)$`).exec(url)?.[1]
     if (file !== undefined && serves.includes(file)) {
       return new Response(PNG as BodyInit, { headers: { 'Content-Type': 'image/png' } })
     }
@@ -200,7 +200,7 @@ const DAEMON_SCOPE = createDaemonFileAdapter({
   daemonFetch: globalThis.fetch,
   daemonBaseUrl: DAEMON,
   workspaceId: DAEMON_WS,
-  path: '',
+  documentId: undefined,
 }).fileScope
 
 describe('ReplicaReadPage pictures across copy and paste', () => {

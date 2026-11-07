@@ -5,6 +5,8 @@ import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonContractError } from './daemon-contract-error.js'
 import { createDaemonVersionsBackend, VersionsRequestError } from './versions-backend.js'
 
+const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
 const backendAnswering = (response: Response) =>
   createDaemonVersionsBackend(vi.fn().mockResolvedValue(response))
 
@@ -14,7 +16,7 @@ describe('the daemon versions backend, answered with a body its contract refuses
   it('throws a DaemonContractError from list, naming the route and the first issue path', async () => {
     const backend = backendAnswering(jsonResponse({ versions: [{ id: 1 }] }))
 
-    const failure = await contractFailure(backend.list('ws', 'notes/a'))
+    const failure = await contractFailure(backend.list('ws', ID))
 
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).route).toContain('/versions')
@@ -25,7 +27,7 @@ describe('the daemon versions backend, answered with a body its contract refuses
   it('throws a DaemonContractError from loadPast, naming the first issue path', async () => {
     const backend = backendAnswering(jsonResponse({ kind: 'spatial' }))
 
-    const failure = await contractFailure(backend.loadPast('ws', 'notes/a', 'v1'))
+    const failure = await contractFailure(backend.loadPast('ws', ID, 'v1'))
 
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).issues[0]?.path).toEqual(['canvas'])
@@ -35,7 +37,7 @@ describe('the daemon versions backend, answered with a body its contract refuses
   it('throws a DaemonContractError from save, which the old wording never matched', async () => {
     const backend = backendAnswering(jsonResponse({ nope: true }))
 
-    const failure = await contractFailure(backend.save('ws', 'notes/a', { label: 'x' }))
+    const failure = await contractFailure(backend.save('ws', ID, { label: 'x' }))
 
     expect(failure).toBeInstanceOf(DaemonContractError)
     expect((failure as DaemonContractError).issues[0]?.path).toEqual(['version'])
@@ -45,10 +47,10 @@ describe('the daemon versions backend, answered with a body its contract refuses
 
 describe('the daemon versions backend, answered with a body that is not JSON', () => {
   it.each([
-    ['list', (backend: ReturnType<typeof backendAnswering>) => backend.list('ws', 'notes/a')],
+    ['list', (backend: ReturnType<typeof backendAnswering>) => backend.list('ws', ID)],
     [
       'loadPast',
-      (backend: ReturnType<typeof backendAnswering>) => backend.loadPast('ws', 'notes/a', 'v1'),
+      (backend: ReturnType<typeof backendAnswering>) => backend.loadPast('ws', ID, 'v1'),
     ],
   ])('reads it from %s as contract drift, not an untyped parse error', async (_, call) => {
     const failure = await contractFailure(call(backendAnswering(new Response('<html>'))))
@@ -67,7 +69,7 @@ describe('the daemon versions backend, refused', () => {
       },
     })
     const backend = backendAnswering(new Response(cut, { status: 409 }))
-    await expect(backend.restore('ws', 'notes/a', 'v1')).rejects.toMatchObject({
+    await expect(backend.restore('ws', ID, 'v1')).rejects.toMatchObject({
       name: 'FetchFailedError',
     })
   })
@@ -89,10 +91,11 @@ describe('the daemon versions backend, paging a long history', () => {
       .mockResolvedValueOnce(jsonResponse({ versions: [row('v1')] }))
     const backend = createDaemonVersionsBackend(fetchFn)
 
-    const versions = await backend.list('ws', 'notes/a')
+    const versions = await backend.list('ws', ID)
 
     expect(versions.map((v) => v.id)).toEqual(['v3', 'v2', 'v1'])
     expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(String(fetchFn.mock.calls[0]?.[0])).toBe(`/api/workspaces/ws/documents/${ID}/versions`)
     expect(String(fetchFn.mock.calls[1]?.[0])).toMatch(/\/versions\?cursor=9\.2$/)
   })
 
@@ -104,7 +107,7 @@ describe('the daemon versions backend, paging a long history', () => {
       ),
     )
 
-    const failure = await contractFailure(backend.save('ws', 'notes/a', { label: 'x' }))
+    const failure = await contractFailure(backend.save('ws', ID, { label: 'x' }))
 
     expect(failure).toBeInstanceOf(VersionsRequestError)
     expect(failure).toMatchObject({

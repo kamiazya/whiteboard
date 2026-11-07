@@ -124,12 +124,15 @@ describe('DaemonDocumentPage versions', () => {
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
           if (
-            url.includes('/workspaces/w1/documents/main/versions') &&
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
+            init?.method === 'POST'
+          ) {
             return Promise.resolve(
               jsonResponse({
                 version: {
@@ -169,7 +172,7 @@ describe('DaemonDocumentPage versions', () => {
           fetchMock.mock.calls.some(
             ([reqInput, init]) =>
               String(reqInput).startsWith(DAEMON_BASE_URL) &&
-              String(reqInput).includes('/workspaces/w1/documents/main/versions') &&
+              String(reqInput).includes('/workspaces/w1/documents/id-main/versions') &&
               init?.method === 'POST',
           ),
         ).toBe(true)
@@ -196,12 +199,15 @@ describe('DaemonDocumentPage versions', () => {
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
           if (
-            url.includes('/workspaces/w1/documents/main/versions') &&
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
+            init?.method === 'POST'
+          ) {
             // Malformed 200: missing the `version` envelope the schema requires.
             return Promise.resolve(jsonResponse({ id: 'v-manual' }))
           }
@@ -243,12 +249,15 @@ describe('DaemonDocumentPage versions', () => {
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
           if (
-            url.includes('/workspaces/w1/documents/main/versions') &&
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
             (init?.method ?? 'GET') === 'GET'
           ) {
             return Promise.resolve(jsonResponse({ versions: [] }))
           }
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/id-main/versions') &&
+            init?.method === 'POST'
+          ) {
             return Promise.resolve(new Response('nope', { status: 500 }))
           }
           return Promise.resolve(otherReadBody(url))
@@ -301,7 +310,7 @@ describe('DaemonDocumentPage versions', () => {
   })
 
   describe('version history panel', () => {
-    it('opens the panel and lists versions for the current (workspaceId, path) via the daemon fetch', async () => {
+    it('opens the panel and lists versions for the current (workspaceId, documentId) via the daemon fetch', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
@@ -349,7 +358,7 @@ describe('DaemonDocumentPage versions', () => {
           fetchMock.mock.calls.some(
             ([reqInput]) =>
               String(reqInput).startsWith(DAEMON_BASE_URL) &&
-              String(reqInput).includes('/workspaces/w1/documents/main/versions'),
+              String(reqInput).includes('/workspaces/w1/documents/id-main/versions'),
           ),
         ).toBe(true)
       })
@@ -545,7 +554,7 @@ describe('DaemonDocumentPage versions', () => {
       // The daemon's own versions route is what the column read.
       expect(
         fetchMock.mock.calls.some(([url]) =>
-          String(url).includes('/workspaces/w1/documents/notes/versions'),
+          String(url).includes('/workspaces/w1/documents/id-notes/versions'),
         ),
       ).toBe(true)
 
