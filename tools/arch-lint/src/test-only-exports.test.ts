@@ -218,6 +218,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
+    'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
     'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
   'packages/canvas-render/src/generated/geometry.zod.ts#rectSchema':
