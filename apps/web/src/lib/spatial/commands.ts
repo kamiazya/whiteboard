@@ -39,6 +39,7 @@ import {
   nodeFile,
   nodeText,
   nodeUrl,
+  type PinDrop,
   type ProposedChange,
   type ProposedChangeStatus,
   type SpatialCanvas,
@@ -361,18 +362,16 @@ export type EditorLeafCommand =
       readonly endpoint: 'from' | 'to'
       readonly target: EndTarget
     }
-  | {
+  | ({
       /**
-       * A conversation's pin dragged to another spot (`movedAnchor` says
-       * what moves: a point's anchor, or the fallback a node or edge pin
-       * draws at once its subject is gone). Like every thread command it
-       * leaves the CANVAS untouched — the layer is a plane beside it.
+       * A conversation's pin dropped somewhere else: onto a node or an edge
+       * it is about that, onto nothing it is about the point (`movedAnchor`
+       * decides). Like every thread command it leaves the CANVAS untouched —
+       * the layer is a plane beside it.
        */
       readonly kind: 'move-thread'
       readonly threadId: string
-      readonly x: number
-      readonly y: number
-    }
+    } & PinDrop)
   | {
       /**
        * Appends a message to an existing conversation (ADR-0026 decision 2).

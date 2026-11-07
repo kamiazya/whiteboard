@@ -88,6 +88,27 @@ describe('threadsAfterCommand', () => {
     )
   })
 
+  it('a pin dropped on a node or an edge is about it; on nothing, a point', () => {
+    const onNode = threadsAfterCommand([open('t1')], {
+      kind: 'move-thread',
+      threadId: 't1',
+      x: 5,
+      y: 6,
+      nodeId: 'n1',
+    })
+    expect(onNode[0]?.anchor).toEqual({ kind: 'spatial', x: 5, y: 6, nodeId: 'n1' })
+    const onEdge = threadsAfterCommand(onNode, {
+      kind: 'move-thread',
+      threadId: 't1',
+      x: 7,
+      y: 8,
+      edgeId: 'e1',
+    })
+    expect(onEdge[0]?.anchor).toEqual({ kind: 'spatial', x: 7, y: 8, edgeId: 'e1' })
+    const offIt = threadsAfterCommand(onEdge, { kind: 'move-thread', threadId: 't1', x: 9, y: 9 })
+    expect(offIt[0]?.anchor).toEqual({ kind: 'spatial', x: 9, y: 9 })
+  })
+
   it('reaches inside a batch, and a canvas command answers the same array', () => {
     const threads = [open('t1')]
     const next = threadsAfterCommand(threads, {

@@ -568,24 +568,39 @@ describe('canvasCommentsOf', () => {
 
 describe('movedAnchor', () => {
   const to = { x: 40, y: 50 }
-  it('moves a point, a node and an edge anchor, keeping what each names', () => {
-    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2 }, to)).toEqual({
+  it('makes a pin dropped on nothing a point, whatever it was about', () => {
+    for (const held of [
+      { kind: 'spatial', x: 1, y: 2 },
+      { kind: 'spatial', x: 1, y: 2, nodeId: 'n1' },
+      { kind: 'spatial', x: 1, y: 2, edgeId: 'e1' },
+    ] satisfies AnnotationAnchor[]) {
+      expect(movedAnchor(held, to)).toEqual({ kind: 'spatial', x: 40, y: 50 })
+    }
+  })
+  it('re-anchors a pin dropped on a node or an edge to it, keeping the point as its fallback', () => {
+    const node: AnnotationAnchor = { kind: 'spatial', x: 1, y: 2, nodeId: 'n1' }
+    expect(movedAnchor(node, { ...to, nodeId: 'n2' })).toEqual({
       kind: 'spatial',
       x: 40,
       y: 50,
+      nodeId: 'n2',
     })
-    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2, nodeId: 'n1' }, to)).toEqual({
-      kind: 'spatial',
-      x: 40,
-      y: 50,
-      nodeId: 'n1',
-    })
-    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2, edgeId: 'e1' }, to)).toEqual({
+    expect(movedAnchor(node, { ...to, edgeId: 'e1' })).toEqual({
       kind: 'spatial',
       x: 40,
       y: 50,
       edgeId: 'e1',
     })
+    expect(movedAnchor({ kind: 'spatial', x: 1, y: 2 }, { ...to, nodeId: 'n1' })).toEqual({
+      kind: 'spatial',
+      x: 40,
+      y: 50,
+      nodeId: 'n1',
+    })
+  })
+  it('answers the same anchor for a drop that changes nothing', () => {
+    const node: AnnotationAnchor = { kind: 'spatial', x: 40, y: 50, nodeId: 'n1' }
+    expect(movedAnchor(node, { ...to, nodeId: 'n1' })).toBe(node)
   })
   it('leaves a node set, a region and a non-spatial anchor where they are', () => {
     const set: AnnotationAnchor = { kind: 'spatial', x: 1, y: 2, nodeIds: ['n1', 'n2'] }
