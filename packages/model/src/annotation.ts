@@ -508,18 +508,43 @@ export function canvasCommentsOf(
 }
 
 /**
- * Where a thread's anchor goes when its pin is dragged to `point`: a point,
- * a node or an edge anchor keeps what it names and moves its point (for a
- * node or an edge, the fallback a pin draws at once its subject is gone). A
- * node set, a region and a passage have no point a pin drag could honestly
+ * Where a pin was dropped: the point, and the node or the edge it landed on,
+ * if any. Naming both is not a drop — the editor's pick answers one object.
+ */
+export type PinDrop = { readonly x: number; readonly y: number } & (
+  | { readonly nodeId?: string; readonly edgeId?: undefined }
+  | { readonly nodeId?: undefined; readonly edgeId?: string }
+)
+
+/**
+ * Where a thread's anchor goes when its pin is dropped: onto a node, it is
+ * about that node; onto an edge, about that edge; onto nothing, about the
+ * point. So the anchor is whatever the drop landed on, the way the drag reads
+ * — a pin carried off its node and let go in empty space is no longer about
+ * the node. The point is kept on every arm, as the fallback a node or edge
+ * pin draws at once its subject is gone.
+ *
+ * A node set, a region and a passage have no point a pin drag could honestly
  * move — the pin stands at the corner of a box or a node — so they keep the
  * anchor they have, and so does a document thread, which has no pin at all.
+ * The same reference comes back when the drop changes nothing.
  */
-export function movedAnchor(
-  anchor: AnnotationAnchor,
-  point: { readonly x: number; readonly y: number },
-): AnnotationAnchor {
+export function movedAnchor(anchor: AnnotationAnchor, drop: PinDrop): AnnotationAnchor {
   if (anchor.kind !== 'spatial') return anchor
   if (anchor.nodeIds !== undefined || anchor.width !== undefined) return anchor
-  return { ...anchor, x: point.x, y: point.y }
+  if (
+    anchor.x === drop.x &&
+    anchor.y === drop.y &&
+    anchor.nodeId === drop.nodeId &&
+    anchor.edgeId === drop.edgeId
+  ) {
+    return anchor
+  }
+  return {
+    kind: 'spatial',
+    x: drop.x,
+    y: drop.y,
+    ...(drop.nodeId === undefined ? {} : { nodeId: drop.nodeId }),
+    ...(drop.edgeId === undefined ? {} : { edgeId: drop.edgeId }),
+  }
 }

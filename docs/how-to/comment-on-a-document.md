@@ -57,7 +57,10 @@ meant.
 Right-click a node for **Comment on this**, or empty canvas for **Comment
 here**. The comment is drawn as a pin with a bubble, connected by a dotted
 leader, and it also appears in the rail like any other conversation. Drag
-a pin to move where its comment points.
+a pin to move where its comment points. What you drop it on is what the
+comment is about from then on: a node, and the pin follows that node; an
+edge, and it rides that edge; empty canvas, and it stays at that spot. A pin
+carried off its node is no longer about that node.
 
 A canvas's comments are drawn only on the canvas itself. Where the canvas is
 shown inside something else — embedded in a note with `![[…]]`, shown in a

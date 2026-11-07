@@ -1,4 +1,7 @@
+import { commentAnchor } from '@kamiazya/whiteboard-canvas-render'
+import type { CanvasComment, PinDrop } from '@kamiazya/whiteboard-model'
 import { clientPointToRootLocal, type Point, screenToCanvas } from '../../lib/spatial/viewport.js'
+import { pickContentAt, pressProbes } from './element-pick.js'
 import type { EditorPointerInputs } from './pointer-inputs.js'
 
 /**
@@ -10,11 +13,13 @@ export const COMMENT_PRESS_SLOP_PX = 4
 type CommentClaimInputs = Pick<
   EditorPointerInputs,
   | 'applyResult'
+  | 'canvas'
   | 'capturePointer'
   | 'commentById'
   | 'commentDrag'
   | 'commentPlacementObstacles'
   | 'hitTestComment'
+  | 'menuPickInputs'
   | 'openCommentId'
   | 'pressedCommentRef'
   | 'setCommentDrag'
@@ -96,9 +101,12 @@ export function openCommentMenuAt(
 
 /**
  * A press that travels past the slop is spent as a press. Under the
- * select tool it becomes the pin drag of a point-anchored comment (a
- * node-anchored one moves with its node); under the hand tool it was a
- * pan, which navigation is already running. Decided BEFORE navigation,
+ * select tool it becomes the pin drag; under the hand tool it was a pan,
+ * which navigation is already running. A node or an edge comment drags
+ * too: it is carried off its subject and re-anchored wherever it lands
+ * (`commitCommentDrag`). The dragged copy is DETACHED and stands where the
+ * pin was drawn, so the preview starts under the finger rather than at the
+ * fallback point the stored anchor keeps. Decided BEFORE navigation,
  * because a pan's moves never fall through. Capture comes first: it takes
  * the committed copy out of the surface, and a touch pointer's implicit
  * capture sits on that copy.
@@ -121,12 +129,11 @@ export function startCommentPinDrag(
   // Spent before the tool is consulted, so a hand-tool press that
   // travelled does not come back as a card on release.
   c.pressedCommentRef.current = null
-  if (c.tool === 'hand' || c.spaceDownRef.current || pressed.comment.targetNodeId !== undefined) {
-    return false
-  }
+  if (c.tool === 'hand' || c.spaceDownRef.current) return false
   c.capturePointer(root, e.pointerId)
+  const drawn = commentAnchor(pressed.comment, c.canvas, edgePathOf(c))
   c.setCommentDrag({
-    comment: pressed.comment,
+    comment: detachedAt(pressed.comment, drawn),
     startPoint: pressed.startPoint,
     live: screenToCanvas(screenPoint, c.viewport),
     obstacles: c.commentPlacementObstacles(pressed.comment.id),
@@ -164,11 +171,17 @@ export function releaseCommentPress(c: CommentClaimInputs): boolean {
 
 /**
  * The end of a pin drag. A drag that never travelled is a PRESS, which
- * the card toggle owns. The anchor is ROUNDED because the model requires
+ * the card toggle owns. The point is ROUNDED because the model requires
  * an integer and a reader silently drops a comment that fails the schema
- * — a fractional anchor from a zoomed c.viewport would vanish on the next
- * undo, reload or remote import. The preview parks exactly on the
- * rounded anchor, so the committed copy takes over without a step.
+ * — a fractional anchor from a zoomed viewport would vanish on the next
+ * undo, reload or remote import.
+ *
+ * What the pin lands on is what it is about now: a node, an edge, or the
+ * point (model's `movedAnchor`), asked the way a press is — locks aside,
+ * since a lock guards a node's content and commenting changes none. The
+ * preview parks where the layer will DRAW the pin, which for a node is its
+ * corner rather than the drop point, so the committed copy takes over
+ * without a step.
  */
 export function commitCommentDrag(
   c: CommentClaimInputs,
@@ -186,23 +199,59 @@ export function commitCommentDrag(
     c.toggleCommentCard(commentDrag.comment.id)
     return true
   }
-  const dropped = {
+  const drop: PinDrop = {
     x: Math.round(commentDrag.comment.x + dx),
     y: Math.round(commentDrag.comment.y + dy),
+    ...dropTargetAt(c, released),
   }
+  const settled = commentAnchor(
+    {
+      ...detachedAt(commentDrag.comment, drop),
+      ...(drop.nodeId === undefined ? {} : { targetNodeId: drop.nodeId }),
+      ...(drop.edgeId === undefined ? {} : { targetEdgeId: drop.edgeId }),
+    },
+    c.canvas,
+    edgePathOf(c),
+  )
   c.setCommentDrag({
     ...commentDrag,
     live: {
-      x: commentDrag.startPoint.x + (dropped.x - commentDrag.comment.x),
-      y: commentDrag.startPoint.y + (dropped.y - commentDrag.comment.y),
+      x: commentDrag.startPoint.x + (settled.x - commentDrag.comment.x),
+      y: commentDrag.startPoint.y + (settled.y - commentDrag.comment.y),
     },
-    dropped,
+    dropped: settled,
   })
   c.applyResult({
     state: { kind: 'idle' },
-    commands: [{ kind: 'move-thread', threadId: commentDrag.comment.id, ...dropped } as const],
+    commands: [{ kind: 'move-thread', threadId: commentDrag.comment.id, ...drop } as const],
   })
   return true
+}
+
+/**
+ * The node or the edge under a dropped pin; ink and empty canvas are neither.
+ * A frame's interior answers the frame, as it does for a press, so a pin let
+ * go inside a frame is about the frame.
+ */
+function dropTargetAt(
+  c: CommentClaimInputs,
+  at: Point,
+): { readonly nodeId: string } | { readonly edgeId: string } | Record<never, never> {
+  const picked = pickContentAt(pressProbes(c.menuPickInputs), at)
+  if (picked?.kind === 'nodes') return { nodeId: picked.id }
+  if (picked?.kind === 'edges') return { edgeId: picked.id }
+  return {}
+}
+
+/** An edge's path as drawn — the same paths a press is hit-tested against, which the layer pins an edge comment on. */
+function edgePathOf(c: CommentClaimInputs): (edgeId: string) => readonly Point[] | undefined {
+  return (edgeId) => c.menuPickInputs.paths.find((entry) => entry.id === edgeId)?.path
+}
+
+/** The comment standing at `at` on its own, naming no node or edge. */
+function detachedAt(comment: CanvasComment, at: Point): CanvasComment {
+  const { targetNodeId: _node, targetEdgeId: _edge, ...rest } = comment
+  return { ...rest, x: at.x, y: at.y }
 }
 
 /**

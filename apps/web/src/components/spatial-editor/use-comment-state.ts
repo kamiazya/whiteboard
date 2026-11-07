@@ -31,6 +31,28 @@ export interface CommentStateInputs {
   }[]
 }
 
+/** How near the committed pin must be to the dropped point to count as there, in canvas units. */
+const SETTLE_EPSILON = 1e-6
+
+/**
+ * Whether the drawn pin of `commentId` stands at `point`. Near, not equal:
+ * the pin's box is laid out around its anchor and read back here, and a
+ * node's corner or a point on an edge is fractional, where that round trip
+ * is not exact.
+ */
+function pinStandsAt(
+  boxes: CommentStateInputs['commentChromeBoxes'],
+  commentId: string,
+  point: Point,
+): boolean {
+  const pin = boxes.find((entry) => entry.commentId === commentId && entry.part === 'pin')
+  return (
+    pin !== undefined &&
+    Math.abs(pin.bbox.x + pin.bbox.w / 2 - point.x) < SETTLE_EPSILON &&
+    Math.abs(pin.bbox.y + pin.bbox.h / 2 - point.y) < SETTLE_EPSILON
+  )
+}
+
 export function useCommentState({
   canvasRef,
   canvas,
@@ -118,9 +140,8 @@ export function useCommentState({
     readonly startPoint: Point
   } | null>(null)
   /**
-   * A point-anchored comment's pin being dragged: the comment as it was
-   * at the press (its stored anchor), the press point, and the live
-   * pointer. Kept beside the gesture machine rather than in it — see
+   * A pin being dragged: the comment DETACHED and standing where its pin
+   * was drawn at the press, the press point, and the live pointer. Kept beside the gesture machine rather than in it — see
    * CommentDragLayer for why — so the node machinery (snapping, carried
    * sets, live edges) never has to learn what a comment is.
    */
@@ -131,10 +152,11 @@ export function useCommentState({
     /** The obstacle set at the press, so the preview places like the committed chrome. */
     readonly obstacles: readonly BoundingBox[]
     /**
-     * Set on release: the anchor the move was committed at. The drag then
-     * SETTLES rather than ending — the preview stays up, and the committed
-     * copy stays out of the surface, until the committed scene carries the
-     * comment at this anchor (a worker round trip later on a large canvas).
+     * Set on release: where the layer will draw the pin once the move is
+     * committed — a node's corner, a point on an edge, or the dropped point.
+     * The drag then SETTLES rather than ending — the preview stays up, and
+     * the committed copy stays out of the surface, until the committed scene
+     * carries the pin here (a worker round trip later on a large canvas).
      * Ending at the release instead showed the old copy for a frame and
      * animated it to the new anchor.
      */
@@ -142,14 +164,7 @@ export function useCommentState({
   } | null>(null)
   useEffect(() => {
     if (commentDrag?.dropped == null) return
-    const { dropped } = commentDrag
-    const pin = commentChromeBoxes.find(
-      (entry) => entry.commentId === commentDrag.comment.id && entry.part === 'pin',
-    )
-    const arrived =
-      pin !== undefined &&
-      pin.bbox.x + pin.bbox.w / 2 === dropped.x &&
-      pin.bbox.y + pin.bbox.h / 2 === dropped.y
+    const arrived = pinStandsAt(commentChromeBoxes, commentDrag.comment.id, commentDrag.dropped)
     // Gone (removed underneath the drag) settles too: nothing to wait for.
     if (arrived || commentById(commentDrag.comment.id) === undefined) setCommentDrag(null)
   }, [commentDrag, commentChromeBoxes])

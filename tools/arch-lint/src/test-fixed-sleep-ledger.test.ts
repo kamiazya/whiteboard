@@ -50,7 +50,7 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/components/markdown-editor/verb-bar-measure.browser.test.tsx': 1,
   'apps/web/src/components/markdown-editor/wiki-link-completion.browser.test.tsx': 3,
   'apps/web/src/components/spatial-editor/SpatialEditor.browser.test.tsx': 2,
-  'apps/web/src/components/spatial-editor/comment-move.browser.test.tsx': 3,
+  'apps/web/src/components/spatial-editor/comment-move.browser.test.tsx': 2,
   // Each waits out STROKE_GROUP_PAUSE_MS on the wall clock so the next stroke opens its own group.
   'apps/web/src/components/spatial-editor/freehand-ink.browser.test.tsx': 3,
   'apps/web/src/components/spatial-editor/image-node.browser.test.tsx': 1,

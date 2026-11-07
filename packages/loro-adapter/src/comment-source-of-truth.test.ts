@@ -54,11 +54,19 @@ describe('the canvas does not carry the annotation layer', () => {
 })
 
 describe('moveCommentThread', () => {
-  it('moves a pin and keeps what it names, its messages and its status', () => {
+  it('re-anchors a pin to the node it is dropped on, keeping its messages and its status', () => {
+    const doc = seeded()
+    expect(moveCommentThread(doc, 't1', { x: 7, y: 8, nodeId: 'n2' })).toBe(true)
+    expect(readCommentThreads(doc)).toEqual([
+      { ...THREAD, anchor: { kind: 'spatial', x: 7, y: 8, nodeId: 'n2' } },
+    ])
+  })
+
+  it('makes a pin dropped on nothing a point', () => {
     const doc = seeded()
     expect(moveCommentThread(doc, 't1', { x: 7, y: 8 })).toBe(true)
     expect(readCommentThreads(doc)).toEqual([
-      { ...THREAD, anchor: { kind: 'spatial', x: 7, y: 8, nodeId: 'n1' } },
+      { ...THREAD, anchor: { kind: 'spatial', x: 7, y: 8 } },
     ])
   })
 

@@ -7,6 +7,7 @@ import {
   compareCodeUnit,
   compareMessages,
   movedAnchor,
+  type PinDrop,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
 import { type DocumentContainers, THREADS_KEY } from './containers.js'
@@ -117,7 +118,7 @@ export function setCommentThreadStatus(
 }
 
 /**
- * A thread's pin dragged to `point` (`movedAnchor` decides what moves). One
+ * A thread's pin dropped at `drop` (`movedAnchor` decides what it becomes). One
  * key, last-writer-wins, like the status: the messages beneath are untouched.
  * Answers whether it wrote — nothing for a thread this replica does not hold
  * (for `writeThreadMessage`'s reason), or one whose anchor stays put.
@@ -125,12 +126,12 @@ export function setCommentThreadStatus(
 export function moveCommentThread(
   doc: DocumentContainers,
   threadId: string,
-  point: { readonly x: number; readonly y: number },
+  drop: PinDrop,
 ): boolean {
   const held = readCommentThread(doc, threadId)
   const container = threadContainer(doc, threadId)
   if (held === undefined || container === undefined) return false
-  const anchor = movedAnchor(held.anchor, point)
+  const anchor = movedAnchor(held.anchor, drop)
   if (anchor === held.anchor) return false
   assertFiniteAnchor({ ...held, anchor })
   container.set(ANCHOR_FIELD, anchor)
