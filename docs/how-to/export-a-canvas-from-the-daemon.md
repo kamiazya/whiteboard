@@ -29,19 +29,23 @@ Treat the token as a password: anything holding it can read and change every wor
 
 ## Export a PNG
 
-Address the canvas by its workspace and its path. A fresh data directory has one workspace,
-`default`:
+Address the canvas by its workspace and its document id. A fresh data directory has one
+workspace, `default`; the workspace's listing names every document with its id and its path:
 
 ```sh
+curl --unix-socket "$SOCKET" -H "Authorization: Bearer $TOKEN" \
+  http://daemon/api/workspaces/default/documents
+# {"documents":[{"documentId":"01ARZ3NDEKTSV4RRFFQ69G5FAV","path":"plans/architecture",...}]}
+
 curl --unix-socket "$SOCKET" \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"scale": 2}' \
-  http://daemon/api/w/default/document/plans/architecture/export
+  http://daemon/api/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export
 ```
 
-The host name after `http://` is ignored; the socket decides where the request goes. Each
-segment of the path is URL-encoded on its own (`plans/my%20board`, not `plans%2Fmy%20board`).
+The host name after `http://` is ignored; the socket decides where the request goes. The id
+survives a rename, so a script that saved one keeps working after the canvas moves.
 
 The answer says where the file went and what it could not draw:
 
@@ -70,7 +74,7 @@ curl --unix-socket "$SOCKET" \
   -H "Authorization: Bearer $TOKEN" \
   -H 'Content-Type: application/json' \
   -d '{"style": "document"}' \
-  http://daemon/api/w/default/document/plans/architecture/export-svg
+  http://daemon/api/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export-svg
 ```
 
 ## When it refuses

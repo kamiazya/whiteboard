@@ -80,7 +80,7 @@ export function createExportRouter(options: ExportRouterOptions) {
   const documentExists = async (workspaceId: string, path: string) =>
     options.liveDocuments.exists(workspaceId, path)
 
-  // POST /api/w/:workspaceId/document/<path>/export
+  // POST /api/workspaces/:workspaceId/documents/:documentId/export
   onDocumentAction(app, 'post', 'export', async (c, workspaceId, path) => {
     const parsedBody = await readExportBody(c, exportRequestSchema)
     if ('refusal' in parsedBody) return parsedBody.refusal

@@ -27,7 +27,7 @@ import {
   refusalReason,
   STORED_DOCUMENT_ANSWERS,
 } from './_shared.js'
-import { onDocumentsRoute } from './path-route.js'
+import { onDocumentRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
@@ -125,7 +125,7 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
   const app = new Hono()
   const { versionStore, daemonActor, scope, callerName } = options
 
-  onDocumentsRoute(app, 'get', ['versions'], (c, workspaceId, path) =>
+  onDocumentRoute(app, 'get', '/versions', (c, workspaceId, path) =>
     versionPage(c, versionStore, workspaceId, path),
   )
 
@@ -140,45 +140,40 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
    * something to draw, and the two shapes below are what every surface that
    * draws a document already speaks.
    */
-  onDocumentsRoute(
-    app,
-    'get',
-    ['versions', ':id', 'document'],
-    async (c, workspaceId, path, params) => {
-      const id = params.id as string
-      try {
-        // The version must belong to THIS document. Without the check an id
-        // alone would read another document's history through this path — the
-        // refusal `restoreVersion` makes for the same reason.
-        if (!(await versionStore.belongsTo(workspaceId, path, id)))
-          return c.json(
-            errorBody('version_not_found', 'no version with that id belongs to this document'),
-            404,
-          )
+  onDocumentRoute(app, 'get', '/versions/:id/document', async (c, workspaceId, path, params) => {
+    const id = params.id as string
+    try {
+      // The version must belong to THIS document. Without the check an id
+      // alone would read another document's history through this path — the
+      // refusal `restoreVersion` makes for the same reason.
+      if (!(await versionStore.belongsTo(workspaceId, path, id)))
+        return c.json(
+          errorBody('version_not_found', 'no version with that id belongs to this document'),
+          404,
+        )
 
-        // Already the past DOCUMENT: `load` checks the frontier out against
-        // the stored workspace and projects it, which is the shape restore
-        // reconciles from too.
-        const past = await versionStore.load(workspaceId, id)
-        if (past === null)
-          return c.json(
-            errorBody('version_not_found', 'no version with that id belongs to this document'),
-            404,
-          )
+      // Already the past DOCUMENT: `load` checks the frontier out against
+      // the stored workspace and projects it, which is the shape restore
+      // reconciles from too.
+      const past = await versionStore.load(workspaceId, id)
+      if (past === null)
+        return c.json(
+          errorBody('version_not_found', 'no version with that id belongs to this document'),
+          404,
+        )
 
-        const response = await pastContent(past, workspaceId, path, scope)
-        return c.json(response)
-      } catch (err) {
-        const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
-        if (owned) return c.json(owned.body, owned.status)
-        throw err
-      }
-    },
-  )
+      const response = await pastContent(past, workspaceId, path, scope)
+      return c.json(response)
+    } catch (err) {
+      const owned = firstOwned(err, STORED_DOCUMENT_ANSWERS)
+      if (owned) return c.json(owned.body, owned.status)
+      throw err
+    }
+  })
 
   // Save a manual version with body { label?: string; operator?: RequestOperator }.
   // auto is false.
-  onDocumentsRoute(app, 'post', ['versions'], async (c, workspaceId, path) => {
+  onDocumentRoute(app, 'post', '/versions', async (c, workspaceId, path) => {
     const parsed = await readJsonBody(c, saveVersionRequestSchema, SAVE_VERSION_BODY)
     if ('refusal' in parsed) return parsed.refusal
     const { label, operator } = parsed.data

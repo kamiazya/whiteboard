@@ -11,12 +11,12 @@ import { type AutoVersionTrigger, createAutoVersionTrigger } from '../store/auto
 import type { StoreScope } from '../store/store-scope.js'
 import type { VersionStore } from '../store/version-store.js'
 import { sendRestoreEvent, sendVersionCreated } from '../sync-audience.js'
-import { refuseTrashedDocument, refuseUnknownWorkspace } from './document/_shared.js'
+import { refuseCorruptStored, refuseUnknownWorkspace } from './document/_shared.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
 import { createDocumentMetadataRouter } from './document/metadata.js'
-import { DOCUMENT_WILDCARD, resolveDocumentAddress } from './document/path-route.js'
+import { resolveDocumentAddress } from './document/path-route.js'
 import { type CallerScopes, createRestoreRouter } from './document/restore.js'
 import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
@@ -130,18 +130,17 @@ function workspacesRouterOptions(options: DocumentRouterOptions) {
 /**
  * What no route below should be reached for, registered ahead of all of them
  * so it also guards the routers composed beside this one afterwards (files,
- * status, export). The page-facing document routes resolve their handle by
- * pass-through, so without the `/api/w` registrations an unknown workspace is
- * minted by the first write and a trashed document recreated by a stale tab.
+ * status, export): an unknown workspace is refused by name, and a document id
+ * is resolved once for every id-addressed route. A trashed or unknown id
+ * resolves to nothing, so a stale tab's write under a deleted document is a
+ * 404 rather than a document minted at its old address.
  */
 function refuseUnaddressable(app: Hono, serverDeps: ServerDeps): void {
   app.use('/api/workspaces/:workspaceId/*', refuseUnknownWorkspace(serverDeps))
   app.use(
     '/api/workspaces/:workspaceId/documents/:documentId/*',
-    resolveDocumentAddress(serverDeps),
+    resolveDocumentAddress(serverDeps, refuseCorruptStored),
   )
-  app.use(DOCUMENT_WILDCARD, refuseUnknownWorkspace(serverDeps))
-  app.use(DOCUMENT_WILDCARD, refuseTrashedDocument(serverDeps))
 }
 
 // Entry point that composes the document API's sub-routers: workspace/document

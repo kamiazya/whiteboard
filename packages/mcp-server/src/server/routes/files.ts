@@ -153,8 +153,8 @@ export function createFilesRouter(options: FilesRouterOptions) {
   const app = new Hono()
   const { scope, versionStore } = options
 
-  // PUT /api/w/:workspaceId/document/<path>/file/:fileId
-  // Called by MCP load_image. fileId is already generated on the MCP side with nanoid().
+  // PUT /api/workspaces/:workspaceId/documents/:documentId/files/:fileId
+  // The uploader names the file: the id is minted on the client side.
   onDocumentFile(
     app,
     'put',
@@ -208,7 +208,7 @@ export function createFilesRouter(options: FilesRouterOptions) {
     limitContentBody(CONTENT_BODY_LIMIT_BYTES, 'Upload'),
   )
 
-  // GET /api/w/:workspaceId/document/<path>/file/:fileId
+  // GET /api/workspaces/:workspaceId/documents/:documentId/files/:fileId
   // Browser-facing route. Find a file under files/ whose stem matches fileId exactly.
   onDocumentFile(app, 'get', async (c, workspaceId, _path, fileId) => {
     try {

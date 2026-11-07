@@ -18,7 +18,7 @@ import {
   invalidBodyRefusal,
   STORED_DOCUMENT_ANSWERS,
 } from './_shared.js'
-import { onDocumentsRoute } from './path-route.js'
+import { onDocumentRoute } from './path-route.js'
 
 // User-facing workspace / document names.
 // When unnamed, the UI falls back to session id / path, so the API only returns stored values.
@@ -67,7 +67,7 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
     }
   })
 
-  onDocumentsRoute(app, 'put', ['name'], async (c, workspaceId, path) => {
+  onDocumentRoute(app, 'put', '/name', async (c, workspaceId, path) => {
     const parsed = await readJsonBody(c, setNameRequestSchema, {
       refuseShape: (error) => invalidBodyRefusal(error, 'name must be a string'),
     })
@@ -83,7 +83,7 @@ export function createDocumentMetadataRouter({ scope }: DocumentMetadataRouterOp
   })
 
   // Idempotently set pin on/off and return the full updated WorkspaceNames payload.
-  onDocumentsRoute(app, 'put', ['pin'], async (c, workspaceId, path) => {
+  onDocumentRoute(app, 'put', '/pin', async (c, workspaceId, path) => {
     const parsed = await readJsonBody(c, setPinnedRequestSchema, {
       refuseShape: (error) => invalidBodyRefusal(error, 'pinned must be boolean'),
     })

@@ -349,9 +349,11 @@ for a second keeper to reproduce:
   server-mode auth codes (now `auth_required` / `auth_forbidden`) are gone,
   and `errorBody` refuses an ill-formed literal code at compile time.
 
-What has NOT happened yet: the document routes are still addressed by PATH in
-two families (`/api/w/:ws/document/<path>/…` and
+What had NOT happened when this was written: the document routes were still
+addressed by PATH in two families (`/api/w/:ws/document/<path>/…` and
 `/api/workspaces/:ws/documents/<path>/…`) beside `/api/v1`'s id-addressed
-one. Folding them into `/api/v1/workspaces/:ws/documents/:documentId/…` is
+one. (Correction, 2026-11-07: both path families are retired; every document
+route is `/api/workspaces/:ws/documents/:documentId/…`, and the web app
+addresses a daemon-kept document by id alone.) Folding them into `/api/v1/workspaces/:ws/documents/:documentId/…` is
 the owner's decision (2026-11-06) and still open work; until it lands, a
 second keeper reproduces all three.

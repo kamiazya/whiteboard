@@ -1,5 +1,5 @@
-// Every daemon URL a client builds, other than the `/api/w/...` document
-// family that lives beside its parser in document-url.ts. A client names a
+// Every daemon URL a client builds, other than the per-document actions and
+// the workspace record's routes in document-url.ts. A client names a
 // route here and nowhere else, so the route a typo would miss is found by
 // the one test that requests each builder against the real app
 // (mcp-server's `daemon-client-urls.routes.test.ts`).
@@ -17,7 +17,7 @@ import {
   searchQueryString,
 } from '@kamiazya/whiteboard-server-core/search-query'
 import type { ListVersionsRequest } from './document.js'
-import { encodeDocumentPath, encodePathSegment } from './document-url.js'
+import { encodePathSegment } from './document-url.js'
 import type { SignInRefusal } from './sign-in.js'
 
 const enc = encodePathSegment
@@ -45,7 +45,7 @@ export function workspaceDocumentsApiUrl(workspaceId: string): string {
   return `${workspaceApiUrl(workspaceId)}/documents`
 }
 
-// The `/api/workspaces/:workspaceId/documents/<document path>[/<suffix>]`
+// The `/api/workspaces/:workspaceId/documents/:documentId[/<suffix>]`
 // family. The suffix is a closed set, written once below.
 type DocumentsSuffix =
   | ''
@@ -56,50 +56,8 @@ type DocumentsSuffix =
   | 'versions'
   | `versions/${string}`
 
-function documentsFamilyUrl(workspaceId: string, path: string, suffix: DocumentsSuffix): string {
-  return withSuffix(`${workspaceDocumentsApiUrl(workspaceId)}/${encodeDocumentPath(path)}`, suffix)
-}
-
 function withSuffix(base: string, suffix: DocumentsSuffix): string {
   return suffix === '' ? base : `${base}/${suffix}`
-}
-
-/** DELETE a document and everything under it. */
-export function documentRecordApiUrl(workspaceId: string, path: string): string {
-  return documentsFamilyUrl(workspaceId, path, '')
-}
-
-export function documentPathApiUrl(workspaceId: string, path: string): string {
-  return documentsFamilyUrl(workspaceId, path, 'path')
-}
-
-export function documentNameApiUrl(workspaceId: string, path: string): string {
-  return documentsFamilyUrl(workspaceId, path, 'name')
-}
-
-export function documentPinApiUrl(workspaceId: string, path: string): string {
-  return documentsFamilyUrl(workspaceId, path, 'pin')
-}
-
-/** POST: copy the document, beside itself, in one keeper-side write. */
-export function documentDuplicateApiUrl(workspaceId: string, path: string): string {
-  return documentsFamilyUrl(workspaceId, path, 'duplicate')
-}
-
-export function documentVersionsApiUrl(workspaceId: string, path: string): string {
-  return documentsFamilyUrl(workspaceId, path, 'versions')
-}
-
-/**
- * One page of `documentVersionsApiUrl`'s list: the first without a cursor,
- * the next from the `nextCursor` the previous page answered.
- */
-export function documentVersionsPageApiUrl(
-  workspaceId: string,
-  path: string,
-  query: ListVersionsRequest = {},
-): string {
-  return versionsPageUrl(documentVersionsApiUrl(workspaceId, path), query)
 }
 
 function versionsPageUrl(base: string, query: ListVersionsRequest): string {
@@ -110,21 +68,6 @@ function versionsPageUrl(base: string, query: ListVersionsRequest): string {
   return search === '' ? base : `${base}?${search}`
 }
 
-// The version id is data, so it is encoded here — the one place that builds
-// it — rather than by each caller.
-export function versionDocumentApiUrl(
-  workspaceId: string,
-  path: string,
-  versionId: string,
-): string {
-  return documentsFamilyUrl(workspaceId, path, `versions/${enc(versionId)}/document`)
-}
-
-export function versionRestoreApiUrl(workspaceId: string, path: string, versionId: string): string {
-  return documentsFamilyUrl(workspaceId, path, `versions/${enc(versionId)}/restore`)
-}
-
-// The same family addressed by document id: `.../documents/:documentId[/<suffix>]`.
 function documentByIdFamilyUrl(
   workspaceId: string,
   documentId: string,
@@ -158,6 +101,10 @@ export function documentVersionsByIdApiUrl(workspaceId: string, documentId: stri
   return documentByIdFamilyUrl(workspaceId, documentId, 'versions')
 }
 
+/**
+ * One page of `documentVersionsByIdApiUrl`'s list: the first without a cursor,
+ * the next from the `nextCursor` the previous page answered.
+ */
 export function documentVersionsPageByIdApiUrl(
   workspaceId: string,
   documentId: string,
@@ -166,6 +113,8 @@ export function documentVersionsPageByIdApiUrl(
   return versionsPageUrl(documentVersionsByIdApiUrl(workspaceId, documentId), query)
 }
 
+// The version id is data, so it is encoded here — the one place that builds
+// it — rather than by each caller.
 export function versionDocumentByIdApiUrl(
   workspaceId: string,
   documentId: string,

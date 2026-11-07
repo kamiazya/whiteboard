@@ -4,7 +4,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
 
-// Request schema for POST /api/w/:workspaceId/document/<path>/export-svg.
+// Request schema for POST /api/workspaces/:workspaceId/documents/:documentId/export-svg.
 // Imported by the route handler so the wire format has exactly one place
 // to update. Unlike PNG export, SVG rendering always runs headless from
 // the persisted document (see routes/document/export-svg.ts) — there is no

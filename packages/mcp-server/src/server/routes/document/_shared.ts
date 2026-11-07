@@ -3,17 +3,11 @@ import type {
   CreateWorkspaceRefusal,
   saveVersionRequestSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import {
-  documentPathForAction,
-  documentPathForFile,
-  parseDocumentApiPath,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
 import { workspaceNotFoundRefusal } from '@kamiazya/whiteboard-daemon-client/api-contracts/membership'
 import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentPathTakenError,
-  hasDocumentTrash,
   isDisplayNameTakenError,
   isDocumentNotFoundError,
   isWorkspaceNotFoundError,
@@ -33,12 +27,8 @@ import type { Context, MiddlewareHandler } from 'hono'
 import type { z } from 'zod'
 import type { CallerName } from '../../security/membership-gate.js'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
-import { validateDocumentPath, validationErrorBody } from '../../validators.js'
-import {
-  callerNamespaceOf,
-  refuseMalformedHandle,
-  workspaceIdFromHandle,
-} from '../../workspace-handle.js'
+import { validationErrorBody } from '../../validators.js'
+import { callerNamespaceOf, refuseMalformedHandle } from '../../workspace-handle.js'
 
 function defaultHumanDisplayName(): string {
   try {
@@ -263,57 +253,19 @@ export function refuseUnknownWorkspace(deps: Pick<ServerDeps, 'documentIndex'>):
   }
 }
 
-/** The document path a write names: an update's (POST) or an upload's (PUT). */
-function writtenPathOf(method: string, tail: string[]): string | null {
-  if (method === 'POST') return documentPathForAction(tail, 'update')
-  if (method === 'PUT') return documentPathForFile(tail)?.path ?? null
-  return null
-}
-
-/**
- * Refuses a write to a document that is in the trash and has no live
- * successor, on the two page-facing write routes (an update, a file upload).
- *
- * A tab that still holds a document someone deleted keeps pushing to it, and
- * those routes take a path nothing holds as the first write of a new document
- * (an open page's first edit is how one begins), so the push recreated the
- * path as an unrelated document while the original sat in the trash. A path
- * that was never created is NOT refused, and neither is one whose trash entry
- * has a live document at the same path again.
- *
- * The trash is read only when the path holds no live document, so the usual
- * write costs one existence check. A malformed address or path passes through to
- * each route's own 400.
- */
-export function refuseTrashedDocument(
-  deps: Pick<ServerDeps, 'documentIndex' | 'liveDocuments'>,
-): MiddlewareHandler {
-  return async (c, next) => {
-    const parsed = parseDocumentApiPath(c.req.path)
-    if (parsed === null) return next()
-    const path = writtenPathOf(c.req.method, parsed.tail)
-    const index = deps.documentIndex
-    if (
-      path === null ||
-      !hasDocumentTrash(index) ||
-      refuseMalformedHandle(c, parsed.workspaceId) !== null ||
-      refusedBy(() => validateDocumentPath(path)) !== null
-    ) {
-      return next()
-    }
-    const workspaceId = await workspaceIdFromHandle(c, parsed.workspaceId)
-    if (await deps.liveDocuments.exists(workspaceId, path)) return next()
-    const trash = await index.listTrash({ workspaceId })
-    if (trash.some((entry) => entry.path === path)) {
-      const body = { error: 'not_found', message: `Document "${path}" not found` }
-      return c.json(body satisfies ApiErrorBody, 404)
-    }
-    return next()
-  }
-}
-
 /** Stored data this server cannot read — a 500 that says which. */
 export const corruptStored: ErrorAnswer = (err) => handleCorruptStoredData(err)
+
+/**
+ * `resolveDocumentAddress`'s answer for a workspace record it cannot read:
+ * the id is resolved ahead of the handler, so the record is met there, and
+ * the composition words the refusal as every route does. A failure that is
+ * not corrupt stored data is rethrown by the resolver.
+ */
+export const refuseCorruptStored = (err: unknown, c: Context): Response | null => {
+  const corrupt = handleCorruptStoredData(err)
+  return corrupt === null ? null : c.json(corrupt.body, corrupt.status)
+}
 
 /**
  * A validator's refusal, or null when it passed.
