@@ -8,7 +8,7 @@ import { fc } from '../fast-check.js'
  */
 
 /** Equal as doubles, NaN equal to NaN (a payload does not survive a typed array), a signed zero counted. */
-export const sameDouble = (a: number, b: number) =>
+const sameDouble = (a: number, b: number) =>
   Number.isNaN(a) || Number.isNaN(b) ? Number.isNaN(a) && Number.isNaN(b) : Object.is(a, b)
 
 /** The first index the two answers differ at, for a minimal repro. */
@@ -32,7 +32,7 @@ export const coordinate = fc.oneof(
   { weight: 1, arbitrary: fc.double({ min: -200, max: 200 }) },
   { weight: 1, arbitrary: fc.constantFrom(-0, Number.NaN, Number.POSITIVE_INFINITY, -1e300) },
 )
-export const size = fc.oneof(
+const size = fc.oneof(
   { weight: 8, arbitrary: fc.integer({ min: 1, max: 24 }).map((k) => k * 2.5) },
   { weight: 1, arbitrary: fc.constantFrom(0, -0, -10, Number.NaN) },
 )
