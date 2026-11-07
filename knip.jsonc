@@ -119,8 +119,13 @@
       // The Rust router shim stands in for `./edge-router.js` under
       // vitest.rust.config.ts's alias, which knip does not read: the suites
       // importing DETOUR_REACH_PX and detourCandidates from `./edge-router.js`
-      // reach these re-exports only through it.
-      "ignoreIssues": { "src/test-utils/wasm/edge-router.ts": ["exports"] }
+      // reach these re-exports only through it. The side-choice search's shim
+      // stands in for `./spatial-edges.js` the same way, and nothing imports
+      // it by its own path at all.
+      "ignoreIssues": {
+        "src/test-utils/wasm/edge-router.ts": ["exports"],
+        "src/test-utils/wasm/spatial-edges.ts": ["files", "exports"]
+      }
     },
     "packages/plugin-visual": {
       // A hand-run regenerator, not a build step: the emoji catalog it

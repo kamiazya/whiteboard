@@ -86,10 +86,11 @@ wasm artifact, exact on every double, and fails on CI if the artifact is absent;
 ported so far (grid-route, the geometry and ink primitives, edge-rules, the
 router's leaves, the router, the anchor pass, the coincident-ends repair, the crossing sweep, the side-choice search). The same
 project re-runs every `layout/edges` suite, scoreboards included, with
-`./grid-route.js` and `./edge-router.js` aliased to the Rust ports through the
-wasm (QR-21 layer 1; those suites are included only when the artifact exists),
-so the side-choice search and the coincident-ends repair already route through
-the Rust router. Every target runs nightly
+`./grid-route.js`, `./edge-router.js` and `./spatial-edges.js` aliased to the
+Rust ports through the wasm (QR-21 layer 1; those suites are included only when
+the artifact exists), so the routing scoreboards judge the Rust side-choice
+search, repair and router together; the two `*.cost.test.ts` files that count
+TypeScript internals are excluded there, since under Rust they count nothing. Every target runs nightly
 in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
 restores read-only. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
 steps and cache paths to the scripts.
