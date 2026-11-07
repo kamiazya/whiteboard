@@ -59,6 +59,9 @@ allow_attributes_without_reason = "deny"
 [workspace.dependencies]
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+# Pinned exactly: det-math.oracle.txt is libm 0.2.11's bits, and canvas-render's
+# det-math.ts is ported to match them.
+libm = "=0.2.11"
 wasm-bindgen = "=0.2.130"
 wasmparser = "0.263.0"
 object = { version = "0.39.1", default-features = false, features = ["std", "read_core", "elf"] }
