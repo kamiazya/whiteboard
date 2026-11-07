@@ -458,6 +458,12 @@ revise one without reopening decisions 1–25.
 | Errors | Generated `RefusalCode` (Seams, 4) | Hand-written per language: the drift `v1-refusals-cover-errors` exists to catch |
 | Async | `MaybeSend` ports (Seams, 7) | `async-trait` boxing everywhere, or `Send` everywhere, which wasm cannot satisfy |
 | Daemon SQLite | rusqlite, bundled; migration log keys kept identical | libSQL client: only if a libSQL-specific feature is in use |
+| Daemon shape | Plain binary under biome-style `optionalDependencies` plus GitHub release binaries; static musl on Linux (decision 19) | napi-rs addon (decision 1) |
+| Workers MCP | `rmcp`-on-wasm spike before planning it | Assuming rmcp works without tokio |
+| Scene across the boundary | Decided before the composer is ported (Seams, 8) | Deciding it during the port |
+| Highlighting | A host seam during the transition (lowlight stays in TypeScript), then decided on measurements | A Rust highlighter now: none is a twin of highlight.js, so byte parity fails on the first fence |
+| Browser storage | Stays TypeScript (IndexedDB/OPFS) behind coarse ports | Rust over IndexedDB bindings: no gain, and the ports are coarse enough that the boundary is cheap |
+| Version skew | A protocol version in the daemon-to-web handshake, now | Compatibility shims: the project ships none pre-1.0 |
 
 #### The generator spike (2026-11-07): typify fails, the own emitter it is
 
@@ -481,14 +487,17 @@ Three of those are exactly the divergences this ADR exists to make
 structural — a bound one side checks and the other does not, and a length in
 two units — and the dialect's own keywords would need a second pass over
 typify's output in any case. So the Rust half is the same `xtask` emitter as
-the Zod half, generated from one walk of each schema, so each construct's two meanings are
-written side by side, and the differential harness still checks that they agree.
-| Daemon shape | Plain binary under biome-style `optionalDependencies` plus GitHub release binaries; static musl on Linux (decision 19) | napi-rs addon (decision 1) |
-| Workers MCP | `rmcp`-on-wasm spike before planning it | Assuming rmcp works without tokio |
-| Scene across the boundary | Decided before the composer is ported (Seams, 8) | Deciding it during the port |
-| Highlighting | A host seam during the transition (lowlight stays in TypeScript), then decided on measurements | A Rust highlighter now: none is a twin of highlight.js, so byte parity fails on the first fence |
-| Browser storage | Stays TypeScript (IndexedDB/OPFS) behind coarse ports | Rust over IndexedDB bindings: no gain, and the ports are coarse enough that the boundary is cheap |
-| Version skew | A protocol version in the daemon-to-web handshake, now | Compatibility shims: the project ships none pre-1.0 |
+the Zod half, generated from one walk of each schema, so each construct's two
+meanings are written side by side, and the differential harness still checks
+that they agree.
+
+That emitter is `cargo xtask codegen` (`crates/xtask/src/codegen.rs`). Its
+dialect is what its typed parse accepts — today closed objects of required
+numbers with an inclusive `minimum` — so a construct it does not implement is
+refused by name rather than dropped from one language's output, and the
+dialect grows with the contract that needs a construct. `codegen --check`
+fails on generated output that differs from its contract and on a file under
+a `generated` directory that no contract produces.
 
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
