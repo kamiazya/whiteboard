@@ -166,9 +166,8 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
   if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const result: { parent: string; child: string }[] = []
   for (const child of entries) {
-    const candidates = entries.filter(
-      (parent) => parent.id !== child.id && strictlyContains(parent.bbox, child.bbox),
-    )
+    // No entry is its own candidate: a parent's area must exceed its child's.
+    const candidates = entries.filter((parent) => strictlyContains(parent.bbox, child.bbox))
     if (candidates.length === 0) continue
     const smallest = [...candidates].sort((a, b) => {
       const areaDiff = area(a.bbox) - area(b.bbox)
@@ -296,6 +295,9 @@ function occupiedCells(
     // grid line must not occupy the next cell: ceil(...) - 1 agrees with
     // floor(...) except exactly at a grid boundary, where it correctly
     // stops one cell earlier.
+    // The grid spans the entries' union, so a box's last cell is at most
+    // `cols - 1` / `rows - 1` already: the clamps guard the index arithmetic
+    // against a bbox the grid was not sized from, and are never active here.
     const c0 = Math.max(Math.floor((entry.bbox.x - minX) / FREE_REGION_GRID_PX), 0)
     const c1 = Math.min(
       Math.ceil((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX) - 1,

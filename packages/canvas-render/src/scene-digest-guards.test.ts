@@ -14,9 +14,17 @@ function scene(...boxes: BoundingBox[]): Scene {
   return { nodes: boxes.map((bbox) => ({ kind: 'thematicBreak' as const, bbox })) }
 }
 
-function shapes(...nodes: { id?: string; bbox: BoundingBox }[]): Scene {
+function shapes(
+  ...nodes: { id?: string; bbox: BoundingBox; truncated?: true; overflows?: true }[]
+): Scene {
   return {
-    nodes: nodes.map(({ id, bbox }) => ({ kind: 'shape' as const, bbox, ...(id ? { id } : {}) })),
+    nodes: nodes.map(({ id, bbox, truncated, overflows }) => ({
+      kind: 'shape' as const,
+      bbox,
+      ...(id ? { id } : {}),
+      ...(truncated ? { truncated } : {}),
+      ...(overflows ? { overflows } : {}),
+    })),
   }
 }
 
@@ -29,6 +37,39 @@ describe('sceneDigest, the pins the mutation lane asked for', () => {
     expect(digest.overlaps.length).toBeGreaterThan(0)
     expect(digest.containment.length).toBeGreaterThan(0)
     expect(sceneDigestSchema.parse(digest)).toEqual(digest)
+  })
+
+  it('carries a cut node and an overflowing node through the schema as the literal true', () => {
+    // `z.literal(true)` is the shape; a literal of the other value would
+    // refuse exactly the digest the layout produces, and nothing else reads
+    // the two flags off a parsed digest.
+    const digest = sceneDigest(
+      shapes(
+        { id: 'cut', bbox: box(0, 0, 10, 10), truncated: true },
+        { id: 'tight', bbox: box(50, 0, 10, 10), overflows: true },
+      ),
+    )
+    expect(digest.nodes).toEqual([
+      { id: 'cut', bbox: box(0, 0, 10, 10), z: 0, truncated: true },
+      { id: 'tight', bbox: box(50, 0, 10, 10), z: 1, overflows: true },
+    ])
+    expect(sceneDigestSchema.parse(digest)).toEqual(digest)
+  })
+
+  it('orders overlap pairs by their second id when the first ties', () => {
+    // Pairs arrive in scene order, so the one with the later second id is
+    // generated first; only the tie branch of the pair sort moves it.
+    const digest = sceneDigest(
+      shapes(
+        { id: 'a', bbox: box(0, 0, 100, 100) },
+        { id: 'c', bbox: box(90, 0, 20, 20) },
+        { id: 'b', bbox: box(0, 90, 20, 20) },
+      ),
+    )
+    expect(digest.overlaps).toEqual([
+      ['a', 'b'],
+      ['a', 'c'],
+    ])
   })
 
   it('measures the gap the same whichever entry is listed first', () => {
@@ -116,6 +157,26 @@ describe('sceneDigest, the pins the mutation lane asked for', () => {
       box(0, 20, 20, 20),
       box(40, 20, 20, 20),
       box(0, 40, 20, 20),
+    ])
+  })
+
+  it("puts a row's narrower left run before its wider right run past the region cap", () => {
+    // 600 rows, each a 20px run on the left and a 40px run on the right:
+    // 1200 regions, so the area sort lists every right run before every
+    // left one, and the kept 1000 — all 600 right runs and the first 400
+    // left ones — reach the position sort with each row's pair REVERSED.
+    // Only the column tie-break puts them back; the capped case above has
+    // equal-area runs that the area sort never disturbs.
+    const digest = sceneDigest(
+      scene(box(20, 0, 20, 601 * 20), box(0, 0, 20, 20), box(40, 0, 40, 20)),
+    )
+    expect(digest.partial).toBe(true)
+    expect(digest.freeRegions).toHaveLength(1000)
+    expect(digest.freeRegions.slice(0, 4)).toEqual([
+      box(0, 20, 20, 20),
+      box(40, 20, 40, 20),
+      box(0, 40, 20, 20),
+      box(40, 40, 40, 20),
     ])
   })
 

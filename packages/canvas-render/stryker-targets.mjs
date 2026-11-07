@@ -266,7 +266,11 @@ export const KNOWN_EQUIVALENT = {
   // span's four difference marks cancel. (4) Past the entry cap no overlap
   // scan runs, so its `capped` flag is unobservable beside `partial`; and
   // the containment sort's tie branch is unreachable, one entry per child.
+  // (5) The occupancy clamps never bind: the grid is sized from the same
+  // union the boxes are read against.
   'src/scene-digest.ts': {
+    'ArithmeticOperator: cols - 1 -> cols + 1': 1,
+    'ArithmeticOperator: rows - 1 -> rows + 1': 1,
     'BooleanLiteral: false -> true': 1,
     'EqualityOperator: i < entries.length -> i <= entries.length': 2,
     'ConditionalExpression: a.child === b.child -> false': 1,
