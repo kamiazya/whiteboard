@@ -23,12 +23,7 @@ use whiteboard_edge_routing::straight_detour::{
 
 /// A side by its `edgeSideSchema.options` index; anything else reads as top.
 fn side(index: f64) -> Side {
-    match index {
-        1.0 => Side::Right,
-        2.0 => Side::Bottom,
-        3.0 => Side::Left,
-        _ => Side::Top,
-    }
+    side_of(index).unwrap_or(Side::Top)
 }
 
 fn points_out(points: Option<Vec<Point>>) -> Vec<f64> {

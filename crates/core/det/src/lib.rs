@@ -17,4 +17,5 @@
 pub mod format;
 pub mod math;
 pub mod rng;
+pub mod sort;
 pub mod utf16;

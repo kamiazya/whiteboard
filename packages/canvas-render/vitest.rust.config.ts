@@ -13,8 +13,9 @@ const wasmDir = resolve(here, '../../target/dist/wasm-bindgen/whiteboard-wasm')
 // Two layers run here:
 // - layer 2, `*.rust.test.ts`: properties holding a TypeScript function to its
 //   Rust twin, always included, failing on CI when the artifact is absent;
-// - layer 1, the EXISTING layout/edges suites with the grid router swapped for
-//   the Rust port (`./grid-route.js` aliased to the wasm-backed shim), so its
+// - layer 1, the EXISTING layout/edges suites with the grid router and the
+//   edge router swapped for their Rust ports (`./grid-route.js` and
+//   `./edge-router.js` aliased to wasm-backed shims), so its
 //   examples, the optimality property and the routing scoreboard judge the
 //   Rust router unchanged. They are included only when the artifact is there,
 //   because a run without it — the stress lane, a fresh checkout — would
@@ -27,6 +28,10 @@ export default defineProject({
       {
         find: /^\.\/grid-route\.js$/,
         replacement: resolve(here, 'src/test-utils/wasm/grid-route.ts'),
+      },
+      {
+        find: /^\.\/edge-router\.js$/,
+        replacement: resolve(here, 'src/test-utils/wasm/edge-router.ts'),
       },
     ],
   },
