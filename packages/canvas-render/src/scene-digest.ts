@@ -137,8 +137,13 @@ function computeOverlaps(entries: readonly DigestEntry[]): {
   readonly pairs: [string, string][]
   readonly capped: boolean
 } {
+  // `capped` says the SCAN stopped short; past the entry cap no scan ran, and
+  // `partial` reads the entry count itself, so the flag's value here is
+  // unobservable either way.
   if (entries.length > PAIRWISE_MAX_ENTRIES) return { pairs: [], capped: false }
   const pairs: [string, string][] = []
+  // Each pair once: `j` starts past `i`, so the last `i` runs the inner loop
+  // zero times and an `i` one past the end would read nothing at all.
   for (let i = 0; i < entries.length; i++) {
     for (let j = i + 1; j < entries.length; j++) {
       if (overlapArea(entries[i].bbox, entries[j].bbox) > 0) {
@@ -161,6 +166,9 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
   if (entries.length > PAIRWISE_MAX_ENTRIES) return []
   const result: { parent: string; child: string }[] = []
   for (const child of entries) {
+    // `strictlyContains` already refuses an entry's own bbox (the parent's
+    // area must exceed the child's); the id check refuses a SECOND entry
+    // wearing the child's id, which a hand-built scene can hold.
     const candidates = entries.filter(
       (parent) => parent.id !== child.id && strictlyContains(parent.bbox, child.bbox),
     )
@@ -291,6 +299,9 @@ function occupiedCells(
     // grid line must not occupy the next cell: ceil(...) - 1 agrees with
     // floor(...) except exactly at a grid boundary, where it correctly
     // stops one cell earlier.
+    // The grid spans the entries' union, so a box's last cell is at most
+    // `cols - 1` / `rows - 1` already: the clamps guard the index arithmetic
+    // against a bbox the grid was not sized from, and are never active here.
     const c0 = Math.max(Math.floor((entry.bbox.x - minX) / FREE_REGION_GRID_PX), 0)
     const c1 = Math.min(
       Math.ceil((entry.bbox.x + entry.bbox.w - minX) / FREE_REGION_GRID_PX) - 1,
@@ -301,14 +312,17 @@ function occupiedCells(
       Math.ceil((entry.bbox.y + entry.bbox.h - minY) / FREE_REGION_GRID_PX) - 1,
       rows - 1,
     )
-    // An empty span (a zero-size box on a grid line) covers nothing. Its four
-    // marks would cancel anyway; the test keeps a NaN bound from indexing.
+    // An empty span (a zero-size box on a grid line; a size is never
+    // negative) covers nothing. Its four marks would cancel anyway; the test
+    // keeps a NaN bound from indexing.
     if (!(c0 <= c1 && r0 <= r1)) continue
     diff[r0 * stride + c0] += 1
     diff[r0 * stride + c1 + 1] -= 1
     diff[(r1 + 1) * stride + c0] -= 1
     diff[(r1 + 1) * stride + c1 + 1] += 1
   }
+  // `freeRunsIn` reads exactly `rows` x `cols` of this; a trailing row or
+  // cell past either bound would never be read.
   const occupied: boolean[][] = []
   const above = new Int32Array(cols)
   for (let r = 0; r < rows; r++) {
@@ -356,8 +370,12 @@ function freeRunsIn(
   return regions
 }
 
-const byPosition = (a: BoundingBox, b: BoundingBox): number =>
-  a.y === b.y ? (a.x === b.x ? (a.w === b.w ? a.h - b.h : a.w - b.w) : a.x - b.x) : a.y - b.y
+/**
+ * Row first, then column. Every region is one free run of one row, and two
+ * runs of a row never start at the same column, so no two regions tie on
+ * both axes and a finer tie-break would be unreachable code.
+ */
+const byPosition = (a: BoundingBox, b: BoundingBox): number => a.y - b.y || a.x - b.x
 
 /**
  * Maximal empty axis-aligned rectangles over the union bounding box, on a
@@ -371,10 +389,11 @@ function computeFreeRegions(entries: readonly DigestEntry[]): {
   if (entries.length === 0) return { regions: [], capped: false }
   const grid = freeRegionGrid(entries)
   if (grid === null) return { regions: [], capped: true }
+  // `freeRunsIn` walks rows top-down and runs left to right, which IS
+  // `byPosition` order; only the capped path below re-sorts, after the
+  // area sort has shuffled it.
   const regions = freeRunsIn(occupiedCells(entries, grid), grid)
-  if (regions.length <= FREE_REGION_MAX_REGIONS) {
-    return { regions: regions.sort(byPosition), capped: false }
-  }
+  if (regions.length <= FREE_REGION_MAX_REGIONS) return { regions, capped: false }
   const largest = regions
     .sort((a, b) => area(b) - area(a) || byPosition(a, b))
     .slice(0, FREE_REGION_MAX_REGIONS)
