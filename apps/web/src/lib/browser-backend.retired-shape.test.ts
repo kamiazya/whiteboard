@@ -21,7 +21,7 @@ import { writeRefusalReason } from './write-refusal-store.js'
 
 // jsdom has no IndexedDB, so the timestamp touch is replaced by its
 // outcome; see browser-backend.read-failure.test.ts.
-vi.mock('./loro-store.js', () => ({ LoroStore: class {}, touchContentTimestamp: async () => {} }))
+vi.mock('./content-timestamp.js', () => ({ touchContentTimestamp: async () => {} }))
 
 const BOARD = {
   documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAW',
