@@ -8,6 +8,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 
 pub mod coincident_ends;
 pub mod edge_anchors;
+pub mod edge_crossing_sweep;
 pub mod edge_primitives;
 pub mod edge_router;
 pub mod edge_router_leaves;
@@ -17,7 +18,7 @@ pub mod routing_wire;
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
 /// on its first mismatched call.
-pub const ABI_VERSION: &str = "10";
+pub const ABI_VERSION: &str = "11";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]
