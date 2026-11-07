@@ -15,6 +15,11 @@ import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 claimIsolatedWhiteboardDb('browserdocumentpage-create-link')
 
 const source = () => document.querySelector('.markdown-editor-source .cm-content')
+const editable = () => document.querySelector('.markdown-editor-source [contenteditable="true"]')
+// Opening the page reads IndexedDB and mounts CodeMirror; on a loaded shard
+// that outlasts `focusEditable`'s one-second retry budget, so the editor is
+// awaited on the page's own budget first.
+const WAIT = { timeout: 10_000 }
 
 describe('BrowserDocumentPage link create (real IndexedDB)', () => {
   beforeEach(async () => {
@@ -28,9 +33,8 @@ describe('BrowserDocumentPage link create (real IndexedDB)', () => {
     const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'week-1', kind: 'markdown', makeDefault: true })
     renderPage(<BrowserDocumentPage store={store} />)
-    await focusEditable(() =>
-      document.querySelector('.markdown-editor-source [contenteditable="true"]'),
-    )
+    await waitFor(() => expect(editable()).not.toBeNull(), WAIT)
+    await focusEditable(editable)
 
     await userEvent.keyboard('See [[[[Lecture 6 notes')
     await waitFor(() => {
@@ -57,9 +61,8 @@ describe('BrowserDocumentPage link create (real IndexedDB)', () => {
     const store = new BrowserDocumentIndex()
     await seedIdbDocument({ path: 'week-1', kind: 'markdown', makeDefault: true })
     const first = renderPage(<BrowserDocumentPage store={store} />)
-    await focusEditable(() =>
-      document.querySelector('.markdown-editor-source [contenteditable="true"]'),
-    )
+    await waitFor(() => expect(editable()).not.toBeNull(), WAIT)
+    await focusEditable(editable)
     await userEvent.keyboard('[[[[Rollback')
     await waitFor(() =>
       expect(
