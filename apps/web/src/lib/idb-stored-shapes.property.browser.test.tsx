@@ -174,11 +174,11 @@ describe('IdbDocumentStore', () => {
     'gives back the snapshot and the delta log as they were saved',
     async (snapshot, maxChunkBytes, frontier, updates, newFrontier) => {
       const store = new IdbDocumentStore()
-      const docRef: DocRef = {
-        kind: 'document',
-        workspaceId: generateDocumentId(),
-        documentId: generateDocumentId(),
-      }
+      // The browser keeper mints workspace-tree refs alone: a `document:*` row
+      // is the retired per-document record, which `BrowserDocumentIndex`
+      // refuses the whole workspace over — so a draw spelled that way would
+      // trip the describe below, not the store under test.
+      const docRef: DocRef = { kind: 'workspace-tree', workspaceId: generateDocumentId() }
       const { manifest, chunks } = chunkSnapshot(snapshot, maxChunkBytes)
       await store.saveSnapshot({ docRef, manifest, chunks, frontier })
 
