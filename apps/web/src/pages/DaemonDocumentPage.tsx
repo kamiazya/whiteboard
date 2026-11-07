@@ -15,6 +15,7 @@ import { type ConnectionState, sessionHealthOf } from '../lib/connection-state.j
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
+import { documentReadFailureOf } from '../lib/document-read-failure.js'
 import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { faviconStatusOf } from '../lib/favicon.js'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
@@ -44,6 +45,7 @@ import type {
   DocumentKeeperEvents,
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { refineForContentReadFailure } from './document-page-state.js'
 import { connectionsStamp } from './use-connections.js'
 import { useDaemonConnections } from './use-daemon-connections.js'
 import { useDaemonDocumentBackend } from './use-daemon-document-backend.js'
@@ -398,8 +400,18 @@ function useDaemonDocument(
     documentAtPath: controller.documents.some((entry) => entry.path === controller.path),
     refusal: controller.refusal,
   })
+  // The second phase of the page state: what reading the CONTENT said. A
+  // snapshot the session refused (a retired stored shape, corrupt bytes)
+  // binds no editor, and the screen has to say why rather than keep the
+  // loading copy up. The shell and the tab read THIS state, so the chip says
+  // no session was built rather than claiming to reconnect over an error
+  // screen that offers no retry.
+  const renderState = refineForContentReadFailure(
+    pageState,
+    documentReadFailureOf(sync.backendError),
+  )
   // One state feeds the tab and the shell, which raises the badge from it.
-  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(pageState))
+  const session = sessionHealthOf(authError, syncStatus, persistence, buildsNoSession(renderState))
   const connection = useMemo((): ConnectionState => ({ keeper: 'daemon', session }), [session])
   useDocumentFavicon({
     settingsStore,
@@ -437,7 +449,7 @@ function useDaemonDocument(
 
   const onNameSettled = usePlaceByName(controller, daemonFetch, daemonBaseUrl, onPathMoved)
 
-  const terminal = daemonTerminalAnswer(pageState, daemonBaseUrl, controller.retry)
+  const terminal = daemonTerminalAnswer(renderState, daemonBaseUrl, controller.retry)
   if (terminal !== null) return terminal
 
   const labels = daemonDocumentLabels(

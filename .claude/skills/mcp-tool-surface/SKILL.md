@@ -27,7 +27,7 @@ on its first run: one tool being 45% of everything the model reads, and
 |---|---|---|---|
 | 1 | tool-surface scoreboard: per tool, model-visible bytes, wire bytes, description words, parameters and how many are undescribed, what a stray key gets, which neighbours the description names; plus totals, and C9 for every tool | `pnpm test --project mcp-node packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts` | every push; pinned exactly |
 | 2 | errand scoreboard: calls and bytes per errand | `pnpm test --project mcp-node packages/mcp-server/src/server/mcp/tool-call-count-quality.test.ts` | every push; pinned exactly |
-| 3 | LLM-driven lane: a real model, only this server's tools, a seeded fixture, graded by outcome | `pnpm eval:tool-surface` (`--trials=3`, `--only=<substring>`, `--model=<alias>`, `--out=<file>`, `--dry-run`) | on demand; spends quota (~$0.06 a task, ~$0.70 a run); skips without the `claude` CLI |
+| 3 | LLM-driven lane: a real model, only this server's tools, a seeded fixture, graded by outcome | `pnpm eval:tool-surface` (`--trials=3`, `--only=<substring>`, `--model=<alias>`, `--out=<file>`, `--dry-run`) | on demand; spends quota — measured 2026-11-06 on main, 28 tasks × 3 trials: `totalCostUsd` 13.87, about $0.17 a trial and $0.50 a task, so ~$14 a full run; `--only=<substring>` filters TASK names (not tools) and is for a focused diagnostic — a retirement compares full runs before and after, since a subset can leave out a task the tool reached; skips without the `claude` CLI |
 
 | the change | rungs |
 |---|---|

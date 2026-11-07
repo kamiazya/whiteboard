@@ -5,7 +5,7 @@
  * never be classified as one.
  */
 import { describe, expect, it } from 'vitest'
-import { isDocumentReadFailure } from './document-read-failure.js'
+import { documentReadFailureOf } from './document-read-failure.js'
 import type { BackendErrorReason } from './document-sync-session.js'
 
 // A Record over the whole union, so a reason added to the backend contract
@@ -23,14 +23,14 @@ const IS_READ_FAILURE: Record<BackendErrorReason, boolean> = {
   'document-removed': false,
 }
 
-describe('isDocumentReadFailure', () => {
+describe('documentReadFailureOf', () => {
   it.each(
     Object.entries(IS_READ_FAILURE),
   )('classifies %s as a read failure: %s', (reason, expected) => {
-    expect(isDocumentReadFailure(reason)).toBe(expected)
+    expect(documentReadFailureOf(reason)).toBe(expected ? reason : null)
   })
 
   it('answers no for the absence of a failure', () => {
-    expect(isDocumentReadFailure(null)).toBe(false)
+    expect(documentReadFailureOf(null)).toBeNull()
   })
 })

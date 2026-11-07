@@ -64,6 +64,7 @@ describe('page-state conformance', () => {
     expect(countOf(readPage('BrowserDocumentPage'), 'derivePageState(')).toBe(1)
     expect(countOf(readPage('BrowserDocumentPage'), 'refineForContentReadFailure(')).toBe(1)
     expect(countOf(readPage('DaemonDocumentPage'), 'deriveDaemonPageState(')).toBe(1)
+    expect(countOf(readPage('DaemonDocumentPage'), 'refineForContentReadFailure(')).toBe(1)
   })
 
   it('the daemon page reads controller.loadError only as the derive input', () => {
