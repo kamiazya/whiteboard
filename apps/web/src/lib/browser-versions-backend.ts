@@ -24,18 +24,6 @@ export interface VersionsRecordSeam {
 }
 
 /**
- * The path the live record stands `documentId` at. The store keys a
- * document's rows by path, so the id the seam speaks is resolved against the
- * record once per call; an id the record does not hold (or a record not yet
- * delivered) throws before any store is touched.
- */
-function pathOfDocument(record: VersionsRecordSeam, documentId: string): string {
-  const path = record.readRecord((doc) => resolveWorkspaceDocumentById(doc, documentId)?.path)
-  if (path == null) throw new Error(`no such document: ${documentId}`)
-  return path
-}
-
-/**
  * The browser keeper's answer to the versions seam: rows from the
  * IndexedDB store, restores through whichever seam holds the live
  * workspace record — the two halves the daemon keeps in one process, here
@@ -63,7 +51,16 @@ export function createBrowserVersionsBackend(deps: {
    */
   readonly kind: DocumentKind
 }): VersionsBackend {
-  const pathOf = (documentId: string) => pathOfDocument(deps.record, documentId)
+  // The store keys a document's rows by path, so the id the seam speaks is
+  // resolved against the live record once per call; an id the record does not
+  // hold (or a record not yet delivered) throws before any store is touched.
+  const pathOf = (documentId: string): string => {
+    const path = deps.record.readRecord(
+      (doc) => resolveWorkspaceDocumentById(doc, documentId)?.path,
+    )
+    if (path == null) throw new Error(`no such document: ${documentId}`)
+    return path
+  }
   return {
     list: async (_workspaceId, id) => deps.store.list(getBrowserWorkspaceId(), pathOf(id)),
     async save(_workspaceId, documentId, { label }) {
