@@ -499,6 +499,42 @@ dialect grows with the contract that needs a construct. `codegen --check`
 fails on generated output that differs from its contract and on a file under
 a `generated` directory that no contract produces.
 
+#### The routing spike (2026-11-07): the port holds, a per-edge boundary does not
+
+The first instrument the migration order names. `grid-route.ts` (the A*
+search over the Hanan grid that the side-choice search falls back to) was
+ported structure for structure to `whiteboard-edge-routing`
+(`grid_route.rs`, `min_heap.rs`). Three places needed work to give the same
+answer:
+- `Math.min`/`Math.max` propagate NaN and order the zeros (`det::math::js_min`/`js_max`);
+- a `Set<number>` dedups by `SameValueZero` and keeps the first value;
+- the heap's tie order, which picks among equal-cost routes, is the TypeScript's own sift.
+
+The port is exported to wasm as `edge_route_on_grid` over typed arrays.
+
+Layer 1 of the harness ran on it. `canvas-render-rust` re-runs every
+`layout/edges` suite (65 files, 475 tests) with `./grid-route.js` aliased to
+the wasm-backed shim. That includes the optimality property against its
+independent Dijkstra, and the routing and grid-route scoreboards. Every pinned
+number held with no expectation edited. A bend cost of 81 in the Rust port
+fails the grid-route scoreboard, and a `<=` in its heap's sift fails the
+routing scoreboard's clustered canvas.
+
+Measured on one machine, interleaved:
+
+| What ran | TypeScript | Rust through wasm |
+|---|---|---|
+| `routeOnGrid`, 200 clustered queries (both agree on all 200) | 16.4–17.9 Hz | 33.5–35.9 Hz |
+| `assignEdgeAnchors`, 60 nodes / 200 edges, mean | 326–333 ms | 429–446 ms |
+| `routeEdge` over 200 edges, straight, mean | 37–39 ms | 58 ms |
+
+The search itself is about twice as fast. The layout is 20–50% slower, because
+every grid call crosses the boundary and copies its obstacles into a typed
+array, and most calls in a layout are small. That is QR-22b measured on this
+code rather than argued: the port moves `layout/edges` as a whole, behind one
+call per layout. The per-edge export is the spike's scaffold, not the shape of
+the port.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 
