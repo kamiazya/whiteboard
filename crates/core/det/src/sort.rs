@@ -11,10 +11,12 @@
 //! the rest. A comparator answering NaN reads as 0, as `CallCompare` does.
 //!
 //! Longer arrays take the merge path, which this does not port. They fall
-//! back to a stable sort, which agrees with V8 for a total preorder only.
-//! `JS_SORT_EXACT_BELOW` says where exactness ends, so a caller sorting
-//! longer arrays with an inconsistent comparator can see that it would
-//! need more than this.
+//! back to `slice::sort_by`, which agrees with V8 for a total preorder only
+//! and MAY PANIC when the comparator is not one (std's documented contract
+//! since Rust 1.81) — under the wasm build's `panic = "abort"`, an aborted
+//! instance. `JS_SORT_EXACT_BELOW` says where exactness ends, so a caller
+//! sorting longer arrays with an inconsistent comparator can see that it
+//! would need more than this.
 
 use core::cmp::Ordering;
 
@@ -23,6 +25,11 @@ pub const JS_SORT_EXACT_BELOW: usize = 64;
 
 /// Sorts `items` as `items.sort(compare)` would, `compare` answering as a
 /// JavaScript comparator does: negative, zero (or NaN), positive.
+///
+/// # Panics
+///
+/// At [`JS_SORT_EXACT_BELOW`] elements or more, may panic when `compare` is
+/// not a total preorder.
 pub fn js_sort_by<T: Clone>(items: &mut [T], compare: impl Fn(&T, &T) -> f64) {
     let order = |a: &T, b: &T| {
         let v = compare(a, b);
