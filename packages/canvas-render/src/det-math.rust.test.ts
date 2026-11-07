@@ -72,6 +72,14 @@ const REDUCTION_CEILING = 1647099
  * range around its ceiling, and the first few turns where the kernels and
  * the near-multiple reductions sit.
  */
+/** `x` moved `step` doubles toward positive infinity (a positive `x` only). */
+function nudge(x: number, step: number): number {
+  const view = new DataView(new ArrayBuffer(8))
+  view.setFloat64(0, x)
+  view.setBigUint64(0, view.getBigUint64(0) + BigInt(step))
+  return view.getFloat64(0)
+}
+
 const angle = fc.oneof(
   fc.double(),
   fc.double({ min: -2e6, max: 2e6 }),
@@ -83,6 +91,15 @@ const angle = fc.oneof(
     .map(([magnitude, negative]) => (negative ? -magnitude : magnitude)),
   fc.double({ min: REDUCTION_CEILING * 0.999_999, max: REDUCTION_CEILING * 1.000_001 }),
   fc.constantFrom(Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY, 0, -0),
+  // The reductions special-case the exact multiples of pi/4 and pi/2 by their
+  // high word, which no uniform draw lands on: each multiple and the doubles
+  // either side of it, signed.
+  fc
+    .tuple(fc.integer({ min: 1, max: 32 }), fc.integer({ min: -1, max: 1 }), fc.boolean())
+    .map(([k, step, negative]) => {
+      const x = nudge((k * Math.PI) / 4, step)
+      return negative ? -x : x
+    }),
 )
 const angles = fc.array(angle, { minLength: 1, maxLength: 64 })
 
