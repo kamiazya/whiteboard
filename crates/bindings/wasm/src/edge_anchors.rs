@@ -15,12 +15,12 @@ use whiteboard_edge_routing::geometry::Point;
 use whiteboard_edge_routing::js_map::JsMap;
 use whiteboard_edge_routing::routing_input::EdgeId;
 
-fn edge_id(wire: &mut Wire<'_>) -> Option<EdgeId> {
+pub(crate) fn edge_id(wire: &mut Wire<'_>) -> Option<EdgeId> {
     count(wire.number()?).and_then(|n| u32::try_from(n).ok())
 }
 
 /// A side pair as `[from side, to side, around 0/1]`.
-fn side_pair(wire: &mut Wire<'_>) -> Option<SidePair> {
+pub(crate) fn side_pair(wire: &mut Wire<'_>) -> Option<SidePair> {
     Some(SidePair {
         from_side: side_of(wire.number()?)?,
         to_side: side_of(wire.number()?)?,
@@ -28,12 +28,12 @@ fn side_pair(wire: &mut Wire<'_>) -> Option<SidePair> {
     })
 }
 
-fn sides(wire: &mut Wire<'_>) -> Option<JsMap<EdgeId, SidePair>> {
+pub(crate) fn sides(wire: &mut Wire<'_>) -> Option<JsMap<EdgeId, SidePair>> {
     let n = count(wire.number()?)?;
     (0..n).map(|_| Some((edge_id(wire)?, side_pair(wire)?))).collect()
 }
 
-fn pin(wire: &mut Wire<'_>) -> Result<(EdgeId, EdgeAnchorOverride), Malformed> {
+pub(crate) fn pin(wire: &mut Wire<'_>) -> Result<(EdgeId, EdgeAnchorOverride), Malformed> {
     let id = edge_id(wire).ok_or(Malformed)?;
     let sides = side_pair(wire).ok_or(Malformed)?;
     Ok((
@@ -56,7 +56,7 @@ fn flagged(v: Option<f64>) -> [f64; 2] {
     v.map_or([0.0, 0.0], |v| [1.0, v])
 }
 
-fn entry_values(id: EdgeId, e: &EdgeAnchorPair) -> impl Iterator<Item = f64> {
+pub(crate) fn entry_values(id: EdgeId, e: &EdgeAnchorPair) -> impl Iterator<Item = f64> {
     let side = |s: Option<_>| s.map_or(-1.0, side_index);
     [f64::from(id)]
         .into_iter()

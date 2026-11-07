@@ -776,8 +776,11 @@ function optimizeSideChoices(
  * authored is left exactly as authored — a user who names both sides has
  * asked for that geometry, degenerate or not (routeOrthogonal still declines
  * to draw a spike for it).
+ *
+ * Exported for the Rust port's differential (`test-utils/wasm`), which holds
+ * the repair to this one; `assignEdgeAnchors` is its only caller here.
  */
-function anchorsWithoutCoincidentEnds(
+export function anchorsWithoutCoincidentEnds(
   nodes: readonly SpatialNode[],
   labels: readonly Rect[],
   edges: readonly RoutableElement[],

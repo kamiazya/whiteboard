@@ -13,7 +13,7 @@ use whiteboard_edge_routing::geometry::Rect;
 use whiteboard_edge_routing::routing_budget::RoutingBudget;
 use whiteboard_edge_routing::routing_input::Arrowhead;
 
-fn rects(wire: &mut Wire<'_>, n: usize) -> Option<Vec<Rect>> {
+pub(crate) fn rects(wire: &mut Wire<'_>, n: usize) -> Option<Vec<Rect>> {
     (0..n)
         .map(|_| {
             let (x, y) = (wire.number()?, wire.number()?);
@@ -38,7 +38,7 @@ fn anchors(wire: &mut Wire<'_>) -> Result<Option<EdgeAnchorPair>, Malformed> {
 }
 
 /// The style by its wire number: 0 straight, 1 orthogonal, 2 curved.
-fn style_of(n: f64) -> Option<RoutingStyle> {
+pub(crate) fn style_of(n: f64) -> Option<RoutingStyle> {
     match n {
         0.0 => Some(RoutingStyle::Straight),
         1.0 => Some(RoutingStyle::Orthogonal),
