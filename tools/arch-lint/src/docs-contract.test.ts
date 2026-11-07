@@ -337,6 +337,7 @@ describe('docs/ contract', () => {
       'twenty-six',
       'twenty-seven',
       'twenty-eight',
+      'twenty-nine',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

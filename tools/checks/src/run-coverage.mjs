@@ -44,7 +44,13 @@ const DEFAULT_REPO_ROOT = resolve(__dirname, '../../..')
 
 // Keyed by CONFIG PATH, not project name, so renaming `test.name` cannot
 // silently invalidate the exemption (PROJECTS_RUN_ELSEWHERE's convention).
-const HELD_OUT = new Set(['packages/mcp-server/vitest.smoke.config.ts'])
+// The rust differential is held out because it needs the wasm artifact, which
+// the coverage lane does not build; det-math.ts is measured by
+// canvas-render-node either way.
+const HELD_OUT = new Set([
+  'packages/mcp-server/vitest.smoke.config.ts',
+  'packages/canvas-render/vitest.rust.config.ts',
+])
 
 // Six times the tightest per-test budget in the repo (5s). A hung test taking
 // 30s instead of 5s to be declared hung costs a report-only lane nothing.

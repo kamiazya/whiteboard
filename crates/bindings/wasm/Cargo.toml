@@ -13,6 +13,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 wasm-bindgen.workspace = true
+whiteboard-det = { path = "../../core/det" }
 
 [lints]
 workspace = true

@@ -28,13 +28,15 @@ import { parseScriptArgs } from './script-flags.mjs'
 const FRESH_RUNS = 5
 const REPEATS = 3
 // `.claude/**` is excluded because its test-NAMED files (biome-plugin lint fixtures) belong to no
-// vitest project, and vitest exits 1 on a file list that matches no project.
+// vitest project, and vitest exits 1 on a file list that matches no project. `*.rust.test.ts` is
+// excluded because it needs the wasm artifact only the rust job builds, and that job runs it.
 const CHANGED_TEST_PATHSPEC = [
   '*.test.ts',
   '*.test.tsx',
   '*.browser.test.ts',
   '*.browser.test.tsx',
   ':(exclude).claude/**',
+  ':(exclude)**/*.rust.test.ts',
 ]
 // Partitioned by project NAME, as the job is: every browser-mode project's name, and no other,
 // contains `-browser` (`web-browser-window-state` included).

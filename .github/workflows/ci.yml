@@ -446,7 +446,9 @@ jobs:
         id: changed
         # `.claude/**` is excluded: its test-NAMED files (biome-plugin lint
         # fixtures) belong to no vitest project, and vitest exits 1 on a file
-        # list that matches no project.
+        # list that matches no project. `*.rust.test.ts` is excluded too: it
+        # needs the wasm artifact only the rust job builds, and that job runs
+        # it on every change in its path scope.
         #
         # HEAD^1 rather than a merge base against a fetched `origin/$BASE_REF`.
         # On a pull_request event the checked-out ref is the merge commit, so
@@ -472,7 +474,7 @@ jobs:
         # retired sixteen test files.
         run: |
           set -o pipefail
-          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done | tr '\n' ' ')
+          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' ':(exclude)**/*.rust.test.ts' | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 
@@ -1055,6 +1057,11 @@ jobs:
       - name: Wasm release build (cargo xtask dist wasm)
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:build:wasm
+
+      # QR-21 layer 2: TypeScript against the wasm just built, exact equality.
+      - name: TypeScript-against-wasm differential (canvas-render-rust)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm exec vitest run --project=canvas-render-rust
 
       - name: Rust release gates (dist native, harden-check, repro-check, notices)
         if: steps.scope.outputs.run == 'true'

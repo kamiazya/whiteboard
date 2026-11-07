@@ -5,7 +5,7 @@ export default defineProject({
     name: 'canvas-render-node',
     environment: 'node',
     include: ['src/**/*.test.ts'],
-    exclude: ['src/**/*.browser.test.ts'],
+    exclude: ['src/**/*.browser.test.ts', 'src/**/*.rust.test.ts'],
     // Vitest's default is 5s, which this project never chose — and the
     // live-drag parity property sits right at it. Measured: 1427/1642/1512ms
     // with its file alone, 4654ms with all vitest projects running, so the

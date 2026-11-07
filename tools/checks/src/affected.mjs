@@ -181,7 +181,16 @@ export const PACKAGE_JOBS = {
  * everything, the Rust jobs with it.
  */
 const RUST_SCOPE = {
-  files: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rustfmt.toml', 'deny.toml'],
+  files: [
+    'Cargo.toml',
+    'Cargo.lock',
+    'rust-toolchain.toml',
+    'rustfmt.toml',
+    'deny.toml',
+    'packages/canvas-render/src/det-math.ts',
+    'packages/canvas-render/src/det-math.rust.test.ts',
+    'packages/canvas-render/vitest.rust.config.ts',
+  ],
   trees: ['.cargo', 'crates', 'contracts', 'packages/canvas-render/src/generated'],
 }
 
