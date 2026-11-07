@@ -35,10 +35,11 @@ export interface WasmGlue {
   edge_route_edge(input: Float64Array): Float64Array
   edge_compute_anchors(input: Float64Array): Float64Array
   edge_repair_coincident(input: Float64Array): Float64Array
+  edge_pairwise_scores(input: Float64Array): Float64Array
 }
 
 /** The surface these tests were written against; a stale artifact fails on this, not on its first mismatched call. */
-export const EXPECTED_ABI = '10'
+export const EXPECTED_ABI = '11'
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 

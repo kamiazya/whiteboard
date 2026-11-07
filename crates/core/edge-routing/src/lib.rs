@@ -18,6 +18,7 @@ pub mod bend_route;
 pub mod coincident_ends;
 pub mod edge_anchors;
 pub mod edge_contact;
+pub mod edge_crossing_sweep;
 pub mod edge_geometry;
 pub mod edge_ink;
 pub mod edge_rounding;
