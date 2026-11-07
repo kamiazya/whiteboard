@@ -1,14 +1,22 @@
+import { edgeSideSchema } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { diagonalInkThrough } from '../../layout/edges/diagonal-ink.js'
 import {
   boundingBoxOf,
+  centerOf,
+  containsPoint,
   midpointExtent,
+  outwardNormal,
   type Point,
   pathIsClear,
   pathLength,
   type Rect,
   segmentCrossesRect,
+  sidePoint,
+  sidePointAt,
+  strictlyInside,
+  tangentCoordinate,
   unionRect,
   withoutRepeats,
 } from '../../layout/edges/edge-geometry.js'
@@ -45,9 +53,10 @@ function firstDifference(ts: readonly number[], rust: Float64Array): string | un
 }
 
 /**
- * Coordinates on a quarter-pixel lattice, so paths run along each other and
- * along borders (where the ink terms are non-zero) and land on the half
- * quanta `quantize` rounds, plus the doubles JavaScript treats specially.
+ * Coordinates mostly on a 2.5px lattice, so paths run along each other and
+ * along borders (where the ink terms are non-zero), sometimes on an
+ * eighth-pixel one, which lands on the half quanta `quantize` rounds, plus
+ * the doubles JavaScript treats specially.
  */
 const coordinate = fc.oneof(
   { weight: 10, arbitrary: fc.integer({ min: -40, max: 80 }).map((k) => k * 2.5) },
@@ -115,11 +124,36 @@ const segmentCase = fc
     rect,
     point,
     point,
-    fc.constantFrom('free', 'free', 'from-midpoint', 'from-end'),
+    fc.constantFrom(
+      'free',
+      'free',
+      'free',
+      'from-midpoint',
+      'from-end',
+      'near-an-end',
+      'overflowing',
+    ),
   )
   .map(([a, b, r, c, d, kind]): [Point, Point, Rect, Point, Point] => {
     if (kind === 'from-midpoint') return [a, b, r, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }, d]
     if (kind === 'from-end') return [a, b, r, a, d]
+    if (kind === 'near-an-end') {
+      // A crossing 3px along the first segment, inside the 6px the arc needs.
+      const along = 3 / Math.hypot(b.x - a.x, b.y - a.y)
+      const mid = { x: a.x + (b.x - a.x) * along, y: a.y + (b.y - a.y) * along }
+      const perp = { x: -(b.y - a.y) * 0.1, y: (b.x - a.x) * 0.1 }
+      return [
+        a,
+        b,
+        r,
+        { x: mid.x + perp.x, y: mid.y + perp.y },
+        { x: mid.x - perp.x, y: mid.y - perp.y },
+      ]
+    }
+    if (kind === 'overflowing') {
+      // Extents past the double range turn the arithmetic NaN or infinite.
+      return [a, { x: b.x * 1e307, y: b.y * 1e307 }, r, c, { x: d.x * -1e307, y: d.y * 1e307 }]
+    }
     return [a, b, r, c, d]
   })
 
@@ -132,6 +166,31 @@ const reach = {
   blocked: 0,
   crosses: 0,
   hits: 0,
+  atAnEnd: 0,
+  tooNearAnEnd: 0,
+  overflowed: 0,
+}
+
+/**
+ * Why `segmentIntersection` refused a case its segments do cross, read with
+ * its own arithmetic: at an end (an open-interval bound met exactly), too
+ * near an end for the arc, or an overflowing extent. Reach only; the answer
+ * compared is the function's own.
+ */
+function refusal(a1: Point, a2: Point, b1: Point, b2: Point): keyof typeof reach | undefined {
+  const [dax, day, dbx, dby] = [a2.x - a1.x, a2.y - a1.y, b2.x - b1.x, b2.y - b1.y]
+  const denom = dax * dby - day * dbx
+  if (denom === 0) return undefined
+  const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denom
+  const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denom
+  // The function's own guard: a NaN `t` or `u` passes it, and the finite
+  // check after it is what refuses an overflow.
+  if (t <= 0 || t >= 1 || u <= 0 || u >= 1) {
+    return t === 0 || t === 1 || u === 0 || u === 1 ? 'atAnEnd' : undefined
+  }
+  const x = a1.x + t * dax
+  const y = a1.y + t * day
+  return Number.isFinite(x) && Number.isFinite(y) ? 'tooNearAnEnd' : 'overflowed'
 }
 
 const flat = (points: readonly Point[]) => [points.length, ...points.flatMap((p) => [p.x, p.y])]
@@ -197,7 +256,27 @@ describe.runIf(built)('the edge primitives and their Rust port answer the same n
         const hit = segmentIntersection(a, b, c, d)
         if (crosses) reach.crosses += 1
         if (hit !== undefined) reach.hits += 1
-        return [crosses ? 1 : 0, hit?.x ?? Number.NaN, hit?.y ?? Number.NaN]
+        else {
+          const why = refusal(a, b, c, d)
+          if (why !== undefined) reach[why] += 1
+        }
+        const center = centerOf(r)
+        return [
+          crosses ? 1 : 0,
+          hit === undefined ? 0 : 1,
+          hit?.x ?? Number.NaN,
+          hit?.y ?? Number.NaN,
+          containsPoint(r, a) ? 1 : 0,
+          strictlyInside(r, a) ? 1 : 0,
+          center.x,
+          center.y,
+          ...edgeSideSchema.options.flatMap((side) => {
+            const on = sidePoint(r, side)
+            const at = sidePointAt(r, side, c.x)
+            const normal = outwardNormal(side)
+            return [on.x, on.y, at.x, at.y, tangentCoordinate(side, a), normal.x, normal.y]
+          }),
+        ]
       })
       const input = Float64Array.from(
         cases.flatMap(([a, b, r, c, d]) => [
@@ -230,7 +309,10 @@ describe.runIf(built)('the edge primitives and their Rust port answer the same n
     expect(reach.retraced).toBeGreaterThan(28)
     expect(reach.diagonal).toBeGreaterThan(10)
     expect(reach.blocked).toBeGreaterThan(45)
-    expect(reach.crosses).toBeGreaterThan(28)
-    expect(reach.hits).toBeGreaterThan(80)
+    expect(reach.crosses).toBeGreaterThan(24)
+    expect(reach.hits).toBeGreaterThan(34)
+    expect(reach.atAnEnd).toBeGreaterThan(160)
+    expect(reach.tooNearAnEnd).toBeGreaterThan(65)
+    expect(reach.overflowed).toBeGreaterThan(150)
   })
 })

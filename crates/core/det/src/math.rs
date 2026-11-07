@@ -82,8 +82,9 @@ pub fn js_max(a: f64, b: f64) -> f64 {
 ///
 /// `f64::round` rounds halves away from zero (`-2.5` to `-3` where JS answers
 /// `-2`) and never answers `-0` for `-0.3`, so it is not the oracle's
-/// rounding, and neither is rounding ties to even. `x - x.floor()` is exact for
-/// every finite double, so the comparison against one half is too.
+/// rounding, and neither is rounding ties to even. `x - x.floor()` is exact
+/// wherever it could straddle one half; between -1 and 0 it can round, but
+/// never across one half, so the comparison is exact either way.
 #[must_use]
 pub fn js_round(x: f64) -> f64 {
     if !x.is_finite() {

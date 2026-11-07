@@ -8,8 +8,9 @@
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_geometry::{
-    bounding_box_of, midpoint_extent, path_is_clear, path_length, segment_crosses_rect, union_rect,
-    without_repeats,
+    Side, bounding_box_of, center_of, contains_point, midpoint_extent, outward_normal,
+    path_is_clear, path_length, segment_crosses_rect, side_point, side_point_at, strictly_inside,
+    tangent_coordinate, union_rect, without_repeats,
 };
 use whiteboard_edge_routing::edge_ink::{
     diagonal_ink_through, ink_along_rects, on_either_border, self_retraced_ink, strictly_between,
@@ -44,12 +45,22 @@ fn flag(b: bool) -> f64 {
     if b { 1.0 } else { 0.0 }
 }
 
-/// Segment-against-rect and segment-against-segment, per case.
+/// The four sides in `edgeSideSchema.options` order, which the TypeScript
+/// half of the differential walks too.
+const SIDES: [Side; 4] = [Side::Top, Side::Right, Side::Bottom, Side::Left];
+
+/// Segment, point and side tests, per case.
 ///
 /// In: 12 numbers a case, `[a.x, a.y, b.x, b.y, rect x, y, w, h, c.x, c.y,
-/// d.x, d.y]`. Out: 3 a case, `[segmentCrossesRect(a, b, rect) as 0/1, then
-/// segmentIntersection(a, b, c, d) as x, y, NaN NaN for none]`. A trailing
-/// partial case is ignored.
+/// d.x, d.y]`. Out: 36 a case: `segmentCrossesRect(a, b, rect)` as 0/1;
+/// `segmentIntersection(a, b, c, d)` as 0/1 for whether there is one, then
+/// its x, y (NaN NaN for none: a NaN point is a value, so it is not the
+/// answer "none");
+/// `containsPoint(rect, a)` and `strictlyInside(rect, a)` as 0/1;
+/// `centerOf(rect)` as x, y; then per side, top, right, bottom, left:
+/// `sidePoint(rect, side)` as x, y, `sidePointAt(rect, side, c.x)` as x, y,
+/// `tangentCoordinate(side, a)`, and `outwardNormal(side)` as x, y. A
+/// trailing partial case is ignored.
 #[wasm_bindgen]
 #[must_use]
 pub fn edge_segment_tests(cases: &[f64]) -> Vec<f64> {
@@ -60,11 +71,31 @@ pub fn edge_segment_tests(cases: &[f64]) -> Vec<f64> {
                 (point(c), point(c.get(2..).unwrap_or(&[])), rect(c.get(4..).unwrap_or(&[])));
             let (cc, d) = (point(c.get(8..).unwrap_or(&[])), point(c.get(10..).unwrap_or(&[])));
             let hit = segment_intersection(a, b, cc, d);
-            [
+            let center = center_of(r);
+            let mut out = vec![
                 flag(segment_crosses_rect(a, b, r)),
+                flag(hit.is_some()),
                 hit.map_or(f64::NAN, |p| p.x),
                 hit.map_or(f64::NAN, |p| p.y),
-            ]
+                flag(contains_point(r, a)),
+                flag(strictly_inside(r, a)),
+                center.x,
+                center.y,
+            ];
+            for side in SIDES {
+                let (on, at, normal) =
+                    (side_point(r, side), side_point_at(r, side, cc.x), outward_normal(side));
+                out.extend([
+                    on.x,
+                    on.y,
+                    at.x,
+                    at.y,
+                    tangent_coordinate(side, a),
+                    normal.x,
+                    normal.y,
+                ]);
+            }
+            out
         })
         .collect()
 }
@@ -139,10 +170,13 @@ mod tests {
     use super::{det_round, edge_path_measures, edge_segment_tests};
 
     #[test]
-    fn the_segment_export_answers_three_numbers_a_case() {
+    fn the_segment_export_answers_thirty_six_numbers_a_case() {
         let out =
             edge_segment_tests(&[-5.0, 5.0, 15.0, 5.0, 0.0, 0.0, 10.0, 10.0, 5.0, -5.0, 5.0, 15.0]);
-        assert_eq!(out, vec![1.0, 5.0, 5.0]);
+        assert_eq!(out.len(), 36);
+        assert_eq!(out.get(..8), Some(&[1.0, 1.0, 5.0, 5.0, 0.0, 0.0, 5.0, 5.0][..]));
+        // Top: its midpoint, then the point at fraction c.x = 5 along it.
+        assert_eq!(out.get(8..15), Some(&[5.0, 0.0, 50.0, 0.0, -5.0, 0.0, -1.0][..]));
     }
 
     #[test]
