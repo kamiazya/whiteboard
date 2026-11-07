@@ -268,7 +268,7 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   // (or POST) file route later silently authorizes a mutation with a
   // read-only credential.
   it('any write verb on a file route requires files:write, not just PUT', () => {
-    const filePath = '/api/w/ws1/document/main/file/abc'
+    const filePath = '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/files/abc'
     expect(resolveApiRouteScope('GET', filePath)).toEqual({
       kind: 'scoped',
       scopes: ['files:read'],
@@ -313,19 +313,17 @@ const SCOPE_DECISIONS = [
   ['runtime/ping', 'GET', '/api/runtime/ping', { kind: 'public' }],
   ['runtime/proof', 'GET', '/api/runtime/proof', { kind: 'public' }],
   [
-    'document file/action overlap',
+    'document file',
     'GET',
-    '/api/w/ws1/document/a/file/snapshot',
-    scoped('files:read', 'canvas:read'),
+    '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/files/f1',
+    scoped('files:read'),
   ],
   [
-    'document file/action overlap',
-    'POST',
-    '/api/w/ws1/document/a/file/export',
-    scoped('files:write', 'canvas:write'),
+    'document file',
+    'PUT',
+    '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/files/f1',
+    scoped('files:write'),
   ],
-  ['document file', 'GET', '/api/w/ws1/document/a/b/file/f1', scoped('files:read')],
-  ['document file', 'PUT', '/api/w/ws1/document/a/b/file/f1', scoped('files:write')],
   [
     'workspace-document/promote',
     'POST',
@@ -344,9 +342,24 @@ const SCOPE_DECISIONS = [
     '/api/w/ws1/workspace-document/update',
     scoped('canvas:write'),
   ],
-  ['document export', 'POST', '/api/w/ws1/document/d1/export', scoped('canvas:write')],
-  ['document (rest)', 'GET', '/api/w/ws1/document/d1', scoped('canvas:read')],
-  ['document (rest)', 'DELETE', '/api/w/ws1/document/d1', scoped('canvas:write')],
+  [
+    'document export',
+    'POST',
+    '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export',
+    scoped('canvas:write'),
+  ],
+  [
+    'document content',
+    'GET',
+    '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot',
+    scoped('canvas:read'),
+  ],
+  [
+    'document content',
+    'POST',
+    '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export-svg',
+    scoped('canvas:write'),
+  ],
   // Reading the stream, subscribing and posting a message are all read-level
   // whatever the verb: they change only what this stream is told about.
   ['sync transport', 'GET', '/api/sync/stream', scoped('canvas:read')],
@@ -443,7 +456,7 @@ describe('what each rule decides', () => {
   // mounted today: a write-scoped rule that asked for read on some verb
   // would let a read-only credential reach it.
   it.for([
-    ['/api/w/ws1/document/d1', 'canvas:write'],
+    ['/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export-svg', 'canvas:write'],
     ['/api/w/ws1/workspace-document/update', 'canvas:write'],
     ['/api/workspaces/ws1/trash/d1/restore', 'workspace:write'],
     ['/api/workspaces/ws1', 'workspace:write'],
@@ -493,12 +506,11 @@ describe('what each rule decides', () => {
 const CLAIMED_BY = {
   'runtime/ping': ['GET', '/api/runtime/ping'],
   'runtime/proof': ['GET', '/api/runtime/proof'],
-  'document file/action overlap': ['POST', '/api/w/ws1/document/a/file/export'],
-  'document file': ['GET', '/api/w/ws1/document/a/b/file/f1'],
+  'document file': ['GET', '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/files/f1'],
   'workspace-document/promote': ['POST', '/api/w/ws1/workspace-document/promote'],
   'workspace-document sync': ['POST', '/api/w/ws1/workspace-document/update'],
-  'document export': ['POST', '/api/w/ws1/document/d1/export'],
-  'document (rest)': ['GET', '/api/w/ws1/document/d1'],
+  'document export': ['POST', '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export'],
+  'document content': ['GET', '/api/workspaces/ws1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/snapshot'],
   'sync transport': ['POST', '/api/sync/stream'],
   'document versions': ['GET', '/api/workspaces/ws1/documents/d1/versions'],
   'versions/prune-sandwiched': ['POST', '/api/workspaces/ws1/versions/prune-sandwiched'],
@@ -547,12 +559,11 @@ describe('no rule in the table is shadowed by an earlier one', () => {
 // added to ORIGIN_TRUSTED here fails this test, which is the point: nothing
 // ships silently unclassified.
 const GATED = [
-  'document file/action overlap',
   'document file',
   'workspace-document/promote',
   'workspace-document sync',
   'document export',
-  'document (rest)',
+  'document content',
   'document versions',
   'versions/prune-sandwiched',
   'files/purge-dangling',
@@ -698,7 +709,9 @@ describe('no rule decides a write scope for a read verb', () => {
     // The sample has to reach the table, not merely pass over it: every rule
     // is met by a read verb except those that claim write verbs alone.
     const readReachable = API_ROUTE_RULE_NAMES.filter((name) => !WRITE_VERB_ONLY.includes(name))
-    expect(readReachable.length).toBeGreaterThan(15)
+    // A floor under the table's size, so a filter that matched nothing could
+    // not pass vacuously; the partition tests above pin the table itself.
+    expect(readReachable.length).toBeGreaterThan(12)
     expect([...reached].sort()).toEqual([...readReachable].sort())
     expect(offending, offending.join('\n')).toEqual([])
   })

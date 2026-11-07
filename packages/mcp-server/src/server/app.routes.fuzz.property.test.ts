@@ -122,9 +122,7 @@ async function seededApp(): Promise<Seeded> {
   _clearWorkspaceDocCacheForTests()
   const workspace = workspaceIdFor(`ws-${++seq}`)
   await seedWorkspaceRow(dataDir, workspace)
-  // The same SQLite store under `/api/v1` (serverDeps) and the legacy routes
-  // (the module-level document store), as production composes it — the
-  // default container is an in-memory store the legacy routes never see.
+  // One SQLite store under `/api/v1` (serverDeps) and the legacy routes, as production composes it.
   const db = await getDb(dataDir)
   const serverDeps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, dataDir)))
   const app = createApp({ ...runtimeOptions(), serverDeps, dataLayout: testDataLayout() })
@@ -140,27 +138,31 @@ async function seededApp(): Promise<Seeded> {
   }
   const spatialId = await create({ path: SPATIAL_PATH, kind: 'spatial' })
   const markdownId = await create({ path: MARKDOWN_PATH, kind: 'markdown', markdown: OKF_NOTE })
-  const saved = await app.request(
-    `/api/workspaces/${workspace}/documents/${SPATIAL_PATH}/versions`,
-    { method: 'POST', headers: auth, body: JSON.stringify({ label: 'seed' }) },
-  )
+  const saved = await app.request(`/api/workspaces/${workspace}/documents/${spatialId}/versions`, {
+    method: 'POST',
+    headers: auth,
+    body: JSON.stringify({ label: 'seed' }),
+  })
   if (saved.status !== 200 && saved.status !== 201) {
     throw new Error(`seed version failed: ${saved.status} ${await saved.text()}`)
   }
   const versionId = ((await saved.json()) as { version: { id: string } }).version.id
   // A document in the trash, so restore has something restorable.
   const trashedId = await create({ path: 'old', kind: 'spatial' })
-  const deleted = await app.request(`/api/workspaces/${workspace}/documents/old`, {
+  const deleted = await app.request(`/api/workspaces/${workspace}/documents/${trashedId}`, {
     method: 'DELETE',
     headers: auth,
   })
   if (deleted.status >= 300) throw new Error(`seed delete failed: ${deleted.status}`)
   // A stored file, so the file read has bytes to answer with.
-  const stored = await app.request(`/api/w/${workspace}/document/${SPATIAL_PATH}/file/${FILE_ID}`, {
-    method: 'PUT',
-    headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'image/png' },
-    body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
-  })
+  const stored = await app.request(
+    `/api/workspaces/${workspace}/documents/${spatialId}/files/${FILE_ID}`,
+    {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'image/png' },
+      body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
+    },
+  )
   if (stored.status !== 204) throw new Error(`seed file failed: ${stored.status}`)
   return { app, workspace, spatialId, markdownId, trashedId, versionId }
 }
@@ -174,21 +176,6 @@ const workspaceArb = (seed: Seeded) =>
     { weight: 1, arbitrary: fc.constant('nowhere') },
     { weight: 1, arbitrary: segmentArb },
   )
-const documentPathArb = fc.oneof(
-  { weight: 3, arbitrary: fc.constant(SPATIAL_PATH) },
-  { weight: 3, arbitrary: fc.constant(MARKDOWN_PATH) },
-  { weight: 1, arbitrary: fc.constant('missing') },
-  // Whole segments, so a drawn `/` cannot make an empty one — that is a
-  // path no route matches, answered by the framework rather than a route.
-  { weight: 1, arbitrary: segmentArb.filter((s) => !s.includes('/')) },
-  {
-    weight: 1,
-    arbitrary: fc
-      .tuple(segmentArb, segmentArb)
-      .filter(([a, b]) => !a.includes('/') && !b.includes('/'))
-      .map(([a, b]) => `${a}/${b}`),
-  },
-)
 const NONCES = ['AAAAAAAAAAAAAAAAAAAAAA', 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA', 'A'.repeat(43)]
 const OKF_OR_NOT = fc.oneof(
   { weight: 3, arbitrary: fc.constant(OKF_NOTE) },
@@ -270,7 +257,6 @@ function fillPattern(
     if (happy) {
       const seededText = (): string | null => {
         if (segment === ':workspaceId') return seed.workspace
-        if (segment === '*') return SPATIAL_PATH
         if (segment === ':documentId') return documentIdFor(pattern, seed).happy
         if (segment === ':id') return seed.versionId
         if (segment === ':fileId') return FILE_ID
@@ -283,12 +269,6 @@ function fillPattern(
       return workspaceArb(seed).map((w) => ({
         text: encodeURIComponent(w),
         seeded: w === seed.workspace,
-      }))
-    }
-    if (segment === '*') {
-      return documentPathArb.map((p) => ({
-        text: p.split('/').map(encodeURIComponent).join('/'),
-        seeded: p === SPATIAL_PATH || p === MARKDOWN_PATH,
       }))
     }
     if (segment === ':documentId') return documentIdFor(pattern, seed).drawn

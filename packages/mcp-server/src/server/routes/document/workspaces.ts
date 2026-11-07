@@ -74,7 +74,7 @@ import {
   segmentTaken,
   workspaceNotFound,
 } from './_shared.js'
-import { onDocumentsRoute } from './path-route.js'
+import { onDocumentRoute } from './path-route.js'
 
 /**
  * How many documents one workspace holds, for the listing.
@@ -416,7 +416,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   // from drifting. All this translates is the ADDRESS — this surface names a
   // document by path, the operation by the id the index assigned — and the
   // absent case, which is a 404 here and a throw there.
-  onDocumentsRoute(app, 'delete', [], async (c, workspaceId, path) => {
+  onDocumentRoute(app, 'delete', '', async (c, workspaceId, path) => {
     try {
       const deps = options.serverDeps
       const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
@@ -452,7 +452,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions) {
   //
   // The web app's move/rename UI reaches exactly this route
   // (`WorkspaceFilesPanel` -> `daemon-files-source` -> `PUT …/documents/:path/path`).
-  onDocumentsRoute(app, 'put', ['path'], async (c, workspaceId, path) => {
+  onDocumentRoute(app, 'put', '/path', async (c, workspaceId, path) => {
     const body = await readJsonBody(c, renameDocumentPathRequestSchema, {
       refuseShape: (error) => invalidBodyRefusal(error, 'path is required'),
     })
@@ -551,7 +551,7 @@ function duplicateAnswer(
 export function createDuplicateRouter({ serverDeps }: DuplicateRouterOptions): Hono {
   const app = new Hono()
 
-  onDocumentsRoute(app, 'post', ['duplicate'], async (c, workspaceId, path) => {
+  onDocumentRoute(app, 'post', '/duplicate', async (c, workspaceId, path) => {
     const asked = await readJsonBody(c, duplicateDocumentRequestSchema, {
       optional: true,
       refuseShape: (error) => invalidBodyRefusal(error, 'invalid duplicate options'),

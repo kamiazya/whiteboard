@@ -16,7 +16,7 @@ import { bootSelfHostDeps } from '../di/boot-self-host-deps.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
 import { storeMemoryModule } from '../shared/test-utils/store-memory.module.js'
 import type { ServerModeAppOptions } from './app.js'
-import { testDataLayout } from './routes/_test-helpers.js'
+import { documentIdAt, testDataLayout } from './routes/_test-helpers.js'
 import { oidcProviders } from './security/_test-helpers.js'
 import { createAdministratorCheck } from './security/administrator-check.js'
 import { createInvitationStore } from './security/invitation-store.js'
@@ -306,12 +306,14 @@ describe('server mode — a corrupt stored file is refused without its storage p
       const created = await ada.call('wb_workspace_edit', createPlans)
       expect(created.isError, textOf(created)).toBeFalsy()
       const { workspaceId } = created.structuredContent as { workspaceId: string }
+      const listed = await ada.call('wb_document_list', { workspaceId })
+      const [notes] = (listed.structuredContent?.documents ?? []) as { documentId: string }[]
       const dir = layout.workspaceFilesDir(workspaceId)
       await mkdir(dir, { recursive: true })
       await writeFile(join(dir, 'empty1.png'), new Uint8Array(0))
 
       const res = await app.request(
-        `${PUBLIC_URL}/api/w/${workspaceId}/document/notes/file/empty1`,
+        `${PUBLIC_URL}/api/workspaces/${workspaceId}/documents/${notes?.documentId}/files/empty1`,
         {
           headers: { Authorization: `Bearer ${await tokenFor('ada', 'files:read')}` },
         },
@@ -363,8 +365,10 @@ describe('server mode /mcp — a refusal reaches the member in its own words', (
 describe('server mode — an export answers no server path', () => {
   // The export renders from the directory the deps were booted over, so the
   // document has to be in it rather than in the in-memory index.
+  let bootedDeps: Awaited<ReturnType<typeof bootSelfHostDeps>>['serverDeps']
   beforeEach(async () => {
     const boot = await bootSelfHostDeps(tempDir)
+    bootedDeps = boot.serverDeps
     app = createApp({ ...options, serverDeps: boot.serverDeps, dataLayout: boot.dataLayout })
   })
 
@@ -382,15 +386,19 @@ describe('server mode — an export answers no server path', () => {
       expect(created.isError, textOf(created)).toBeFalsy()
       const { workspaceId } = created.structuredContent as { workspaceId: string }
 
-      const res = await app.request(`${PUBLIC_URL}/api/w/${workspaceId}/document/board/${action}`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${await tokenFor('ada', 'canvas:write canvas:read')}`,
-          'content-type': 'application/json',
-          origin: PUBLIC_URL,
+      const boardId = await documentIdAt(bootedDeps, workspaceId, 'board')
+      const res = await app.request(
+        `${PUBLIC_URL}/api/workspaces/${workspaceId}/documents/${boardId}/${action}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${await tokenFor('ada', 'canvas:write canvas:read')}`,
+            'content-type': 'application/json',
+            origin: PUBLIC_URL,
+          },
+          body: '{}',
         },
-        body: '{}',
-      })
+      )
       const text = await res.text()
       expect(res.status, text).toBe(200)
       expect(text).not.toContain(tempDir)
@@ -587,11 +595,11 @@ describe('server mode — a restore that writes other documents needs workspace:
     ['over another document', { targetPath: 'other', overwrite: true }],
     ['as a subtree', { subtree: true }],
   ])('refuses the restore route %s with 403, writing nothing', async (_case, mode) => {
-    const { versionId } = await savedNote()
+    const { documentId, versionId } = await savedNote()
     const token = await tokenFor('ada', VERSIONS_ONLY)
     const restore = (body: unknown) =>
       app.request(
-        `${PUBLIC_URL}/api/workspaces/plans/documents/notes/versions/${versionId}/restore`,
+        `${PUBLIC_URL}/api/workspaces/plans/documents/${documentId}/versions/${versionId}/restore`,
         {
           method: 'POST',
           headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },

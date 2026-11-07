@@ -1,95 +1,33 @@
-// The URL builders and the path parser are one contract written in two
-// directions (the file's own docblock says so), which is exactly the
-// parser/serializer shape that earns a round-trip property: every segment
-// the builders encode, the parser must hand back verbatim — including the
-// adversarial cases the docblock calls out (slashes and percent signs
-// INSIDE a segment, a document whose last segment collides with an action
-// name).
+// The oracle is the WHATWG URL parser fetch itself runs, not this module: a
+// URL it would normalise reaches a different same-origin path than the one
+// built, so the builders either answer a stable URL or refuse.
 
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import {
-  DOCUMENT_API_ACTIONS,
-  documentApiUrl,
-  documentFileApiUrl,
-  documentPathForAction,
-  documentPathForFile,
-  parseDocumentApiPath,
-} from './document-url.js'
-
-const ACTIONS = DOCUMENT_API_ACTIONS
-
-/**
- * A path segment as data: non-empty, and deliberately DENSE in the
- * characters that break naive URL handling — the separators themselves,
- * percent signs, spaces, unicode — plus the action names, so the
- * "document named like an action" collision is generated rather than
- * hand-picked.
- */
-const segmentArb = fc.oneof(
-  { arbitrary: fc.string({ minLength: 1, maxLength: 12 }), weight: 3 },
-  {
-    arbitrary: fc.constantFrom(
-      '/',
-      '%',
-      '%2F',
-      'a/b',
-      'file',
-      '...',
-      '%2e',
-      ' ',
-      '導線',
-      ...ACTIONS,
-    ),
-    weight: 1,
-  },
-)
+import { documentByIdApiUrl, documentFileByIdApiUrl } from './document-url.js'
 
 const isDotSegment = (segment: string) => segment === '.' || segment === '..'
 
-const documentPathArb = fc
-  .array(segmentArb, { minLength: 1, maxLength: 4 })
-  .map((segments) => segments.join('/'))
-  // A segment that is itself '/' produces an empty segment once joined,
-  // which the parser rejects by contract ("not-a-match rather than a
-  // throw") — keep the generator on paths every segment of which is data.
-  .filter((path) =>
-    path.split('/').every((segment) => segment.length > 0 && !isDotSegment(segment)),
-  )
-
-const workspaceIdArb = segmentArb.filter((segment) => !isDotSegment(segment))
-const fileIdArb = workspaceIdArb
-
-describe('document-url round trip', () => {
-  fcTest.prop([workspaceIdArb, documentPathArb, fc.constantFrom(...ACTIONS)], withDefaults())(
-    'documentApiUrl -> parseDocumentApiPath -> documentPathForAction recovers the input',
-    (workspaceId, path, action) => {
-      const parsed = parseDocumentApiPath(documentApiUrl(workspaceId, path, action))
-      expect(parsed).not.toBeNull()
-      expect(parsed?.workspaceId).toBe(workspaceId)
-      expect(documentPathForAction(parsed?.tail ?? [], action)).toBe(path)
-    },
-  )
-
-  fcTest.prop([workspaceIdArb, documentPathArb, fileIdArb], withDefaults())(
-    'documentFileApiUrl -> parseDocumentApiPath -> documentPathForFile recovers path and fileId',
-    (workspaceId, path, fileId) => {
-      const parsed = parseDocumentApiPath(documentFileApiUrl(workspaceId, path, fileId))
-      expect(parsed).not.toBeNull()
-      expect(parsed?.workspaceId).toBe(workspaceId)
-      expect(documentPathForFile(parsed?.tail ?? [])).toEqual({ path, fileId })
-    },
-  )
-})
-
 /**
  * Segments dense in what the URL parser rewrites: both dot segments, their
- * percent-encoded spellings, and near misses that must survive as data.
+ * percent-encoded spellings, and near misses that must survive as data —
+ * beside the separators and a percent sign, which a segment may carry.
  */
-const dottySegmentArb = fc.constantFrom('.', '..', '%2e', '%2E%2e', '.%2e', '...', 'a', 'a.b')
-const dottyPathArb = fc
-  .array(dottySegmentArb, { minLength: 1, maxLength: 3 })
-  .map((segments) => segments.join('/'))
+const dottySegmentArb = fc.constantFrom(
+  '.',
+  '..',
+  '%2e',
+  '%2E%2e',
+  '.%2e',
+  '...',
+  'a',
+  'a.b',
+  '/',
+  '%',
+  'a/b',
+  ' ',
+  '導線',
+)
 
 /** Whether a builder's answer is one the URL parser leaves exactly as written. */
 function urlParserKeeps(build: () => string): boolean {
@@ -102,25 +40,26 @@ function urlParserKeeps(build: () => string): boolean {
   return new URL(url, 'http://localhost').pathname === url
 }
 
-// The oracle is the WHATWG URL parser fetch itself runs, not this module: a
-// URL it would normalise reaches a different same-origin path than the one
-// built, so the builders either answer a stable URL or refuse.
 describe('document-url builders and the URL parser', () => {
-  fcTest.prop([dottySegmentArb, dottyPathArb, dottySegmentArb], withDefaults())(
+  fcTest.prop([dottySegmentArb, dottySegmentArb, dottySegmentArb], withDefaults())(
     'every URL a builder answers is left unchanged by the URL parser',
-    (workspaceId, path, fileId) => {
-      expect(urlParserKeeps(() => documentApiUrl(workspaceId, path, 'snapshot'))).toBe(true)
-      expect(urlParserKeeps(() => documentFileApiUrl(workspaceId, path, fileId))).toBe(true)
+    (workspaceId, documentId, fileId) => {
+      expect(urlParserKeeps(() => documentByIdApiUrl(workspaceId, documentId, 'snapshot'))).toBe(
+        true,
+      )
+      expect(urlParserKeeps(() => documentFileByIdApiUrl(workspaceId, documentId, fileId))).toBe(
+        true,
+      )
     },
   )
 
   // The near misses (`...`, `a.b`, a literal `%2e`) are data, so the refusal
   // is no wider than the dot segments themselves.
-  fcTest.prop([dottyPathArb], withDefaults())(
-    'refuses exactly the paths holding a dot segment',
-    (path) => {
-      const build = () => documentApiUrl('ws', path, 'snapshot')
-      if (path.split('/').some(isDotSegment)) expect(build).toThrow(/dot segment/)
+  fcTest.prop([dottySegmentArb], withDefaults())(
+    'refuses exactly the ids that are a dot segment',
+    (documentId) => {
+      const build = () => documentByIdApiUrl('ws', documentId, 'snapshot')
+      if (isDotSegment(documentId)) expect(build).toThrow(/dot segment/)
       else expect(build).not.toThrow()
     },
   )

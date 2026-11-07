@@ -86,9 +86,23 @@ async function appWithRealDeps(deps?: Awaited<ReturnType<typeof realDeps>>) {
 
 type App = Awaited<ReturnType<typeof appWithRealDeps>>
 
+/** The id the store holds at `path` — every document route is addressed by it. */
+async function idAt(WS: string, path: string): Promise<string> {
+  const documentId = await resolveDocumentIdAtPath(WS, path)
+  if (documentId === null) throw new Error(`no document at ${path}`)
+  return documentId
+}
+
+/** Deletes the live document at `path` through the id route. */
+async function deleteAt(app: App, WS: string, path: string): Promise<Response> {
+  return app.request(`/api/workspaces/${WS}/documents/${await idAt(WS, path)}`, {
+    method: 'DELETE',
+  })
+}
+
 /** The node texts of the canvas a page opening `path` would be served. */
 async function servedTexts(app: App, WS: string, path: string): Promise<string[]> {
-  const snap = await app.request(`/api/w/${WS}/document/${path}/snapshot`)
+  const snap = await app.request(`/api/workspaces/${WS}/documents/${await idAt(WS, path)}/snapshot`)
   expect(snap.status).toBe(200)
   const doc = new LoroDoc()
   doc.import(new Uint8Array(await snap.arrayBuffer()))
@@ -96,17 +110,22 @@ async function servedTexts(app: App, WS: string, path: string): Promise<string[]
 }
 
 async function saveVersion(app: App, WS: string, path: string): Promise<string> {
-  const saved = await app.request(`/api/workspaces/${WS}/documents/${path}/versions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  })
+  const saved = await app.request(
+    `/api/workspaces/${WS}/documents/${await idAt(WS, path)}/versions`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{}',
+    },
+  )
   expect(saved.status).toBe(200)
   return ((await saved.json()) as { version: { id: string } }).version.id
 }
 
 async function listedVersionIds(app: App, WS: string, path: string): Promise<string[]> {
-  const listed = await app.request(`/api/workspaces/${WS}/documents/${path}/versions`)
+  const listed = await app.request(
+    `/api/workspaces/${WS}/documents/${await idAt(WS, path)}/versions`,
+  )
   expect(listed.status).toBe(200)
   return ((await listed.json()) as { versions: { id: string }[] }).versions.map((v) => v.id)
 }
@@ -124,18 +143,18 @@ async function versionRowDocumentIds(WS: string): Promise<string[]> {
 
 /**
  * What a tab left open on a document deleted elsewhere does next: act on the
- * path it still shows. Each call is refused, and a refusal must leave nothing
- * behind that a later restore of the same path would be served as.
+ * id it still shows. A trashed id resolves to nothing, so each call is a 404
+ * that writes nothing a later restore of the same document could be served as.
  */
 const STALE_TAB_CALLS = {
-  'saves a version': async (app: App, WS: string) =>
-    app.request(`/api/workspaces/${WS}/documents/doomed/versions`, {
+  'saves a version': async (app: App, WS: string, documentId: string) =>
+    app.request(`/api/workspaces/${WS}/documents/${documentId}/versions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: '{}',
     }),
-  'restores a version': async (app: App, WS: string, versionId: string) =>
-    app.request(`/api/workspaces/${WS}/documents/doomed/versions/${versionId}/restore`, {
+  'restores a version': async (app: App, WS: string, documentId: string, versionId: string) =>
+    app.request(`/api/workspaces/${WS}/documents/${documentId}/versions/${versionId}/restore`, {
       method: 'POST',
     }),
 }
@@ -146,14 +165,11 @@ async function trashBehindAStaleTab(staleCall: keyof typeof STALE_TAB_CALLS) {
   const documentId = await resolveDocumentIdAtPath(WS, 'doomed')
   const deps = await realDeps()
   const app = await appWithRealDeps(deps)
-  const saved = await app.request(`/api/workspaces/${WS}/documents/doomed/versions`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: '{}',
-  })
-  const versionId = ((await saved.json()) as { version: { id: string } }).version.id
-  await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
-  expect((await STALE_TAB_CALLS[staleCall](app, WS, versionId)).status).toBe(404)
+  const versionId = await saveVersion(app, WS, 'doomed')
+  await deleteAt(app, WS, 'doomed')
+  expect((await STALE_TAB_CALLS[staleCall](app, WS, documentId as string, versionId)).status).toBe(
+    404,
+  )
   const restored = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
     method: 'POST',
   })
@@ -170,7 +186,7 @@ describe('trash routes', () => {
     expect(documentId).not.toBeNull()
     const app = await appWithRealDeps()
 
-    const del = await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    const del = await deleteAt(app, WS, 'doomed')
     expect(del.status).toBe(200)
 
     const listed = await app.request(`/api/workspaces/${WS}/trash`)
@@ -206,7 +222,7 @@ describe('trash routes', () => {
     const syncedId = (await resolveDocumentIdAtPath(WS, 'untitled-2')) as string
     const app = await appWithRealDeps()
 
-    await app.request(`/api/workspaces/${WS}/documents/untitled-1`, { method: 'DELETE' })
+    await deleteAt(app, WS, 'untitled-1')
     const snapshot = await app.request(`/api/w/${WS}/workspace-document/snapshot`)
     const replica = new LoroDoc()
     replica.import(new Uint8Array(await snapshot.arrayBuffer()))
@@ -236,7 +252,7 @@ describe('trash routes', () => {
     })
     expect(named.status).toBe(200)
 
-    await app.request(`/api/workspaces/${WS}/documents/field-trips/trip-log`, { method: 'DELETE' })
+    await deleteAt(app, WS, 'field-trips/trip-log')
 
     const listed = listTrashResponseSchema.parse(
       await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
@@ -310,8 +326,8 @@ describe('trash routes', () => {
     const doomedId = await resolveDocumentIdAtPath(WS, 'doomed')
     const keptId = await resolveDocumentIdAtPath(WS, 'kept')
     const app = await appWithRealDeps()
-    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
-    await app.request(`/api/workspaces/${WS}/documents/kept`, { method: 'DELETE' })
+    await deleteAt(app, WS, 'doomed')
+    await deleteAt(app, WS, 'kept')
 
     const purged = await app.request(`/api/workspaces/${WS}/trash/${doomedId}`, {
       method: 'DELETE',
@@ -346,7 +362,7 @@ describe('trash routes', () => {
     const documentId = (await resolveDocumentIdAtPath(WS, 'twice')) as string
     const deps = await realDeps()
     const app = await appWithRealDeps(deps)
-    await app.request(`/api/workspaces/${WS}/documents/twice`, { method: 'DELETE' })
+    await deleteAt(app, WS, 'twice')
     const record = await deps.workspaceDocuments.get(WS)
     const [entry] = readTrashEntries(record)
     if (entry === undefined) throw new Error('the delete recorded no trash entry')
@@ -375,7 +391,7 @@ describe('trash routes', () => {
     const app = await appWithRealDeps()
     const versionId = await saveVersion(app, WS, 'doomed')
 
-    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    await deleteAt(app, WS, 'doomed')
     const restored = await app.request(`/api/workspaces/${WS}/trash/${documentId}/restore`, {
       method: 'POST',
     })
@@ -384,7 +400,7 @@ describe('trash routes', () => {
     expect(await listedVersionIds(app, WS, 'doomed')).toEqual([versionId])
     // Listed AND openable: the version still reads the state it saved.
     const past = await app.request(
-      `/api/workspaces/${WS}/documents/doomed/versions/${versionId}/document`,
+      `/api/workspaces/${WS}/documents/${documentId}/versions/${versionId}/document`,
     )
     expect(past.status).toBe(200)
     expect(JSON.stringify(await past.json())).toContain('versioned')
@@ -399,7 +415,7 @@ describe('trash routes', () => {
     const app = await appWithRealDeps()
     await saveVersion(app, WS, 'doomed')
     await saveVersion(app, WS, 'kept')
-    await app.request(`/api/workspaces/${WS}/documents/doomed`, { method: 'DELETE' })
+    await deleteAt(app, WS, 'doomed')
     // Kept through the delete, so the purge below is what has to remove them.
     expect(await versionRowDocumentIds(WS)).toEqual([doomedId, keptId].sort())
 

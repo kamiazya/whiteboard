@@ -103,23 +103,12 @@ const WORKSPACE_DOCUMENT_ACTION_METHODS: Record<WorkspaceDocumentApiAction, Meth
   promote: 'POST',
 }
 
-const DOC = 'notes/plan'
-const doc = [WS, DOC] as const
 // A canonical ULID no document holds: the id routes answer it with their own 404, not "no route".
 const docById = [WS, '01ARZ3NDEKTSV4RRFFQ69G5FAV'] as const
 
 // One entry per builder, keyed by its export name. A builder with no entry
 // fails the completeness test below, so adding one means pinning it here.
 const SAMPLES: Record<string, readonly Sample[]> = {
-  documentApiUrl: DOCUMENT_API_ACTIONS.map((action) => ({
-    label: action,
-    method: DOCUMENT_ACTION_METHODS[action],
-    url: documentUrls.documentApiUrl(...doc, action),
-  })),
-  documentFileApiUrl: [
-    { label: 'file', method: 'GET', url: documentUrls.documentFileApiUrl(...doc, 'img1') },
-    { label: 'upload', method: 'PUT', url: documentUrls.documentFileApiUrl(...doc, 'img1') },
-  ],
   workspaceDocumentApiUrl: WORKSPACE_DOCUMENT_API_ACTIONS.map((action) => ({
     label: action,
     method: WORKSPACE_DOCUMENT_ACTION_METHODS[action],
@@ -138,36 +127,6 @@ const SAMPLES: Record<string, readonly Sample[]> = {
   ],
   workspaceDocumentsApiUrl: [
     { label: 'list', method: 'GET', url: daemonUrls.workspaceDocumentsApiUrl(WS) },
-  ],
-  documentRecordApiUrl: [
-    { label: 'delete', method: 'DELETE', url: daemonUrls.documentRecordApiUrl(...doc) },
-  ],
-  documentPathApiUrl: [
-    { label: 'move', method: 'PUT', url: daemonUrls.documentPathApiUrl(...doc) },
-  ],
-  documentNameApiUrl: [
-    { label: 'name', method: 'PUT', url: daemonUrls.documentNameApiUrl(...doc) },
-  ],
-  documentPinApiUrl: [{ label: 'pin', method: 'PUT', url: daemonUrls.documentPinApiUrl(...doc) }],
-  documentDuplicateApiUrl: [
-    { label: 'duplicate', method: 'POST', url: daemonUrls.documentDuplicateApiUrl(...doc) },
-  ],
-  documentVersionsApiUrl: [
-    { label: 'list', method: 'GET', url: daemonUrls.documentVersionsApiUrl(...doc) },
-    { label: 'save', method: 'POST', url: daemonUrls.documentVersionsApiUrl(...doc) },
-  ],
-  documentVersionsPageApiUrl: [
-    {
-      label: 'list page',
-      method: 'GET',
-      url: daemonUrls.documentVersionsPageApiUrl(...doc, { cursor: '1000.1', limit: 10 }),
-    },
-  ],
-  versionDocumentApiUrl: [
-    { label: 'read', method: 'GET', url: daemonUrls.versionDocumentApiUrl(...doc, 'v1') },
-  ],
-  versionRestoreApiUrl: [
-    { label: 'restore', method: 'POST', url: daemonUrls.versionRestoreApiUrl(...doc, 'v1') },
   ],
   documentByIdApiUrl: DOCUMENT_API_ACTIONS.map((action) => ({
     label: action,

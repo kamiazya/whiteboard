@@ -4,7 +4,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
 
-// Request / response schemas for POST /api/w/:workspaceId/document/<path>/export.
+// Request / response schemas for POST /api/workspaces/:workspaceId/documents/:documentId/export.
 // Imported by the route handler, which validates incoming bodies against
 // exportRequestSchema and types its success response via ExportResponse.
 // Refusals are not declared here: they are server-core's `apiErrorBodySchema`

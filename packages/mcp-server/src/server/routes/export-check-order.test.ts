@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { testStoreScope } from './_test-helpers.js'
+import { resolvingDocumentIds, testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -31,6 +31,10 @@ const { createExportRouter } = await import('./export.js')
 const { createDocumentSvgExportRouter } = await import('./document/export-svg.js')
 
 const missing = async () => false
+
+// The index holds the id while the live-document seam reports the document gone:
+// the window in which the router's own existence check is what answers.
+const HELD_ID = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
 
 // Both formats are one request shape answered in one order; the table is what
 // keeps a third format, or an edit to one route, from reordering only its own.
@@ -62,8 +66,9 @@ describe.each(ROUTES)('$format export refusal order on a missing document', (rou
 
   function post(body: string | undefined) {
     const app = new Hono()
+    resolvingDocumentIds(app, { [HELD_ID]: { path: 'gone' } })
     route.mount(app, testStoreScope(tempDir))
-    return app.request(`/api/w/s1/document/gone/${route.action}`, {
+    return app.request(`/api/workspaces/s1/documents/${HELD_ID}/${route.action}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       ...(body === undefined ? {} : { body }),

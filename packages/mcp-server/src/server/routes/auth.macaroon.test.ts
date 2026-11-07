@@ -11,8 +11,12 @@ const DAEMON_TOKEN = 'the-daemon-token'
 // Real routes, so the scopes come from `route-scope-registry.ts` rather than
 // from a fixture that could drift from it. Read is `canvas:read`, write is
 // `canvas:write`; the registry is what decides, and that is the point.
-const READ_PATH = '/api/w/ws-alpha/document/board'
-const WRITE = { method: 'PUT', path: '/api/w/ws-alpha/document/board' } as const
+const DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const READ_PATH = `/api/workspaces/ws-alpha/documents/${DOCUMENT_ID}/snapshot`
+const WRITE = {
+  method: 'POST',
+  path: `/api/workspaces/ws-alpha/documents/${DOCUMENT_ID}/export`,
+} as const
 
 function app(macaroonRootKey?: Uint8Array) {
   const instance = new Hono()
@@ -31,9 +35,9 @@ const get = (instance: Hono, path: string, bearer?: string) =>
     headers: bearer === undefined ? {} : { authorization: `Bearer ${bearer}` },
   })
 
-const put = (instance: Hono, path: string, bearer: string) =>
+const write = (instance: Hono, path: string, bearer: string) =>
   instance.request(path, {
-    method: 'PUT',
+    method: WRITE.method,
     headers: { authorization: `Bearer ${bearer}` },
   })
 
@@ -58,7 +62,7 @@ describe('the daemon /api guard — a macaroon is checked against the route scop
       caveats: [{ kind: 'scope', scopes: ['canvas:read'] }],
     })
 
-    const response = await put(app(ROOT_KEY), WRITE.path, readOnly)
+    const response = await write(app(ROOT_KEY), WRITE.path, readOnly)
     expect(response.status).toBe(401)
     await expect(response.json()).resolves.toEqual({ error: 'unauthorized' })
   })
@@ -70,7 +74,7 @@ describe('the daemon /api guard — a macaroon is checked against the route scop
       caveats: [{ kind: 'scope', scopes: ['canvas:read', 'canvas:write'] }],
     })
 
-    expect((await put(app(ROOT_KEY), WRITE.path, readWrite)).status).toBe(200)
+    expect((await write(app(ROOT_KEY), WRITE.path, readWrite)).status).toBe(200)
   })
 
   it('refuses a macaroon minted under a different root key', async () => {
@@ -118,7 +122,7 @@ describe('the daemon /api guard — what a macaroon must not change', () => {
     const instance = app(ROOT_KEY)
 
     expect((await get(instance, READ_PATH, DAEMON_TOKEN)).status).toBe(200)
-    expect((await put(instance, WRITE.path, DAEMON_TOKEN)).status).toBe(200)
+    expect((await write(instance, WRITE.path, DAEMON_TOKEN)).status).toBe(200)
   })
 
   it('carries no macaroon branch at all when no root key is supplied', async () => {
@@ -150,7 +154,7 @@ describe('the daemon /api guard — what a macaroon must not change', () => {
       get(instance, READ_PATH),
       get(instance, READ_PATH, 'not-a-token'),
       get(instance, READ_PATH, foreign),
-      put(instance, WRITE.path, readOnly),
+      write(instance, WRITE.path, readOnly),
     ])
 
     for (const response of refusals) {

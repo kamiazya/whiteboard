@@ -359,26 +359,40 @@ try {
   }
   console.log('[server-mode-smoke] scenario 5a (workspaces auth): PASS')
 
-  // --- Scenario 5b: POST /api/w/:wid/document/:path/export — canvas:write ---
+  // --- Scenario 5b: POST /api/workspaces/:wid/documents/:documentId/export — canvas:write ---
   {
     const appEmpty = makeApp([])
-    const res401 = await req(appEmpty, 'POST', '/api/w/w1/document/s1/export')
+    const res401 = await req(
+      appEmpty,
+      'POST',
+      '/api/workspaces/w1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export',
+    )
     if (res401.status !== 401) fail('5b: expected 401 without auth', { status: res401.status })
     assertNoAppLeak('5b 401', await res401.text())
 
     const appRead = makeApp(['canvas:read'])
-    const res403 = await req(appRead, 'POST', '/api/w/w1/document/s1/export', {
-      bearer: SMOKE_TOKEN,
-    })
+    const res403 = await req(
+      appRead,
+      'POST',
+      '/api/workspaces/w1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export',
+      {
+        bearer: SMOKE_TOKEN,
+      },
+    )
     if (res403.status !== 403) {
       fail('5b: canvas:read must be 403 on canvas:write export route', { status: res403.status })
     }
     assertNoAppLeak('5b 403', await res403.text())
 
     const appWrite = makeApp(['canvas:write'])
-    const resPass = await req(appWrite, 'POST', '/api/w/w1/document/s1/export', {
-      bearer: SMOKE_TOKEN,
-    })
+    const resPass = await req(
+      appWrite,
+      'POST',
+      '/api/workspaces/w1/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/export',
+      {
+        bearer: SMOKE_TOKEN,
+      },
+    )
     if (await scopeGateRefused(resPass)) {
       fail('5b: canvas:write must pass auth gate on export', { status: resPass.status })
     }

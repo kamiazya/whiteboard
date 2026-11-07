@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 
 import { exportResponseSchema } from '../../shared/api-contracts/export.js'
 import { captureLogsForTests } from '../log.js'
 import type { StoreScope } from '../store/store-scope.js'
-import { testStoreScope } from './_test-helpers.js'
+import { resolvingDocumentIds, testStoreScope, UNKNOWN_DOCUMENT_ID } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -24,8 +24,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-// getClientCount is a spy so the metamorphic test can vary it; a connected
-// browser must have no effect on export, which is headless-only.
+// A spy, so the metamorphic test can vary it: a connected browser must have no effect on a headless export.
 const mockGetClientCount = vi.fn<(workspaceId: string, path: string) => number>()
 
 vi.mock('../sync-audience.js', () => ({
@@ -37,11 +36,7 @@ type MockHeadlessArgs = {
   workspaceId: string
   path: string
   scope: StoreScope
-  options?: {
-    padding?: number
-    scale?: number
-    theme?: 'light' | 'dark'
-  }
+  options?: { padding?: number; scale?: number; theme?: 'light' | 'dark' }
 }
 const mockExportCanvasHeadless =
   vi.fn<
@@ -82,13 +77,24 @@ vi.mock('nanoid', async (importOriginal) => {
 
 const { createExportRouter } = await import('./export.js')
 
-function makeApp() {
+const CANVAS_A = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+const NESTED = '01BX5ZZKBKACTAV9WEVGEMMVRY'
+const HELD: Record<string, string> = { [CANVAS_A]: 'canvas-a', [NESTED]: 'architecture/overview' }
+const exportUrl = (documentId: string, workspaceId = 's1') =>
+  `/api/workspaces/${workspaceId}/documents/${documentId}/export`
+const EXPORT_URL = exportUrl(CANVAS_A)
+
+function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   const app = new Hono()
+  resolvingDocumentIds(
+    app,
+    Object.fromEntries(Object.entries(HELD).map(([id, path]) => [id, { path }])),
+  )
   app.route(
     '/',
     createExportRouter({
       liveDocuments: { exists: mockDocumentExists },
-      scope: testStoreScope(tempDir),
+      scope,
     }),
   )
   return app
@@ -97,7 +103,7 @@ function makeApp() {
 const SAMPLE_PNG_BASE64 =
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
-describe('POST /api/w/:workspaceId/document/:path/export - error handling', () => {
+describe('POST /api/workspaces/:workspaceId/documents/:documentId/export - error handling', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-test-'))
     mockGetClientCount.mockReset()
@@ -124,7 +130,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await app.request(EXPORT_URL, { method: 'POST' })
 
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
@@ -146,16 +152,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
         undrawable: [],
         unresolvedFamilies: [],
       })
-      const app = new Hono()
-      app.route(
-        '/',
-        createExportRouter({
-          liveDocuments: { exists: mockDocumentExists },
-          scope: testStoreScope(elsewhere),
-        }),
-      )
-
-      const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+      const res = await makeApp(testStoreScope(elsewhere)).request(EXPORT_URL, { method: 'POST' })
 
       expect(res.status).toBe(200)
       const { filePath } = (await res.json()) as { filePath: string }
@@ -178,7 +175,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
 
     mockGetClientCount.mockReturnValue(0)
-    const resNoClient = await makeApp().request('/api/w/s1/document/canvas-a/export', {
+    const resNoClient = await makeApp().request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 20 }),
@@ -187,7 +184,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
     mockExportCanvasHeadless.mockClear()
     mockGetClientCount.mockReturnValue(3)
-    const resWithClients = await makeApp().request('/api/w/s1/document/canvas-a/export', {
+    const resWithClients = await makeApp().request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 20 }),
@@ -216,8 +213,8 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
       const [resA, resB] = await Promise.all([
-        app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' }),
-        app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' }),
+        app.request(EXPORT_URL, { method: 'POST' }),
+        app.request(EXPORT_URL, { method: 'POST' }),
       ])
       const bodyA = (await resA.json()) as { filePath: string }
       const bodyB = (await resB.json()) as { filePath: string }
@@ -235,7 +232,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     mockDocumentExists.mockResolvedValueOnce(false)
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/missing-canvas/export', { method: 'POST' })
+    const res = await app.request(EXPORT_URL, { method: 'POST' })
 
     expect(res.status).toBe(404)
     const body = (await res.json()) as { error: string; message?: string }
@@ -251,7 +248,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       new Error('Target size is zero (please do not set the width/height/zoom options to 0)'),
     )
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scale: 5e-324 }),
@@ -272,7 +269,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       { padding: -1 },
       { padding: 1e308 },
     ]) {
-      const res = await app.request('/api/w/s1/document/canvas-a/export', {
+      const res = await app.request(EXPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
@@ -287,7 +284,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const logs = captureLogsForTests('error')
     onTestFinished(() => logs.restore())
     mockExportCanvasHeadless.mockRejectedValue(new Error('boom at /secret/path'))
-    const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await makeApp().request(EXPORT_URL, { method: 'POST' })
     expect(res.status).toBe(500)
     const body = (await res.json()) as { error: string; message: string }
     expect(body.error).toBe('headless_export_failed')
@@ -298,7 +295,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   it('leaves a busy database to the app, which answers 503 with Retry-After', async () => {
     mockExportCanvasHeadless.mockRejectedValue(Object.assign(new Error(), { code: 'SQLITE_BUSY' }))
     const app = new Hono().onError(answerUnhandled(() => {})).route('/', makeApp())
-    const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await app.request(EXPORT_URL, { method: 'POST' })
     expect(res.status).toBe(503)
     expect(res.headers.get('Retry-After')).toBe('1')
   })
@@ -324,7 +321,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
         }),
     )
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await app.request(EXPORT_URL, { method: 'POST' })
     expect(res.status).toBe(200)
   })
 
@@ -338,7 +335,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 48 }),
@@ -359,7 +356,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 32, scale: 2 }),
@@ -383,7 +380,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: 'dark', padding: 16 }),
@@ -400,7 +397,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
   it('rejects invalid theme values with 400 invalid_request', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ theme: 'sepia' }),
@@ -418,7 +415,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   ])('rejects an oversized request body that %s with 413 payload_too_large', async (_name, declared) => {
     const app = makeApp()
     const oversized = 'x'.repeat(1024 * 1024 + 1)
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -441,7 +438,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     ['background', '#fff'],
   ])('refuses the undefined field %s by name with 400 invalid_request', async (field, value) => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ padding: 24, [field]: value }),
@@ -463,7 +460,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
     const app = makeApp()
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await app.request(EXPORT_URL, { method: 'POST' })
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toMatch(/canvas-a-.*\.png$/)
@@ -481,7 +478,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       unresolvedFamilies: [],
     })
 
-    const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await makeApp().request(EXPORT_URL, { method: 'POST' })
 
     expect(res.status).toBe(200)
     // Parsed, not cast: the point is that the field survives the contract.
@@ -497,7 +494,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       unresolvedFamilies: [],
     })
 
-    const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+    const res = await makeApp().request(EXPORT_URL, { method: 'POST' })
 
     // Present and empty rather than absent: a caller must be able to tell
     // "nothing was lost" from "this daemon does not report".
@@ -530,9 +527,9 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
     try {
-      const resA = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+      const resA = await app.request(EXPORT_URL, { method: 'POST' })
       const bodyA = (await resA.json()) as { filePath: string }
-      const resB = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+      const resB = await app.request(EXPORT_URL, { method: 'POST' })
       const bodyB = (await resB.json()) as { filePath: string }
 
       expect(resA.status).toBe(200)
@@ -558,8 +555,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     })
     const app = makeApp()
 
-    // MCP sends the path through encodeURIComponent, so it arrives as one segment with `%2F`.
-    const res = await app.request('/api/w/s1/document/architecture%2Foverview/export', {
+    const res = await app.request(exportUrl(NESTED), {
       method: 'POST',
     })
     expect(res.status).toBe(200)
@@ -567,18 +563,19 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(body.filePath).toMatch(/exports\/architecture\/overview-.*\.png$/)
   })
 
-  it('returns 400 for invalid workspaceId or path without reaching the headless renderer', async () => {
+  it('returns 400 for a malformed workspace handle without reaching the headless renderer', async () => {
     const app = makeApp()
 
-    const badSession = await app.request('/api/w/bad.sid/document/canvas-a/export', {
-      method: 'POST',
-    })
+    const badSession = await app.request(exportUrl(CANVAS_A, 'bad.sid'), { method: 'POST' })
     expect(badSession.status).toBe(400)
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
+  })
 
-    const badPath = await app.request('/api/w/s1/document/bad.path/export', {
-      method: 'POST',
-    })
-    expect(badPath.status).toBe(400)
+  it('returns 404 for an id no document holds, without reaching the headless renderer', async () => {
+    const res = await makeApp().request(exportUrl(UNKNOWN_DOCUMENT_ID), { method: 'POST' })
+
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: 'not_found' })
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
@@ -593,7 +590,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'subdir', 'custom.excalidraw.png')
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -610,7 +607,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const app = makeApp()
     // ${DATA_DIR}/daemon.json is inside DATA_DIR but not inside ${DATA_DIR}/s1/exports
     const daemonFile = join(tempDir, 'daemon.json')
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: daemonFile }),
@@ -624,7 +621,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const app = makeApp()
     // ${DATA_DIR}/s1/.checkpoints is inside DATA_DIR/s1 but not in ${DATA_DIR}/s1/exports
     const checkpointFile = join(tempDir, 's1', '.checkpoints', 'v1.json')
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: checkpointFile }),
@@ -636,7 +633,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
   it('rejects outputPath fully outside DATA_DIR', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: '/tmp/attack.png' }),
@@ -648,7 +645,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
   it('does not leak internal paths in invalid_output_path error response', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: join(tempDir, 'daemon.json') }),
@@ -665,7 +662,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     const outputPath = join(tempDir, 's1', 'exports', 'exists.png')
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -679,7 +676,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
 
   it('rejects a relative PNG outputPath with 400 invalid_output_path', async () => {
     const app = makeApp()
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath: 'relative/out.png' }),
@@ -702,7 +699,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath }),
@@ -726,7 +723,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     await mkdir(join(tempDir, 's1', 'exports'), { recursive: true })
     await writeFile(outputPath, 'OLD')
 
-    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+    const res = await app.request(EXPORT_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ outputPath, overwrite: true }),
@@ -786,7 +783,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   ])('the refusal for %s', (_name, status, arrange) => {
     it(`answers ${status} with a body inside apiErrorBodySchema and a readable reason`, async () => {
       const request = await arrange()
-      const res = await makeApp().request('/api/w/s1/document/canvas-a/export', {
+      const res = await makeApp().request(EXPORT_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         ...request,

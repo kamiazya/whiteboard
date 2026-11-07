@@ -18,7 +18,12 @@ import {
   serverModePeople,
 } from './_test-server-mode-harness.js'
 import type { ServerModeAppOptions } from './app.js'
-import { resolveTestServerDeps, testDataLayout } from './routes/_test-helpers.js'
+import {
+  createTestDocument,
+  documentIdAt,
+  resolveTestServerDeps,
+  testDataLayout,
+} from './routes/_test-helpers.js'
 import type { MemberProfileStore } from './security/member-profile-store.js'
 import { SESSION_COOKIE, type SignInSessionStore } from './security/sign-in-session-store.js'
 import { createIsolatedDb } from './store/db/test-helpers.js'
@@ -41,6 +46,7 @@ let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 let members: MemberProfileStore
 let sessions: SignInSessionStore
 let app: ReturnType<typeof createApp>
+let serverDeps: Awaited<ReturnType<typeof resolveTestServerDeps>>
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), 'wb-server-mode-write-after-removal-'))
@@ -48,12 +54,13 @@ beforeEach(async () => {
   const stores = serverModePeople(handle.db, tempDir)
   members = stores.members
   sessions = stores.sessions
+  serverDeps = await resolveTestServerDeps(tempDir)
   const options: ServerModeAppOptions = {
     authMode: 'server-mode',
     publicBaseUrl: PUBLIC_URL,
     allowedOrigins: [PUBLIC_URL],
     authStrategy: bearerNamesItsSubject,
-    serverDeps: await resolveTestServerDeps(tempDir),
+    serverDeps,
     dataLayout: testDataLayout(),
     people: stores.people,
     touch: () => {},
@@ -87,7 +94,9 @@ async function sharedWorkspace() {
   expect(created.status).toBe(201)
   const { workspaceId } = (await created.json()) as { workspaceId: string }
   await members.addMember(workspaceId, bob.userId)
-  return { ada, bob, workspaceId }
+  await createTestDocument(serverDeps, { workspaceId, path: 'board' })
+  const documentId = await documentIdAt(serverDeps, workspaceId, 'board')
+  return { ada, bob, workspaceId, documentId }
 }
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
@@ -100,11 +109,16 @@ function probeUpdate(): Uint8Array {
 
 interface Write {
   readonly method: 'POST' | 'PUT'
-  readonly path: string
+  /** The route under `/api`, relative to the workspace's address. */
+  readonly route: (workspaceId: string, documentId: string) => string
   readonly contentType: string
   readonly bytes: () => Uint8Array
   /** Whether what the write carries is now stored, read as the owner. */
-  readonly landed: (headers: Record<string, string>, workspaceId: string) => Promise<boolean>
+  readonly landed: (
+    headers: Record<string, string>,
+    workspaceId: string,
+    documentId: string,
+  ) => Promise<boolean>
 }
 
 const get = (headers: Record<string, string>, url: string) =>
@@ -114,7 +128,7 @@ const get = (headers: Record<string, string>, url: string) =>
 const WRITES: Record<string, Write> = {
   'workspace-document update': {
     method: 'POST',
-    path: 'workspace-document/update',
+    route: (workspaceId) => `/api/w/${workspaceId}/workspace-document/update`,
     contentType: 'application/octet-stream',
     bytes: probeUpdate,
     async landed(headers, workspaceId) {
@@ -128,11 +142,15 @@ const WRITES: Record<string, Write> = {
 
   'file upload': {
     method: 'PUT',
-    path: 'document/board/file/probe-file',
+    route: (workspaceId, documentId) =>
+      `/api/workspaces/${workspaceId}/documents/${documentId}/files/probe-file`,
     contentType: 'image/png',
     bytes: () => PNG,
-    async landed(headers, workspaceId) {
-      const res = await get(headers, `/api/w/${workspaceId}/document/board/file/probe-file`)
+    async landed(headers, workspaceId, documentId) {
+      const res = await get(
+        headers,
+        `/api/workspaces/${workspaceId}/documents/${documentId}/files/probe-file`,
+      )
       if (res.status === 404) return false
       expect(res.status).toBe(200)
       return true
@@ -141,7 +159,12 @@ const WRITES: Record<string, Write> = {
 }
 
 /** `write` from `headers`, its body withheld until `release`. */
-function held(write: Write, headers: Record<string, string>, workspaceId: string) {
+function held(
+  write: Write,
+  headers: Record<string, string>,
+  workspaceId: string,
+  documentId: string,
+) {
   const bytes = write.bytes()
   let release = () => {}
   const released = new Promise<void>((resolve) => {
@@ -160,7 +183,7 @@ function held(write: Write, headers: Record<string, string>, workspaceId: string
     { highWaterMark: 0 },
   )
   const response = Promise.resolve(
-    app.request(`${PUBLIC_URL}/api/w/${workspaceId}/${write.path}`, {
+    app.request(`${PUBLIC_URL}${write.route(workspaceId, documentId)}`, {
       method: write.method,
       headers: { ...headers, 'content-type': write.contentType },
       body,
@@ -176,18 +199,18 @@ function people() {
 
 describe.each(Object.entries(WRITES))('server mode — a %s outliving its membership', (_, write) => {
   it('lands for a member who is still one when the body arrives', async () => {
-    const { ada, bob, workspaceId } = await sharedWorkspace()
-    expect(await write.landed(ada.headers, workspaceId)).toBe(false)
-    const request = held(write, bob.headers, workspaceId)
+    const { ada, bob, workspaceId, documentId } = await sharedWorkspace()
+    expect(await write.landed(ada.headers, workspaceId, documentId)).toBe(false)
+    const request = held(write, bob.headers, workspaceId, documentId)
     await vi.waitFor(() => expect(request.wasRead()).toBe(true))
     request.release()
     expect((await request.response).status).toBeLessThan(300)
-    expect(await write.landed(ada.headers, workspaceId)).toBe(true)
+    expect(await write.landed(ada.headers, workspaceId, documentId)).toBe(true)
   })
 
   it('is refused for a member removed while the body was arriving', async () => {
-    const { ada, bob, workspaceId } = await sharedWorkspace()
-    const request = held(write, bob.headers, workspaceId)
+    const { ada, bob, workspaceId, documentId } = await sharedWorkspace()
+    const request = held(write, bob.headers, workspaceId, documentId)
     await vi.waitFor(() => expect(request.wasRead()).toBe(true))
 
     expect(await people().roles.remove(workspaceId, bob.userId)).toBe('ok')
@@ -196,21 +219,21 @@ describe.each(Object.entries(WRITES))('server mode — a %s outliving its member
     const res = await request.response
     expect(res.status).toBe(403)
     expect(await res.json()).toMatchObject({ error: 'not_a_member' })
-    expect(await write.landed(ada.headers, workspaceId)).toBe(false)
+    expect(await write.landed(ada.headers, workspaceId, documentId)).toBe(false)
   })
 })
 
 describe('server mode — a write outliving its author’s deactivation', () => {
   it('is refused for a member deactivated while the body was arriving', async () => {
     const write = WRITES['workspace-document update'] as Write
-    const { ada, bob, workspaceId } = await sharedWorkspace()
-    const request = held(write, bob.headers, workspaceId)
+    const { ada, bob, workspaceId, documentId } = await sharedWorkspace()
+    const request = held(write, bob.headers, workspaceId, documentId)
     await vi.waitFor(() => expect(request.wasRead()).toBe(true))
 
     await people().administration.deactivation.deactivate(bob.userId, Date.now())
     request.release()
 
     expect((await request.response).status).toBe(403)
-    expect(await write.landed(ada.headers, workspaceId)).toBe(false)
+    expect(await write.landed(ada.headers, workspaceId, documentId)).toBe(false)
   })
 })

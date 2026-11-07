@@ -17,7 +17,7 @@ import {
 } from '../export-request.js'
 import { onDocumentAction } from './path-route.js'
 
-// POST /api/w/:workspaceId/document/<path>/export-svg
+// POST /api/workspaces/:workspaceId/documents/:documentId/export-svg
 //
 // Renders headless straight from the persisted LoroDoc, as the PNG route in
 // export.ts does: neither asks a connected browser for its screen, so there

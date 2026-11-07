@@ -26,7 +26,9 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { resolveTestServerDeps, writeDocumentUpdate } = await import('../_test-helpers.js')
+const { documentIdAt, resolveTestServerDeps, writeDocumentUpdate } = await import(
+  '../_test-helpers.js'
+)
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js, mirroring the other route tests' documented cycle
 // workaround for document.ts's dynamic import.
@@ -67,7 +69,10 @@ describe('live-doc routes and the deps they were handed', () => {
         autoVersionQuietMs: 60_000,
       }),
     )
-    const res = await app.request('/api/w/01FCF6YZ7AZ4K20T4QCA9JJ9QM/document/canvas-a/snapshot')
+    const documentId = await documentIdAt(deps, '01FCF6YZ7AZ4K20T4QCA9JJ9QM', 'canvas-a')
+    const res = await app.request(
+      `/api/workspaces/01FCF6YZ7AZ4K20T4QCA9JJ9QM/documents/${documentId}/snapshot`,
+    )
 
     expect(res.status).toBe(200)
     // The recorder on the injected deps is the discriminator: a route that

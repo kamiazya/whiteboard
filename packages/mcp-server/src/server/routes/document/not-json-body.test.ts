@@ -4,6 +4,7 @@ import { apiErrorBodySchema, apiErrorReason } from '@kamiazya/whiteboard-server-
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   withTempDataDir,
@@ -24,18 +25,23 @@ const { clearDocCacheForTests } = await import('../../store/doc-cache.js')
 const { createDocumentRouter } = await import('../document.js')
 
 let serverDeps: ServerDeps
+let realId = ''
 beforeEach(async () => {
   clearDocCacheForTests()
   serverDeps = await resolveTestServerDeps(tmp.dir)
   await createTestDocument(serverDeps, { workspaceId: 'ws1', path: 'real', kind: 'markdown' })
+  // 'ws1' is a segment; the index is asked by the canonical id it minted.
+  const workspace = await serverDeps.documentIndex.resolveWorkspace('ws1')
+  realId = await documentIdAt(serverDeps, workspace?.workspaceId ?? 'ws1', 'real')
 })
 
 const NOT_JSON_REASON = 'the request body is not valid JSON'
-const DOCUMENT = '/api/workspaces/ws1/documents/real'
+// `{id}` is filled with the seeded document's id when the request is sent.
+const DOCUMENT = '/api/workspaces/ws1/documents/{id}'
 
 const send = async (method: string, path: string, body: string) => {
   const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
-  const res = await app.request(path, {
+  const res = await app.request(path.replace('{id}', realId), {
     method,
     headers: { 'Content-Type': 'application/json' },
     body,

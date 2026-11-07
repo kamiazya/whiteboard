@@ -8,7 +8,7 @@ import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { refuseOversizedTarget } from '../export/export-budget.js'
-import { testStoreScope } from './_test-helpers.js'
+import { resolvingDocumentIds, testStoreScope } from './_test-helpers.js'
 
 let tempDir: string
 
@@ -32,6 +32,8 @@ vi.mock('../export/headless-export.js', () => ({
 
 const { createExportRouter } = await import('./export.js')
 
+const BOARD_ID = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+
 describe('a PNG export past the pixel budget', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-too-large-'))
@@ -53,6 +55,7 @@ describe('a PNG export past the pixel budget', () => {
     expect(refusal).toBeInstanceOf(Error)
     mockExportCanvasHeadless.mockRejectedValue(refusal)
     const app = new Hono()
+    resolvingDocumentIds(app, { [BOARD_ID]: { path: 'board' } })
     app.route(
       '/',
       createExportRouter({
@@ -60,7 +63,7 @@ describe('a PNG export past the pixel budget', () => {
         scope: testStoreScope(tempDir),
       }),
     )
-    const res = await app.request('/api/w/s1/document/board/export', {
+    const res = await app.request(`/api/workspaces/s1/documents/${BOARD_ID}/export`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scale: 8 }),

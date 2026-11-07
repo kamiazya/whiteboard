@@ -10,7 +10,7 @@
  * not about anyone using it.
  *
  * A caller is a call whose LAST argument is the action's string literal, in a
- * production file that names `documentApiUrl` or its id twin `documentByIdApiUrl`.
+ * production file that names `documentByIdApiUrl`.
  * That reads `documentByIdApiUrl(ws, id, 'snapshot')` and a wrapper that fixes the action
  * (`documentRouteUrl(base, doc, 'update')`) alike, and it does not read the
  * server's own `onDocumentAction(app, 'get', 'snapshot', …)`, which is a
@@ -30,7 +30,7 @@ import { parseSource } from './ast-helpers.js'
 import { REPO_ROOT, relativeToRepo, SCAN_ROOTS } from './scan-roots.js'
 import { isShippedPath, walkSourceFiles } from './source-scan.js'
 
-const DOCUMENT_URL_BUILDERS: ReadonlySet<string> = new Set(['documentApiUrl', 'documentByIdApiUrl'])
+const DOCUMENT_URL_BUILDERS: ReadonlySet<string> = new Set(['documentByIdApiUrl'])
 
 const ACTIONS_FILE = 'packages/daemon-client/src/api-contracts/document-url.ts'
 
@@ -166,19 +166,19 @@ describe('what the scan counts as a call', () => {
   })
 
   it('reads a call to the builder with the action last', () => {
-    expect([...callsWithAction(`documentApiUrl(ws, path, 'snapshot')`)]).toEqual(['snapshot'])
+    expect([...callsWithAction(`documentByIdApiUrl(ws, id, 'snapshot')`)]).toEqual(['snapshot'])
   })
 
   it('reads a wrapper that fixes the action, in a file that names the builder', () => {
     expect([
       ...callsWithAction(
-        `import { documentApiUrl } from 'x'\ndocumentRouteUrl(base, doc, 'update')`,
+        `import { documentByIdApiUrl } from 'x'\ndocumentRouteUrl(base, doc, 'update')`,
       ),
     ]).toEqual(['update'])
   })
 
   it('does not read prose or a file that never names the builder', () => {
-    expect(callsWithAction(`// documentApiUrl(ws, path, 'export')\nconst a = 1`).size).toBe(0)
+    expect(callsWithAction(`// documentByIdApiUrl(ws, id, 'export')\nconst a = 1`).size).toBe(0)
     expect(callsWithAction(`onDocumentAction(app, 'get', 'snapshot')`).size).toBe(0)
   })
 })

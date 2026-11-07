@@ -6,7 +6,7 @@
  */
 
 import { duplicateDocumentResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { documentDuplicateApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { documentDuplicateByIdApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   readCommentThreads,
   readMarkdownBody,
@@ -17,7 +17,12 @@ import {
 import { hasDocumentDuplicates } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { testDocumentRouterOptions, withTempDataDir } from '../_test-helpers.js'
+import {
+  documentIdAt,
+  testDocumentRouterOptions,
+  UNKNOWN_DOCUMENT_ID,
+  withTempDataDir,
+} from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-duplicate-test-')
 
@@ -70,15 +75,19 @@ async function appWithRealDeps() {
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createSelfHostStoreLocalModule(db, tmp.dir)))
   expect(hasDocumentDuplicates(deps.documentIndex)).toBe(true)
-  return createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
+  const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps: deps }))
+  /** The duplicate route for the document saved at `path`. */
+  const duplicateUrl = async (path: string) =>
+    documentDuplicateByIdApiUrl(WS, await documentIdAt(deps, WS, path))
+  return Object.assign(app, { duplicateUrl })
 }
 
-describe('POST …/documents/<path>/duplicate', () => {
+describe('POST …/documents/:documentId/duplicate', () => {
   it('copies a document in a folder to a sibling path, named after it, with its content', async () => {
     await saveDocument(WS, 'notes/roadmap', note('# Roadmap\n\nship it'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), {
+    const res = await app.request(await app.duplicateUrl('notes/roadmap'), {
       method: 'POST',
     })
 
@@ -93,18 +102,20 @@ describe('POST …/documents/<path>/duplicate', () => {
     await saveDocument(WS, 'untitled-3', note('draft'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, 'untitled-3'), { method: 'POST' })
+    const res = await app.request(await app.duplicateUrl('untitled-3'), { method: 'POST' })
 
     expect(res.status).toBe(200)
     const { document } = duplicateDocumentResponseSchema.parse(await res.json())
     expect(document).toMatchObject({ path: 'untitled-3-copy', name: 'Untitled 3 (copy)' })
   })
 
-  it('answers 404 for a path no document holds, and makes nothing', async () => {
+  it('answers 404 for an id no document holds, and makes nothing', async () => {
     await saveDocument(WS, 'kept', note('kept'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, 'gone'), { method: 'POST' })
+    const res = await app.request(documentDuplicateByIdApiUrl(WS, UNKNOWN_DOCUMENT_ID), {
+      method: 'POST',
+    })
 
     expect(res.status).toBe(404)
     const listed = await app.request(`/api/workspaces/${WS}/documents`)
@@ -118,7 +129,7 @@ describe('POST …/documents/<path>/duplicate', () => {
     await saveDocument(WS, deep, note('deep'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, deep), { method: 'POST' })
+    const res = await app.request(await app.duplicateUrl(deep), { method: 'POST' })
 
     expect(res.status).toBe(409)
     expect(((await res.json()) as { message: string }).message).toMatch(/no room beside/)
@@ -131,7 +142,7 @@ describe('POST …/documents/<path>/duplicate', () => {
     await saveDocument(WS, 'notes/roadmap', commented('ship it'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), {
+    const res = await app.request(await app.duplicateUrl('notes/roadmap'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ withoutAnnotations: true }),
@@ -152,7 +163,7 @@ describe('POST …/documents/<path>/duplicate', () => {
     await saveDocument(WS, 'notes/roadmap', commented('ship it'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, 'notes/roadmap'), { method: 'POST' })
+    const res = await app.request(await app.duplicateUrl('notes/roadmap'), { method: 'POST' })
 
     expect(duplicateDocumentResponseSchema.parse(await res.json())).not.toHaveProperty(
       'withoutAnnotations',
@@ -164,7 +175,7 @@ describe('POST …/documents/<path>/duplicate', () => {
     await saveDocument(WS, 'kept', note('kept'), { kind: 'markdown' })
     const app = await appWithRealDeps()
 
-    const res = await app.request(documentDuplicateApiUrl(WS, 'kept'), {
+    const res = await app.request(await app.duplicateUrl('kept'), {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ withoutAnnotations: 'yes' }),

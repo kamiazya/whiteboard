@@ -194,7 +194,7 @@ async function loadImageAssetUrl(
  * The browser binding of the editor's file seams. Declared here beside
  * the four functions it wires so the page is left with no backend knowledge
  * of its own — the daemon page supplies its own adapter over the daemon's
- * `/api/w/:workspaceId/document/:path/file/:fileId` endpoints.
+ * `/api/workspaces/:workspaceId/documents/:documentId/files/:fileId` route.
  */
 export const BROWSER_FILE_ADAPTER: DocumentFileAdapter = {
   // One file store per origin, shared by every browser-kept workspace in it.

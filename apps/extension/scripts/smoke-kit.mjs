@@ -126,11 +126,11 @@ export async function callTool(record, name, args) {
 }
 
 /** How many browsers the daemon counts on a document, ready ones apart. */
-export async function clientCount(record, path) {
+export async function clientCount(record, documentId) {
   const { json } = await daemonApi(
     record,
     'GET',
-    `/api/w/default/document/${encodeURIComponent(path)}/client-count`,
+    `/api/workspaces/default/documents/${encodeURIComponent(documentId)}/client-count`,
   )
   return json
 }

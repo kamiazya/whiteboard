@@ -4,6 +4,7 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
@@ -28,7 +29,7 @@ vi.mock('../../config.js', () => ({
 
 const { createDocumentRouter } = await import('../document.js')
 
-describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
+describe('PUT /api/workspaces/:workspaceId/documents/:documentId/path', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF'), { recursive: true })
     await seedWorkspaceRow(tmp.dir, '01M8BBN7JS60N0ZAR13NP8SXBF')
@@ -45,9 +46,10 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       path: 'month/x',
       name: 'plan',
     })
+    const id = await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'month/x')
     const app = createDocumentRouter(testDocumentRouterOptions({ serverDeps }))
     const res = await app.request(
-      '/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/month/x/path',
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${id}/path`,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },

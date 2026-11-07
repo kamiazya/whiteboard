@@ -50,6 +50,7 @@ import { PROMOTE_MAX_JUDGED_SIZE } from '@kamiazya/whiteboard-server-core/versio
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import {
+  documentIdAt,
   resolveTestServerDeps,
   seedWorkspaceRow,
   testDocumentRouterOptions,
@@ -532,7 +533,7 @@ it('carries saved versions: listed for their document, label kept, restorable to
   expect(listed[1]?.createdAt).toBe(new Date(1_000).toISOString())
 
   const restored = await app.request(
-    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/notes/roadmap/versions/${DRAFTED_VERSION_ID}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${ROADMAP_ID}/versions/${DRAFTED_VERSION_ID}/restore`,
     { method: 'POST' },
   )
   expect(restored.status).toBe(200)
@@ -698,8 +699,9 @@ it('answers a restore of a saved state past a sync limit with 413 in the sync re
     overwrite: true,
   })
 
+  const canvasId = await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
   const res = await app.request(
-    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/canvas-a/versions/${version.id}/restore`,
+    `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${canvasId}/versions/${version.id}/restore`,
     { method: 'POST' },
   )
   expect(res.status).toBe(413)

@@ -87,8 +87,8 @@ const server = setupServer(
       headers: { 'Content-Type': 'application/octet-stream' },
     })
   }),
-  http.get(`${BASE}/api/w/:workspaceId/document/:path/snapshot`, ({ params }) => {
-    perDocumentSnapshotHits.push(`${String(params.workspaceId)}/${String(params.path)}`)
+  http.get(`${BASE}/api/workspaces/:workspaceId/documents/:documentId/snapshot`, ({ params }) => {
+    perDocumentSnapshotHits.push(`${String(params.workspaceId)}/${String(params.documentId)}`)
     return HttpResponse.json({ error: 'refused', message: 'not this route' }, { status: 500 })
   }),
 )

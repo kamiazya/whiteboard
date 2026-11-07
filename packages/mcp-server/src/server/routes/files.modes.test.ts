@@ -5,10 +5,17 @@
  */
 import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
 import { CHMOD_IS_OBSERVABLE } from '../../shared/test-utils/chmod-is-observable.js'
 import { PENDING_WRITES_DIRNAME } from '../atomic-write.js'
-import { testFilesRouterOptions, testStoreScope, withTempDataDir } from './_test-helpers.js'
+import type { StoreScope } from '../store/store-scope.js'
+import {
+  resolvingDocumentIds,
+  testFilesRouterOptions,
+  testStoreScope,
+  withTempDataDir,
+} from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-files-modes-')
 
@@ -23,14 +30,25 @@ vi.mock('../config.js', () => ({
 
 const { createFilesRouter } = await import('./files.js')
 
+const BOARD = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+
+// The daemon resolves the document id once ahead of its routers; the index here
+// holds one document, at `board`.
+function filesApp(scope: StoreScope) {
+  const app = new Hono()
+  resolvingDocumentIds(app, { [BOARD]: { path: 'board' } })
+  app.route('/', createFilesRouter(testFilesRouterOptions(scope)))
+  return app
+}
+
 const modeOf = async (path: string): Promise<number> => (await stat(path)).mode & 0o777
 
 describe('the modes an upload is written with', () => {
   it.skipIf(!CHMOD_IS_OBSERVABLE)('writes the file 0600 under 0700 directories', async () => {
     const scope = testStoreScope(tmp.dir)
-    const app = createFilesRouter(testFilesRouterOptions(scope))
+    const app = filesApp(scope)
 
-    const res = await app.request('/api/w/ws-modes/document/board/file/img1', {
+    const res = await app.request(`/api/workspaces/ws-modes/documents/${BOARD}/files/img1`, {
       method: 'PUT',
       headers: { 'Content-Type': 'image/png' },
       body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),

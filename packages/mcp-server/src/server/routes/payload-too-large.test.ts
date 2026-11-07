@@ -9,8 +9,11 @@
  * only the code.
  */
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { Hono } from 'hono'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  createTestDocument,
+  documentIdAt,
   resolveTestServerDeps,
   testDocumentRouterOptions,
   testFilesRouterOptions,
@@ -20,10 +23,15 @@ import {
 
 const tmp = withTempDataDir('whiteboard-payload-too-large-')
 
+const WORKSPACE = '01CEHRD78WBHCGPXDTJQF2GNQD'
+
 let serverDeps: ServerDeps
+let canvasId: string
 beforeEach(async () => {
   serverDeps = await resolveTestServerDeps(tmp.dir)
-  await serverDeps.documentIndex.createWorkspace({ workspaceId: '01CEHRD78WBHCGPXDTJQF2GNQD' })
+  await serverDeps.documentIndex.createWorkspace({ workspaceId: WORKSPACE })
+  await createTestDocument(serverDeps, { workspaceId: WORKSPACE, path: 'canvas-a' })
+  canvasId = await documentIdAt(serverDeps, WORKSPACE, 'canvas-a')
 })
 
 vi.mock('../config.js', () => ({
@@ -38,15 +46,27 @@ vi.mock('../config.js', () => ({
 const { createDocumentRouter } = await import('./document.js')
 const { createExportRouter } = await import('./export.js')
 const { createFilesRouter } = await import('./files.js')
+const { resolveDocumentAddress } = await import('./document/path-route.js')
 
 const MIB = 1024 * 1024
+
+// The daemon resolves the document id once ahead of its routers.
+function addressed(router: Hono): Hono {
+  const app = new Hono()
+  app.use(
+    '/api/workspaces/:workspaceId/documents/:documentId/*',
+    resolveDocumentAddress(serverDeps),
+  )
+  app.route('/', router)
+  return app
+}
 
 type Build = () => { request: (path: string, init: RequestInit) => Response | Promise<Response> }
 
 const CASES: readonly {
   readonly route: string
   readonly method: string
-  readonly path: string
+  readonly path: () => string
   readonly build: Build
   readonly limit: number
   readonly noun: string
@@ -54,27 +74,29 @@ const CASES: readonly {
   {
     route: 'file upload',
     method: 'PUT',
-    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/file/img1',
-    build: () => createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir))),
+    path: () => `/api/workspaces/${WORKSPACE}/documents/${canvasId}/files/img1`,
+    build: () => addressed(createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir)))),
     limit: 16 * MIB,
     noun: 'Upload',
   },
   {
     route: 'PNG export',
     method: 'POST',
-    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/export',
+    path: () => `/api/workspaces/${WORKSPACE}/documents/${canvasId}/export`,
     build: () =>
-      createExportRouter({
-        liveDocuments: { exists: async () => true },
-        scope: testStoreScope(tmp.dir),
-      }),
+      addressed(
+        createExportRouter({
+          liveDocuments: { exists: async () => true },
+          scope: testStoreScope(tmp.dir),
+        }),
+      ),
     limit: MIB,
     noun: 'Request body',
   },
   {
     route: 'SVG export',
     method: 'POST',
-    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/document/canvas-a/export-svg',
+    path: () => `/api/workspaces/${WORKSPACE}/documents/${canvasId}/export-svg`,
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: MIB,
     noun: 'Request body',
@@ -82,7 +104,7 @@ const CASES: readonly {
   {
     route: 'workspace document update',
     method: 'POST',
-    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/update',
+    path: () => '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/update',
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: 16 * MIB,
     noun: 'Update',
@@ -90,7 +112,7 @@ const CASES: readonly {
   {
     route: 'workspace promotion',
     method: 'POST',
-    path: '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/promote',
+    path: () => '/api/w/01CEHRD78WBHCGPXDTJQF2GNQD/workspace-document/promote',
     build: () => createDocumentRouter(testDocumentRouterOptions({ serverDeps })),
     limit: 24 * MIB,
     noun: 'Promotion',
@@ -100,7 +122,7 @@ const CASES: readonly {
 describe('an oversized request body', () => {
   for (const { route, method, path, build, limit, noun } of CASES) {
     it(`is 413 payload_too_large on the ${route} route`, async () => {
-      const res = await build().request(path, {
+      const res = await build().request(path(), {
         method,
         headers: { 'Content-Type': 'application/octet-stream' },
         body: new Uint8Array(limit + 1),

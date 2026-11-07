@@ -5,8 +5,15 @@
  */
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
-import { testFilesRouterOptions, testStoreScope, withTempDataDir } from './_test-helpers.js'
+import type { StoreScope } from '../store/store-scope.js'
+import {
+  resolvingDocumentIds,
+  testFilesRouterOptions,
+  testStoreScope,
+  withTempDataDir,
+} from './_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-files-content-type-')
 
@@ -21,11 +28,22 @@ vi.mock('../config.js', () => ({
 
 const { createFilesRouter } = await import('./files.js')
 
-const route = (fileId: string) => `/api/w/ws-ct/document/board/file/${fileId}`
+const BOARD = '01HZX3QK8M2N5P7R9T1V3W5Y7A'
+
+// The daemon resolves the document id once ahead of its routers; the index here
+// holds one document, at `board`.
+function filesApp(scope: StoreScope) {
+  const app = new Hono()
+  resolvingDocumentIds(app, { [BOARD]: { path: 'board' } })
+  app.route('/', createFilesRouter(testFilesRouterOptions(scope)))
+  return app
+}
+
+const route = (fileId: string) => `/api/workspaces/ws-ct/documents/${BOARD}/files/${fileId}`
 
 describe('the file route when the type is not stated', () => {
   it('stores an upload with no Content-Type as a PNG', async () => {
-    const app = createFilesRouter(testFilesRouterOptions(testStoreScope(tmp.dir)))
+    const app = filesApp(testStoreScope(tmp.dir))
 
     const stored = await app.request(route('untyped1'), {
       method: 'PUT',
@@ -44,7 +62,7 @@ describe('the file route when the type is not stated', () => {
     await mkdir(dir, { recursive: true })
     await writeFile(join(dir, 'foreign1.bin'), new Uint8Array([1, 2, 3]))
 
-    const read = await createFilesRouter(testFilesRouterOptions(scope)).request(route('foreign1'))
+    const read = await filesApp(scope).request(route('foreign1'))
     expect(read.status).toBe(200)
     expect(read.headers.get('Content-Type')).toBe('application/octet-stream')
   })

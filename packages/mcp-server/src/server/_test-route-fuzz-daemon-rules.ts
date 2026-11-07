@@ -49,7 +49,7 @@ import { exportSvgRequestSchema } from '../shared/api-contracts/export-svg.js'
 import { fc } from '../shared/test-utils/fast-check.js'
 import type { Rule } from './_test-route-fuzz-lane.js'
 
-const PATH_RULES: Record<string, Rule> = {
+const DAEMON_RULES: Record<string, Rule> = {
   'GET /api/workspaces': { answers: 'json', response: listWorkspacesResponseSchema },
   'POST /api/workspaces': {
     answers: 'json',
@@ -92,30 +92,30 @@ const PATH_RULES: Record<string, Rule> = {
     answers: 'json',
     response: purgeResultSchema,
   },
-  'GET /api/workspaces/:workspaceId/documents/*/versions': {
+  'GET /api/workspaces/:workspaceId/documents/:documentId/versions': {
     answers: 'json',
     response: listVersionsResponseSchema,
   },
-  'GET /api/workspaces/:workspaceId/documents/*/versions/:id/document': {
+  'GET /api/workspaces/:workspaceId/documents/:documentId/versions/:id/document': {
     answers: 'json',
     response: versionDocumentResponseSchema,
   },
-  'POST /api/workspaces/:workspaceId/documents/*/versions': {
+  'POST /api/workspaces/:workspaceId/documents/:documentId/versions': {
     answers: 'json',
     body: saveVersionRequestSchema,
     response: saveVersionResponseSchema,
   },
-  'POST /api/workspaces/:workspaceId/documents/*/versions/:id/restore': {
+  'POST /api/workspaces/:workspaceId/documents/:documentId/versions/:id/restore': {
     answers: 'json',
     body: restoreVersionRequestSchema,
     response: restoreVersionResponseSchema,
   },
-  'PUT /api/workspaces/:workspaceId/documents/*/name': {
+  'PUT /api/workspaces/:workspaceId/documents/:documentId/name': {
     answers: 'json',
     body: setNameRequestSchema,
     response: workspaceNamesSchema,
   },
-  'POST /api/workspaces/:workspaceId/documents/*/duplicate': {
+  'POST /api/workspaces/:workspaceId/documents/:documentId/duplicate': {
     answers: 'json',
     body: duplicateDocumentRequestSchema,
     response: duplicateDocumentResponseSchema,
@@ -138,43 +138,43 @@ const PATH_RULES: Record<string, Rule> = {
           )
         : undefined,
   },
-  'PUT /api/workspaces/:workspaceId/documents/*/pin': {
+  'PUT /api/workspaces/:workspaceId/documents/:documentId/pin': {
     answers: 'json',
     body: setPinnedRequestSchema,
     response: workspaceNamesSchema,
   },
-  'PUT /api/workspaces/:workspaceId/documents/*/path': {
+  'PUT /api/workspaces/:workspaceId/documents/:documentId/path': {
     answers: 'json',
     body: renameDocumentPathRequestSchema,
     response: renameDocumentPathResponseSchema,
   },
-  'DELETE /api/workspaces/:workspaceId/documents/*': {
+  'DELETE /api/workspaces/:workspaceId/documents/:documentId': {
     answers: 'json',
     response: deleteDocumentResponseSchema,
   },
-  'GET /api/w/:workspaceId/document/*/snapshot': { answers: 'bytes' },
-  'GET /api/w/:workspaceId/document/*/client-count': {
+  'GET /api/workspaces/:workspaceId/documents/:documentId/snapshot': { answers: 'bytes' },
+  'GET /api/workspaces/:workspaceId/documents/:documentId/client-count': {
     answers: 'json',
     response: clientCountResponseSchema,
   },
-  'POST /api/w/:workspaceId/document/*/export': {
+  'POST /api/workspaces/:workspaceId/documents/:documentId/export': {
     answers: 'json',
     body: exportRequestSchema,
     runs: 24,
     response: exportResponseSchema,
   },
-  'POST /api/w/:workspaceId/document/*/export-svg': {
+  'POST /api/workspaces/:workspaceId/documents/:documentId/export-svg': {
     answers: 'json',
     body: exportSvgRequestSchema,
     runs: 24,
     response: exportResponseSchema,
   },
-  'PUT /api/w/:workspaceId/document/*/file/:fileId': {
+  'PUT /api/workspaces/:workspaceId/documents/:documentId/files/:fileId': {
     answers: 'none',
     raw: true,
     contentType: 'image/png',
   },
-  'GET /api/w/:workspaceId/document/*/file/:fileId': { answers: 'bytes' },
+  'GET /api/workspaces/:workspaceId/documents/:documentId/files/:fileId': { answers: 'bytes' },
   'GET /api/w/:workspaceId/workspace-document/snapshot': { answers: 'bytes' },
   'POST /api/w/:workspaceId/workspace-document/update': {
     answers: 'json',
@@ -207,32 +207,4 @@ const PATH_RULES: Record<string, Rule> = {
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
 }
 
-const DOCUMENTS = '/api/workspaces/:workspaceId/documents'
-const PAGE_DOCUMENT = '/api/w/:workspaceId/document/*'
-
-/** Each path-addressed document route's id-addressed twin, by registered key. */
-const ID_TWINS: Record<string, string> = {
-  [`GET ${PAGE_DOCUMENT}/snapshot`]: `GET ${DOCUMENTS}/:documentId/snapshot`,
-  [`GET ${PAGE_DOCUMENT}/client-count`]: `GET ${DOCUMENTS}/:documentId/client-count`,
-  [`POST ${PAGE_DOCUMENT}/export`]: `POST ${DOCUMENTS}/:documentId/export`,
-  [`POST ${PAGE_DOCUMENT}/export-svg`]: `POST ${DOCUMENTS}/:documentId/export-svg`,
-  [`PUT ${PAGE_DOCUMENT}/file/:fileId`]: `PUT ${DOCUMENTS}/:documentId/files/:fileId`,
-  [`GET ${PAGE_DOCUMENT}/file/:fileId`]: `GET ${DOCUMENTS}/:documentId/files/:fileId`,
-  [`DELETE ${DOCUMENTS}/*`]: `DELETE ${DOCUMENTS}/:documentId`,
-  [`PUT ${DOCUMENTS}/*/path`]: `PUT ${DOCUMENTS}/:documentId/path`,
-  [`POST ${DOCUMENTS}/*/duplicate`]: `POST ${DOCUMENTS}/:documentId/duplicate`,
-  [`PUT ${DOCUMENTS}/*/name`]: `PUT ${DOCUMENTS}/:documentId/name`,
-  [`PUT ${DOCUMENTS}/*/pin`]: `PUT ${DOCUMENTS}/:documentId/pin`,
-  [`GET ${DOCUMENTS}/*/versions`]: `GET ${DOCUMENTS}/:documentId/versions`,
-  [`POST ${DOCUMENTS}/*/versions`]: `POST ${DOCUMENTS}/:documentId/versions`,
-  [`GET ${DOCUMENTS}/*/versions/:id/document`]: `GET ${DOCUMENTS}/:documentId/versions/:id/document`,
-  [`POST ${DOCUMENTS}/*/versions/:id/restore`]: `POST ${DOCUMENTS}/:documentId/versions/:id/restore`,
-}
-
-// The id form reaches the same handler, so its twin's answers, body and
-// response contract are its own; deriving them keeps the two from drifting.
-const ID_RULES: Record<string, Rule> = Object.fromEntries(
-  Object.entries(ID_TWINS).map(([twin, idKey]) => [idKey, PATH_RULES[twin] as Rule]),
-)
-
-export const RULES: Record<string, Rule> = { ...PATH_RULES, ...ID_RULES }
+export const RULES: Record<string, Rule> = DAEMON_RULES
