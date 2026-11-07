@@ -491,7 +491,7 @@ the Zod half, generated from one walk of each schema, so each construct's two
 meanings are written side by side, and the differential harness still checks
 that they agree.
 
-That emitter is `cargo xtask codegen` (`crates/xtask/src/codegen.rs`). Its
+That emitter is `cargo xtask codegen` (`crates/xtask/src/codegen/`). Its
 dialect is what its typed parse accepts — today closed objects of required
 numbers with an inclusive `minimum` — so a construct it does not implement is
 refused by name rather than dropped from one language's output, and the

@@ -82,8 +82,11 @@ fn read_dir(dir: &Path) -> Result<Vec<std::fs::DirEntry>, String> {
 }
 
 /// Directories only: a symlink is neither walked nor followed.
-fn is_dir(entry: &std::fs::DirEntry) -> bool {
-    entry.file_type().is_ok_and(|t| t.is_dir())
+fn is_dir(entry: &std::fs::DirEntry) -> Result<bool, String> {
+    entry
+        .file_type()
+        .map(|t| t.is_dir())
+        .map_err(|e| format!("cannot stat {}: {e}", entry.path().display()))
 }
 
 fn contract_files(root: &Path) -> Result<Vec<PathBuf>, Vec<String>> {
@@ -92,7 +95,7 @@ fn contract_files(root: &Path) -> Result<Vec<PathBuf>, Vec<String>> {
     while let Some(dir) = stack.pop() {
         for entry in read_dir(&dir).map_err(|e| vec![e])? {
             let path = entry.path();
-            if is_dir(&entry) {
+            if is_dir(&entry).map_err(|e| vec![e])? {
                 stack.push(path);
             } else if path.to_string_lossy().ends_with(SCHEMA_SUFFIX) {
                 found.push(path);
@@ -111,13 +114,11 @@ fn generated_files(root: &Path) -> Result<BTreeSet<String>, Vec<String>> {
         for _ in 0..*depth {
             let mut next = Vec::new();
             for dir in &dirs {
-                next.extend(
-                    read_dir(dir)
-                        .map_err(|e| vec![e])?
-                        .iter()
-                        .filter(|e| is_dir(e))
-                        .map(std::fs::DirEntry::path),
-                );
+                for entry in read_dir(dir).map_err(|e| vec![e])? {
+                    if is_dir(&entry).map_err(|e| vec![e])? {
+                        next.push(entry.path());
+                    }
+                }
             }
             dirs = next;
         }
