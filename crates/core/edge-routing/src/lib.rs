@@ -16,6 +16,7 @@
 
 pub mod bend_route;
 pub mod coincident_ends;
+pub mod config_score;
 pub mod edge_anchors;
 pub mod edge_contact;
 pub mod edge_crossing_sweep;
@@ -34,4 +35,5 @@ pub mod routing_budget;
 pub mod routing_input;
 pub mod segment_intersection;
 pub mod side_slides;
+pub mod spatial_edges;
 pub mod straight_detour;
