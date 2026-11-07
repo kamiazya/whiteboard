@@ -299,17 +299,23 @@ impl<'a> ConfigScore<'a> {
         for c in &score.self_costs {
             score.current_cost = add_cost(&score.current_cost, c, 1.0);
         }
-        match build_pairwise_scores(&score.paths, Some(budget)) {
-            None => score.current_cost = ZERO_COST,
-            Some(built) => {
-                for (key, triple) in built.iter() {
-                    let pair = pair_penalty(*triple);
-                    score.matrix.set(*key, pair);
-                    score.current_cost = add_cost(&score.current_cost, &pair, 1.0);
-                }
-            }
-        }
+        score.price_pairs(budget);
         score
+    }
+
+    /// The sweep's pair matrix added to the cost; a build the budget cannot
+    /// cover prices the whole configuration at zero, which the search leaves
+    /// as it is.
+    fn price_pairs(&mut self, budget: &mut RoutingBudget) {
+        let Some(built) = build_pairwise_scores(&self.paths, Some(budget)) else {
+            self.current_cost = ZERO_COST;
+            return;
+        };
+        for (key, triple) in built.iter() {
+            let pair = pair_penalty(*triple);
+            self.matrix.set(*key, pair);
+            self.current_cost = add_cost(&self.current_cost, &pair, 1.0);
+        }
     }
 
     fn edge_id(&self, i: usize) -> EdgeId {

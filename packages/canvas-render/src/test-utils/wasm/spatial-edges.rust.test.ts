@@ -27,7 +27,13 @@ const SIDES = edgeSideSchema.options
 const sideIndex = (s: string | undefined) => (s === undefined ? -1 : SIDES.indexOf(s as never))
 const STYLES: Record<EdgeRoutingStyle, number> = { straight: 0, orthogonal: 1, curved: 2 }
 // Straight mostly: only a straight edge steps round what is in its way.
-const style = fc.constantFrom<EdgeRoutingStyle>('straight', 'straight', 'straight', 'orthogonal', 'curved')
+const style = fc.constantFrom<EdgeRoutingStyle>(
+  'straight',
+  'straight',
+  'straight',
+  'orthogonal',
+  'curved',
+)
 const side = fc.constantFrom(...SIDES)
 
 /**
@@ -125,19 +131,31 @@ const accountDraw = (ample: number) =>
     { weight: 1, arbitrary: fc.integer({ min: 0, max: 20_000 }) },
   )
 
-const drawn = (canvas: fc.Arbitrary<[SpatialNode[], RoutableElement[]]>) =>
+/** How a draw varies what is around the canvas; each defaults to the broad mix. */
+interface Around {
+  readonly cut?: fc.Arbitrary<number | undefined>
+  readonly style?: fc.Arbitrary<EdgeRoutingStyle>
+  readonly frozen?: boolean
+}
+
+const drawn = (canvas: fc.Arbitrary<[SpatialNode[], RoutableElement[]]>, around: Around = {}) =>
   canvas.chain(([nodes, edges]) =>
     fc.record({
       nodes: fc.constant(nodes),
       edges: fc.constant(edges),
-      styles: fc.tuple(...edges.map(() => style)),
-      overrides: overridesFor(edges),
+      styles: fc.tuple(...edges.map(() => around.style ?? style)),
+      overrides: around.frozen === false ? fc.constant(undefined) : overridesFor(edges),
       labels: fc.array(rect, { maxLength: 2 }),
       trials: accountDraw(createRoutingBudget().trials),
       // A fraction of what the search spends with the account ample, so it
       // runs out partway through, after it has adopted something.
-      cut: fc.option(fc.double({ min: 0, max: 1, noNaN: true }), { nil: undefined, freq: 5 }),
-      pairs: accountDraw(createRoutingBudget().pairs),
+      cut:
+        around.cut ??
+        fc.option(fc.double({ min: 0, max: 1, noNaN: true }), { nil: undefined, freq: 5 }),
+      pairs:
+        around.frozen === false
+          ? fc.constant(createRoutingBudget().pairs)
+          : accountDraw(createRoutingBudget().pairs),
     }),
   )
 
@@ -172,19 +190,17 @@ function fullSpend(
   return createRoutingBudget().trials - ample.trials
 }
 
-function check(d: Drawn) {
-  const wire = encodeRouting(d.nodes, d.edges)
+/** The input `edge_assign_anchors` reads for `d`, with `trials` in the account. */
+function wireInput(
+  d: Drawn,
+  wire: ReturnType<typeof encodeRouting>,
+  overrides: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
+  trials: number,
+): Float64Array {
   const idOf = (id: string) => wire.edgeIds.indexOf(id)
-  const overrides = overrideMap(d)
   const labels = d.labels as readonly Rect[]
-  const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
   const fresh = createRoutingBudget()
-  const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
-  const trials =
-    d.cut === undefined ? d.trials : Math.floor(fullSpend(d, styleOf, overrides) * d.cut)
-  const budget: RoutingBudget = { ...fresh, trials, pairs: d.pairs }
-  const ts = assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, budget, labels)
-  const input = Float64Array.from([
+  return Float64Array.from([
     ...wire.values,
     ...d.styles.map((s) => STYLES[s as EdgeRoutingStyle]),
     overrides === undefined ? 0 : 1,
@@ -210,17 +226,17 @@ function check(d: Drawn) {
     trials,
     fresh.repairs,
   ])
-  const out = requireWasm().edge_assign_anchors(input)
-  const expected = [
-    budget.grid,
-    budget.pairs,
-    budget.trials,
-    budget.repairs,
-    ts.size,
-    ...[...ts].flatMap(([id, e]) => entryValues(idOf(id), e)),
-  ]
-  expect(firstDifference(expected, out)).toBeUndefined()
+}
 
+/** What the draw reached, counted for the floors. */
+function tally(
+  d: Drawn,
+  ts: ReadonlyMap<string, EdgeAnchorPair>,
+  overrides: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
+  budget: RoutingBudget,
+  trials: number,
+): void {
+  const fresh = createRoutingBudget()
   // Searched: some edge left on sides the first guess did not pick.
   const routed = d.edges.filter((e) => !marksContact(d.nodes, e))
   const initial = initialSideChoices(d.nodes, routed)
@@ -237,11 +253,52 @@ function check(d: Drawn) {
   if (routed.length > 200) reach.regions += 1
 }
 
+function check(d: Drawn) {
+  const wire = encodeRouting(d.nodes, d.edges)
+  const idOf = (id: string) => wire.edgeIds.indexOf(id)
+  const overrides = overrideMap(d)
+  const labels = d.labels as readonly Rect[]
+  const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
+  const fresh = createRoutingBudget()
+  const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
+  const trials =
+    d.cut === undefined ? d.trials : Math.floor(fullSpend(d, styleOf, overrides) * d.cut)
+  const budget: RoutingBudget = { ...fresh, trials, pairs: d.pairs }
+  const ts = assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, budget, labels)
+  const input = wireInput(d, wire, overrides, trials)
+  const out = requireWasm().edge_assign_anchors(input)
+  const expected = [
+    budget.grid,
+    budget.pairs,
+    budget.trials,
+    budget.repairs,
+    ts.size,
+    ...[...ts].flatMap(([id, e]) => entryValues(idOf(id), e)),
+  ]
+  expect(firstDifference(expected, out)).toBeUndefined()
+
+  tally(d, ts, overrides, budget, trials)
+}
+
 describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same anchors', () => {
   fcTest.prop([fc.oneof(drawn(scene), drawn(board(9, 14)), drawn(board(9, 14)))], withDefaults())(
     'anchors and the budget left, over small canvases',
     check,
   )
+
+  // Run out partway through on a crowded board, where the search has
+  // adopted something: an around it adopted must survive the account
+  // running out, which only this draw reaches often enough.
+  fcTest.prop(
+    [
+      drawn(board(9, 20), {
+        cut: fc.double({ min: 0.05, max: 1, noNaN: true }),
+        style: fc.constant('straight'),
+        frozen: false,
+      }),
+    ],
+    withDefaults(),
+  )('anchors and the budget left, over an account cut short', check)
 
   // Past the 200-edge gate the search runs over Morton-ordered regions.
   fcTest.prop([drawn(board(24, 230, 210))], withDefaults({ numRuns: 5 }))(
@@ -255,9 +312,17 @@ describe.runIf(built)('assignEdgeAnchors and its Rust port settle the same ancho
       'anchors and the budget left, over regions',
     ],
     () => {
-      // About half the lowest of five measured runs (searched 122, stepped
-      // 67, overridden 84, cutShort 124; regions is every region run).
-      const floors = { searched: 61, stepped: 33, overridden: 42, cutShort: 62, regions: 5 }
+      // About half the lowest of five measured runs (searched 211, stepped
+      // 91, overridden 82, cutShort 385, partway 210; regions is every
+      // region run).
+      const floors = {
+        searched: 105,
+        stepped: 45,
+        overridden: 41,
+        cutShort: 192,
+        partway: 105,
+        regions: 5,
+      }
       for (const [kind, floor] of Object.entries(floors)) {
         expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
       }
