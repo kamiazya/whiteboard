@@ -486,7 +486,8 @@ describe.runIf(built)(
       expect(reach.zeroBend).toBeGreaterThan(30)
       expect(reach.zeroBendBlocked).toBeGreaterThan(25)
       expect(reach.zeroBendKeptStart).toBeGreaterThan(30)
-      expect(reach.straight).toBeGreaterThan(35)
+      // Measured 37 to 50 over eight runs: 35 sat at the minimum, not half of it.
+      expect(reach.straight).toBeGreaterThan(18)
       expect(reach.around).toBeGreaterThan(17)
       expect(reach.noDetour).toBeGreaterThan(40)
       expect(reach.exitSquared).toBeGreaterThan(30)
