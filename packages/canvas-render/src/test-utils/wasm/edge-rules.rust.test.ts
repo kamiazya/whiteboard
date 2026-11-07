@@ -1,11 +1,14 @@
 import { type EdgeSide, edgeSideSchema } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
+import { compareNumbers } from '../../det-math.js'
 import type { Point, Rect } from '../../layout/edges/edge-geometry.js'
+import { inkAlongRects } from '../../layout/edges/edge-ink.js'
 import {
   addCost,
   composeSidePairs,
   facingLaneWindow,
+  fullyContains,
   hasRepairableProblem,
   lessCost,
   selfPenalty,
@@ -28,13 +31,46 @@ const sideIndex = (side: EdgeSide) => SIDES.indexOf(side)
 /**
  * Two boxes and the offset between them. The offset is usually their
  * centres' (what side choice passes), sometimes zero on an axis (the
- * degenerate case the U-hook rule exists for), sometimes anything.
+ * degenerate case the U-hook rule exists for), sometimes anything. Two
+ * shapes are drawn on purpose because free boxes almost never make them:
+ * wide boxes stacked with a horizontally dominant offset, where only the
+ * NON-dominant facing qualifies for a zero bend, and a box nested in the
+ * other, where the span-exposed rule returns its hooks unreordered; and
+ * overlapping boxes, where a side's span runs through the other and is
+ * moved to the back.
  */
+function shaped(from: Rect, to: Rect, kind: string, a: number, b: number): [Rect, Rect] {
+  if (kind === 'wide-stacked') {
+    const wide = { x: from.x, y: from.y, w: 300, h: 40 }
+    return [wide, { x: wide.x + 80 + a, y: wide.y + 40 + 10 + b / 4, w: 300, h: 40 }]
+  }
+  if (kind === 'overlapping') {
+    // `from`'s right border runs through `to`'s interior.
+    return [
+      from,
+      { x: from.x + from.w / 2, y: from.y - 5 - a / 4, w: from.w, h: from.h + 10 + b / 2 },
+    ]
+  }
+  if (kind === 'nested') {
+    return [from, { x: from.x - a, y: from.y - b, w: from.w + a + b + 5, h: from.h + a + b + 5 }]
+  }
+  return [from, to]
+}
+
 const sidePairCase = fc
   .tuple(
     rect,
     rect,
-    fc.constantFrom('centres', 'centres', 'aligned-x', 'aligned-y', 'free'),
+    fc.constantFrom(
+      'centres',
+      'centres',
+      'aligned-x',
+      'aligned-y',
+      'free',
+      'wide-stacked',
+      'nested',
+      'overlapping',
+    ),
     coordinate,
     coordinate,
     fc.array(fc.oneof(fc.integer({ min: 0, max: 3 }), fc.constant(Number.NaN)), {
@@ -42,7 +78,8 @@ const sidePairCase = fc
       maxLength: 8,
     }),
   )
-  .map(([from, to, kind, fdx, fdy, crowd]) => {
+  .map(([drawnFrom, drawnTo, kind, fdx, fdy, crowd]) => {
+    const [from, to] = shaped(drawnFrom, drawnTo, kind, Math.abs(fdx) % 60, Math.abs(fdy) % 60)
     const cdx = to.x + to.w / 2 - (from.x + from.w / 2)
     const cdy = to.y + to.h / 2 - (from.y + from.h / 2)
     const [dx, dy] =
@@ -91,12 +128,81 @@ const costPair = fc.tuple(
 const reach = {
   hookFirst: 0,
   opposingFirst: 0,
-  crowdingReordered: 0,
+  crowdingSwapped: 0,
+  zeroBendNonDominant: 0,
+  hooksContained: 0,
+  hooksTainted: 0,
   window: 0,
   noWindow: 0,
   tiers: [0, 0, 0, 0, 0, 0, 0],
   less: 0,
   repairable: 0,
+}
+
+const OPPOSITE = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' } as const
+
+/** The border segment of `rect`'s `side`, as edge-rules' private `sideSegment`. */
+function borderOf(rect: Rect, side: EdgeSide): [Point, Point] {
+  const [l, t, r, b] = [rect.x, rect.y, rect.x + rect.w, rect.y + rect.h]
+  if (side === 'top')
+    return [
+      { x: l, y: t },
+      { x: r, y: t },
+    ]
+  if (side === 'bottom')
+    return [
+      { x: l, y: b },
+      { x: r, y: b },
+    ]
+  if (side === 'left')
+    return [
+      { x: l, y: t },
+      { x: l, y: b },
+    ]
+  return [
+    { x: r, y: t },
+    { x: r, y: b },
+  ]
+}
+
+/**
+ * Which of the rules' less common branches a case reaches, read with the
+ * exported helpers the rules themselves are built from. Reach only: the
+ * answer compared is composeSidePairs'.
+ */
+function countRuleReach(c: {
+  from: Rect
+  to: Rect
+  dx: number
+  dy: number
+  crowd: number[]
+}): void {
+  const { from, to, dx, dy, crowd } = c
+  if (Number.isNaN(dx) || Number.isNaN(dy)) return
+  const h: EdgeSide = dx >= 0 ? 'right' : 'left'
+  const v: EdgeSide = dy >= 0 ? 'bottom' : 'top'
+  const horizontalFirst = Math.abs(dx) >= Math.abs(dy)
+  // The L-pair sort SWAPS the dominant order: its second pair is less crowded.
+  if (dx !== 0 && dy !== 0) {
+    const crowdOf = (fromSide: EdgeSide, toSide: EdgeSide) =>
+      (crowd[sideIndex(fromSide)] as number) + (crowd[4 + sideIndex(toSide)] as number)
+    const l1 = crowdOf(h, OPPOSITE[v])
+    const l2 = crowdOf(v, OPPOSITE[h])
+    const [first, second] = horizontalFirst ? [l1, l2] : [l2, l1]
+    if (compareNumbers(first, second) > 0) reach.crowdingSwapped += 1
+  }
+  // A zero bend on the NON-dominant axis only.
+  const gapH = h === 'right' ? from.x + from.w <= to.x : to.x + to.w <= from.x
+  const gapV = v === 'bottom' ? from.y + from.h <= to.y : to.y + to.h <= from.y
+  const zeroH = gapH && facingLaneWindow(from, to, 'h') !== undefined
+  const zeroV = gapV && facingLaneWindow(from, to, 'v') !== undefined
+  if (horizontalFirst ? zeroV && !zeroH : zeroH && !zeroV) reach.zeroBendNonDominant += 1
+  // The span-exposed rule: its early return, and a hook it moves to the back.
+  if (fullyContains(to, from)) reach.hooksContained += 1
+  else if (
+    SIDES.some((s) => inkAlongRects(borderOf(from, s), [to], (f, n, x) => n < f && f < x) > 0)
+  )
+    reach.hooksTainted += 1
 }
 
 const rectValues = (r: Rect) => [r.x, r.y, r.w, r.h]
@@ -118,16 +224,7 @@ describe.runIf(built)('edge-rules.ts and its Rust port answer the same', () => {
         const first = ranked[0]
         if (first?.fromSide === first?.toSide) reach.hookFirst += 1
         else reach.opposingFirst += 1
-        // The L-pair rule sorts its two pairs by crowding: reached when the
-        // offset is diagonal and the two pairs' crowds differ.
-        if (dx !== 0 && dy !== 0 && !Number.isNaN(dx) && !Number.isNaN(dy)) {
-          const at = (end: number, side: EdgeSide) => crowd[end + sideIndex(side)] as number
-          const h: EdgeSide = dx >= 0 ? 'right' : 'left'
-          const v: EdgeSide = dy >= 0 ? 'bottom' : 'top'
-          const opposite = { top: 'bottom', bottom: 'top', left: 'right', right: 'left' } as const
-          if (at(0, h) + at(4, opposite[v]) !== at(0, v) + at(4, opposite[h]))
-            reach.crowdingReordered += 1
-        }
+        countRuleReach({ from, to, dx, dy, crowd })
         return [
           ranked.length,
           ...ranked.flatMap((p) => [sideIndex(p.fromSide), sideIndex(p.toSide)]),
@@ -197,10 +294,13 @@ describe.runIf(built)('edge-rules.ts and its Rust port answer the same', () => {
     // Each rule and tier is reached, so agreement is not agreement on its
     // silence. Floors at about half of what three runs measured; tiers 1
     // and 2 are pairwise and a self penalty leaves them zero by definition.
-    expect(reach.hookFirst).toBeGreaterThan(40)
+    expect(reach.hookFirst).toBeGreaterThan(25)
     expect(reach.opposingFirst).toBeGreaterThan(500)
-    expect(reach.crowdingReordered).toBeGreaterThan(290)
-    expect(reach.window).toBeGreaterThan(50)
+    expect(reach.crowdingSwapped).toBeGreaterThan(70)
+    expect(reach.zeroBendNonDominant).toBeGreaterThan(18)
+    expect(reach.hooksContained).toBeGreaterThan(55)
+    expect(reach.hooksTainted).toBeGreaterThan(50)
+    expect(reach.window).toBeGreaterThan(45)
     expect(reach.noWindow).toBeGreaterThan(1000)
     expect(reach.tiers[0]).toBeGreaterThan(50)
     expect(reach.tiers[3]).toBeGreaterThan(22)
