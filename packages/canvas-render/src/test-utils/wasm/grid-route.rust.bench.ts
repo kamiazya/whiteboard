@@ -15,6 +15,8 @@ import { routeOnGrid as routeRust } from './grid-route.js'
  * box an obstacle, over the clustered corpus canvas. Both sides must agree on
  * every query before either is timed, so a speed number is never quoted for a
  * port that answers differently.
+ *
+ * Run with `pnpm bench`, after building the wasm with `pnpm rust:build:wasm`.
  */
 const layout = clusteredLayout({ clusters: 12, nodesPerCluster: 12, edgesPerCluster: 16 })
 const rects: Rect[] = layout.nodes.map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height }))
