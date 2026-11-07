@@ -280,6 +280,11 @@ and the pre-existing one is marked *shadowed* — nothing is renamed or
 overwritten. Your saved versions keep their dates; the move adds one more,
 marking the move itself.
 
+Images travel through a live document on the daemon. If the workspace has no
+live document at all, only trashed ones, its images cannot be sent: the result
+names each as failed ("no live document to send that picture through"), and
+the browser copy is kept. Restore a document on the daemon, then move again.
+
 The move is one request of at most 24 MiB, and the Trash is what gives
 way: once the workspace, its saved versions and the trashed documents taken
 so far reach that limit, each further trashed document stays behind. The
