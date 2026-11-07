@@ -2,11 +2,30 @@
 
 //! The point and rectangle the edge layer is written in, in canvas coordinates.
 
+use std::marker::PhantomData;
+
+use serde::de::value::MapAccessDeserializer;
+use serde::de::{Deserializer, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
 
+/// Reads a JSON object and nothing else: a derived `Deserialize` also takes an
+/// array in field order, which the Zod half refuses.
+struct MapOnly<W>(PhantomData<W>);
+
+impl<'de, W: Deserialize<'de>> Visitor<'de> for MapOnly<W> {
+    type Value = W;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("an object")
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, map: A) -> Result<W, A::Error> {
+        W::deserialize(MapAccessDeserializer::new(map))
+    }
+}
+
 /// A point in canvas coordinates.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Point {
     /// Canvas x.
     pub x: f64,
@@ -14,9 +33,23 @@ pub struct Point {
     pub y: f64,
 }
 
+/// `Point` as it arrives, before it is checked.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PointWire {
+    x: f64,
+    y: f64,
+}
+
+impl<'de> Deserialize<'de> for Point {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let wire: PointWire = deserializer.deserialize_map(MapOnly(PhantomData))?;
+        Ok(Self { x: wire.x, y: wire.y })
+    }
+}
+
 /// An axis-aligned rectangle in canvas coordinates.
-#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
-#[serde(try_from = "RectWire")]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize)]
 pub struct Rect {
     /// Left edge.
     pub x: f64,
@@ -28,7 +61,7 @@ pub struct Rect {
     pub h: f64,
 }
 
-/// Rect as it arrives, before its bounds are checked.
+/// `Rect` as it arrives, before it is checked.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RectWire {
@@ -38,15 +71,14 @@ struct RectWire {
     h: f64,
 }
 
-impl TryFrom<RectWire> for Rect {
-    type Error = &'static str;
-
-    fn try_from(wire: RectWire) -> Result<Self, Self::Error> {
+impl<'de> Deserialize<'de> for Rect {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let wire: RectWire = deserializer.deserialize_map(MapOnly(PhantomData))?;
         if wire.w.is_nan() || wire.w < 0.0 {
-            return Err("Rect.w is below its minimum 0");
+            return Err(serde::de::Error::custom("Rect.w is below its minimum 0"));
         }
         if wire.h.is_nan() || wire.h < 0.0 {
-            return Err("Rect.h is below its minimum 0");
+            return Err(serde::de::Error::custom("Rect.h is below its minimum 0"));
         }
         Ok(Self { x: wire.x, y: wire.y, w: wire.w, h: wire.h })
     }

@@ -9,8 +9,8 @@ import { describe, expect, it } from 'vitest'
  *
  * `theme/` decides appearance and geometry tokens and reads nothing else;
  * `highlight/` tokenises a code fence; `leaf` is everything that reads no
- * other stage (references, tags, the vendored line-breaker, the small root
- * helpers, the legend's measurements); `quality/` scores a drawing;
+ * other stage (references, tags, the vendored line-breaker, the generated
+ * contract types, the small root helpers, the legend's measurements); `quality/` scores a drawing;
  * `legend/` lays out the legend panel; `engines` are `layout/edges/` and
  * `layout/nodes/`, which `layout/layer-boundary.test.ts` keeps free of each
  * other; `ink` is `layout/ink/`, which draws on both; `scene-bounds` is the
@@ -67,6 +67,7 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   references: 'leaf',
   tags: 'leaf',
   vendor: 'leaf',
+  generated: 'leaf',
   quality: 'quality',
   legend: 'legend',
   'layout/edges': 'engines',

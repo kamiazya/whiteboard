@@ -25,3 +25,11 @@ fn an_unknown_key_is_refused_on_both_types() {
 fn a_missing_field_is_refused() {
     assert!(serde_json::from_str::<Point>(r#"{"x":0}"#).is_err());
 }
+
+#[test]
+fn a_positional_array_is_refused() {
+    // serde's derived Deserialize also reads a sequence; Zod's strictObject
+    // does not, so the generated types must refuse one too.
+    assert!(serde_json::from_str::<Point>("[1,2]").is_err());
+    assert!(serde_json::from_str::<Rect>("[0,0,1,1]").is_err());
+}

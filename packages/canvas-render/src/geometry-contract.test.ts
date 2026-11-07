@@ -17,6 +17,11 @@ describe('the generated geometry contract', () => {
     expect(pointSchema.safeParse({ x: 0, y: 0, z: 0 }).success).toBe(false)
   })
 
+  it('refuses a positional array', () => {
+    expect(pointSchema.safeParse([1, 2]).success).toBe(false)
+    expect(rectSchema.safeParse([0, 0, 1, 1]).success).toBe(false)
+  })
+
   it('refuses a missing field', () => {
     expect(pointSchema.safeParse({ x: 0 }).success).toBe(false)
   })
