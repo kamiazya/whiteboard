@@ -322,6 +322,24 @@ jobs:
       # from each config's browser mode — the set the root test:browser
       # script lists (ci-verify-coverage.test.ts holds the two equal), so a
       # new browser-mode project is covered the moment it is registered.
+      # A shard has died part-way with VITEST_BROWSER_CONNECTION_CLOSED, a
+      # different file each time and never locally, where the same shard
+      # holds Chrome flat at 2-3 GB. Memory is sampled for the length of the
+      # run so a death says whether the runner was out of it; the step after
+      # the tests prints the samples and the kernel's OOM lines on failure.
+      - name: Sample memory during the browser run
+        if: steps.scope.outputs.run == 'true'
+        run: |
+          sample() {
+            while true; do
+              used=$(free -m | awk '/Mem:/ {print $3 "/" $2 " MB used, " $7 " MB available"}')
+              chrome=$(ps -eo rss=,comm= | awk '/chrom/ {s += $1} END {print int(s / 1024) " MB in chrome"}')
+              echo "$(date -u +%T) $used, $chrome"
+              sleep 10
+            done
+          }
+          sample > "$RUNNER_TEMP/memory.log" 2>&1 &
+
       - name: Test browser projects (shard ${{ matrix.shard }}/2)
         if: steps.scope.outputs.run == 'true'
         timeout-minutes: 12
@@ -338,6 +356,14 @@ jobs:
       # off linux gets a linux pixel baseline (pixel-golden-scenes.ts); the
       # directory is hidden, so it needs `include-hidden-files`. Held by
       # ci-policy.test.ts for every job that runs a browser project.
+      - name: Memory and kernel log of a failed browser run
+        if: failure() && steps.scope.outputs.run == 'true'
+        run: |
+          echo "--- memory, every 10s ---"
+          cat "$RUNNER_TEMP/memory.log" || true
+          echo "--- kernel: out-of-memory and killed processes ---"
+          sudo dmesg -T | grep -iE 'out of memory|oom|killed process' | tail -20 || true
+
       - name: Upload browser traces of failed tests
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
