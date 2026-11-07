@@ -4,8 +4,8 @@
   "headroomMinBytes": 1024,
   "artifacts": {
     "whiteboard-wasm": {
-      "ceilingBytes": 96000,
-      "reason": "abi_version(), the batched det exports, and edge_route_on_grid, the routing spike's port of grid-route.ts (ADR-0054 step 5): 92124 bytes measured. The grid router is the subject of the layer-1 harness, whose existing edge suites and routing scoreboards judge it; the per-edge export is a measuring scaffold the spike's own result says to replace with one call per layout, which is when this ceiling is re-measured"
+      "ceilingBytes": 122000,
+      "reason": "abi_version(), the batched det exports (det_round among them), edge_route_on_grid from the routing spike, and the batched edge-primitive exports edge_segment_tests and edge_path_measures (ADR-0054 step 5's port of edge-geometry, segment-intersection, edge-ink, diagonal-ink and edge-rounding): 116654 bytes measured. The edge exports are the layer-2 differential's test surface, and nothing in the product loads this artifact yet (the core-wasm shim does not exist); they go when the one-call-per-layout export replaces them, which is when this ceiling is re-measured"
     }
   }
 }

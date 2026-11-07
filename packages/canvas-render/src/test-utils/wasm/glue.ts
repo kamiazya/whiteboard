@@ -17,10 +17,13 @@ export interface WasmGlue {
   det_sin(xs: Float64Array): Float64Array
   det_cos(xs: Float64Array): Float64Array
   edge_route_on_grid(input: Float64Array): Float64Array
+  det_round(xs: Float64Array): Float64Array
+  edge_segment_tests(cases: Float64Array): Float64Array
+  edge_path_measures(input: Float64Array): Float64Array
 }
 
 /** The surface these tests were written against; a stale artifact fails on this, not on its first mismatched call. */
-export const EXPECTED_ABI = '3'
+export const EXPECTED_ABI = '4'
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 
