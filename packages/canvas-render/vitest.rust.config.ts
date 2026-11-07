@@ -34,7 +34,10 @@ export default defineProject({
     name: 'canvas-render-rust',
     environment: 'node',
     include: ['src/**/*.rust.test.ts', ...(ported ? ['src/layout/edges/**/*.test.ts'] : [])],
-    exclude: ['src/**/*.browser.test.ts'],
+    // grid-route.cost.test.ts counts the obstacle READS the TypeScript search
+    // makes; the shim reads each rect once per call, so under Rust its bound
+    // cannot fail and it would judge nothing.
+    exclude: ['src/**/*.browser.test.ts', 'src/layout/edges/grid-route.cost.test.ts'],
     testTimeout: 20_000,
     // `vitest bench --project "canvas-render-rust (bench)"`: the spike's
     // TypeScript-against-Rust measurement.

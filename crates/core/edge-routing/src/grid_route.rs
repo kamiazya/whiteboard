@@ -8,9 +8,9 @@
 //!
 //! - `Math.min`/`Math.max` propagate NaN and order the zeros, `f64::min` does
 //!   neither, so the port calls [`js_min`]/[`js_max`].
-//! - A `Set` of numbers dedups by `SameValueZero` and keeps the FIRST value
-//!   inserted (so `-0` survives a later `0`), and the sort is
-//!   `compareNumbers`; [`distinct`] and [`compare_numbers`] are that.
+//! - A `Set` of numbers dedups by `SameValueZero` and stores `-0` as `+0`
+//!   (`Set.prototype.add` normalises it), and the sort is `compareNumbers`;
+//!   [`distinct`] and [`compare_numbers`] are that.
 //! - The heap's tie order decides which of several optimal routes wins, so it
 //!   is the TypeScript heap's own sift ([`MinHeap`]).
 
@@ -94,10 +94,12 @@ fn compare_numbers(a: f64, b: f64) -> Ordering {
     }
 }
 
-/// A `Set<number>`'s contents in insertion order: `SameValueZero`, first kept.
+/// A `Set<number>`'s contents in insertion order: `SameValueZero`, and `-0`
+/// stored as `+0`, which `Set.prototype.add` does before it stores anything.
 fn distinct(values: impl IntoIterator<Item = f64>) -> Vec<f64> {
     let mut out: Vec<f64> = Vec::new();
     for v in values {
+        let v = if v == 0.0 { 0.0 } else { v };
         if !out.iter().any(|&seen| seen == v || (seen.is_nan() && v.is_nan())) {
             out.push(v);
         }
@@ -426,7 +428,7 @@ pub fn route_on_grid(
 
 #[cfg(test)]
 mod tests {
-    use super::{Point, Rect, route_on_grid};
+    use super::{Point, Rect, distinct, route_on_grid};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -436,6 +438,14 @@ mod tests {
 
     fn rect(x: f64, y: f64, w: f64, h: f64) -> Rect {
         Rect { x, y, w, h }
+    }
+
+    #[test]
+    fn a_negative_zero_line_is_stored_as_positive_zero_as_a_set_would() {
+        // `new Set([-0, 3, 0])` holds `[0, 3]`, with a POSITIVE zero.
+        let lines = distinct([-0.0, 3.0, 0.0]);
+        assert_eq!(lines.len(), 2);
+        assert!(lines.first().is_some_and(|z| z.to_bits() == 0.0_f64.to_bits()));
     }
 
     #[test]
