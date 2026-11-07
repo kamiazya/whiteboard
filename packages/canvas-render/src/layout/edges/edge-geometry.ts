@@ -20,15 +20,13 @@
 
 import type { EdgeEnd, EdgeSide, LineEnd, SpatialNode } from '@kamiazya/whiteboard-model'
 import { hypot } from '../../det-math.js'
+import type { Point, Rect } from '../../generated/geometry.zod.js'
 
-/** The edge layer's one point and rectangle, in canvas coordinates. */
-export type Point = { readonly x: number; readonly y: number }
-export type Rect = {
-  readonly x: number
-  readonly y: number
-  readonly w: number
-  readonly h: number
-}
+/**
+ * The edge layer's one point and rectangle, in canvas coordinates. Both are
+ * generated from `contracts/geometry`, the wire the Rust edge router reads too.
+ */
+export type { Point, Rect } from '../../generated/geometry.zod.js'
 
 export function rectOf(node: SpatialNode): Rect {
   return { x: node.x, y: node.y, w: node.width, h: node.height }

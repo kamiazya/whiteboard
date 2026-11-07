@@ -1,6 +1,7 @@
 //! Repository tasks for the Rust workspace, run as `cargo xtask <task>`.
 
 mod arch_map;
+mod codegen;
 mod dist;
 mod harden;
 mod inputs;
@@ -18,7 +19,7 @@ use std::process::ExitCode;
 const USAGE: &str = "usage: cargo xtask <task>
 
 tasks:
-  codegen --check   generated code is current (no contracts are generated yet)
+  codegen [--check] Zod and serde types from contracts/; --check fails on drift
   arch-map          crates follow crates/architecture-map.json
   inputs            untrusted-input entries declare caps in crates/input-caps.json
   wasm-imports      core crates built for wasm32 import nothing
@@ -39,9 +40,8 @@ tasks:
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let result = match args.iter().map(String::as_str).collect::<Vec<_>>().as_slice() {
-        ["codegen", "--check"] => {
-            Ok(vec!["codegen: no contracts are generated yet; nothing to check".to_owned()])
-        }
+        ["codegen"] => codegen::run(codegen::Mode::Write),
+        ["codegen", "--check"] => codegen::run(codegen::Mode::Check),
         ["arch-map"] => arch_map::run(),
         ["inputs"] => inputs::run(),
         ["wasm-imports"] => wasm_imports::run(),

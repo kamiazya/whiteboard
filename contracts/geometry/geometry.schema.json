@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Geometry",
+  "description": "The point and rectangle the edge layer is written in, in canvas coordinates.",
+  "x-wb-emit": {
+    "zod": "packages/canvas-render/src/generated/geometry.zod.ts",
+    "rust": "crates/core/edge-routing/src/generated/geometry.rs"
+  },
+  "$defs": {
+    "Point": {
+      "description": "A point in canvas coordinates.",
+      "type": "object",
+      "properties": {
+        "x": { "type": "number", "description": "Canvas x." },
+        "y": { "type": "number", "description": "Canvas y." }
+      },
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "Rect": {
+      "description": "An axis-aligned rectangle in canvas coordinates.",
+      "type": "object",
+      "properties": {
+        "x": { "type": "number", "description": "Left edge." },
+        "y": { "type": "number", "description": "Top edge." },
+        "w": { "type": "number", "minimum": 0, "description": "Width." },
+        "h": { "type": "number", "minimum": 0, "description": "Height." }
+      },
+      "required": ["x", "y", "w", "h"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    }
+  }
+}

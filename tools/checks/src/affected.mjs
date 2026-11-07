@@ -182,7 +182,7 @@ export const PACKAGE_JOBS = {
  */
 const RUST_SCOPE = {
   files: ['Cargo.toml', 'Cargo.lock', 'rust-toolchain.toml', 'rustfmt.toml', 'deny.toml'],
-  trees: ['.cargo', 'crates'],
+  trees: ['.cargo', 'crates', 'contracts', 'packages/canvas-render/src/generated'],
 }
 
 /**
