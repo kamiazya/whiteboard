@@ -29,7 +29,8 @@ import {
 import { flattenRoundedEdgePath } from '../../layout/edges/edge-rounding.js'
 import { segmentIntersection } from '../../layout/edges/segment-intersection.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
-import { built, wasm } from './glue.js'
+import { coordinate, firstDifference, pathAndRects, point, rect } from './edge-arbitraries.js'
+import { built, requireWasm } from './glue.js'
 
 /**
  * The edge layer's geometry and ink primitives against their Rust port
@@ -38,79 +39,6 @@ import { built, wasm } from './glue.js'
  * computes its own answer from the same draw, and every number is compared
  * exactly, a signed zero included.
  */
-
-/** Equal as doubles, NaN equal to NaN (a payload does not survive a typed array), a signed zero counted. */
-const sameDouble = (a: number, b: number) =>
-  Number.isNaN(a) || Number.isNaN(b) ? Number.isNaN(a) && Number.isNaN(b) : Object.is(a, b)
-
-/** The first index the two answers differ at, for a minimal repro. */
-function firstDifference(ts: readonly number[], rust: Float64Array): string | undefined {
-  const at = ts.findIndex((v, i) => !sameDouble(v, rust[i] ?? Number.NaN))
-  if (at === -1 && ts.length === rust.length) return undefined
-  const i = at === -1 ? Math.min(ts.length, rust.length) : at
-  const show = (v: number | undefined) => (Object.is(v, -0) ? '-0' : String(v))
-  return `index ${i}: ts ${show(ts[i])}, rust ${show(rust[i])} (lengths ${ts.length}, ${rust.length})`
-}
-
-/**
- * Coordinates mostly on a 2.5px lattice, so paths run along each other and
- * along borders (where the ink terms are non-zero), sometimes on an
- * eighth-pixel one, which lands on the half quanta `quantize` rounds, plus
- * the doubles JavaScript treats specially.
- */
-const coordinate = fc.oneof(
-  { weight: 10, arbitrary: fc.integer({ min: -40, max: 80 }).map((k) => k * 2.5) },
-  { weight: 2, arbitrary: fc.integer({ min: -400, max: 800 }).map((k) => k / 8) },
-  { weight: 1, arbitrary: fc.double({ min: -200, max: 200 }) },
-  { weight: 1, arbitrary: fc.constantFrom(-0, Number.NaN, Number.POSITIVE_INFINITY, -1e300) },
-)
-const size = fc.oneof(
-  { weight: 8, arbitrary: fc.integer({ min: 1, max: 24 }).map((k) => k * 2.5) },
-  { weight: 1, arbitrary: fc.constantFrom(0, -0, -10, Number.NaN) },
-)
-const point = fc.record({ x: coordinate, y: coordinate })
-const rect = fc.record({ x: coordinate, y: coordinate, w: size, h: size })
-
-/** A path that mostly turns at right angles, as a routed edge does, sometimes cutting a diagonal. */
-const path = fc
-  .tuple(
-    point,
-    fc.array(
-      fc.tuple(fc.constantFrom('h', 'v', 'h', 'v', 'diagonal', 'repeat'), coordinate, coordinate),
-      { maxLength: 7 },
-    ),
-  )
-  .map(([start, steps]) => {
-    const points: Point[] = [start]
-    for (const [kind, a, b] of steps) {
-      const last = points.at(-1) as Point
-      if (kind === 'h') points.push({ x: a, y: last.y })
-      else if (kind === 'v') points.push({ x: last.x, y: a })
-      else if (kind === 'repeat') points.push({ ...last })
-      else points.push({ x: a, y: b })
-    }
-    return points
-  })
-
-/**
- * Rects drawn AGAINST a path as well as anywhere: a corner on one of its
- * points (so a segment runs along that rect's border), or centred on a
- * segment's midpoint (so the segment, diagonal or not, runs through it).
- * Placed anywhere, a rect almost never shares a line with a path, and the
- * border and diagonal terms would be compared on zeros.
- */
-const pathAndRects = path.chain((p) => {
-  const anchored = fc
-    .tuple(fc.nat(p.length - 1), size, size, fc.constantFrom('corner', 'far-corner', 'midpoint'))
-    .map(([i, w, h, kind]): Rect => {
-      const a = p[i] as Point
-      const b = p[Math.min(i + 1, p.length - 1)] as Point
-      if (kind === 'corner') return { x: a.x, y: a.y, w, h }
-      if (kind === 'far-corner') return { x: a.x - w, y: a.y - h, w, h }
-      return { x: (a.x + b.x) / 2 - w / 2, y: (a.y + b.y) / 2 - h / 2, w, h }
-    })
-  return fc.tuple(fc.constant(p), fc.array(fc.oneof(rect, anchored, anchored), { maxLength: 5 }))
-})
 
 /**
  * A segment-test case, its second segment sometimes STARTING on the first
@@ -232,7 +160,7 @@ describe.runIf(built)('the edge primitives and their Rust port answer the same n
   fcTest.prop([fc.array(coordinate, { minLength: 1, maxLength: 64 })], withDefaults())(
     'quantize',
     (xs) => {
-      const rust = wasm?.det_round(Float64Array.from(xs, (x) => x * 4)) ?? new Float64Array()
+      const rust = requireWasm().det_round(Float64Array.from(xs, (x) => x * 4))
       expect(firstDifference(xs.map(quantize), rust)).toBeUndefined()
     },
   )
@@ -244,7 +172,7 @@ describe.runIf(built)('the edge primitives and their Rust port answer the same n
       rects.length,
       ...rects.flatMap((r) => [r.x, r.y, r.w, r.h]),
     ])
-    const rust = wasm?.edge_path_measures(input) ?? new Float64Array()
+    const rust = requireWasm().edge_path_measures(input)
     expect(firstDifference(tsMeasures(p, rects), rust)).toBeUndefined()
   })
 
@@ -294,9 +222,7 @@ describe.runIf(built)('the edge primitives and their Rust port answer the same n
           d.y,
         ]),
       )
-      expect(
-        firstDifference(ts, wasm?.edge_segment_tests(input) ?? new Float64Array()),
-      ).toBeUndefined()
+      expect(firstDifference(ts, requireWasm().edge_segment_tests(input))).toBeUndefined()
     },
   )
 

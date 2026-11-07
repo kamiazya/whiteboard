@@ -4,8 +4,8 @@
   "headroomMinBytes": 1024,
   "artifacts": {
     "whiteboard-wasm": {
-      "ceilingBytes": 122000,
-      "reason": "abi_version(), the batched det exports (det_round among them), edge_route_on_grid from the routing spike, and the batched edge-primitive exports edge_segment_tests and edge_path_measures (ADR-0054 step 5's port of edge-geometry, segment-intersection, edge-ink, diagonal-ink and edge-rounding): 117911 bytes measured. The edge exports are the layer-2 differential's test surface, and nothing in the product loads this artifact yet (the core-wasm shim does not exist); they go when the one-call-per-layout export replaces them, which is when this ceiling is re-measured"
+      "ceilingBytes": 150000,
+      "reason": "abi_version(), the batched det exports, edge_route_on_grid from the routing spike, and the batched layer-2 test surface of each edge module ported so far (ADR-0054 step 5): the geometry and ink primitives (edge_segment_tests, edge_path_measures) and edge-rules (edge_side_pairs, edge_lane_windows, edge_self_penalty, edge_cost_ops): 143429 bytes measured. Nothing in the product loads this artifact yet (the core-wasm shim does not exist); the per-module exports go when the one-call-per-layout export replaces them, which is when this ceiling is re-measured"
     }
   }
 }
