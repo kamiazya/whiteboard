@@ -4,7 +4,7 @@
 // knowledge of styles; rounded corners re-use the same points because
 // 'curved' travels the orthogonal waypoints.
 import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
-import { hypot } from '../../det-math.js'
+import { compareNumbers, hypot } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 import {
   EDGE_JUMP_RADIUS_PX,
@@ -244,7 +244,7 @@ class SegmentGrid {
       box.minY = Math.min(box.minY, p.minY)
       box.maxY = Math.max(box.maxY, p.maxY)
     }
-    this.levels = [...byId.values()].sort((x, y) => x.id - y.id)
+    this.levels = [...byId.values()].sort((x, y) => compareNumbers(x.id, y.id))
   }
 
   /** The levels `p` takes part in, own first, each with its cells there. */
@@ -296,7 +296,7 @@ class SegmentGrid {
     }
     // Checked per segment, so no segment is searched in part.
     if (this.work > MAX_GRID_WORK_PER_SCENE) return undefined
-    found.sort((p, q) => p - q)
+    found.sort(compareNumbers)
     return found.map((index) => this.segments[index] as IndexedSegment)
   }
 
@@ -367,7 +367,7 @@ function spacedHops(
   seg: number,
   limit: number,
 ): EdgeJumpPoint[] {
-  crossings.sort((p, q) => p.t - q.t)
+  crossings.sort((p, q) => compareNumbers(p.t, q.t))
   const kept: EdgeJumpPoint[] = []
   let lastKeptT = Number.NEGATIVE_INFINITY
   for (const { point, t } of crossings) {
@@ -482,8 +482,8 @@ function handOverHop(
   budget.left -= added
   result.set(
     target.id,
-    [...existing.filter((jump) => jump.segment !== there.segment), ...hops].sort(
-      (x, y) => x.segment - y.segment,
+    [...existing.filter((jump) => jump.segment !== there.segment), ...hops].sort((x, y) =>
+      compareNumbers(x.segment, y.segment),
     ),
   )
 }
@@ -523,7 +523,7 @@ export function computeEdgeJumps(
       const onSegment = placeCrossings(edges, p.seg, candidates, (target, there) =>
         handOverHop(result, budget, target, there),
       )
-      for (const seg of [...onSegment.keys()].sort((x, y) => x - y)) {
+      for (const seg of [...onSegment.keys()].sort(compareNumbers)) {
         const { crossings, length } = onSegment.get(seg) as {
           crossings: Crossing[]
           length: number

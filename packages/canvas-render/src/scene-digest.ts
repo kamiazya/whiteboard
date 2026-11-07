@@ -1,6 +1,7 @@
 import { compareCodeUnit } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
+import { compareNumbers } from './det-math.js'
 import { area, contains, overlapArea } from './quality/rect.js'
 
 /**
@@ -165,10 +166,9 @@ function computeContainment(entries: readonly DigestEntry[]): { parent: string; 
       (parent) => parent.id !== child.id && strictlyContains(parent.bbox, child.bbox),
     )
     if (candidates.length === 0) continue
-    const smallest = [...candidates].sort((a, b) => {
-      const areaDiff = area(a.bbox) - area(b.bbox)
-      return areaDiff !== 0 ? areaDiff : compareCodeUnit(a.id, b.id)
-    })[0]
+    const smallest = [...candidates].sort(
+      (a, b) => compareNumbers(area(a.bbox), area(b.bbox)) || compareCodeUnit(a.id, b.id),
+    )[0]
     result.push({ parent: smallest.id, child: child.id })
   }
   return result.sort((a, b) =>
@@ -357,7 +357,10 @@ function freeRunsIn(
 }
 
 const byPosition = (a: BoundingBox, b: BoundingBox): number =>
-  a.y === b.y ? (a.x === b.x ? (a.w === b.w ? a.h - b.h : a.w - b.w) : a.x - b.x) : a.y - b.y
+  compareNumbers(a.y, b.y) ||
+  compareNumbers(a.x, b.x) ||
+  compareNumbers(a.w, b.w) ||
+  compareNumbers(a.h, b.h)
 
 /**
  * Maximal empty axis-aligned rectangles over the union bounding box, on a
@@ -376,7 +379,7 @@ function computeFreeRegions(entries: readonly DigestEntry[]): {
     return { regions: regions.sort(byPosition), capped: false }
   }
   const largest = regions
-    .sort((a, b) => area(b) - area(a) || byPosition(a, b))
+    .sort((a, b) => compareNumbers(area(b), area(a)) || byPosition(a, b))
     .slice(0, FREE_REGION_MAX_REGIONS)
   return { regions: largest.sort(byPosition), capped: true }
 }

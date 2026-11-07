@@ -84,6 +84,9 @@ export {
   type CommentBodyLayoutOptions,
   layoutCommentBody,
 } from './comment-body.js'
+
+import { compareNumbers } from '../det-math.js'
+
 export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
 
 /**
@@ -521,7 +524,7 @@ function composeDecorations(
 export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
   const groups = nodes
     .filter((node) => isFrame(node))
-    .sort((a, b) => b.width * b.height - a.width * a.height)
+    .sort((a, b) => compareNumbers(b.width * b.height, a.width * a.height))
   return [...groups, ...nodes.filter((node) => !isFrame(node))]
 }
 
@@ -750,4 +753,5 @@ export type {
   SpatialLayoutOptions,
   SpatialRenderStyle,
 } from './layout-options.js'
+
 export { spatialRenderStyleSchema } from './layout-options.js'

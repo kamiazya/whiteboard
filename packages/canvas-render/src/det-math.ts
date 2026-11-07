@@ -21,6 +21,27 @@ export function hypot(dx: number, dy: number): number {
   return Math.sqrt(dx * dx + dy * dy)
 }
 
+/**
+ * A total order on numbers, ascending: `-0` equals `0`, and NaN sorts after
+ * every number and equals itself.
+ *
+ * A comparator written as `a - b` answers NaN for a NaN key, which
+ * `Array.prototype.sort` reads as "equal to everything" — no order at all, so
+ * where the key lands is the engine's sort algorithm and a port running
+ * another algorithm lands it elsewhere. On any two non-NaN numbers this has
+ * the sign `a - b` has, which is all a sort reads, so nothing ordered before
+ * moves. This is the NaN policy ADR-0054 decision 11 asks the oracle to write
+ * down; the Rust twin is `f64::total_cmp` with both zeros and every NaN folded.
+ */
+export function compareNumbers(a: number, b: number): -1 | 0 | 1 {
+  if (a < b) return -1
+  if (a > b) return 1
+  if (a === b) return 0
+  const aNaN = Number.isNaN(a)
+  if (aNaN === Number.isNaN(b)) return 0
+  return aNaN ? 1 : -1
+}
+
 // fdlibm's sine and cosine, as musl carries them (src/math/sin.c, cos.c,
 // __sin.c, __cos.c, __rem_pio2.c), line for line. Rust's `libm` crate is the
 // same port, so the two languages share one algorithm rather than two

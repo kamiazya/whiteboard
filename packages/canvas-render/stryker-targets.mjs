@@ -465,8 +465,6 @@ export const KNOWN_EQUIVALENT = {
   // canvas-render tests green.
   'src/layout/edges/edge-crossing-sweep.ts': {
     'ArithmeticOperator: 1 / COST_QUANTUM -> 1 * COST_QUANTUM': 1,
-    'ArithmeticOperator: s1.edge - s2.edge -> s1.edge + s2.edge': 1,
-    'ArithmeticOperator: s1.maxX - s2.maxX -> s1.maxX + s2.maxX': 1,
     'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
     'ConditionalExpression: active[i]!.maxX >= minX -> true': 1,
     'ConditionalExpression: denom === 0 -> false': 1,

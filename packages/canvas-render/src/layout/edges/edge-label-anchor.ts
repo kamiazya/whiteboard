@@ -12,7 +12,7 @@
 // and leave a label floating at the canvas origin.
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import { hypot } from '../../det-math.js'
+import { compareNumbers, hypot } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
 
@@ -154,7 +154,7 @@ function slideCandidates(mid: { point: Point; from: Point; to: Point }): Point[]
   const length = hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
   if (length === 0) return []
   const dir = { x: (mid.to.x - mid.from.x) / length, y: (mid.to.y - mid.from.y) / length }
-  const byPosition = (a: Point, b: Point) => a.y - b.y || a.x - b.x
+  const byPosition = (a: Point, b: Point) => compareNumbers(a.y, b.y) || compareNumbers(a.x, b.x)
   const normals = [
     { x: -dir.y, y: dir.x },
     { x: dir.y, y: -dir.x },

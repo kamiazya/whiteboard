@@ -67,6 +67,7 @@
  */
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import { endNode, isFiniteRect } from '@kamiazya/whiteboard-model'
+import { compareNumbers } from './det-math.js'
 import {
   AXES,
   AXIS_X,
@@ -249,7 +250,7 @@ function hopClear(unit: Unit, ax: Axis, dir: 1 | -1, occupied: readonly Rect[], 
     (dir === 1 ? Math.ceil((v - from) / TIDY_GRID_PX) : Math.floor((v - from) / TIDY_GRID_PX)) *
       TIDY_GRID_PX
   const inHopOrder = [...occupied].sort((a, b) =>
-    dir === 1 ? ax.near(a) - ax.near(b) : ax.at(b, 1) - ax.at(a, 1),
+    dir === 1 ? compareNumbers(ax.near(a), ax.near(b)) : compareNumbers(ax.at(b, 1), ax.at(a, 1)),
   )
   for (const hit of inHopOrder) {
     if (!overlapsWithMargin(unit.bbox, hit)) continue

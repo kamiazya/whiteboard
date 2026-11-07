@@ -1,6 +1,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { isFrame, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
+import { compareNumbers } from '../det-math.js'
 import { sceneBounds } from '../scene-bounds.js'
 import {
   bends,
@@ -253,7 +254,7 @@ function unevenGapsAlong(
   start: (r: Rect) => number,
   extent: (r: Rect) => number,
 ): number {
-  const sorted = [...boxes].sort((a, b) => band(a) - band(b))
+  const sorted = [...boxes].sort((a, b) => compareNumbers(band(a), band(b)))
   const bands: Rect[][] = []
   for (const r of sorted) {
     const current = bands[bands.length - 1]
@@ -266,7 +267,7 @@ function unevenGapsAlong(
   }
   let uneven = 0
   for (const members of bands) {
-    const along = [...members].sort((a, b) => start(a) - start(b))
+    const along = [...members].sort((a, b) => compareNumbers(start(a), start(b)))
     const gaps: number[] = []
     for (let i = 1; i < along.length; i++) {
       const prev = along[i - 1] as Rect

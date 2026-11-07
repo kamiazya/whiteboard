@@ -1,3 +1,4 @@
+import { compareNumbers } from '../../det-math.js'
 import type { Point, Rect } from './edge-geometry.js'
 import { MinHeap } from './min-heap.js'
 import type { RoutingBudget } from './routing-budget.js'
@@ -185,8 +186,8 @@ function buildGrid(
   }
   if (xSet.size * ySet.size > MAX_GRID_CELLS) return undefined
   return {
-    xs: [...xSet].sort((a, b) => a - b),
-    ys: [...ySet].sort((a, b) => a - b),
+    xs: [...xSet].sort(compareNumbers),
+    ys: [...ySet].sort(compareNumbers),
     near,
   }
 }

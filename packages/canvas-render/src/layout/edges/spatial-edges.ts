@@ -16,6 +16,7 @@ import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 
 import { endNode, endSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import { compareNumbers } from '../../det-math.js'
 import { type AroundLedger, aroundLedger } from './around-ledger.js'
 import { bestRepairedPair } from './coincident-ends.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
@@ -591,10 +592,12 @@ function trialEdgesFor(
     // same judgement the whole-config short-circuit makes
     // (hasRepairableProblem, edge-rules.ts).
     .filter((r) => hasRepairableProblem(r.cost))
-    .sort((a, b) => (lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : a.i - b.i))
+    .sort((a, b) =>
+      lessCost(a.cost, b.cost) ? 1 : lessCost(b.cost, a.cost) ? -1 : compareNumbers(a.i, b.i),
+    )
     .slice(0, TRIAL_BUDGET_EDGES)
     // Document order within the budget keeps adoption sequencing stable.
-    .sort((a, b) => a.i - b.i)
+    .sort((a, b) => compareNumbers(a.i, b.i))
   return ranked.map((r) => r.edge)
 }
 
@@ -998,7 +1001,7 @@ function optimizeAcrossRegions(
     .map((edge, i) => ({ edge, i, key: mortonOf(midpoints[i] as Point) }))
     // Document order breaks key ties, so the grouping is a total function of
     // the canvas — two layouts of the same canvas never split it differently.
-    .sort((a, b) => a.key - b.key || a.i - b.i)
+    .sort((a, b) => compareNumbers(a.key, b.key) || compareNumbers(a.i, b.i))
 
   // Even-sized regions rather than cap-sized ones: cost grows super-linearly
   // inside a region, so two regions of 173 beat one of 200 plus one of 145.

@@ -21,7 +21,7 @@
  */
 
 import type { EdgeSide } from '@kamiazya/whiteboard-model'
-import { hypot } from '../../det-math.js'
+import { compareNumbers, hypot } from '../../det-math.js'
 import type { Point, Rect } from './edge-geometry.js'
 import { containsPoint, outwardNormal, segmentCrossesRect } from './edge-geometry.js'
 
@@ -98,7 +98,7 @@ export function cornerDetour(
       return hit === CLEAR
     })
     if (met.size === 0 || added.size + met.size > MAX_BLOCKERS) return best
-    for (const i of [...met].sort((a, b) => a - b)) add(i)
+    for (const i of [...met].sort(compareNumbers)) add(i)
   }
   return best
 }
