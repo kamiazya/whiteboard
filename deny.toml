@@ -43,7 +43,11 @@ allow-wildcard-paths = true
 # crate that pulls one in, at any depth, fails here before it fails anywhere
 # else.
 deny = [
-  { crate = "tokio", wrappers = ["whiteboard-daemon"], reason = "an async runtime belongs to the native composition root" },
+  # wasm-bindgen-futures names tokio only for emscripten under the unstable
+  # `wasm_bindgen_unstable_tokio` cfg, so it is resolved in the lockfile and
+  # built for no target here; it arrives with wasm-bindgen-test, a wasm32
+  # dev-dependency of the core crates (QR-21 layer 3).
+  { crate = "tokio", wrappers = ["whiteboard-daemon", "wasm-bindgen-futures"], reason = "an async runtime belongs to the native composition root" },
   { crate = "hyper", wrappers = ["whiteboard-daemon"], reason = "the HTTP server belongs to the native composition root" },
   { crate = "rusqlite", wrappers = ["whiteboard-daemon-store"], reason = "SQLite is the daemon store's mechanic" },
   # jobserver is `cc`'s build-time client of make's job server: its

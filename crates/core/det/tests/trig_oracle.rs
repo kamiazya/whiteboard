@@ -4,6 +4,10 @@
 //! implementations share the fixture and nothing else.
 
 use whiteboard_det::math::{cos, sin};
+// On wasm32 the same tests run under Node (QR-21 layer 3), so one fixture
+// file holds both targets to one answer.
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 const ORACLE: &str = include_str!("../../../../packages/canvas-render/src/det-math.oracle.txt");
 

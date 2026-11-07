@@ -107,17 +107,21 @@ fn build(args: &[&str]) -> Result<(), Vec<String>> {
     if status.success() { Ok(()) } else { Err(vec![format!("cargo {} failed", args.join(" "))]) }
 }
 
-pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
-    let metadata = metadata::load()?;
-    let map = arch_map::load_map(&metadata)?;
-    let core: Vec<&String> = map
-        .crates
+/// The present core crates that target wasm32, in map order.
+pub(crate) fn wasm_core_crates(map: &arch_map::ArchMap) -> Vec<&String> {
+    map.crates
         .iter()
         .filter(|(_, c)| {
             c.layer == "core" && c.status == Status::Present && c.targets.contains(&Target::Wasm32)
         })
         .map(|(name, _)| name)
-        .collect();
+        .collect()
+}
+
+pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
+    let metadata = metadata::load()?;
+    let map = arch_map::load_map(&metadata)?;
+    let core = wasm_core_crates(&map);
     let mut report = Vec::new();
     let mut violations = Vec::new();
     let mut own_total = 0;

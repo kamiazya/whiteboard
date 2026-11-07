@@ -14,6 +14,10 @@ serde.workspace = true
 [dev-dependencies]
 serde_json.workspace = true
 
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
 [lints]
 workspace = true
 

@@ -14,6 +14,8 @@ pub fn len(s: &str) -> usize {
 #[cfg(test)]
 mod tests {
     use super::len;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     #[test]
     fn counts_code_units_not_bytes_or_chars() {
