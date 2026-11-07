@@ -14,7 +14,11 @@
 // line of production code.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+pub mod edge_geometry;
+pub mod edge_ink;
+pub mod edge_rounding;
 #[path = "generated/geometry.rs"]
 pub mod geometry;
 pub mod grid_route;
 mod min_heap;
+pub mod segment_intersection;

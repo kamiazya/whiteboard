@@ -81,7 +81,9 @@ root files, `.cargo/` or `crates/` runs them and not the vitest matrix, and
 any other change skips them as a declared skip. After the wasm build the `rust`
 job runs `canvas-render-rust` (QR-21 layer 2): canvas-render's
 `det-math.rust.test.ts` holds `det-math.ts` to `whiteboard-det` through the
-wasm artifact, exact on every double, and fails on CI if the artifact is absent. The same
+wasm artifact, exact on every double, and fails on CI if the artifact is absent; the
+`test-utils/wasm/*.rust.test.ts` beside it do the same for each edge module
+ported so far (grid-route, and the geometry and ink primitives). The same
 project re-runs every `layout/edges` suite, scoreboards included, with
 `./grid-route.js` aliased to the Rust port through the wasm (QR-21 layer 1;
 those suites are included only when the artifact exists). Every target runs nightly

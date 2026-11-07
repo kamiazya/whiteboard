@@ -77,9 +77,27 @@ pub fn js_max(a: f64, b: f64) -> f64 {
     }
 }
 
+/// `Math.round(x)`: halves round toward positive infinity, and a result of
+/// zero from a negative `x` is `-0`.
+///
+/// `f64::round` rounds halves away from zero (`-2.5` to `-3` where JS answers
+/// `-2`) and never answers `-0` for `-0.3`, so it is not the oracle's
+/// rounding, and neither is rounding ties to even. `x - x.floor()` is exact
+/// wherever it could straddle one half; between -1 and 0 it can round, but
+/// never across one half, so the comparison is exact either way.
+#[must_use]
+pub fn js_round(x: f64) -> f64 {
+    if !x.is_finite() {
+        return x;
+    }
+    let floor = x.floor();
+    let rounded = if x - floor >= 0.5 { floor + 1.0 } else { floor };
+    if rounded == 0.0 && x.is_sign_negative() { -0.0 } else { rounded }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{hypot, js_max, js_min};
+    use super::{hypot, js_max, js_min, js_round};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -99,6 +117,26 @@ mod tests {
         assert_eq!(js_min(2.0, -3.0).to_bits(), (-3.0f64).to_bits());
         assert_eq!(js_max(2.0, -3.0).to_bits(), 2.0f64.to_bits());
         assert_eq!(js_min(f64::NEG_INFINITY, 0.0).to_bits(), f64::NEG_INFINITY.to_bits());
+    }
+
+    #[test]
+    fn js_round_rounds_halves_up_and_keeps_a_negative_zero_as_math_round_does() {
+        // Each pair is Math.round's answer in Node, read off rather than derived.
+        for (x, js) in [
+            (2.5, 3.0),
+            (-2.5, -2.0),
+            (1.5, 2.0),
+            (-1.5, -1.0),
+            (0.499_999_999_999_999_94, 0.0),
+            (4_503_599_627_370_497.0, 4_503_599_627_370_497.0),
+            (f64::INFINITY, f64::INFINITY),
+        ] {
+            assert_eq!(js_round(x).to_bits(), f64::to_bits(js), "Math.round({x})");
+        }
+        for x in [-0.5, -0.3, -0.0] {
+            assert_eq!(js_round(x).to_bits(), (-0.0f64).to_bits(), "Math.round({x}) is -0");
+        }
+        assert!(js_round(f64::NAN).is_nan());
     }
 
     #[test]
