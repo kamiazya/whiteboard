@@ -10,6 +10,7 @@
  */
 
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
+import { hypot } from '../det-math.js'
 import {
   arrowMarkerGeometry,
   edgeArrowEnds,
@@ -147,7 +148,7 @@ function pulledBack(
 ): readonly EdgePoint[] {
   if (fromInset === 0 && toInset === 0) return path
   const toward = (from: EdgePoint, to: EdgePoint, by: number): EdgePoint => {
-    const length = Math.hypot(to.x - from.x, to.y - from.y)
+    const length = hypot(to.x - from.x, to.y - from.y)
     return {
       x: from.x + ((to.x - from.x) / length) * by,
       y: from.y + ((to.y - from.y) / length) * by,

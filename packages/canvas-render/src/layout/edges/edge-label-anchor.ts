@@ -12,6 +12,7 @@
 // and leave a label floating at the canvas origin.
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
+import { hypot } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 import { flattenRoundedEdgePath } from './edge-rounding.js'
 
@@ -27,7 +28,7 @@ function midpointOf(
   const lengths: number[] = []
   let total = 0
   for (let i = 0; i + 1 < drawn.length; i++) {
-    const length = Math.hypot(drawn[i + 1]!.x - drawn[i]!.x, drawn[i + 1]!.y - drawn[i]!.y)
+    const length = hypot(drawn[i + 1]!.x - drawn[i]!.x, drawn[i + 1]!.y - drawn[i]!.y)
     lengths.push(length)
     total += length
   }
@@ -150,7 +151,7 @@ export function edgeLabelPlacement(
  * then to either side of it, above (or left) before below (or right).
  */
 function slideCandidates(mid: { point: Point; from: Point; to: Point }): Point[] {
-  const length = Math.hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
+  const length = hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
   if (length === 0) return []
   const dir = { x: (mid.to.x - mid.from.x) / length, y: (mid.to.y - mid.from.y) / length }
   const byPosition = (a: Point, b: Point) => a.y - b.y || a.x - b.x
@@ -159,10 +160,10 @@ function slideCandidates(mid: { point: Point; from: Point; to: Point }): Point[]
     { x: dir.y, y: -dir.x },
   ].sort(byPosition)
   const runs = [
-    { n: dir, room: Math.hypot(mid.to.x - mid.point.x, mid.to.y - mid.point.y) },
+    { n: dir, room: hypot(mid.to.x - mid.point.x, mid.to.y - mid.point.y) },
     {
       n: { x: -dir.x, y: -dir.y },
-      room: Math.hypot(mid.from.x - mid.point.x, mid.from.y - mid.point.y),
+      room: hypot(mid.from.x - mid.point.x, mid.from.y - mid.point.y),
     },
   ].sort((a, b) => byPosition(a.n, b.n))
   const at = (n: Point, d: number): Point => ({

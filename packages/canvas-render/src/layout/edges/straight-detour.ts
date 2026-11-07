@@ -21,6 +21,7 @@
  */
 
 import type { EdgeSide } from '@kamiazya/whiteboard-model'
+import { hypot } from '../../det-math.js'
 import type { Point, Rect } from './edge-geometry.js'
 import { containsPoint, outwardNormal, segmentCrossesRect } from './edge-geometry.js'
 
@@ -198,7 +199,7 @@ function shortestThrough(
 ): Point[] | undefined {
   const goal = vertices[1] as Point
   const search: Search = {
-    toGoal: vertices.map((p) => Math.hypot(goal.x - p.x, goal.y - p.y)),
+    toGoal: vertices.map((p) => hypot(goal.x - p.x, goal.y - p.y)),
     dist: vertices.map((_, i) => (i === 0 ? 0 : Number.POSITIVE_INFINITY)),
     prev: vertices.map(() => -1),
     done: vertices.map(() => false),
@@ -244,7 +245,7 @@ function relaxFrom(
   for (let v = 1; v < vertices.length; v++) {
     if (done[v]) continue
     const to = vertices[v] as Point
-    const step = Math.hypot(to.x - from.x, to.y - from.y) + (v === 1 ? 0 : CORNER_COST_PX)
+    const step = hypot(to.x - from.x, to.y - from.y) + (v === 1 ? 0 : CORNER_COST_PX)
     const through = (dist[u] as number) + step
     if (through >= (dist[v] as number) || !visible(u, v)) continue
     dist[v] = through

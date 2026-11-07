@@ -20,6 +20,7 @@ import type {
   ShapeContribution,
   ShapeTable,
 } from '@kamiazya/whiteboard-scene'
+import { hypot } from '../../det-math.js'
 import { isFiniteBox } from '../../finite-box.js'
 
 export type { NodeOutline, ShapeContribution, ShapeTable }
@@ -186,7 +187,7 @@ export function outlineEntryPoint(
   const center = { x: box.x + box.w / 2, y: box.y + box.h / 2 }
   const dx = to.x - from.x
   const dy = to.y - from.y
-  const length = Math.hypot(dx, dy)
+  const length = hypot(dx, dy)
   // With no usable approach direction, fall back to probing straight at
   // the center so a degenerate edge still lands on the boundary.
   const dirX = length > 0 ? dx / length : center.x - to.x
@@ -196,7 +197,7 @@ export function outlineEntryPoint(
   // onto the ray, not the distance to it — walking the full distance along
   // an off-center approach overshoots the far rim, and a probe that lands
   // outside makes the bisection give up and leave the terminal on the bbox.
-  const dirLength = Math.hypot(dirX, dirY)
+  const dirLength = hypot(dirX, dirY)
   if (!(dirLength > 0)) return to
   const span = Math.max(0, ((center.x - to.x) * dirX + (center.y - to.y) * dirY) / dirLength)
   if (!Number.isFinite(span)) return to

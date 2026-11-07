@@ -4,6 +4,7 @@
 // knowledge of styles; rounded corners re-use the same points because
 // 'curved' travels the orthogonal waypoints.
 import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
+import { hypot } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 import {
   EDGE_JUMP_RADIUS_PX,
@@ -310,14 +311,14 @@ class SegmentGrid {
 /** Every proper crossing of `seg` by a candidate segment of an earlier edge. */
 function crossingsOn(seg: IndexedSegment, earlier: readonly IndexedSegment[]): RunCrossing[] {
   const { a: a1, b: a2 } = seg
-  const len = Math.hypot(a2.x - a1.x, a2.y - a1.y)
+  const len = hypot(a2.x - a1.x, a2.y - a1.y)
   const found: RunCrossing[] = []
   for (const other of earlier) {
     const hit = segmentIntersection(a1, a2, other.a, other.b)
     if (hit === undefined) continue
     found.push({
       point: hit,
-      t: len === 0 ? 0 : Math.hypot(hit.x - a1.x, hit.y - a1.y) / len,
+      t: len === 0 ? 0 : hypot(hit.x - a1.x, hit.y - a1.y) / len,
       other,
     })
   }
@@ -339,7 +340,7 @@ function segmentCarrying(
   for (let segment = run.first; segment <= run.last; segment += 1) {
     const a = path[segment] as Point
     const b = path[segment + 1] as Point
-    const length = Math.hypot(b.x - a.x, b.y - a.y)
+    const length = hypot(b.x - a.x, b.y - a.y)
     if (length === 0) continue
     // A run of one segment was cleared by the intersection itself, in the
     // jumping segment's own terms; measuring it again would only add rounding.
@@ -347,7 +348,7 @@ function segmentCarrying(
       const along = ((point.x - a.x) * (b.x - a.x) + (point.y - a.y) * (b.y - a.y)) / length
       if (along < END_CLEARANCE_PX - 1e-9 || length - along < END_CLEARANCE_PX - 1e-9) continue
     }
-    return { point, t: Math.hypot(point.x - a.x, point.y - a.y) / length, segment, length }
+    return { point, t: hypot(point.x - a.x, point.y - a.y) / length, segment, length }
   }
   return undefined
 }
@@ -468,7 +469,7 @@ function handOverHop(
     [
       ...onSegment.map((jump) => ({
         point: { x: jump.x, y: jump.y },
-        t: Math.hypot(jump.x - start.x, jump.y - start.y) / there.length,
+        t: hypot(jump.x - start.x, jump.y - start.y) / there.length,
       })),
       { point: there.point, t: there.t },
     ],

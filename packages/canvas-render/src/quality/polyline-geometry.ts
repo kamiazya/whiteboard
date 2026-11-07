@@ -1,3 +1,4 @@
+import { hypot } from '../det-math.js'
 /**
  * The polyline geometry every instrument in this package reads a drawing
  * with: ink inside a box, corners, length, proper crossings, a path that
@@ -24,7 +25,7 @@ export type Rect = {
   readonly h: number
 }
 
-export const segmentLength = (a: Point, b: Point): number => Math.hypot(b.x - a.x, b.y - a.y)
+export const segmentLength = (a: Point, b: Point): number => hypot(b.x - a.x, b.y - a.y)
 
 /**
  * One Liang–Barsky slab applied to the open interval `[t0, t1]`: the part of

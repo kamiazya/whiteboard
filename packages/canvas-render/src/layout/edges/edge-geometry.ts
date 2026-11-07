@@ -19,6 +19,7 @@
  */
 
 import type { EdgeEnd, EdgeSide, LineEnd, SpatialNode } from '@kamiazya/whiteboard-model'
+import { hypot } from '../../det-math.js'
 
 /** The edge layer's one point and rectangle, in canvas coordinates. */
 export type Point = { readonly x: number; readonly y: number }
@@ -181,8 +182,7 @@ export const pathLength = (path: readonly Point[]) =>
     (total, point, i) =>
       i === 0
         ? 0
-        : total +
-          Math.hypot(point.x - (path[i - 1] as Point).x, point.y - (path[i - 1] as Point).y),
+        : total + hypot(point.x - (path[i - 1] as Point).x, point.y - (path[i - 1] as Point).y),
     0,
   )
 
