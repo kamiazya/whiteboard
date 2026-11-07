@@ -1,5 +1,7 @@
 // The line-jump narrow phase on its own, so the broad phase in front of it
 // can be measured by counting its calls.
+
+import { hypot } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 
 /** Radius of the hop arc, in px. Kept below the editor's edge hit tolerance so the decoration never escapes the grabbable band around the raw path. */
@@ -27,7 +29,7 @@ export function segmentIntersection(a1: Point, a2: Point, b1: Point, b2: Point):
   // An extent that overflows turns the arithmetic NaN (0 × ∞), which passes
   // every comparison above; a hop there would write NaN into the path.
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return undefined
-  const lenA = Math.hypot(dax, day)
+  const lenA = hypot(dax, day)
   // Too close to either end of the jumping segment to fit the arc.
   if (t * lenA < END_CLEARANCE_PX || (1 - t) * lenA < END_CLEARANCE_PX) return undefined
   return point

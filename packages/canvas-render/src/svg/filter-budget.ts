@@ -15,6 +15,7 @@
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
+import { compareNumbers } from '../det-math.js'
 import { collectDefs } from './defs.js'
 import { DROP_SHADOW_ID } from './paint.js'
 import { isVNode, type SvgChild, type SvgDef, type SvgVNode } from './vnode.js'
@@ -160,7 +161,9 @@ export function boundFilterWork(
   if (total <= FILTER_REGION_BUDGET_PX) return { body, defs }
 
   // Largest first; among equals the later one, which paints over the earlier.
-  const ranked = [...references].sort((a, b) => b.work - a.work || b.order - a.order)
+  const ranked = [...references].sort(
+    (a, b) => compareNumbers(b.work, a.work) || compareNumbers(b.order, a.order),
+  )
   const drop = new Set<number>()
   for (const reference of ranked) {
     if (total <= FILTER_REGION_BUDGET_PX) break

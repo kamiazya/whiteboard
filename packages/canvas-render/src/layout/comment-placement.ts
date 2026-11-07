@@ -31,6 +31,7 @@
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
+import { cos, sin } from '../det-math.js'
 import type { Point } from './edges/edge-geometry.js'
 
 /** Gap (px) from the anchor point to the bubble's nearest corner. */
@@ -97,8 +98,8 @@ export function commentBubbleCandidates(anchor: Point, size: Size): readonly Bou
   for (const distance of RING_DISTANCES_PX) {
     for (let k = 0; k < RING_DIRECTIONS; k += 1) {
       const angle = (k / RING_DIRECTIONS) * 2 * Math.PI
-      const centerX = anchor.x + Math.cos(angle) * (distance + size.w / 2)
-      const centerY = anchor.y + Math.sin(angle) * (distance + size.h / 2)
+      const centerX = anchor.x + cos(angle) * (distance + size.w / 2)
+      const centerY = anchor.y + sin(angle) * (distance + size.h / 2)
       out.push({ x: centerX - size.w / 2, y: centerY - size.h / 2, ...size })
     }
   }

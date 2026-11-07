@@ -6,6 +6,7 @@
 
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
+import { cos, hypot, sin } from '../../det-math.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import type { Point } from './edge-geometry.js'
 import { edgeLabelPlacement, type LabelObstacle, type LabelSize } from './edge-label-anchor.js'
@@ -19,7 +20,7 @@ function oracleMidpoint(path: readonly Point[], rounded?: boolean) {
   const lengths: number[] = []
   let total = 0
   for (let i = 0; i + 1 < drawn.length; i++) {
-    const length = Math.hypot(drawn[i + 1]!.x - drawn[i]!.x, drawn[i + 1]!.y - drawn[i]!.y)
+    const length = hypot(drawn[i + 1]!.x - drawn[i]!.x, drawn[i + 1]!.y - drawn[i]!.y)
     lengths.push(length)
     total += length
   }
@@ -61,7 +62,7 @@ function oracle(
   })
   const clear = (c: Point) => !obstacles.some((o) => overlaps(boxAt(c), o))
   if (clear(mid.point)) return { at: mid.point, blocked: false }
-  const length = Math.hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
+  const length = hypot(mid.to.x - mid.from.x, mid.to.y - mid.from.y)
   if (length === 0) return { at: mid.point, blocked: true }
   const dir = { x: (mid.to.x - mid.from.x) / length, y: (mid.to.y - mid.from.y) / length }
   const normals = [
@@ -69,10 +70,10 @@ function oracle(
     { x: dir.y, y: -dir.x },
   ].sort((a, b) => a.y - b.y || a.x - b.x)
   const alongLine = [
-    { n: dir, room: Math.hypot(mid.to.x - mid.point.x, mid.to.y - mid.point.y) },
+    { n: dir, room: hypot(mid.to.x - mid.point.x, mid.to.y - mid.point.y) },
     {
       n: { x: -dir.x, y: -dir.y },
-      room: Math.hypot(mid.from.x - mid.point.x, mid.from.y - mid.point.y),
+      room: hypot(mid.from.x - mid.point.x, mid.from.y - mid.point.y),
     },
   ].sort((a, b) => a.n.y - b.n.y || a.n.x - b.n.x)
   for (let d = 8; d <= 128; d += 8) {
@@ -135,8 +136,8 @@ const rimCaseArb = fc
   })
   .map(({ angle, half, blocker, rim, size, rounded }) => ({
     path: [
-      { x: CENTRE - half * Math.cos(angle), y: CENTRE - half * Math.sin(angle) },
-      { x: CENTRE + half * Math.cos(angle), y: CENTRE + half * Math.sin(angle) },
+      { x: CENTRE - half * cos(angle), y: CENTRE - half * sin(angle) },
+      { x: CENTRE + half * cos(angle), y: CENTRE + half * sin(angle) },
     ],
     obstacles: [
       ...rim.map((r) => ({ x: CENTRE + r.dx, y: CENTRE + r.dy, w: r.w, h: r.h })),
@@ -160,7 +161,7 @@ describe('edgeLabelPlacement obstacle pre-filter', () => {
       if (expected.blocked) reach.blocked++
       const mid = oracleMidpoint(path, rounded)?.point
       if (expected.at !== undefined && mid !== undefined) {
-        const offset = Math.hypot(expected.at.x - mid.x, expected.at.y - mid.y)
+        const offset = hypot(expected.at.x - mid.x, expected.at.y - mid.y)
         if (offset > 0) reach.slid++
         if (offset >= FAR_SLIDE_PX - 1e-6) reach.far++
       }

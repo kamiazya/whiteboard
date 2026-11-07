@@ -8,6 +8,8 @@
  * anchor, never a running mean, is what stops transitive chaining (A near B,
  * C near B's new spot) from dragging a whole diagonal into one line.
  */
+
+import { compareNumbers } from './det-math.js'
 import { type Axis, roundToGrid } from './tidy-axis.js'
 import { overlapsWithMargin, TIDY_BAND_PX, type Unit } from './tidy-units.js'
 
@@ -163,7 +165,7 @@ export function alignBands(units: Unit[], ax: Axis, origin: number, floor?: numb
  * exactly one band from a neighbour must not re-join it on a later pass.
  */
 function bandsBy(units: Unit[], anchor: (u: Unit) => number): Unit[][] {
-  const sorted = [...units].sort((a, b) => anchor(a) - anchor(b))
+  const sorted = [...units].sort((a, b) => compareNumbers(anchor(a), anchor(b)))
   const bands: Unit[][] = []
   let band: Unit[] = []
   let bandFirst = 0

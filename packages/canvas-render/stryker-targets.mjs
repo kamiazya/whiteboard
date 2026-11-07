@@ -104,6 +104,11 @@ export const MUTATED = [
   // own path, so it is a gap the direct tests closed rather than a selection
   // artefact.
   'src/layout/nodes/inline-junction.ts',
+  // The pinned math layout calls instead of Math.hypot/sin/cos (ADR-0054
+  // decision 11). Its oracle is independent and bit-exact — 900 answers of
+  // the Rust libm crate — so a surviving mutant is a polynomial term or a
+  // reduction round that answer never needed.
+  'src/det-math.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
@@ -176,6 +181,9 @@ export const MINUTES = {
   'src/layout/comment-placement.ts': 7,
   'src/layout/ink/sketch.ts': 4.5,
   'src/layout/nodes/inline-junction.ts': 2.8,
+  // ESTIMATED, not yet measured: about 120 mutants, one 5-test file that
+  // runs in milliseconds, priced at `tidy-bands.ts`'s rate.
+  'src/det-math.ts': 1.5,
 }
 
 /**
@@ -495,8 +503,6 @@ export const KNOWN_EQUIVALENT = {
   // canvas-render tests green.
   'src/layout/edges/edge-crossing-sweep.ts': {
     'ArithmeticOperator: 1 / COST_QUANTUM -> 1 * COST_QUANTUM': 1,
-    'ArithmeticOperator: s1.edge - s2.edge -> s1.edge + s2.edge': 1,
-    'ArithmeticOperator: s1.maxX - s2.maxX -> s1.maxX + s2.maxX': 1,
     'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
     'ConditionalExpression: active[i]!.maxX >= minX -> true': 1,
     'ConditionalExpression: denom === 0 -> false': 1,

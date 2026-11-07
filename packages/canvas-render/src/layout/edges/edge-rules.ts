@@ -14,6 +14,7 @@
  * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
 import { type EdgeSide, edgeSideSchema } from '@kamiazya/whiteboard-model'
+import { compareNumbers } from '../../det-math.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
 import type { Point, Rect } from './edge-geometry.js'
 import { COST_QUANTUM, inkAlongRects, quantize, selfRetracedInk, tunnelledInk } from './edge-ink.js'
@@ -208,7 +209,7 @@ const lPairCrowdingTieBreak = {
     const l2: SidePair = { fromSide: v, toSide: oppositeSide(h) }
     const crowding = (p: SidePair) => ctx.crowd('from', p.fromSide) + ctx.crowd('to', p.toSide)
     const [first, second] = dominantAxisOrder(ctx.dx, ctx.dy, l1, l2)
-    return [first, second].sort((a, b) => crowding(a) - crowding(b))
+    return [first, second].sort((a, b) => compareNumbers(crowding(a), crowding(b)))
   },
 }
 
@@ -837,7 +838,7 @@ const tierOrderCache = new WeakMap<readonly PenaltyRule[], readonly PenaltyRule[
 function tierOrdered(rules: readonly PenaltyRule[]): readonly PenaltyRule[] {
   let ordered = tierOrderCache.get(rules)
   if (ordered === undefined) {
-    ordered = [...rules].sort((x, y) => x.tier - y.tier)
+    ordered = [...rules].sort((x, y) => compareNumbers(x.tier, y.tier))
     tierOrderCache.set(rules, ordered)
   }
   return ordered

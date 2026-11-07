@@ -14,6 +14,7 @@
 import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode, endSide, isSelfLoop } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
+import { compareNumbers } from '../../det-math.js'
 import { bendRoute } from './bend-route.js'
 import { contactRoute } from './edge-contact.js'
 import type { Point, Rect } from './edge-geometry.js'
@@ -94,9 +95,9 @@ function bestCandidate(
   }))
   const ranked = scored
     .sort((a, b) => {
-      if (a.ink !== b.ink) return a.ink - b.ink
-      if (Math.abs(a.length - b.length) > 1e-6) return a.length - b.length
-      return a.bends - b.bends
+      if (a.ink !== b.ink) return compareNumbers(a.ink, b.ink)
+      if (Math.abs(a.length - b.length) > 1e-6) return compareNumbers(a.length, b.length)
+      return compareNumbers(a.bends, b.bends)
     })
     .map((c) => c.path)
   return (

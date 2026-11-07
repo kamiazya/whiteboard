@@ -417,9 +417,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // max and the padding, each pinned by name in `fitted-height.test.ts`
     // (the floor binding, the caller's font binding) and by a parity test at
     // each call site.
+    // 25 of 125 with `det-math.ts`, the pinned hypot/sin/cos layout calls
+    // (ADR-0054 decision 11), in the lane because its oracle is a bit-exact
+    // table of the Rust libm crate's answers.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 24,
-      production: 124,
+      mutated: 25,
+      production: 125,
     })
   })
 

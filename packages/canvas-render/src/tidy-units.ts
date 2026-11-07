@@ -4,6 +4,7 @@ import {
   isFrame,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { compareNumbers } from './det-math.js'
 // `fullyContains` is ONE predicate, and it was two byte-identical copies —
 // this file's and `edge-rules`' — until the mutation lane reported eight
 // survivors in this one. The copy there is exercised by name; the copy here
@@ -305,7 +306,7 @@ export function buildUnits(
   // nested chain is one unit, and needs no order.
   if (units.length < 2) return units
   const orderOf = new Map(nodes.map((n, i) => [n.id, i]))
-  units.sort((a, b) => (orderOf.get(a.rootId) ?? 0) - (orderOf.get(b.rootId) ?? 0))
+  units.sort((a, b) => compareNumbers(orderOf.get(a.rootId) ?? 0, orderOf.get(b.rootId) ?? 0))
   return units
 }
 

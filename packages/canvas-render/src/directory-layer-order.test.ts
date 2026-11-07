@@ -89,6 +89,7 @@ const FILE_LAYERS: Readonly<Record<string, Layer>> = {
  */
 const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'canvas-fragment.ts': 'leaf',
+  'det-math.ts': 'leaf',
   'edge-arrows.ts': 'leaf',
   'hit-test.ts': 'surface',
   'finite-box.ts': 'leaf',

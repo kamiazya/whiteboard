@@ -1,4 +1,5 @@
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
+import { hypot } from './det-math.js'
 
 /**
  * Arrowhead geometry shared by the SVG backend (which draws the triangles)
@@ -47,7 +48,7 @@ function arrowAt(
 ): ArrowPolygon | null {
   const dx = tip.x - inward.x
   const dy = tip.y - inward.y
-  const length = Math.hypot(dx, dy)
+  const length = hypot(dx, dy)
   if (length < MIN_DIRECTION_LENGTH) return null
   const ux = dx / length
   const uy = dy / length
@@ -126,7 +127,7 @@ export function edgeArrowInset(edge: ResolvedEdgeNode, end: 'from' | 'to'): numb
   const inset = ((lineWidth(edge) / 2) * ARROW_LENGTH) / ARROW_HALF_WIDTH
   const tip = end === 'to' ? edge.path[edge.path.length - 1] : edge.path[0]
   const inward = end === 'to' ? edge.path[edge.path.length - 2] : edge.path[1]
-  const run = Math.hypot(tip.x - inward.x, tip.y - inward.y)
+  const run = hypot(tip.x - inward.x, tip.y - inward.y)
   return run > inset + MIN_DIRECTION_LENGTH ? inset : 0
 }
 

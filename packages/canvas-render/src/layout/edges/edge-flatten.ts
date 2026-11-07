@@ -5,6 +5,7 @@
 // their segment; rounded paths truncate spans to the corner midpoints and
 // drop hops without arc clearance, exactly like `roundedPathData`.
 import type { EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
+import { cos, hypot, sin } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import { flattenRoundedEdgePath, roundedEdgeCorners } from './edge-rounding.js'
@@ -23,7 +24,7 @@ export function hopEndpoints(
   to: Point,
   jump: Point,
 ): { readonly entry: Point; readonly exit: Point } | undefined {
-  const len = Math.hypot(to.x - from.x, to.y - from.y)
+  const len = hypot(to.x - from.x, to.y - from.y)
   if (len === 0) return undefined
   const ux = (to.x - from.x) / len
   const uy = (to.y - from.y) / len
@@ -40,7 +41,7 @@ export function hopEndpoints(
  * including the entry and exit points on the base line.
  */
 function hopPoints(from: Point, to: Point, jump: Point): Point[] {
-  const len = Math.hypot(to.x - from.x, to.y - from.y)
+  const len = hypot(to.x - from.x, to.y - from.y)
   if (len === 0) return []
   const ux = (to.x - from.x) / len
   const uy = (to.y - from.y) / len
@@ -52,8 +53,8 @@ function hopPoints(from: Point, to: Point, jump: Point): Point[] {
   for (let step = 0; step <= HOP_SUBDIVISIONS; step++) {
     const t = step / HOP_SUBDIVISIONS
     points.push({
-      x: jump.x - ux * r * Math.cos(Math.PI * t) + nx * r * Math.sin(Math.PI * t),
-      y: jump.y - uy * r * Math.cos(Math.PI * t) + ny * r * Math.sin(Math.PI * t),
+      x: jump.x - ux * r * cos(Math.PI * t) + nx * r * sin(Math.PI * t),
+      y: jump.y - uy * r * cos(Math.PI * t) + ny * r * sin(Math.PI * t),
     })
   }
   return points
@@ -81,7 +82,7 @@ export function jumpsWithinSpan(
   from: Point,
   to: Point,
 ): readonly EdgeJumpPoint[] {
-  const len = Math.hypot(to.x - from.x, to.y - from.y)
+  const len = hypot(to.x - from.x, to.y - from.y)
   if (len === 0) return []
   const ux = (to.x - from.x) / len
   const uy = (to.y - from.y) / len

@@ -8,6 +8,7 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { endSide } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import { hypot } from '../../det-math.js'
 import type { AnchorContext, AnchorGroups } from './edge-anchors.js'
 import { computeAnchorsFor, patchAnchorGroups, patchWork } from './edge-anchors.js'
 import type { Point, Rect } from './edge-geometry.js'
@@ -108,7 +109,7 @@ function scoreRepairedRoute(
   const runway =
     tail === undefined || beforeTail === undefined
       ? 0
-      : Math.hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
+      : hypot(tail.x - beforeTail.x, tail.y - beforeTail.y)
   const clean = interiorInkThrough(path, [fromRect, toRect]) === 0
   return {
     pair,

@@ -26,6 +26,10 @@ interface LedgerEntry {
 }
 
 const LEDGER: Readonly<Record<string, LedgerEntry>> = {
+  'packages/canvas-render/src/det-math.ts': {
+    uses: 1,
+    why: 'compareNumbers is the one total order over NUMBERS, with its NaN policy, so it spells the comparison out once as compareCodeUnit does for strings',
+  },
   'packages/model/src/compare.ts': {
     uses: 1,
     why: 'the one definition itself, which every other site is meant to call rather than restate',

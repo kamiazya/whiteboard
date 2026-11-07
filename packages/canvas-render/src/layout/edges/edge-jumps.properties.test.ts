@@ -7,6 +7,7 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type { EdgeJumpPoint, ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { hypot } from '../../det-math.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { computeEdgeJumps, EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import { segmentIntersection } from './segment-intersection.js'
@@ -22,13 +23,13 @@ function oracle(edges: readonly ResolvedEdgeNode[]): Map<string, EdgeJumpPoint[]
     for (let seg = 0; seg < later.path.length - 1; seg++) {
       const a1 = later.path[seg]!
       const a2 = later.path[seg + 1]!
-      const len = Math.hypot(a2.x - a1.x, a2.y - a1.y)
+      const len = hypot(a2.x - a1.x, a2.y - a1.y)
       const hits: { point: Point; t: number }[] = []
       for (const earlier of edges.slice(0, i)) {
         for (let k = 0; k < earlier.path.length - 1; k++) {
           const hit = segmentIntersection(a1, a2, earlier.path[k]!, earlier.path[k + 1]!)
           if (hit === undefined) continue
-          hits.push({ point: hit, t: len === 0 ? 0 : Math.hypot(hit.x - a1.x, hit.y - a1.y) / len })
+          hits.push({ point: hit, t: len === 0 ? 0 : hypot(hit.x - a1.x, hit.y - a1.y) / len })
         }
       }
       hits.sort((p, q) => p.t - q.t)

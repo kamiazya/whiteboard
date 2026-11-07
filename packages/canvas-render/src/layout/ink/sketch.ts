@@ -30,6 +30,7 @@
  */
 
 import type { BoundingBox, EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
+import { cos, hypot, sin } from '../../det-math.js'
 import type { ArrowPolygon } from '../../edge-arrows.js'
 import { isFiniteBox } from '../../finite-box.js'
 import { flattenDrawnEdgePath } from '../edges/edge-flatten.js'
@@ -107,7 +108,7 @@ function jittered(rng: Rng, a: Point, b: Point, jitter: number, bow: number): st
 function bowed(rng: Rng, a: Point, b: Point, bow: number): readonly [number, number] {
   const dx = b.x - a.x
   const dy = b.y - a.y
-  const len = Math.hypot(dx, dy)
+  const len = hypot(dx, dy)
   const t = 0.35 + rng() * 0.3
   const off = (rng() * 2 - 1) * bow
   const nx = len === 0 ? 0 : -dy / len
@@ -117,7 +118,7 @@ function bowed(rng: Rng, a: Point, b: Point, bow: number): readonly [number, num
 
 /** A side's bow amplitude: proportional to its length, capped. */
 const sideBow = (a: Point, b: Point): number =>
-  Math.min(BOW_MAX_PX, Math.hypot(b.x - a.x, b.y - a.y) * BOW_PER_PX)
+  Math.min(BOW_MAX_PX, hypot(b.x - a.x, b.y - a.y) * BOW_PER_PX)
 
 /**
  * One displaced copy of each vertex, shared by the segments meeting there.
@@ -129,7 +130,7 @@ function shaken(rng: Rng, points: readonly Point[], amount: number, closed: bool
   const gap = (i: number, j: number): number => {
     const a = points[i]!
     const b = points[j]!
-    return Math.hypot(b.x - a.x, b.y - a.y)
+    return hypot(b.x - a.x, b.y - a.y)
   }
   return points.map((p, i) => {
     const before =
@@ -174,7 +175,7 @@ function strokePolyline(rng: Rng, points: readonly Point[], close: boolean): str
     const [cx, cy] = bowed(rng, a, b, sideBow(a, b))
     let to = shook[(i + 1) % n]!
     if (close && i === sides - 1) {
-      const len = Math.hypot(b.x - a.x, b.y - a.y)
+      const len = hypot(b.x - a.x, b.y - a.y)
       if (len > 0) {
         to = {
           x: to.x + ((b.x - a.x) / len) * OVERSHOOT_PX,
@@ -208,8 +209,8 @@ function strokeCurve(rng: Rng, curve: Curve): string {
 }
 
 const onEllipse = (cx: number, cy: number, rx: number, ry: number, a: number): Point => ({
-  x: cx + rx * Math.cos(a),
-  y: cy + ry * Math.sin(a),
+  x: cx + rx * cos(a),
+  y: cy + ry * sin(a),
 })
 
 function ellipseCurve(cx: number, cy: number, rx: number, ry: number): Curve {
@@ -349,11 +350,11 @@ function hatchLines(rng: Rng, polygon: readonly Point[], box: BoundingBox): stri
   // the same angle and pitch is what made the hatch read as machine-drawn.
   const angle = HATCH_ANGLE + (rng() * 2 - 1) * HATCH_ANGLE_SPREAD
   const gap = HATCH_GAP_PX * (1 + (rng() * 2 - 1) * HATCH_GAP_SPREAD)
-  const dir = { x: Math.cos(angle), y: Math.sin(angle) }
+  const dir = { x: cos(angle), y: sin(angle) }
   const normal = { x: -dir.y, y: dir.x }
   const cx = box.x + box.w / 2
   const cy = box.y + box.h / 2
-  const reach = Math.hypot(box.w, box.h) / 2
+  const reach = hypot(box.w, box.h) / 2
   const lines: string[] = []
   for (let offset = -reach; offset <= reach; offset += gap) {
     const origin = { x: cx + normal.x * offset, y: cy + normal.y * offset }
@@ -410,7 +411,7 @@ function anchored(points: readonly Point[]): Point[] {
     const p = points[i]!
     if (i > 0) {
       const prev = points[i - 1]!
-      const len = Math.hypot(p.x - prev.x, p.y - prev.y)
+      const len = hypot(p.x - prev.x, p.y - prev.y)
       const pieces = Math.floor(len / EDGE_STEP_PX)
       for (let k = 1; k < pieces; k += 1) {
         const t = k / pieces

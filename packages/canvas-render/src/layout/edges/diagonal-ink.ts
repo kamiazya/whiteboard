@@ -1,3 +1,4 @@
+import { hypot } from '../../det-math.js'
 import type { Point, Rect } from './edge-geometry.js'
 
 /**
@@ -38,7 +39,7 @@ export function diagonalInkThrough(path: readonly Point[], rects: readonly Rect[
     const dx = b.x - a.x
     const dy = b.y - a.y
     if (dx === 0 || dy === 0) continue
-    const length = Math.hypot(dx, dy)
+    const length = hypot(dx, dy)
     for (const r of rects) {
       total += insideFraction(a, dx, dy, r) * length
     }

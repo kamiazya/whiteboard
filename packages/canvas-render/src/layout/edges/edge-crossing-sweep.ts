@@ -15,6 +15,7 @@
 // ordering to create cross-platform ties: per-pair integer tuples are
 // summed per pair key, enumeration-order-independent.
 
+import { compareNumbers, hypot } from '../../det-math.js'
 import type { Point } from './edge-geometry.js'
 import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import type { RoutingBudget } from './routing-budget.js'
@@ -185,7 +186,7 @@ function addSharedCorners(
 function axisLength(dx: number, dy: number): number {
   if (dx === 0) return Math.abs(dy)
   if (dy === 0) return Math.abs(dx)
-  return Math.round(Math.hypot(dx, dy))
+  return Math.round(hypot(dx, dy))
 }
 
 interface SweepSegment {
@@ -220,7 +221,12 @@ function sweepSegments(paths: readonly (readonly Point[])[]): SweepSegment[] {
       })
     }
   }
-  segments.sort((s1, s2) => s1.minX - s2.minX || s1.maxX - s2.maxX || s1.edge - s2.edge)
+  segments.sort(
+    (s1, s2) =>
+      compareNumbers(s1.minX, s2.minX) ||
+      compareNumbers(s1.maxX, s2.maxX) ||
+      compareNumbers(s1.edge, s2.edge),
+  )
   return segments
 }
 

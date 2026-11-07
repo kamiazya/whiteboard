@@ -15,6 +15,7 @@
 import type { EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { endNode, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
+import { compareNumbers } from '../../det-math.js'
 import type { Point, Rect } from './edge-geometry.js'
 import { centerOf, rectOf, sidePointAt, tangentCoordinate } from './edge-geometry.js'
 import { facingLaneWindow, oppositeSide, type SidePair } from './edge-rules.js'
@@ -149,8 +150,11 @@ function endsOfEdge(
 function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, AnchorEntry>): void {
   const ordered = [...group].sort(
     (a, b) =>
-      tangentCoordinate(a.side, a.farCenter) - tangentCoordinate(b.side, b.farCenter) ||
-      a.edgeIndex - b.edgeIndex ||
+      compareNumbers(
+        tangentCoordinate(a.side, a.farCenter),
+        tangentCoordinate(b.side, b.farCenter),
+      ) ||
+      compareNumbers(a.edgeIndex, b.edgeIndex) ||
       (a.role === b.role ? 0 : a.role === 'from' ? -1 : 1),
   )
   const placed = ordered.map((end, i) => ({
@@ -161,7 +165,7 @@ function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, Anch
   // Ranks are counted by binary search over the sorted coordinates, not by
   // scanning the group per member: a group holds every end on one side, so a
   // board can put thousands in one and a scan per member is quadratic in it.
-  const sortedT = placed.map((p) => p.t).sort((a, b) => a - b)
+  const sortedT = placed.map((p) => p.t).sort(compareNumbers)
   for (const member of placed) {
     // Depth by SWEEP RANK, not list index: a corridor travelling toward
     // its far endpoint passes every anchor between its own and that
