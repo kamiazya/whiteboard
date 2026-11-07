@@ -437,6 +437,7 @@ dependencies = [
  "serde",
  "serde_json",
  "wasm-bindgen-test",
+ "whiteboard-det",
 ]
 
 [[package]]
@@ -456,6 +457,7 @@ version = "0.0.0"
 dependencies = [
  "wasm-bindgen",
  "whiteboard-det",
+ "whiteboard-edge-routing",
 ]
 
 [[package]]
