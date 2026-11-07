@@ -36,6 +36,30 @@ impl<K: Ord + Copy, V> JsMap<K, V> {
         self.index.get(key).and_then(|&i| self.entries.get(i)).map(|(_, v)| v)
     }
 
+    /// The value under `key`, to change in place where it sits.
+    pub fn get_mut(&mut self, key: &K) -> Option<&mut V> {
+        let i = *self.index.get(key)?;
+        self.entries.get_mut(i).map(|(_, v)| v)
+    }
+
+    /// `map.delete(key)`: a key set again afterwards goes to the end, as a
+    /// new key does.
+    pub fn delete(&mut self, key: &K) -> bool {
+        let Some(i) = self.index.remove(key) else { return false };
+        self.entries.remove(i);
+        for slot in self.index.values_mut() {
+            if *slot > i {
+                *slot = slot.saturating_sub(1);
+            }
+        }
+        true
+    }
+
+    /// The values in iteration order, as `map.values()`.
+    pub fn values(&self) -> impl Iterator<Item = &V> {
+        self.entries.iter().map(|(_, v)| v)
+    }
+
     /// `map.has(key)`.
     #[must_use]
     pub fn has(&self, key: &K) -> bool {
@@ -85,5 +109,20 @@ mod tests {
         assert_eq!(map.get(&3), Some(&"c"));
         assert!(map.has(&1) && !map.has(&2));
         assert_eq!(map.len(), 2);
+    }
+
+    #[test]
+    fn a_deleted_key_set_again_goes_to_the_end() {
+        let mut map: JsMap<u32, &str> = [(3, "a"), (1, "b"), (2, "c")].into_iter().collect();
+        assert!(map.delete(&3) && !map.delete(&3));
+        map.set(3, "d");
+        assert_eq!(
+            map.iter().map(|(k, v)| (*k, *v)).collect::<Vec<_>>(),
+            [(1, "b"), (2, "c"), (3, "d")]
+        );
+        if let Some(v) = map.get_mut(&2) {
+            *v = "e";
+        }
+        assert_eq!(map.values().copied().collect::<Vec<_>>(), ["b", "e", "d"]);
     }
 }

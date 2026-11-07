@@ -15,6 +15,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod bend_route;
+pub mod edge_anchors;
 pub mod edge_contact;
 pub mod edge_geometry;
 pub mod edge_ink;

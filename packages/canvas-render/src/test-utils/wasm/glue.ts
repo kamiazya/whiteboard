@@ -33,10 +33,11 @@ export interface WasmGlue {
   edge_bend_routes(input: Float64Array): Float64Array
   edge_self_loop_points(cases: Float64Array): Float64Array
   edge_route_edge(input: Float64Array): Float64Array
+  edge_compute_anchors(input: Float64Array): Float64Array
 }
 
 /** The surface these tests were written against; a stale artifact fails on this, not on its first mismatched call. */
-export const EXPECTED_ABI = '8'
+export const EXPECTED_ABI = '9'
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 
