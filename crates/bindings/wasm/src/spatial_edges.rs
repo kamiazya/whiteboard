@@ -92,7 +92,9 @@ fn override_is_finite(o: &EdgeAnchorOverride) -> bool {
 /// reaches the search makes its cost tuples incomparable: std's sort panics on
 /// a comparator that is not a total order, which in the wasm build is an
 /// aborted instance. A NaN in an end's unused slot is the wire's own
-/// placeholder and never reaches here.
+/// placeholder and never reaches here. A bend is not checked: the TypeScript
+/// admits a non-finite bend and its bend route declines it, so the port must
+/// answer it the same way rather than refuse the board.
 fn all_finite(
     nodes: &[RoutingNode],
     edges: &[RoutableEdge],
@@ -101,11 +103,7 @@ fn all_finite(
     budget: &RoutingBudget,
 ) -> bool {
     nodes.iter().all(|n| rect_is_finite(&n.rect))
-        && edges.iter().all(|e| {
-            end_is_finite(&e.from)
-                && end_is_finite(&e.to)
-                && e.bends.as_ref().is_none_or(|b| b.iter().all(|p| point_is_finite(*p)))
-        })
+        && edges.iter().all(|e| end_is_finite(&e.from) && end_is_finite(&e.to))
         && overrides.is_none_or(|m| m.iter().all(|(_, o)| override_is_finite(o)))
         && labels.iter().all(rect_is_finite)
         && [budget.grid, budget.pairs, budget.trials, budget.repairs].iter().all(|v| v.is_finite())
@@ -279,10 +277,17 @@ mod tests {
     }
 
     #[test]
+    fn a_non_finite_bend_is_answered_as_the_typescript_answers_it() {
+        let mut w = board();
+        w[25] = f64::NAN;
+        assert!(!edge_route_layout(&w).is_empty());
+    }
+
+    #[test]
     fn a_non_finite_position_size_or_allowance_is_refused() {
-        // node 0's height, node 1's x, the free end's x, the bend's y, the
-        // label's width, and each of the budget's four accounts
-        for at in [5, 7, 19, 25, 31, 33, 34, 35, 36] {
+        // node 0's height, node 1's x, the free end's x, the label's width,
+        // and each of the budget's four accounts
+        for at in [5, 7, 19, 31, 33, 34, 35, 36] {
             for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
                 let mut w = board();
                 w[at] = bad;
