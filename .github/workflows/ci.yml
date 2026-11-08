@@ -1099,7 +1099,7 @@ jobs:
       - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         if: steps.scope.outputs.run == 'true'
         with:
-          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.130,cargo-auditable@0.7.7,cargo-about@0.9.3
+          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.130,cargo-auditable@0.7.7,cargo-about@0.9.3,cargo-llvm-cov@0.9.1
           fallback: none
 
       # Both workspaces' dependency builds, keyed on the toolchain and each
@@ -1234,6 +1234,101 @@ jobs:
             crates/fuzz/regressions
           retention-days: 14
 
+  # QR-17: every mutant in this change's Rust lines must be caught by the
+  # workspace's tests, or ledgered in .cargo/mutants.toml with its reason.
+  # `cargo mutants --in-diff` against the merge commit's first parent, after a
+  # separate green test step (the run skips its own baseline), sharded with
+  # identical arguments so one slow shard never hides another's result. The
+  # edge crate is judged by the wasm crate's replay of the TypeScript's
+  # recorded answers (crates/bindings/wasm/tests/recorded_oracle.rs), its
+  # oracle in native form. tools/checks/src/rust-mutants.mjs reads the exit
+  # codes as QR-17 does: missed, timed out and a failed baseline all fail.
+  rust-mutants:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    strategy:
+      # One shard failing must not cancel its siblings: a cancelled job is not
+      # a failed one, so "Re-run failed jobs" never revives it.
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+    steps:
+      # Two commits, so the merge commit's first parent is there to diff against.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+
+      - name: Detect change scope
+        id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+        run: node tools/checks/src/affected-cli.mjs job rust-mutants --event "$EVENT"
+
+      - name: Not affected by this change
+        if: steps.scope.outputs.run != 'true'
+        env:
+          REASON: ${{ steps.scope.outputs.reason }}
+        run: echo "::notice title=Not affected by this change::$REASON"
+
+      - uses: ./.github/actions/setup-pnpm
+        if: steps.scope.outputs.run == 'true'
+
+      - name: Install dependencies
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm install --frozen-lockfile
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        if: steps.scope.outputs.run == 'true'
+        run: rustup toolchain install
+
+      # Built from source once per version and cached by it: the version is
+      # the cache key, so a bump installs fresh and an old binary never runs.
+      - name: Restore cargo-mutants
+        if: steps.scope.outputs.run == 'true'
+        id: mutants-bin
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/bin/cargo-mutants
+          key: cargo-mutants-27.1.0
+
+      - name: cargo-mutants
+        if: steps.scope.outputs.run == 'true' && steps.mutants-bin.outputs.cache-hit != 'true'
+        run: cargo install --locked cargo-mutants --version 27.1.0
+
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+        if: steps.scope.outputs.run == 'true'
+
+      # The baseline, on its own: a red tree would otherwise read as every
+      # mutant caught.
+      - name: Workspace tests (the baseline)
+        if: steps.scope.outputs.run == 'true'
+        run: cargo test --workspace --locked
+
+      - name: Mutants in this change (shard ${{ matrix.shard }}/4)
+        if: steps.scope.outputs.run == 'true'
+        env:
+          EVENT: ${{ github.event_name }}
+          RUST_MUTANTS_BASE: HEAD^1
+          RUST_MUTANTS_SHARD: ${{ matrix.shard }}/4
+        run: |
+          if [ "$EVENT" = pull_request ]; then
+            pnpm rust:mutants:pr
+          else
+            pnpm rust:mutants:full
+          fi
+
+      - name: Upload the mutants report
+        if: failure() && steps.scope.outputs.run == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: rust-mutants-shard-${{ matrix.shard }}
+          path: mutants.out
+          retention-days: 14
+
   # zizmor (https://docs.zizmor.sh): static analysis of the workflows and
   # composite actions themselves — template injection, credential persistence,
   # dangerous triggers, excessive permissions, and impostor commits behind a
@@ -1364,6 +1459,7 @@ jobs:
       - dry-run-docker
       - rust
       - rust-fuzz-pr
+      - rust-mutants
       - zizmor
       - dependency-review
     runs-on: ubuntu-24.04

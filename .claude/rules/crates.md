@@ -122,6 +122,28 @@ steps and cache paths to the scripts.
 - **`#[expect]` is ledgered**: `crates/expect-ledger.json` names every
   `#[expect]` with its reason, and `tools/arch-lint`'s
   `expect-ledger.test.ts` holds it equal to the source from both sides.
+- **Coverage floors** are `crates/coverage-floor.json` (QR-18), held by
+  `cargo xtask coverage` in `rust:check`: one `cargo llvm-cov --workspace`
+  run, counted per crate; under a floor fails, and so does a floor more than
+  `headroomPoints` below the measurement (`--update` only raises).
+- **Mutation gate** (QR-17): CI's `rust-mutants` job runs `pnpm
+  rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, four
+  shards, after a separate green `cargo test --workspace` — and a missed or
+  timed-out mutant, or a failed baseline, fails it
+  (`tools/checks/src/rust-mutants.mjs` reads the exit codes). A mutant no
+  test can observe is ledgered in `.cargo/mutants.toml` with its reason above
+  the entry; the script fails an entry that matches no mutant, and the entry
+  count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). On push to
+  main the job runs the whole workspace (`rust:mutants:full`).
+- **The TypeScript's answers are recorded for native tests**:
+  `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
+  what the TypeScript composer answers to 309 layouts, replayed bit for bit
+  by `crates/bindings/wasm/tests/recorded_oracle.rs`, so cargo-mutants and the coverage floor judge
+  the edge crate by the same oracle as the wasm differentials.
+  canvas-render's `recorded-oracle.test.ts` (node project, nothing aliased to
+  Rust) fails when the recording no longer equals today's TypeScript;
+  re-record with `WHITEBOARD_RECORD_ORACLE=1` after a deliberate routing
+  change.
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).

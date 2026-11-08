@@ -4,8 +4,8 @@
     {
       "crate": "crates/bindings/wasm",
       "lint": "clippy::cast_possible_truncation",
-      "count": 1,
-      "reason": "the one count-from-f64 read, range-checked whole and non-negative on the line before"
+      "count": 2,
+      "reason": "the count-from-f64 reads, range-checked whole and non-negative on the line before: one in the export's decoder, one in tests/recorded_oracle.rs reading the recording"
     },
     {
       "crate": "crates/bindings/wasm",
@@ -16,8 +16,8 @@
     {
       "crate": "crates/bindings/wasm",
       "lint": "clippy::cast_sign_loss",
-      "count": 1,
-      "reason": "the same count-from-f64 read as cast_possible_truncation: checked non-negative first"
+      "count": 2,
+      "reason": "the same count-from-f64 reads as cast_possible_truncation: checked non-negative first"
     },
     {
       "crate": "crates/core/edge-routing",

@@ -36,6 +36,8 @@
     "rust:build:wasm": "node tools/checks/src/rust-build-wasm.mjs",
     "rust:fuzz:pr": "node tools/checks/src/rust-fuzz.mjs pr",
     "rust:fuzz:nightly": "node tools/checks/src/rust-fuzz.mjs nightly",
+    "rust:mutants:pr": "node tools/checks/src/rust-mutants.mjs pr",
+    "rust:mutants:full": "node tools/checks/src/rust-mutants.mjs full",
     "rust:release:check": "node tools/checks/src/rust-release-check.mjs",
     "dev": "concurrently --kill-others-on-fail -n web,mcp -c blue,green \"pnpm --filter @kamiazya/whiteboard-web dev\" \"pnpm --filter @kamiazya/whiteboard-mcp mcp:http:dev\"",
     "dev:connected": "node apps/extension/scripts/dev-connected.mjs",

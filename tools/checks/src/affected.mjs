@@ -189,6 +189,10 @@ export const PATH_JOBS = {
     scope: RUST_SCOPE,
     why: 'the fuzz targets whose crates changed, for tens of seconds each',
   },
+  'rust-mutants': {
+    scope: RUST_SCOPE,
+    why: 'cargo-mutants over the Rust lines the change touches (QR-17)',
+  },
 }
 
 /**
