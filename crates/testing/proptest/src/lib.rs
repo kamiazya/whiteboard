@@ -39,8 +39,8 @@ pub fn config(cases: u32, source_file: &'static str) -> Config {
     // 27.1.0 deletes a field from a struct expression whatever `exclude_re`
     // says, and neither of these is observable from a passing test. The seed
     // restates proptest's default so that PROPTEST_RNG_SEED cannot pin it,
-    // and a test cannot set that variable (`set_var` is unsafe in edition
-    // 2024, and the workspace forbids unsafe).
+    // and a test cannot set that variable (setting an environment variable
+    // is unsafe in edition 2024, and the workspace forbids unsafe).
     config.rng_seed = RngSeed::Random;
     // wasm32 under Node has no filesystem to keep a regression in; the native
     // run of the same property is the one that writes it. This crate's own
