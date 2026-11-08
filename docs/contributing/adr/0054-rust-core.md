@@ -1,8 +1,8 @@
 # ADR-0054: The core moves to Rust — one pure core for wasm and native, with the TypeScript implementation as its oracle until it is deleted
 
 **Status:** Accepted, decided by the owner on 2026-11-06. The workspace
-skeleton and the Rust gates are in place; no product module has been ported
-yet, and the migration order below is the plan. The development quality bar the
+skeleton and the Rust gates are in place, and the first module, edge routing,
+is ported (the status note below); the migration order below is the plan. The development quality bar the
 migration is held to is a separate, language-neutral document,
 [Development quality requirements](../quality-requirements.md), which this
 ADR cites by requirement number (QR-n). Amends
@@ -19,6 +19,16 @@ cannot emit one for Rust (owner decision; QR-28d); and CI selects the Rust
 jobs by PATH (`PATH_JOBS` in `tools/checks/src/affected.mjs`) rather than
 through `cargo metadata` (decision 10) — the per-crate graph is the next
 cut once there is more than one crate worth distinguishing.
+
+**Status note (2026-11-08, the first module is ported).** Edge routing
+(`packages/canvas-render/src/layout/edges`, Rust in `crates/core/edge-routing`,
+one wasm export `edge_route_layout` reached through
+`@kamiazya/whiteboard-core-wasm`) is at stage 2, `differential`, in the daemon
+and the web editor under development and in CI, and `ts` in a release. It is
+listed in the `PORTED_FUNCTIONS` ledger (`tools/arch-lint/src/ported-functions.ts`).
+The switch may not move to `rust` until every row of its parity checklist,
+[parity/edge-routing.md](../parity/edge-routing.md), is met or not applicable.
+The decisions below are unchanged.
 
 ## Context
 
