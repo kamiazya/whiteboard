@@ -56,6 +56,9 @@ export interface RenderMarkdownPreviewOptions {
   readonly tagLibrary?: TagLibrary
 }
 
+// A failed layout still answers an empty scene, but says so: under
+// VITE_WHITEBOARD_CORE_MISMATCH=throw a routing difference in a board embedded
+// in a note lands in that catch, and a silent blank would hide it.
 const log = getAppLogger('render-preview')
 /**
  * One top-level block's scroll-sync anchor: its 1-based source start line
@@ -221,7 +224,6 @@ function layoutMarkdownScene(
         // is held, exactly as `editorLayoutBase` answers for the canvas
         // surfaces (ADR-0011's invariant).
         fontAvailable: hasLoadedFace,
-        // A board embedded in a note routes through this realm's core too.
         core: currentLayoutCore(),
         // A page, not an object. This pane runs to a readable measure, where the
         // node scale — cut so a heading cannot eat a third of a 280px box —
@@ -237,9 +239,6 @@ function layoutMarkdownScene(
       },
     )
   } catch (error) {
-    // Still an empty scene, but said: under VITE_WHITEBOARD_CORE_MISMATCH=throw
-    // a routing difference in an embedded board lands here, and a blank
-    // preview with nothing logged would hide exactly what that mode surfaces.
     log.warn('markdown preview layout failed; rendering an empty scene', error)
     return { nodes: [] }
   }
