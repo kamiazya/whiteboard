@@ -19,7 +19,7 @@ pub mod spatial_edges;
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
 /// on its first mismatched call.
-pub const ABI_VERSION: &str = "12";
+pub const ABI_VERSION: &str = "13";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]

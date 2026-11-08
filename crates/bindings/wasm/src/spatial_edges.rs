@@ -5,14 +5,15 @@
 use crate::edge_anchors::{entry_values, pin};
 use crate::edge_primitives::{count, points_len_of};
 use crate::edge_router::{rects, style_of};
-use crate::routing_wire::Wire;
+use crate::routing_wire::{Wire, side_index};
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_router::RoutingStyle;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorOverride;
 use whiteboard_edge_routing::geometry::Rect;
 use whiteboard_edge_routing::js_map::JsMap;
+use whiteboard_edge_routing::layout_routes::route_layout;
 use whiteboard_edge_routing::routing_budget::RoutingBudget;
-use whiteboard_edge_routing::routing_input::{EdgeId, RoutableEdge, RoutingNode};
+use whiteboard_edge_routing::routing_input::{Arrowhead, EdgeId, RoutableEdge, RoutingNode};
 use whiteboard_edge_routing::spatial_edges::assign_edge_anchors;
 
 /// The wire's nodes, edges, styles, overrides, labels and budget.
@@ -73,6 +74,39 @@ pub fn edge_assign_anchors(input: &[f64]) -> Vec<f64> {
     ];
     for (id, entry) in anchors.iter() {
         out.extend(entry_values(*id, entry));
+    }
+    out
+}
+
+/// One layout's edge routing in one call: `assignEdgeAnchors`, then
+/// `routeEdge` of every edge between its anchors on the same budget, as
+/// canvas-render's composer runs them.
+///
+/// In: what `edge_assign_anchors` reads. Out: `[the four accounts left, edge
+/// count, then per edge in input order: rounded 0/1, from side, to side,
+/// from end, to end (0 none, 1 arrow), point count, then x, y per point]`;
+/// an empty array for a malformed input.
+#[wasm_bindgen]
+#[must_use]
+pub fn edge_route_layout(input: &[f64]) -> Vec<f64> {
+    let Some((nodes, edges, styles, overrides, labels, mut budget)) = decode(input) else {
+        return Vec::new();
+    };
+    let routed =
+        route_layout((&nodes, &labels), (&edges, &styles), overrides.as_ref(), &mut budget);
+    let end = |a: Arrowhead| if a == Arrowhead::Arrow { 1.0 } else { 0.0 };
+    let mut out =
+        vec![budget.grid, budget.pairs, budget.trials, budget.repairs, points_len_of(routed.len())];
+    for edge in &routed {
+        out.extend([
+            if edge.rounded { 1.0 } else { 0.0 },
+            side_index(edge.from_side),
+            side_index(edge.to_side),
+            end(edge.from_end),
+            end(edge.to_end),
+            points_len_of(edge.path.len()),
+        ]);
+        out.extend(edge.path.iter().flat_map(|p| [p.x, p.y]));
     }
     out
 }

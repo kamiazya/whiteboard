@@ -84,7 +84,8 @@ job runs `canvas-render-rust` (QR-21 layer 2): canvas-render's
 wasm artifact, exact on every double, and fails on CI if the artifact is absent; the
 `test-utils/wasm/*.rust.test.ts` beside it do the same for each edge module
 ported so far (grid-route, the geometry and ink primitives, edge-rules, the
-router's leaves, the router, the anchor pass, the coincident-ends repair, the crossing sweep, the side-choice search). The same
+router's leaves, the router, the anchor pass, the coincident-ends repair, the crossing sweep, the side-choice search, and
+`edge_route_layout`, the whole layout's routing in one call). The same
 project re-runs every `layout/edges` suite, scoreboards included, with
 `./grid-route.js`, `./edge-router.js` and `./spatial-edges.js` aliased to the
 Rust ports through the wasm (QR-21 layer 1; those suites are included only when

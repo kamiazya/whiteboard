@@ -30,6 +30,7 @@ pub mod edge_sides;
 pub mod geometry;
 pub mod grid_route;
 pub mod js_map;
+pub mod layout_routes;
 mod min_heap;
 pub mod routing_budget;
 pub mod routing_input;
