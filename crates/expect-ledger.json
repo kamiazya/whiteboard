@@ -46,8 +46,8 @@
     {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::float_cmp",
-      "count": 10,
-      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more in tests/grid_route_optimality.rs, whose reference compares grid lines the same way)"
+      "count": 11,
+      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more each in tests/grid_route_optimality.rs, whose reference compares grid lines the same way, and tests/ink_properties.rs, whose oracle skips an axis-aligned segment the same way)"
     },
     {
       "crate": "crates/core/edge-routing",
