@@ -13,8 +13,9 @@ import { boundaryBoards, routeBoard } from './route-layout-boundary.js'
  * and routing, and the browser and worker runs, are
  * `scripts/route-layout-boundary.mjs`.
  *
- * Needs `pnpm rust:build:wasm` and `pnpm --filter @kamiazya/whiteboard-core-wasm
- * stage:wasm`; without the artifact the cases are skipped.
+ * Run with `pnpm bench`, after `pnpm rust:build:wasm` and
+ * `pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm`; without the
+ * artifact the cases are skipped.
  */
 // The package's own `./wasm` export, so no path leaves this workspace; it
 // resolves to nothing until the artifact is staged.
