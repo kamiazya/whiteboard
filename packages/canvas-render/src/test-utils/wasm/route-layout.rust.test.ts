@@ -1,27 +1,18 @@
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
-import type { EdgeRoutingStyle, EdgeSide } from '@kamiazya/whiteboard-model'
+import type { EdgeRoutingStyle } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
-import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
+import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { describe, expect } from 'vitest'
 import { marksContact } from '../../layout/edges/edge-contact.js'
 import type { Rect } from '../../layout/edges/edge-geometry.js'
-import { routeEdge } from '../../layout/edges/edge-router.js'
 import { createRoutingBudget, type RoutingBudget } from '../../layout/edges/routing-budget.js'
 import { assignEdgeAnchors } from '../../layout/edges/spatial-edges.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
 import { firstDifference } from './edge-arbitraries.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
+import { routeLayoutCase } from './route-layout-oracle.js'
 import { scene } from './routing-arbitraries.js'
-import { encodeRouting } from './routing-wire.js'
-import {
-  board,
-  type Drawn,
-  drawn,
-  entryValues,
-  overrideMap,
-  SIDES,
-  wireInput,
-} from './search-arbitraries.js'
+import { board, type Drawn, drawn, overrideMap } from './search-arbitraries.js'
 
 /**
  * One layout's edge routing in one wasm call (`edge_route_layout`) against
@@ -37,17 +28,6 @@ import {
  * edges the search leaves out), and the router and the grid search keep
  * their own differentials.
  */
-
-const end = (e: string | undefined) => (e === 'arrow' ? 1 : 0)
-const routedValues = (r: ResolvedEdgeNode) => [
-  r.rounded === true ? 1 : 0,
-  SIDES.indexOf(r.fromSide as EdgeSide),
-  SIDES.indexOf(r.toSide as EdgeSide),
-  end(r.fromEnd),
-  end(r.toEnd),
-  r.path.length,
-  ...r.path.flatMap((p) => [p.x, p.y]),
-]
 
 /**
  * The grid account: ample, a fixed cut that may run out anywhere, or just
@@ -74,29 +54,13 @@ const core = () => {
 }
 
 function check([d, draw]: [Drawn, GridDraw]) {
-  const wire = encodeRouting(d.nodes, d.edges)
   const overrides = overrideMap(d)
   const labels = d.labels as readonly Rect[]
   const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
   const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
   const grid = gridOf(draw, d, styleOf, overrides, labels)
-  const budget: RoutingBudget = { ...createRoutingBudget(), grid, trials: d.trials, pairs: d.pairs }
-  const anchors = assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, budget, labels)
-  const afterSearch = budget.grid
-  const routed = d.edges.map((edge) =>
-    routeEdge(d.nodes, edge, styleOf(edge), anchors.get(edge.id), undefined, budget, labels),
-  )
-  const out = requireWasm().edge_route_layout(wireInput(d, wire, overrides, d.trials, grid))
-  const expected = [
-    budget.grid,
-    budget.pairs,
-    budget.trials,
-    budget.repairs,
-    routed.length,
-    ...routed.flatMap(routedValues),
-    anchors.size,
-    ...[...anchors].flatMap(([id, e]) => entryValues(wire.edgeIds.indexOf(id), e)),
-  ]
+  const { input, expected, routed, anchors, budget, afterSearch } = routeLayoutCase(d, grid)
+  const out = requireWasm().edge_route_layout(input)
   expect(firstDifference(expected, out)).toBeUndefined()
 
   // The same layout through @kamiazya/whiteboard-core-wasm's typed call, the
