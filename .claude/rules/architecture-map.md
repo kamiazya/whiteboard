@@ -23,7 +23,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, canvas-render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | model, codec, canvas-render, canvas-viewer, core-wasm, ports, loro-adapter, facet-engine, plugin-visual, server-core, workspace-index, daemon-client, history |
 | `apps/extension` | the browser extension (ADR-0050): relays the hosted app to the native host | daemon-client |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, canvas-render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, reference-graph, workspace-index, daemon-client, history + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, canvas-render, canvas-viewer, core-wasm, ports, facet-engine, facet-ui, plugin-visual, search, reference-graph, workspace-index, daemon-client, history + port impls |
 
 **The Rust workspace under `crates/` is a second map with the same shape**
 (ADR-0054): layers core < ports < ops < adapters < mechanics < bindings, every
