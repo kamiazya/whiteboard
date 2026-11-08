@@ -1,0 +1,77 @@
+{
+  "$comment": "Every `#[expect(lint)]` in the Rust workspace, counted per crate per lint, held from both sides by tools/arch-lint's expect-ledger.test.ts: a new expectation fails until it is listed here with a reason, and an entry whose count no longer matches fails too, so the ledger only shrinks by deletion. A site with two lints counts once for each. The reason is why the lint is wrong FOR THAT CLASS of site; the site's own `reason = \"...\"` says why for the one expression. A lint the workspace should instead satisfy belongs in the code, not here.",
+  "entries": [
+    {
+      "crate": "crates/bindings/wasm",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "the one count-from-f64 read, range-checked whole and non-negative on the line before"
+    },
+    {
+      "crate": "crates/bindings/wasm",
+      "lint": "clippy::cast_precision_loss",
+      "count": 1,
+      "reason": "an answer's length converted to the f64 the wire carries; far below 2^53"
+    },
+    {
+      "crate": "crates/bindings/wasm",
+      "lint": "clippy::cast_sign_loss",
+      "count": 1,
+      "reason": "the same count-from-f64 read as cast_possible_truncation: checked non-negative first"
+    },
+    {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::arithmetic_side_effects",
+      "count": 4,
+      "reason": "index arithmetic in the grid search and the min-heap whose bound is an invariant the surrounding code enforces (a state index is below 2 * MAX_GRID_CELLS, a child index is compared against len first); each site names it"
+    },
+    {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "a value known to be 0..=1023 narrowed to the integer the TypeScript's bit arithmetic works in"
+    },
+    {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::cast_precision_loss",
+      "count": 10,
+      "reason": "a count or index becomes the f64 the TypeScript works in, where JavaScript's own number has the same 2^53 ceiling and every such count is far below it"
+    },
+    {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::cast_sign_loss",
+      "count": 1,
+      "reason": "the same narrowing as cast_possible_truncation: the value is 0..=1023"
+    },
+    {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::float_cmp",
+      "count": 9,
+      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned"
+    },
+    {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::manual_midpoint",
+      "count": 4,
+      "reason": "f64::midpoint avoids the overflow (a + b) / 2 has, and the TypeScript's expression overflows where midpoint would not; the port reproduces the TypeScript bit for bit"
+    },
+    {
+      "crate": "crates/fuzz",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "a fuzz target's own bounded count read, range-checked on the line before"
+    },
+    {
+      "crate": "crates/fuzz",
+      "lint": "clippy::cast_sign_loss",
+      "count": 1,
+      "reason": "the same count read as cast_possible_truncation: checked non-negative first"
+    },
+    {
+      "crate": "crates/xtask",
+      "lint": "clippy::struct_excessive_bools",
+      "count": 1,
+      "reason": "harden-check's report holds one flag per independent mitigation, read and printed one by one; a state enum would hide which mitigation failed"
+    }
+  ]
+}
