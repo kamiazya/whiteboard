@@ -27,6 +27,11 @@
       "regions": 100,
       "reason": "first measured 2026-11-08 at 100% lines and regions"
     },
+    "testing/proptest": {
+      "lines": 98,
+      "regions": 96,
+      "reason": "first measured 2026-11-08 at 98.63% lines and 96.90% regions"
+    },
     "xtask": {
       "lines": 60,
       "regions": 58,

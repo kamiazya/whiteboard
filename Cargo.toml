@@ -10,6 +10,7 @@ members = [
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",
+  "crates/testing/proptest",
 ]
 # A workspace of its own: it builds only on the pinned nightly (see its
 # Cargo.toml).
@@ -68,6 +69,12 @@ wasm-bindgen = "=0.2.130"
 wasm-bindgen-test = "=0.3.80"
 wasmparser = "0.263.0"
 object = { version = "0.39.1", default-features = false, features = ["std", "read_core", "elf"] }
+# Tests only, through whiteboard-proptest (QR-14b). No fork or timeout: both
+# spawn processes, which wasm32 under Node cannot, and the same properties run
+# on both targets (QR-21 layer 3).
+proptest = { version = "1.12.0", default-features = false, features = ["std"] }
+# A test's seed on wasm32 comes from the host's crypto.getRandomValues.
+getrandom = { version = "0.4.3", features = ["wasm_js"] }
 
 # The release profile is the WASM size profile: the browser and Workers pay
 # for every byte. The native daemon gets its own speed-tuned profile when it

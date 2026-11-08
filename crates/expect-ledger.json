@@ -46,8 +46,8 @@
     {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::float_cmp",
-      "count": 9,
-      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned"
+      "count": 10,
+      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more in tests/grid_route_optimality.rs, whose reference compares grid lines the same way)"
     },
     {
       "crate": "crates/core/edge-routing",
@@ -66,6 +66,12 @@
       "lint": "clippy::cast_sign_loss",
       "count": 1,
       "reason": "the same count read as cast_possible_truncation: checked non-negative first"
+    },
+    {
+      "crate": "crates/testing/proptest",
+      "lint": "clippy::panic",
+      "count": 1,
+      "reason": "the prelude's runner reports a failed property the way every test fails, by panicking with the shrunk counterexample"
     },
     {
       "crate": "crates/xtask",

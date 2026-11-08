@@ -32,9 +32,9 @@
       "description": "composition roots: wasm-bindgen, workers-rs, the native daemon"
     },
     "tooling": {
-      "dirs": ["crates/xtask", "crates/fuzz"],
+      "dirs": ["crates/xtask", "crates/fuzz", "crates/testing"],
       "mayDependOn": ["core", "ports", "ops", "adapters", "bindings"],
-      "description": "repository tooling and fuzz targets, never shipped"
+      "description": "repository tooling, test utilities and fuzz targets, never shipped"
     }
   },
   "crates": {
@@ -421,6 +421,19 @@
         "serde_json": "reads cargo metadata and the checked-in JSON ledgers",
         "wasmparser": "reads a wasm artifact's import section for the core import scan",
         "object": "reads a native binary's ELF headers, segments and dynamic table for harden-check (read-only, std + elf features only)"
+      },
+      "absorbs": []
+    },
+    "whiteboard-proptest": {
+      "path": "crates/testing/proptest",
+      "layer": "tooling",
+      "status": "present",
+      "description": "the one proptest prelude (QR-14b/d/e): the case budget, an unseeded runner, regressions beside the property, the reachability floor; a dev-dependency only",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [],
+      "allowedThirdParty": {
+        "proptest": "the property runner (QR-14); std only, no fork or timeout, so the same property runs natively and on wasm32 under Node",
+        "getrandom": "wasm32 only, with wasm_js: each run's fresh seed from the host's crypto.getRandomValues, since no seed is pinned (QR-14d)"
       },
       "absorbs": []
     },

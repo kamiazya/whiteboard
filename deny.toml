@@ -53,7 +53,14 @@ deny = [
   # jobserver is `cc`'s build-time client of make's job server: its
   # randomness names a temporary FIFO while a C dependency compiles, and never
   # reaches a built artifact (libfuzzer-sys's build is where it appears).
-  { crate = "getrandom", wrappers = ["whiteboard-daemon", "whiteboard-worker", "jobserver"], reason = "randomness is a port (IdMint); core is seeded" },
+  # A property's runner is the one other place OS randomness belongs: QR-14d
+  # forbids a pinned seed, so each run draws a fresh one. It arrives only
+  # through the prelude, which is a dev-dependency (arch-map refuses it as a
+  # normal one, since no crate lists it in allowedInternalDeps), so it never
+  # reaches a built artifact.
+  { crate = "getrandom", wrappers = ["whiteboard-daemon", "whiteboard-worker", "jobserver", "rand", "whiteboard-proptest"], reason = "randomness is a port (IdMint); core is seeded" },
+  { crate = "rand", wrappers = ["proptest"], reason = "test randomness only, for the property runner" },
+  { crate = "proptest", wrappers = ["whiteboard-proptest"], reason = "every property goes through the one prelude (QR-14b)" },
 ]
 # serde_json's recursion limit (128 levels) is part of every JSON entry's
 # depth cap (crates/input-caps.json); `unbounded_depth` removes it, so one

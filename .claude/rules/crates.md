@@ -59,6 +59,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-daemon` | bindings | planned | the native daemon binary: UDS server, MCP stdio, native messaging |
 | `whiteboard-native-fixture` | bindings | present | a minimal native binary built with the dist-native profile, so the hardening and reproducibility gates have a subject before the daemon exists |
 | `xtask` | tooling | present | repository tasks: codegen, arch-map, wasm-imports, cross-target, size, inputs, unsafe-ledger, harden-check, dist, repro-check, notices |
+| `whiteboard-proptest` | tooling | present | the one proptest prelude: case budget, unseeded runner, regressions beside the property, reachability floor |
 | `whiteboard-fuzz` | tooling | present | cargo-fuzz targets, one per untrusted-input entry |
 
 Core crates are pure: no I/O, `forbid(unsafe_code)`, unchanged on wasm32 and
@@ -136,6 +137,15 @@ steps and cache paths to the scripts.
   count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). A push to
   main judges the merged change in-diff the same way; `rust:mutants:full`
   (the whole workspace) is run by hand until its survivors are classified.
+- **Properties go through `whiteboard-proptest`** (QR-14b/d/e,
+  `crates/testing/proptest`), a dev-dependency only: `check(strategy, cases,
+  test)` runs 200 cases unless the call passes another budget, never with a
+  fixed seed, and writes a failure's shrunk case beside the property as
+  `<file>.proptest-regressions` (committed); `Floor` asserts how many draws
+  reached the case the property is about. `deny.toml` admits proptest only
+  through it, and `rust-proptest-prelude.test.ts` refuses a runner, config,
+  `proptest!` or seed built elsewhere. A property runs on wasm32 too, so it
+  counts in `cross-target` like any test.
 - **The TypeScript's answers are recorded for native tests**:
   `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
   what the TypeScript composer answers to 309 layouts, replayed bit for bit
