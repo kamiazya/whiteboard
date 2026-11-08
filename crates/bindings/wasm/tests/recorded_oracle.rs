@@ -11,7 +11,9 @@
 use whiteboard_wasm::spatial_edges::edge_route_layout;
 
 fn recording() -> Vec<f64> {
-    let bytes = include_bytes!("../../../../packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64");
+    let bytes = include_bytes!(
+        "../../../../packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64"
+    );
     bytes
         .chunks_exact(8)
         .map(|c| <[u8; 8]>::try_from(c).map_or(f64::NAN, f64::from_le_bytes))
