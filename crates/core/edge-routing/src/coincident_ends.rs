@@ -244,12 +244,42 @@ pub fn anchors_without_coincident_ends(
 
 #[cfg(test)]
 mod tests {
-    use super::score_repaired_route;
+    use super::{CoincidentRequest, anchors_without_coincident_ends, score_repaired_route};
     use crate::edge_geometry::Side;
+    use crate::edge_router::RoutingStyle;
     use crate::edge_rules::SidePair;
     use crate::geometry::{Point, Rect};
+    use crate::js_map::JsMap;
+    use crate::routing_budget::RoutingBudget;
+    use crate::routing_input::{RoutableEdge, RoutingEnd, RoutingNode};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    /// Two boxes sharing a border, an edge sided across it: both anchors land
+    /// on the one point, and the repair re-sides the edge so they part. The
+    /// native tests reach the repair here rather than only when a generated
+    /// board happens to, so the crate's coverage does not move with the draw.
+    #[test]
+    fn an_edge_whose_ends_coincide_is_re_sided_until_they_part() {
+        let nodes = [
+            RoutingNode { id: 0, rect: Rect { x: 0.0, y: 0.0, w: 100.0, h: 50.0 } },
+            RoutingNode { id: 1, rect: Rect { x: 100.0, y: 0.0, w: 100.0, h: 50.0 } },
+        ];
+        let end = |node| RoutingEnd::Node { node, side: None, arrowhead: None };
+        let edges = [RoutableEdge { id: 7, from: end(0), to: end(1), bends: None }];
+        let across = SidePair { from_side: Side::Right, to_side: Side::Left, around: false };
+        let sides: JsMap<_, _> = [(7, across)].into_iter().collect();
+        let style_of = |_: &RoutableEdge| RoutingStyle::Orthogonal;
+        let request =
+            CoincidentRequest { labels: &[], style_of: &style_of, align: false, pins: None };
+        let mut budget = RoutingBudget::for_layout();
+        let anchors =
+            anchors_without_coincident_ends(&nodes, &edges, &sides, &request, &mut budget);
+        let pair = anchors.get(&7).copied().unwrap_or_default();
+        assert!(pair.from.is_some() && pair.to.is_some());
+        assert_ne!(pair.from, pair.to);
+        assert_ne!((pair.from_side, pair.to_side), (Some(Side::Right), Some(Side::Left)));
+    }
 
     /// A clean route keeps tier 0 with a final segment exactly the
     /// arrowhead's length and drops to tier 1 just short of it: no
