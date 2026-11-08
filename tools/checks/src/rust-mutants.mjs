@@ -29,7 +29,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ledgerEntries, ledgerProblems } from './rust-mutants-ledger.mjs'
+import { ledgerEntries, ledgerProblems, mutantNames } from './rust-mutants-ledger.mjs'
 
 const VERSION = '27.1.0'
 const INSTALL = `cargo install --locked cargo-mutants --version ${VERSION}`
@@ -55,14 +55,21 @@ if (version.status !== 0) fail(`cargo-mutants is not installed. Install it with:
 if (!found.endsWith(VERSION))
   fail(`cargo-mutants ${VERSION} is required, found \`${found}\`:\n  ${INSTALL}`)
 
-const listed = spawnSync('cargo', ['mutants', '--workspace', '--list', '--no-config'], {
-  encoding: 'utf8',
-  maxBuffer: 64 * 1024 * 1024,
-})
+// `--colors never`: CI sets CARGO_TERM_COLOR=always, and coloured names
+// (`replace \x1b[38;5;13mmeasure\x1b[0m ->`) match no ledger pattern, which
+// reads as every entry being stale.
+const listed = spawnSync(
+  'cargo',
+  ['mutants', '--workspace', '--list', '--no-config', '--colors', 'never'],
+  {
+    encoding: 'utf8',
+    maxBuffer: 64 * 1024 * 1024,
+  },
+)
 if (listed.status !== 0) fail(`cargo mutants --list failed:\n${listed.stderr}`)
 const problems = ledgerProblems(
   ledgerEntries(readFileSync('.cargo/mutants.toml', 'utf8')),
-  listed.stdout.split('\n').filter((l) => l.trim() !== ''),
+  mutantNames(listed.stdout),
 )
 if (problems.length > 0) fail(`the mutants ledger:\n  ${problems.join('\n  ')}`)
 

@@ -5,7 +5,7 @@
 // checks the file's shape on every change.
 
 /** How many `exclude_re` entries .cargo/mutants.toml holds: a change is a decision made in the diff. */
-export const EXCLUSIONS = 2
+const EXCLUSIONS = 2
 
 /**
  * The ledger's entries, each with the comment lines directly above it. A
@@ -64,4 +64,20 @@ export function ledgerProblems(entries, names, expected = EXCLUSIONS) {
       problems.push(`${e.regex}: matches no mutant, so it is stale`)
   }
   return problems
+}
+
+/**
+ * The mutant names in `cargo mutants --list` output, one a line, with any
+ * terminal colour stripped: a name the ledger is matched against must be the
+ * plain text, whatever the environment asked the tool to draw.
+ * @param {string} stdout
+ * @returns {string[]}
+ */
+export function mutantNames(stdout) {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: an ANSI escape is what is being stripped
+  const ansi = /\u001b\[[0-9;]*m/g
+  return stdout
+    .split('\n')
+    .map((l) => l.replace(ansi, '').trim())
+    .filter((l) => l !== '')
 }

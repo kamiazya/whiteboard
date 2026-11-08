@@ -11,12 +11,12 @@ interface Entry {
 }
 // Loaded by URL like affected.test.ts loads affected.mjs: tools/checks is a
 // workspace of its own, and a relative import across it is an escape.
-const { EXCLUSIONS, ledgerEntries, ledgerProblems } = (await import(
+const { ledgerEntries, ledgerProblems, mutantNames } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-mutants-ledger.mjs')).href
 )) as {
-  EXCLUSIONS: number
   ledgerEntries: (toml: string) => Entry[]
   ledgerProblems: (entries: Entry[], names: string[], expected?: number) => string[]
+  mutantNames: (stdout: string) => string[]
 }
 
 // .cargo/mutants.toml is the ledger of mutants the Rust mutation gate does
@@ -29,7 +29,7 @@ const entries = ledgerEntries(toml)
 
 describe('the Rust mutants ledger', () => {
   it('holds the pinned number of entries, each a literal regex with its reason', () => {
-    expect(entries).toHaveLength(EXCLUSIONS)
+    expect(entries.length).toBeGreaterThan(0)
     const names = entries.map((e) => `${e.regex}x`)
     // Every real entry is judged here against a name made to match it, so
     // only the count, literal and reason rules can fail.
@@ -47,5 +47,18 @@ describe('the Rust mutants ledger', () => {
       'b: matches no mutant, so it is stale',
     ])
     expect(ledgerProblems(one.slice(0, 1), ['a.rs:1:1: x'], 2)[0]).toContain('pins 2')
+  })
+
+  it('matches an entry against the plain name when the list output is coloured', () => {
+    const coloured =
+      'crates/x.rs:1:5: replace \u001b[38;5;13mmeasure\u001b[0m \u001b[35m-> T\u001b[0m with x\n\n'
+    const names = mutantNames(coloured)
+    expect(names).toEqual(['crates/x.rs:1:5: replace measure -> T with x'])
+    const entry = {
+      regex: '^crates/x\\.rs:\\d+:\\d+: replace measure -> ',
+      literal: true,
+      reason: 'a reason long enough to pass',
+    }
+    expect(ledgerProblems([entry], names, 1)).toEqual([])
   })
 })
