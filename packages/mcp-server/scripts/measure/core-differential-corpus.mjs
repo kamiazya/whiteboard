@@ -26,11 +26,11 @@
 import { cp, mkdtemp, rm } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { readSpatialCanvasWithSkipped } from '@kamiazya/whiteboard-loro-adapter'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { createCanvasRenderSvgTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
+import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { layoutCoreLoader, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
 import { closeDb } from '../../src/server/store/db/index.ts'
@@ -205,7 +205,7 @@ async function main() {
   return 0
 }
 
-if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+if (isRunAsScript(import.meta.url)) {
   main().then(
     (code) => process.exit(code),
     (err) => {
