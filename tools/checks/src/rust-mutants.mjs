@@ -26,9 +26,10 @@
 // would judge a diff by a list nobody reviewed.
 
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { ledgerEntries, ledgerProblems } from './rust-mutants-ledger.mjs'
 
 const VERSION = '27.1.0'
 const INSTALL = `cargo install --locked cargo-mutants --version ${VERSION}`
@@ -53,6 +54,17 @@ const found = (version.stdout ?? '').trim()
 if (version.status !== 0) fail(`cargo-mutants is not installed. Install it with:\n  ${INSTALL}`)
 if (!found.endsWith(VERSION))
   fail(`cargo-mutants ${VERSION} is required, found \`${found}\`:\n  ${INSTALL}`)
+
+const listed = spawnSync('cargo', ['mutants', '--workspace', '--list', '--no-config'], {
+  encoding: 'utf8',
+  maxBuffer: 64 * 1024 * 1024,
+})
+if (listed.status !== 0) fail(`cargo mutants --list failed:\n${listed.stderr}`)
+const problems = ledgerProblems(
+  ledgerEntries(readFileSync('.cargo/mutants.toml', 'utf8')),
+  listed.stdout.split('\n').filter((l) => l.trim() !== ''),
+)
+if (problems.length > 0) fail(`the mutants ledger:\n  ${problems.join('\n  ')}`)
 
 const args = [
   'mutants',

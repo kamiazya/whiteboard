@@ -130,23 +130,28 @@ pub(crate) fn tally(report_json: &str) -> Result<BTreeMap<String, Counts>, Strin
     Ok(by)
 }
 
+/// Whether `found`, `cargo llvm-cov --version`'s output, is the pinned version.
+pub(crate) fn required_version(found: &str) -> Result<(), String> {
+    if found.ends_with(LLVM_COV_VERSION) {
+        Ok(())
+    } else if found.is_empty() {
+        Err(format!(
+            "coverage: cargo-llvm-cov is not installed. Install it with:\n  {LLVM_COV_INSTALL}"
+        ))
+    } else {
+        Err(format!(
+            "coverage: cargo-llvm-cov {LLVM_COV_VERSION} is required, found `{found}`. Install it \
+             with:\n  {LLVM_COV_INSTALL}"
+        ))
+    }
+}
+
+/// Runs `cargo llvm-cov` and answers its JSON summary: process plumbing,
+/// judged by running it in `rust:check` (ledgered in .cargo/mutants.toml).
 fn measure(root: &std::path::Path) -> Result<String, Vec<String>> {
     let version = Command::new(metadata::cargo()).args(["llvm-cov", "--version"]).output();
-    let found = version.as_ref().map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned());
-    match found {
-        Ok(v) if v.ends_with(LLVM_COV_VERSION) => {}
-        Ok(v) if !v.is_empty() => {
-            return Err(vec![format!(
-                "coverage: cargo-llvm-cov {LLVM_COV_VERSION} is required, found `{v}`. Install it \
-                 with:\n  {LLVM_COV_INSTALL}"
-            )]);
-        }
-        _ => {
-            return Err(vec![format!(
-                "coverage: cargo-llvm-cov is not installed. Install it with:\n  {LLVM_COV_INSTALL}"
-            )]);
-        }
-    }
+    let found = version.map(|o| String::from_utf8_lossy(&o.stdout).trim().to_owned());
+    required_version(&found.unwrap_or_default()).map_err(|e| vec![e])?;
     let out = Command::new(metadata::cargo())
         .current_dir(root)
         .args(["llvm-cov", "--workspace", "--locked", "--json", "--summary-only"])
@@ -183,18 +188,36 @@ pub(crate) fn coverage_of_ledger(
     v
 }
 
-pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
-    let metadata = metadata::load()?;
-    let ledger_path = metadata.workspace_root.join(LEDGER_PATH);
-    let mut ledger: Ledger = metadata::read_json(&ledger_path)?;
-    let measured = tally(&measure(&metadata.workspace_root)?).map_err(|e| vec![e])?;
-    let mut violations = coverage_of_ledger(&ledger, &measured);
-    let mut report = Vec::new();
-    let mut changed = false;
-    for (name, counts) in &measured {
+/// What one measurement says against the ledger.
+#[derive(Debug, Default)]
+pub(crate) struct Outcome {
+    pub(crate) report: Vec<String>,
+    pub(crate) violations: Vec<String>,
+    /// Whether `--update` raised a floor, so the ledger has to be written.
+    pub(crate) changed: bool,
+}
+
+/// `measured` against `ledger`, raising floors first under `Mode::Update`.
+pub(crate) fn check(
+    ledger: &mut Ledger,
+    measured: &BTreeMap<String, Counts>,
+    mode: Mode,
+) -> Outcome {
+    let mut out =
+        Outcome { violations: coverage_of_ledger(ledger, measured), ..Outcome::default() };
+    let headroom = ledger.headroom_points;
+    for (name, counts) in measured {
         let Some(floor) = ledger.crates.get_mut(name) else { continue };
         let (lines, regions) = (basis_points(counts.lines), basis_points(counts.regions));
-        report.push(format!(
+        if let Mode::Update = mode {
+            for (f, bp) in [(&mut floor.lines, lines), (&mut floor.regions, regions)] {
+                if bp / 100 > *f {
+                    *f = bp / 100;
+                    out.changed = true;
+                }
+            }
+        }
+        out.report.push(format!(
             "  {name}: lines {}.{:02}% (floor {}), regions {}.{:02}% (floor {})",
             lines / 100,
             lines % 100,
@@ -203,21 +226,24 @@ pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
             regions % 100,
             floor.regions
         ));
-        if let Mode::Update = mode {
-            for (f, bp) in [(&mut floor.lines, lines), (&mut floor.regions, regions)] {
-                if bp / 100 > *f {
-                    *f = bp / 100;
-                    changed = true;
-                }
-            }
-        }
-        let headroom = ledger.headroom_points;
         for (what, f, bp) in [("line", floor.lines, lines), ("region", floor.regions, regions)] {
             if let Some(v) = judge(what, f, bp, headroom) {
-                violations.push(format!("{name}: {v}"));
+                out.violations.push(format!("{name}: {v}"));
             }
         }
     }
+    out
+}
+
+/// `cargo xtask coverage`: reads the ledger, measures, writes the ledger back
+/// when `--update` raised a floor. File and process plumbing around `check`,
+/// judged by running it in `rust:check` (ledgered in .cargo/mutants.toml).
+pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
+    let metadata = metadata::load()?;
+    let ledger_path = metadata.workspace_root.join(LEDGER_PATH);
+    let mut ledger: Ledger = metadata::read_json(&ledger_path)?;
+    let measured = tally(&measure(&metadata.workspace_root)?).map_err(|e| vec![e])?;
+    let Outcome { mut report, violations, changed } = check(&mut ledger, &measured, mode);
     if changed {
         let text = serde_json::to_string_pretty(&ledger)
             .map_err(|e| vec![format!("cannot serialise {LEDGER_PATH}: {e}")])?;
@@ -234,7 +260,88 @@ pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{basis_points, crate_of, judge, tally};
+    use super::{
+        Counts, Floor, Ledger, Mode, basis_points, check, crate_of, judge, required_version, tally,
+    };
+    use std::collections::BTreeMap;
+
+    fn ledger(floors: &[(&str, u64, u64)]) -> Ledger {
+        Ledger {
+            comment: String::new(),
+            headroom_points: 2,
+            crates: floors
+                .iter()
+                .map(|(n, l, r)| {
+                    ((*n).to_owned(), Floor { lines: *l, regions: *r, reason: "r".into() })
+                })
+                .collect(),
+        }
+    }
+
+    /// A crate's directory, then its (covered, count) lines and regions.
+    type Row<'a> = (&'a str, (u64, u64), (u64, u64));
+
+    fn measured(rows: &[Row<'_>]) -> BTreeMap<String, Counts> {
+        rows.iter().map(|(n, l, r)| ((*n).to_owned(), Counts { lines: *l, regions: *r })).collect()
+    }
+
+    #[test]
+    fn a_check_passes_a_crate_at_its_floors_and_reports_it() {
+        let mut l = ledger(&[("core/log", 94, 90)]);
+        let out = check(&mut l, &measured(&[("core/log", (945, 1000), (905, 1000))]), Mode::Check);
+        assert!(out.violations.is_empty(), "{:?}", out.violations);
+        assert!(!out.changed);
+        assert_eq!(
+            out.report,
+            vec!["  core/log: lines 94.50% (floor 94), regions 90.50% (floor 90)"]
+        );
+    }
+
+    #[test]
+    fn a_check_names_each_measure_under_its_floor() {
+        let mut l = ledger(&[("core/log", 95, 91)]);
+        let out = check(&mut l, &measured(&[("core/log", (945, 1000), (905, 1000))]), Mode::Check);
+        assert_eq!(out.violations.len(), 2, "{:?}", out.violations);
+        assert!(out.violations.iter().all(|v| v.starts_with("core/log: ") && v.contains("under")));
+    }
+
+    #[test]
+    fn update_raises_a_floor_to_the_measurement_rounded_down_and_never_lowers_one() {
+        let mut l = ledger(&[("core/log", 90, 95)]);
+        let out = check(&mut l, &measured(&[("core/log", (977, 1000), (905, 1000))]), Mode::Update);
+        assert!(out.changed);
+        let floor = l.crates.get("core/log").map(|f| (f.lines, f.regions));
+        assert_eq!(floor, Some((97, 95)));
+        // 90.50% regions is under the floor of 95, which update did not lower.
+        assert_eq!(out.violations.len(), 1, "{:?}", out.violations);
+        let again =
+            check(&mut l, &measured(&[("core/log", (977, 1000), (955, 1000))]), Mode::Update);
+        assert!(!again.changed && again.violations.is_empty(), "{:?}", again.violations);
+    }
+
+    #[test]
+    fn a_check_fails_a_crate_without_a_floor_a_floor_without_a_crate_and_one_without_a_reason() {
+        let mut l = ledger(&[("core/gone", 0, 0), ("core/log", 0, 0)]);
+        if let Some(f) = l.crates.get_mut("core/log") {
+            f.reason = " ".into();
+        }
+        let m = measured(&[("core/log", (0, 0), (0, 0)), ("core/new", (1, 1), (1, 1))]);
+        let out = check(&mut l, &m, Mode::Check);
+        let joined = out.violations.join("\n");
+        assert!(joined.contains("core/new: a measured crate with no floor"), "{joined}");
+        assert!(
+            joined.contains("core/gone: a floor for a crate the run did not measure"),
+            "{joined}"
+        );
+        assert!(joined.contains("core/log: a floor with no reason"), "{joined}");
+    }
+
+    #[test]
+    fn the_pinned_version_is_required_and_its_absence_says_how_to_install_it() {
+        assert_eq!(required_version("cargo-llvm-cov 0.9.1"), Ok(()));
+        assert!(required_version("cargo-llvm-cov 0.9.0").is_err_and(|e| e.contains("found")));
+        assert!(required_version("").is_err_and(|e| e.contains("not installed")));
+    }
 
     #[test]
     fn a_floor_fits_between_itself_and_its_headroom() {

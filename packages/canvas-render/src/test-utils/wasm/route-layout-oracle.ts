@@ -152,10 +152,22 @@ export function recordedDraws(): readonly { readonly draw: Drawn; readonly grid:
 
 /** The recording's file: `[count, then per case: input length, input, answer length, answer]` as little-endian f64. */
 export function encodeRecording(cases: readonly RouteLayoutCase[]): Uint8Array {
-  const values = [cases.length]
-  for (const c of cases) values.push(c.input.length, ...c.input, c.expected.length, ...c.expected)
-  const bytes = new Uint8Array(values.length * 8)
+  // Written number by number: spreading a case into one call's arguments
+  // would meet the engine's argument limit long before the wire cap.
+  const total = 1 + cases.reduce((n, c) => n + 2 + c.input.length + c.expected.length, 0)
+  const bytes = new Uint8Array(total * 8)
   const view = new DataView(bytes.buffer)
-  for (const [i, v] of values.entries()) view.setFloat64(i * 8, v, true)
+  let at = 0
+  const put = (v: number) => {
+    view.setFloat64(at, v, true)
+    at += 8
+  }
+  put(cases.length)
+  for (const c of cases) {
+    put(c.input.length)
+    for (const v of c.input) put(v)
+    put(c.expected.length)
+    for (const v of c.expected) put(v)
+  }
   return bytes
 }

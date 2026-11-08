@@ -126,6 +126,15 @@ steps and cache paths to the scripts.
   `cargo xtask coverage` in `rust:check`: one `cargo llvm-cov --workspace`
   run, counted per crate; under a floor fails, and so does a floor more than
   `headroomPoints` below the measurement (`--update` only raises).
+- **Mutation gate** (QR-17): CI's `rust-mutants` job runs `pnpm
+  rust:mutants:pr` — `cargo mutants --in-diff` against the PR base, four
+  shards, after a separate green `cargo test --workspace` — and a missed or
+  timed-out mutant, or a failed baseline, fails it
+  (`tools/checks/src/rust-mutants.mjs` reads the exit codes). A mutant no
+  test can observe is ledgered in `.cargo/mutants.toml` with its reason above
+  the entry; the script fails an entry that matches no mutant, and the entry
+  count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). On push to
+  main the job runs the whole workspace (`rust:mutants:full`).
 - **The TypeScript's answers are recorded for native tests**:
   `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
   what the TypeScript composer answers to 309 layouts, replayed bit for bit

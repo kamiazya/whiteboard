@@ -1,0 +1,20 @@
+# cargo-mutants' configuration, and the ledger of mutants the gate does not
+# judge (QR-17). Every `exclude_re` entry carries its reason in the comment
+# directly above it; `tools/checks/src/rust-mutants.mjs` fails an entry with
+# no reason, an entry that no longer matches any mutant (a stale one), and a
+# change in how many entries there are, which it pins.
+#
+# An entry is for a mutant no test can observe, never for one a test is owed:
+# a survivor is classified first (real risk: add the test; equivalent or
+# intentionally permissive: ledger it here with the reason).
+
+exclude_re = [
+  # The xtask entry point: argument dispatch and exit-code mapping. Every arm
+  # runs in `pnpm rust:check` (and the release check), whose steps fail when
+  # a task does not run; a unit test would re-state the match.
+  '^crates/xtask/src/main\.rs:',
+  # `cargo xtask coverage`'s process and file plumbing around the tested
+  # `check` and `required_version`: spawning cargo llvm-cov and writing the
+  # ledger back. Judged by running it in `pnpm rust:check`.
+  '^crates/xtask/src/coverage\.rs:\d+:\d+: (replace (measure|run) -> |.* in (measure|run)$)',
+]

@@ -84,9 +84,49 @@
     "status": "completed",
     "conclusion": "success"
   },
-  { "conclusion": "success", "name": "scope", "status": "completed" },
-  { "conclusion": "success", "name": "rust", "status": "completed" },
-  { "conclusion": "success", "name": "rust-fuzz-pr", "status": "completed" },
-  { "conclusion": "success", "name": "zizmor", "status": "completed" },
-  { "conclusion": "success", "name": "dependency-review", "status": "completed" }
+  {
+    "conclusion": "success",
+    "name": "scope",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "rust",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "rust-fuzz-pr",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "zizmor",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "dependency-review",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "rust-mutants (1)",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "rust-mutants (2)",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "rust-mutants (3)",
+    "status": "completed"
+  },
+  {
+    "conclusion": "success",
+    "name": "rust-mutants (4)",
+    "status": "completed"
+  }
 ]

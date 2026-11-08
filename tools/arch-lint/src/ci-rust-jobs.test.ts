@@ -32,6 +32,7 @@ interface Step {
 interface Job {
   env?: Record<string, unknown>
   steps?: Step[]
+  strategy?: { 'fail-fast'?: boolean; matrix?: Record<string, unknown> }
 }
 interface Workflow {
   env?: Record<string, unknown>
@@ -42,7 +43,7 @@ const read = (path: string): string => readFileSync(join(REPO_ROOT, path), 'utf-
 const ci = parseYaml(read('.github/workflows/ci.yml')) as Workflow
 const nightly = parseYaml(read('.github/workflows/rust-fuzz-nightly.yml')) as Workflow
 
-const RUST_JOBS = ['rust', 'rust-fuzz-pr']
+const RUST_JOBS = ['rust', 'rust-fuzz-pr', 'rust-mutants']
 const stepsOf = (workflow: Workflow, id: string): Step[] => workflow.jobs[id]?.steps ?? []
 const runs = (workflow: Workflow, id: string): string[] =>
   stepsOf(workflow, id).flatMap((step) => (step.run === undefined ? [] : [step.run]))
@@ -66,6 +67,7 @@ const TOOL_PINS: Record<string, string> = {
   ),
 }
 const FUZZ_PIN = pinned('tools/checks/src/rust-fuzz.mjs', /cargo-fuzz --version (\S+?)'/)
+const MUTANTS_PIN = pinned('tools/checks/src/rust-mutants.mjs', /const VERSION = '([^']+)'/)
 
 describe('the rust job runs every Rust gate', () => {
   it.each([
@@ -122,6 +124,33 @@ describe('the Rust jobs install the tool versions the scripts require', () => {
     )
     expect(versions.length).toBeGreaterThan(0)
     expect(new Set(versions)).toEqual(new Set([FUZZ_PIN]))
+  })
+})
+
+describe('the rust-mutants job runs the pinned cargo-mutants after a green baseline', () => {
+  const steps = stepsOf(ci, 'rust-mutants')
+
+  it('installs and caches the version rust-mutants.mjs requires', () => {
+    const installs = [
+      ...runs(ci, 'rust-mutants')
+        .join('\n')
+        .matchAll(/cargo-mutants --version (\S+)/g),
+    ]
+    expect(installs.map((m) => m[1])).toEqual([MUTANTS_PIN])
+    const cache = steps.find((s) => s.uses?.startsWith('actions/cache@'))
+    expect(cache?.with?.key).toBe(`cargo-mutants-${MUTANTS_PIN}`)
+  })
+
+  it('runs the workspace tests in a step before the mutants, and shards with identical arguments', () => {
+    const test = steps.findIndex((s) => s.run?.trim() === 'cargo test --workspace --locked')
+    const mutants = steps.findIndex((s) => s.run?.includes('pnpm rust:mutants:pr'))
+    expect(test).toBeGreaterThan(-1)
+    expect(mutants).toBeGreaterThan(test)
+    expect(steps[mutants]?.env?.RUST_MUTANTS_BASE).toBe('HEAD^1')
+    const legs = ci.jobs['rust-mutants']?.strategy?.matrix?.shard as number[] | undefined
+    expect(legs?.length).toBeGreaterThan(1)
+    expect(steps[mutants]?.env?.RUST_MUTANTS_SHARD).toBe(`\${{ matrix.shard }}/${legs?.length}`)
+    expect(ci.jobs['rust-mutants']?.strategy?.['fail-fast']).toBe(false)
   })
 })
 
