@@ -1,3 +1,4 @@
+import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { EdgeRoutingStyle, EdgeSide } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
@@ -9,7 +10,7 @@ import { createRoutingBudget, type RoutingBudget } from '../../layout/edges/rout
 import { assignEdgeAnchors } from '../../layout/edges/spatial-edges.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
 import { firstDifference } from './edge-arbitraries.js'
-import { built, requireWasm } from './glue.js'
+import { built, requireWasm, wasmBytes } from './glue.js'
 import { scene } from './routing-arbitraries.js'
 import { encodeRouting } from './routing-wire.js'
 import { board, type Drawn, drawn, overrideMap, SIDES, wireInput } from './search-arbitraries.js'
@@ -47,6 +48,12 @@ const gridDraw = fc.oneof(
 
 const reach = { bent: 0, contact: 0, gridSpent: 0, overridden: 0 }
 
+let shim: ReturnType<typeof coreFrom> | undefined
+const core = () => {
+  shim ??= coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  return shim
+}
+
 function check([d, grid]: [Drawn, number]) {
   const wire = encodeRouting(d.nodes, d.edges)
   const overrides = overrideMap(d)
@@ -69,6 +76,19 @@ function check([d, grid]: [Drawn, number]) {
     ...routed.flatMap(routedValues),
   ]
   expect(firstDifference(expected, out)).toBeUndefined()
+
+  // The same layout through @kamiazya/whiteboard-core-wasm's typed call, the
+  // one a composition root will hand canvas-render: its encoder and decoder
+  // are judged here, against the same TypeScript composition.
+  const shimBudget: RoutingBudget = {
+    ...createRoutingBudget(),
+    grid,
+    trials: d.trials,
+    pairs: d.pairs,
+  }
+  const shimRoutes = core().routeLayout(d.nodes, d.edges, styleOf, overrides, shimBudget, labels)
+  expect(shimRoutes).toEqual(routed)
+  expect(shimBudget).toEqual(budget)
 
   if (routed.some((r) => r.path.length > 2)) reach.bent += 1
   // An edge the search leaves out, which the composer still routes.

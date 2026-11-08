@@ -58,10 +58,7 @@ function treeDisagreements(
  * TypeScript paths an `absorbs` entry may name that are not packages yet,
  * each with why. Guarded from both sides below.
  */
-const ABSORBED_BEFORE_IT_EXISTS: Readonly<Record<string, string>> = {
-  'packages/core-wasm':
-    'the TypeScript shim over the wasm artifact, created when the first core crate ships through it',
-}
+const ABSORBED_BEFORE_IT_EXISTS: Readonly<Record<string, string>> = {}
 
 /** The repo path an `absorbs` entry starts with; the rest of the entry is prose qualifying it. */
 const absorbedPath = (entry: string): string => entry.split(' ')[0] ?? ''

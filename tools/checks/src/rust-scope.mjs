@@ -28,5 +28,7 @@ export const RUST_SCOPE = {
     // canvas-render-rust re-runs the edge suites against the Rust router.
     'packages/canvas-render/src/layout/edges',
     'packages/canvas-render/src/test-utils/wasm',
+    // The shim over the artifact, tested in the rust job (core-wasm-rust).
+    'packages/core-wasm',
   ],
 }

@@ -69,6 +69,7 @@ describe('docs/ contract', () => {
       'packages/canvas-render': 'canvas-render',
       'packages/loro-adapter': 'loro-adapter',
       'packages/search': 'search node',
+      'packages/core-wasm': 'core-wasm',
       'packages/reference-graph': 'reference-graph node',
       'packages/server-core': 'server-core',
       'packages/workspace-index': 'workspace-index',
@@ -338,6 +339,8 @@ describe('docs/ contract', () => {
       'twenty-seven',
       'twenty-eight',
       'twenty-nine',
+      'thirty',
+      'thirty-one',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

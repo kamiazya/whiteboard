@@ -105,6 +105,12 @@
     "packages/scene": {
       "project": ["src/**/*.ts"]
     },
+    "packages/core-wasm": {
+      // The type-only check `typecheck:abi` compiles against the staged
+      // artifact; nothing imports it, which is the point.
+      "entry": ["abi-conformance.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/search": {
       "project": ["src/**/*.ts"]
     },

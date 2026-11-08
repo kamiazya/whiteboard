@@ -68,6 +68,9 @@ describe('the rust job runs every Rust gate', () => {
     'pnpm rust:check',
     'pnpm rust:build:wasm',
     'pnpm exec vitest run --project=canvas-render-rust',
+    'pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm',
+    'pnpm --filter @kamiazya/whiteboard-core-wasm typecheck:abi',
+    'pnpm exec vitest run --project=core-wasm-rust',
     'pnpm rust:release:check',
   ])('runs %s, gated on its own scope', (command) => {
     const step = stepsOf(ci, 'rust').find((s) => s.run?.trim() === command)

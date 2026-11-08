@@ -137,7 +137,7 @@ steps and cache paths to the scripts.
   the environment silently replaces config rustflags.
 - **Panic policy**: wasm builds with `panic = "abort"` — the host recreates
   the instance and rehydrates (`cargo xtask poison-recover` prints the
-  scenario and fails until the wasm shim package, `core-wasm`, implements it); the native
+  scenario and fails until the wasm shim package, `core-wasm`, gains the recovery module it names); the native
   daemon builds with `panic = "unwind"` and `catch_unwind` per request, so
   one request fails rather than the process.
 

@@ -155,6 +155,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // either half is a second set of answers.
   // It takes content already read (a body, or a canvas), so it needs
   // neither the CRDT nor the bridge — model's types are the whole surface.
+  // The Rust core's wasm artifact behind a thin shim (ADR-0054): init from
+  // bytes or a compiled module a composition root hands it, an ABI check, one
+  // typed call per user operation. Below canvas-render's consumers but never
+  // importing canvas-render: the composer will take its implementation
+  // through layout options, so the dependency points this way.
+  '@kamiazya/whiteboard-core-wasm': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-scene'],
+    allowedThirdParty: [],
+  },
   '@kamiazya/whiteboard-search': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: [],

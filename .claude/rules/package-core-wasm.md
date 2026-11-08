@@ -1,0 +1,56 @@
+---
+paths:
+  - "packages/core-wasm/**"
+---
+
+# core-wasm — the Rust core behind a thin shim
+
+[ADR-0054](../../docs/contributing/adr/0054-rust-core.md) keeps this package
+in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
+(`crates/`, `.claude/rules/crates.md`); what lives here is only the boundary.
+
+## What belongs here
+
+- `loadCore(source)` / `coreFrom(glue, source)`: init from the artifact's
+  bytes or a compiled `WebAssembly.Module` that a COMPOSITION ROOT hands over
+  (a Vite `?url` import, `fs` in mcp-server, a module import on Workers).
+  The shim never fetches or reads a file itself, and imports no `node:*`.
+- The ABI check at init (`EXPECTED_ABI` against `abi_version()`): the shim
+  and the artifact come from one commit, and a pair that does not is refused
+  as `CoreAbiMismatch` rather than failing on its first mismatched call.
+- One typed call per user operation (QR-22b): `routeLayout` encodes a whole
+  layout's routing onto the typed-array wire (`wire.ts`, the layout
+  `crates/bindings/wasm` decodes), makes ONE call, decodes, and writes the
+  budget accounts back.
+
+## What does NOT belong here
+
+- Anything that imports canvas-render. The composer will take this package's
+  implementation through its layout options, so the dependency points from
+  the roots to both, never from here to canvas-render. Its input types are
+  declared structurally in `types.ts` for that reason.
+- Recovery from a trapped instance: `cargo xtask poison-recover` names the
+  module that will own it and fails until it exists.
+
+## The artifact
+
+`artifacts/` is gitignored and built in the pipeline (owner decision,
+2026-11-08): `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` runs
+`pnpm rust:build:wasm` (the one build path the size ledger and the
+reproducibility check measure) and `stage:wasm` copies it in. There is no
+`build` script, so `pnpm -r build` and the release path need no Rust yet.
+
+`#glue` (package `imports`) is declared by hand in `src/glue.d.ts`, so
+`tsc` needs no artifact: the TypeScript jobs and the pre-push hook have no
+Rust toolchain. Three checks keep the declaration honest — the runtime ABI
+check, `typecheck:abi` (`abi-conformance.ts` beside `src`, compiled in the
+`rust` job against the generated declaration), and core-wasm-rust.
+
+## Tests
+
+- `core-wasm-node`: the shim over a fake glue — the wire layout, decoding,
+  the budget writeback, both refusals. Runs anywhere.
+- `core-wasm-rust`: the shim over the staged artifact. CI runs it in the
+  `rust` job after the wasm build.
+- What the shim ROUTES is held to the TypeScript composer by canvas-render's
+  `route-layout.rust.test.ts`, which goes through `coreFrom`.

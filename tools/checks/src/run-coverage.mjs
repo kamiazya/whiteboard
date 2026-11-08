@@ -50,6 +50,7 @@ const DEFAULT_REPO_ROOT = resolve(__dirname, '../../..')
 const HELD_OUT = new Set([
   'packages/mcp-server/vitest.smoke.config.ts',
   'packages/canvas-render/vitest.rust.config.ts',
+  'packages/core-wasm/vitest.rust.config.ts',
 ])
 
 // Six times the tightest per-test budget in the repo (5s). A hung test taking

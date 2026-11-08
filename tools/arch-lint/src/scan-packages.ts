@@ -22,6 +22,7 @@ export const SHARED_LAYER_PACKAGES = [
   'packages/history',
   'packages/scene',
   'packages/reference-graph',
+  'packages/core-wasm',
   // Browser-runtime UI package, not a "shared" model/codec/... layer package
   // in the architecture-map.md sense, but scanned the same way — see its
   // `exemptBoundaryViolationKinds` and `exemptBoundaryFiles` entries in
