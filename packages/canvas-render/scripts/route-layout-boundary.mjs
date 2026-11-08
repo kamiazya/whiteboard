@@ -22,12 +22,20 @@ const runtimes = (args.runtime ?? 'node,chromium,workerd').split(',')
 const entry = `
 import * as glue from ${JSON.stringify(join(artifacts, 'whiteboard_wasm.js'))}
 import { coreFrom } from '@kamiazya/whiteboard-core-wasm'
-import { formatBoundary, instrumentGlue, measureBoundary } from ${JSON.stringify(join(pkg, 'src/test-utils/wasm/route-layout-boundary.ts'))}
+import { boundaryBoards, formatBoundary, instrumentGlue, measureBoundary, memorySteadyState } from ${JSON.stringify(join(pkg, 'src/test-utils/wasm/route-layout-boundary.ts'))}
 export function run(source, runtime, rounds, batchMs) {
   const instrumented = instrumentGlue(glue)
+  const started = performance.now()
   const core = coreFrom(instrumented.glue, source)
-  const results = measureBoundary({ core, instrumented, now: () => performance.now(), rounds, batchMs })
-  return { runtime, results, table: formatBoundary(runtime, results) }
+  const startupMs = performance.now() - started
+  const initialBytes = instrumented.memoryBytes()
+  const options = { core, instrumented, now: () => performance.now(), rounds, batchMs }
+  const results = measureBoundary(options)
+  const largest = boundaryBoards().reduce((a, b) => (b.cases.reduce((n, c) => n + c.edges.length, 0) > a.cases.reduce((n, c) => n + c.edges.length, 0) ? b : a))
+  const steady = memorySteadyState(options, largest)
+  const mib = (n) => (n / 2 ** 20).toFixed(2)
+  const memory = \`init (coreFrom) \${startupMs.toFixed(2)} ms; wasm memory \${mib(initialBytes)} MiB after init, \${mib(steady.before)} MiB after every board, \${mib(steady.after)} MiB after \${steady.repeats} more \${steady.board}\`
+  return { runtime, results, startupMs, initialBytes, steady, table: formatBoundary(runtime, results) + '\\n' + memory }
 }
 `
 const outDir = mkdtempSync(join(tmpdir(), 'route-layout-boundary-'))

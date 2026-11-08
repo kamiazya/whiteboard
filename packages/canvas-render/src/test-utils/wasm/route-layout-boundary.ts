@@ -30,6 +30,10 @@ import {
 /** Everything the boundary reads of the glue. */
 export interface RoutingGlue {
   edge_route_layout(input: Float64Array): Float64Array
+  /** wasm-bindgen's synchronous init, which answers the instance's exports. */
+  initSync(options: { module: BufferSource | WebAssembly.Module }): {
+    readonly memory: WebAssembly.Memory
+  }
 }
 
 /**
@@ -39,8 +43,14 @@ export interface RoutingGlue {
 export function instrumentGlue<G extends RoutingGlue>(glue: G) {
   let calls = 0
   let kept: Float64Array[] | undefined
+  let memory: WebAssembly.Memory | undefined
   const instrumented: G = {
     ...glue,
+    initSync(options: { module: BufferSource | WebAssembly.Module }) {
+      const exports = glue.initSync(options)
+      memory = exports.memory
+      return exports
+    },
     edge_route_layout(input: Float64Array) {
       calls += 1
       kept?.push(input)
@@ -50,6 +60,14 @@ export function instrumentGlue<G extends RoutingGlue>(glue: G) {
   return {
     glue: instrumented,
     calls: () => calls,
+    /**
+     * The instance's linear memory in bytes. It only ever grows, so read after
+     * a board it is the peak so far.
+     */
+    memoryBytes: () => {
+      if (memory === undefined) throw new Error('the glue was never initialised')
+      return memory.buffer.byteLength
+    },
     capture<T>(run: () => T): { result: T; inputs: Float64Array[] } {
       kept = []
       try {
@@ -137,6 +155,8 @@ export interface BoardResult {
   readonly ratio: Spread
   /** Per round, marshal / rust. */
   readonly marshalShare: Spread
+  /** Linear memory after this board was checked, warmed and timed: the peak so far. */
+  readonly memoryBytes: number
 }
 
 export interface BoundaryOptions {
@@ -248,14 +268,17 @@ function measureBoard(options: BoundaryOptions, board: Board): BoardResult {
       `${board.name}: ${counted} counted wasm calls in the Rust batches, expected ${expectedCalls}; the TypeScript baseline may not be TypeScript`,
     )
   }
-  return summarize(board, iterations, { tsMs, rustMs, wasmMs })
+  return {
+    ...summarize(board, iterations, { tsMs, rustMs, wasmMs }),
+    memoryBytes: instrumented.memoryBytes(),
+  }
 }
 
 function summarize(
   board: Board,
   iterations: number,
   m: { tsMs: number[]; rustMs: number[]; wasmMs: number[] },
-): BoardResult {
+): Omit<BoardResult, 'memoryBytes'> {
   const marshal = m.rustMs.map((r, i) => r - (m.wasmMs[i] as number))
   return {
     name: board.name,
@@ -277,6 +300,31 @@ export function measureBoundary(options: BoundaryOptions): BoardResult[] {
   return (options.boards ?? boundaryBoards()).map((board) => measureBoard(options, board))
 }
 
+/** What the instance's linear memory does when one board is routed again and again. */
+export interface MemorySteadyState {
+  readonly board: string
+  readonly repeats: number
+  readonly before: number
+  readonly after: number
+}
+
+/**
+ * Routes `board` through Rust `repeats` more times after everything else has
+ * run. Linear memory never shrinks, so a long-lived tab's growth is whatever
+ * this leaves above `before`; zero says repeated layouts reuse what the first
+ * one grew.
+ */
+export function memorySteadyState(
+  options: BoundaryOptions,
+  board: Board,
+  repeats = 20,
+): MemorySteadyState {
+  const rust: LayoutCore = { routing: options.core, impl: { routeLayout: 'rust' } }
+  const before = options.instrumented.memoryBytes()
+  for (let i = 0; i < repeats; i++) routeBoard(rust, board, options.style ?? 'straight')
+  return { board: board.name, repeats, before, after: options.instrumented.memoryBytes() }
+}
+
 /** The measurement as a markdown table. */
 export function formatBoundary(runtime: string, results: readonly BoardResult[]): string {
   const f = (s: Spread, digits = 3) =>
@@ -285,12 +333,12 @@ export function formatBoundary(runtime: string, results: readonly BoardResult[])
     `${(s.median * 100).toFixed(0)}% [${(s.min * 100).toFixed(0)}-${(s.max * 100).toFixed(0)}]`
   const rows = results.map(
     (r) =>
-      `| ${r.name} | ${r.layouts}/${r.nodes}/${r.edges} | ${f(r.ts)} | ${f(r.rust)} | ${f(r.wasm)} | ${f(r.marshal)} | ${r.ratio.median.toFixed(2)} [${r.ratio.min.toFixed(2)}-${r.ratio.max.toFixed(2)}] | ${pct(r.marshalShare)} |`,
+      `| ${r.name} | ${r.layouts}/${r.nodes}/${r.edges} | ${f(r.ts)} | ${f(r.rust)} | ${f(r.wasm)} | ${f(r.marshal)} | ${r.ratio.median.toFixed(2)} [${r.ratio.min.toFixed(2)}-${r.ratio.max.toFixed(2)}] | ${pct(r.marshalShare)} | ${(r.memoryBytes / 2 ** 20).toFixed(2)} |`,
   )
   return [
     `${runtime}: ms per iteration, median [min-max] over rounds`,
-    '| board | layouts/nodes/edges | TypeScript | Rust (total) | wasm call | boundary (Rust - wasm call) | Rust/TS (<1: Rust faster) | boundary share of Rust |',
-    '|---|---|---|---|---|---|---|---|',
+    '| board | layouts/nodes/edges | TypeScript | Rust (total) | wasm call | boundary (Rust - wasm call) | Rust/TS (<1: Rust faster) | boundary share of Rust | wasm memory after (MiB) |',
+    '|---|---|---|---|---|---|---|---|---|',
     ...rows,
   ].join('\n')
 }

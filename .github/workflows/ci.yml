@@ -288,14 +288,17 @@ jobs:
     # shaped — parallel pages in one browser fighting over focus and origin
     # state — so halving the files per runner attacks both at once. Verified
     # locally that the shards partition exactly: 69+69 of 138 files,
-    # 410+342 of 752 tests, no overlap and no loss.
+    # 410+342 of 752 tests, no overlap and no loss. Three shards since a
+    # shard that died with VITEST_BROWSER_CONNECTION_CLOSED had 5.4 GB free
+    # and no OOM kill while Chrome's summed RSS climbed 8.3 -> 11.6 GB across
+    # it: growth that accumulates per shard, so a third fewer files each.
     strategy:
       # One shard failing must not cancel its siblings: a cancelled job is not
       # a failed one, so "Re-run failed jobs" never revives it and the run can
       # never reach green again. See ci-policy.test.ts for the measurement.
       fail-fast: false
       matrix:
-        shard: [1, 2]
+        shard: [1, 2, 3]
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
@@ -350,21 +353,21 @@ jobs:
           sample() {
             while true; do
               used=$(free -m | awk '/Mem:/ {print $3 "/" $2 " MB used, " $7 " MB available"}')
-              chrome=$(ps -eo rss=,comm= | awk '/chrom/ {s += $1} END {print int(s / 1024) " MB in chrome"}')
+              chrome=$(ps -eo rss=,comm= | awk '/chrom/ {s += $1; if ($1 > m) m = $1} END {print int(s / 1024) " MB in chrome, the largest process " int(m / 1024) " MB"}')
               echo "$(date -u +%T) $used, $chrome"
               sleep 10
             done
           }
           sample > "$RUNNER_TEMP/memory.log" 2>&1 &
 
-      - name: Test browser projects (shard ${{ matrix.shard }}/2)
+      - name: Test browser projects (shard ${{ matrix.shard }}/3)
         if: steps.scope.outputs.run == 'true'
         timeout-minutes: 12
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
           VITE_WHITEBOARD_CORE: differential
           VITE_WHITEBOARD_CORE_MISMATCH: throw
-        run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/2
+        run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/3
 
       # A failing browser test prints the path of its retained trace and the
       # runner is then discarded with it; the trace is the only place its
