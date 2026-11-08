@@ -7,7 +7,7 @@ one wasm export `edge_route_layout`, ABI 14, reached through
 row says what is shown, not what is intended. The switch
 (`CoreImpl`, per ADR-0054 "Transition mechanics") is `differential` in the
 daemon and the web editor under development and CI, and `ts` in a release. It
-**may not move to `rust` until every row below is `met` or `n/a`**; rows 1, 4, 7, 10, 11 and 13 are still open, so today it may not.
+**may not move to `rust` until every row below is `met` or `n/a`**; rows 1, 4, 10 and 11 are still open and row 14 is partly met, so today it may not.
 
 Ports, in order: #2163 (grid-route spike), #2164 (geometry and ink), #2165
 (edge-rules), #2166 (router leaves), #2167 (`routeEdge`), #2168 (anchor pass),
