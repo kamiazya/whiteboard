@@ -44,19 +44,16 @@ export interface Core {
 
 const ends = ['none', 'arrow'] as const
 
+/** The routes in `out`, or undefined when it does not hold exactly one per edge. */
 function decodeRoutes(
   out: Float64Array,
   edges: readonly RoutableElement[],
-  budget: RoutingBudget,
-): ResolvedEdgeNode[] {
-  budget.grid = out[0] as number
-  budget.pairs = out[1] as number
-  budget.trials = out[2] as number
-  budget.repairs = out[3] as number
+): ResolvedEdgeNode[] | undefined {
+  if (out.length < 5 || out[4] !== edges.length) return undefined
   let at = 5
-  return edges.map((edge) => {
+  const routes = edges.map((edge): ResolvedEdgeNode => {
     const [rounded, fromSide, toSide, fromEnd, toEnd, n] = out.subarray(at, at + 6)
-    const path = Array.from({ length: n as number }, (_, i) => ({
+    const path = Array.from({ length: n ?? 0 }, (_, i) => ({
       x: out[at + 6 + 2 * i] as number,
       y: out[at + 7 + 2 * i] as number,
     }))
@@ -72,6 +69,8 @@ function decodeRoutes(
       toEnd: ends[toEnd as number] ?? 'none',
     }
   })
+  // Every number accounted for: a garbled answer is refused, not half read.
+  return at === out.length ? routes : undefined
 }
 
 /**
@@ -87,8 +86,13 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
       const wire = encodeLayout(nodes, edges, styleOf, overrides, budget, labels)
       const out = glue.edge_route_layout(wire.input)
-      if (out.length < 5 || out[4] !== edges.length) throw new CoreInputRefused('edge_route_layout')
-      return decodeRoutes(out, edges, budget)
+      const routes = decodeRoutes(out, edges)
+      if (routes === undefined) throw new CoreInputRefused('edge_route_layout')
+      budget.grid = out[0] as number
+      budget.pairs = out[1] as number
+      budget.trials = out[2] as number
+      budget.repairs = out[3] as number
+      return routes
     },
   }
 }

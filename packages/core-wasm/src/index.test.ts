@@ -48,6 +48,28 @@ describe('the core-wasm shim', () => {
     ).toThrow(CoreInputRefused)
   })
 
+  it('refuses an answer that routes another number of edges, or leaves numbers over', () => {
+    for (const out of [
+      [0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 9],
+    ]) {
+      const { glue } = fakeGlue(EXPECTED_ABI, out)
+      const b = budget()
+      expect(() =>
+        coreFrom(glue, new Uint8Array()).routeLayout(
+          nodes,
+          [edge],
+          () => 'straight',
+          undefined,
+          b,
+          [],
+        ),
+      ).toThrow(CoreInputRefused)
+      // Refused before anything is written back.
+      expect(b).toEqual(budget())
+    }
+  })
+
   it('encodes one layout as the wire the export decodes', () => {
     const { glue, sent } = fakeGlue(
       EXPECTED_ABI,
@@ -113,6 +135,9 @@ describe('the core-wasm shim', () => {
           toSide: 'top' as const,
           around: true as const,
           from: { x: 1, y: 2 },
+          fromLaneDepth: 7,
+          to: { x: 3, y: 4 },
+          toLaneDepth: 9,
         },
       ],
       ['gone', { fromSide: 'left' as const, toSide: 'top' as const }],
@@ -127,8 +152,8 @@ describe('the core-wasm shim', () => {
     )
     const input = [...(sent[0] as Float64Array)]
     // After the one style: present, one entry, edge 0, left, top, around,
-    // from pinned at (1, 2), no lane depths, no to.
-    expect(input.slice(25, 25 + 16)).toEqual([1, 1, 0, 3, 0, 1, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0])
+    // from pinned at (1, 2), its lane 7, to pinned at (3, 4), its lane 9.
+    expect(input.slice(25, 25 + 16)).toEqual([1, 1, 0, 3, 0, 1, 1, 1, 2, 1, 7, 1, 3, 4, 1, 9])
   })
 
   it('decodes every route in order and writes the four accounts back', () => {
