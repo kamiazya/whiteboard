@@ -234,7 +234,9 @@ describe('the stress steps take the changed files as data, not script', () => {
   }
   const steps = (parseYaml(ciYaml) as { jobs: Record<string, { steps: Step[] }> }).jobs[
     'stress-changed-tests'
-  ].steps.filter((s) => s.if?.includes('steps.changed.outputs.files'))
+    // Steps that RUN a script over the list; an action step gated on the same
+    // condition (the core wasm restore) takes no file list.
+  ].steps.filter((s) => s.run !== undefined && s.if?.includes('steps.changed.outputs.files'))
 
   const dirs: string[] = []
   afterAll(() => {
