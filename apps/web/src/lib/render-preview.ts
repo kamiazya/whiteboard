@@ -19,6 +19,7 @@ import {
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { getAppLogger } from './app-logger.js'
 import { outlineBlocks } from './document-outline.js'
 import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
@@ -55,6 +56,7 @@ export interface RenderMarkdownPreviewOptions {
   readonly tagLibrary?: TagLibrary
 }
 
+const log = getAppLogger('render-preview')
 /**
  * One top-level block's scroll-sync anchor: its 1-based source start line
  * paired with its top edge in the emitted SVG's own pixel space (viewBox
@@ -234,7 +236,11 @@ function layoutMarkdownScene(
         ...(tagLibrary !== undefined ? { tagLibrary } : {}),
       },
     )
-  } catch {
+  } catch (error) {
+    // Still an empty scene, but said: under VITE_WHITEBOARD_CORE_MISMATCH=throw
+    // a routing difference in an embedded board lands here, and a blank
+    // preview with nothing logged would hide exactly what that mode surfaces.
+    log.warn('markdown preview layout failed; rendering an empty scene', error)
     return { nodes: [] }
   }
 }

@@ -243,8 +243,13 @@ describe('the core-wasm action builds what the rust job builds', () => {
     const runs = stress.filter((s) => s.run?.includes('pnpm exec vitest run'))
     expect(runs).toHaveLength(2)
     for (const run of runs) {
-      expect(String(run.env?.VITE_WHITEBOARD_CORE)).toContain("matrix.leg == 'browser'")
-      expect(String(run.env?.VITE_WHITEBOARD_CORE_MISMATCH)).toContain("matrix.leg == 'browser'")
+      // The whole expression: the browser leg compares and fails, the node leg is unset.
+      expect(run.env?.VITE_WHITEBOARD_CORE).toMatch(
+        /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
+      )
+      expect(run.env?.VITE_WHITEBOARD_CORE_MISMATCH).toMatch(
+        /^\$\{\{ matrix\.leg == 'browser' && 'throw' \|\| '' \}\}$/,
+      )
     }
   })
 
