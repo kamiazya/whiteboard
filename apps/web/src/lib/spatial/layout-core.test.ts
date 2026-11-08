@@ -1,7 +1,6 @@
 import type { CoreMismatch, RoutingCore } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it, vi } from 'vitest'
-import type { AppLogger } from '../app-logger.js'
-import { createLayoutCoreHost } from './layout-core.js'
+import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
 import type { CoreSettings } from './layout-core-settings.js'
 
 const routing = {} as RoutingCore
@@ -9,7 +8,7 @@ const settings = (impl: CoreSettings['impl'], mismatch: CoreSettings['mismatch']
   impl,
   mismatch,
 })
-const silent = (): AppLogger => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() })
+const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const differs: CoreMismatch = {
   fn: 'routeLayout',
@@ -95,5 +94,12 @@ describe('createLayoutCoreHost', () => {
     )
     const core = await host.ready()
     expect(() => core?.onMismatch?.(differs)).toThrow(/differs/)
+  })
+})
+
+describe('a realm that never installed a core', () => {
+  it('has none and routes in TypeScript', async () => {
+    expect(currentLayoutCore()).toBeUndefined()
+    expect(await layoutCoreReady()).toBeUndefined()
   })
 })

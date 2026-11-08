@@ -32,6 +32,7 @@ import { getAppLogger } from './lib/app-logger.js'
 import { parseWorkspaceRoute } from './lib/app-routes.js'
 import { resolveBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
+import { startLayoutCore } from './lib/page-layout-core.js'
 
 const log = getAppLogger('boot')
 
@@ -159,6 +160,8 @@ export async function startBootSequence({
   // keeper's own uploads are this page's to reclaim. Armed before the awaits
   // below, so its delay counts from page load rather than from first paint.
   if (!servedByServerKeeper()) scheduleFileSweep()
+  // The routing core loads beside the font, so the first layout finds it.
+  startLayoutCore()
   // Bounded await: every on-screen text measurement (SpatialEditor,
   // MarkdownEditor's preview pane, useDocumentSync) must use the same vendored
   // Roboto face the Node export pipeline measures, or wrapped-line counts and

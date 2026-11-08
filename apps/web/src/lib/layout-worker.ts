@@ -58,6 +58,7 @@ import {
 } from './layout-worker-protocol.js'
 import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
 import { namesAReference } from './names-a-reference.js'
+import { startLayoutCore } from './page-layout-core.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { layoutCoreReady } from './spatial/layout-core.js'
@@ -78,6 +79,7 @@ const fontReady = ensureViewerFontLoaded()
 // layout waits for it (`measurable`) so the worker never routes a request in
 // TypeScript that the page would have sent through the core. A load that
 // fails under `throw` rejects here and again for each request, which fails it.
+startLayoutCore()
 const coreReady = layoutCoreReady()
 coreReady.catch(() => undefined)
 /** Every theme face posted so far, settled — what a layout waits on before it measures. */

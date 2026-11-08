@@ -12,8 +12,8 @@ import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whitebo
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import type { AppLogger } from '../app-logger.js'
 import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js'
+import { startLayoutCore } from '../page-layout-core.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
 
@@ -21,6 +21,7 @@ const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 
 async function loadRealCore() {
   try {
+    // lazy-import: the artifact may be absent, and a static import of the module that names it would fail the whole file to load instead of skipping
     const { loadWebCore } = await import('./layout-core-source.js')
     return { routing: await loadWebCore(fetch) }
   } catch (err) {
@@ -29,7 +30,7 @@ async function loadRealCore() {
 }
 const real = await loadRealCore()
 
-const silent = (): AppLogger => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() })
+const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const board = (routing: 'orthogonal' | 'curved' | 'straight'): SpatialCanvas =>
   ({
@@ -89,6 +90,7 @@ describe('the real Rust core in a browser', () => {
 
 describe.runIf(REQUIRED)('the page core', () => {
   it('loads although the page has since replaced fetch, which knows nothing of the wasm', async () => {
+    startLayoutCore()
     vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }))
     try {
       expect(await layoutCoreReady()).toBeDefined()

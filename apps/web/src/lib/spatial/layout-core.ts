@@ -1,5 +1,4 @@
 import type { CoreMismatch, LayoutCore, RoutingCore } from '@kamiazya/whiteboard-canvas-render'
-import { type AppLogger, getAppLogger } from '../app-logger.js'
 import { type CoreSettings, coreSettingsFrom } from './layout-core-settings.js'
 
 /**
@@ -15,6 +14,15 @@ export interface LayoutCoreHost {
   ready(): Promise<LayoutCore | undefined>
   /** The loaded core, or `undefined` before it loads. Starts the load, and throws a failed one under `throw`. */
   current(): LayoutCore | undefined
+}
+
+/**
+ * Where the host reports to. Structural, and injected by the realm that
+ * installs it: this directory is below `lib/` and may not import its logger.
+ */
+export interface CoreLog {
+  warn(message: string, data?: unknown): void
+  debug(message: string, data?: unknown): void
 }
 
 function summarize(mismatch: CoreMismatch) {
@@ -39,7 +47,7 @@ function summarize(mismatch: CoreMismatch) {
 export function createLayoutCoreHost(
   settings: CoreSettings,
   load: () => Promise<RoutingCore>,
-  log: AppLogger,
+  log: CoreLog,
 ): LayoutCoreHost {
   let loaded: LayoutCore | undefined
   let failure: { readonly err: unknown } | undefined
@@ -83,19 +91,33 @@ export function createLayoutCoreHost(
   }
 }
 
-// The platform's fetch as it stood when this module loaded. The wasm is a
-// build asset, not an API call: a later replacement of `globalThis.fetch`
-// (a test double answering 404 to every route it was not told of) would
-// otherwise be asked for bytes it knows nothing about.
-const fetchAsset: typeof fetch = globalThis.fetch?.bind(globalThis)
+let installed: LayoutCoreHost | undefined
 
-const host = createLayoutCoreHost(
-  coreSettingsFrom(import.meta.env),
-  // A build that routes in TypeScript replaces `layout-core-source.ts` with a
-  // stub (vite-plugin-core-source.ts), so this import never reaches the wasm.
-  async () => (await import('./layout-core-source.js')).loadWebCore(fetchAsset),
-  getAppLogger('layout-core'),
-)
+/**
+ * Makes this realm's host from the build's environment. Each realm that lays
+ * out installs once (the page at boot, the layout worker at start): a realm
+ * that never does routes in TypeScript, which is what a unit test of a
+ * component wants.
+ */
+export function installLayoutCore(log: CoreLog): LayoutCoreHost {
+  // The platform's fetch as it stood now. The wasm is a build asset, not an
+  // API call: a later replacement of `globalThis.fetch` (a test double
+  // answering 404 to every route it was not told of) would otherwise be asked
+  // for bytes it knows nothing about.
+  const fetchAsset: typeof fetch = globalThis.fetch?.bind(globalThis)
+  installed ??= createLayoutCoreHost(
+    coreSettingsFrom(import.meta.env),
+    // A build that routes in TypeScript replaces `layout-core-source.ts` with
+    // a stub (vite-plugin-core-source.ts), so this import never reaches the wasm.
+    async () => (await import('./layout-core-source.js')).loadWebCore(fetchAsset),
+    log,
+  )
+  return installed
+}
 
-export const layoutCoreReady = host.ready
-export const currentLayoutCore = host.current
+/** Settles with this realm's core once loaded; `undefined` when none is installed or in use. */
+export const layoutCoreReady = (): Promise<LayoutCore | undefined> =>
+  installed?.ready() ?? Promise.resolve(undefined)
+
+/** The core this realm has loaded so far, or `undefined`. */
+export const currentLayoutCore = (): LayoutCore | undefined => installed?.current()
