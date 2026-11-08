@@ -40,10 +40,20 @@ const routedValues = (r: ResolvedEdgeNode) => [
   ...r.path.flatMap((p) => [p.x, p.y]),
 ]
 
-/** The grid account: ample mostly, sometimes short enough to run out partway through the edges. */
-const gridDraw = fc.oneof(
-  { weight: 1, arbitrary: fc.constant(createRoutingBudget().grid) },
-  { weight: 1, arbitrary: fc.integer({ min: 0, max: 5_000 }) },
+/**
+ * The grid account: ample, a fixed cut that may run out anywhere, or just
+ * past what the search itself spends, so the routing AFTER the search is
+ * the pass that runs it dry. A fixed cut alone reached that last case too
+ * rarely to judge it on every run.
+ */
+type GridDraw =
+  | { readonly kind: 'full' }
+  | { readonly kind: 'cut'; readonly grid: number }
+  | { readonly kind: 'pastSearch'; readonly slack: number }
+const gridDraw: fc.Arbitrary<GridDraw> = fc.oneof(
+  fc.constant({ kind: 'full' as const }),
+  fc.record({ kind: fc.constant('cut' as const), grid: fc.integer({ min: 0, max: 5_000 }) }),
+  fc.record({ kind: fc.constant('pastSearch' as const), slack: fc.integer({ min: 0, max: 400 }) }),
 )
 
 const reach = { bent: 0, contact: 0, gridSpent: 0, overridden: 0 }
@@ -54,12 +64,13 @@ const core = () => {
   return shim
 }
 
-function check([d, grid]: [Drawn, number]) {
+function check([d, draw]: [Drawn, GridDraw]) {
   const wire = encodeRouting(d.nodes, d.edges)
   const overrides = overrideMap(d)
   const labels = d.labels as readonly Rect[]
   const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
   const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
+  const grid = gridOf(draw, d, styleOf, overrides, labels)
   const budget: RoutingBudget = { ...createRoutingBudget(), grid, trials: d.trials, pairs: d.pairs }
   const anchors = assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, budget, labels)
   const afterSearch = budget.grid
@@ -99,17 +110,45 @@ function check([d, grid]: [Drawn, number]) {
   if (overrides !== undefined && overrides.size > 0) reach.overridden += 1
 }
 
+/** The grid account a draw names; `pastSearch` measures the search's own spend first. */
+function gridOf(
+  draw: GridDraw,
+  d: Drawn,
+  styleOf: (e: RoutableElement) => EdgeRoutingStyle,
+  overrides: ReturnType<typeof overrideMap>,
+  labels: readonly Rect[],
+): number {
+  const full = createRoutingBudget().grid
+  if (draw.kind === 'full') return full
+  if (draw.kind === 'cut') return draw.grid
+  const probe: RoutingBudget = { ...createRoutingBudget(), trials: d.trials, pairs: d.pairs }
+  assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, probe, labels)
+  return full - probe.grid + draw.slack
+}
+
 describe.runIf(built)('one layout routed in one call matches the composer', () => {
   fcTest.prop(
-    [fc.tuple(fc.oneof(drawn(scene), drawn(board(9, 14)), drawn(board(9, 14))), gridDraw)],
+    [
+      fc.tuple(
+        fc.oneof(
+          drawn(scene),
+          drawn(board(9, 14)),
+          // Every edge orthogonal on a crowded board: the routing after the
+          // search searches the grid, which is what spends that account.
+          drawn(board(9, 14), { style: fc.constant('orthogonal' as const) }),
+        ),
+        gridDraw,
+      ),
+    ],
     withDefaults(),
   )('every route and the budget left', check)
 
   afterAllFloor(['every route and the budget left'], () => {
-    // About half the lowest of five measured runs (bent 183, contact 12,
-    // gridSpent 2, overridden 81). gridSpent is a cut account the routing
-    // drew on AFTER the search, which only a few draws reach.
-    const floors = { bent: 91, gridSpent: 1, overridden: 40, contact: 6 }
+    // About half the lowest of five measured runs (bent 185, contact 10,
+    // gridSpent 4, overridden 79). gridSpent is a cut account the routing
+    // drew on AFTER the search: the `pastSearch` draws and the orthogonal
+    // boards are what reach it; before them a run could reach it never.
+    const floors = { bent: 92, gridSpent: 2, overridden: 40, contact: 5 }
     for (const [kind, floor] of Object.entries(floors)) {
       expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
     }
