@@ -9,13 +9,11 @@ use crate::routing_wire::{Wire, side_index};
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_router::RoutingStyle;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorOverride;
-use whiteboard_edge_routing::geometry::{Point, Rect};
+use whiteboard_edge_routing::geometry::Rect;
 use whiteboard_edge_routing::js_map::JsMap;
 use whiteboard_edge_routing::layout_routes::route_layout;
 use whiteboard_edge_routing::routing_budget::RoutingBudget;
-use whiteboard_edge_routing::routing_input::{
-    Arrowhead, EdgeId, RoutableEdge, RoutingEnd, RoutingNode,
-};
+use whiteboard_edge_routing::routing_input::{Arrowhead, EdgeId, RoutableEdge, RoutingNode};
 use whiteboard_edge_routing::spatial_edges::assign_edge_anchors;
 
 /// The wire's nodes, edges, styles, overrides, labels and budget.
@@ -58,55 +56,20 @@ fn decode(input: &[f64]) -> Option<Decoded> {
         trials: wire.number()?,
         repairs: wire.number()?,
     };
-    if !wire.is_done() || !all_finite(&nodes, &edges, overrides.as_ref(), &labels, &budget) {
+    if !wire.is_done() || !budget_is_finite(&budget) {
         return None;
     }
     Some((nodes, edges, styles, overrides, labels, budget))
 }
 
-fn point_is_finite(p: Point) -> bool {
-    p.x.is_finite() && p.y.is_finite()
-}
-
-fn rect_is_finite(r: &Rect) -> bool {
-    [r.x, r.y, r.w, r.h].iter().all(|v| v.is_finite())
-}
-
-fn end_is_finite(end: &RoutingEnd) -> bool {
-    match end {
-        RoutingEnd::Node { .. } => true,
-        RoutingEnd::Point { point, .. } => point_is_finite(*point),
-    }
-}
-
-fn override_is_finite(o: &EdgeAnchorOverride) -> bool {
-    o.from.is_none_or(point_is_finite)
-        && o.to.is_none_or(point_is_finite)
-        && o.from_lane_depth.is_none_or(f64::is_finite)
-        && o.to_lane_depth.is_none_or(f64::is_finite)
-}
-
-/// Every number the routing reads as a position, size or allowance is finite.
+/// Every account of the budget is finite.
 ///
-/// The TypeScript's model admits only finite numbers there, and a NaN that
-/// reaches the search makes its cost tuples incomparable: std's sort panics on
-/// a comparator that is not a total order, which in the wasm build is an
-/// aborted instance. A NaN in an end's unused slot is the wire's own
-/// placeholder and never reaches here. A bend is not checked: the TypeScript
-/// admits a non-finite bend and its bend route declines it, so the port must
-/// answer it the same way rather than refuse the board.
-fn all_finite(
-    nodes: &[RoutingNode],
-    edges: &[RoutableEdge],
-    overrides: Option<&JsMap<EdgeId, EdgeAnchorOverride>>,
-    labels: &[Rect],
-    budget: &RoutingBudget,
-) -> bool {
-    nodes.iter().all(|n| rect_is_finite(&n.rect))
-        && edges.iter().all(|e| end_is_finite(&e.from) && end_is_finite(&e.to))
-        && overrides.is_none_or(|m| m.iter().all(|(_, o)| override_is_finite(o)))
-        && labels.iter().all(rect_is_finite)
-        && [budget.grid, budget.pairs, budget.trials, budget.repairs].iter().all(|v| v.is_finite())
+/// A budget is the layout's own allowance, never a caller's geometry, and an
+/// infinite one never runs out, which is the time cap's failure. Geometry is
+/// NOT checked: the TypeScript answers a NaN or infinite position, size, end
+/// or bend, and so must the port.
+fn budget_is_finite(budget: &RoutingBudget) -> bool {
+    [budget.grid, budget.pairs, budget.trials, budget.repairs].iter().all(|v| v.is_finite())
 }
 
 /// `assignEdgeAnchors`.
@@ -277,21 +240,27 @@ mod tests {
     }
 
     #[test]
-    fn a_non_finite_bend_is_answered_as_the_typescript_answers_it() {
-        let mut w = board();
-        w[25] = f64::NAN;
-        assert!(!edge_route_layout(&w).is_empty());
-    }
-
-    #[test]
-    fn a_non_finite_position_size_or_allowance_is_refused() {
-        // node 0's height, node 1's x, the free end's x, the label's width,
-        // and each of the budget's four accounts
-        for at in [5, 7, 19, 31, 33, 34, 35, 36] {
+    fn a_non_finite_allowance_is_refused() {
+        // each of the budget's four accounts
+        for at in [33, 34, 35, 36] {
             for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
                 let mut w = board();
                 w[at] = bad;
                 assert!(edge_route_layout(&w).is_empty(), "{bad} at {at} was answered");
+            }
+        }
+    }
+
+    #[test]
+    fn non_finite_geometry_is_answered_as_the_typescript_answers_it() {
+        // node 0's height, node 1's x, the free end's x, the bend's y and the
+        // label's width: a NaN height once made the side search's cost tuples
+        // incomparable and std's sort aborted the instance
+        for at in [5, 7, 19, 25, 31] {
+            for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+                let mut w = board();
+                w[at] = bad;
+                assert!(!edge_route_layout(&w).is_empty(), "{bad} at {at} was refused");
             }
         }
     }

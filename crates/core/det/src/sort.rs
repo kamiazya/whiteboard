@@ -10,13 +10,15 @@
 //! strictly descending, then reversed) stretch, then binary insertion of
 //! the rest. A comparator answering NaN reads as 0, as `CallCompare` does.
 //!
-//! Longer arrays take the merge path, which this does not port. They fall
-//! back to `slice::sort_by`, which agrees with V8 for a total preorder only
-//! and MAY PANIC when the comparator is not one (std's documented contract
-//! since Rust 1.81) — under the wasm build's `panic = "abort"`, an aborted
-//! instance. `JS_SORT_EXACT_BELOW` says where exactness ends, so a caller
+//! Longer arrays take V8's merge path, which this does not port. They take a
+//! plain stable merge sort instead, which agrees with V8 for a total
+//! preorder only. It is NOT `slice::sort_by`: std may panic when the
+//! comparator is not a total order (its documented contract since Rust
+//! 1.81), which under the wasm build's `panic = "abort"` is an aborted
+//! instance, and a cost tuple holding a NaN makes exactly such a
+//! comparator. `JS_SORT_EXACT_BELOW` says where exactness ends, so a caller
 //! sorting longer arrays with an inconsistent comparator can see that it
-//! would need more than this.
+//! would need more than this; what it is promised there is an answer.
 
 use core::cmp::Ordering;
 
@@ -26,10 +28,8 @@ pub const JS_SORT_EXACT_BELOW: usize = 64;
 /// Sorts `items` as `items.sort(compare)` would, `compare` answering as a
 /// JavaScript comparator does: negative, zero (or NaN), positive.
 ///
-/// # Panics
-///
-/// At [`JS_SORT_EXACT_BELOW`] elements or more, may panic when `compare` is
-/// not a total preorder.
+/// At [`JS_SORT_EXACT_BELOW`] elements or more the order is V8's only when
+/// `compare` is a total preorder; it never panics either way.
 pub fn js_sort_by<T: Clone>(items: &mut [T], compare: impl Fn(&T, &T) -> f64) {
     let order = |a: &T, b: &T| {
         let v = compare(a, b);
@@ -45,7 +45,7 @@ pub fn js_sort_by<T: Clone>(items: &mut [T], compare: impl Fn(&T, &T) -> f64) {
         return;
     }
     if items.len() >= JS_SORT_EXACT_BELOW {
-        items.sort_by(order);
+        merge_sort(items, &order);
         return;
     }
     let run = count_and_make_run(items, &order);
@@ -99,6 +99,33 @@ fn binary_insertion_sort<T: Clone>(
     }
 }
 
+/// A stable top-down merge sort that answers for ANY comparator: the left
+/// element is taken unless the right one sorts strictly before it.
+fn merge_sort<T: Clone>(items: &mut [T], order: &impl Fn(&T, &T) -> Ordering) {
+    if items.len() < 2 {
+        return;
+    }
+    let mut merged = Vec::with_capacity(items.len());
+    let (left, right) = items.split_at_mut(items.len() / 2);
+    merge_sort(left, order);
+    merge_sort(right, order);
+    let (mut l, mut r) = (left.iter().peekable(), right.iter().peekable());
+    while let (Some(a), Some(b)) = (l.peek(), r.peek()) {
+        if order(b, a) == Ordering::Less {
+            merged.push((*b).clone());
+            r.next();
+        } else {
+            merged.push((*a).clone());
+            l.next();
+        }
+    }
+    merged.extend(l.cloned());
+    merged.extend(r.cloned());
+    for (slot, value) in items.iter_mut().zip(merged) {
+        *slot = value;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::js_sort_by;
@@ -118,6 +145,36 @@ mod tests {
         let mut v = vec![(3, 'a'), (1, 'b'), (3, 'c'), (2, 'd'), (1, 'e')];
         js_sort_by(&mut v, |a, b| f64::from(a.0) - f64::from(b.0));
         assert_eq!(v, vec![(1, 'b'), (1, 'e'), (2, 'd'), (3, 'a'), (3, 'c')]);
+    }
+
+    #[test]
+    fn a_long_array_under_a_comparator_with_no_order_is_answered() {
+        // Every comparison contradicts the last one asked of the same pair, as
+        // a cost tuple holding a NaN can: std's sort may panic on this.
+        let flip = core::cell::Cell::new(false);
+        let mut v: Vec<u32> = (0..200).rev().collect();
+        js_sort_by(&mut v, |a, b| {
+            flip.set(!flip.get());
+            if (a ^ b) % 3 == 0 {
+                f64::NAN
+            } else if flip.get() {
+                1.0
+            } else {
+                -1.0
+            }
+        });
+        let mut seen = [false; 200];
+        for x in &v {
+            seen[*x as usize] = true;
+        }
+        assert!(v.len() == 200 && seen.iter().all(|s| *s), "not a permutation");
+    }
+
+    #[test]
+    fn a_long_array_sorts_stably() {
+        let mut v: Vec<(u32, u32)> = (0..150).map(|i| ((i * 7) % 5, i)).collect();
+        js_sort_by(&mut v, |a, b| f64::from(a.0) - f64::from(b.0));
+        assert!(v.windows(2).all(|w| w[0].0 < w[1].0 || (w[0].0 == w[1].0 && w[0].1 < w[1].1)));
     }
 
     #[test]

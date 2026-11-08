@@ -20,6 +20,7 @@ use crate::routing_budget::RoutingBudget;
 use crate::routing_input::{EdgeId, RoutableEdge, RoutingNode, node_at_end};
 use std::collections::{BTreeMap, BTreeSet};
 use whiteboard_det::math::{compare_numbers, js_max, js_min};
+use whiteboard_det::sort::js_sort_by;
 
 /// The search's edge gate, and the size of a region past it.
 const CROSSING_OPT_MAX_EDGES: usize = 200;
@@ -132,13 +133,19 @@ fn trial_edges_for(score: &ConfigScore<'_>, edges: usize, align: bool) -> Vec<us
         .map(|i| (i, score.contribution(i)))
         .filter(|(_, cost)| has_repairable_problem(cost))
         .collect();
-    ranked.sort_by(|(ai, a), (bi, b)| {
+    // A cost holding a NaN makes this comparator no order at all, which
+    // V8's sort answers and std's may panic on, so it is V8's sort.
+    js_sort_by(&mut ranked, |(ai, a), (bi, b)| {
         if less_cost(a, b) {
-            std::cmp::Ordering::Greater
+            1.0
         } else if less_cost(b, a) {
-            std::cmp::Ordering::Less
+            -1.0
         } else {
-            ai.cmp(bi)
+            match ai.cmp(bi) {
+                std::cmp::Ordering::Less => -1.0,
+                std::cmp::Ordering::Equal => 0.0,
+                std::cmp::Ordering::Greater => 1.0,
+            }
         }
     });
     // Document order within the budget keeps adoption sequencing stable.

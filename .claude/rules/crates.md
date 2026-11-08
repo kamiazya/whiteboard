@@ -112,12 +112,13 @@ steps and cache paths to the scripts.
   `fuzzTarget`; `cargo xtask inputs` holds the registry and `crates/fuzz`
   equal from both sides. `template: true` marks the one entry that exists to
   show the shape. A cap is ENFORCED by the export itself, not only declared:
-  `edge_route_layout` refuses a wire over `MAX_WIRE_NUMBERS` and any
-  non-finite position, size or allowance (a NaN makes the cost tuples
-  incomparable and std's sort aborts the instance), and the shim then
-  answers from the TypeScript. A non-finite BEND is not refused: the
-  TypeScript admits one and its bend route declines it, so the port does
-  the same. Each fuzz target's seeds live in `crates/fuzz/seeds/<target>`.
+  `edge_route_layout` refuses a wire over `MAX_WIRE_NUMBERS` and a
+  non-finite budget account, and the shim then answers from the
+  TypeScript. Non-finite GEOMETRY is answered, because the TypeScript
+  answers it: a sort whose comparator a NaN can break goes through
+  `whiteboard-det`'s `js_sort_by`, never std's `sort_by`, which may panic
+  on a comparator that is not a total order. Each fuzz target's seeds
+  live in `crates/fuzz/seeds/<target>`.
 - **`#[expect]` is ledgered**: `crates/expect-ledger.json` names every
   `#[expect]` with its reason, and `tools/arch-lint`'s
   `expect-ledger.test.ts` holds it equal to the source from both sides.
