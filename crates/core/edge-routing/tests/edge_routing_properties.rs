@@ -441,17 +441,23 @@ fn crosses(a1: Point, a2: Point, b1: Point, b2: Point) -> bool {
 }
 
 /// Spokes both above and below the hub's right side, so the group mixes
-/// upward- and downward-sweeping corridors.
+/// upward- and downward-sweeping corridors. They stand CLOSE to the hub:
+/// placed far out (x = 2000), every route ran its first elbow horizontally to
+/// the target's stub, no lane run passed the node, and the property held
+/// under the very defect it names (lane depth by list index), in the
+/// TypeScript as well.
 #[test]
 fn no_lane_run_crosses_another_member_exit_at_the_node_for_mixed_sweep_directions() {
-    let scenario = (1i32..=5, 1i32..=5, prop::collection::vec(0i32..=40, 10));
-    check(scenario, None, |(below, above, jitters)| {
+    let beside = Floor::new("a board with a lane run beside the hub");
+    let scenario = (1i32..=5, 1i32..=5, 150i32..=300, prop::collection::vec(0i32..=40, 10));
+    check(scenario, None, |(below, above, spoke_x, jitters)| {
         let jit = |i: i32| jitters.get(usize::try_from(i).unwrap_or(0)).copied().unwrap_or(0);
         let spokes: Vec<(i32, i32)> = (0..below)
-            .map(|i| (2000, 250 + i * 130 + jit(i)))
-            .chain((0..above).map(|i| (2000, -250 - i * 130 - jit(5 + i))))
+            .map(|i| (spoke_x, 250 + i * 130 + jit(i)))
+            .chain((0..above).map(|i| (spoke_x, -250 - i * 130 - jit(5 + i))))
             .collect();
         let routed = spoke_routes(&spokes);
+        beside.draw(routed.iter().any(|r| lane_run_beside(&r.path, f64::from(spoke_x))));
         for (i, a) in routed.iter().enumerate() {
             for (j, b) in routed.iter().enumerate() {
                 if i == j || a.path.len() < 3 || b.path.len() < 2 {
@@ -464,6 +470,14 @@ fn no_lane_run_crosses_another_member_exit_at_the_node_for_mixed_sweep_direction
         }
         Ok(())
     });
+    // Measured 112 to 121 of 200; 0 with the spokes at x = 2000.
+    beside.assert(50);
+}
+
+/// Whether a route's run from its stub is vertical and short of the spokes:
+/// the lane the property is about.
+fn lane_run_beside(path: &[Point], spoke_x: f64) -> bool {
+    matches!((path.get(1), path.get(2)), (Some(a), Some(b)) if a.x == b.x && a.x < spoke_x)
 }
 
 // ---- crossing minimization -------------------------------------------------
