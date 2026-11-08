@@ -46,8 +46,8 @@
     {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::float_cmp",
-      "count": 14,
-      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more each in tests/grid_route_optimality.rs, whose reference compares grid lines the same way, tests/ink_properties.rs, whose oracle skips an axis-aligned segment the same way, tests/crossing_sweep_properties.rs, whose integer-quantized scores the sweep owes the scan exactly, tests/edge_rules_properties.rs, whose costs are exact integers, and tests/edge_routing_properties.rs, whose route coordinates the TypeScript compares with toBe)"
+      "count": 15,
+      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more each in tests/grid_route_optimality.rs, whose reference compares grid lines the same way, tests/ink_properties.rs, whose oracle skips an axis-aligned segment the same way, tests/crossing_sweep_properties.rs, whose integer-quantized scores the sweep owes the scan exactly, tests/edge_rules_properties.rs, whose costs are exact integers, and tests/edge_routing_properties.rs, whose route coordinates the TypeScript compares with toBe, and tests/survivors_config_score.rs, whose costs and accounts are exact integers)"
     },
     {
       "crate": "crates/core/edge-routing",
