@@ -17,6 +17,18 @@
       "ceiling": 34,
       "reason": "build time only, never shipped: libfuzzer-sys's build (fuzz) and minicov's (wasm test harness): compiles libFuzzer's C++; process and job-server plumbing"
     },
+    "chacha20": {
+      "ceiling": 66,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: the ChaCha stream cipher behind rand's standard RNG; SIMD backends selected by CPU feature"
+    },
+    "core_detect": {
+      "ceiling": 7,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: CPU feature detection (cpuid, xgetbv) for chacha20 under rand"
+    },
+    "cpufeatures": {
+      "ceiling": 11,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: CPU feature detection for chacha20 under rand"
+    },
     "find-msvc-tools": {
       "ceiling": 55,
       "reason": "build time only, never shipped: libfuzzer-sys's build (fuzz) and minicov's (wasm test harness): cc's MSVC discovery (Windows registry FFI)"
@@ -101,9 +113,17 @@
       "ceiling": 6,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: token-stream plumbing of every derive"
     },
+    "proptest": {
+      "ceiling": 5,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: the property runner; its RNG byte-fill helpers in test_runner/rng.rs"
+    },
     "r-efi": {
       "ceiling": 332,
       "reason": "fuzz only (libfuzzer-sys's build or runtime), never shipped: UEFI bindings of getrandom, for a target never built"
+    },
+    "rand": {
+      "ceiling": 16,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: rand's fill and macro plumbing under proptest's runner"
     },
     "rustversion": {
       "ceiling": 2,
@@ -144,6 +164,10 @@
     "tokio": {
       "ceiling": 1153,
       "reason": "resolved in the lockfile only, never built here: wasm-bindgen-futures names it for emscripten under an unstable cfg, and it arrives with wasm-bindgen-test (a wasm32 dev-dependency); deny.toml records the same wrapper"
+    },
+    "unarray": {
+      "ceiling": 9,
+      "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: array-from-iterator construction with MaybeUninit under proptest"
     },
     "unicode-ident": {
       "ceiling": 2,
