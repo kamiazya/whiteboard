@@ -12,4 +12,5 @@ pub mod targets;
 pub type Target = fn(&[u8]);
 
 /// Every target, by the name its binary and its registry entry carry.
-pub const TARGETS: &[(&str, Target)] = &[("det_utf16_len", targets::det_utf16_len)];
+pub const TARGETS: &[(&str, Target)] =
+    &[("det_utf16_len", targets::det_utf16_len), ("edge_route_layout", targets::edge_route_layout)];
