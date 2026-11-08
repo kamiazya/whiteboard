@@ -189,3 +189,7 @@ snapshot-post-reload.md
 
 # The wasm-bindgen artifact `stage:wasm` copies in; built in the pipeline, never committed.
 packages/core-wasm/artifacts/
+
+# cargo-mutants' run directory (`pnpm rust:mutants:*`); mutants.out.old is the run before it.
+/mutants.out/
+/mutants.out.old/
