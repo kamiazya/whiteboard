@@ -18,9 +18,9 @@
       "reason": "first measured 2026-11-08 at 98.81% lines and 98.68% regions"
     },
     "core/edge-routing": {
-      "lines": 96,
-      "regions": 96,
-      "reason": "first measured 2026-11-08 at 94.47% lines and 94.57% regions, with the wasm crate's replay of the TypeScript's recorded answers (71.37% and 69.20% from the crate's own tests alone); raised with the native properties to 97.06-97.34% lines and 96.72-96.94% regions over four runs. Generated boards still move spatial_edges.rs by about nine lines, so the floor sits a point under the lowest run; the coincident-ends repair, which a board reached only sometimes and which moved the crate by 2.8 points, has a fixed example of its own"
+      "lines": 98,
+      "regions": 97,
+      "reason": "first measured 2026-11-08 at 94.47% lines and 94.57% regions, with the wasm crate's replay of the TypeScript's recorded answers (71.37% and 69.20% from the crate's own tests alone); raised with the native properties to 97.06-97.34% lines and 96.72-96.94% regions over four runs. Generated boards still move spatial_edges.rs by about nine lines, so the floor sits a point under the lowest run; the coincident-ends repair, which a board reached only sometimes and which moved the crate by 2.8 points, has a fixed example of its own. Raised again with the survivor tests (tests/survivors_*.rs) to 99.01-99.04% lines and 98.82-98.83% regions over three runs; the floor stays a point under the lowest"
     },
     "core/log": {
       "lines": 100,
