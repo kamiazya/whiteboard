@@ -8,8 +8,8 @@ import wasmUrl from '@kamiazya/whiteboard-core-wasm/wasm?url'
  * `vite-plugin-core-source.ts` swaps it for a stub in a build that routes in
  * TypeScript, so that build needs no artifact at all.
  */
-export async function loadWebCore(): Promise<RoutingCore> {
-  const response = await fetch(wasmUrl)
+export async function loadWebCore(fetchAsset: typeof fetch): Promise<RoutingCore> {
+  const response = await fetchAsset(wasmUrl)
   if (!response.ok) throw new Error(`the core wasm answered ${response.status} from ${wasmUrl}`)
   return loadCore(await response.arrayBuffer())
 }

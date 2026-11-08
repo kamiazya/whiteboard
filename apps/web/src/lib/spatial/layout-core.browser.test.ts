@@ -15,14 +15,14 @@ import { describe, expect, it, vi } from 'vitest'
 import type { AppLogger } from '../app-logger.js'
 import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js'
 import { createEditorAppearance } from './editor-appearance.js'
-import { createLayoutCoreHost } from './layout-core.js'
+import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
 
 const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 
 async function loadRealCore() {
   try {
     const { loadWebCore } = await import('./layout-core-source.js')
-    return { routing: await loadWebCore() }
+    return { routing: await loadWebCore(fetch) }
   } catch (err) {
     return { failure: err }
   }
@@ -85,6 +85,17 @@ describe('the real Rust core in a browser', () => {
       expect(calls).toBe(3)
     },
   )
+})
+
+describe.runIf(REQUIRED)('the page core', () => {
+  it('loads although the page has since replaced fetch, which knows nothing of the wasm', async () => {
+    vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }))
+    try {
+      expect(await layoutCoreReady()).toBeDefined()
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
 })
 
 describe.skipIf(!REQUIRED)('the layout worker with the core on', () => {

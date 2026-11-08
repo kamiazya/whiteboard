@@ -83,11 +83,17 @@ export function createLayoutCoreHost(
   }
 }
 
+// The platform's fetch as it stood when this module loaded. The wasm is a
+// build asset, not an API call: a later replacement of `globalThis.fetch`
+// (a test double answering 404 to every route it was not told of) would
+// otherwise be asked for bytes it knows nothing about.
+const fetchAsset: typeof fetch = globalThis.fetch?.bind(globalThis)
+
 const host = createLayoutCoreHost(
   coreSettingsFrom(import.meta.env),
   // A build that routes in TypeScript replaces `layout-core-source.ts` with a
   // stub (vite-plugin-core-source.ts), so this import never reaches the wasm.
-  async () => (await import('./layout-core-source.js')).loadWebCore(),
+  async () => (await import('./layout-core-source.js')).loadWebCore(fetchAsset),
   getAppLogger('layout-core'),
 )
 
