@@ -514,6 +514,12 @@ jobs:
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 
+      # A node-realm test of the daemon's layout core asserts the staged wasm
+      # is there wherever CI runs it; the artifact comes from the same cache
+      # test-unit restores, so a hit costs no Rust toolchain.
+      - uses: ./.github/actions/core-wasm
+        if: steps.changed.outputs.files != '' && matrix.leg == 'node'
+
       - name: Stress changed test files (5 runs, fresh process each)
         if: steps.changed.outputs.files != ''
         # Fresh vitest process per iteration on purpose: module state, test

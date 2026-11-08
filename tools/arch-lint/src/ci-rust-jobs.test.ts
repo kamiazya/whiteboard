@@ -201,6 +201,14 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(restore?.with?.path).toBe('packages/core-wasm/artifacts')
   })
 
+  it('is restored by the stress lane before it reruns a changed node test', () => {
+    const stress = stepsOf(ci, 'stress-changed-tests')
+    const at = stress.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const run = stress.findIndex((s) => s.name?.startsWith('Stress changed test files'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(run)
+  })
+
   it('is what test-unit restores before mcp-node runs in differential', () => {
     const unit = stepsOf(ci, 'test-unit')
     const at = unit.findIndex((s) => s.uses === './.github/actions/core-wasm')
