@@ -133,8 +133,9 @@ steps and cache paths to the scripts.
   (`tools/checks/src/rust-mutants.mjs` reads the exit codes). A mutant no
   test can observe is ledgered in `.cargo/mutants.toml` with its reason above
   the entry; the script fails an entry that matches no mutant, and the entry
-  count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). On push to
-  main the job runs the whole workspace (`rust:mutants:full`).
+  count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). A push to
+  main judges the merged change in-diff the same way; `rust:mutants:full`
+  (the whole workspace) is run by hand until its survivors are classified.
 - **The TypeScript's answers are recorded for native tests**:
   `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
   what the TypeScript composer answers to 309 layouts, replayed bit for bit

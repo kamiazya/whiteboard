@@ -4,7 +4,8 @@
 //
 //   pr    the mutants in the lines this change touches under crates/, against
 //         RUST_MUTANTS_BASE (default origin/main): `cargo mutants --in-diff`.
-//   full  every mutant in the workspace, the nightly run.
+//   full  every mutant in the workspace. Run by hand: CI judges a push to
+//         main in-diff too, until the workspace's survivors are classified.
 //
 // Both judge each mutant by the whole workspace's tests
 // (`--test-workspace=true`), so the edge crate is judged by the wasm crate's

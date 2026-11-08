@@ -1308,18 +1308,15 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: cargo test --workspace --locked
 
+      # A push to main judges the merged change the same way, against HEAD^1:
+      # the whole workspace still holds survivors nobody has classified, so a
+      # full run here would fail every merge on mutants it did not add.
       - name: Mutants in this change (shard ${{ matrix.shard }}/4)
         if: steps.scope.outputs.run == 'true'
         env:
-          EVENT: ${{ github.event_name }}
           RUST_MUTANTS_BASE: HEAD^1
           RUST_MUTANTS_SHARD: ${{ matrix.shard }}/4
-        run: |
-          if [ "$EVENT" = pull_request ]; then
-            pnpm rust:mutants:pr
-          else
-            pnpm rust:mutants:full
-          fi
+        run: pnpm rust:mutants:pr
 
       - name: Upload the mutants report
         if: failure() && steps.scope.outputs.run == 'true'
