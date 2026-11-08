@@ -59,6 +59,12 @@ export {
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export { routeEdge } from './layout/edges/edge-router.js'
 export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
+export type {
+  CoreImpl,
+  CoreMismatch,
+  LayoutCore,
+  RoutingCore,
+} from './layout/edges/layout-core.js'
 export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'

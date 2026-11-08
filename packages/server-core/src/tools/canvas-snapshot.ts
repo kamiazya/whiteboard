@@ -403,8 +403,11 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
       // `overflows` is a claim about what a reader SEES, so measuring it with
       // a different model than the one that draws the picture would make the
       // claim about nothing.
+      const core = await deps.layoutCore?.()
       const { nodes: laidOut, ...relations } = sceneDigest(
-        composeCanvasScene(canvas, (await resolveTextMeasurer(deps)).measure),
+        composeCanvasScene(canvas, (await resolveTextMeasurer(deps)).measure, {
+          ...(core === undefined ? {} : { core }),
+        }),
       )
       // The one fact the node list above cannot restate. Matched by id, so a
       // node past `SNAPSHOT_MAX_NODES` simply never gets asked about.

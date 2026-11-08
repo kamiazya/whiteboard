@@ -222,16 +222,14 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the refusal a composition root catches when its wasm artifact and this shim come from different commits; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees when the artifact rejects what the shim encoded; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
-  'packages/core-wasm/src/index.ts#coreFrom':
-    "the synchronous entry for a root that already holds the glue, such as the layout worker; canvas-render's route-layout differential goes through it, and the roots take it in ADR-0054 step 5's next slice",
-  'packages/core-wasm/src/index.ts#loadCore':
+  'packages/mcp-server/src/server/export/layout-core.ts#stagedArtifacts':
+    "where the daemon reads the staged wasm by default; exported so layout-core.test.ts asserts CI staged it at the SAME path, rather than a second spelling of the path that could drift from the loader's",
+  'packages/core-wasm/src/load.ts#loadCore':
     "the entry a composition root loads the core through, from the artifact's bytes or a compiled module; the roots take it in ADR-0054 step 5's next slice, and core-wasm-rust loads the real artifact through it",
   'packages/canvas-render/src/layout/edges/layout-core.ts#CoreImpl':
     "the switch a composition root sets per ported function in `SpatialLayoutOptions.core` (ADR-0054's CoreImpl); the roots set it in ADR-0054 step 5's next slice, and the switch's own tests drive each value",
   'packages/canvas-render/src/layout/edges/layout-core.ts#RoutingCore':
     "the routing a composition root hands the layout, which core-wasm's Core satisfies structurally; the roots hand it over in ADR-0054 step 5's next slice, and core-switch.rust.test.ts passes the real core as one",
-  'packages/canvas-render/src/layout/edges/layout-core.ts#CoreMismatch':
-    "what `differential` mode reports to the root's onMismatch; the roots log it in ADR-0054 step 5's next slice, and the switch's own tests read each kind",
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
     'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':

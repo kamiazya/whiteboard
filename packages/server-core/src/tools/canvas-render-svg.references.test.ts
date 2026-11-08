@@ -301,4 +301,28 @@ describe('wb_canvas_snapshot({ layout: true })', () => {
     })
     expect(after).toEqual(before)
   })
+
+  test('lays the canvas out through the core ServerDeps hands it', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, NOTE_ID)
+    // A core that refuses: the layout reports it and the TypeScript answers,
+    // so the digest is unchanged and the report is the proof the core was asked.
+    const reports: string[] = []
+    const deps = {
+      ...makeDeps(store),
+      layoutCore: async () => ({
+        routing: {
+          routeLayout: () => {
+            throw new Error('refused')
+          },
+        },
+        impl: { routeLayout: 'rust' as const },
+        onMismatch: (m: { kind: string }) => reports.push(m.kind),
+      }),
+    }
+    const input = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, layout: true }
+    const withCore = await createCanvasSnapshotTool(deps).execute(input)
+    expect(reports).toEqual(['refused'])
+    expect(withCore).toEqual(await createCanvasSnapshotTool(makeDeps(store)).execute(input))
+  })
 })

@@ -1,3 +1,4 @@
+import type { RoutingCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   constantRatioMeasureText,
   SPATIAL_THEME_FONT_FAMILY,
@@ -608,5 +609,54 @@ describe('wb_scene_render comments', () => {
 
   test('draws the conversation when asked to', async () => {
     expect(await renderWith(true, true)).not.toBe(await renderWith(false))
+  })
+})
+
+describe('wb_scene_render and the routing core', () => {
+  test('routes through the core ServerDeps hands it, under the switch it names', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
+          textNode({ id: 'b', x: 300, y: 0, width: 100, height: 50, text: 'b' }),
+        ],
+        edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
+      })
+    })
+    // A core whose one route is a path no TypeScript routing would draw: the
+    // SVG carries it only if the layout asked the core.
+    const marked = { x: 123, y: 456 }
+    const routing: RoutingCore = {
+      routeLayout: (_nodes, edges) => ({
+        routes: edges.map((edge) => ({
+          kind: 'edge' as const,
+          id: edge.id,
+          path: [marked, { x: 300, y: 25 }],
+          fromSide: 'right' as const,
+          toSide: 'left' as const,
+          fromEnd: 'none' as const,
+          toEnd: 'arrow' as const,
+        })),
+        anchors: new Map(),
+      }),
+    }
+    let asked = 0
+    const deps = {
+      ...(await makeDeps(store)),
+      layoutCore: async () => {
+        asked += 1
+        return { routing, impl: { routeLayout: 'rust' as const } }
+      },
+    }
+    const result = await createCanvasRenderSvgTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      comments: false,
+      style: 'clean',
+    })
+    expect(asked).toBe(1)
+    expect(result.svg).toContain('points="123,456 300,25"')
   })
 })

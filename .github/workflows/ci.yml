@@ -119,10 +119,20 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The daemon lays canvases out through the Rust core in differential
+      # (ADR-0054 stage 2: both run, the TypeScript answers), and a
+      # difference fails the test that drew it. The artifact comes from the
+      # cache keyed on its inputs, so a hit needs no Rust toolchain.
+      - uses: ./.github/actions/core-wasm
+        if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
+
       # Shard mcp-node (largest suite) across 2 parallel runners.
       # --shard splits the collected spec list so each runner handles a disjoint half.
       - name: Test mcp-node (shard ${{ matrix.shard }}/2)
         if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
+        env:
+          WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 
       # canvas-viewer is small enough to skip sharding; run it once (shard 1)

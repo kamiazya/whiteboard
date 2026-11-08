@@ -12,6 +12,10 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
+    "./load": {
+      "types": "./src/load.ts",
+      "import": "./src/load.ts"
+    },
     "./package.json": "./package.json"
   },
   "imports": {
