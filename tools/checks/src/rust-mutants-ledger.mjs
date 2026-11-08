@@ -81,3 +81,21 @@ export function mutantNames(stdout) {
     .map((l) => l.replace(ansi, '').trim())
     .filter((l) => l !== '')
 }
+
+/**
+ * The `--shard` argument for a CI leg. Legs are numbered from 1 (the matrix,
+ * and the job names `rust-mutants (1)`..`(n)`), cargo-mutants' shards from 0
+ * (`0/n` to `n-1/n`), so leg k runs shard k-1: passing k through left shard 0
+ * unrun and refused leg n.
+ * @param {string | undefined} leg `k/n`, 1-based, or nothing for one unsharded run
+ * @returns {string | undefined | Error}
+ */
+export function cargoShard(leg) {
+  if (leg === undefined || leg === '') return undefined
+  const m = /^(\d+)\/(\d+)$/.exec(leg)
+  const k = Number(m?.[1])
+  const n = Number(m?.[2])
+  if (!m || k < 1 || k > n)
+    return new Error(`RUST_MUTANTS_SHARD must be k/n with 1 <= k <= n, got ${leg}`)
+  return `${k - 1}/${n}`
+}

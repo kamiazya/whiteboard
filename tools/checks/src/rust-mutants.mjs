@@ -29,7 +29,7 @@ import { spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { ledgerEntries, ledgerProblems, mutantNames } from './rust-mutants-ledger.mjs'
+import { cargoShard, ledgerEntries, ledgerProblems, mutantNames } from './rust-mutants-ledger.mjs'
 
 const VERSION = '27.1.0'
 const INSTALL = `cargo install --locked cargo-mutants --version ${VERSION}`
@@ -82,11 +82,9 @@ const args = [
   TIMEOUT_SECONDS,
   '--no-shuffle',
 ]
-const shard = process.env.RUST_MUTANTS_SHARD
-if (shard !== undefined && shard !== '') {
-  if (!/^\d+\/\d+$/.test(shard)) fail(`RUST_MUTANTS_SHARD must be k/n, got ${shard}`)
-  args.push('--shard', shard)
-}
+const shard = cargoShard(process.env.RUST_MUTANTS_SHARD)
+if (shard instanceof Error) fail(shard.message)
+if (shard !== undefined) args.push('--shard', shard)
 
 if (mode === 'pr') {
   const base = process.env.RUST_MUTANTS_BASE ?? 'origin/main'

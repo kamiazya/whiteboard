@@ -11,12 +11,13 @@ interface Entry {
 }
 // Loaded by URL like affected.test.ts loads affected.mjs: tools/checks is a
 // workspace of its own, and a relative import across it is an escape.
-const { ledgerEntries, ledgerProblems, mutantNames } = (await import(
+const { cargoShard, ledgerEntries, ledgerProblems, mutantNames } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-mutants-ledger.mjs')).href
 )) as {
   ledgerEntries: (toml: string) => Entry[]
   ledgerProblems: (entries: Entry[], names: string[], expected?: number) => string[]
   mutantNames: (stdout: string) => string[]
+  cargoShard: (leg: string | undefined) => string | undefined | Error
 }
 
 // .cargo/mutants.toml is the ledger of mutants the Rust mutation gate does
@@ -60,5 +61,12 @@ describe('the Rust mutants ledger', () => {
       reason: 'a reason long enough to pass',
     }
     expect(ledgerProblems([entry], names, 1)).toEqual([])
+  })
+
+  it('runs every cargo-mutants shard once across legs numbered from 1', () => {
+    expect([1, 2, 3, 4].map((k) => cargoShard(`${k}/4`))).toEqual(['0/4', '1/4', '2/4', '3/4'])
+    expect(cargoShard(undefined)).toBeUndefined()
+    expect(cargoShard('0/4')).toBeInstanceOf(Error)
+    expect(cargoShard('5/4')).toBeInstanceOf(Error)
   })
 })
