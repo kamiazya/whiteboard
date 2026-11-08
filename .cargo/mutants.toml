@@ -17,4 +17,62 @@ exclude_re = [
   # `check` and `required_version`: spawning cargo llvm-cov and writing the
   # ledger back. Judged by running it in `pnpm rust:check`.
   '^crates/xtask/src/coverage\.rs:\d+:\d+: (replace (measure|run) -> |.* in (measure|run)$)',
+  # config_score: `j` is filtered to `j != i` before these comparisons, so
+  # `i <= j` is `i < j` (both `<` in apply_pair_costs and the one in
+  # contribution).
+  'config_score\.rs:\d+:\d+: replace < with <= in ConfigScore<.a>::contribution$',
+  # config_score: as above, for apply_pair_costs' two `<`.
+  'config_score\.rs:\d+:\d+: replace < with <= in ConfigScore<.a>::apply_pair_costs$',
+  # config_score: `updates.has(key)` already implies `touched(j) && j < i`, so
+  # the skip's `A || X` is X and `A && X` is A; they differ only on a revisit
+  # that recorded no update, which never calls pair_score and spends nothing.
+  'config_score\.rs:\d+:\d+: replace \|\| with && in ConfigScore<.a>::apply_pair_costs$',
+  # config_score: `j == i` never holds past the filter, so `j == i` reduces the
+  # skip to `updates.has(key)`, the case above. Column-pinned: the other `<`
+  # in this function is judged.
+  'config_score\.rs:\d+:68: replace < with == in ConfigScore<.a>::apply_pair_costs$',
+  # coincident_ends: the tier and bend comparisons sit inside `!=` guards, so
+  # `<=` is `<` (NaN makes both false). Column-pinned: the length comparison's
+  # `<=` is judged.
+  'coincident_ends\.rs:\d+:(23|24): replace < with <= in better_repair$',
+  # straight_detour: only the leg cache's KEY order changes, and first_blocker
+  # is symmetric in its endpoints (no asymmetry in 3M boundary-biased probes,
+  # no output diff on 9000 fuzzed boards); `<=` differs only at u == v, which
+  # a settled vertex never reaches.
+  'straight_detour\.rs:\d+:28: replace < with (==|>|<=) in corner_detour$',
+  # straight_detour: the bounding-box pre-filter is redundant with the same
+  # rejection inside segment_crosses_rect. Column-pinned: the escaping test's
+  # `||` is judged.
+  'straight_detour\.rs:\d+:13: replace \|\| with && in first_blocker$',
+  # straight_detour: `p == 0` has already taken the `continue`, so `p <= 0` is
+  # `p < 0`.
+  'straight_detour\.rs:\d+:\d+: replace < with <= in enters_interior$',
+  # straight_detour: one component of the outward normal is always zero, so
+  # `abs(x - 0)` is `abs(x + 0)`. Column-pinned: the vx/vy minuses are judged.
+  'straight_detour\.rs:\d+:37: replace - with \+ in approaches_sideways$',
+  # straight_detour: always answering vertex 0 makes the corner search loop
+  # forever on any blocked route, so the mutant times out (measured past 120s)
+  # rather than surviving; every detour test hangs on it.
+  'straight_detour\.rs:\d+:\d+: replace nearest_open -> Option<usize> with Some\(0\)$',
+  # segment_intersection: a `t` that passes the range test leaves x and y both
+  # finite or both NaN, never one alone. LINE-pinned, because 30:29 has the
+  # same description and is judged; an edit above it makes this entry stale,
+  # which the gate reports rather than hiding.
+  'segment_intersection\.rs:34:29: replace \|\| with && in segment_intersection$',
+  # spatial_edges: every OR in the Morton interleave joins operands with
+  # disjoint bits, so `|` is `^`.
+  'spatial_edges\.rs:\d+:\d+: replace \| with \^ in interleave$',
+  # spatial_edges: gx sits on bits 3k and gy << 1 on bits 3k+1, so `|` is `^`.
+  'spatial_edges\.rs:\d+:\d+: replace \| with \^ in morton_keys$',
+  # spatial_edges: the cell index never exceeds GRID - 1 (the value lies in
+  # [min, min + span]), so a cap of GRID + 1 or GRID binds nowhere.
+  # Column-pinned: the same descriptions at other columns are judged.
+  'spatial_edges\.rs:\d+:29: replace - with [+/] in morton_keys$',
+  # spatial_edges: n = 0 means no edges, so the search prices nothing and the
+  # anchors and the budget come back the same (measured).
+  'spatial_edges\.rs:\d+:\d+: replace match guard n >= 1 with true in assign_edge_anchors$',
+  # spatial_edges: the sort comparator is only ever called with the later
+  # index first, so the index tie-break's `Less` arm is never reached.
+  # Column-pinned: the same description at column 13 is judged.
+  'spatial_edges\.rs:\d+:45: delete - in trial_edges_for$',
 ]

@@ -394,8 +394,8 @@ fn optimize_across_regions(
     let region_size = edges.len().div_ceil(edges.len().div_ceil(CROSSING_OPT_MAX_EDGES));
     let mut settled = initial.clone();
     for chunk in ordered.chunks(region_size) {
-        // Unreachable past the gate, where the last region holds at least a
-        // hundred edges; kept because the TypeScript has it.
+        // A lone edge has nothing to cross. The last region can be that small:
+        // 39801 edges make 199 regions of 200 and one of 1.
         if chunk.len() < 2 {
             continue;
         }
