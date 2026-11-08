@@ -41,6 +41,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
+import { currentLayoutCore } from './layout-core.js'
 
 export interface RenderCanvasCoreOptions {
   readonly measure: MeasureText
@@ -139,7 +140,7 @@ export interface RenderedCanvas {
 export function editorLayoutBase(options: {
   readonly measure: MeasureText
   readonly theme?: SpatialThemeMode
-}): Pick<SpatialLayoutOptions, 'measure' | 'appearance' | 'style' | 'fontAvailable'> {
+}): Pick<SpatialLayoutOptions, 'measure' | 'appearance' | 'style' | 'fontAvailable' | 'core'> {
   return {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
@@ -152,6 +153,11 @@ export function editorLayoutBase(options: {
     // face for it; otherwise layout measures and declares the bundled one,
     // the same answer the daemon's export gives.
     fontAvailable: hasLoadedFace,
+    // The Rust core this realm has loaded, if any (ADR-0054): every layout
+    // here takes the same routing switch, the worker's and the drag layers'
+    // alike, or the committed scene and the overlay floating over it would
+    // route apart under `rust`. Before it loads, TypeScript answers.
+    core: currentLayoutCore(),
   }
 }
 

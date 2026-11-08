@@ -23,6 +23,7 @@ import { outlineBlocks } from './document-outline.js'
 import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
+import { currentLayoutCore } from './spatial/layout-core.js'
 import type { ResolvedTheme } from './theme.js'
 
 export interface RenderMarkdownPreviewOptions {
@@ -218,6 +219,8 @@ function layoutMarkdownScene(
         // is held, exactly as `editorLayoutBase` answers for the canvas
         // surfaces (ADR-0011's invariant).
         fontAvailable: hasLoadedFace,
+        // A board embedded in a note routes through this realm's core too.
+        core: currentLayoutCore(),
         // A page, not an object. This pane runs to a readable measure, where the
         // node scale — cut so a heading cannot eat a third of a 280px box —
         // reads timid. Set on `layoutMarkdownScene` rather than at the preview's own

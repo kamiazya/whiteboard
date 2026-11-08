@@ -70,6 +70,25 @@ describe('computeDragPreview — routing budget', () => {
     expect(budget?.grid).toBeLessThan(render.createRoutingBudget().grid)
   })
 
+  it('still routes only the tentative edge when a core is present but set to ts', () => {
+    const canvas = cagedBoard()
+    const selectableBoxes: NodeBox[] = canvas.nodes.map((n) => ({
+      id: n.id,
+      box: { x: n.x, y: n.y, width: n.width, height: n.height },
+    }))
+    computeDragPreview(
+      { kind: 'connecting', fromNodeId: 'A' },
+      selectableBoxes,
+      { x: 1050, y: 50 },
+      {
+        canvas: { ...canvas, edges: [{ id: 'e1', from: { node: 'A' }, to: { node: 'wall0' } }] },
+        selectableBoxes,
+        core: { routing: { routeLayout: vi.fn() }, impl: { routeLayout: 'ts' } },
+      },
+    )
+    expect(routeEdge).toHaveBeenCalledTimes(1)
+  })
+
   it('opens a fresh budget for each pointer move', () => {
     previewOnto(cagedBoard())
     previewOnto(cagedBoard())

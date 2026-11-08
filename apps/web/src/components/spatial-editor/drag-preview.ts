@@ -23,12 +23,15 @@ import {
   edgeArrowPolygons,
   flattenDrawnEdgePath,
   type LabelObstacle,
+  type LayoutCore,
   routeEdge,
+  routeLayout,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import type { Box, NodeBox } from '../../lib/spatial/geometry.js'
 import { hitTest, resizeBoxByDelta } from '../../lib/spatial/geometry.js'
+import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { GestureState } from './gestures.js'
 
@@ -66,6 +69,12 @@ export interface ConnectPreviewContext {
    * steps round.
    */
   readonly frameTitles?: readonly LabelObstacle[]
+  /**
+   * The Rust core to route the tentative edge through (ADR-0054); absent,
+   * this realm's own, once loaded. Without it the preview would draw the
+   * TypeScript's line under `rust` and the drop would replace it.
+   */
+  readonly core?: LayoutCore
 }
 
 /**
@@ -189,15 +198,53 @@ function previewLine(
   // unbounded on each frame of the gesture.
   const budget = createRoutingBudget()
   const titles = connect.frameTitles ?? []
+  const core = connect.core ?? currentLayoutCore()
+  const routed =
+    core === undefined || core.impl.routeLayout === 'ts'
+      ? routeTentativeOnly(nodes, canvas.edges, tentative, routingStyle, connect, budget, titles)
+      : // The core answers a whole layout in one call, so the existing edges
+        // are routed too and only the tentative one (last) is drawn.
+        routeLayout(
+          core,
+          nodes,
+          [...canvas.edges, tentative],
+          () => routingStyle ?? 'straight',
+          connect.frozenEdgeSides,
+          budget,
+          titles,
+        ).routes.at(-1)
+  if (routed === undefined) return { kind: 'line', path: [], arrows: [] }
+  return {
+    kind: 'line',
+    path: flattenDrawnEdgePath(routed.path, [], routed.rounded === true),
+    arrows: edgeArrowPolygons(routed).map((arrow) => arrow.points),
+  }
+}
+
+/**
+ * The TypeScript's routing of the tentative edge alone: the side search sees
+ * every edge, but only this one is routed. Kept apart from `routeLayout`
+ * because that routes (and spends the budget on) every edge per pointer
+ * move, which the preview has never paid.
+ */
+function routeTentativeOnly(
+  nodes: SpatialCanvas['nodes'],
+  existing: SpatialCanvas['edges'],
+  tentative: CanvasEdge,
+  routingStyle: ReturnType<typeof resolveCanvasEdgeStyle>['style'],
+  connect: ConnectPreviewContext,
+  budget: ReturnType<typeof createRoutingBudget>,
+  titles: readonly LabelObstacle[],
+) {
   const anchors = assignEdgeAnchors(
     nodes,
-    [...canvas.edges, tentative],
+    [...existing, tentative],
     routingStyle,
     connect.frozenEdgeSides,
     budget,
     titles,
   )
-  const routed = routeEdge(
+  return routeEdge(
     nodes,
     tentative,
     routingStyle,
@@ -206,11 +253,6 @@ function previewLine(
     budget,
     titles,
   )
-  return {
-    kind: 'line',
-    path: flattenDrawnEdgePath(routed.path, [], routed.rounded === true),
-    arrows: edgeArrowPolygons(routed).map((arrow) => arrow.points),
-  }
 }
 
 /**
