@@ -418,23 +418,38 @@ type PointXY = { x: number; y: number }
 // lane run may cross another member's exit segment right at the node.
 // Mutation check: reverting depth to the list index reintroduces the
 // crossing for a sweeping corridor given a shallow lane.
+//
+// The spokes stand CLOSE to the hub. Placed far out (x = 2000) every route
+// ran its first elbow horizontally to the target's stub, so no lane run ever
+// passed the node and the property held under the very mutation it names;
+// near, the corridor turns at its lane, which is the case it is about.
 const mixedLaneScenario = fc.record({
   below: fc.integer({ min: 1, max: 5 }),
   above: fc.integer({ min: 1, max: 5 }),
+  spokeX: fc.integer({ min: 150, max: 300 }),
   jitters: fc.array(fc.integer({ min: 0, max: 40 }), { minLength: 10, maxLength: 10 }),
 })
 
+const SWEEP_TITLE =
+  'no lane run crosses another member exit at the node, for mixed sweep directions'
+const sweepReach = { runs: 0, laneRuns: 0 }
+
 describe('routing properties: sweep-rank lanes', () => {
   fcTest.prop([mixedLaneScenario], withDefaults())(
-    'no lane run crosses another member exit at the node, for mixed sweep directions',
-    ({ below, above, jitters }) => {
+    SWEEP_TITLE,
+    ({ below, above, spokeX, jitters }) => {
       const hub = node('hub', 'text', { x: 0, y: 0, w: 100, h: 100 })
       const spokes = [
         ...Array.from({ length: below }, (_, i) =>
-          node(`d${i}`, 'text', { x: 2000, y: 250 + i * 130 + jitters[i]!, w: 100, h: 100 }),
+          node(`d${i}`, 'text', { x: spokeX, y: 250 + i * 130 + jitters[i]!, w: 100, h: 100 }),
         ),
         ...Array.from({ length: above }, (_, i) =>
-          node(`u${i}`, 'text', { x: 2000, y: -250 - i * 130 - jitters[5 + i]!, w: 100, h: 100 }),
+          node(`u${i}`, 'text', {
+            x: spokeX,
+            y: -250 - i * 130 - jitters[5 + i]!,
+            w: 100,
+            h: 100,
+          }),
         ),
       ]
       const edges: CanvasEdge[] = spokes.map((s, i) => ({
@@ -458,8 +473,18 @@ describe('routing properties: sweep-rank lanes', () => {
           expect(cross(a.path[1]!, a.path[2]!, b.path[0]!, b.path[1]!)).toBe(false)
         }
       }
+      // A lane run is the case: a vertical run from the stub, beside the node.
+      sweepReach.runs++
+      const besideHub = (r: (typeof routed)[number]) =>
+        r.path.length >= 3 && r.path[1]!.x === r.path[2]!.x && r.path[1]!.x < spokeX
+      if (routed.some(besideHub)) sweepReach.laneRuns++
     },
   )
+
+  afterAllFloor([SWEEP_TITLE], () => {
+    // Measured 106 to 115 of 200 boards; 0 with the spokes at x = 2000.
+    expect(sweepReach.laneRuns, 'boards with a lane run beside the hub').toBeGreaterThan(50)
+  })
 })
 
 // Crossing minimization. Dense chunky boxes with edges across them make
