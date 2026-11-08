@@ -931,6 +931,9 @@ to the origin. Drawing one — the router taking a box-less end — is
 job. Until then the model can STORE an end this renderer will not draw, which
 is the honest state and is pinned by example rather than left to be found.
 
+**A layout's routing is ONE call** (`routeLayout`, `layout/edges/layout-core.ts`),
+answered by the TypeScript or the Rust core as `SpatialLayoutOptions.core` says.
+
 **An edge's algorithm is not contributable.** The seam was deleted
 (2026-11-06); `routeEdge` and `bend-route.ts` are the only producers of an
 edge's path.

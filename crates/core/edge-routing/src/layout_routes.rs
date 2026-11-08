@@ -6,7 +6,7 @@
 //! once per edge.
 
 use crate::edge_router::{RouteRequest, RoutedEdge, RoutingStyle, route_edge};
-use crate::edge_sides::EdgeAnchorOverride;
+use crate::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use crate::geometry::Rect;
 use crate::js_map::JsMap;
 use crate::routing_budget::RoutingBudget;
@@ -16,16 +16,17 @@ use crate::spatial_edges::assign_edge_anchors;
 /// Every edge of `edges` routed, in order, as the composer routes them:
 /// anchors from [`assign_edge_anchors`], no obstacle list of the caller's
 /// own, and the labels both passes avoid. `styles` holds one style per edge,
-/// by position.
+/// by position. The anchors are answered beside the routes because the
+/// composer hands them on: the editor freezes a drag from them.
 #[must_use]
 pub fn route_layout(
     (nodes, labels): (&[RoutingNode], &[Rect]),
     (edges, styles): (&[RoutableEdge], &[RoutingStyle]),
     side_overrides: Option<&JsMap<EdgeId, EdgeAnchorOverride>>,
     budget: &mut RoutingBudget,
-) -> Vec<RoutedEdge> {
+) -> (JsMap<EdgeId, EdgeAnchorPair>, Vec<RoutedEdge>) {
     let anchors = assign_edge_anchors((nodes, labels), (edges, styles), side_overrides, budget);
-    edges
+    let routed = edges
         .iter()
         .enumerate()
         .map(|(i, edge)| {
@@ -38,7 +39,8 @@ pub fn route_layout(
             };
             route_edge(nodes, edge, style, request)
         })
-        .collect()
+        .collect();
+    (anchors, routed)
 }
 
 #[cfg(test)]
@@ -63,8 +65,9 @@ mod tests {
     #[test]
     fn no_edges_route_to_nothing_and_spend_nothing() {
         let mut budget = RoutingBudget::for_layout();
-        let routed = route_layout((&[node(0, 0.0)], &[]), (&[], &[]), None, &mut budget);
+        let (anchors, routed) = route_layout((&[node(0, 0.0)], &[]), (&[], &[]), None, &mut budget);
         assert!(routed.is_empty());
+        assert_eq!(anchors.len(), 0);
         assert_eq!(budget, RoutingBudget::for_layout());
     }
 
@@ -74,8 +77,11 @@ mod tests {
         let edges = [edge(0, 0, 1), edge(1, 1, 0), edge(2, 0, 9)];
         let styles = [RoutingStyle::Orthogonal; 3];
         let mut budget = RoutingBudget::for_layout();
-        let routed = route_layout((&nodes, &[]), (&edges, &styles), None, &mut budget);
+        let (anchors, routed) = route_layout((&nodes, &[]), (&edges, &styles), None, &mut budget);
         assert_eq!(routed.len(), 3);
+        // The anchors are the search's, and each route leaves by the side its anchor names.
+        assert_eq!(anchors.get(&0).and_then(|pair| pair.from_side), Some(routed[0].from_side));
+        assert_eq!(anchors.get(&1).and_then(|pair| pair.to_side), Some(routed[1].to_side));
         let xs = |i: usize| {
             let path = &routed[i].path;
             (path.first().map_or(f64::NAN, |p| p.x), path.last().map_or(f64::NAN, |p| p.x))

@@ -41,7 +41,7 @@ export interface WasmGlue {
 }
 
 /** The surface these tests were written against; a stale artifact fails on this, not on its first mismatched call. */
-export const EXPECTED_ABI = '13'
+export const EXPECTED_ABI = '14'
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 

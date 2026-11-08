@@ -424,9 +424,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // codegen` emits from contracts/geometry. Outside the lane: it is
     // generated, so an edit to it fails `codegen --check` before any test,
     // and its refusals are pinned by `geometry-contract.test.ts`.
+    // 127 with `layout/edges/layout-core.ts`, ADR-0054's CoreImpl switch for
+    // the layout's routing. Outside the lane: it is a three-way dispatch and
+    // a comparison, every branch driven by `layout/core-switch.test.ts` and
+    // mutation-checked by hand, and it goes when the TypeScript routing does.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 126,
+      production: 127,
     })
   })
 

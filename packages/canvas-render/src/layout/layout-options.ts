@@ -35,6 +35,7 @@ import type { ReferenceSeams } from '../references/seams.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
+import type { LayoutCore } from './edges/layout-core.js'
 import type { NestedLayoutBudget } from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
@@ -103,6 +104,12 @@ export interface SpatialLayoutOptions {
    * through the full pipeline.
    */
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
+  /**
+   * The Rust core and the switch for each function it ports (ADR-0054's
+   * `CoreImpl`), set by the composition root and read nowhere ambiently.
+   * Absent, every function runs in TypeScript.
+   */
+  readonly core?: LayoutCore
   /**
    * Documents already on the embed recursion path when this canvas is
    * itself embedded content — a markdown body's `![[canvas]]`. Seeds the
