@@ -28,8 +28,8 @@
     {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::cast_possible_truncation",
-      "count": 1,
-      "reason": "a value known to be 0..=1023 narrowed to the integer the TypeScript's bit arithmetic works in"
+      "count": 2,
+      "reason": "a value known to be 0..=1023 narrowed to the integer the TypeScript's bit arithmetic works in (one more in tests/crossing_sweep_properties.rs, whose oracle keys a small quantized test coordinate as an integer)"
     },
     {
       "crate": "crates/core/edge-routing",
@@ -46,8 +46,8 @@
     {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::float_cmp",
-      "count": 11,
-      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more each in tests/grid_route_optimality.rs, whose reference compares grid lines the same way, and tests/ink_properties.rs, whose oracle skips an axis-aligned segment the same way)"
+      "count": 12,
+      "reason": "the TypeScript compares coordinates with === and the port must agree on exactly the same equalities; an epsilon here would change which edges count as aligned (one more each in tests/grid_route_optimality.rs, whose reference compares grid lines the same way, tests/ink_properties.rs, whose oracle skips an axis-aligned segment the same way, and tests/crossing_sweep_properties.rs, whose integer-quantized scores the sweep owes the scan exactly)"
     },
     {
       "crate": "crates/core/edge-routing",
