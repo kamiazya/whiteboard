@@ -66,8 +66,6 @@ const ESCAPES: Readonly<Record<string, string>> = {
     'a test helper whose `import.meta.glob` lists every test file in the repo by name, to hold a coverage ledger to the tests that exist; nothing is loaded, so no module is coupled',
   'tools/arch-lint/src/browser-launch-options.test.ts -> vitest.browser.launch-options.js':
     'arch-lint polices the root vitest browser config, so it imports the module it is policing',
-  'packages/canvas-render/src/test-utils/wasm/recorded-oracle.test.ts -> crates/bindings/wasm/tests/oracle/route_layout.f64':
-    'writes and checks the recording of the TypeScript routing answers that the Rust crate replays natively; it has to live where the Rust test can `include_bytes!` it, so the TypeScript side reads across',
   'tools/arch-lint/src/vitest-projects.test.ts -> vitest.browser.shared.js':
     'arch-lint polices the root vitest project list, so it imports the module it is policing',
 }

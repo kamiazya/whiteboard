@@ -156,6 +156,6 @@ export function encodeRecording(cases: readonly RouteLayoutCase[]): Uint8Array {
   for (const c of cases) values.push(c.input.length, ...c.input, c.expected.length, ...c.expected)
   const bytes = new Uint8Array(values.length * 8)
   const view = new DataView(bytes.buffer)
-  values.forEach((v, i) => view.setFloat64(i * 8, v, true))
+  for (const [i, v] of values.entries()) view.setFloat64(i * 8, v, true)
   return bytes
 }

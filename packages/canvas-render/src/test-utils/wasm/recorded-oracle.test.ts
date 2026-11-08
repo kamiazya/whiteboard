@@ -15,10 +15,10 @@ import { encodeRecording, recordedDraws, routeLayoutCase } from './route-layout-
  * Re-record after a deliberate routing change with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node recorded-oracle`.
  */
-const FILE = new URL(
-  '../../../../../crates/bindings/wasm/tests/oracle/route_layout.f64',
-  import.meta.url,
-)
+// Kept here, not beside the Rust test: this tree is in the Rust jobs' path
+// scope, so a re-recording runs both sides, while a crate change does not
+// run this package's projects (affected.mjs reads a path a source names).
+const FILE = new URL('./oracle/route_layout.f64', import.meta.url)
 
 describe('the recorded routing oracle', () => {
   const cases = recordedDraws().map(({ draw, grid }) => routeLayoutCase(draw, grid))

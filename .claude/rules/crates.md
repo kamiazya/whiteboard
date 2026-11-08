@@ -127,9 +127,9 @@ steps and cache paths to the scripts.
   run, counted per crate; under a floor fails, and so does a floor more than
   `headroomPoints` below the measurement (`--update` only raises).
 - **The TypeScript's answers are recorded for native tests**:
-  `crates/bindings/wasm/tests/oracle/route_layout.f64` is what the TypeScript
-  composer answers to 309 layouts, replayed bit for bit by
-  `tests/recorded_oracle.rs`, so cargo-mutants and the coverage floor judge
+  `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
+  what the TypeScript composer answers to 309 layouts, replayed bit for bit
+  by `crates/bindings/wasm/tests/recorded_oracle.rs`, so cargo-mutants and the coverage floor judge
   the edge crate by the same oracle as the wasm differentials.
   canvas-render's `recorded-oracle.test.ts` (node project, nothing aliased to
   Rust) fails when the recording no longer equals today's TypeScript;

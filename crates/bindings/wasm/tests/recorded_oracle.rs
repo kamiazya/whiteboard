@@ -1,7 +1,8 @@
 //! `edge_route_layout` against the recorded TypeScript answers, bit for bit.
 //!
-//! canvas-render's `recorded-oracle.test.ts` writes `oracle/route_layout.f64`
-//! from the TypeScript composer and fails when the file no longer equals what
+//! canvas-render's `recorded-oracle.test.ts` writes
+//! `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` from
+//! the TypeScript composer and fails when the file no longer equals what
 //! the TypeScript answers. This replays it natively, which is what lets
 //! cargo-mutants judge the edge crate's mutants by the same oracle the wasm
 //! differentials use (QR-17). Format: `[count, then per case: input length,
@@ -10,7 +11,7 @@
 use whiteboard_wasm::spatial_edges::edge_route_layout;
 
 fn recording() -> Vec<f64> {
-    let bytes = include_bytes!("oracle/route_layout.f64");
+    let bytes = include_bytes!("../../../../packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64");
     bytes
         .chunks_exact(8)
         .map(|c| <[u8; 8]>::try_from(c).map_or(f64::NAN, f64::from_le_bytes))
