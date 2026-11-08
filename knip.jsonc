@@ -125,14 +125,21 @@
       "project": ["src/**/*.ts"]
     },
     "packages/canvas-render": {
-      "project": ["src/**/*.ts"],
+      // A hand-run measurement (QR-22b), not a build step: it bundles the
+      // boundary harness and runs it on Node, Chromium and workerd.
+      "entry": ["scripts/*.mjs"],
+      "project": ["src/**/*.ts", "scripts/**/*.mjs"],
       // The Rust router shim stands in for `./edge-router.js` under
       // vitest.rust.config.ts's alias, which knip does not read: the suites
       // importing DETOUR_REACH_PX and detourCandidates from `./edge-router.js`
       // reach these re-exports only through it. The side-choice search's shim
       // stands in for `./spatial-edges.js` the same way, and nothing imports
       // it by its own path at all.
+      // The boundary harness is read by the bundle scripts/route-layout-boundary.mjs
+      // generates (an entry written as a string), and by the node bench for its
+      // boards alone, so knip sees the rest of its surface unused.
       "ignoreIssues": {
+        "src/test-utils/wasm/route-layout-boundary.ts": ["exports", "types"],
         "src/test-utils/wasm/edge-router.ts": ["exports"],
         "src/test-utils/wasm/spatial-edges.ts": ["files", "exports"]
       }
