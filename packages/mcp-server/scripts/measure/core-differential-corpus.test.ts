@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { cp, mkdtemp, readdir, readFile, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
@@ -74,6 +74,14 @@ async function seededDataDir(): Promise<string> {
   return dir
 }
 
+/** Every file of a dir, by name, with its bytes. */
+async function snapshotDir(dir: string): Promise<Record<string, Buffer>> {
+  const names = (await readdir(dir)).sort()
+  const out: Record<string, Buffer> = {}
+  for (const name of names) out[name] = await readFile(join(dir, name))
+  return out
+}
+
 const differs = {
   fn: 'routeLayout' as const,
   kind: 'differs' as const,
@@ -114,8 +122,13 @@ describe('the differential corpus script', () => {
 
   describe.runIf(built)('over the staged artifact', () => {
     it('routes a seeded document and leaves the data dir it read untouched', async () => {
-      const dataDir = await seededDataDir()
-      const dbBefore = await readFile(join(dataDir, 'whiteboard.db'))
+      // The seed's store keeps a connection past closeDb whose own close later
+      // checkpoints the WAL into the db, so the seed dir is no fixed point to
+      // compare against. A copy nothing has opened is.
+      const dataDir = await mkdtemp(join(tmpdir(), 'wb-corpus-read-'))
+      dirs.push(dataDir)
+      await cp(await seededDataDir(), dataDir, { recursive: true })
+      const before = await snapshotDir(dataDir)
 
       const result = await measureCorpus({ dataDir })
 
@@ -127,7 +140,7 @@ describe('the differential corpus script', () => {
       expect(row.edges).toBe(2)
       expect(row.routed).toBeGreaterThan(0)
       expect(row.mismatches).toEqual([])
-      expect(await readFile(join(dataDir, 'whiteboard.db'))).toEqual(dbBefore)
+      expect(await snapshotDir(dataDir)).toEqual(before)
     })
   })
 })
