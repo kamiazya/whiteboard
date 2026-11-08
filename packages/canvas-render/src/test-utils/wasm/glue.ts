@@ -51,6 +51,9 @@ export const gluePath = join(dir, 'whiteboard_wasm.js')
 /** Whether the artifact is there. A probe, read once. */
 export const built = dir !== '' && existsSync(gluePath)
 
+/** The artifact's bytes, for a caller that initialises its own instance. */
+export const wasmBytes = (): Uint8Array => readFileSync(join(dir, 'whiteboard_wasm_bg.wasm'))
+
 /** The initialised glue, or undefined when the artifact is absent. */
 export const wasm: WasmGlue | undefined = built
   ? await (async () => {

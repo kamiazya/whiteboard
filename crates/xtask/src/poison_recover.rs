@@ -5,13 +5,15 @@
 //! The release profile builds wasm with `panic = "abort"`, so a panic traps
 //! (`unreachable`) and the instance is unusable from then on. Panics are
 //! prevented by the lints; when one happens anyway, the JavaScript shim
-//! that owns the instance (`packages/core-wasm`, which does not exist yet)
-//! must discard it, re-instantiate, and REHYDRATE from persisted state. That
-//! is a property of the shim, so it can only be tested once the shim
-//! exists. Until then this task prints the scenario and FAILS: a stub that
-//! passed would read exactly like a recovery that had been proven.
+//! that owns the instance (`packages/core-wasm`) must discard it,
+//! re-instantiate, and REHYDRATE from persisted state. That is a property of
+//! the shim's recovery module (named by [`RECOVERY`], which does not exist yet:
+//! the shim's first slice loads the instance and holds no state), so it can
+//! only be tested once that module exists. Until then this task prints the
+//! scenario and FAILS: a stub that passed would read exactly like a recovery
+//! that had been proven.
 //!
-//! When `packages/core-wasm` lands, the unit test below fails, and this task
+//! When the recovery module lands, the unit test below fails, and this task
 //! is replaced by the real test (one per runtime) that runs [`SCENARIO`].
 
 use std::path::Path;
@@ -19,6 +21,9 @@ use std::path::Path;
 use crate::metadata;
 
 pub(crate) const SHIM_DIR: &str = "packages/core-wasm";
+
+/// The shim's recovery module, whose arrival retires this placeholder.
+pub(crate) const RECOVERY: &str = "src/recover.ts";
 
 /// The scenario, step by step. Each step is an assertion the real test makes.
 pub(crate) const SCENARIO: &[&str] = &[
@@ -33,18 +38,18 @@ pub(crate) const SCENARIO: &[&str] = &[
 ];
 
 pub(crate) fn shim_exists(root: &Path) -> bool {
-    root.join(SHIM_DIR).join("package.json").is_file()
+    root.join(SHIM_DIR).join(RECOVERY).is_file()
 }
 
 pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
     let meta = metadata::load()?;
     let mut lines = vec![if shim_exists(&meta.workspace_root) {
         format!(
-            "poison-recover: {SHIM_DIR} exists, so this scenario must now be a real test in it; this placeholder still fails until it is replaced:"
+            "poison-recover: {SHIM_DIR}/{RECOVERY} exists, so this scenario must now be a real test there; this placeholder still fails until it is replaced:"
         )
     } else {
         format!(
-            "poison-recover: not yet: {SHIM_DIR} does not exist, and the recovery under test is the shim's. The scenario to implement with it:"
+            "poison-recover: not yet: {SHIM_DIR}/{RECOVERY} does not exist, and the recovery under test is the shim's. The scenario to implement with it:"
         )
     }];
     lines.extend(SCENARIO.iter().map(|s| format!("  {s}")));
@@ -57,12 +62,12 @@ mod tests {
 
     #[test]
     fn the_scenario_is_still_owed_while_the_shim_is_absent() {
-        // Fails the day packages/core-wasm appears: that change must turn
-        // SCENARIO into a real test in each runtime and delete this task.
+        // Fails the day the shim's recovery module appears: that change must
+        // turn SCENARIO into a real test in each runtime and delete this task.
         let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
         assert!(
             !shim_exists(&root),
-            "{SHIM_DIR} exists: implement the poison-and-recover scenario there and retire this placeholder"
+            "{SHIM_DIR}/{RECOVERY} exists: implement the poison-and-recover scenario there and retire this placeholder"
         );
         assert!(SCENARIO.len() >= 8);
     }

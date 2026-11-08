@@ -115,6 +115,13 @@ export const PROJECTS_RUN_ELSEWHERE = {
     mechanism: 'flag',
     marker: '--project=canvas-render-rust',
   },
+  // The core-wasm shim over the staged artifact: runs in the rust job after
+  // the wasm build and `stage:wasm`, the only job that has the artifact.
+  'packages/core-wasm/vitest.rust.config.ts': {
+    job: 'rust',
+    mechanism: 'flag',
+    marker: '--project=core-wasm-rust',
+  },
   // Small but given its own test-unit step so canvas-viewer coverage reads as
   // one block in CI logs; not folded into the shared-layer step.
   'packages/canvas-viewer/vitest.node.config.ts': {

@@ -251,6 +251,10 @@ describe('type-inclusive import-cycle check (real source coverage)', () => {
  * pointing outside every scanned tree.
  */
 const NON_PATH_BARE_SPECIFIERS: Record<string, string> = {
+  '#glue':
+    "core-wasm's package.json `imports` entry for the wasm-bindgen glue staged into its " +
+    'artifacts/ (gitignored, built in the pipeline). It names one generated file outside src, ' +
+    'not a directory, so there is no source edge for the cycle graph to miss',
   'virtual:pwa-register':
     "vite-plugin-pwa generates this module's source at build time. It is not a directory, so " +
     'there is no import edge for the cycle graph to be missing',

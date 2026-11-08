@@ -117,7 +117,13 @@ function configsRunByScript(dir: string, script: string): string[] {
  * like the wrapper ledger: an entry must name a registered config the script
  * really does not run.
  */
-const SCRIPT_OMITS: Record<string, Omission> = {}
+const SCRIPT_OMITS: Record<string, Omission> = {
+  'packages/core-wasm': {
+    configs: ['packages/core-wasm/vitest.rust.config.ts'],
+    reason:
+      'core-wasm-rust loads the artifact `build:wasm` stages, which needs the Rust toolchain; CI runs it in the rust job, and `pnpm test` (the root aggregate) still includes it',
+  },
+}
 
 const registered = new Map<string, string[]>()
 const projectName = new Map<string, string | undefined>()

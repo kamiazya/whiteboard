@@ -1089,6 +1089,21 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=canvas-render-rust
 
+      # The core-wasm shim over the artifact just built: staged into the
+      # package, its hand-written glue declaration held to the generated one,
+      # and its own tests run against the real instance.
+      - name: Stage the wasm artifact into core-wasm
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm
+
+      - name: core-wasm glue declaration against the generated one
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm --filter @kamiazya/whiteboard-core-wasm typecheck:abi
+
+      - name: core-wasm shim over the artifact (core-wasm-rust)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm exec vitest run --project=core-wasm-rust
+
       - name: Rust release gates (dist native, harden-check, repro-check, notices)
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:release:check

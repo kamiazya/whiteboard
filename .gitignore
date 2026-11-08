@@ -186,3 +186,6 @@ snapshot-post-reload.md
 
 # Cargo build output (CARGO_TARGET_DIR overrides where it goes).
 /target/
+
+# The wasm-bindgen artifact `stage:wasm` copies in; built in the pipeline, never committed.
+packages/core-wasm/artifacts/
