@@ -7,7 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.js'
 import { stagedArtifacts } from '../../src/server/export/layout-core.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../../src/server/store/auto-compact.js'
@@ -118,6 +118,20 @@ describe('the differential corpus script', () => {
     } finally {
       await rm(empty, { recursive: true, force: true })
     }
+  })
+
+  it('refuses a run whose database lives outside the copied dir', async () => {
+    const dataDir = await seededDataDir()
+    vi.stubEnv('WHITEBOARD_DATABASE_URL', `file:${join(dataDir, 'whiteboard.db')}`)
+    try {
+      await expect(measureCorpus({ dataDir })).rejects.toThrow(/WHITEBOARD_DATABASE_URL/)
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it('has the staged artifact wherever CI runs this file', () => {
+    if (process.env.CI) expect(built).toBe(true)
   })
 
   describe.runIf(built)('over the staged artifact', () => {

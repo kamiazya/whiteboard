@@ -34,6 +34,7 @@ import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
 import { layoutCoreLoader, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
 import { closeDb } from '../../src/server/store/db/index.ts'
+import { databaseIsInsideDataDir } from '../../src/server/store/db/location.ts'
 
 /** The fields of a mismatch worth reading without the whole repro. */
 function summarize(mismatch) {
@@ -64,6 +65,14 @@ export async function measureCorpus({ dataDir, coreDir }) {
   const copy = join(scratch, 'data')
   try {
     await cp(dataDir, copy, { recursive: true })
+    // WHITEBOARD_DATABASE_URL moves the database out of the directory, and a
+    // boot on the copy would then open and migrate whatever it names, a live
+    // database or the original file included.
+    if (!databaseIsInsideDataDir(copy)) {
+      throw new Error(
+        'WHITEBOARD_DATABASE_URL names a database outside the copied data dir; unset it so the copy is what gets opened',
+      )
+    }
     const booted = await bootSelfHostDeps(copy)
     try {
       return await measureDeps(booted.serverDeps, coreDir)
