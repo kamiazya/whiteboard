@@ -12,6 +12,7 @@ Contributor and maintainer guides:
 - **[releasing](releasing.md)** — release-please and npm/GHCR publishing.
 - **[observability](observability.md)** — OpenTelemetry tracing for the daemon and MCP entrypoint.
 - **[quality-requirements](quality-requirements.md)** — the development quality bar, language-neutral and numbered (QR-1…): each requirement, the defect class it guards, how TypeScript and Rust meet it, and its gate level; ends with the parity checklist a Rust port meets before it replaces TypeScript ([ADR-0054](adr/0054-rust-core.md)).
+- **[parity/edge-routing](parity/edge-routing.md)** — the QR-33a parity checklist for the first module ported to Rust (edge routing): one row per check with its evidence or what is missing, the QR-33b exit criteria, and the boundary-cost measurement on Node, Chromium and workerd.
 - **[review-checklist](review-checklist.md)** — checklist for PR authors and reviewers.
 - **[security-baseline](security-baseline.md)** — the OpenSSF control matrix (Scorecard, OSPS Baseline, Best Practices badge, SLSA, SSDF): what is met, what the repository can still close, and what only the owner can.
 - **[deployment/cloudflare-pages](deployment/cloudflare-pages.md)** — deploying the hosted browser app.
