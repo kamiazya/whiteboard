@@ -8,8 +8,10 @@ code — or would be re-invented per crate, differently each time.
 
 **Status of the two columns.** The TypeScript column describes what runs
 today, with the paths that implement it. The Rust column is the REQUIRED
-mechanism for Rust code. A skeleton Cargo workspace (`crates/`) exists, with
-its gates run by `pnpm rust:check`, `pnpm rust:release:check` and the
+mechanism for Rust code. A Cargo workspace (`crates/`) exists and edge
+routing is ported into it (stage 2, `differential` in development and CI, `ts`
+in a release; its checklist is [parity/edge-routing.md](parity/edge-routing.md)).
+Its gates are run by `pnpm rust:check`, `pnpm rust:release:check` and the
 `pnpm rust:fuzz:*` scripts and by ci.yml's `rust` and `rust-fuzz-pr` jobs; a
 Rust entry that names a path or a task under `crates/` or `cargo xtask`
 describes what runs, and every other Rust entry is the specification a crate

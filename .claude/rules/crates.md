@@ -111,7 +111,22 @@ steps and cache paths to the scripts.
   entry declares `maxBytes`, `maxDepth`, `maxMillis` and names its
   `fuzzTarget`; `cargo xtask inputs` holds the registry and `crates/fuzz`
   equal from both sides. `template: true` marks the one entry that exists to
-  show the shape.
+  show the shape. A cap is ENFORCED by the export itself, not only declared:
+  `edge_route_layout` refuses a wire over `MAX_WIRE_NUMBERS` and a
+  non-finite budget account, and the shim then answers from the
+  TypeScript. Non-finite GEOMETRY is answered, because the TypeScript
+  answers it: a sort whose comparator a NaN can break goes through
+  `whiteboard-det`'s `js_sort_by`, never std's `sort_by`, which may panic
+  on a comparator that is not a total order. Each fuzz target's seeds
+  live in `crates/fuzz/seeds/<target>`.
+- **`#[expect]` is ledgered**: `crates/expect-ledger.json` names every
+  `#[expect]` with its reason, and `tools/arch-lint`'s
+  `expect-ledger.test.ts` holds it equal to the source from both sides.
+- **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
+  (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
+  port and differential (QR-33a item 16).
+- **Tooling may depend on bindings** (`crates/architecture-map.json`): a
+  fuzz target drives an export through the same decode a host reaches.
 - **Dependencies**: `deny.toml` keeps sources crates.io-only and bans
   `serde_json`'s `unbounded_depth` and `arbitrary_precision`; a third-party
   crate is allowed per crate in the map with its review as the reason.

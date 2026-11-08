@@ -33,7 +33,7 @@
     },
     "tooling": {
       "dirs": ["crates/xtask", "crates/fuzz"],
-      "mayDependOn": ["core", "ports", "ops", "adapters"],
+      "mayDependOn": ["core", "ports", "ops", "adapters", "bindings"],
       "description": "repository tooling and fuzz targets, never shipped"
     }
   },
@@ -457,7 +457,8 @@
         "whiteboard-reference-graph",
         "whiteboard-api-contracts",
         "whiteboard-http",
-        "whiteboard-mcp"
+        "whiteboard-mcp",
+        "whiteboard-wasm"
       ],
       "allowedThirdParty": {
         "libfuzzer-sys": "the libFuzzer driver cargo-fuzz links each target against; optional, so the target bodies build on stable"

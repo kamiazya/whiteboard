@@ -51,3 +51,39 @@ fn every_target_has_a_binary_and_every_binary_a_target() {
     assert_eq!(bins, targets);
     assert!(!targets.is_empty());
 }
+
+#[test]
+fn every_seed_input_passes_its_target_and_every_seed_dir_names_one() {
+    let mut replayed = 0usize;
+    for dir in std::fs::read_dir(root().join("seeds")).unwrap() {
+        let dir = dir.unwrap().path();
+        let name = dir.file_name().unwrap().to_string_lossy().into_owned();
+        let target = whiteboard_fuzz::TARGETS
+            .iter()
+            .find(|(n, _)| *n == name)
+            .unwrap_or_else(|| panic!("seeds/{name} names no fuzz target"))
+            .1;
+        for input in std::fs::read_dir(&dir).unwrap() {
+            target(&std::fs::read(input.unwrap().path()).unwrap());
+            replayed += 1;
+        }
+    }
+    assert!(replayed > 0, "no seed input was replayed");
+}
+
+#[test]
+fn the_routing_seeds_are_wires_the_export_answers() {
+    // A seed the decoder refuses is a seed that taught the fuzzer nothing,
+    // which is what a wire-format change leaves behind when it forgets them.
+    let mut answered = 0usize;
+    for input in std::fs::read_dir(root().join("seeds").join("edge_route_layout")).unwrap() {
+        let bytes = std::fs::read(input.unwrap().path()).unwrap();
+        let wire: Vec<f64> = bytes
+            .chunks_exact(8)
+            .map(|c| <[u8; 8]>::try_from(c).map_or(0.0, f64::from_le_bytes))
+            .collect();
+        assert!(!whiteboard_wasm::spatial_edges::edge_route_layout(&wire).is_empty());
+        answered += 1;
+    }
+    assert!(answered >= 10, "only {answered} routing seeds");
+}

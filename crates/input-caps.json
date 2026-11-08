@@ -9,6 +9,14 @@
       "maxDepth": 1,
       "maxMillis": 100,
       "reason": "template entry: a flat string, so depth 1; 4 KiB keeps libFuzzer's executions per second high, and 100 ms is far above the microseconds a 4 KiB length takes"
+    },
+    "whiteboard-wasm::spatial_edges::edge_route_layout": {
+      "crate": "whiteboard-wasm",
+      "fuzzTarget": "edge_route_layout",
+      "maxBytes": 262144,
+      "maxDepth": 2,
+      "maxMillis": 5000,
+      "reason": "the routing wire is a flat f64 array the shim builds but any holder of the wasm glue can call. maxBytes is MAX_WIRE_NUMBERS (32768) x 8, the export's own refusal: the largest corpus board's wire is 22984 bytes (clustered 12x12, 144 nodes and 165 edges), so the cap is 11.4x that; a board past it is answered by the TypeScript. maxDepth 2 is the deepest counted group (an edge's bend list inside the edge list); the decoder is iterative. maxMillis 5000 is 2.2x the slowest draw measured at the cap: 2.3 s on Node wasm for a 920-node, 2065-edge board of 251624 bytes, straight edges"
     }
   }
 }

@@ -25,7 +25,10 @@
 //
 // The growing corpus is crates/fuzz/corpus/<target>/, git-ignored and kept
 // in the CI cache; the committed regressions are read as a second, seed
-// corpus that libFuzzer never writes to.
+// corpus that libFuzzer never writes to, and so are the committed inputs under
+// crates/fuzz/seeds/<target>/: well-formed inputs encoded from real boards, so
+// the fuzzer starts inside the format instead of searching for its first
+// valid prefix.
 
 import { spawnSync } from 'node:child_process'
 import {
@@ -196,6 +199,7 @@ for (const target of targets) {
   const corpus = join(FUZZ, 'corpus', target)
   const artifacts = join(FUZZ, 'artifacts', target)
   const regressions = join(FUZZ, 'regressions', target)
+  const seeds = join(FUZZ, 'seeds', target)
   for (const dir of [corpus, artifacts, regressions]) mkdirSync(dir, { recursive: true })
   const before = new Set(readdirSync(artifacts))
   const started = Date.now()
@@ -209,6 +213,7 @@ for (const target of targets) {
     target,
     corpus,
     regressions,
+    ...(existsSync(seeds) ? [seeds] : []),
     '--',
     `-max_total_time=${seconds}`,
     `-max_len=${entry.maxBytes}`,

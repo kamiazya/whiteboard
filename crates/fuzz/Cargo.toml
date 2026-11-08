@@ -26,10 +26,19 @@ libfuzzer = ["dep:libfuzzer-sys"]
 [dependencies]
 libfuzzer-sys = { version = "0.4.10", optional = true }
 whiteboard-det = { path = "../core/det" }
+whiteboard-wasm = { path = "../bindings/wasm" }
 
 [[bin]]
 name = "det_utf16_len"
 path = "fuzz_targets/det_utf16_len.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "edge_route_layout"
+path = "fuzz_targets/edge_route_layout.rs"
 test = false
 doc = false
 bench = false
