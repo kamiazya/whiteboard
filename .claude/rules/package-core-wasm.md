@@ -30,10 +30,18 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   the anchors the side search settled (the editor freezes a drag from
   them), and writes the budget accounts back. It satisfies canvas-render's
   `RoutingCore` structurally, which is how a root hands it to the layout.
-- Refusing an answer it cannot fully account for, as `CoreInputRefused`: a
-  count past what is left, a side, end or flag out of range, an anchor
-  naming no edge. The count is checked BEFORE anything is allocated, since
-  it is the artifact's word.
+- Refusing, as `CoreInputRefused` with a `code` from the generated
+  `RefusalCode` (`src/generated/input-caps.ts`, `cargo xtask codegen` from
+  `crates/input-caps.json`, so both languages refuse by one cap, QR-28b):
+  - `input-too-large`: the encoded wire is past the entry's `maxBytes`,
+    refused BEFORE the artifact is called — the export refuses the same
+    length by the same generated constant.
+  - `malformed`: an answer it cannot fully account for — a count past what
+    is left, a side, end or flag out of range, an anchor naming no edge. The
+    count is checked BEFORE anything is allocated, since it is the
+    artifact's word.
+
+  A composition root answers either refusal from the TypeScript.
 
 ## What does NOT belong here
 

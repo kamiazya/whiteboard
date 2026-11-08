@@ -1,6 +1,7 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { EDGE_ROUTE_LAYOUT_CAPS } from './generated/input-caps.js'
 import {
   CoreAbiMismatch,
   type CoreGlue,
@@ -8,7 +9,7 @@ import {
   coreFrom,
   EXPECTED_ABI,
 } from './index.js'
-import type { RoutingBudget } from './types.js'
+import type { LabelRect, RoutingBudget } from './types.js'
 
 /** A glue that answers `out` to every routing call and records what it was sent. */
 function fakeGlue(abi: string, out: number[]) {
@@ -40,12 +41,55 @@ describe('the core-wasm shim', () => {
     expect(() => coreFrom(glue, new Uint8Array())).toThrow(CoreAbiMismatch)
   })
 
-  it('treats an artifact refusing its input as its own defect', () => {
+  it('reports an artifact refusing its input as malformed', () => {
     const { glue } = fakeGlue(EXPECTED_ABI, [])
     const core = coreFrom(glue, new Uint8Array())
     expect(() =>
       core.routeLayout(nodes, [edge], () => 'straight', undefined, budget(), []),
-    ).toThrow(CoreInputRefused)
+    ).toThrow(expect.objectContaining({ name: 'CoreInputRefused', code: 'malformed' }))
+  })
+
+  /**
+   * Edgeless boards whose wire is exactly `bytes` long: the wire is
+   * `8 + 5 * nodes + 4 * labels` numbers of eight bytes each.
+   */
+  function boardOfBytes(bytes: number) {
+    const numbers = bytes / 8
+    const nodeCount = [0, 1, 2, 3].find((n) => (numbers - 8 - 5 * n) % 4 === 0) ?? 0
+    const labelRects: LabelRect[] = Array.from(
+      { length: (numbers - 8 - 5 * nodeCount) / 4 },
+      () => ({
+        x: 0,
+        y: 0,
+        w: 1,
+        h: 1,
+      }),
+    )
+    const boxes = Array.from({ length: nodeCount }, (_, i) => box(`n${i}`, 0))
+    return { boxes, labelRects }
+  }
+
+  it('refuses a wire past maxBytes before calling the artifact, and calls it at maxBytes', () => {
+    const { maxBytes } = EDGE_ROUTE_LAYOUT_CAPS
+    // An edgeless answer: four accounts, no routes, no anchors.
+    const { glue, sent } = fakeGlue(EXPECTED_ABI, [0, 0, 0, 0, 0, 0])
+    const core = coreFrom(glue, new Uint8Array())
+    const over = boardOfBytes(maxBytes + 8)
+    const b = budget()
+    expect(() =>
+      core.routeLayout(over.boxes, [], () => 'straight', undefined, b, over.labelRects),
+    ).toThrow(
+      expect.objectContaining({
+        name: 'CoreInputRefused',
+        operation: 'edge_route_layout',
+        code: 'input-too-large',
+      }),
+    )
+    expect(sent).toEqual([])
+    expect(b).toEqual(budget())
+    const at = boardOfBytes(maxBytes)
+    core.routeLayout(at.boxes, [], () => 'straight', undefined, budget(), at.labelRects)
+    expect(sent.map((input) => input.byteLength)).toEqual([maxBytes])
   })
 
   it('refuses an answer that routes another number of edges, or leaves numbers over', () => {

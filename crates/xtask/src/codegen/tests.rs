@@ -134,3 +134,117 @@ fn the_checked_in_contracts_generate_cleanly() {
         outputs(&text).unwrap();
     }
 }
+
+/// The whole generator over the repository, as `cargo xtask codegen --check`
+/// runs it: every output is the checked-in file, the caps reach both
+/// languages, and the check reports them matched.
+#[test]
+fn the_repository_generates_exactly_its_checked_in_files() {
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let outputs = generate_all(&root).unwrap();
+    for target in [
+        "packages/core-wasm/src/generated/input-caps.ts",
+        "crates/bindings/wasm/src/generated/input_caps.rs",
+    ] {
+        assert!(outputs.contains_key(target), "{target} is not generated");
+    }
+    for (target, content) in &outputs {
+        let on_disk = std::fs::read_to_string(root.join(target)).unwrap();
+        assert_eq!(&on_disk, content, "{target}");
+    }
+    let report = run(Mode::Check).unwrap();
+    assert_eq!(report, [format!("codegen: {} generated files match their sources", outputs.len())]);
+}
+
+fn caps(krate: &str) -> crate::inputs::Caps {
+    crate::inputs::Caps {
+        krate: Some(krate.to_owned()),
+        max_bytes: Some(262_144),
+        max_depth: Some(2),
+        max_millis: Some(5000),
+        ..Default::default()
+    }
+}
+
+fn caps_outputs(
+    entries: &[(&str, crate::inputs::Caps)],
+) -> Result<Vec<(String, String, bool)>, Vec<String>> {
+    caps::generate(&entries.iter().map(|(k, c)| ((*k).to_owned(), c.clone())).collect())
+}
+
+#[test]
+fn caps_reach_both_languages_for_the_wasm_crate_only() {
+    let template = crate::inputs::Caps { template: true, ..caps("whiteboard-wasm") };
+    let files = caps_outputs(&[
+        ("whiteboard-wasm::spatial_edges::edge_route_layout", caps("whiteboard-wasm")),
+        ("whiteboard-wasm::t::template_entry", template),
+        ("whiteboard-det::utf16::len", caps("whiteboard-det")),
+    ])
+    .unwrap();
+    let targets: Vec<(&str, bool)> = files.iter().map(|(t, _, r)| (t.as_str(), *r)).collect();
+    assert_eq!(
+        targets,
+        [
+            ("packages/core-wasm/src/generated/input-caps.ts", false),
+            ("crates/bindings/wasm/src/generated/input_caps.rs", true),
+        ]
+    );
+    let (ts, rust) = (&files[0].1, &files[1].1);
+    assert!(ts.starts_with(&emit::header("crates/input-caps.json")));
+    assert!(ts.contains(
+        "export const EDGE_ROUTE_LAYOUT_CAPS = Object.freeze({\n  maxBytes: 262144,\n  maxDepth: 2,\n  maxMillis: 5000,\n} as const)\n"
+    ));
+    assert!(ts.contains("export type RefusalCode = 'input-too-large' | 'malformed'\n"));
+    assert!(rust.contains(
+        "pub const EDGE_ROUTE_LAYOUT: InputCaps = InputCaps { max_bytes: 262_144, max_depth: 2, max_millis: 5000, max_nodes: None };"
+    ));
+    for skipped in ["TEMPLATE_ENTRY", "LEN"] {
+        assert!(!ts.contains(skipped) && !rust.contains(skipped), "{skipped} was emitted");
+    }
+}
+
+#[test]
+fn a_declared_max_nodes_reaches_both_languages() {
+    let entry = crate::inputs::Caps { max_nodes: Some(100_000), ..caps("whiteboard-wasm") };
+    let files = caps_outputs(&[("whiteboard-wasm::m::import", entry)]).unwrap();
+    assert!(files[0].1.contains("  maxMillis: 5000,\n  maxNodes: 100000,\n} as const)"));
+    assert!(files[1].1.contains("max_nodes: Some(100_000) };"));
+}
+
+#[test]
+fn a_caps_entry_the_generator_cannot_name_or_fill_is_refused() {
+    let no_depth = crate::inputs::Caps { max_depth: None, ..caps("whiteboard-wasm") };
+    for (key, entry, expect) in [
+        ("whiteboard-wasm::m::Route", caps("whiteboard-wasm"), "not a lowercase identifier"),
+        ("whiteboard-wasm::m::9route", caps("whiteboard-wasm"), "not a lowercase identifier"),
+        ("whiteboard-wasm::m::route", no_depth, "whiteboard-wasm::m::route: declares no maxDepth"),
+    ] {
+        let errors = caps_outputs(&[(key, entry)]).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains(expect)), "{key}: {errors:?}");
+    }
+    let long = format!("whiteboard-wasm::m::{}", "a".repeat(90));
+    let errors = caps_outputs(&[(&long, caps("whiteboard-wasm"))]).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("biome's 100 columns")), "{errors:?}");
+}
+
+#[test]
+fn a_rust_int_literal_groups_five_digits_or_more() {
+    assert_eq!(caps::rust_int(0), "0");
+    assert_eq!(caps::rust_int(5000), "5000");
+    assert_eq!(caps::rust_int(10_000), "10_000");
+    assert_eq!(caps::rust_int(262_144), "262_144");
+    assert_eq!(caps::rust_int(1_048_576), "1_048_576");
+}
+
+#[test]
+fn every_caps_target_is_a_generated_path_and_every_code_is_kebab_case() {
+    for target in caps::TARGETS {
+        assert!(target.ts.starts_with("packages/") && target.ts.contains("/src/generated/"));
+        assert!(target.rust.starts_with("crates/") && target.rust.contains("/src/generated/"));
+        assert!(!target.krate.is_empty());
+    }
+    for (code, meaning) in caps::REFUSAL_CODES {
+        assert!(code.chars().all(|c| c.is_ascii_lowercase() || c == '-'), "{code}");
+        assert!(!meaning.is_empty());
+    }
+}

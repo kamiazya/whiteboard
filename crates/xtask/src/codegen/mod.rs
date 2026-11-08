@@ -1,5 +1,7 @@
 //! `cargo xtask codegen [--check]`: Zod source and serde types from the
-//! JSON Schema contracts under `contracts/` (ADR-0054 decision 8).
+//! JSON Schema contracts under `contracts/` (ADR-0054 decision 8), and the
+//! untrusted-input caps of `crates/input-caps.json` for both languages that
+//! enforce them (QR-28b, `caps.rs`).
 //!
 //! Both halves come from this one emitter. typify, spiked for the Rust half,
 //! enforced no numeric bound, counted `maxLength` in code points, ignored the
@@ -8,11 +10,12 @@
 //! `dialect.rs`; what each construct becomes in each language is `emit.rs`.
 //!
 //! `--check` regenerates in memory and fails on any difference from the
-//! checked-in output, on a file under a `generated` directory that no
-//! contract produces, and on a Rust output its crate does not compile — so a
-//! hand edit to generated code fails, and so does generated code nothing
-//! builds.
+//! checked-in output, on a file under a `generated` directory that neither a
+//! contract nor the caps registry produces, and on a Rust output its crate
+//! does not compile — so a hand edit to generated code fails, and so does
+//! generated code nothing builds.
 
+mod caps;
 mod dialect;
 mod emit;
 
@@ -21,7 +24,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 
-use crate::metadata;
+use crate::{inputs, metadata};
 
 const CONTRACTS_DIR: &str = "contracts";
 const SCHEMA_SUFFIX: &str = ".schema.json";
@@ -151,7 +154,35 @@ fn declared_in_crate(root: &Path, target: &str) -> Result<(), String> {
     }
 }
 
-/// Every contract's outputs, keyed by repo-relative target path, formatted.
+/// Formats one source's outputs into `outputs`, each Rust half checked to be
+/// declared by its crate and run through rustfmt.
+fn collect(
+    root: &Path,
+    source: &str,
+    files: Vec<(String, String, bool)>,
+    outputs: &mut BTreeMap<String, String>,
+    v: &mut Vec<String>,
+) {
+    for (target, content, is_rust) in files {
+        let content = if is_rust {
+            match declared_in_crate(root, &target).and_then(|()| rustfmt(root, &content)) {
+                Ok(formatted) => formatted,
+                Err(e) => {
+                    v.push(format!("{target}: {e}"));
+                    continue;
+                }
+            }
+        } else {
+            content
+        };
+        if outputs.insert(target.clone(), content).is_some() {
+            v.push(format!("{source}: {target} is also another source's output"));
+        }
+    }
+}
+
+/// Every contract's outputs and the input caps', keyed by repo-relative
+/// target path, formatted.
 fn generate_all(root: &Path) -> Result<BTreeMap<String, String>, Vec<String>> {
     let mut outputs = BTreeMap::new();
     let mut v = Vec::new();
@@ -162,25 +193,16 @@ fn generate_all(root: &Path) -> Result<BTreeMap<String, String>, Vec<String>> {
         let files = dialect::parse(&text)
             .map_err(|e| vec![format!("{source}: {e}")])
             .and_then(|contract| generate(&contract, &source));
-        for (target, content, is_rust) in files.unwrap_or_else(|errors| {
+        let files = files.unwrap_or_else(|errors| {
             v.extend(errors);
             Vec::new()
-        }) {
-            let content = if is_rust {
-                match declared_in_crate(root, &target).and_then(|()| rustfmt(root, &content)) {
-                    Ok(formatted) => formatted,
-                    Err(e) => {
-                        v.push(format!("{target}: {e}"));
-                        continue;
-                    }
-                }
-            } else {
-                content
-            };
-            if outputs.insert(target.clone(), content).is_some() {
-                v.push(format!("{source}: {target} is also another contract's output"));
-            }
-        }
+        });
+        collect(root, &source, files, &mut outputs, &mut v);
+    }
+    let ledger: inputs::Ledger = metadata::read_json(&root.join(inputs::LEDGER_PATH))?;
+    match caps::generate(&ledger.entries) {
+        Ok(files) => collect(root, inputs::LEDGER_PATH, files, &mut outputs, &mut v),
+        Err(errors) => v.extend(errors),
     }
     if v.is_empty() { Ok(outputs) } else { Err(v) }
 }
@@ -210,11 +232,13 @@ pub(crate) fn run(mode: Mode) -> Result<Vec<String>, Vec<String>> {
     }
     for stray in generated_files(&root)? {
         if !outputs.contains_key(&stray) {
-            v.push(format!("{stray}: under a generated directory, but no contract produces it"));
+            v.push(format!(
+                "{stray}: under a generated directory, but no contract or caps entry produces it"
+            ));
         }
     }
     if v.is_empty() {
-        Ok(vec![format!("codegen: {} generated files match their contracts", outputs.len())])
+        Ok(vec![format!("codegen: {} generated files match their sources", outputs.len())])
     } else {
         Err(v)
     }

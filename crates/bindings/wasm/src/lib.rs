@@ -13,6 +13,8 @@ pub mod edge_primitives;
 pub mod edge_router;
 pub mod edge_router_leaves;
 pub mod edge_rules;
+#[path = "generated/input_caps.rs"]
+pub mod input_caps;
 pub mod routing_wire;
 pub mod spatial_edges;
 

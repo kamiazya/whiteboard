@@ -5,6 +5,7 @@
 use crate::edge_anchors::{entry_values, pin};
 use crate::edge_primitives::{count, points_len_of};
 use crate::edge_router::{rects, style_of};
+use crate::input_caps::EDGE_ROUTE_LAYOUT;
 use crate::routing_wire::{Wire, side_index};
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_router::RoutingStyle;
@@ -27,12 +28,13 @@ type Decoded = (
 );
 
 /// The most numbers a routing wire may hold: `maxBytes` of this export's entry
-/// in `crates/input-caps.json` (256 KiB) over eight bytes a number. The
-/// largest wire the routing corpus and bench boards produce is 2,873 numbers
-/// (23 KB, a 144-node, 165-edge board), so the cap is about eleven times
-/// that, a board of roughly 2,000 edges. A longer input is refused as
-/// malformed, and the shim then answers from the TypeScript.
-pub const MAX_WIRE_NUMBERS: usize = 32_768;
+/// in `crates/input-caps.json`, generated into [`crate::input_caps`], over
+/// eight bytes a number, so the shim refuses by the same cap before it calls.
+/// The largest wire the routing corpus and bench boards produce is 2,873
+/// numbers (23 KB, a 144-node, 165-edge board), so the cap is about eleven
+/// times that, a board of roughly 2,000 edges. A longer input answers the
+/// empty array, and the shim then answers from the TypeScript.
+pub const MAX_WIRE_NUMBERS: usize = EDGE_ROUTE_LAYOUT.max_bytes / 8;
 
 fn decode(input: &[f64]) -> Option<Decoded> {
     if input.len() > MAX_WIRE_NUMBERS {

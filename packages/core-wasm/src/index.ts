@@ -4,6 +4,7 @@
 /// <reference path="./glue.d.ts" />
 import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
+import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
 import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
 
@@ -21,10 +22,20 @@ export class CoreAbiMismatch extends Error {
   }
 }
 
-/** The artifact refused its input, which this shim built: a shim defect, never the caller's. */
+/**
+ * An operation refused its input, with the registry's refusal code:
+ * `input-too-large` when the encoded wire is past the entry's caps in
+ * `crates/input-caps.json`, refused here before the artifact is called, as
+ * the export would refuse it; `malformed` when the artifact's answer cannot
+ * be accounted for, which for a wire this shim built is a shim defect. A
+ * composition root answers either from the TypeScript.
+ */
 export class CoreInputRefused extends Error {
-  constructor(readonly operation: string) {
-    super(`${operation} refused the input this shim encoded`)
+  constructor(
+    readonly operation: string,
+    readonly code: RefusalCode,
+  ) {
+    super(`${operation} refused its input: ${code}`)
     this.name = 'CoreInputRefused'
   }
 }
@@ -155,9 +166,12 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   return {
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
       const wire = encodeLayout(nodes, edges, styleOf, overrides, budget, labels)
+      if (wire.input.byteLength > EDGE_ROUTE_LAYOUT_CAPS.maxBytes) {
+        throw new CoreInputRefused('edge_route_layout', 'input-too-large')
+      }
       const out = glue.edge_route_layout(wire.input)
       const routed = decodeLayout(out, edges, wire.edgeIds)
-      if (routed === undefined) throw new CoreInputRefused('edge_route_layout')
+      if (routed === undefined) throw new CoreInputRefused('edge_route_layout', 'malformed')
       budget.grid = out[0] as number
       budget.pairs = out[1] as number
       budget.trials = out[2] as number

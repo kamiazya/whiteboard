@@ -88,6 +88,12 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
             def.description
         );
     }
+    within_width(out)
+}
+
+/// `out` when every line after its header fits biome's width: a longer line
+/// is refused rather than emitted, since biome would rewrap it.
+pub(super) fn within_width(out: String) -> Result<String, Vec<String>> {
     let long: Vec<String> = out
         .lines()
         .skip(1)
