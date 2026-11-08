@@ -16,6 +16,7 @@
       "types": "./src/load.ts",
       "import": "./src/load.ts"
     },
+    "./wasm": "./artifacts/whiteboard_wasm_bg.wasm",
     "./package.json": "./package.json"
   },
   "imports": {

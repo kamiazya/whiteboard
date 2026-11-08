@@ -19,10 +19,12 @@ import {
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { getAppLogger } from './app-logger.js'
 import { outlineBlocks } from './document-outline.js'
 import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
 import { createEditorAppearance } from './spatial/editor-appearance.js'
+import { currentLayoutCore } from './spatial/layout-core.js'
 import type { ResolvedTheme } from './theme.js'
 
 export interface RenderMarkdownPreviewOptions {
@@ -54,6 +56,10 @@ export interface RenderMarkdownPreviewOptions {
   readonly tagLibrary?: TagLibrary
 }
 
+// A failed layout still answers an empty scene, but says so: under
+// VITE_WHITEBOARD_CORE_MISMATCH=throw a routing difference in a board embedded
+// in a note lands in that catch, and a silent blank would hide it.
+const log = getAppLogger('render-preview')
 /**
  * One top-level block's scroll-sync anchor: its 1-based source start line
  * paired with its top edge in the emitted SVG's own pixel space (viewBox
@@ -218,6 +224,7 @@ function layoutMarkdownScene(
         // is held, exactly as `editorLayoutBase` answers for the canvas
         // surfaces (ADR-0011's invariant).
         fontAvailable: hasLoadedFace,
+        core: currentLayoutCore(),
         // A page, not an object. This pane runs to a readable measure, where the
         // node scale — cut so a heading cannot eat a third of a 280px box —
         // reads timid. Set on `layoutMarkdownScene` rather than at the preview's own
@@ -231,7 +238,8 @@ function layoutMarkdownScene(
         ...(tagLibrary !== undefined ? { tagLibrary } : {}),
       },
     )
-  } catch {
+  } catch (error) {
+    log.warn('markdown preview layout failed; rendering an empty scene', error)
     return { nodes: [] }
   }
 }

@@ -11,6 +11,9 @@ import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { type LoadedReference, layoutMdastBlocks, referenceSeams } from '../index.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { routeEdge } from './edges/edge-router.js'
+import type { RoutingCore } from './edges/layout-core.js'
+import { assignEdgeAnchors } from './edges/spatial-edges.js'
 
 const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -134,5 +137,37 @@ describe('layoutMdastBlocks (public) — an embedded canvas keeps its own theme'
   it('under the library default the miniature draws clean, as every headless caller expects', () => {
     expect(inkStyles(embedOf().children)).not.toContain('sketch')
     expect(inkStyles(embedOf('clean').children)).not.toContain('sketch')
+  })
+})
+
+describe('layoutMdastBlocks (public) — an embedded canvas routes through the core', () => {
+  const connected: SpatialCanvas = {
+    nodes: [
+      textNode({ id: 'a', x: 0, y: 0, width: 120, height: 60, text: 'a' }),
+      textNode({ id: 'b', x: 400, y: 0, width: 120, height: 60, text: 'b' }),
+    ],
+    edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
+  }
+
+  it('hands the embedded canvas the core the note was laid out with', () => {
+    const seen: number[] = []
+    const routing: RoutingCore = {
+      routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
+        seen.push(edges.length)
+        const anchors = assignEdgeAnchors(nodes, edges, styleOf, overrides, budget, labels)
+        const routes = edges.map((edge) =>
+          routeEdge(nodes, edge, styleOf(edge), anchors.get(edge.id), undefined, budget, labels),
+        )
+        return { routes, anchors }
+      },
+    }
+    layoutMdastBlocks(body, {
+      measure: createFakeMeasure(),
+      maxWidth: 600,
+      fontFamily: 'sans-serif',
+      resolveEmbed: (id) => (id === A ? { title: 'Board', canvas: connected } : undefined),
+      core: { routing, impl: { routeLayout: 'rust' } },
+    })
+    expect(seen).toEqual([1])
   })
 })

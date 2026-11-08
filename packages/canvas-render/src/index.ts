@@ -65,6 +65,7 @@ export type {
   LayoutCore,
   RoutingCore,
 } from './layout/edges/layout-core.js'
+export { routeLayout } from './layout/edges/layout-core.js'
 export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'

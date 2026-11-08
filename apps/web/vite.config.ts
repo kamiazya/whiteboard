@@ -7,6 +7,7 @@ import wasm from 'vite-plugin-wasm'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { createCodeSplittingGroups } from './vite-code-splitting.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
+import { coreSourcePlugin } from './vite-plugin-core-source.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
@@ -19,7 +20,7 @@ export default defineConfig({
   // worker needs a dependency with top-level await: loro-crdt's WASM init has
   // one, and `iife` cannot express it, so the build fails with
   // UNSUPPORTED_FEATURE pointing at a file nobody here wrote.
-  worker: { format: 'es' },
+  worker: { format: 'es', plugins: () => [coreSourcePlugin()] },
   resolve: {
     alias: {
       // loro-crdt's export map resolves the production browser build to its
@@ -62,6 +63,8 @@ export default defineConfig({
     },
   },
   plugins: [
+    // Before everything: the module it stubs must not be read at all.
+    coreSourcePlugin(),
     react(),
     svgr(),
     // Tailwind v4 does not need PostCSS; CSS imports `tailwindcss` directly.

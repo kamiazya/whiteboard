@@ -22,6 +22,7 @@ import { afterEach } from 'vitest'
 import '../index.css'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
+import { startLayoutCore } from '../lib/page-layout-core.js'
 
 /**
  * A browser test renders production code that reads `getBrowserWorkspaceId()`
@@ -48,6 +49,14 @@ setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
  * slows nothing down that succeeds.
  */
 configure({ asyncUtilTimeout: 5_000 })
+
+/**
+ * The page boots its routing core before it lays anything out; a browser
+ * test mounts components without that boot, so it does the same, and a CI
+ * run with VITE_WHITEBOARD_CORE set routes the page's own layouts through the
+ * core as well as the worker's. A no-op under the default `ts`.
+ */
+startLayoutCore()
 
 /**
  * Anything a browser test writes to `console.error` or `console.warn` fails

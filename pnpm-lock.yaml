@@ -210,6 +210,9 @@ importers:
       '@kamiazya/whiteboard-codec':
         specifier: workspace:*
         version: link:../../packages/codec
+      '@kamiazya/whiteboard-core-wasm':
+        specifier: workspace:*
+        version: link:../../packages/core-wasm
       '@kamiazya/whiteboard-daemon-client':
         specifier: workspace:*
         version: link:../../packages/daemon-client

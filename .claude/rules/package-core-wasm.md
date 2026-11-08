@@ -18,7 +18,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   `loadCore` is its own entry (`./load`), the one runtime import of
   `#glue`, so a root that BUNDLES the shim and loads the glue by path at
   run time (mcp-server's `packages/mcp-server/src/server/export/layout-core.ts`) takes `coreFrom` from `.`
-  and its build needs no artifact.
+  and its build needs no artifact. `./wasm` exports the `.wasm` itself, for a
+  browser root that fetches it from where its bundler serves it
+  (apps/web's `layout-core-source.ts`).
 - The ABI check at init (`EXPECTED_ABI` against `abi_version()`): the shim
   and the artifact come from one commit, and a pair that does not is refused
   as `CoreAbiMismatch` rather than failing on its first mismatched call.

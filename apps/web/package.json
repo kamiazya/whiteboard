@@ -34,6 +34,7 @@
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
+    "@kamiazya/whiteboard-core-wasm": "workspace:*",
     "@kamiazya/whiteboard-daemon-client": "workspace:*",
     "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-facet-ui": "workspace:*",

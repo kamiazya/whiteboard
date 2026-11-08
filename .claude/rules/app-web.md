@@ -438,3 +438,17 @@ own list took the fast path (`BrowserDocumentPage.stale-link.test.tsx`).
 The list surfaces (row thumbnail, preview pane, Peek) are the one other
 reader: `load-row-render.ts` is not a page and has no `model.tags`, and its
 render key must name the library before the worker is asked.
+
+## The Rust routing core, per realm (ADR-0054 stage 2)
+
+`lib/spatial/layout-core-settings.ts` decides from `VITE_WHITEBOARD_CORE` /
+`VITE_WHITEBOARD_CORE_MISMATCH` (`differential` in the dev server, `ts` in a
+production build and in a vitest run unless the job sets it; an unknown value
+throws). Each realm installs its own host through `startLayoutCore()` (the
+page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
+reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
+it routes in TypeScript. `layout-core-source.ts` is the one module that names
+the artifact, and `vite-plugin-core-source.ts` stubs it in a `ts` build (page
+AND `worker.plugins`), because the bundler resolves every import before it
+prunes any — so a production build needs no wasm. A CI job that sets the
+variable restores the artifact with `.github/actions/core-wasm`.

@@ -58,8 +58,10 @@ import {
 } from './layout-worker-protocol.js'
 import { decodeStoredReply, encodeStoredReply } from './layout-worker-stored-reply.js'
 import { namesAReference } from './names-a-reference.js'
+import { startLayoutCore } from './page-layout-core.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
+import { layoutCoreReady } from './spatial/layout-core.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
 
 const measure = createBrowserMeasureText()
@@ -73,6 +75,13 @@ const contentCacheFor = createContentCacheStore()
 // fallback metrics, which is exactly the divergence this worker must not
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
+// The Rust routing core, loaded in this realm like the measurer's face: a
+// layout waits for it (`measurable`) so the worker never routes a request in
+// TypeScript that the page would have sent through the core. A load that
+// fails under `throw` rejects here and again for each request, which fails it.
+startLayoutCore()
+const coreReady = layoutCoreReady()
+coreReady.catch(() => undefined)
 /** Every theme face posted so far, settled — what a layout waits on before it measures. */
 let facesReady: Promise<unknown> = Promise.resolve()
 
@@ -132,7 +141,8 @@ function fail(id: number, cause: unknown): void {
 
 /**
  * Whether this realm can measure with the face the answer must be measured
- * with — refusing on the caller's behalf when it cannot.
+ * with — refusing on the caller's behalf when it cannot. Also the gate that
+ * waits for the routing core, which every layout handler passes first.
  *
  * Verified present in Chromium, WebKit and Firefox, but Playwright's WebKit
  * is not Safari, and a browser that lacks a worker `FontFaceSet` would
@@ -141,6 +151,7 @@ function fail(id: number, cause: unknown): void {
  * does the work on the main thread, where the face is known to be loaded.
  */
 async function measurable(id: number): Promise<boolean> {
+  await coreReady
   if ((await fontReady) === 'loaded') return true
   fail(id, FONT_DEGRADED)
   return false
