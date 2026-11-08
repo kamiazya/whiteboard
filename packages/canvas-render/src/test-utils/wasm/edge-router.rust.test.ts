@@ -160,7 +160,7 @@ const generalCall = (nodes: readonly SpatialNode[], edges: readonly RoutableElem
 
 const call = (nodes: readonly SpatialNode[], edges: readonly RoutableElement[]) =>
   fc.oneof(
-    { weight: 3, arbitrary: generalCall(nodes, edges) },
+    { weight: 1, arbitrary: generalCall(nodes, edges) },
     { weight: 1, arbitrary: mazeCall(nodes, edges) },
   )
 
@@ -226,19 +226,20 @@ describe.runIf(built)('edge-router.ts and its Rust port route the same', () => {
   })
 
   afterAllFloor(['route, sides and grid spend'], () => {
-    // About half the lowest of eight measured runs (straight 149, orthogonal
-    // 308, curved 156, detoured 14, gridSpent 23, unbounded 136, anchored 332,
-    // labelOverEnd 79). `detoured` is honest and low: most canvases leave an
-    // elbow clear, and the layer-1 suites carry the detours' dense cases.
+    // About half the lowest of eight measured runs (straight 101, orthogonal
+    // 434, curved 103, detoured 19, gridSpent 32, unbounded 80, anchored 316,
+    // labelOverEnd 54). `detoured` is the sparse one: most canvases leave an
+    // elbow clear, which is why the maze call is drawn as often as the general
+    // one — at one in four, eight runs gave 12 to 22 and CI drew a 6.
     const floors = {
-      straight: 70,
-      orthogonal: 150,
-      curved: 75,
-      detoured: 7,
-      gridSpent: 11,
-      unbounded: 65,
-      anchored: 160,
-      labelOverEnd: 39,
+      straight: 50,
+      orthogonal: 215,
+      curved: 50,
+      detoured: 9,
+      gridSpent: 16,
+      unbounded: 40,
+      anchored: 158,
+      labelOverEnd: 27,
     }
     for (const [kind, floor] of Object.entries(floors)) {
       expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
