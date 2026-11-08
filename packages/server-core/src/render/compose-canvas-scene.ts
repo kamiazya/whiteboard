@@ -1,4 +1,5 @@
 import type {
+  LayoutCore,
   MeasureText,
   ReferenceSeams,
   Scene,
@@ -78,6 +79,11 @@ export interface ComposeCanvasSceneOptions {
    * document, the library, did.
    */
   readonly tagLibrary?: TagLibrary
+  /**
+   * The Rust core and its switch (`ServerDeps.layoutCore`, resolved by the
+   * caller). Absent, the layout routes in TypeScript.
+   */
+  readonly core?: LayoutCore
 }
 
 /**
@@ -111,6 +117,7 @@ export function composeCanvasScene(
     ...(options?.threads === undefined ? {} : { threads: options.threads }),
     ...(options?.commentLayer === undefined ? {} : { commentLayer: options.commentLayer }),
     ...(options?.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
+    ...(options?.core === undefined ? {} : { core: options.core }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's
     // words: a node's intrinsic size, not its zoom.

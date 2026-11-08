@@ -161,3 +161,63 @@ describe('the PR fuzz job restores the cache entry the nightly saves', () => {
     expect(sha(restored?.uses)).toBe(sha(saved?.uses))
   })
 })
+
+describe('the core-wasm action builds what the rust job builds', () => {
+  const action = parseYaml(read('.github/actions/core-wasm/action.yml')) as {
+    runs: { steps: Step[] }
+  }
+  const steps = action.runs.steps
+  const keyStep = steps.find((s) => s.name === 'Core wasm cache key')
+  const inputs = String(keyStep?.env?.INPUTS ?? '')
+
+  it('installs wasm-bindgen at the version the crate pins, and names it in the key', () => {
+    const install = steps.find((s) => s.uses?.startsWith('taiki-e/install-action@'))
+    expect(install?.with?.tool).toBe(`wasm-bindgen@${TOOL_PINS['wasm-bindgen']}`)
+    expect(install?.with?.fallback).toBe('none')
+    expect(keyStep?.run).toContain(`wasm-bindgen-${TOOL_PINS['wasm-bindgen']}-`)
+  })
+
+  it.each([
+    'crates/**',
+    'Cargo.lock',
+    'Cargo.toml',
+    '.cargo/**',
+    'rust-toolchain.toml',
+    'tools/checks/src/rust-build-wasm.mjs',
+    'packages/core-wasm/scripts/stage-artifacts.mjs',
+  ])('keys the cache on %s, an input of the artifact', (path) => {
+    expect(inputs).toContain(`'${path}'`)
+  })
+
+  it('builds through build:wasm, the path the size ledger measures, and saves under the key it restored', () => {
+    expect(
+      steps.some(
+        (s) => s.run?.trim() === 'pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm',
+      ),
+    ).toBe(true)
+    const restore = steps.find((s) => s.uses?.startsWith('actions/cache/restore@'))
+    const save = steps.find((s) => s.uses?.startsWith('actions/cache/save@'))
+    expect(save?.with).toEqual(restore?.with)
+    expect(restore?.with?.path).toBe('packages/core-wasm/artifacts')
+  })
+
+  it('is restored by the stress lane before it reruns a changed node test', () => {
+    const stress = stepsOf(ci, 'stress-changed-tests')
+    const at = stress.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const run = stress.findIndex((s) => s.name?.startsWith('Stress changed test files'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(run)
+  })
+
+  it('is what test-unit restores before mcp-node runs in differential', () => {
+    const unit = stepsOf(ci, 'test-unit')
+    const at = unit.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const test = unit.findIndex((s) => s.run?.includes('--project=mcp-node'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(test)
+    expect(unit[test]?.env).toEqual({
+      WHITEBOARD_CORE: 'differential',
+      WHITEBOARD_CORE_MISMATCH: 'throw',
+    })
+  })
+})

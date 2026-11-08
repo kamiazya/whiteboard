@@ -1,4 +1,4 @@
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { LayoutCore, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
@@ -106,6 +106,14 @@ export interface ServerDeps {
    * promise and startup pays nothing for a server that never renders.
    */
   textMeasurer?: () => Promise<SceneTextMeasurer>
+  /**
+   * The Rust core a canvas layout routes through, and the switch per ported
+   * function (ADR-0054's `CoreImpl`). Optional for the reason `textMeasurer`
+   * is: loading the wasm is a composition root's to do, and absent means
+   * every layout runs in TypeScript. A factory, memoized by the root, so a
+   * server that never renders never loads it.
+   */
+  layoutCore?: () => Promise<LayoutCore | undefined>
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

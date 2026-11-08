@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { abi_version, edge_route_layout, initSync } from '#glue'
-import { loadCore } from './index.js'
+import { loadCore } from './load.js'
 import type { RoutingBudget } from './types.js'
 
 /**

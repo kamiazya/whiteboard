@@ -146,8 +146,10 @@ async function canvasScene(
   const loaded = input.embedReferences
     ? await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })
     : undefined
+  const core = await deps.layoutCore?.()
   const scene = composeCanvasScene(part, measure, {
     references: loaded?.seams,
+    ...(core === undefined ? {} : { core }),
     style: input.style,
     fontAvailable,
     // Colour by intent (ADR-0040 decision 5).

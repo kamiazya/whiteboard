@@ -39,6 +39,14 @@ describe('resolveDevDataDirEnv', () => {
     expect(result.WHITEBOARD_DATA_DIR).toBe('/custom/data')
   })
 
+  it('routes in differential unless WHITEBOARD_CORE says otherwise', () => {
+    expect(resolveDevDataDirEnv({}, repoRoot).WHITEBOARD_CORE).toBe('differential')
+    expect(resolveDevDataDirEnv({ WHITEBOARD_DATA_DIR: '/d' }, repoRoot).WHITEBOARD_CORE).toBe(
+      'differential',
+    )
+    expect(resolveDevDataDirEnv({ WHITEBOARD_CORE: 'ts' }, repoRoot).WHITEBOARD_CORE).toBe('ts')
+  })
+
   it('returns a new object and leaves the input env untouched (immutable update)', () => {
     const input = { FOO: 'bar' }
     const result = resolveDevDataDirEnv(input, repoRoot)

@@ -15,6 +15,10 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   bytes or a compiled `WebAssembly.Module` that a COMPOSITION ROOT hands over
   (a Vite `?url` import, `fs` in mcp-server, a module import on Workers).
   The shim never fetches or reads a file itself, and imports no `node:*`.
+  `loadCore` is its own entry (`./load`), the one runtime import of
+  `#glue`, so a root that BUNDLES the shim and loads the glue by path at
+  run time (mcp-server's `packages/mcp-server/src/server/export/layout-core.ts`) takes `coreFrom` from `.`
+  and its build needs no artifact.
 - The ABI check at init (`EXPECTED_ABI` against `abi_version()`): the shim
   and the artifact come from one commit, and a pair that does not is refused
   as `CoreAbiMismatch` rather than failing on its first mismatched call.
@@ -45,6 +49,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
 `pnpm rust:build:wasm` (the one build path the size ledger and the
 reproducibility check measure) and `stage:wasm` copies it in. There is no
 `build` script, so `pnpm -r build` and the release path need no Rust yet.
+In CI, `.github/actions/core-wasm` restores it from a cache keyed on its
+inputs and builds and saves it only on a miss (owner decision, 2026-11-08);
+a job that lays out through the core in `differential` uses that action.
 
 `#glue` (package `imports`) is declared by hand in `src/glue.d.ts`, so
 `tsc` needs no artifact: the TypeScript jobs and the pre-push hook have no

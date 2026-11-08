@@ -1,0 +1,54 @@
+name: Core wasm
+description: >-
+  Puts the Rust core's wasm artifact in packages/core-wasm/artifacts, built
+  once per change to its inputs and reused from the cache everywhere else
+  (owner decisions, 2026-11-08: built in the pipeline, never committed; built
+  once and cached on its inputs). A hit needs no Rust toolchain. A miss
+  builds it through `build:wasm`, the one build path the size ledger and the
+  reproducibility check measure, and saves it. Expects pnpm installed.
+
+runs:
+  using: composite
+  steps:
+    # Everything the artifact is a function of: the crates and their lock,
+    # the toolchain and cargo config, the wasm-bindgen CLI version (pinned
+    # equal to the crate, so the lock carries it too) and the two scripts
+    # that build and stage it.
+    - name: Core wasm cache key
+      id: key
+      shell: bash
+      env:
+        INPUTS: ${{ hashFiles('crates/**', 'Cargo.lock', 'Cargo.toml', '.cargo/**', 'rust-toolchain.toml', 'tools/checks/src/rust-build-wasm.mjs', 'packages/core-wasm/scripts/stage-artifacts.mjs') }}
+      run: echo "key=core-wasm-${RUNNER_OS}-wasm-bindgen-0.2.130-${INPUTS}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the core wasm
+      id: restore
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: packages/core-wasm/artifacts
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Rust toolchain (rust-toolchain.toml)
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: |
+        rustup toolchain install
+        rustup show
+
+    - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
+      if: steps.restore.outputs.cache-hit != 'true'
+      with:
+        tool: wasm-bindgen@0.2.130
+        fallback: none
+
+    - name: Build the core wasm
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      run: pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm
+
+    - name: Save the core wasm
+      if: steps.restore.outputs.cache-hit != 'true'
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+      with:
+        path: packages/core-wasm/artifacts
+        key: ${{ steps.key.outputs.key }}

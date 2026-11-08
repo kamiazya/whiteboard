@@ -776,6 +776,9 @@ importers:
       '@kamiazya/whiteboard-codec':
         specifier: workspace:*
         version: link:../codec
+      '@kamiazya/whiteboard-core-wasm':
+        specifier: workspace:*
+        version: link:../core-wasm
       '@kamiazya/whiteboard-daemon-client':
         specifier: workspace:*
         version: link:../daemon-client

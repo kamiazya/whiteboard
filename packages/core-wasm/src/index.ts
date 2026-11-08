@@ -166,11 +166,3 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     },
   }
 }
-
-/**
- * The core, from the artifact's bytes or a compiled module. The glue is
- * imported only here, so nothing loads until a root asks for it.
- */
-export async function loadCore(source: BufferSource | WebAssembly.Module): Promise<Core> {
-  return coreFrom(await import('#glue'), source)
-}

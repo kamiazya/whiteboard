@@ -60,6 +60,7 @@ export default defineConfig({
       '@kamiazya/whiteboard-history',
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-core-wasm',
       '@kamiazya/whiteboard-canvas-render',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-loro-adapter',

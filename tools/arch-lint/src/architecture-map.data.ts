@@ -366,6 +366,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-render',
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-core-wasm',
       '@kamiazya/whiteboard-daemon-client',
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-history',
