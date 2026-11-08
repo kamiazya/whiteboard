@@ -13,7 +13,10 @@ import type { RoutingBudget } from './types.js'
  * differential, which goes through this shim.
  */
 
-const bytes = () => readFileSync(new URL('../artifacts/whiteboard_wasm_bg.wasm', import.meta.url))
+// Built, not committed: a name the relative-import scan reads as a file that
+// must exist would fail every job that has no wasm build.
+const WASM = 'whiteboard_wasm_bg.wasm'
+const bytes = () => readFileSync(new URL(`../artifacts/${WASM}`, import.meta.url))
 const box = (id: string, x: number): SpatialNode =>
   ({ id, type: 'text', text: '', x, y: 0, width: 100, height: 50 }) as SpatialNode
 const budget = (): RoutingBudget => ({ grid: 1e6, pairs: 1e6, trials: 1e6, repairs: 1e6 })

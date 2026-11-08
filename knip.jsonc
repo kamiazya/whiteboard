@@ -109,7 +109,11 @@
       // The type-only check `typecheck:abi` compiles against the staged
       // artifact; nothing imports it, which is the point.
       "entry": ["abi-conformance.ts"],
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      // `#glue` names the artifact `stage:wasm` copies into the gitignored
+      // artifacts/, absent wherever the wasm is not built; src/glue.d.ts
+      // declares it for tsc.
+      "ignoreUnresolved": ["#glue"]
     },
     "packages/search": {
       "project": ["src/**/*.ts"]

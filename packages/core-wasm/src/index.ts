@@ -1,3 +1,7 @@
+// The `#glue` declaration travels with this module, so a consumer's `tsc`
+// (canvas-render compiles this source through the workspace link) sees it
+// with no staged artifact.
+/// <reference path="./glue.d.ts" />
 import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { LabelRect, RoutingBudget, SideOverride } from './types.js'
