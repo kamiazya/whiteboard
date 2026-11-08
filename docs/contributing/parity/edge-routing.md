@@ -1,0 +1,141 @@
+# Parity checklist: edge routing
+
+The [QR-33a](../quality-requirements.md) checklist for the first ported module,
+`packages/canvas-render/src/layout/edges` (Rust: `crates/core/edge-routing`,
+one wasm export `edge_route_layout`, ABI 14, reached through
+`@kamiazya/whiteboard-core-wasm`). It is filled in as the module stands, so a
+row says what is shown, not what is intended. The switch
+(`CoreImpl`, per ADR-0054 "Transition mechanics") is `differential` in the
+daemon and the web editor under development and CI, and `ts` in a release. It
+**may not move to `rust` until every row below is `met` or `n/a`**; today it
+may not.
+
+Ports, in order: #2163 (grid-route spike), #2164 (geometry and ink), #2165
+(edge-rules), #2166 (router leaves), #2167 (`routeEdge`), #2168 (anchor pass),
+#2169 (coincident-ends repair), #2170 (crossing sweep), #2171 (side-choice
+search), #2172 (layout/edges suites against Rust), #2173 (one call per
+layout), #2174 (core-wasm shim), #2175 (`routeLayout` and the `CoreImpl`
+switch in canvas-render), #2176 (daemon), #2177 (web editor).
+
+## QR-33a
+
+| # | Check | Status | Evidence, or what is missing |
+|---|---|---|---|
+| 1 | Contracts in `contracts/`, generated into both languages, `codegen --check` clean | not yet | `contracts/geometry` (`Point`, `Rect`) is generated into `crates/core/edge-routing/src/generated/geometry.rs` and checked by `tests/geometry_contract.rs`. The routing input and output are NOT contracts: they cross as flat `Float64Array`s, ADR-0054 decision 9's declared fast path (`routing_input.rs` says so), so there is no schema to generate. The deviation is declared by the ADR; the row stays open until the PR moving the switch states it as accepted. |
+| 2 | Layer per the architecture map; dependencies equal the allowed set; core wasm imports nothing | met | `crates/architecture-map.json` declares `whiteboard-edge-routing` (core layer; allowed: `whiteboard-det`, `whiteboard-scene`, `serde`). The manifest depends on `serde` and `whiteboard-det` only, a subset. `cargo xtask arch-map` and the wasm32 import scan run in the `rust` job via `pnpm rust:check`. |
+| 3 | Clippy, fmt and the core lint set pass with no new `#[expect]` outside a ledger | not yet | Workspace lints deny `unwrap`/`expect`/`panic` and bare `allow` (`Cargo.toml`), and `pnpm rust:check` passes. The crate carries 20 `#[expect(..., reason)]` across 9 files and no ledger of them exists, so "outside a ledger" cannot be shown. |
+| 4 | Native unit tests red-first; every QR-14a property class present through the shared prelude, with reachability floors, committed regressions, no pinned seed, each mutation-checked | not yet | 44 `#[test]` in `crates/core/edge-routing/src` plus `tests/geometry_contract.rs`. There is no Rust property-test prelude or `proptest` dependency in the workspace: the properties live on the TypeScript side as the fast-check layer-2 differentials (`packages/canvas-render/src/test-utils/wasm/*.rust.test.ts`). Rust-side properties are not written. |
+| 5 | Every port implementation the module touches runs its conformance suite | n/a | The module touches no store or sync port; it is a pure function of boxes. |
+| 6 | Layer 1: every TypeScript test and scoreboard passes against Rust, pinned numbers identical, no expectation edited | met | The `canvas-render-rust` project (`packages/canvas-render/vitest.rust.config.ts`) re-runs `src/layout/edges/**/*.test.ts` with `grid-route`, `edge-router` and `spatial-edges` aliased to wasm shims (#2172), including the routing scoreboard. Two files are excluded because they count TypeScript-internal work (`grid-route.cost.test.ts`, `spatial-edges.cost.test.ts`); their reasons are in the config, and the Rust search's budget accounts are compared exactly by `spatial-edges.rust.test.ts`. It runs in CI's `rust` job. |
+| 7 | Layer 2: property differential with exact equality, shown to fail on a planted one-ulp change | not yet | Exact equality: `edge-*.rust.test.ts`, `route-layout.rust.test.ts` (compared position by position). No record in the tree that a one-ulp change was planted on the Rust side for the edge-routing differentials; do it in the switch PR and record it here. |
+| 8 | Layer 3: shared fixtures and goldens byte-identical natively and on wasm | met | `cargo xtask cross-target` runs every core crate's tests natively and on wasm32 under Node with the same count (#2162); the crate has the `wasm-bindgen-test` dev-dependency for it. |
+| 9 | Every tolerated difference is a both-sided ledger entry | met (vacuously) | There are none: the differentials assert exact equality and no tolerance ledger exists for this module. `differential` mode reports any difference as a `CoreMismatch`. |
+| 10 | `differential` has run in CI and in dogfooding with no unexplained mismatch | not yet | In CI: the daemon (#2176) and the web editor (#2177) set `differential` for dev and test, and `WHITEBOARD_CORE_MISMATCH=throw` makes a difference fail a test. In dogfooding: no recorded time. The stage needs "one release of differential data" (ADR-0054, stage 3), and no release has carried it. |
+| 11 | `cargo mutants --in-diff` clean or ledgered; line and region coverage at or above the crate's floor | not yet | No cargo-mutants configuration and no llvm-cov floor exist in the tree. Nothing has been run. |
+| 12 | One call per user operation; boundary cost measured on browser, Node and workerd against the TypeScript, result in the PR body | met for the measurement, PR body owed | `edge_route_layout` is called once per `routeLayout`, which the composer calls once per layout; `scripts/route-layout-boundary.mjs` fails if the Rust loop makes any other number of wasm calls. Measured on all three runtimes, below. The PR that moves the switch pastes the table. |
+| 13 | Artifact size within its ledger, peak memory reported, Workers budgets measured | not yet | Size: `crates/wasm-size-ledger.json` ceiling 566000 bytes, 544794 measured. Peak memory and the Workers budgets (QR-22c, QR-22d, QR-23) are not measured. |
+| 14 | Every untrusted-input entry has caps and a fuzz target, seeded and run, no open crash | not yet | `crates/input-caps.json` holds only the template entry (`whiteboard-det::utf16::len`); `crates/fuzz` has the one `det_utf16_len` target. `edge_route_layout` reads a flat array the shim builds, but the export itself is reachable by anything holding the glue, so it needs a registry entry and a target. |
+| 15 | Logging through the `log` facade; `thiserror` convention; poison-and-recover covers held state | n/a | The crate neither logs nor returns errors (a refusal is the shim's `CoreInputRefused`, and `routeLayout` falls back to the TypeScript), and holds no state across calls; its budget is passed in and out per call. |
+| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | not yet | The ledger does not exist: `PORTED_FUNCTIONS` appears only in ADR-0054 and QR-33a, in no source file or guard. It needs creating, both-sided, before the switch moves. |
+| 17 | Any Unicode table comes from a pinned crate with a version-asserting test | n/a | The edge layer uses no Unicode tables. |
+| 18 | Exit criteria (QR-33b) recorded in the PR | met here, repeat in the PR | Below. |
+| 19 | Docs reflect the shipped state | not yet | This file, and the README link. `quality-requirements.md` and the ADR index still describe "no product module ported yet", which is no longer true; the switch PR corrects them. |
+
+## QR-33b exit criteria
+
+| Criterion | Recorded |
+|---|---|
+| Port shape | Structure-preserving. The Rust files follow the TypeScript modules one to one (`edge_router.rs` / `edge-router.ts`, `spatial_edges.rs` / `spatial-edges.ts`, ...), so a reviewer reads them side by side; `js_map.rs` exists to keep the TypeScript's `Map` iteration order. |
+| TypeScript deletion deadline | The release after the one in which the switch first defaults to `rust`. No later date is requested. |
+| Rollback | Set `WHITEBOARD_CORE` (daemon) or `VITE_WHITEBOARD_CORE` (web) back to `ts` or `differential`; the composition roots read it (`packages/mcp-server/src/server/export/layout-core.ts`, `apps/web/src/lib/spatial/layout-core-settings.ts`). While the TypeScript exists nothing else is needed; a core that throws already falls back to the TypeScript answer per call. |
+| Freeze lift | `packages/canvas-render/src/layout/edges` is frozen for feature work until the switch is `rust` and the TypeScript is deleted; after that, features go to Rust only (ADR-0054 decision 23). |
+
+## Boundary cost (QR-22b)
+
+Instrument: `packages/canvas-render/src/test-utils/wasm/route-layout-boundary.ts`,
+driven by `scripts/route-layout-boundary.mjs`
+(`node packages/canvas-render/scripts/route-layout-boundary.mjs --rounds=15 --batch-ms=100`;
+`--runtime=node,chromium,workerd`, `--workerd=<binary>`), with a thinner
+`vitest bench --project "canvas-render-node (bench)" route-layout-boundary`
+over the same boards for Node alone. It needs the staged artifact
+(`pnpm rust:build:wasm`, then `pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm`).
+
+How each side is known to be what it claims:
+
+- The TypeScript side is `routeLayout(undefined, ...)` over the real modules in a
+  bundle built with no alias. The `canvas-render-rust` vitest project aliases
+  `./edge-router.js`, `./spatial-edges.js` and `./grid-route.js` to Rust shims,
+  so a baseline taken there would be Rust twice; the bench project and the
+  script bundle have no such alias.
+- The wasm export is wrapped and counted. The harness throws if the TypeScript
+  batches make any wasm call, or the Rust batches make other than one per
+  layout. Planting the Rust core on the TypeScript side makes it throw
+  (`240 counted wasm calls ... expected 120`).
+- Before timing a board the harness routes it once in `differential` and throws
+  on any mismatch, so no ratio is quoted for a port that answers differently.
+- Rounds interleave the TypeScript batch, the Rust batch and a replay of the
+  bare wasm call in a rotating order; each batch repeats the board until it is
+  long enough for the runtime's clock. Numbers are milliseconds per iteration
+  (every layout of the class once), median with [min-max] over 15 rounds.
+- The boundary is `Rust total - wasm call`. The wasm call is the export replayed
+  on the inputs the shim built, so it includes copying across and the routing;
+  the remainder is encode, decode and the shim. It is a difference of two noisy
+  medians and goes negative below the noise (about 1 ms on the big boards), so
+  read it as "no larger than a few tenths of a millisecond" there, not as a
+  value. The nodes-only row (144 nodes, no edges) is the direct fixed cost:
+  about 0.01 ms.
+- Chromium is 153 headless shell with a 100 microsecond clock; workerd is the
+  local `workerd` binary (2026-11-08), whose clock here advances during
+  synchronous work (a production Worker's does not, so these are engine
+  numbers, not a Workers platform measurement).
+
+Node v24.22.1, one machine, nothing else running by intent (load average 0.2 at the start):
+
+| board (layouts / nodes / edges) | TypeScript | Rust | wasm call | Rust / TypeScript | boundary share |
+|---|---|---|---|---|---|
+| corpus, 5 reported boards (5/15/11) | 0.484 [0.440-0.877] | 0.307 [0.266-0.542] | 0.263 | 0.62 [0.54-0.70] | 16% [4-35] |
+| synthetic, 30 boards (30/108/90) | 17.5 [17.0-19.8] | 9.44 [9.15-9.60] | 9.11 | 0.54 [0.48-0.55] | 3% [2-5] |
+| clustered 3x8 (1/24/38) | 46.0 [42.8-47.3] | 30.4 [29.4-31.6] | 30.3 | 0.66 [0.63-0.74] | 0% [-3-3] |
+| lattice, 12 boards (12/80/82) | 43.1 [40.8-58.8] | 27.4 [26.9-30.7] | 27.1 | 0.65 [0.48-0.71] | 1% [-3-12] |
+| stacked frames, 12 boards (12/137/49) | 26.7 [24.7-33.2] | 16.9 [16.4-19.9] | 16.6 | 0.63 [0.56-0.68] | 1% [-50-17] |
+| clustered 12x12 (1/144/165) | 88.2 [85.1-110.8] | 59.1 [58.2-61.3] | 58.7 | 0.67 [0.55-0.69] | 0% [-3-6] |
+| clustered 12x12, no edges (1/144/0) | 0.015 | 0.018 | 0.004 | 1.18 [1.12-1.24] | 80% |
+
+Chromium 153.0.8010.12:
+
+| board | TypeScript | Rust | wasm call | Rust / TypeScript | boundary share |
+|---|---|---|---|---|---|
+| corpus | 0.395 [0.347-0.598] | 0.297 [0.269-0.539] | 0.255 | 0.77 [0.61-0.90] | 14% [4-18] |
+| synthetic | 14.3 [13.1-20.2] | 8.98 [8.48-11.5] | 8.78 | 0.64 [0.45-0.71] | 1% [-54-15] |
+| clustered 3x8 | 34.1 [33.2-41.9] | 29.5 [29.3-31.2] | 29.7 | 0.87 [0.74-0.89] | 0% [-13-1] |
+| lattice | 32.8 [32.2-36.9] | 25.6 [24.3-32.3] | 25.4 | 0.78 [0.69-0.93] | 1% [-8-21] |
+| stacked frames | 21.3 [20.5-22.9] | 16.0 [15.8-18.8] | 16.0 | 0.75 [0.71-0.88] | 1% [-22-17] |
+| clustered 12x12 | 75.3 [71.5-94.0] | 58.9 [56.8-67.8] | 57.9 | 0.76 [0.63-0.90] | 0% [-10-13] |
+| clustered 12x12, no edges | 0.011 | 0.017 | 0.002 | 1.68 [1.57-1.79] | 87% |
+
+workerd (local binary, 300 ms batches, 15 rounds):
+
+| board | TypeScript | Rust | wasm call | Rust / TypeScript | boundary share |
+|---|---|---|---|---|---|
+| corpus | 0.323 [0.295-0.430] | 0.270 [0.263-0.390] | 0.247 | 0.84 [0.66-0.96] | 10% [2-30] |
+| synthetic | 13.4 [11.7-15.7] | 9.63 [9.11-11.3] | 9.37 | 0.75 [0.63-0.80] | 2% [-4-17] |
+| clustered 3x8 | 33.6 [32.4-39.0] | 32.2 [31.8-36.5] | 32.4 | 0.97 [0.89-1.06] | 0% [-17-12] |
+| lattice | 33.2 [30.6-36.1] | 27.8 [27.0-32.5] | 27.6 | 0.86 [0.77-0.95] | 1% [-2-14] |
+| stacked frames | 20.9 [20.1-24.1] | 18.0 [17.4-21.0] | 18.0 | 0.85 [0.74-1.04] | 0% [-9-16] |
+| clustered 12x12 | 71.0 [67.6-75.2] | 63.8 [61.0-70.2] | 64.4 | 0.90 [0.84-1.00] | 0% [-17-10] |
+| clustered 12x12, no edges | 0.009 | 0.012 | 0.002 | 1.37 [1.13-1.62] | 80% |
+
+Reading: with edges to route, the Rust path is faster than the TypeScript by median
+on every runtime and board class (ratio 0.54-0.97; the narrowest is a 38-edge
+board in workerd, whose range [0.89-1.06] crosses 1), and the marshalling is below what the method can
+resolve on any board past the smallest. On the five reported corpus boards,
+where a layout is about 0.1 ms, the boundary is the largest share (10-16%
+median) and the Rust path is still ahead. The one place the boundary dominates
+is a layout with nothing to route (a 144-node board with no edges: 0.012-0.018
+ms against 0.009-0.015 ms), which is a 0.003-0.007 ms cost per layout.
+
+Not measured: QR-22b also asks for JSON compared with serde-wasm-bindgen on this
+payload. The boundary is typed arrays by ADR-0054 decision 9, so there is no
+JSON path to compare; the row stays a recorded decision, not a measurement.
+Production Workers (a frozen in-worker clock, the platform CPU limit) are not
+measured.
