@@ -2,16 +2,16 @@
 // (canvas-render compiles this source through the workspace link) sees it
 // with no staged artifact.
 /// <reference path="./glue.d.ts" />
-import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { LabelRect, RoutingBudget, SideOverride } from './types.js'
+import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
 
 /** The glue surface the shim calls: the `#glue` module's own type. */
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '13'
+export const EXPECTED_ABI = '14'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {
@@ -29,12 +29,19 @@ export class CoreInputRefused extends Error {
   }
 }
 
+/** One layout's routes, in input order, and the anchors the search settled, by edge id. */
+interface RoutedLayout {
+  readonly routes: ResolvedEdgeNode[]
+  readonly anchors: ReadonlyMap<string, AnchorPair>
+}
+
 /** An initialised core: one call per user operation (QR-22b). */
 export interface Core {
   /**
    * One layout's edge routing, as canvas-render's composer runs it between
    * `assignEdgeAnchors` and its per-edge `routeEdge`: every edge of `edges`
-   * routed in order, on `budget`, whose four accounts are written back.
+   * routed in order, on `budget`, whose four accounts are written back,
+   * with the anchors the composer hands on to the editor.
    */
   routeLayout(
     nodes: readonly SpatialNode[],
@@ -43,38 +50,97 @@ export interface Core {
     overrides: ReadonlyMap<string, SideOverride> | undefined,
     budget: RoutingBudget,
     labels: readonly LabelRect[],
-  ): ResolvedEdgeNode[]
+  ): RoutedLayout
 }
 
 const ends = ['none', 'arrow'] as const
 
-/** The routes in `out`, or undefined when it does not hold exactly one per edge. */
-function decodeRoutes(
+/** One anchor entry of 14 numbers, as `edge_assign_anchors` answers it. */
+function anchorAt(out: Float64Array, at: number): AnchorPair {
+  const point = (i: number) =>
+    out[i] === 1 ? { x: out[i + 1] as number, y: out[i + 2] as number } : undefined
+  const from = point(at + 1)
+  const to = point(at + 4)
+  const fromSide = sideAt(out[at + 11] as number)
+  const toSide = sideAt(out[at + 12] as number)
+  return {
+    ...(from === undefined ? {} : { from }),
+    ...(to === undefined ? {} : { to }),
+    ...(out[at + 7] === 1 ? { fromLaneDepth: out[at + 8] as number } : {}),
+    ...(out[at + 9] === 1 ? { toLaneDepth: out[at + 10] as number } : {}),
+    ...(fromSide === undefined ? {} : { fromSide }),
+    ...(toSide === undefined ? {} : { toSide }),
+    ...(out[at + 13] === 1 ? { around: true as const } : {}),
+  }
+}
+
+const ANCHOR_WIDTH = 14
+
+/**
+ * The routes and anchors in `out`, or undefined when it does not hold
+ * exactly one route per edge and whole anchor entries naming known edges.
+ */
+function decodeLayout(
   out: Float64Array,
   edges: readonly RoutableElement[],
-): ResolvedEdgeNode[] | undefined {
+  edgeIds: readonly string[],
+): RoutedLayout | undefined {
   if (out.length < 5 || out[4] !== edges.length) return undefined
   let at = 5
-  const routes = edges.map((edge): ResolvedEdgeNode => {
-    const [rounded, fromSide, toSide, fromEnd, toEnd, n] = out.subarray(at, at + 6)
-    const path = Array.from({ length: n ?? 0 }, (_, i) => ({
-      x: out[at + 6 + 2 * i] as number,
-      y: out[at + 7 + 2 * i] as number,
-    }))
-    at += 6 + 2 * path.length
-    return {
-      kind: 'edge',
-      id: edge.id,
-      path,
-      ...(rounded === 1 ? { rounded: true as const } : {}),
-      fromSide: sideAt(fromSide as number) as EdgeSide,
-      toSide: sideAt(toSide as number) as EdgeSide,
-      fromEnd: ends[fromEnd as number] ?? 'none',
-      toEnd: ends[toEnd as number] ?? 'none',
-    }
-  })
+  const routes: ResolvedEdgeNode[] = []
+  for (const edge of edges) {
+    const route = routeAt(out, at, edge.id)
+    if (route === undefined) return undefined
+    routes.push(route)
+    at += 6 + 2 * route.path.length
+  }
+  const count = out[at] ?? Number.NaN
+  at += 1
   // Every number accounted for: a garbled answer is refused, not half read.
-  return at === out.length ? routes : undefined
+  if (!Number.isInteger(count) || at + count * ANCHOR_WIDTH !== out.length) return undefined
+  const anchors = new Map<string, AnchorPair>()
+  for (let i = 0; i < count; i++, at += ANCHOR_WIDTH) {
+    const id = edgeIds[out[at] as number]
+    const sides = [out[at + 11], out[at + 12]]
+    if (id === undefined || !sides.every((s) => s === -1 || sideAt(s as number) !== undefined)) {
+      return undefined
+    }
+    anchors.set(id, anchorAt(out, at))
+  }
+  return { routes, anchors }
+}
+
+const isFlag = (v: number | undefined): v is 0 | 1 => v === 0 || v === 1
+
+/**
+ * One route at `at`, or undefined when any of its numbers is out of range:
+ * a side that names none, an end or a rounding flag past 0/1, or a point
+ * count that is not a whole number the answer has room for. Checked before
+ * anything is allocated, since the count is the artifact's word.
+ */
+function routeAt(out: Float64Array, at: number, id: string): ResolvedEdgeNode | undefined {
+  const [rounded, from, to, fromEnd, toEnd, n] = out.subarray(at, at + 6)
+  const fromSide = sideAt(from as number)
+  const toSide = sideAt(to as number)
+  if (fromSide === undefined || toSide === undefined) return undefined
+  if (!isFlag(rounded) || !isFlag(fromEnd) || !isFlag(toEnd)) return undefined
+  if (n === undefined || !Number.isInteger(n) || n < 0 || at + 6 + 2 * n > out.length) {
+    return undefined
+  }
+  const path = Array.from({ length: n }, (_, i) => ({
+    x: out[at + 6 + 2 * i] as number,
+    y: out[at + 7 + 2 * i] as number,
+  }))
+  return {
+    kind: 'edge',
+    id,
+    path,
+    ...(rounded === 1 ? { rounded: true as const } : {}),
+    fromSide,
+    toSide,
+    fromEnd: ends[fromEnd],
+    toEnd: ends[toEnd],
+  }
 }
 
 /**
@@ -90,13 +156,13 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
       const wire = encodeLayout(nodes, edges, styleOf, overrides, budget, labels)
       const out = glue.edge_route_layout(wire.input)
-      const routes = decodeRoutes(out, edges)
-      if (routes === undefined) throw new CoreInputRefused('edge_route_layout')
+      const routed = decodeLayout(out, edges, wire.edgeIds)
+      if (routed === undefined) throw new CoreInputRefused('edge_route_layout')
       budget.grid = out[0] as number
       budget.pairs = out[1] as number
       budget.trials = out[2] as number
       budget.repairs = out[3] as number
-      return routes
+      return routed
     },
   }
 }

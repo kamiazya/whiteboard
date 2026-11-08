@@ -20,8 +20,14 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   as `CoreAbiMismatch` rather than failing on its first mismatched call.
 - One typed call per user operation (QR-22b): `routeLayout` encodes a whole
   layout's routing onto the typed-array wire (`wire.ts`, the layout
-  `crates/bindings/wasm` decodes), makes ONE call, decodes, and writes the
-  budget accounts back.
+  `crates/bindings/wasm` decodes), makes ONE call, decodes the routes and
+  the anchors the side search settled (the editor freezes a drag from
+  them), and writes the budget accounts back. It satisfies canvas-render's
+  `RoutingCore` structurally, which is how a root hands it to the layout.
+- Refusing an answer it cannot fully account for, as `CoreInputRefused`: a
+  count past what is left, a side, end or flag out of range, an anchor
+  naming no edge. The count is checked BEFORE anything is allocated, since
+  it is the artifact's word.
 
 ## What does NOT belong here
 

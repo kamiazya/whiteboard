@@ -66,11 +66,9 @@ import {
   type LabelObstacle,
   labelObstacles,
 } from './edges/edge-label-anchor.js'
-import { routeEdge } from './edges/edge-router.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
-import type { RoutingBudget } from './edges/routing-budget.js'
+import { routeLayout } from './edges/layout-core.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
-import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import { weighStroke } from './edges/stroke-weight.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { labelOf, labelRuns } from './node-box.js'
@@ -125,10 +123,7 @@ function composeEdge(
   canvas: SpatialCanvas,
   edge: RoutableElement,
   options: ResolvedLayoutOptions,
-  routingStyle: EdgeRoutingStyle | undefined,
-  anchors: EdgeAnchorPair | undefined,
-  routingBudget: RoutingBudget,
-  titles: readonly LabelObstacle[],
+  route: ResolvedEdgeNode,
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
   // documented contract — nothing further to catch here.
@@ -136,13 +131,7 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
-  const routed = pullEdgeOntoOutlines(
-    routeEdge(canvas.nodes, edge, routingStyle, anchors, undefined, routingBudget, titles),
-    canvas,
-    edge,
-    options.nodeOutlines,
-    options.shapeTable,
-  )
+  const routed = pullEdgeOntoOutlines(route, canvas, edge, options.nodeOutlines, options.shapeTable)
   const appearance = weighStroke(options.appearance.resolveEdge(edge), edge)
   const ink = sketchInkFor(edge.id, options, false)
   return {
@@ -588,6 +577,34 @@ function layoutSpatialCanvasInternal(
   }
 }
 
+/**
+ * Every edge routed and drawn. One anchor pass and routing account for the
+ * whole set (fan-out needs each end sharing a side), told where frame titles
+ * are, in ONE call for the layout (QR-22b), answered by the TypeScript or
+ * the Rust core as the composition root's switch says.
+ */
+function routeAndCompose(
+  canvas: SpatialCanvas,
+  resolved: ResolvedLayoutOptions,
+  routable: readonly RoutableElement[],
+  styleOf: (edge: RoutableElement) => EdgeRoutingStyle,
+  titles: readonly LabelObstacle[],
+): { routedEdges: ResolvedEdgeNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
+  const { routes, anchors } = routeLayout(
+    resolved.core,
+    canvas.nodes,
+    routable,
+    styleOf,
+    resolved.edgeSideOverrides,
+    createRoutingBudget(),
+    titles,
+  )
+  const routedEdges = routable.map((edge, index) =>
+    composeEdge(canvas, edge, resolved, routes[index] as ResolvedEdgeNode),
+  )
+  return { routedEdges, anchors }
+}
+
 function composeEdgesAndLabels(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
@@ -627,15 +644,8 @@ function composeEdgesAndLabels(
   // same question whichever the element is, and the anchoring pass has to see
   // every element or two of them will pick the same side of one box.
   const routable: readonly RoutableElement[] = [...canvas.edges, ...(canvas.lines ?? [])]
-  // One anchor pass and routing account for every edge (fan-out needs each end
-  // sharing a side), told where frame titles are, as the router is.
-  const budget = createRoutingBudget()
-  const overrides = resolved.edgeSideOverrides
   const titles = frameTitleBoxes(canvas.nodes, resolved)
-  const anchors = assignEdgeAnchors(canvas.nodes, routable, styleOf, overrides, budget, titles)
-  const routedEdges = routable.map((edge) =>
-    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id), budget, titles),
-  )
+  const { routedEdges, anchors } = routeAndCompose(canvas, resolved, routable, styleOf, titles)
   // A jump is drawn on the LATER edge of a crossing pair, so "does this edge
   // hop" is asked of the edge that would draw the arc. Crossings are still
   // computed over EVERY edge — who crosses whom is geometry, and an edge

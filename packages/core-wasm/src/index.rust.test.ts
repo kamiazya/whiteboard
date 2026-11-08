@@ -34,7 +34,7 @@ describe('the core-wasm shim over the built artifact', () => {
     for (const source of [bytes(), new WebAssembly.Module(bytes())]) {
       const core = await loadCore(source)
       const b = budget()
-      const [route] = core.routeLayout(
+      const { routes, anchors } = core.routeLayout(
         [box('a', 0), box('b', 300)],
         [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
         () => 'orthogonal',
@@ -42,10 +42,12 @@ describe('the core-wasm shim over the built artifact', () => {
         b,
         [],
       )
+      const [route] = routes
       expect(route?.path.at(0)?.x).toBe(100)
       expect(route?.path.at(-1)?.x).toBe(300)
       expect(route?.fromSide).toBe('right')
       expect(route?.toSide).toBe('left')
+      expect(anchors.get('e')).toMatchObject({ fromSide: 'right', toSide: 'left' })
       // A clean pair needs no trial: the search short-circuits.
       expect(b).toEqual(budget())
     }

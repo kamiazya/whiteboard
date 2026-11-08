@@ -50,8 +50,23 @@ describe('the core-wasm shim', () => {
 
   it('refuses an answer that routes another number of edges, or leaves numbers over', () => {
     for (const out of [
-      [0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0],
-      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 9],
+      [0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 9],
+      // An anchor entry cut short, and one naming an edge the layout does not have.
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1, 5],
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, -1, -1, 0],
+      // No anchor count at all.
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+      // A side naming none, an end or a rounding flag past 0/1.
+      [0, 0, 0, 0, 1, 0, 7, 0, 0, 0, 0, 0],
+      [0, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0],
+      [0, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0],
+      // A point count that is huge, negative or fractional.
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1e9, 0],
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, -1, 0],
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0.5, 1, 2, 0],
+      // An anchor whose side names none.
+      [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, -1, 0],
     ]) {
       const { glue } = fakeGlue(EXPECTED_ABI, out)
       const b = budget()
@@ -73,7 +88,7 @@ describe('the core-wasm shim', () => {
   it('encodes one layout as the wire the export decodes', () => {
     const { glue, sent } = fakeGlue(
       EXPECTED_ABI,
-      [0, 0, 0, 0, 1, 0, 1, 3, 0, 1, 2, 100, 25, 300, 25],
+      [0, 0, 0, 0, 1, 0, 1, 3, 0, 1, 2, 100, 25, 300, 25, 0],
     )
     const label = { x: 10, y: 20, w: 30, h: 40 }
     coreFrom(glue, new Uint8Array()).routeLayout(
@@ -126,7 +141,7 @@ describe('the core-wasm shim', () => {
   })
 
   it('encodes overrides it can name and drops those naming no edge', () => {
-    const { glue, sent } = fakeGlue(EXPECTED_ABI, [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0])
+    const { glue, sent } = fakeGlue(EXPECTED_ABI, [0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0])
     const overrides = new Map([
       [
         'e',
@@ -157,10 +172,10 @@ describe('the core-wasm shim', () => {
   })
 
   it('decodes every route in order and writes the four accounts back', () => {
-    const out = [7, 8, 9, 10, 2, 1, 1, 3, 0, 1, 2, 100, 25, 300, 25, 0, 2, 0, 1, 0, 0]
+    const out = [7, 8, 9, 10, 2, 1, 1, 3, 0, 1, 2, 100, 25, 300, 25, 0, 2, 0, 1, 0, 0, 0]
     const { glue } = fakeGlue(EXPECTED_ABI, out)
     const b = budget()
-    const routes = coreFrom(glue, new Uint8Array()).routeLayout(
+    const { routes } = coreFrom(glue, new Uint8Array()).routeLayout(
       nodes,
       [edge, { ...edge, id: 'f' }],
       () => 'straight',
@@ -192,6 +207,39 @@ describe('the core-wasm shim', () => {
         fromEnd: 'arrow',
         toEnd: 'none',
       },
+    ])
+  })
+
+  it('decodes the anchors by edge id, each field present only when the search set it', () => {
+    // No routes' worth of detail matters here: one straight route, then two
+    // anchor entries, the second edge's first. Edge 1 ('f') sits on lanes
+    // with both ends pinned and goes around; edge 0 ('e') names sides only.
+    const out = [0, 0, 0, 0, 2, 0, 1, 3, 0, 0, 0, 0, 1, 3, 0, 0, 0, 2]
+    out.push(1, 1, 10, 20, 1, 30, 40, 1, 6, 1, 8, 2, 0, 1)
+    out.push(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, -1, 0)
+    const { glue } = fakeGlue(EXPECTED_ABI, out)
+    const { anchors } = coreFrom(glue, new Uint8Array()).routeLayout(
+      nodes,
+      [edge, { ...edge, id: 'f' }],
+      () => 'straight',
+      undefined,
+      budget(),
+      [],
+    )
+    expect([...anchors]).toEqual([
+      [
+        'f',
+        {
+          from: { x: 10, y: 20 },
+          to: { x: 30, y: 40 },
+          fromLaneDepth: 6,
+          toLaneDepth: 8,
+          fromSide: 'bottom',
+          toSide: 'top',
+          around: true,
+        },
+      ],
+      ['e', { fromSide: 'right' }],
     ])
   })
 })

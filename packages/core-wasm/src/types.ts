@@ -31,3 +31,14 @@ export interface LabelRect {
   readonly w: number
   readonly h: number
 }
+
+/** Where the search settled one edge's ends (`EdgeAnchorPair`). */
+export interface AnchorPair {
+  readonly from?: { readonly x: number; readonly y: number }
+  readonly to?: { readonly x: number; readonly y: number }
+  readonly fromLaneDepth?: number
+  readonly toLaneDepth?: number
+  readonly fromSide?: EdgeSide
+  readonly toSide?: EdgeSide
+  readonly around?: true
+}

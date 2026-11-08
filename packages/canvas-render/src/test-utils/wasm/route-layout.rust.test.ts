@@ -13,13 +13,22 @@ import { firstDifference } from './edge-arbitraries.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { scene } from './routing-arbitraries.js'
 import { encodeRouting } from './routing-wire.js'
-import { board, type Drawn, drawn, overrideMap, SIDES, wireInput } from './search-arbitraries.js'
+import {
+  board,
+  type Drawn,
+  drawn,
+  entryValues,
+  overrideMap,
+  SIDES,
+  wireInput,
+} from './search-arbitraries.js'
 
 /**
  * One layout's edge routing in one wasm call (`edge_route_layout`) against
  * what canvas-render's composer does between `assignEdgeAnchors` and its
  * per-edge `routeEdge` (ADR-0054 step 5, QR-22b): every edge's path,
- * rounding, sides and ends in input order, and every budget account left,
+ * rounding, sides and ends in input order, the anchors the search settled
+ * (the composer hands them on), and every budget account left,
  * the grid account included, since the search and the routing after it
  * draw on one budget. In this project `./edge-router.js` and
  * `./grid-route.js` resolve to the Rust ports inside the TypeScript modules,
@@ -58,10 +67,10 @@ const gridDraw: fc.Arbitrary<GridDraw> = fc.oneof(
 
 const reach = { bent: 0, contact: 0, gridSpent: 0, overridden: 0 }
 
-let shim: ReturnType<typeof coreFrom> | undefined
+let loaded: ReturnType<typeof coreFrom> | undefined
 const core = () => {
-  shim ??= coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
-  return shim
+  loaded ??= coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  return loaded
 }
 
 function check([d, draw]: [Drawn, GridDraw]) {
@@ -85,6 +94,8 @@ function check([d, draw]: [Drawn, GridDraw]) {
     budget.repairs,
     routed.length,
     ...routed.flatMap(routedValues),
+    anchors.size,
+    ...[...anchors].flatMap(([id, e]) => entryValues(wire.edgeIds.indexOf(id), e)),
   ]
   expect(firstDifference(expected, out)).toBeUndefined()
 
@@ -97,8 +108,9 @@ function check([d, draw]: [Drawn, GridDraw]) {
     trials: d.trials,
     pairs: d.pairs,
   }
-  const shimRoutes = core().routeLayout(d.nodes, d.edges, styleOf, overrides, shimBudget, labels)
-  expect(shimRoutes).toEqual(routed)
+  const shim = core().routeLayout(d.nodes, d.edges, styleOf, overrides, shimBudget, labels)
+  expect(shim.routes).toEqual(routed)
+  expect([...shim.anchors]).toEqual([...anchors])
   expect(shimBudget).toEqual(budget)
 
   if (routed.some((r) => r.path.length > 2)) reach.bent += 1

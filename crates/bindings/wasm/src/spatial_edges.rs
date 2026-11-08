@@ -84,15 +84,17 @@ pub fn edge_assign_anchors(input: &[f64]) -> Vec<f64> {
 ///
 /// In: what `edge_assign_anchors` reads. Out: `[the four accounts left, edge
 /// count, then per edge in input order: rounded 0/1, from side, to side,
-/// from end, to end (0 none, 1 arrow), point count, then x, y per point]`;
-/// an empty array for a malformed input.
+/// from end, to end (0 none, 1 arrow), point count, then x, y per point;
+/// then the anchors as `edge_assign_anchors` answers them after its
+/// accounts: an entry count and 14 numbers an entry]`; an empty array for a
+/// malformed input.
 #[wasm_bindgen]
 #[must_use]
 pub fn edge_route_layout(input: &[f64]) -> Vec<f64> {
     let Some((nodes, edges, styles, overrides, labels, mut budget)) = decode(input) else {
         return Vec::new();
     };
-    let routed =
+    let (anchors, routed) =
         route_layout((&nodes, &labels), (&edges, &styles), overrides.as_ref(), &mut budget);
     let end = |a: Arrowhead| if a == Arrowhead::Arrow { 1.0 } else { 0.0 };
     let mut out =
@@ -107,6 +109,10 @@ pub fn edge_route_layout(input: &[f64]) -> Vec<f64> {
             points_len_of(edge.path.len()),
         ]);
         out.extend(edge.path.iter().flat_map(|p| [p.x, p.y]));
+    }
+    out.push(points_len_of(anchors.len()));
+    for (id, entry) in anchors.iter() {
+        out.extend(entry_values(*id, entry));
     }
     out
 }
