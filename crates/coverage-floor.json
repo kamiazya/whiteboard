@@ -1,0 +1,36 @@
+{
+  "$comment": "QR-18: each crate's floor for line and region coverage of the native test run, as `cargo xtask coverage` measures it (one `cargo llvm-cov --workspace` run; every workspace test counts toward every crate). A floor starts at the first measured value rounded down and only goes up: a measurement under it fails, and so does a floor more than headroomPoints below it, so the PR that earned the coverage raises the floor (`cargo xtask coverage --update` only raises). Lowering a floor is a hand edit with its reason here.",
+  "headroomPoints": 2,
+  "crates": {
+    "bindings/native-fixture": {
+      "lines": 0,
+      "regions": 0,
+      "reason": "a minimal binary that exists so the hardening and reproducibility gates have a subject; it has no tests and nothing to cover"
+    },
+    "bindings/wasm": {
+      "lines": 66,
+      "regions": 60,
+      "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively"
+    },
+    "core/det": {
+      "lines": 98,
+      "regions": 98,
+      "reason": "first measured 2026-11-08 at 98.81% lines and 98.68% regions"
+    },
+    "core/edge-routing": {
+      "lines": 94,
+      "regions": 94,
+      "reason": "first measured 2026-11-08 at 94.47% lines and 94.57% regions, with the wasm crate's replay of the TypeScript's recorded answers (71.37% and 69.20% from the crate's own tests alone)"
+    },
+    "core/log": {
+      "lines": 100,
+      "regions": 100,
+      "reason": "first measured 2026-11-08 at 100% lines and regions"
+    },
+    "xtask": {
+      "lines": 58,
+      "regions": 56,
+      "reason": "first measured 2026-11-08 at 58.43% lines and 56.22% regions; the commands that build, run tools or need a release toolchain are exercised by running them in rust:check, not by unit tests"
+    }
+  }
+}

@@ -1099,7 +1099,7 @@ jobs:
       - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
         if: steps.scope.outputs.run == 'true'
         with:
-          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.130,cargo-auditable@0.7.7,cargo-about@0.9.3
+          tool: cargo-deny@0.20.2,wasm-bindgen@0.2.130,cargo-auditable@0.7.7,cargo-about@0.9.3,cargo-llvm-cov@0.9.1
           fallback: none
 
       # Both workspaces' dependency builds, keyed on the toolchain and each

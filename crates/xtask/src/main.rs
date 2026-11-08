@@ -2,6 +2,7 @@
 
 mod arch_map;
 mod codegen;
+mod coverage;
 mod cross_target;
 mod dist;
 mod harden;
@@ -26,6 +27,8 @@ tasks:
   inputs            untrusted-input entries declare caps in crates/input-caps.json
   wasm-imports      core crates built for wasm32 import nothing
   size [--update]   wasm artifacts fit crates/wasm-size-ledger.json
+  coverage [--update]
+                    native line and region coverage meets crates/coverage-floor.json
   harden-check [--require-stack-protector] <binary>...
                     a release binary carries PIE, full RELRO, NX, no RPATH,
                     stripped symbols and its embedded dependency list
@@ -50,6 +53,8 @@ fn main() -> ExitCode {
         ["wasm-imports"] => wasm_imports::run(),
         ["size"] => size::run(size::Mode::Check),
         ["size", "--update"] => size::run(size::Mode::Update),
+        ["coverage"] => coverage::run(coverage::Mode::Check),
+        ["coverage", "--update"] => coverage::run(coverage::Mode::Update),
         ["harden-check", rest @ ..] => harden::run(rest),
         ["dist", rest @ ..] => dist::run_task(rest),
         ["repro-check", rest @ ..] => repro::run(rest),

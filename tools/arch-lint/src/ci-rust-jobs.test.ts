@@ -60,6 +60,7 @@ const TOOL_PINS: Record<string, string> = {
   'wasm-bindgen': pinned('Cargo.toml', /^wasm-bindgen = "=([^"]+)"/m),
   'cargo-auditable': pinned('crates/xtask/src/dist.rs', /cargo-auditable --version (\S+?)"/),
   'cargo-about': pinned('crates/xtask/src/notices.rs', /const ABOUT_VERSION: &str = "([^"]+)"/),
+  'cargo-llvm-cov': pinned('crates/xtask/src/coverage.rs', /const LLVM_COV_VERSION: &str = "([^"]+)"/),
 }
 const FUZZ_PIN = pinned('tools/checks/src/rust-fuzz.mjs', /cargo-fuzz --version (\S+?)'/)
 
