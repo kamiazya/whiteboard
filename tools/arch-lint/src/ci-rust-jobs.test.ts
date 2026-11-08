@@ -220,4 +220,39 @@ describe('the core-wasm action builds what the rust job builds', () => {
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
+
+  it('is what test-browser restores before the browser projects run in differential', () => {
+    const browser = stepsOf(ci, 'test-browser')
+    const at = browser.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const test = browser.findIndex((s) => s.run?.includes('run test-browser'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(test)
+    // Restored when the browser projects run at all, never only when a
+    // narrower scope happens to name the web app.
+    expect(browser[at]?.if).toBe("steps.scope.outputs.run == 'true'")
+    expect(browser[test]?.env).toMatchObject({
+      VITE_WHITEBOARD_CORE: 'differential',
+      VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
+    })
+  })
+
+  it('is restored for every stress leg, and turned on for the browser leg alone', () => {
+    const stress = stepsOf(ci, 'stress-changed-tests')
+    const restore = stress.find((s) => s.uses === './.github/actions/core-wasm')
+    expect(restore?.if).toBe("steps.changed.outputs.files != ''")
+    const runs = stress.filter((s) => s.run?.includes('pnpm exec vitest run'))
+    expect(runs).toHaveLength(2)
+    for (const run of runs) {
+      expect(String(run.env?.VITE_WHITEBOARD_CORE)).toContain("matrix.leg == 'browser'")
+      expect(String(run.env?.VITE_WHITEBOARD_CORE_MISMATCH)).toContain("matrix.leg == 'browser'")
+    }
+  })
+
+  it('is not needed by test-jsdom, whose pages cannot fetch the wasm', () => {
+    const jsdom = stepsOf(ci, 'test-jsdom')
+    expect(jsdom.some((s) => s.uses === './.github/actions/core-wasm')).toBe(false)
+    expect(jsdom.some((s) => JSON.stringify(s.env ?? {}).includes('VITE_WHITEBOARD_CORE'))).toBe(
+      false,
+    )
+  })
 })

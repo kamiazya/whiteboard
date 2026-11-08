@@ -328,6 +328,13 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The web app routes edges through the Rust core in differential
+      # (ADR-0054 stage 2): its layout worker and its page fetch the wasm,
+      # and a difference throws in the test that drew it. Same cache as
+      # test-unit's, so a hit needs no Rust toolchain.
+      - uses: ./.github/actions/core-wasm
+        if: steps.scope.outputs.run == 'true'
+
       # The browser projects the change reaches, out of a universe DERIVED
       # from each config's browser mode — the set the root test:browser
       # script lists (ci-verify-coverage.test.ts holds the two equal), so a
@@ -355,6 +362,8 @@ jobs:
         timeout-minutes: 12
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
+          VITE_WHITEBOARD_CORE: differential
+          VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/2
 
       # A failing browser test prints the path of its retained trace and the
@@ -515,10 +524,11 @@ jobs:
           echo "changed test files: $files"
 
       # A node-realm test of the daemon's layout core asserts the staged wasm
-      # is there wherever CI runs it; the artifact comes from the same cache
-      # test-unit restores, so a hit costs no Rust toolchain.
+      # is there wherever CI runs it, and the browser leg's web tests load it
+      # in the page and the layout worker; the artifact comes from the same
+      # cache test-unit restores, so a hit costs no Rust toolchain.
       - uses: ./.github/actions/core-wasm
-        if: steps.changed.outputs.files != '' && matrix.leg == 'node'
+        if: steps.changed.outputs.files != ''
 
       - name: Stress changed test files (5 runs, fresh process each)
         if: steps.changed.outputs.files != ''
@@ -542,6 +552,10 @@ jobs:
         # split by `read -a`: interpolated, a name holding `$(…)` would run.
         env:
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          # Only the browser leg loads the web app's core: a jsdom page has no
+          # fetch to load it with, and an empty value reads as unset.
+          VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
+          VITE_WHITEBOARD_CORE_MISMATCH: ${{ matrix.leg == 'browser' && 'throw' || '' }}
         run: |
           read -r -a files <<< "$CHANGED_FILES"
           for i in 1 2 3 4 5; do
@@ -557,6 +571,10 @@ jobs:
         # passes too, which is what separates it from `retry`.
         env:
           CHANGED_FILES: ${{ steps.changed.outputs.files }}
+          # Only the browser leg loads the web app's core: a jsdom page has no
+          # fetch to load it with, and an empty value reads as unset.
+          VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
+          VITE_WHITEBOARD_CORE_MISMATCH: ${{ matrix.leg == 'browser' && 'throw' || '' }}
         run: |
           read -r -a files <<< "$CHANGED_FILES"
           pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --repeats=3 --fsModuleCache --passWithNoTests "${files[@]}"

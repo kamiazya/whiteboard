@@ -433,6 +433,9 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       // the same facts, aggregate and cache the daemon does — its Connections
       // panel — so it reads the package rather than a copy of it.
       '@kamiazya/whiteboard-reference-graph',
+      // core-wasm: the Rust routing core (ADR-0054), loaded in the page and
+      // the layout worker and handed to canvas-render as a layout option.
+      '@kamiazya/whiteboard-core-wasm',
     ],
     allowedThirdParty: [],
   },
