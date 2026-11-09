@@ -314,6 +314,9 @@ describe('a release ships the core wasm it built from cold', () => {
   it('stages the notices beside the wasm, which the pack gate requires', () => {
     const notices = action.runs.steps.find((s) => s.run?.includes('cargo xtask notices'))
     expect(notices?.run).toContain('stage:wasm')
+    // cargo-about reads metadata --offline for every target it scans, and a
+    // cold job has fetched only what the wasm build compiled.
+    expect(notices?.run).toMatch(/cargo fetch --locked[\s\S]*cargo xtask notices/)
     const install = action.runs.steps.find(
       (s) =>
         s.uses?.startsWith('taiki-e/install-action@') &&

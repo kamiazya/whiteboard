@@ -68,7 +68,10 @@ runs:
     - name: Third-party notices for the core wasm
       if: steps.restore.outputs.cache-hit != 'true'
       shell: bash
+      # cargo-about reads `cargo metadata --offline` for each artifact's
+      # target, and a cold job has fetched only what the wasm build compiled.
       run: |
+        cargo fetch --locked
         cargo xtask notices
         pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm
 
