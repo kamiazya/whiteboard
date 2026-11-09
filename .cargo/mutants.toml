@@ -123,4 +123,63 @@ exclude_re = [
   # workspace run reaches such a board before survivors_grid_route.rs, which
   # kills the mutant in about a second, so it times out rather than surviving.
   'grid_route\.rs:\d+:\d+: replace traced_along -> f64 with -1\.0$',
+  # js_map: index values are distinct positions, so once key i is removed no
+  # remaining slot equals i, and `>` and `>=` pick the same slots.
+  'js_map\.rs:\d+:\d+: replace > with >= in JsMap<K, V>::delete$',
+  # min_heap: these are the `left < len` / `right < len` bounds; at the bound
+  # cost() answers NaN, and `NaN < x` is false, so `smallest` never moves.
+  # Column-pinned: the cost comparisons share the description and are judged.
+  'min_heap\.rs:\d+:25: replace < with <= in MinHeap::pop$',
+  # min_heap: the `right < len` bound, as above.
+  'min_heap\.rs:\d+:26: replace < with <= in MinHeap::pop$',
+  # min_heap: both make the sift loop forever (indices 2 and 3 each other's
+  # child; a self-swap when smallest == parent), so every search hangs: the
+  # mutant's own infinite loop, a timeout rather than a survivor.
+  'min_heap\.rs:\d+:\d+: replace \* with / in MinHeap::pop$',
+  # min_heap: a self-swap when smallest == parent, which a one-element heap
+  # reaches on the first pop: the sift never ends, a timeout.
+  'min_heap\.rs:\d+:\d+: replace == with != in MinHeap::pop$',
+  # grid_route: an empty heap's `pop()?` already returns None, the loop's own
+  # exit value. Column-pinned: the same description at another column is judged.
+  'grid_route\.rs:\d+:22: replace > with >= in search_grid$',
+  # grid_route, timeouts. Each of these is killed in about a second by
+  # survivors_grid_route.rs, whose boards charge every step against a finite
+  # allowance. The gate runs the lib unit tests and crossing_sweep_properties
+  # first, whose searches charge nothing on an open grid, and on those the
+  # mutant's own loop never ends, so it times out instead. This one: a negative
+  # traced cost makes a negative cycle (crossing_sweep_properties hangs).
+  'grid_route\.rs:\d+:\d+: replace > with < in traced_along$',
+  # grid_route timeout: no coordinates make every step cost NaN, which never
+  # compares settled, so states re-relax forever (lib steps_around_a_box hangs).
+  'grid_route\.rs:\d+:\d+: replace GridSearch::coords -> &\[f64\] with Vec::leak\(Vec::new\(\)\)$',
+  # grid_route timeout: one coordinate, the same NaN re-relaxing.
+  'grid_route\.rs:\d+:\d+: replace GridSearch::coords -> &\[f64\] with Vec::leak\(vec!\[0\.0\]\)$',
+  # grid_route timeout: one coordinate, the same NaN re-relaxing.
+  'grid_route\.rs:\d+:\d+: replace GridSearch::coords -> &\[f64\] with Vec::leak\(vec!\[1\.0\]\)$',
+  # grid_route timeout: one coordinate, the same NaN re-relaxing.
+  'grid_route\.rs:\d+:\d+: replace GridSearch::coords -> &\[f64\] with Vec::leak\(vec!\[-1\.0\]\)$',
+  # grid_route timeout: states land out of range and are re-pushed uncharged
+  # (lib runs_straight hangs). Column-pinned: 219:30 is judged.
+  'grid_route\.rs:\d+:12: replace \* with \+ in GridSearch::state_of$',
+  # grid_route timeout: every pop decodes to one cell, so the search loops.
+  'grid_route\.rs:\d+:\d+: replace GridSearch::cell_of -> \(usize, usize\) with \(0, 1\)$',
+  # grid_route timeout: every pop decodes to one cell, so the search loops.
+  'grid_route\.rs:\d+:\d+: replace GridSearch::cell_of -> \(usize, usize\) with \(1, 1\)$',
+  # grid_route timeout: states decode off the grid and re-push forever.
+  # Column-pinned: the other `/` in cell_of is judged.
+  'grid_route\.rs:\d+:26: replace / with \* in GridSearch::cell_of$',
+  # grid_route timeout: j decodes as i, so states re-push forever.
+  # Column-pinned: the other `/` in cell_of is judged.
+  'grid_route\.rs:\d+:34: replace / with % in GridSearch::cell_of$',
+  # grid_route timeout: off-grid steps get NaN costs and re-relax forever.
+  'grid_route\.rs:\d+:\d+: replace \|\| with && in expand$',
+  # grid_route timeout: subtracting the step length makes a negative cycle.
+  # Column-pinned: the other `+` in expand are judged.
+  'grid_route\.rs:\d+:34: replace \+ with - in expand$',
+  # grid_route timeout: `hi + lo` is negative on negative coordinates, a
+  # negative cycle (crossing_sweep_properties hangs).
+  'grid_route\.rs:\d+:\d+: replace - with \+ in expand$',
+  # grid_route timeout: `hi / lo` gives negative or NaN costs, and the search
+  # loops.
+  'grid_route\.rs:\d+:\d+: replace - with / in expand$',
 ]
