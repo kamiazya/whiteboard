@@ -9,10 +9,10 @@ import { OKF_PARSE_CAPS, OKF_SERIALIZE_CAPS, type RefusalCode } from './generate
 // `packages/codec` holds them assignable both ways to codec's `z.infer` types.
 
 /** One entry of OKF's trust family (§5.2); anything beyond `by` and `at` is kept. */
-export type OkfTrustEvent = { [key: string]: unknown; by: string; at: string }
+type OkfTrustEvent = { [key: string]: unknown; by: string; at: string }
 
 /** The frontmatter `parseOkf` hands over. */
-export type OkfFrontmatter = CoreFacets & {
+type OkfFrontmatter = CoreFacets & {
   generated?: OkfTrustEvent
   verified?: OkfTrustEvent[]
   facets?: ExtensionFacets
@@ -26,14 +26,14 @@ export interface OkfDocument {
 }
 
 /** Where the frontmatter reader or its schema refused. */
-export type OkfParseStage = 'yaml' | 'frontmatter-schema'
+type OkfParseStage = 'yaml' | 'frontmatter-schema'
 
 /**
  * One place the schema refused: where and why. Zod's issue also carries the
  * fields its code defines (`expected`, `minimum`, ...), which the Rust reader
  * does not produce.
  */
-export interface OkfIssue {
+interface OkfIssue {
   readonly code: 'invalid_type' | 'too_small' | 'invalid_format' | 'custom'
   readonly path: (string | number)[]
   readonly message: string

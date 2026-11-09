@@ -85,3 +85,53 @@ fn assign(entries: &mut Map, held: Option<usize>, name: String, value: Value) {
         None => entries.push((name, value)),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::document;
+    use crate::frontmatter::Value;
+    use crate::okf::{Document, Frontmatter};
+    // On wasm32 the same tests run under Node (QR-21 layer 3).
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn written(frontmatter: Frontmatter) -> String {
+        document(&Document { frontmatter, body: String::new() }).unwrap_or_default()
+    }
+
+    fn number(n: f64) -> Value {
+        Value::Number(n)
+    }
+
+    #[test]
+    fn a_preserved_key_held_twice_is_written_once_with_its_last_value() {
+        let raw = vec![
+            ("b".to_owned(), number(1.0)),
+            ("a".to_owned(), number(2.0)),
+            ("a".to_owned(), number(3.0)),
+            ("a".to_owned(), number(4.0)),
+        ];
+        let fm =
+            Frontmatter { r#type: "x".to_owned(), facets_raw: Some(raw), ..Frontmatter::default() };
+        assert_eq!(written(fm), "---\ntype: x\na: 4\nb: 1\n---\n");
+    }
+
+    #[test]
+    fn a_preserved_key_named_like_a_modelled_one_takes_its_place_and_the_last_value_wins() {
+        let raw = vec![
+            ("facets".to_owned(), number(7.0)),
+            ("title".to_owned(), Value::String("raw".to_owned())),
+            ("type".to_owned(), Value::String("raw type".to_owned())),
+        ];
+        let fm = Frontmatter {
+            r#type: "x".to_owned(),
+            title: Some("t".to_owned()),
+            facets: Some(vec![("a.b/v1".to_owned(), Value::Null)]),
+            facets_raw: Some(raw),
+            ..Frontmatter::default()
+        };
+        // `title` and `type` keep their modelled places with the raw values;
+        // `facets` was first held by the preserved key and then replaced.
+        assert_eq!(written(fm), "---\ntype: raw type\ntitle: raw\nfacets:\n  a.b/v1: null\n---\n");
+    }
+}

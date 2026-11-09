@@ -327,6 +327,10 @@ mod tests {
             mapping(&[("type", text("x")), ("generated", event(&[("by", text("me"))]))]),
             mapping(&[
                 ("type", text("x")),
+                ("generated", event(&[("by", text("me")), ("note", text("n")), ("at", text("t"))])),
+            ]),
+            mapping(&[
+                ("type", text("x")),
                 ("generated", event(&[("by", Value::Null), ("at", text("t"))])),
             ]),
             mapping(&[
