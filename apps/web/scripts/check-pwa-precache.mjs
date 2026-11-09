@@ -9,6 +9,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { expectsCoreWasm } from './smoke-artifact.mjs'
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SW_PATH = resolve(ROOT, 'dist', 'sw.js')
@@ -49,6 +50,16 @@ const checks = [
   // moment it needs Loro.
   { label: 'the Loro WASM module (*.wasm) is precached', pattern: /url:"assets\/[^"]+\.wasm"/ },
 ]
+
+// The Rust core's wasm is precached beside Loro's when the build carries it
+// (the rule smoke-artifact.mjs states): an installed PWA must hold it before
+// the default routes through it.
+if (expectsCoreWasm()) {
+  checks.push({
+    label: 'the Rust core wasm (whiteboard_wasm_bg-*.wasm) is precached',
+    pattern: /url:"assets\/whiteboard_wasm_bg[^"]*\.wasm"/,
+  })
+}
 
 for (const { label, pattern } of checks) {
   if (pattern.test(swSource)) {

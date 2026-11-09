@@ -94,9 +94,15 @@ export function assertTarballFileList(entries: readonly string[]): void {
 // resolve its source-tree paths against a tree that was never packed.
 // Stripping the flag keeps this smoke pinned to the same dist-mode run a real
 // npm install gets.
+//
+// The core is asked for in `differential` and a failure to load it throws: an
+// install has no sibling core-wasm package, so the only artifact it can find is
+// the one the tarball carries, and an absent or unloadable one must fail this
+// smoke rather than degrade to the TypeScript. WHITEBOARD_CORE_DIR is dropped
+// for the same reason, so an ambient override cannot stand in for the package.
 export function buildTarballSmokeChildEnv(processEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
-  const { WHITEBOARD_DEV: _unused, ...rest } = processEnv
-  return rest
+  const { WHITEBOARD_DEV: _dev, WHITEBOARD_CORE_DIR: _dir, ...rest } = processEnv
+  return { ...rest, WHITEBOARD_CORE: 'differential', WHITEBOARD_CORE_MISMATCH: 'throw' }
 }
 
 function listTarballEntries(tarballPath: string): string[] {

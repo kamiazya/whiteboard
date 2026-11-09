@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -13,8 +14,8 @@ const log = getLogger('layout-core')
  * How this daemon routes a canvas's edges (ADR-0054's `CoreImpl`), from
  * its environment. `WHITEBOARD_CORE` is `ts` unless something sets it: the
  * dev scripts and CI's test jobs set `differential`, a release never does,
- * so a published daemon neither pays for a second routing nor needs the
- * wasm. `WHITEBOARD_CORE_MISMATCH=throw` turns a reported difference into a
+ * so a published daemon pays for no second routing. The wasm ships in the
+ * package regardless, ready for the default to move. `WHITEBOARD_CORE_MISMATCH=throw` turns a reported difference into a
  * failure, which is what a test run wants; a person dogfooding wants the
  * log line and the drawing.
  */
@@ -39,6 +40,33 @@ export function layoutCoreSettingsFrom(env: Readonly<Record<string, string | und
  */
 export const stagedArtifacts = (): string =>
   join(findPackageRoot(import.meta.url), '..', 'core-wasm', 'artifacts')
+
+/**
+ * Where a published install carries the artifact: `build` copies it beside
+ * the other assets (packages/mcp-server/scripts/copy-core-wasm-into-dist.mjs), because a tarball
+ * has no sibling `core-wasm` package to find.
+ */
+export const packagedArtifacts = (): string =>
+  join(findPackageRoot(import.meta.url), 'dist', 'assets', 'core-wasm')
+
+interface ArtifactCandidates {
+  readonly packaged: string
+  readonly staged: string
+}
+
+/**
+ * The directory holding the glue and wasm: the one the environment names,
+ * else the packaged copy when this install has one, else the checkout's.
+ */
+export function artifactDirectory(
+  settings: LayoutCoreSettings,
+  candidates: ArtifactCandidates = { packaged: packagedArtifacts(), staged: stagedArtifacts() },
+): string {
+  if (settings.WHITEBOARD_CORE_DIR !== undefined) return settings.WHITEBOARD_CORE_DIR
+  return existsSync(join(candidates.packaged, 'whiteboard_wasm_bg.wasm'))
+    ? candidates.packaged
+    : candidates.staged
+}
 
 /** A mismatch reported, or thrown when the settings ask a test run to fail on one. */
 function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => void {
@@ -78,7 +106,7 @@ export function layoutCoreLoader(
   let loaded: Promise<LayoutCore | undefined> | undefined
   return () => {
     loaded ??= (async () => {
-      const dir = settings.WHITEBOARD_CORE_DIR ?? stagedArtifacts()
+      const dir = artifactDirectory(settings)
       try {
         const glue = (await import(pathToFileURL(join(dir, 'whiteboard_wasm.js')).href)) as CoreGlue
         const bytes = await readFile(join(dir, 'whiteboard_wasm_bg.wasm'))

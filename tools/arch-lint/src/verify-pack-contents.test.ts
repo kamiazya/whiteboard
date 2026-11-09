@@ -58,6 +58,9 @@ const VALID_ENTRY = {
     { path: 'dist/assets/fonts/Roboto/Roboto-Bold.ttf' },
     { path: 'dist/assets/fonts/Roboto/Roboto-Italic.ttf' },
     { path: 'dist/assets/fonts/Roboto/Roboto-BoldItalic.ttf' },
+    { path: 'dist/assets/core-wasm/whiteboard_wasm.js' },
+    { path: 'dist/assets/core-wasm/whiteboard_wasm_bg.wasm' },
+    { path: 'dist/assets/core-wasm/THIRD-PARTY-NOTICES' },
   ],
 }
 
@@ -78,7 +81,7 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.ok).toBe(true)
     expect(result.missing).toEqual([])
     expect(result.forbidden).toEqual([])
-    expect(result.fileCount).toBe(10)
+    expect(result.fileCount).toBe(13)
     expect(result.sizeBytes).toBe(1024)
   })
 
@@ -93,6 +96,9 @@ describe('verifyPackContents (pure core)', () => {
     'dist/assets/fonts/Roboto/Roboto-Bold.ttf',
     'dist/assets/fonts/Roboto/Roboto-Italic.ttf',
     'dist/assets/fonts/Roboto/Roboto-BoldItalic.ttf',
+    'dist/assets/core-wasm/whiteboard_wasm.js',
+    'dist/assets/core-wasm/whiteboard_wasm_bg.wasm',
+    'dist/assets/core-wasm/THIRD-PARTY-NOTICES',
   ]) {
     it(`flags ${required} as missing when it is absent`, () => {
       const entry = {
@@ -427,7 +433,7 @@ describe('verify-pack-contents run as the release workflow runs it', () => {
     const r = run(['--stdin'], JSON.stringify([VALID_ENTRY]))
     expect(r.stderr).toBe('')
     expect(r.status).toBe(0)
-    expect(r.stdout).toContain('[verify-pack-contents] OK: 10 files')
+    expect(r.stdout).toContain('[verify-pack-contents] OK: 13 files')
   })
 
   it('exits 1 when a required file is missing', () => {

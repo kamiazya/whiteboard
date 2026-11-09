@@ -222,6 +222,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the refusal a composition root catches when its wasm artifact and this shim come from different commits; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
+  'packages/mcp-server/src/server/export/layout-core.ts#packagedArtifacts':
+    'where a published install carries the wasm; exported so layout-core.test.ts pins the dist/assets/core-wasm segment that copy-core-wasm-into-dist.mjs writes, rather than a second spelling of it',
+  'packages/mcp-server/src/server/export/layout-core.ts#artifactDirectory':
+    "the choice among the environment's directory, the packaged copy and the checkout's; exported so layout-core.test.ts decides it over temp directories, since the real candidates exist only in a built tree",
   'packages/mcp-server/src/server/export/layout-core.ts#stagedArtifacts':
     "where the daemon reads the staged wasm by default; exported so layout-core.test.ts asserts CI staged it at the SAME path, rather than a second spelling of the path that could drift from the loader's",
   'apps/web/src/lib/spatial/layout-core.ts#createLayoutCoreHost':

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
@@ -7,7 +7,13 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
-import { layoutCoreLoader, layoutCoreSettingsFrom, stagedArtifacts } from './layout-core.js'
+import {
+  artifactDirectory,
+  layoutCoreLoader,
+  layoutCoreSettingsFrom,
+  packagedArtifacts,
+  stagedArtifacts,
+} from './layout-core.js'
 
 // Where `stage:wasm` puts the artifact in this checkout. The rust job and
 // test-unit restore it before this file runs, so on CI its absence is a
@@ -42,6 +48,39 @@ const emptyDir = () => {
   empty = mkdtempSync(join(tmpdir(), 'layout-core-'))
   return empty
 }
+
+describe('where the daemon finds the core artifact', () => {
+  const candidates = () => {
+    const root = emptyDir()
+    const packaged = join(root, 'packaged')
+    const staged = join(root, 'staged')
+    return { packaged, staged }
+  }
+  const withWasm = (dir: string) => {
+    mkdirSync(dir, { recursive: true })
+    writeFileSync(join(dir, 'whiteboard_wasm_bg.wasm'), '')
+  }
+
+  it('prefers WHITEBOARD_CORE_DIR over a packaged copy over the checkout copy', () => {
+    const where = candidates()
+    withWasm(where.packaged)
+    withWasm(where.staged)
+    expect(
+      artifactDirectory(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: '/elsewhere' }), where),
+    ).toBe('/elsewhere')
+    expect(artifactDirectory(layoutCoreSettingsFrom({}), where)).toBe(where.packaged)
+  })
+
+  it('falls back to the checkout copy when no packaged copy shipped', () => {
+    const where = candidates()
+    withWasm(where.staged)
+    expect(artifactDirectory(layoutCoreSettingsFrom({}), where)).toBe(where.staged)
+  })
+
+  it('names the packaged directory under dist/assets, where the build copies it', () => {
+    expect(packagedArtifacts()).toMatch(/dist[\\/]assets[\\/]core-wasm$/)
+  })
+})
 
 describe('the daemon layout core', () => {
   it('reads ts, log and the staged artifacts when nothing is set', () => {

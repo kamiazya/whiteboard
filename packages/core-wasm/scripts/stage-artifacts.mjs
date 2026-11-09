@@ -20,6 +20,12 @@ if (missing.length > 0) {
   )
   process.exit(1)
 }
+// `cargo xtask notices` writes the licence text the wasm's linked crates
+// require; it needs cargo-about, so it is staged when it was run and a
+// release gate (mcp-server's verify-core-wasm-dist) is what requires it.
+const notices = join(here, '..', '..', 'target', 'dist', 'notices', 'wasm', 'THIRD-PARTY-NOTICES')
 mkdirSync(to, { recursive: true })
 for (const f of files) copyFileSync(join(from, f), join(to, f))
-process.stdout.write(`stage:wasm: ${files.length} files into ${to}\n`)
+const withNotices = existsSync(notices)
+if (withNotices) copyFileSync(notices, join(to, 'THIRD-PARTY-NOTICES'))
+process.stdout.write(`stage:wasm: ${files.length + (withNotices ? 1 : 0)} files into ${to}\n`)
