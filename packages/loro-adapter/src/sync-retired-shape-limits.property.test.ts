@@ -124,18 +124,9 @@ function apply(doc: LoroDoc, step: Op): void {
   const board = documentContainers(doc, BOARD)
   switch (step.kind) {
     case 'node':
-      board
-        .getMap(NODES_KEY)
-        .set(
-          step.id,
-          step.retired
-            ? { id: step.id, 'x-whiteboard': {}, written: ++writeCount }
-            : { id: step.id, n: 1 },
-        )
-      break
     case 'edge':
       board
-        .getMap(EDGES_KEY)
+        .getMap(step.kind === 'node' ? NODES_KEY : EDGES_KEY)
         .set(
           step.id,
           step.retired
