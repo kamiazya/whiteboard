@@ -3,6 +3,7 @@
 //! invariant the entry promises; reusing the entry's own helpers as the
 //! oracle would agree with whatever it got wrong.
 use whiteboard_codec::frontmatter::Value;
+use whiteboard_codec::okf::Document;
 
 /// The template target. `whiteboard-det` has no untrusted-input entry, so
 /// this exists to carry the pipeline (registry, caps, corpus, regressions,
@@ -150,5 +151,82 @@ fn same(a: &Value, b: &Value) -> bool {
             x.len() == y.len() && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
         }
         _ => a == b,
+    }
+}
+
+/// The OKF envelope on any UTF-8 text: it must answer a document or a
+/// refusal, never panic or run past its budget; the fence split and the
+/// reader must agree about what a block is; and a document it reads that the
+/// writer can spell must be written to a text that reads back to a document
+/// the writer writes the same way. The check shares nothing with the parser
+/// but its output, so a reader and a writer that agree on a wrong reading
+/// would still pass; the recorded oracle is what holds both to the TypeScript.
+///
+/// # Panics
+///
+/// When the parser panics, the split and the reader disagree, or a written
+/// document does not read back stably.
+pub fn okf_parse(data: &[u8]) {
+    use whiteboard_codec::okf::{Failure, has_frontmatter, parse, serialize};
+
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let read = parse(text);
+    assert_eq!(
+        has_frontmatter(text),
+        !matches!(read, Err(Failure::NoFence)),
+        "the split and the reader disagree about a block in {text:?}"
+    );
+    let Ok(doc) = read else {
+        return;
+    };
+    // Two writings `serializeOkf` gets wrong are copied byte for byte (see
+    // `serialize_okf_loses`), so a document holding either is not held to it.
+    if okf_strings(&doc).into_iter().any(serialize_okf_loses) {
+        return;
+    }
+    let Ok(written) = serialize(&doc) else {
+        return;
+    };
+    // Folding and indentation can carry a frontmatter read under the cap past it.
+    if written.len() > whiteboard_codec::frontmatter::MAX_BYTES {
+        return;
+    }
+    let again = parse(&written);
+    assert!(again.is_ok(), "{doc:?} written as {written:?} is refused: {again:?}");
+    let rewritten = again.map(|second| serialize(&second));
+    assert_eq!(rewritten, Ok(Ok(written.clone())), "{written:?} does not read back stably");
+}
+
+/// Every string a document holds: its fields, its events and the values
+/// under its facets and preserved keys. Keys are not among them, because the
+/// writer quotes a key it cannot write plain.
+fn okf_strings(doc: &Document) -> Vec<&str> {
+    let fm = &doc.frontmatter;
+    let mut found: Vec<&str> = [Some(&fm.r#type), fm.title.as_ref(), fm.description.as_ref()]
+        .into_iter()
+        .chain([fm.resource.as_ref(), fm.view.as_ref()])
+        .flatten()
+        .map(String::as_str)
+        .chain(fm.tags.iter().flatten().map(String::as_str))
+        .collect();
+    let events = fm.generated.iter().chain(fm.verified.iter().flatten());
+    for event in events {
+        found.extend([event.by.as_str(), event.at.as_str()]);
+        found.extend(event.extra.iter().flat_map(|(_, value)| value_strings(value)));
+    }
+    for (_, value) in fm.facets.iter().chain(&fm.facets_raw).flatten() {
+        found.extend(value_strings(value));
+    }
+    found
+}
+
+fn value_strings(value: &Value) -> Vec<&str> {
+    match value {
+        Value::String(text) => vec![text],
+        Value::Seq(items) => items.iter().flat_map(value_strings).collect(),
+        Value::Map(entries) => entries.iter().flat_map(|(_, item)| value_strings(item)).collect(),
+        _ => Vec::new(),
     }
 }

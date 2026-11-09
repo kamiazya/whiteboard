@@ -25,6 +25,14 @@
       "maxDepth": 64,
       "maxMillis": 250,
       "reason": "the OKF frontmatter YAML reader takes the text between a document's fences, from a file, an import or a sync, so any holder of a document can call it. maxBytes is MAX_BYTES, the function's own refusal (a longer text answers TooLarge before it is read): frontmatter is metadata, and the largest the repository carries is a few kilobytes, so the cap is far above any document and bounds the fuzzer's cost. maxDepth 64 is MAX_PARSE_DEPTH: past MAX_DEPTH (32) the visit refuses, and the parse recurses to 64 only so that a document malformed further down is named malformed first; deeper is refused outright. maxMillis 250 is 13x the slowest draw measured at the cap: 18.9 ms natively in release for a 262144-byte flow sequence of 131067 items (the 24 other shapes tried, among them one long scalar, many short keys, long block and quoted scalars, a 256 KiB hex literal and an alias flood, took under 14 ms)"
+    },
+    "whiteboard-codec::okf::parse": {
+      "crate": "whiteboard-codec",
+      "fuzzTarget": "okf_parse",
+      "maxBytes": 262144,
+      "maxDepth": 64,
+      "maxMillis": 250,
+      "reason": "the OKF envelope reads a whole document from a file, an import or a sync, so any holder of one can call it. maxBytes is the frontmatter's own cap (frontmatter::MAX_BYTES), the refusal parse inherits: the text between the fences is read only up to it, and past it the answer is a YAML refusal. The body is not read at all: the closing-fence search scans it once and it is copied once, so it is not capped (the TypeScript has no cap either) and fuzzing at the frontmatter's cap covers the shapes that cost. maxDepth 64 is MAX_PARSE_DEPTH, the deepest the YAML reader recurses; the schema and the key reordering walk what it produced and add no nesting. maxMillis 250 is 5.6x the slowest draw measured natively in release: 44.4 ms for a frontmatter of 262101 bytes whose type is a mapping with a 131050-item length list (the schema renders it to a string to measure it). The other shapes tried at the cap took 7 to 28 ms (a flow list, 26k preserved keys, 26k integer keys that JavaScript enumerates first, 26k refused facet keys, 6k trust events with extra keys, 26k tags), and a 16 MiB body took 4.4 ms, 15.7 MiB of near-miss fences 19 ms and 21 MiB of CRLF near-misses 26 ms"
     }
   }
 }
