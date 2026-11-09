@@ -96,7 +96,11 @@ export function readerCase(y: string): ReaderCase {
 /** The text `serializeOkf` puts between its fences for this frontmatter. */
 export function writtenText(frontmatter: Record<string, unknown>): string {
   const text = serializeOkf({ frontmatter, body: '' } as Parameters<typeof serializeOkf>[0])
-  return text.slice('---\n'.length, text.length - '\n---\n'.length)
+  const between = text.slice('---\n'.length, text.length - '\n---\n'.length)
+  // The frontmatter writer's own text ends without the line break yaml
+  // appends; the envelope keeps that break before the fence only after a
+  // keep-chomped block, where it is the block's own.
+  return between.endsWith('\n') ? between.slice(0, -1) : between
 }
 
 export function writerCase(frontmatter: Record<string, unknown>): WriterCase {

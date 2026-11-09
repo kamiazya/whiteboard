@@ -227,10 +227,12 @@ impl Parser {
                 }
                 (quoted, self.units(start, self.pos))
             }
-            '[' | '{' | '&' | '!' | '*' | '|' | '>' | '?' | '#' => {
+            '[' | '{' | '&' | '!' | '*' | '|' | '>' | '#' => {
                 return subset("an explicit key");
             }
-            '-' if self.blank_at(1) => return subset("an explicit key"),
+            // Followed by a non-blank, `?` and `-` start a plain scalar (YAML
+            // 1.2 rule 126), which the writer emits for a long key like any other.
+            '?' | '-' if self.blank_at(1) => return subset("an explicit key"),
             _ => {
                 let (text, stop) = self.plain_line(false, false)?;
                 if stop == super::scalars::Stop::Colon {
