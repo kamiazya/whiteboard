@@ -155,11 +155,11 @@ mod tests {
     /// What `trim` strips in the JavaScript engine, recorded by
     /// `packages/codec/src/okf/oracle/js-whitespace.test.ts`.
     const RECORDED: &str =
-        include_str!("../../../../../packages/codec/src/okf/oracle/js-whitespace.json");
+        include_str!("../../../../../packages/codec/src/okf/oracle/js-whitespace.jsonl");
 
     #[test]
     fn is_exactly_what_the_engine_strips_for_every_scalar_value() {
-        let recorded: Vec<u32> = serde_json::from_str(RECORDED).unwrap_or_default();
+        let recorded: Vec<u32> = RECORDED.lines().filter_map(|line| line.parse().ok()).collect();
         assert!(recorded.len() > 20, "the recording names {} code points", recorded.len());
         let mut stripped = Vec::new();
         for cp in 0..=0x10_ffff_u32 {

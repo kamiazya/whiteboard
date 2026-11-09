@@ -12,7 +12,14 @@ import { describe, expect, it } from 'vitest'
  * differently. Re-record with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project codec-node js-whitespace`.
  */
-const FILE = new URL('./js-whitespace.json', import.meta.url)
+const FILE = new URL('./js-whitespace.jsonl', import.meta.url)
+
+/** One code point per line, like the other recordings here (and so outside biome's formatter). */
+const readRecording = (): number[] =>
+  readFileSync(FILE, 'utf8')
+    .split('\n')
+    .filter((line) => line !== '')
+    .map((line) => JSON.parse(line) as number)
 
 function strippedByTrim(): number[] {
   const stripped: number[] = []
@@ -24,17 +31,16 @@ function strippedByTrim(): number[] {
 }
 
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${JSON.stringify(strippedByTrim())}\n`)
+  writeFileSync(FILE, `${strippedByTrim().join('\n')}\n`)
 }
 
 describe('the recorded JavaScript whitespace table', () => {
   it('is what trim strips in this engine', () => {
-    const recorded: unknown = JSON.parse(readFileSync(FILE, 'utf8'))
-    expect(recorded).toEqual(strippedByTrim())
+    expect(readRecording()).toEqual(strippedByTrim())
   })
 
   it('holds the space, the line terminators, the byte order mark and the Zs block', () => {
-    const recorded = JSON.parse(readFileSync(FILE, 'utf8')) as number[]
+    const recorded = readRecording()
     for (const cp of [0x20, 0x0a, 0x2028, 0xfeff, 0x3000, 0x2000]) expect(recorded).toContain(cp)
     expect(recorded).not.toContain(0x85)
   })
