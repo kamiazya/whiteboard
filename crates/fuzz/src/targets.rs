@@ -76,3 +76,61 @@ fn count_at(out: &[f64], at: usize) -> usize {
     assert!(n >= 0.0 && n.fract() == 0.0 && n < 1e9, "{n} at {at} is not a count");
     n as usize
 }
+
+/// The frontmatter reader on any UTF-8 text: it must answer a value or a
+/// refusal, never panic or run past its budget, and a value it reads that the
+/// writer can spell must read back as itself. The check shares nothing with
+/// the reader but its output, so a reader and a writer that agree on a wrong
+/// reading would still pass; the recorded oracle is what holds both to the
+/// TypeScript.
+///
+/// # Panics
+///
+/// When the reader panics, or a written value reads back as another.
+pub fn frontmatter_parse(data: &[u8]) {
+    use whiteboard_codec::frontmatter::{Value, parse, stringify};
+
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let Ok(value) = parse(text) else {
+        return;
+    };
+    // `serializeOkf` drops a newline from a last value that ends in two, and
+    // the Rust writer answers as it does, so such a value does not read back.
+    if ends_in_two_newlines(&value) {
+        return;
+    }
+    let Ok(written) = stringify(&value) else {
+        return;
+    };
+    let again = parse(&written);
+    assert!(
+        again.as_ref().is_ok_and(|read| same(read, &value)),
+        "{value:?} written as {written:?} reads back as {again:?}"
+    );
+
+    fn ends_in_two_newlines(value: &Value) -> bool {
+        match value {
+            Value::String(text) => text.ends_with("\n\n"),
+            Value::Seq(items) => items.iter().any(ends_in_two_newlines),
+            Value::Map(entries) => entries.iter().any(|(_, item)| ends_in_two_newlines(item)),
+            _ => false,
+        }
+    }
+
+    /// Equality that tells `-0` from `0` and counts `NaN` as itself.
+    fn same(a: &Value, b: &Value) -> bool {
+        match (a, b) {
+            (Value::Number(x), Value::Number(y)) => x.to_bits() == y.to_bits(),
+            (Value::Seq(x), Value::Seq(y)) => {
+                x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same(p, q))
+            }
+            (Value::Map(x), Value::Map(y)) => {
+                x.len() == y.len()
+                    && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
+            }
+            _ => a == b,
+        }
+    }
+}

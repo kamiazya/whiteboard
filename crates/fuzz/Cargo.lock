@@ -209,6 +209,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-codec"
+version = "0.0.0"
+dependencies = [
+ "whiteboard-det",
+]
+
+[[package]]
 name = "whiteboard-det"
 version = "0.0.0"
 dependencies = [
@@ -228,6 +235,7 @@ name = "whiteboard-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-wasm",
 ]

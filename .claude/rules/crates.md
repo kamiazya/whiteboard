@@ -39,7 +39,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-model` | core | planned | serde types generated from the contracts plus the invariants |
 | `whiteboard-facet-engine` | core | planned | facet registry, write validation, compat chain, derived form |
 | `whiteboard-scene` | core | planned | the scene vocabulary and the contribution traits |
-| `whiteboard-codec` | core | planned | OKF Markdown, JSON Canvas and OCIF serialize and parse |
+| `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | planned | the bundled visual plugin as an ordinary contribution |
 | `whiteboard-canvas-render` | core | planned | composer, typesetter, line breaking, theme, SVG backend, digest |

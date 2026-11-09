@@ -25,6 +25,7 @@ libfuzzer = ["dep:libfuzzer-sys"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4.10", optional = true }
+whiteboard-codec = { path = "../core/codec" }
 whiteboard-det = { path = "../core/det" }
 whiteboard-wasm = { path = "../bindings/wasm" }
 
@@ -39,6 +40,14 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "edge_route_layout"
 path = "fuzz_targets/edge_route_layout.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "frontmatter_parse"
+path = "fuzz_targets/frontmatter_parse.rs"
 test = false
 doc = false
 bench = false

@@ -528,6 +528,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-codec"
+version = "0.0.0"
+dependencies = [
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-det",
+ "whiteboard-proptest",
+]
+
+[[package]]
 name = "whiteboard-det"
 version = "0.0.0"
 dependencies = [

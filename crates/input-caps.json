@@ -17,6 +17,14 @@
       "maxDepth": 2,
       "maxMillis": 5000,
       "reason": "the routing wire is a flat f64 array the shim builds but any holder of the wasm glue can call. maxBytes is MAX_WIRE_NUMBERS (32768) x 8, the export's own refusal: the largest corpus board's wire is 22984 bytes (clustered 12x12, 144 nodes and 165 edges), so the cap is 11.4x that; a board past it is answered by the TypeScript. maxDepth 2 is the deepest counted group (an edge's bend list inside the edge list); the decoder is iterative. maxMillis 5000 is 2.2x the slowest draw measured at the cap: 2.3 s on Node wasm for a 920-node, 2065-edge board of 251624 bytes, straight edges"
+    },
+    "whiteboard-codec::frontmatter::parse": {
+      "crate": "whiteboard-codec",
+      "fuzzTarget": "frontmatter_parse",
+      "maxBytes": 262144,
+      "maxDepth": 64,
+      "maxMillis": 250,
+      "reason": "the OKF frontmatter YAML reader takes the text between a document's fences, from a file, an import or a sync, so any holder of a document can call it. maxBytes is MAX_BYTES, the function's own refusal (a longer text answers TooLarge before it is read): frontmatter is metadata, and the largest the repository carries is a few kilobytes, so the cap is far above any document and bounds the fuzzer's cost. maxDepth 64 is MAX_PARSE_DEPTH: past MAX_DEPTH (32) the visit refuses, and the parse recurses to 64 only so that a document malformed further down is named malformed first; deeper is refused outright. maxMillis 250 is 13x the slowest draw measured at the cap: 18.9 ms natively in release for a 262144-byte flow sequence of 131067 items (the 24 other shapes tried, among them one long scalar, many short keys, long block and quoted scalars, a 256 KiB hex literal and an alias flood, took under 14 ms)"
     }
   }
 }

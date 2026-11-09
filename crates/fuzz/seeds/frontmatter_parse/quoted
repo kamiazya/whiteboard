@@ -1,0 +1,4 @@
+a: "x\ny\u0001\x85"
+b: 'it''s'
+c: "one
+  two"
