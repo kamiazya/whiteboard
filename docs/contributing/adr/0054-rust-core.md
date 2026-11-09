@@ -542,10 +542,19 @@ meanings are written side by side, and the differential harness still checks
 that they agree.
 
 That emitter is `cargo xtask codegen` (`crates/xtask/src/codegen/`). Its
-dialect is what its typed parse accepts — today closed objects of required
-numbers with an inclusive `minimum` — so a construct it does not implement is
-refused by name rather than dropped from one language's output, and the
-dialect grows with the contract that needs a construct. `codegen --check`
+dialect is what its typed parse accepts, so a construct it does not implement
+is refused by name rather than dropped from one language's output, and the
+dialect grows with the contract that needs a construct. Today that is numbers
+with an inclusive `minimum`; strings with `x-wb-minUtf16`, an anchored
+`pattern` (with `x-wb-matcher` and `x-wb-message`) and a named `x-wb-check`;
+arrays; `$ref`s to a definition, emitted in dependency order; `x-wb-any`
+values and records of them; and objects with optional fields in `x-wb-order`
+and `x-wb-unknownKeys: refuse | strip | keep`. A named check or matcher is a
+hand-written predicate in both languages (`x-wb-checks` names the two
+modules), and `codegen --check` fails when either is missing. Three contract
+switches choose the emission: `x-wb-describe` (`.describe()` in Zod),
+`x-wb-rustSerde` (serde in Rust; a crate that may take no dependency emits
+plain data types) and `x-wb-readonlyTypes`. `codegen --check`
 fails on generated output that differs from its contract and on a file under
 a `generated` directory that no contract produces.
 

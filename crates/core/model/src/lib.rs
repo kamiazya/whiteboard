@@ -9,6 +9,10 @@
 // line of production code.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+pub mod checks;
+#[path = "generated/okf.rs"]
+pub mod okf;
+
 /// A frontmatter value: what `yaml`'s core schema makes of a document, as
 /// `toJS()` hands it to the TypeScript.
 ///

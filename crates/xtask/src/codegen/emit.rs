@@ -2,10 +2,14 @@
 //!
 //! What each construct means is written here side by side for both
 //! languages: a bound is `.min()` in Zod and a check in the Rust type's
-//! `Deserialize`; `refuse` is `z.strictObject` and `deny_unknown_fields`.
-//! The Rust half reads through `MapOnly` because serde's derived
+//! `Deserialize`; `refuse` is `z.strictObject` and `deny_unknown_fields`;
+//! `strip` is `z.object` and no field; `keep` is `z.looseObject` and an
+//! `extra` map; an optional field is `.optional()` and `Option<T>`.
+//! The serde Rust half reads through `MapOnly` because serde's derived
 //! `Deserialize` also accepts a JSON array in field order, which
-//! `z.strictObject` refuses.
+//! `z.strictObject` refuses. A crate that may take no dependency gets plain
+//! data types instead, and its named checks are hand-written predicates the
+//! doc comments point at.
 //!
 //! The Rust text is unformatted; `mod.rs` runs it through rustfmt. The Zod
 //! text is written in the shape biome keeps, and a line past biome's width
@@ -13,7 +17,7 @@
 
 use std::fmt::Write as _;
 
-use super::dialect::{Checked, CheckedDef};
+use super::dialect::{Checked, CheckedDef, Field, Object, Pattern, Ty, Unknown, Uses};
 
 /// biome.json's `lineWidth`.
 const TS_LINE_WIDTH: usize = 100;
@@ -66,27 +70,194 @@ pub(super) fn rust_float(n: f64) -> String {
     format!("{sign}{}{frac}{exponent}", group(int, false))
 }
 
+/// `camelCase` of a `snake_case` name.
+pub(super) fn camel(snake: &str) -> String {
+    let mut out = String::new();
+    let mut upper = false;
+    for c in snake.chars() {
+        if c == '_' {
+            upper = true;
+        } else if upper {
+            out.push(c.to_ascii_uppercase());
+            upper = false;
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// One call of a chain, `.name(arg, ..)`.
+struct Call {
+    name: &'static str,
+    args: Vec<String>,
+}
+
+impl Call {
+    fn flat(&self) -> String {
+        format!(".{}({})", self.name, self.args.join(", "))
+    }
+}
+
+/// A Zod expression as the chain it is written in: a head and its calls.
+struct Chain {
+    head: String,
+    calls: Vec<Call>,
+}
+
+impl Chain {
+    fn new(name: &'static str, args: Vec<String>) -> Self {
+        Self { head: "z".to_owned(), calls: vec![Call { name, args }] }
+    }
+
+    fn named(name: String) -> Self {
+        Self { head: name, calls: Vec::new() }
+    }
+
+    fn then(mut self, name: &'static str, args: Vec<String>) -> Self {
+        self.calls.push(Call { name, args });
+        self
+    }
+
+    /// One line when it fits `width`, else one call per line and a call whose
+    /// line is still too long one argument per line, the way biome breaks a
+    /// member chain.
+    fn render(&self, indent: usize, lead: &str, trail: &str) -> String {
+        let pad = " ".repeat(indent);
+        let flat = format!(
+            "{pad}{lead}{}{}{trail}",
+            self.head,
+            self.calls.iter().map(Call::flat).collect::<String>()
+        );
+        if flat.chars().count() <= TS_LINE_WIDTH || self.calls.is_empty() {
+            return flat;
+        }
+        let mut out = format!("{pad}{lead}{}", self.head);
+        for call in &self.calls {
+            let line = format!("{pad}  {}", call.flat());
+            if line.chars().count() <= TS_LINE_WIDTH || call.args.is_empty() {
+                let _ = write!(out, "\n{line}");
+            } else {
+                let _ = write!(out, "\n{pad}  .{}(", call.name);
+                for arg in &call.args {
+                    let _ = write!(out, "\n{pad}    {arg},");
+                }
+                let _ = write!(out, "\n{pad}  )");
+            }
+        }
+        out.push_str(trail);
+        out
+    }
+}
+
+fn js_string(text: &str) -> String {
+    format!("'{text}'")
+}
+
+fn zod_chain(ty: &Ty<'_>) -> Chain {
+    let refine = |chain: Chain, check: Option<&str>| match check {
+        Some(c) => chain.then("superRefine", vec![camel(c)]),
+        None => chain,
+    };
+    match ty {
+        Ty::Number { min } => {
+            let chain = Chain::new("number", vec![]);
+            match min {
+                Some(m) => chain.then("min", vec![js_number(*m)]),
+                None => chain,
+            }
+        }
+        Ty::Str { min_utf16, pattern, check } => {
+            let mut chain = Chain::new("string", vec![]);
+            if let Some(n) = min_utf16 {
+                chain = chain.then("min", vec![n.to_string()]);
+            }
+            if let Some(Pattern { source, message, .. }) = pattern {
+                chain = chain.then("regex", vec![format!("/{source}/"), js_string(message)]);
+            }
+            refine(chain, *check)
+        }
+        Ty::Array(item) => Chain::new("array", vec![zod_chain(item).render(0, "", "")]),
+        Ty::Ref(name) => Chain::named(schema_name(name)),
+        Ty::Any => Chain::new("unknown", vec![]),
+        Ty::Record { check } => refine(
+            Chain::new("record", vec!["z.string()".to_owned(), "z.unknown()".to_owned()]),
+            *check,
+        ),
+        Ty::Object(_) => Chain::named("z.object".to_owned()),
+    }
+}
+
+fn zod_field(field: &Field<'_>, indent: usize, describe: bool) -> String {
+    let mut chain = zod_chain(&field.ty);
+    if field.optional {
+        chain = chain.then("optional", vec![]);
+    }
+    if describe {
+        chain = chain.then("describe", vec![js_string(field.description)]);
+    }
+    chain.render(indent, &format!("{}: ", field.name), ",")
+}
+
+fn zod_object(
+    out: &mut String,
+    schema: &str,
+    description: &str,
+    object: &Object<'_>,
+    describe: bool,
+) {
+    let ctor = match object.unknown {
+        Unknown::Refuse => "strictObject",
+        Unknown::Strip => "object",
+        Unknown::Keep => "looseObject",
+    };
+    if describe {
+        let _ = writeln!(out, "export const {schema} = z\n  .{ctor}({{");
+        for field in &object.fields {
+            let _ = writeln!(out, "{}", zod_field(field, 4, true));
+        }
+        let _ = writeln!(out, "  }})\n  .describe({})", js_string(description));
+    } else {
+        let _ = writeln!(out, "export const {schema} = z.{ctor}({{");
+        for field in &object.fields {
+            let _ = writeln!(out, "{}", zod_field(field, 2, false));
+        }
+        out.push_str("})\n");
+    }
+}
+
 pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<String>> {
+    let contract = checked.contract;
     let mut out = header(source);
     out.push_str("\nimport { z } from 'zod'\n");
-    for CheckedDef { name, def, fields } in &checked.defs {
+    if let Some(modules) = &contract.checks.as_ref().filter(|_| !checked.zod_checks.is_empty()) {
+        let mut names: Vec<String> = checked.zod_checks.iter().map(|c| camel(c)).collect();
+        names.sort_unstable();
+        let stem = modules.zod.rsplit('/').next().and_then(|f| f.strip_suffix(".ts")).unwrap_or("");
+        let _ = writeln!(out, "import {{ {} }} from '../{stem}.js'", names.join(", "));
+    }
+    for CheckedDef { name, description, ty } in &checked.defs {
         let schema = schema_name(name);
-        let _ = write!(
-            out,
-            "\n/** {} */\nexport const {schema} = z\n  .strictObject({{\n",
-            def.description
-        );
-        for (field, property) in fields {
-            let min =
-                property.minimum.map(|m| format!(".min({})", js_number(m))).unwrap_or_default();
-            let _ =
-                writeln!(out, "    {field}: z.number(){min}.describe('{}'),", property.description);
+        let _ = write!(out, "\n/** {description} */\n");
+        match ty {
+            Ty::Object(object) => {
+                zod_object(&mut out, &schema, description, object, contract.describe);
+            }
+            other => {
+                let mut chain = zod_chain(other);
+                if contract.describe {
+                    chain = chain.then("describe", vec![js_string(description)]);
+                }
+                let _ =
+                    writeln!(out, "{}", chain.render(0, &format!("export const {schema} = "), ""));
+            }
         }
-        let _ = write!(
-            out,
-            "  }})\n  .describe('{}')\nexport type {name} = Readonly<z.infer<typeof {schema}>>\n",
-            def.description
-        );
+        let infer = format!("z.infer<typeof {schema}>");
+        let _ = if contract.readonly_types {
+            writeln!(out, "export type {name} = Readonly<{infer}>")
+        } else {
+            writeln!(out, "export type {name} = {infer}")
+        };
     }
     within_width(out)
 }
@@ -130,28 +301,103 @@ impl<'de, W: Deserialize<'de>> Visitor<'de> for MapOnly<W> {
 pub(super) fn rust(checked: &Checked<'_>, source: &str) -> String {
     let mut out = header(source);
     let _ = writeln!(out, "\n//! {}", checked.contract.description);
-    out.push_str(RUST_PRELUDE);
+    if checked.contract.rust_serde {
+        out.push_str(RUST_PRELUDE);
+        for def in &checked.defs {
+            if let Ty::Object(object) = &def.ty {
+                rust_serde_type(&mut out, def.name, def.description, object);
+            }
+        }
+        return out;
+    }
+    let uses = |wanted| checked.defs.iter().any(|d| d.ty.uses(wanted));
+    match (uses(Uses::Map), uses(Uses::Value)) {
+        (true, true) => out.push_str("\nuse crate::{Map, Value};\n"),
+        (true, false) => out.push_str("\nuse crate::Map;\n"),
+        (false, true) => out.push_str("\nuse crate::Value;\n"),
+        (false, false) => {}
+    }
     for def in &checked.defs {
-        rust_type(&mut out, def);
+        rust_plain_type(&mut out, def);
     }
     out
 }
 
-fn rust_type(out: &mut String, CheckedDef { name, def, fields }: &CheckedDef<'_>) {
+fn rust_ty(ty: &Ty<'_>) -> String {
+    match ty {
+        Ty::Number { .. } => "f64".to_owned(),
+        Ty::Str { .. } => "String".to_owned(),
+        Ty::Array(item) => format!("Vec<{}>", rust_ty(item)),
+        Ty::Ref(name) => (*name).to_owned(),
+        Ty::Any => "Value".to_owned(),
+        Ty::Record { .. } => "Map".to_owned(),
+        Ty::Object(_) => String::new(),
+    }
+}
+
+/// The doc lines that point at the hand-written predicates standing behind a
+/// type the schema alone cannot state.
+fn rust_checked_by(ty: &Ty<'_>, indent: &str) -> String {
+    let mut out = String::new();
+    let (check, matcher) = match ty {
+        Ty::Str { check, pattern, .. } => (*check, pattern.as_ref().map(|p| p.matcher)),
+        Ty::Record { check } => (*check, None),
+        Ty::Array(item) => return rust_checked_by(item, indent),
+        _ => (None, None),
+    };
+    for (verb, name) in [("Matched", matcher), ("Checked", check)] {
+        if let Some(name) = name {
+            let _ = writeln!(out, "{indent}///\n{indent}/// {verb} by `crate::checks::{name}`.");
+        }
+    }
+    out
+}
+
+fn rust_plain_type(out: &mut String, CheckedDef { name, description, ty }: &CheckedDef<'_>) {
+    let Ty::Object(object) = ty else {
+        let _ = write!(out, "\n/// {description}\n{}", rust_checked_by(ty, ""));
+        let _ = writeln!(out, "pub type {name} = {};", rust_ty(ty));
+        return;
+    };
     let _ = write!(
         out,
-        "\n/// {}\n#[derive(Debug, Clone, Copy, PartialEq, Serialize)]\npub struct {name} {{\n",
-        def.description
+        "\n/// {description}\n#[derive(Debug, Clone, PartialEq)]\npub struct {name} {{\n"
     );
-    for (field, property) in fields {
-        let _ = writeln!(out, "    /// {}\n    pub {field}: f64,", property.description);
+    for field in &object.fields {
+        let inner = rust_ty(&field.ty);
+        let wrapped = if field.optional { format!("Option<{inner}>") } else { inner };
+        let _ =
+            write!(out, "    /// {}\n{}", field.description, rust_checked_by(&field.ty, "    "));
+        let _ = writeln!(out, "    pub {}: {wrapped},", field.rust);
+    }
+    if object.unknown == Unknown::Keep {
+        out.push_str(
+            "    /// Keys the contract does not name, in the order written.\n    pub extra: Map,\n",
+        );
+    }
+    out.push_str("}\n");
+}
+
+fn rust_serde_type(out: &mut String, name: &str, description: &str, object: &Object<'_>) {
+    let fields: Vec<(&str, Option<f64>)> = object
+        .fields
+        .iter()
+        .map(|f| (f.name, if let Ty::Number { min } = f.ty { min } else { None }))
+        .collect();
+    let docs: Vec<&str> = object.fields.iter().map(|f| f.description).collect();
+    let _ = write!(
+        out,
+        "\n/// {description}\n#[derive(Debug, Clone, Copy, PartialEq, Serialize)]\npub struct {name} {{\n"
+    );
+    for ((field, _), doc) in fields.iter().zip(&docs) {
+        let _ = writeln!(out, "    /// {doc}\n    pub {field}: f64,");
     }
     let _ = write!(
         out,
         "}}\n\n/// `{name}` as it arrives, before it is checked.\n\
          #[derive(Deserialize)]\n#[serde(deny_unknown_fields)]\nstruct {name}Wire {{\n"
     );
-    for (field, _) in fields {
+    for (field, _) in &fields {
         let _ = writeln!(out, "    {field}: f64,");
     }
     let _ = write!(
@@ -160,14 +406,14 @@ fn rust_type(out: &mut String, CheckedDef { name, def, fields }: &CheckedDef<'_>
          fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {{\n\
          let wire: {name}Wire = deserializer.deserialize_map(MapOnly(PhantomData))?;\n"
     );
-    for (field, property) in fields {
-        if let Some(min) = property.minimum {
+    for (field, minimum) in &fields {
+        if let Some(min) = minimum {
             let _ = write!(
                 out,
                 "if wire.{field}.is_nan() || wire.{field} < {} {{\n\
                  return Err(serde::de::Error::custom(\"{name}.{field} is below its minimum {}\"));\n}}\n",
-                rust_float(min),
-                js_number(min)
+                rust_float(*min),
+                js_number(*min)
             );
         }
     }

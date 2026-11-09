@@ -73,7 +73,11 @@
       }
     },
     "packages/model": {
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      // Each contract definition is emitted as a schema and its inferred type
+      // together; a definition's type is read once the hand-written schema it
+      // mirrors is swapped for the generated one.
+      "ignoreIssues": { "src/generated/okf.zod.ts": ["types"] }
     },
     "packages/codec": {
       // Layer 1's shims are reached through vitest.rust.config.ts's resolver

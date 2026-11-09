@@ -15,6 +15,7 @@
         "y": { "type": "number", "description": "Canvas y." }
       },
       "required": ["x", "y"],
+      "x-wb-order": ["x", "y"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     },
@@ -28,6 +29,7 @@
         "h": { "type": "number", "minimum": 0, "description": "Height." }
       },
       "required": ["x", "y", "w", "h"],
+      "x-wb-order": ["x", "y", "w", "h"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     }
