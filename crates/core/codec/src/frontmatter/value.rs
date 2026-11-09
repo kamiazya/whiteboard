@@ -1,27 +1,6 @@
 //! What the frontmatter reader produces and the writer takes.
 
-/// A frontmatter value: what `yaml`'s core schema makes of a document, as
-/// `toJS()` hands it to the TypeScript.
-///
-/// The crate carries its own ordered tree because `whiteboard-model`, which
-/// will own the document model, is not ported yet. A mapping keeps its keys
-/// in written order; a JavaScript object enumerates integer-like keys first,
-/// which is a property of that host and is applied where a host needs it
-/// (the recorded-oracle test does), not here.
-#[derive(Debug, Clone, PartialEq)]
-pub enum Value {
-    Null,
-    Bool(bool),
-    /// A double. An integer written within +-2^53 lands here.
-    Number(f64),
-    /// An integer written past 2^53 whose digits the double cannot hold, as
-    /// the signed decimal digits it was written as. The TypeScript reads it
-    /// as a `bigint`, which `yamlSafeValueSchema` refuses by name.
-    BigInt(String),
-    String(String),
-    Seq(Vec<Value>),
-    Map(Vec<(String, Value)>),
-}
+pub use whiteboard_model::Value;
 
 /// Why a frontmatter text was not read. The class is the TypeScript reader's
 /// own: it is what `oracle` records beside every refusal.

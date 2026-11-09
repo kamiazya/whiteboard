@@ -238,6 +238,7 @@ name = "whiteboard-codec"
 version = "0.0.0"
 dependencies = [
  "whiteboard-det",
+ "whiteboard-model",
 ]
 
 [[package]]
@@ -264,6 +265,10 @@ dependencies = [
  "whiteboard-det",
  "whiteboard-wasm",
 ]
+
+[[package]]
+name = "whiteboard-model"
+version = "0.0.0"
 
 [[package]]
 name = "whiteboard-wasm"
