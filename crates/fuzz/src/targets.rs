@@ -127,8 +127,7 @@ pub fn frontmatter_parse(data: &[u8]) {
                 x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same(p, q))
             }
             (Value::Map(x), Value::Map(y)) => {
-                x.len() == y.len()
-                    && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
+                x.len() == y.len() && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
             }
             _ => a == b,
         }
