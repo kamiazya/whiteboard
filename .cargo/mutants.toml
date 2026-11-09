@@ -118,4 +118,9 @@ exclude_re = [
   # f64, which needs both below about 3e-6 px; no candidate kind is that short
   # (elbows tie, detours are at least 32 px). Believed equivalent, not proven.
   'edge_router\.rs:\d+:\d+: replace > with >= in best_candidate$',
+  # grid_route: a traced border costing -1 makes a negative cycle on a grid
+  # whose lines sit under a pixel apart, and the search then never ends. The
+  # workspace run reaches such a board before survivors_grid_route.rs, which
+  # kills the mutant in about a second, so it times out rather than surviving.
+  'grid_route\.rs:\d+:\d+: replace traced_along -> f64 with -1\.0$',
 ]
