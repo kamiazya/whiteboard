@@ -46,6 +46,12 @@ const REQUIRED_FILES = [
   'dist/assets/fonts/Roboto/Roboto-Bold.ttf',
   'dist/assets/fonts/Roboto/Roboto-Italic.ttf',
   'dist/assets/fonts/Roboto/Roboto-BoldItalic.ttf',
+  // The Rust core (ADR-0054) the daemon loads from here when WHITEBOARD_CORE
+  // asks for it: a tarball without it would fail every such daemon at first
+  // layout. The notices are the licence text its linked crates require.
+  'dist/assets/core-wasm/whiteboard_wasm.js',
+  'dist/assets/core-wasm/whiteboard_wasm_bg.wasm',
+  'dist/assets/core-wasm/THIRD-PARTY-NOTICES',
 ]
 
 // Deliberately does NOT include \.map$ — the packaged tarball legitimately

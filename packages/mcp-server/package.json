@@ -85,7 +85,7 @@
     "mcp:inspect:stdio": "npx -y @modelcontextprotocol/inspector@2.9.0 node --import tsx/esm scripts/dev/run-source-stdio.mjs",
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "build:server": "tsdown && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",
-    "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs",
+    "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs && node scripts/copy-core-wasm-into-dist.mjs",
     "test": "vitest run",
     "test:all": "vitest run",
     "test:node": "vitest run --project mcp-node",
@@ -109,7 +109,7 @@
     "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",
     "smoke:all": "pnpm smoke:e2e && pnpm smoke:claude",
     "prepublishOnly": "test -x dist/cli/index.js",
-    "prepack": "node scripts/verify-web-app-dist.mjs && node scripts/verify-widget-dist.mjs && node scripts/verify-export-font-dist.mjs",
+    "prepack": "node scripts/verify-web-app-dist.mjs && node scripts/verify-widget-dist.mjs && node scripts/verify-export-font-dist.mjs && node scripts/verify-core-wasm-dist.mjs",
     "search:fetch-model": "node --import tsx/esm scripts/search/fetch-model.mjs",
     "search:pipeline-check": "node --import tsx/esm scripts/measure/pipeline-check-jqara.mjs"
   },

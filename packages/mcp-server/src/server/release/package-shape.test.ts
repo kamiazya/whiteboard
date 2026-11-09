@@ -38,10 +38,14 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
     expect(mcpPackage.scripts?.['build:app']).toBeUndefined()
   })
 
-  it('build runs build:server plus the MCP Apps widget and export font copy steps, nothing else', () => {
+  it('build runs build:server plus the widget, export font and core wasm copy steps, nothing else', () => {
     expect(mcpPackage.scripts?.build).toBe(
-      'pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs',
+      'pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs && node scripts/copy-core-wasm-into-dist.mjs',
     )
+  })
+
+  it('prepack refuses a tarball without the core wasm', () => {
+    expect(mcpPackage.scripts?.prepack).toContain('node scripts/verify-core-wasm-dist.mjs')
   })
 
   it('dev does not spawn vite', () => {

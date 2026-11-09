@@ -649,10 +649,17 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - uses: ./.github/actions/core-wasm
+
       - name: Build
+        env:
+          WHITEBOARD_SHIP_CORE_WASM: '1'
         run: pnpm build
 
       - name: Packaged distribution smoke
+        env:
+          WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm smoke:distribution:packaged:node
 
   # Prod vite build of packages/canvas-viewer's self-contained widget HTML,
@@ -762,7 +769,14 @@ jobs:
           WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
 
+      # The artifact a release ships, restored or built as the test jobs do:
+      # the package build copies it into dist, `npm pack` refuses a tarball
+      # without it, and the web build fails rather than omit it.
+      - uses: ./.github/actions/core-wasm
+
       - name: Build
+        env:
+          WHITEBOARD_SHIP_CORE_WASM: '1'
         run: pnpm build
 
       # Runs the packed-tarball / packaged-entry / codex-config distribution
@@ -823,7 +837,12 @@ jobs:
       - name: Cross-origin transfer real-browser smoke (ADR-0044)
         run: pnpm smoke:transfer
 
+      # Asks for the Rust core and throws on a difference or a load failure, so
+      # a dist without its wasm fails here instead of routing in TypeScript.
       - name: Packaged stdio smoke
+        env:
+          WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm smoke:packaged
 
       - name: Check release artifacts

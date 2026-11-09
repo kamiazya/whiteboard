@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, it } from 'vitest'
-import { findFilesContainingBytes, listAllRegularFiles } from './smoke-artifact.mjs'
+import {
+  expectsCoreWasm,
+  findFilesContainingBytes,
+  listAllRegularFiles,
+} from './smoke-artifact.mjs'
 
 const SCRIPT_PATH = join(dirname(fileURLToPath(import.meta.url)), 'smoke-artifact.mjs')
 
@@ -111,5 +115,17 @@ describe('listAllRegularFiles', () => {
     const files = listAllRegularFiles(dir).sort()
 
     expect(files).toEqual([join(dir, 'a.wasm'), join(dir, 'b')].sort())
+  })
+})
+
+describe('expectsCoreWasm', () => {
+  it.each([
+    ['1', false, true],
+    ['1', true, true],
+    ['0', true, false],
+    [undefined, true, true],
+    [undefined, false, false],
+  ] as const)('ship=%s staged=%s expects %s', (ship, staged, expected) => {
+    expect(expectsCoreWasm(ship, staged)).toBe(expected)
   })
 })

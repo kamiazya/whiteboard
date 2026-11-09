@@ -41,6 +41,7 @@ interface Workflow {
 
 const read = (path: string): string => readFileSync(join(REPO_ROOT, path), 'utf-8')
 const ci = parseYaml(read('.github/workflows/ci.yml')) as Workflow
+const release = parseYaml(read('.github/workflows/release.yml')) as Workflow
 const nightly = parseYaml(read('.github/workflows/rust-fuzz-nightly.yml')) as Workflow
 
 const RUST_JOBS = ['rust', 'rust-fuzz-pr', 'rust-mutants']
@@ -292,5 +293,83 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(jsdom.some((s) => JSON.stringify(s.env ?? {}).includes('VITE_WHITEBOARD_CORE'))).toBe(
       false,
     )
+  })
+})
+
+describe('a release ships the core wasm it built from cold', () => {
+  const action = parseYaml(read('.github/actions/core-wasm/action.yml')) as {
+    inputs: Record<string, { default: string }>
+    runs: { steps: Step[] }
+  }
+  const publishing = ['build-mcp', 'build-docker', 'build-web']
+
+  it('lets a job skip the cache entirely, restore and save both', () => {
+    expect(action.inputs['use-cache']?.default).toBe('true')
+    for (const prefix of ['actions/cache/restore@', 'actions/cache/save@']) {
+      const step = action.runs.steps.find((s) => s.uses?.startsWith(prefix))
+      expect(step?.if).toContain("inputs.use-cache == 'true'")
+    }
+  })
+
+  it('stages the notices beside the wasm, which the pack gate requires', () => {
+    const notices = action.runs.steps.find((s) => s.run?.includes('cargo xtask notices'))
+    expect(notices?.run).toContain('stage:wasm')
+    // cargo-about reads metadata --offline for every target it scans, and a
+    // cold job has fetched only what the wasm build compiled.
+    expect(notices?.run).toMatch(/cargo fetch --locked[\s\S]*cargo xtask notices/)
+    const install = action.runs.steps.find(
+      (s) =>
+        s.uses?.startsWith('taiki-e/install-action@') &&
+        String(s.with?.tool).includes('cargo-about'),
+    )
+    expect(install?.with?.tool).toBe(`cargo-about@${TOOL_PINS['cargo-about']}`)
+  })
+
+  it.each(publishing)('%s builds it from cold before anything that packs or builds', (id) => {
+    const steps = stepsOf(release, id)
+    const at = steps.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(steps[at]?.with).toEqual({ 'use-cache': 'false' })
+    const firstBuild = steps.findIndex((s) =>
+      /pnpm (publish-gate|--filter \S+ build)/.test(s.run ?? ''),
+    )
+    expect(firstBuild).toBeGreaterThan(at)
+  })
+
+  it.each([
+    'build-mcp',
+    'build-docker',
+  ])('%s requires the wasm in the web build rather than omitting it', (id) => {
+    expect(release.jobs[id]?.env?.WHITEBOARD_SHIP_CORE_WASM).toBe('1')
+  })
+
+  it('build-web requires the wasm on the step that builds the site', () => {
+    const build = stepsOf(release, 'build-web').find((s) => s.run?.includes('whiteboard-web build'))
+    expect(build?.env?.WHITEBOARD_SHIP_CORE_WASM).toBe('1')
+  })
+})
+
+describe('verify and packaged-smoke build over the same artifact a release ships', () => {
+  it.each([
+    'verify',
+    'packaged-smoke',
+  ])('%s restores it before it builds, and requires it', (id) => {
+    const steps = stepsOf(ci, id)
+    const at = steps.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const build = steps.findIndex((s) => s.run?.trim() === 'pnpm build')
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(build)
+    expect(steps[build]?.env?.WHITEBOARD_SHIP_CORE_WASM).toBe('1')
+  })
+
+  it.each([
+    ['verify', 'pnpm smoke:packaged'],
+    ['packaged-smoke', 'pnpm smoke:distribution:packaged:node'],
+  ])('%s runs its packaged smoke in differential, throwing on a load failure', (id, command) => {
+    const smoke = stepsOf(ci, id).find((s) => s.run?.trim() === command)
+    expect(smoke?.env).toEqual({
+      WHITEBOARD_CORE: 'differential',
+      WHITEBOARD_CORE_MISMATCH: 'throw',
+    })
   })
 })

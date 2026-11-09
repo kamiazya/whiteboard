@@ -97,8 +97,17 @@ RUN pnpm install --offline --frozen-lockfile \
       --store-dir /pnpm/store \
       --config.enable-global-virtual-store=false
 
+# `1` makes the Rust core's wasm (packages/core-wasm/artifacts, built outside
+# the image: it needs a Rust toolchain this image does not carry) a
+# requirement: the web build fails without it and so does the check below. A
+# release passes it; unset, an image without the wasm still builds.
+ARG WHITEBOARD_SHIP_CORE_WASM
+
 RUN pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 RUN pnpm --filter @kamiazya/whiteboard-mcp build
+RUN if [ "$WHITEBOARD_SHIP_CORE_WASM" = "1" ]; then \
+      node packages/mcp-server/scripts/verify-core-wasm-dist.mjs; \
+    fi
 # The web app the keeper serves from its own origin (ADR-0047). After the
 # server build, because the web build copies itself into the server's dist/.
 RUN pnpm --filter @kamiazya/whiteboard-web build

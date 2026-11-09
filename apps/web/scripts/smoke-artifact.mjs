@@ -9,6 +9,26 @@ import { isRunAsScript } from '../../../tools/checks/src/is-run-as-script.mjs'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
 
+const STAGED_CORE_WASM = resolve(
+  ROOT,
+  '..',
+  '..',
+  'packages',
+  'core-wasm',
+  'artifacts',
+  'whiteboard_wasm_bg.wasm',
+)
+
+// Mirrors vite-plugin-core-source.ts: a build carries the Rust core's wasm
+// when the release asks for it (`WHITEBOARD_SHIP_CORE_WASM=1`) or, unasked,
+// when one is staged; `0` leaves it out.
+export function expectsCoreWasm(
+  ship = process.env.WHITEBOARD_SHIP_CORE_WASM,
+  staged = existsSync(STAGED_CORE_WASM),
+) {
+  return ship === '1' || (ship !== '0' && staged)
+}
+
 let failures = 0
 
 function assert(condition, message) {
@@ -76,6 +96,18 @@ export function findFilesContainingBytes(dir, needle) {
   return offenders
 }
 
+// The Rust core's wasm is not loro-crdt's: a release ships it unused until the
+// default moves, so its absence is a packaging regression nothing at run time
+// would show.
+function assertCoreWasmShipped(assetsDir) {
+  if (!expectsCoreWasm()) return
+  assert(
+    existsSync(assetsDir) &&
+      readdirSync(assetsDir).some((f) => /^whiteboard_wasm_bg.*\.wasm$/.test(f)),
+    'dist/assets/ contains the Rust core wasm (whiteboard_wasm_bg-*.wasm)',
+  )
+}
+
 // Guarded behind the import.meta.url check at the bottom so importing
 // listAllRegularFiles/findFilesContainingBytes for a unit test does not run
 // the whole dist/ smoke (and does not process.exit the test process).
@@ -93,6 +125,8 @@ function main() {
   const hasRobotoAsset =
     existsSync(fontsAssetsDir) && readdirSync(fontsAssetsDir).some((f) => /Roboto.*\.ttf$/.test(f))
   assert(hasRobotoAsset, 'dist/assets/ contains the vendored Roboto .ttf face')
+
+  assertCoreWasmShipped(fontsAssetsDir)
 
   // ── _headers copied ───────────────────────────────────────────────────────────
   console.log('\n[smoke-artifact] _headers')

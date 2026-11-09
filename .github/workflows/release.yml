@@ -128,6 +128,9 @@ jobs:
       # modules, WASM, first-run migrations), which exceeds the default RPC
       # deadline on CI runners ("RPC tools/call timed out", v0.0.10).
       WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: '90000'
+      # The web app inside the package must carry the core wasm: its build
+      # fails without one.
+      WHITEBOARD_SHIP_CORE_WASM: '1'
     defaults:
       run:
         working-directory: packages/mcp-server
@@ -183,6 +186,15 @@ jobs:
       - name: Install dependencies (workspace root)
         working-directory: .
         run: pnpm install --frozen-lockfile
+
+      # Built from cold (`use-cache: 'false'`), never restored: this job's
+      # output is published. The wasm and its THIRD-PARTY-NOTICES land in
+      # packages/core-wasm/artifacts, which the build copies into dist and the
+      # prepack gate then requires.
+      - name: Build the Rust core's wasm
+        uses: ./.github/actions/core-wasm
+        with:
+          use-cache: 'false'
 
       - name: Install Playwright Chromium
         working-directory: .
@@ -266,6 +278,9 @@ jobs:
       # modules, WASM, first-run migrations), which exceeds the default RPC
       # deadline on CI runners ("RPC tools/call timed out", v0.0.10).
       WHITEBOARD_SMOKE_RPC_TIMEOUT_MS: '90000'
+      # The web app inside the package must carry the core wasm: its build
+      # fails without one.
+      WHITEBOARD_SHIP_CORE_WASM: '1'
     steps:
       - name: Validate tag shape
         env:
@@ -312,6 +327,15 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Built from cold (`use-cache: 'false'`), never restored: this job's
+      # output is published. The wasm and its THIRD-PARTY-NOTICES land in
+      # packages/core-wasm/artifacts, which the build copies into dist and the
+      # prepack gate then requires.
+      - name: Build the Rust core's wasm
+        uses: ./.github/actions/core-wasm
+        with:
+          use-cache: 'false'
+
       - name: Install Playwright Chromium
         run: pnpm --filter @kamiazya/whiteboard-mcp exec playwright install --with-deps chromium
 
@@ -357,6 +381,7 @@ jobs:
           file: Dockerfile.server
           build-args: |
             NODE_VERSION=${{ steps.node-version.outputs.value }}
+            WHITEBOARD_SHIP_CORE_WASM=1
           tags: ghcr.io/${{ github.repository }}:${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
           outputs: type=oci,dest=${{ runner.temp }}/docker-image/image.tar
           sbom: true
@@ -523,7 +548,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # Built from cold (`use-cache: 'false'`), never restored: this job's
+      # output is published. The wasm and its THIRD-PARTY-NOTICES land in
+      # packages/core-wasm/artifacts, which the build copies into dist and the
+      # prepack gate then requires.
+      - name: Build the Rust core's wasm
+        uses: ./.github/actions/core-wasm
+        with:
+          use-cache: 'false'
+
+      # Required, not opportunistic: the build fails when the wasm above is
+      # missing rather than shipping a site without it.
       - name: Build apps/web
+        env:
+          WHITEBOARD_SHIP_CORE_WASM: '1'
         run: pnpm --filter @kamiazya/whiteboard-web build
 
       - name: Archive the built site

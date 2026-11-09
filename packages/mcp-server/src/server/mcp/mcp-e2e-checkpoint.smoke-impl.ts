@@ -59,6 +59,44 @@ function createFirstDocument(
 }
 
 /**
+ * Draws one routed edge through `wb_scene_render`. Under
+ * `WHITEBOARD_CORE=differential` with `WHITEBOARD_CORE_MISMATCH=throw` (what
+ * the tarball smoke sets) this is the call that loads the Rust core, so an
+ * install whose artifact is missing or unloadable fails here instead of
+ * quietly routing in TypeScript.
+ */
+async function renderRoutedEdge(
+  callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,
+): Promise<void> {
+  const created = await callTool('wb_workspace_edit', {
+    workspaceId: WORKSPACE_ID,
+    ops: [{ op: 'document.create', path: 'e2e-edge', kind: 'spatial' }],
+  })
+  const documentId = (created.results as { documentId?: unknown }[] | undefined)?.[0]?.documentId
+  if (typeof documentId !== 'string') {
+    throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(created)}`)
+  }
+  const node = (id: string, x: number) => ({
+    op: 'node.add',
+    node: { id, type: 'text', x, y: 0, width: 120, height: 60, text: id },
+  })
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      node('from', 0),
+      node('to', 400),
+      { op: 'edge.add', edge: { id: 'link', from: { node: 'from' }, to: { node: 'to' } } },
+    ],
+  })
+  const rendered = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  if (typeof rendered.svg !== 'string' || !rendered.svg.includes('<svg')) {
+    throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
+  }
+}
+
+/**
  * A `document.move` through the same tool, answering the path it reports.
  * The SDK validates `structuredContent` against `outputSchema`, so this is
  * where a result row the schema cannot describe would surface.
@@ -346,6 +384,9 @@ export async function runE2eCheckpointSmoke({
     console.log('[e2e] wb_facet_set → seeded canvas state')
 
     await exerciseVersionRoundTrip(callTool, documentId)
+
+    await renderRoutedEdge(callTool)
+    console.log('[e2e] wb_scene_render → a routed edge is drawn')
 
     console.log('\n[e2e] ALL OK')
   } catch (err) {

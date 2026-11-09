@@ -5,7 +5,16 @@ description: >-
   (owner decisions, 2026-11-08: built in the pipeline, never committed; built
   once and cached on its inputs). A hit needs no Rust toolchain. A miss
   builds it through `build:wasm`, the one build path the size ledger and the
-  reproducibility check measure, and saves it. Expects pnpm installed.
+  reproducibility check measure, and saves it. The artifact directory also
+  carries THIRD-PARTY-NOTICES, because the npm pack gate refuses a tarball
+  without them. A release job passes `use-cache: 'false'`: what it publishes
+  is built from cold, never restored from a store another job wrote.
+  Expects pnpm installed.
+
+inputs:
+  use-cache:
+    description: "'false' builds from cold, neither restoring nor saving the cache."
+    default: 'true'
 
 runs:
   using: composite
@@ -18,11 +27,12 @@ runs:
       id: key
       shell: bash
       env:
-        INPUTS: ${{ hashFiles('crates/**', 'Cargo.lock', 'Cargo.toml', '.cargo/**', 'rust-toolchain.toml', 'tools/checks/src/rust-build-wasm.mjs', 'packages/core-wasm/scripts/stage-artifacts.mjs') }}
+        INPUTS: ${{ hashFiles('crates/**', 'Cargo.lock', 'Cargo.toml', 'deny.toml', '.cargo/**', 'rust-toolchain.toml', 'tools/checks/src/rust-build-wasm.mjs', 'packages/core-wasm/scripts/stage-artifacts.mjs') }}
       run: echo "key=core-wasm-${RUNNER_OS}-wasm-bindgen-0.2.130-${INPUTS}" >> "$GITHUB_OUTPUT"
 
     - name: Restore the core wasm
       id: restore
+      if: inputs.use-cache == 'true'
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: packages/core-wasm/artifacts
@@ -46,8 +56,27 @@ runs:
       shell: bash
       run: pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm
 
-    - name: Save the core wasm
+    # The licence text of the crates linked into the wasm (cargo-about, the
+    # version `cargo xtask notices` demands), staged beside it so the cache
+    # entry and the npm package carry both.
+    - uses: taiki-e/install-action@c509219cf42fba86913069efd0ade2458c59337b # v2.90.1
       if: steps.restore.outputs.cache-hit != 'true'
+      with:
+        tool: cargo-about@0.9.3
+        fallback: none
+
+    - name: Third-party notices for the core wasm
+      if: steps.restore.outputs.cache-hit != 'true'
+      shell: bash
+      # cargo-about reads `cargo metadata --offline` for each artifact's
+      # target, and a cold job has fetched only what the wasm build compiled.
+      run: |
+        cargo fetch --locked
+        cargo xtask notices
+        pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm
+
+    - name: Save the core wasm
+      if: inputs.use-cache == 'true' && steps.restore.outputs.cache-hit != 'true'
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: packages/core-wasm/artifacts
