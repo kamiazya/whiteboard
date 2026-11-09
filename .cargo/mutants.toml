@@ -75,4 +75,47 @@ exclude_re = [
   # index first, so the index tie-break's `Less` arm is never reached.
   # Column-pinned: the same description at column 13 is judged.
   'spatial_edges\.rs:\d+:45: delete - in trial_edges_for$',
+  # edge_crossing_sweep: `denom == 0` (which also matches -0) has already
+  # returned, so `denom <= 0` is `denom < 0`. Column-pinned: the same
+  # description at another column is judged.
+  'edge_crossing_sweep\.rs:\d+:14: replace < with <= in score_quantized_segment_pair$',
+  # edge_crossing_sweep: a pair of the same edge has already been skipped, so
+  # `<=` on the edge index is `<`. Column-pinned: the bounding-box `<` is judged.
+  'edge_crossing_sweep\.rs:\d+:38: replace < with <= in score_against_active$',
+  # edge_anchors: `dir == 0` (and -0) has already returned and NaN fails both,
+  # so `dir >= 0` is `dir > 0`. Column-pinned: the same description at another
+  # column is judged.
+  'edge_anchors\.rs:\d+:12: replace > with >= in sweep_rank$',
+  # edge_anchors: `lo <= hi` in the binary search either loops forever or
+  # returns len + 1 where the answer is len, which both callers read the same
+  # way, so the mutant times out (measured past 60s) rather than surviving.
+  'edge_anchors\.rs:\d+:\d+: replace < with <= in first_index_where$',
+  # grid_route: the only NaN that reaches `distinct` is an endpoint's own
+  # coordinate (obstacle lines fail in_x/in_y), and index_of never finds it,
+  # so route_on_grid answers no path with nothing spent whatever the set holds.
+  'grid_route\.rs:\d+:\d+: replace && with \|\| in distinct$',
+  # edge_contact: equal centres have already returned and NaN fails both, so
+  # `>=` is `>`.
+  'edge_contact\.rs:\d+:\d+: replace > with >= in contact_along$',
+  # edge_geometry: a segment parallel to an axis has already been rejected by
+  # the bounding-box test on exactly these two conditions. Column-pinned: the
+  # pre-filter's own `||` mutants are judged.
+  'edge_geometry\.rs:\d+:27: replace \|\| with && in segment_crosses_rect$',
+  # edge_geometry: every slab step returns on `enter >= exit`, and two
+  # degenerate axes leave 0 < 1, so the final `>=` is `>`. Column-pinned.
+  'edge_geometry\.rs:\d+:10: replace > with >= in segment_crosses_rect$',
+  # edge_ink: the only caller skips dx == 0 and dy == 0, so p is never zero
+  # and `<=` is `<`.
+  'edge_ink\.rs:\d+:\d+: replace < with <= in inside_fraction$',
+  # edge_ink: t0 and t1 can tie only at a finite value, where t1 - t0 is +0,
+  # the same bits as the 0.0 arm.
+  'edge_ink\.rs:\d+:\d+: replace > with >= in inside_fraction$',
+  # edge_rules: `find` has already kept only x != y, so `x <= y` is `x < y`
+  # (NaN makes both false).
+  'edge_rules\.rs:\d+:\d+: replace < with <= in less_cost$',
+  # edge_router: the comparator's `>` against the 1e-6 length tolerance
+  # differs from `>=` only when two candidate lengths differ by exactly that
+  # f64, which needs both below about 3e-6 px; no candidate kind is that short
+  # (elbows tie, detours are at least 32 px). Believed equivalent, not proven.
+  'edge_router\.rs:\d+:\d+: replace > with >= in best_candidate$',
 ]
