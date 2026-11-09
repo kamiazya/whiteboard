@@ -220,6 +220,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/core-wasm/src/index.ts#CoreAbiMismatch':
     "the refusal a composition root catches when its wasm artifact and this shim come from different commits; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
+  'packages/core-wasm/src/index.ts#CoreOkfUnwritable':
+    "the refusal a composition root sees when a frontmatter value has no YAML spelling; codec's switch answers it from the TypeScript, which throws its own OkfNotYamlSafeError (ADR-0054 step 6's next increment), and codec-rust holds that the artifact says so exactly where the TypeScript throws",
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/mcp-server/src/server/export/layout-core.ts#packagedArtifacts':
@@ -350,10 +352,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the schema the migrations are held to, read by the schema-ledger test',
   'packages/mcp-server/src/server/store/inmemory/in-memory-blob-store.ts#InMemoryBlobStore':
     'the in-memory BlobStore double, the differential oracle for the fs blob store; no-production-wiring.test.ts keeps it out of production',
-  'packages/model/src/facets.ts#CoreFacets':
-    'the published type of coreFacetsSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
-  'packages/model/src/facets.ts#FacetsRaw':
-    'the published type of facetsRawSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
   'packages/model/src/ids.ts#NodeId':
     'the published type of nodeIdSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
   'packages/model/src/markdown.ts#MarkdownDocument':

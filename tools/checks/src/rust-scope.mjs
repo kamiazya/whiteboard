@@ -19,6 +19,7 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/det-math.ts',
     'packages/canvas-render/src/det-math.rust.test.ts',
     'packages/canvas-render/vitest.rust.config.ts',
+    'packages/codec/vitest.rust.config.ts',
   ],
   trees: [
     '.cargo',
@@ -30,5 +31,10 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/test-utils/wasm',
     // The shim over the artifact, tested in the rust job (core-wasm-rust).
     'packages/core-wasm',
+    // codec-rust holds the OKF envelope to the Rust twin, and the Rust codec
+    // replays the recording that lives beside it.
+    'packages/codec/src/okf',
+    'packages/codec/src/test-utils/okf-oracle',
+    'packages/codec/src/test-utils/frontmatter-oracle',
   ],
 }

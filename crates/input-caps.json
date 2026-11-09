@@ -18,6 +18,22 @@
       "maxMillis": 5000,
       "reason": "the routing wire is a flat f64 array the shim builds but any holder of the wasm glue can call. maxBytes is MAX_WIRE_NUMBERS (32768) x 8, the export's own refusal: the largest corpus board's wire is 22984 bytes (clustered 12x12, 144 nodes and 165 edges), so the cap is 11.4x that; a board past it is answered by the TypeScript. maxDepth 2 is the deepest counted group (an edge's bend list inside the edge list); the decoder is iterative. maxMillis 5000 is 2.2x the slowest draw measured at the cap: 2.3 s on Node wasm for a 920-node, 2065-edge board of 251624 bytes, straight edges"
     },
+    "whiteboard-wasm::okf::okf_parse": {
+      "crate": "whiteboard-wasm",
+      "fuzzTarget": "okf_wasm_parse",
+      "maxBytes": 262144,
+      "maxDepth": 64,
+      "maxMillis": 500,
+      "reason": "the export reads a whole OKF document, so any holder of the wasm glue can call it. maxBytes is the frontmatter's own cap (frontmatter::MAX_BYTES, which whiteboard-codec::okf::parse inherits): the export refuses a text past it before reading it and the shim then answers from the TypeScript, which has no cap, so a document over 256 KiB (a large body counts) takes the TypeScript's path. The shim also refuses past it in UTF-16 units before the call, which can never refuse what the export would take. maxDepth 64 is the YAML reader's MAX_PARSE_DEPTH, the deepest it recurses; the answer is built by one walk of what it produced and adds no nesting beyond one array per mapping or list. maxMillis 500 is 6.5x the slowest draw measured on Node wasm, 77 ms for a 262129-byte frontmatter holding a flow list of ~131k integers (the others at the cap took under 50 ms: 49 ms for a type that is a mapping with a 130k-item length list, 43 ms for 23k integer keys, 34 ms for 22k preserved keys, 23 ms for 2.5k trust events with extra keys, 15 ms for 43k tags, 6 ms for a 262k scalar, double-quoted or block), and a 256 KiB body took 0.5 ms; the codec's own 250 ms is native, this one carries the wire on wasm"
+    },
+    "whiteboard-wasm::okf::okf_serialize": {
+      "crate": "whiteboard-wasm",
+      "fuzzTarget": "okf_wasm_serialize",
+      "maxBytes": 262144,
+      "maxDepth": 64,
+      "maxMillis": 250,
+      "reason": "the export reads the wire of a frontmatter (JSON in the value wire of okf_wire.rs), so any holder of the wasm glue can call it with bytes of its choosing, which is the decode the fuzz target drives. maxBytes 262144 is the parse entry's: a frontmatter the reader would take is within it as YAML, and the wire is a little larger than the YAML it spells (a double is 22 bytes of wire where its YAML is as short as one), so a frontmatter near the reader's cap is answered by the TypeScript. A wire past it is refused before it is parsed. maxDepth 64 is the writer's nesting cap (MAX_PARSE_DEPTH): a deeper value answers unwritable, and serde_json's own 128-level recursion limit (deny.toml bans unbounded_depth) sits above it because the wire spends one array level per mapping or list. maxMillis 250 is 8.8x the slowest draw measured on Node wasm, 28 ms for 18.5k integer-like keys under facetsRaw (the canonical order sorts them and JavaScript's enumeration puts them first); 20 ms for 2.6k trust events with extra keys, 14 ms for 12k facet keys, 8 ms for a 224 KiB string of escapes, 7 ms for 11k numbers and 5 ms for a 262k string. A search of the held keys for each preserved key had made a 16k-key record 147 ms, and quadratic; the writer indexes them now"
+    },
     "whiteboard-codec::frontmatter::parse": {
       "crate": "whiteboard-codec",
       "fuzzTarget": "frontmatter_parse",

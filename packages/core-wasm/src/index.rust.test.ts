@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { abi_version, edge_route_layout, initSync } from '#glue'
+import { abi_version, edge_route_layout, initSync, okf_parse, okf_serialize } from '#glue'
 import { loadCore } from './load.js'
 import type { RoutingBudget } from './types.js'
 
@@ -23,11 +23,9 @@ const budget = (): RoutingBudget => ({ grid: 1e6, pairs: 1e6, trials: 1e6, repai
 
 describe('the core-wasm shim over the built artifact', () => {
   it('declares only exports the artifact has', () => {
-    expect([typeof initSync, typeof abi_version, typeof edge_route_layout]).toEqual([
-      'function',
-      'function',
-      'function',
-    ])
+    expect(
+      [initSync, abi_version, edge_route_layout, okf_parse, okf_serialize].map((f) => typeof f),
+    ).toEqual(['function', 'function', 'function', 'function', 'function'])
   })
 
   it('routes a layout from the bytes, and again from a compiled module', async () => {
@@ -51,5 +49,17 @@ describe('the core-wasm shim over the built artifact', () => {
       // A clean pair needs no trial: the search short-circuits.
       expect(b).toEqual(budget())
     }
+  })
+
+  it('reads and writes an OKF document, the body never crossing', async () => {
+    const core = await loadCore(bytes())
+    const text = '---\ntype: note\ntags:\n  - a\n---\n\u{1F600} body'
+    const read = core.parseOkf(text)
+    expect(read).toEqual({
+      ok: true,
+      value: { frontmatter: { type: 'note', tags: ['a'] }, body: '\u{1F600} body' },
+    })
+    if (!read.ok) return
+    expect(core.serializeOkf(read.value)).toBe(text)
   })
 })

@@ -12,7 +12,9 @@ publish.workspace = true
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+serde_json.workspace = true
 wasm-bindgen.workspace = true
+whiteboard-codec = { path = "../../core/codec" }
 whiteboard-det = { path = "../../core/det" }
 whiteboard-edge-routing = { path = "../../core/edge-routing" }
 

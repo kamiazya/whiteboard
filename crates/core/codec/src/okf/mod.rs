@@ -21,6 +21,7 @@ mod schema;
 mod write;
 
 pub use document::{Code, Document, Failure, Frontmatter, Issue, Map, Step, TrustEvent};
+pub use js::{array_index, enumeration_order};
 
 use crate::frontmatter::{self, Unwritable, Value};
 

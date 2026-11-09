@@ -17,6 +17,8 @@ function fakeGlue(abi: string, out: number[]) {
   const glue: CoreGlue = {
     initSync: () => undefined,
     abi_version: () => abi,
+    okf_parse: () => '["refused","malformed"]',
+    okf_serialize: () => '["refused","malformed"]',
     edge_route_layout: (input) => {
       sent.push(input)
       return Float64Array.from(out)

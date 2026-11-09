@@ -59,7 +59,7 @@ function textOf(text: string): Text {
   return { t: toWellFormed(text), lone }
 }
 
-function textFrom(recorded: Text): string {
+export function textFrom(recorded: Text): string {
   const units = recorded.t.split('')
   for (const [index, unit] of recorded.lone ?? []) units[index] = String.fromCharCode(unit)
   return units.join('')

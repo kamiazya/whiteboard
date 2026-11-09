@@ -1,0 +1,8 @@
+{
+  // The wasm differential imports core-wasm, whose glue is typed against the DOM
+  // lib's WebAssembly and BufferSource; the package's own config keeps that lib out.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "lib": ["ES2022", "ES2024.String", "DOM"] },
+  "include": ["src/**/*.rust.test.ts", "vitest.rust.config.ts"],
+  "exclude": []
+}

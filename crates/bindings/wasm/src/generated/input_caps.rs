@@ -16,6 +16,14 @@ pub struct InputCaps {
     pub max_nodes: Option<usize>,
 }
 
+/// The caps of `whiteboard-wasm::okf::okf_parse`.
+pub const OKF_PARSE: InputCaps =
+    InputCaps { max_bytes: 262_144, max_depth: 64, max_millis: 500, max_nodes: None };
+
+/// The caps of `whiteboard-wasm::okf::okf_serialize`.
+pub const OKF_SERIALIZE: InputCaps =
+    InputCaps { max_bytes: 262_144, max_depth: 64, max_millis: 250, max_nodes: None };
+
 /// The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`.
 pub const EDGE_ROUTE_LAYOUT: InputCaps =
     InputCaps { max_bytes: 262_144, max_depth: 2, max_millis: 5000, max_nodes: None };

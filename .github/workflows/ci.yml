@@ -1171,6 +1171,12 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=core-wasm-rust
 
+      # QR-21 layer 2 for the OKF envelope: parseOkf and serializeOkf against
+      # the artifact, after stage:wasm, which codec-rust reads it from.
+      - name: OKF envelope against the wasm (codec-rust)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm exec vitest run --project=codec-rust
+
       - name: Rust release gates (dist native, harden-check, repro-check, notices)
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:release:check

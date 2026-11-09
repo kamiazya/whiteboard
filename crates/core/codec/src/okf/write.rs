@@ -11,11 +11,27 @@ pub(super) fn document(doc: &Document) -> Result<String, Unwritable> {
     // `facetsRaw` is spread at the root it came from, and `facets` last, so
     // a key held twice keeps the position of its first holder and takes the
     // value of its last, as an object spread does.
+    let modelled_len = entries.len();
     for (name, item) in canonical(fm.facets_raw.as_deref()) {
-        assign(&mut entries, name, item);
+        // The preserved keys arrive sorted and a record holds a key once, so a
+        // key can only meet a modelled one or, if held twice, the one just
+        // before it. Searching all of `entries` made a record of many keys
+        // quadratic.
+        let held =
+            entries.iter().take(modelled_len).position(|(held, _)| *held == name).or_else(|| {
+                let last = entries.len().checked_sub(1).filter(|last| *last >= modelled_len);
+                last.filter(|last| entries.get(*last).is_some_and(|(held, _)| *held == name))
+            });
+        assign(&mut entries, held, name, item);
     }
     if fm.facets.is_some() {
-        assign(&mut entries, "facets".to_string(), Value::Map(canonical(fm.facets.as_deref())));
+        let held = entries.iter().position(|(held, _)| held == "facets");
+        assign(
+            &mut entries,
+            held,
+            "facets".to_string(),
+            Value::Map(canonical(fm.facets.as_deref())),
+        );
     }
     let yaml = stringify(&enumeration_order(Value::Map(entries)))?;
     Ok(format!("---\n{yaml}\n---\n{}", doc.body))
@@ -62,9 +78,9 @@ fn canonical(record: Option<&[(String, Value)]>) -> Map {
     entries
 }
 
-/// `{...entries, [name]: value}`.
-fn assign(entries: &mut Map, name: String, value: Value) {
-    match entries.iter_mut().find(|(held, _)| *held == name) {
+/// `{...entries, [name]: value}`, given the position `held` of `name` in `entries`.
+fn assign(entries: &mut Map, held: Option<usize>, name: String, value: Value) {
+    match held.and_then(|at| entries.get_mut(at)) {
         Some(slot) => slot.1 = value,
         None => entries.push((name, value)),
     }

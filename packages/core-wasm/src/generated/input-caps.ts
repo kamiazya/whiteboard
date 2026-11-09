@@ -7,6 +7,20 @@
  */
 export type RefusalCode = 'input-too-large' | 'malformed'
 
+/** The caps of `whiteboard-wasm::okf::okf_parse`. */
+export const OKF_PARSE_CAPS = Object.freeze({
+  maxBytes: 262144,
+  maxDepth: 64,
+  maxMillis: 500,
+} as const)
+
+/** The caps of `whiteboard-wasm::okf::okf_serialize`. */
+export const OKF_SERIALIZE_CAPS = Object.freeze({
+  maxBytes: 262144,
+  maxDepth: 64,
+  maxMillis: 250,
+} as const)
+
 /** The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`. */
 export const EDGE_ROUTE_LAYOUT_CAPS = Object.freeze({
   maxBytes: 262144,

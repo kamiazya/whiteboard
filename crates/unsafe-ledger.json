@@ -63,7 +63,7 @@
     },
     "itoa": {
       "ceiling": 13,
-      "reason": "xtask only, never shipped: integer formatting inside serde_json"
+      "reason": "xtask, and the wasm artifact through serde_json (the OKF exports' wire): integer formatting inside serde_json"
     },
     "jobserver": {
       "ceiling": 40,
@@ -87,7 +87,7 @@
     },
     "memchr": {
       "ceiling": 333,
-      "reason": "xtask only, never shipped: SIMD byte search inside serde_json"
+      "reason": "xtask, and the wasm artifact through serde_json (the OKF exports' wire): byte search inside serde_json"
     },
     "minicov": {
       "ceiling": 12,
@@ -139,15 +139,15 @@
     },
     "serde": {
       "ceiling": 2,
-      "reason": "xtask only, never shipped: serde's derive and data model (also counts `unsafe` in generated-code templates)"
+      "reason": "xtask, and the wasm artifact through serde_json: serde's data model (also counts `unsafe` in generated-code templates)"
     },
     "serde_core": {
       "ceiling": 2,
-      "reason": "xtask only, never shipped: serde's core traits"
+      "reason": "xtask, and the wasm artifact through serde_json: serde's core traits"
     },
     "serde_json": {
       "ceiling": 17,
-      "reason": "xtask only, never shipped: JSON reading of cargo metadata and the ledgers"
+      "reason": "xtask, and the wasm artifact (the OKF exports' wire, parsed under deny.toml's depth ban): JSON reading"
     },
     "shlex": {
       "ceiling": 6,
@@ -195,7 +195,7 @@
     },
     "zmij": {
       "ceiling": 70,
-      "reason": "xtask only, never shipped: float formatting inside serde_json"
+      "reason": "xtask, and the wasm artifact through serde_json (the OKF exports' wire): float formatting inside serde_json"
     }
   }
 }

@@ -136,7 +136,7 @@ function reachable(text: string, seen: Set<string>): boolean {
   return true
 }
 
-function generatedText(d: Dice, pool: readonly string[]): string {
+export function generatedText(d: Dice, pool: readonly string[]): string {
   const base = d.chance(0.15) && pool.length > 0 ? d.pick(pool) : wrap(render(frontmatter(d), d), d)
   let text = base
   for (let i = 0, n = d.chance(0.45) ? 1 + d.int(2) : 0; i < n; i++) {
@@ -244,7 +244,7 @@ const UNSAFE_PAYLOADS: (() => unknown)[] = [
   () => ({ '\udc00': 1 }),
 ]
 
-function unsafeDocument(d: Dice): OkfMarkdownDocument {
+export function unsafeDocument(d: Dice): OkfMarkdownDocument {
   const fm = validFrontmatter(d)
   const bucket = d.pick(['facets', 'facetsRaw'])
   fm[bucket] = {
@@ -256,7 +256,7 @@ function unsafeDocument(d: Dice): OkfMarkdownDocument {
   return { frontmatter: fm, body: body(d) } as OkfMarkdownDocument
 }
 
-function validDocument(d: Dice): OkfMarkdownDocument {
+export function validDocument(d: Dice): OkfMarkdownDocument {
   return { frontmatter: validFrontmatter(d), body: body(d) } as OkfMarkdownDocument
 }
 

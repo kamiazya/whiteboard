@@ -717,6 +717,39 @@ future wasm boundary must refuse them as the TypeScript does), and the Rust type
 write the modelled keys and a trust event's `by` and `at` in the schema's order
 rather than the caller's. Still no wasm export or switch.
 
+**Shipped (step 6, third increment).** The OKF envelope crosses the wasm
+boundary: `okf_parse` and `okf_serialize` in `crates/bindings/wasm` (ABI 15),
+`Core.parseOkf` and `Core.serializeOkf` in `packages/core-wasm`. The wire is
+JSON, because a frontmatter value is arbitrary nested data; a double travels as
+the hex of its 64 bits and a collection as one array, so a value nested to the
+writer's cap stays inside `serde_json`'s recursion limit. The body never
+crosses on the way out: a read answers the UTF-16 offset the body starts at and
+the shim slices its own string, a write answers everything before the body and
+the shim appends it, so the body is verbatim by construction. The shim refuses
+a text with a lone surrogate (it would cross as U+FFFD and Rust would accept
+what the TypeScript refuses), a text past the caps, and a document the wire
+does not carry (keys not in the schema's order, a value of another kind), all as
+`CoreInputRefused`, and a value with no YAML spelling as `CoreOkfUnwritable`;
+a root answers each from the TypeScript. Declared deviations: a YAML refusal's
+message names its class, not the `yaml` package's text, and a schema issue
+carries its path, code and a message naming the code, not Zod's extra fields.
+The three other refusal messages are the TypeScript's own words.
+
+The step-6 gate is met at the boundary. `codec-rust` (`packages/codec/src/okf/wasm.rust.test.ts`,
+in CI's `rust` job after the wasm build) holds the artifact to `parseOkf` and
+`serializeOkf` exactly: the 1,700 recorded cases, then 1,500 generated texts, 1,500
+generated documents and 600 documents in shuffled key order per run, every value
+compared by its bits, every mapping in enumeration order, the body verbatim, a
+refusal by stage, schema issue path and code, with reach floors on every
+outcome. Four one-character changes planted on the Rust side (an issue code, the
+key comparison, the trust event key check, the body offset) each turned the
+project red and were restored. `okf_wasm_parse` and `okf_wasm_serialize` fuzz the
+two exports through the decode a host reaches (about 8M and 10M executions
+locally, no finding), but libFuzzer cannot call npm `yaml`, so the
+differential against the reader that ships is the generated one above, not a
+coverage-guided one. The `PORTED_FUNCTIONS` entries wait for the switch, which
+is the next increment: an entry needs a `CoreImpl` key to point at.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

@@ -11,5 +11,6 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src", "vitest.node.config.ts"]
+  "include": ["src", "vitest.node.config.ts"],
+  "exclude": ["src/**/*.rust.test.ts"]
 }

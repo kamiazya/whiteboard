@@ -579,7 +579,9 @@ dependencies = [
 name = "whiteboard-wasm"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "wasm-bindgen",
+ "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-edge-routing",
 ]

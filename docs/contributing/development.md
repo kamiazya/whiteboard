@@ -372,7 +372,7 @@ The selection fails closed. A change to a root build, install or test config (th
 
 `pnpm test:affected` runs the same selection locally against `origin/main` (`--base <ref>` for another base). It leaves `mcp-smoke` to CI, since that project needs a widget build first. To see what the selection would have saved over recent history, run `node tools/checks/src/affected-replay.mjs --count 50`, which replays it over `main`'s merged pull requests and prices each run with job timings measured from real CI runs (`affected-replay.mjs profile` re-measures them).
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the thirty-one configured in `vitest.projects.json`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the thirty-two configured in `vitest.projects.json`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
 
 ```bash
 pnpm test --project mcp-node
