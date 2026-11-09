@@ -58,11 +58,20 @@ function repairOf(step: Op): Op {
 
 const ops = fc.array(op, { maxLength: 3 })
 
+const benign = fc.array(others, { maxLength: 3 })
+
 /**
- * What the record holds and what the update does to it. Three archetypes
- * beside the free draw, so that 25 runs reach each outcome — an update that
- * rewrites a held shape, one that repairs it, one that writes a new one —
- * rather than hoping the free draw lands on a shared pair.
+ * What the record holds and what the update does to it. Archetypes beside the
+ * free draws, so that 25 runs reach each outcome rather than hoping a free
+ * draw lands on a shared pair, and weighted so that each floor below is
+ * missed with a probability far under one in a million per run:
+ *
+ * - one record holding two retired shapes, whose update repairs the first and
+ *   replays the second, beside steps that cannot retire anything. Repair and
+ *   replay are only counted as accepted when nothing in the update newly
+ *   retires a shape, so a free draw (three in four steps are retired writes)
+ *   almost never yields either.
+ * - an update that writes a shape the record did not hold.
  */
 const scenario: fc.Arbitrary<readonly [readonly Op[], readonly Op[]]> = fc.oneof(
   fc.tuple(ops, ops).map(([seeded, steps]) => [seeded, [...steps, ...seeded]] as const),
@@ -73,14 +82,26 @@ const scenario: fc.Arbitrary<readonly [readonly Op[], readonly Op[]]> = fc.oneof
         [w, ...steps],
       ] as const,
   ),
-  fc.tuple(writes, ops, ops).map(
-    ([w, seeded, steps]) =>
-      [
-        [w, ...seeded],
-        [repairOf(w), ...steps],
-      ] as const,
-  ),
-  fc.tuple(writes, ops).map(([w, seeded]) => [seeded, [w]] as const),
+  {
+    weight: 9,
+    arbitrary: fc
+      .tuple(
+        writes,
+        // A push replays as a second entry, which is newly retired.
+        writes.filter((candidate) => candidate.kind !== 'push-element'),
+        benign,
+        benign,
+      )
+      .filter(([repaired, replayed]) => writtenPair(repaired) !== writtenPair(replayed))
+      .map(
+        ([repaired, replayed, seeded, steps]) =>
+          [
+            [...seeded, repaired, replayed],
+            [repairOf(repaired), replayed, ...steps],
+          ] as const,
+      ),
+  },
+  { weight: 9, arbitrary: fc.tuple(writes, ops).map(([w, seeded]) => [seeded, [w]] as const) },
 )
 
 const elementsList = (doc: LoroDoc): LoroMovableList => {
@@ -95,18 +116,32 @@ const elementsList = (doc: LoroDoc): LoroMovableList => {
     : node.data.setContainer('elements', new LoroMovableList())
 }
 
+// Loro drops a set of an identical value, so a replay needs a value that
+// differs for the update to carry an op at all.
+let writeCount = 0
+
 function apply(doc: LoroDoc, step: Op): void {
   const board = documentContainers(doc, BOARD)
   switch (step.kind) {
     case 'node':
       board
         .getMap(NODES_KEY)
-        .set(step.id, step.retired ? { id: step.id, 'x-whiteboard': {} } : { id: step.id, n: 1 })
+        .set(
+          step.id,
+          step.retired
+            ? { id: step.id, 'x-whiteboard': {}, written: ++writeCount }
+            : { id: step.id, n: 1 },
+        )
       break
     case 'edge':
       board
         .getMap(EDGES_KEY)
-        .set(step.id, step.retired ? { id: step.id, 'x-whiteboard': {} } : { id: step.id, n: 1 })
+        .set(
+          step.id,
+          step.retired
+            ? { id: step.id, 'x-whiteboard': {}, written: ++writeCount }
+            : { id: step.id, n: 1 },
+        )
       break
     case 'unset-node':
       board.getMap(NODES_KEY).delete(step.id)
