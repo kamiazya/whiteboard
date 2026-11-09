@@ -29,8 +29,7 @@ export interface CoreSourceOptions {
  * never resolved.
  *
  * Only a build that opted out of the core for routing AND for OKF
- * (`VITE_WHITEBOARD_CORE=ts`, with `VITE_WHITEBOARD_CORE_OKF` at its `ts`
- * default) may be stubbed. A
+ * (`VITE_WHITEBOARD_CORE=ts` and `VITE_WHITEBOARD_CORE_OKF=ts`) may be stubbed. A
  * production build routes with `rust` by default, and one that did so without
  * the wasm would ship a stub that degrades every layout to the TypeScript
  * with nothing failing, so it is a build error instead. The dev server is
@@ -62,7 +61,7 @@ export function coreSourcePlugin(options: CoreSourceOptions = {}): Plugin {
       }
       if (building && usesCore && !staged) {
         throw new Error(
-          'this build uses the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts (and VITE_WHITEBOARD_CORE_OKF=ts, its default) to build without it',
+          'this build uses the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts and VITE_WHITEBOARD_CORE_OKF=ts to build without it',
         )
       }
       if (building && usesCore && ship === '0') {
