@@ -5,6 +5,21 @@ export { EXTENSION_FACET_KEY_PATTERN, RESERVED_ROOT_KEYS } from './facet-keys.js
 export type { CoreFacets, ExtensionFacets, FacetsRaw } from './generated/okf.zod.js'
 export { coreFacetsSchema, extensionFacetsSchema, facetsRawSchema }
 
+// The core facets are `contracts/model/okf.schema.json`'s; why three of them
+// are held to so little:
+//
+// - `description`: OKF §4.1 asks for "a single sentence summarizing the
+//   concept". One sentence is guidance to the author, not a constraint to
+//   enforce: policing it would reject a two-sentence summary that reads well.
+// - `resource`: not validated as a URL. §6.2 makes every path-valued field
+//   accept an absolute URL, a bundle-relative path beginning with `/`, or an
+//   ordinary relative path, so `../computations/revenue.md` is as conformant
+//   as `https://…`.
+// - `view`: which extension facet a reader renders when a document carries
+//   several. Nothing reads it and no tool writes it: it round-trips through
+//   `writeCoreFacets`/`readCoreFacets` and stops there. It stays declared
+//   because dropping it would lose an author's value on the next save.
+
 /**
  * NAMED in zod's registry, so it is emitted into `$defs` once and `$ref`ed at
  * each site instead of inlined there.
