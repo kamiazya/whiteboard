@@ -1,4 +1,5 @@
 import type { LayoutCore, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { OkfCodecCore } from '@kamiazya/whiteboard-codec'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
@@ -114,6 +115,13 @@ export interface ServerDeps {
    * server that never renders never loads it.
    */
   layoutCore?: () => Promise<LayoutCore | undefined>
+  /**
+   * The Rust core's OKF envelope and its switch (ADR-0054's `CoreImpl`),
+   * for every write and read of an OKF Markdown document. Optional and a
+   * memoized factory for the reason `layoutCore` is; absent means the
+   * TypeScript answers.
+   */
+  okfCore?: () => Promise<OkfCodecCore | undefined>
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

@@ -1,5 +1,4 @@
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
-import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
   readDocumentContent,
@@ -12,7 +11,6 @@ import type { ServerDeps } from '../server-deps.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { BARE_BODY_TYPE } from './document-crud.js'
 import { DocumentKindMismatchError, DocumentSerializeError } from './errors.js'
-
 /**
  * OKF-Markdown is a single-document format (frontmatter + body), which is what
  * a markdown document is. A spatial canvas has no body — its nodes are
@@ -25,6 +23,7 @@ import { DocumentKindMismatchError, DocumentSerializeError } from './errors.js'
  * future authorization-scoping hook, not passed to the store.
  */
 import type { ExportOkfInput, ExportOkfOutput } from './export-okf.schemas.js'
+import { okfCodecOf } from './okf-codec.js'
 
 export {
   type ExportOkfInput,
@@ -83,7 +82,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   // the caller can report it per document instead of failing the batch.
   let markdown: string
   try {
-    markdown = serializeOkf({ frontmatter, body })
+    markdown = (await okfCodecOf(deps)).serializeOkf({ frontmatter, body })
   } catch (error) {
     throw new DocumentSerializeError(input.documentId, 'OKF Markdown', error)
   }

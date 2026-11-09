@@ -1,3 +1,4 @@
+import { okfCodec } from '@kamiazya/whiteboard-codec'
 import { DOCUMENT_NAME_MAX_LENGTH } from '@kamiazya/whiteboard-model'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -6,7 +7,10 @@ import { createServer } from '../create-server.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { OkfParseError, parseWritableOkf } from './document-set.js'
+
 import { createWorkspaceEditTool } from './workspace-edit.js'
+
+const TS_OKF = okfCodec(undefined)
 
 const WS = '01GGAH4DBB5ZSV9J187CAE4ZZ5'
 const okf = (title: string) => `---\ntype: note\ntitle: ${title}\n---\nbody`
@@ -32,13 +36,13 @@ async function makeDeps() {
  */
 describe('a frontmatter title past the document name bound', () => {
   it('is refused by the writable parse, naming its stage and the bound', () => {
-    const attempt = () => parseWritableOkf(okf(overLimit))
+    const attempt = () => parseWritableOkf(okf(overLimit), TS_OKF)
     expect(attempt).toThrow(OkfParseError)
     expect(attempt).toThrow(REFUSAL)
   })
 
   it('is taken at exactly the bound', () => {
-    expect(parseWritableOkf(okf(atLimit)).frontmatter.title).toBe(atLimit)
+    expect(parseWritableOkf(okf(atLimit), TS_OKF).frontmatter.title).toBe(atLimit)
   })
 
   it('is refused by document.create before the document exists', async () => {

@@ -1,3 +1,4 @@
+import { okfCodec } from '@kamiazya/whiteboard-codec'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { apiErrorReason } from '../api-errors.js'
@@ -8,6 +9,8 @@ import { wbDocumentCreate } from './document-crud.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { OkfParseError, parseWritableOkf } from './document-set.js'
 
+const TS_OKF = okfCodec(undefined)
+
 const WS = '01BKWAA3N9WZX0M7JN2WQDYEDB'
 // Spelled like a facet but written where no plugin reads: the same payload
 // under `facets:` is refused by the registry, and here it would be stored
@@ -17,26 +20,26 @@ const NESTED_FACET = '---\ntype: note\nfacets:\n  visual.symbol/v0:\n    kind: b
 
 describe('a facet key written at the root of the frontmatter', () => {
   it('is refused with a reason that says facets go under `facets:`', () => {
-    const attempt = () => parseWritableOkf(ROOT_FACET)
+    const attempt = () => parseWritableOkf(ROOT_FACET, TS_OKF)
     expect(attempt).toThrow(OkfParseError)
     expect(attempt).toThrow(/visual\.symbol\/v0.*under `facets:`/s)
   })
 
   it('refuses every such key, not only the first', () => {
     const markdown = '---\ntype: note\na.b/v1: 1\nc.d/v2: 2\n---\nbody'
-    expect(() => parseWritableOkf(markdown)).toThrow(/a\.b\/v1.*c\.d\/v2/s)
+    expect(() => parseWritableOkf(markdown, TS_OKF)).toThrow(/a\.b\/v1.*c\.d\/v2/s)
   })
 
   it('leaves an unknown root key that is not facet-shaped alone', () => {
     // OKF §4.1: unknown keys are preserved, and only the facet spelling has a
     // meaning this write path would be silently ignoring.
     expect(() =>
-      parseWritableOkf('---\ntype: note\nweird: 1\nvisual.symbol: x\n---\nb'),
+      parseWritableOkf('---\ntype: note\nweird: 1\nvisual.symbol: x\n---\nb', TS_OKF),
     ).not.toThrow()
   })
 
   it('still reaches the registry when it is under `facets:`', () => {
-    expect(() => parseWritableOkf(NESTED_FACET)).not.toThrow()
+    expect(() => parseWritableOkf(NESTED_FACET, TS_OKF)).not.toThrow()
   })
 
   it('is refused by wb_document_create before the document exists', async () => {

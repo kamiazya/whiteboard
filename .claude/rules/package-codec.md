@@ -24,7 +24,16 @@ paths:
   syntax and none is invented. Every producer of link markup (link picker, completion, Link all
   mentions) calls it; a raw `` `[[${x}]]` `` template elsewhere is the defect.
 - `CodecParseResult<T>`/`CodecParseError` — the total-parser error contract every parser here
-  returns instead of throwing (`errors.ts`).
+  returns instead of throwing (`errors.ts`). An issue is `CodecIssue` (code, path, message), not
+  Zod's issue type: the Rust core's OKF reader answers that much and no more.
+- The OKF envelope's `CoreImpl` switch ([ADR-0054](../../docs/contributing/adr/0054-rust-core.md)):
+  `okf/okf-core.ts`'s `okfCodec(core)` answers `parseOkf`/`serializeOkf` by the TypeScript, by
+  the Rust core (`OkfCore`, declared structurally so this package never imports `core-wasm`), or
+  by both with any difference reported. A core that throws has DECLINED and the TypeScript
+  answers, in every mode, so a caller keeps the TypeScript's error classes. A caller that writes
+  or reads OKF for a user takes the codec from its root (server-core's `ServerDeps.okfCore`)
+  rather than calling `parseOkf`/`serializeOkf` directly; the comparison it reports is held by
+  `okf-core.test.ts` and, against the real artifact, by `okf/wasm.rust.test.ts`.
 - The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
   the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
   `JSON_CANVAS_PROJECTION` ledger and the loss tables generated from it

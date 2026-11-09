@@ -3,17 +3,22 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { okfCodec } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import {
   artifactDirectory,
-  layoutCoreLoader,
+  coreLoaders,
+  type LayoutCoreSettings,
   layoutCoreSettingsFrom,
   packagedArtifacts,
   stagedArtifacts,
 } from './layout-core.js'
+
+/** The routing factory alone, for the tests that read no OKF. */
+const layoutCore = (settings: LayoutCoreSettings) => coreLoaders(settings).layoutCore
 
 // Where `stage:wasm` puts the artifact in this checkout. The rust job and
 // test-unit restore it before this file runs, so on CI its absence is a
@@ -86,13 +91,15 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
+      WHITEBOARD_CORE_OKF: 'ts',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
+    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'fast' })).toThrow()
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
   })
 
   it('loads nothing under ts, the rollback setting', async () => {
-    const load = layoutCoreLoader(
+    const load = layoutCore(
       layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'ts', WHITEBOARD_CORE_DIR: emptyDir() }),
     )
     expect(await load()).toBeUndefined()
@@ -102,7 +109,7 @@ describe('the daemon layout core', () => {
     const capture = captureLogsForTests('warning')
     try {
       const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
-      expect(await layoutCoreLoader(settings)()).toBeUndefined()
+      expect(await layoutCore(settings)()).toBeUndefined()
       expect(capture.records.filter((r) => r.data?.event === 'core-load-failed')).toHaveLength(1)
     } finally {
       capture.restore()
@@ -116,9 +123,9 @@ describe('the daemon layout core', () => {
         WHITEBOARD_CORE: 'differential',
         WHITEBOARD_CORE_DIR: emptyDir(),
       })
-      expect(await layoutCoreLoader(settings)()).toBeUndefined()
+      expect(await layoutCore(settings)()).toBeUndefined()
       expect(capture.records.map((r) => r.msg)).toContain(
-        'the Rust core did not load; routing in TypeScript',
+        'the Rust core did not load; answering in TypeScript',
       )
     } finally {
       capture.restore()
@@ -131,7 +138,12 @@ describe('the daemon layout core', () => {
       WHITEBOARD_CORE_MISMATCH: 'throw',
       WHITEBOARD_CORE_DIR: emptyDir(),
     })
-    await expect(layoutCoreLoader(settings)()).rejects.toThrow()
+    await expect(layoutCore(settings)()).rejects.toThrow()
+  })
+
+  it('loads nothing for OKF under ts, its default', async () => {
+    const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
+    expect(await coreLoaders(settings).okfCore()).toBeUndefined()
   })
 
   it('has the staged artifact wherever CI runs this file', () => {
@@ -140,14 +152,14 @@ describe('the daemon layout core', () => {
 
   describe.runIf(built)('over the staged artifact', () => {
     it('routes with the Rust core when nothing is set', async () => {
-      const core = await layoutCoreLoader(layoutCoreSettingsFrom({}))()
+      const core = await layoutCore(layoutCoreSettingsFrom({}))()
       expect(core?.impl.routeLayout).toBe('rust')
     })
 
     it('loads once, and a differential layout over it reports nothing', async () => {
       const capture = captureLogsForTests('warning')
       try {
-        const load = layoutCoreLoader(layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }))
+        const load = layoutCore(layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }))
         const core = await load()
         expect(core?.impl.routeLayout).toBe('differential')
         expect(await load()).toBe(core)
@@ -168,7 +180,7 @@ describe('the daemon layout core', () => {
         err: new Error('x'),
         repro: { nodes: [], edges: [], styles: [], overrides: undefined, budget: {}, labels: [] },
       }
-      const strict = await layoutCoreLoader(
+      const strict = await layoutCore(
         layoutCoreSettingsFrom({
           WHITEBOARD_CORE: 'differential',
           WHITEBOARD_CORE_MISMATCH: 'throw',
@@ -177,7 +189,7 @@ describe('the daemon layout core', () => {
       expect(() => strict?.onMismatch?.(mismatch as never)).toThrow(/layout core refused/)
       const capture = captureLogsForTests('warning')
       try {
-        const lenient = await layoutCoreLoader(
+        const lenient = await layoutCore(
           layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }),
         )()
         lenient?.onMismatch?.(mismatch as never)
@@ -188,5 +200,64 @@ describe('the daemon layout core', () => {
         capture.restore()
       }
     })
+  })
+})
+
+describe.runIf(built)('the daemon OKF core over the staged artifact', () => {
+  const differential = layoutCoreSettingsFrom({
+    WHITEBOARD_CORE: 'differential',
+    WHITEBOARD_CORE_OKF: 'differential',
+  })
+
+  it('shares one instance with the layout core', async () => {
+    const loaders = coreLoaders(differential)
+    const okf = await loaders.okfCore()
+    const layout = await loaders.layoutCore()
+    expect(okf?.impl).toEqual({ parseOkf: 'differential', serializeOkf: 'differential' })
+    expect(okf?.okf).toBe(layout?.routing)
+  })
+
+  it('reads and writes a document with nothing to report', async () => {
+    const capture = captureLogsForTests('debug')
+    try {
+      const codec = okfCodec(await coreLoaders(differential).okfCore())
+      const parsed = codec.parseOkf('---\ntype: note\ntags: [a, b]\n---\nbody\n')
+      if (!parsed.ok) throw new Error(parsed.error.message)
+      codec.serializeOkf(parsed.value)
+      expect(capture.records).toEqual([])
+    } finally {
+      capture.restore()
+    }
+  })
+
+  it('throws a difference under throw, logs it otherwise, and only notes a decline', async () => {
+    const differs = {
+      fn: 'parseOkf' as const,
+      kind: 'differs' as const,
+      ts: 'a',
+      rust: 'b',
+      text: '',
+    }
+    const strict = await coreLoaders(
+      layoutCoreSettingsFrom({
+        WHITEBOARD_CORE_OKF: 'differential',
+        WHITEBOARD_CORE_MISMATCH: 'throw',
+      }),
+    ).okfCore()
+    expect(() => strict?.onMismatch?.(differs)).toThrow(/OKF core differs/)
+    const capture = captureLogsForTests('debug')
+    try {
+      const lenient = await coreLoaders(
+        layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'rust' }),
+      ).okfCore()
+      lenient?.onMismatch?.(differs)
+      strict?.onMismatch?.({ fn: 'serializeOkf', kind: 'declined', err: new Error('x') })
+      expect(capture.records.map((r) => [r.level, r.msg])).toEqual([
+        ['warning', 'the Rust core and the TypeScript disagree'],
+        ['debug', 'the Rust core declined; answered in TypeScript'],
+      ])
+    } finally {
+      capture.restore()
+    }
   })
 })

@@ -34,8 +34,8 @@ import { isTestPath, walkSourceFiles } from './source-scan.js'
 const VOCABULARY = /^(probe|fails-safe|degrades-visibly|deliberate|debt): (\S+\s+){7,}\S+/
 
 const LEDGER: Readonly<Record<string, string>> = {
-  'packages/mcp-server/src/server/export/layout-core.ts#layoutCoreLoader':
-    'degrades-visibly: an unreadable wasm artifact logs a warning and the layout routes in TypeScript, which is the answer it always had; a test run that sets WHITEBOARD_CORE_MISMATCH=throw re-throws instead',
+  'packages/mcp-server/src/server/export/layout-core.ts#loadCore':
+    'degrades-visibly: an unreadable wasm artifact logs a warning and every call the core would answer (a layout, an OKF read or write) is answered in TypeScript, which is the answer it always had; a test run that sets WHITEBOARD_CORE_MISMATCH=throw re-throws instead',
   'packages/mcp-server/src/daemon/container-detection.ts#defaultReadCgroup':
     'probe: reads /proc/1/cgroup to guess whether this runs in a container, and an unreadable file only means it cannot tell',
   'packages/mcp-server/src/server/server-mode-web-app.ts#mountServerModeWebApp':
