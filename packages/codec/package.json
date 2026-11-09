@@ -36,6 +36,7 @@
     "@kamiazya/whiteboard-core-wasm": "workspace:*",
     "micromark-util-types": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }
