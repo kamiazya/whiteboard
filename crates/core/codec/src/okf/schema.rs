@@ -5,17 +5,17 @@
 //! Zod reports every refusal it finds, fields in the order the schema
 //! declares them, so this does too, and an [`Issue`] is where and why.
 
-use super::document::{Code, Frontmatter, Issue, Map, Step, TrustEvent};
-use super::js::{is_trimmed, length_below_one};
+use super::document::{Code, Issue, Map, Step};
+use super::js::length_below_one;
 use crate::frontmatter::Value;
-
-/// `RESERVED_ROOT_KEYS`: the root keys the schema models.
-const RESERVED_ROOT_KEYS: [&str; 9] =
-    ["type", "title", "description", "resource", "tags", "view", "facets", "generated", "verified"];
+use whiteboard_model::checks::{
+    RESERVED_ROOT_KEYS, extension_facet_keys, okf_actor, okf_timestamp,
+};
+use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 
 /// The frontmatter a parsed YAML value stands for, or every place the
 /// schema refuses it. A value that is not a mapping is refused at the root.
-pub(super) fn frontmatter(value: Value) -> Result<Frontmatter, Vec<Issue>> {
+pub(super) fn frontmatter(value: Value) -> Result<OkfMarkdownFrontmatter, Vec<Issue>> {
     let Value::Map(entries) = value else {
         return Err(vec![issue(&[], Code::InvalidType)]);
     };
@@ -34,7 +34,7 @@ pub(super) fn frontmatter(value: Value) -> Result<Frontmatter, Vec<Issue>> {
     if !issues.is_empty() {
         return Err(issues);
     }
-    Ok(Frontmatter {
+    Ok(OkfMarkdownFrontmatter {
         r#type: r#type.unwrap_or_default(),
         title,
         description,
@@ -136,12 +136,12 @@ fn optional_tags(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<St
     tags.into_iter().collect()
 }
 
-fn verified(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<TrustEvent>> {
+fn verified(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<OkfTrustEvent>> {
     let Value::Seq(items) = value? else {
         issues.push(issue(&[key("verified")], Code::InvalidType));
         return None;
     };
-    let events: Vec<Option<TrustEvent>> = items
+    let events: Vec<Option<OkfTrustEvent>> = items
         .into_iter()
         .enumerate()
         .map(|(index, item)| event(item, &[key("verified"), Step::Index(index)], issues))
@@ -150,7 +150,7 @@ fn verified(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<TrustEv
 }
 
 /// `okfTrustEventSchema`: `by` and `at` required, anything else kept.
-fn event(value: Value, path: &[Step], issues: &mut Vec<Issue>) -> Option<TrustEvent> {
+fn event(value: Value, path: &[Step], issues: &mut Vec<Issue>) -> Option<OkfTrustEvent> {
     let Value::Map(entries) = value else {
         issues.push(issue(path, Code::InvalidType));
         return None;
@@ -159,7 +159,7 @@ fn event(value: Value, path: &[Step], issues: &mut Vec<Issue>) -> Option<TrustEv
         entries.into_iter().partition(|(name, _)| name == "by" || name == "at");
     let by = event_text(take(&mut named, "by"), path, "by", true, actor_problem, issues);
     let at = event_text(take(&mut named, "at"), path, "at", false, timestamp_problem, issues);
-    Some(TrustEvent { by: by?, at: at?, extra })
+    Some(OkfTrustEvent { by: by?, at: at?, extra })
 }
 
 /// A string of an event that `problem` has no complaint about.
@@ -188,39 +188,16 @@ fn event_text(
 fn actor_problem(actor: &str) -> Option<Code> {
     if actor.is_empty() {
         Some(Code::TooSmall)
-    } else if !is_trimmed(actor) || actor.contains(['\r', '\n']) {
+    } else if !okf_actor(actor) {
         Some(Code::Custom)
     } else {
         None
     }
 }
 
-/// `okfTimestampSchema`: `\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})`.
+/// `okfTimestampSchema`: matched by the model's `okf_timestamp`.
 fn timestamp_problem(timestamp: &str) -> Option<Code> {
-    const SHAPE: &[u8; 19] = b"dddd-dd-ddTdd:dd:dd";
-    let bytes = timestamp.as_bytes();
-    let Some((head, rest)) = bytes.split_at_checked(SHAPE.len()) else {
-        return Some(Code::InvalidFormat);
-    };
-    let head_ok = head.iter().zip(SHAPE).all(|(found, wanted)| {
-        if *wanted == b'd' { found.is_ascii_digit() } else { found == wanted }
-    });
-    let rest = match rest.split_first() {
-        Some((b'.', fraction)) => {
-            let digits = fraction.iter().take_while(|c| c.is_ascii_digit()).count();
-            if digits == 0 {
-                return Some(Code::InvalidFormat);
-            }
-            fraction.get(digits..).unwrap_or_default()
-        }
-        _ => rest,
-    };
-    let offset_ok = match rest {
-        [b'Z'] => true,
-        [b'+' | b'-', h1, h2, b':', m1, m2] => [h1, h2, m1, m2].iter().all(|c| c.is_ascii_digit()),
-        _ => false,
-    };
-    if head_ok && offset_ok { None } else { Some(Code::InvalidFormat) }
+    if okf_timestamp(timestamp) { None } else { Some(Code::InvalidFormat) }
 }
 
 /// `extensionFacetsSchema`: a mapping whose keys are `{namespace}.{name}/v{n}`.
@@ -229,22 +206,8 @@ fn facets(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Map> {
         issues.push(issue(&[key("facets")], Code::InvalidType));
         return None;
     };
-    for (name, _) in entries.iter().filter(|(name, _)| !is_facet_key(name)) {
+    for name in extension_facet_keys(&entries) {
         issues.push(issue(&[key("facets"), key(name)], Code::Custom));
     }
     Some(entries)
-}
-
-/// `EXTENSION_FACET_KEY_PATTERN`: `^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$`.
-fn is_facet_key(name: &str) -> bool {
-    let name_char = |c: char| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-';
-    let segment = |part: &str| {
-        part.chars().next().is_some_and(|c| c.is_ascii_lowercase()) && part.chars().all(name_char)
-    };
-    let Some((namespace, rest)) = name.split_once('.') else { return false };
-    let Some((facet, version)) = rest.split_once("/v") else { return false };
-    segment(namespace)
-        && segment(facet)
-        && !version.is_empty()
-        && version.bytes().all(|b| b.is_ascii_digit())
 }

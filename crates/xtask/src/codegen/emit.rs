@@ -361,7 +361,7 @@ fn rust_plain_type(out: &mut String, CheckedDef { name, description, ty }: &Chec
     };
     let _ = write!(
         out,
-        "\n/// {description}\n#[derive(Debug, Clone, PartialEq)]\npub struct {name} {{\n"
+        "\n/// {description}\n#[derive(Debug, Clone, PartialEq, Default)]\npub struct {name} {{\n"
     );
     for field in &object.fields {
         let inner = rust_ty(&field.ty);

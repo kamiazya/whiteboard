@@ -291,7 +291,7 @@ fn the_plain_rust_types_carry_options_vecs_values_and_the_kept_keys() {
     let rust = model_rust();
     assert!(rust.contains("use crate::{Map, Value};"));
     assert!(!rust.contains("serde") && !rust.contains("MapOnly"), "{rust}");
-    assert!(rust.contains("#[derive(Debug, Clone, PartialEq)]\npub struct Event {"));
+    assert!(rust.contains("#[derive(Debug, Clone, PartialEq, Default)]\npub struct Event {"));
     assert!(rust.contains("    pub by: Actor,\n    /// When.\n    pub at: Stamp,"));
     assert!(rust.contains("    pub note: Option<String>,\n    /// Keys the contract does not name, in the order written.\n    pub extra: Map,\n}"));
     assert!(rust.contains("pub r#type: String,"));

@@ -13,7 +13,9 @@
 use serde_json::{Value as Json, json};
 use std::collections::BTreeSet;
 use whiteboard_codec::frontmatter::Value;
-use whiteboard_codec::okf::{Frontmatter, Map, TrustEvent, array_index, enumeration_order};
+use whiteboard_codec::okf::{
+    Map, OkfMarkdownFrontmatter, OkfTrustEvent, array_index, enumeration_order,
+};
 
 /// The wire of a value.
 pub(crate) fn value_json(value: &Value) -> Json {
@@ -93,7 +95,7 @@ const ORDER: [&str; 10] = [
 ];
 
 /// The frontmatter as the host's object: the keys that are set, in `ORDER`.
-pub(crate) fn frontmatter_value(fm: &Frontmatter) -> Value {
+pub(crate) fn frontmatter_value(fm: &OkfMarkdownFrontmatter) -> Value {
     let text = |held: &Option<String>| held.clone().map(Value::String);
     let map = |held: &Option<Map>| held.clone().map(Value::Map);
     let slots = [
@@ -119,7 +121,7 @@ pub(crate) fn frontmatter_value(fm: &Frontmatter) -> Value {
     ))
 }
 
-fn event_value(event: &TrustEvent) -> Value {
+fn event_value(event: &OkfTrustEvent) -> Value {
     let named = [
         ("by".to_owned(), Value::String(event.by.clone())),
         ("at".to_owned(), Value::String(event.at.clone())),
@@ -134,9 +136,9 @@ fn event_value(event: &TrustEvent) -> Value {
 /// `by` then `at` before anything else. The writer emits in the order
 /// `parseOkf` hands the keys over in, so an object built in another order is
 /// not this wire's to write.
-pub(crate) fn frontmatter_from(value: Value) -> Option<Frontmatter> {
+pub(crate) fn frontmatter_from(value: Value) -> Option<OkfMarkdownFrontmatter> {
     let Value::Map(entries) = value else { return None };
-    let mut fm = Frontmatter::default();
+    let mut fm = OkfMarkdownFrontmatter::default();
     let mut held = None::<String>;
     let mut at = 0;
     for (name, item) in entries {
@@ -175,12 +177,12 @@ fn map(value: Value) -> Option<Map> {
     if let Value::Map(entries) = value { Some(entries) } else { None }
 }
 
-fn events(value: Value) -> Option<Vec<TrustEvent>> {
+fn events(value: Value) -> Option<Vec<OkfTrustEvent>> {
     let Value::Seq(items) = value else { return None };
     items.into_iter().map(event).collect()
 }
 
-fn event(value: Value) -> Option<TrustEvent> {
+fn event(value: Value) -> Option<OkfTrustEvent> {
     let entries = map(value)?;
     // A host enumerates integer-like keys first, so they are set aside; the
     // writer puts them where the host would.
@@ -198,15 +200,27 @@ fn event(value: Value) -> Option<TrustEvent> {
             _ => extra.push((name, item)),
         }
     }
-    Some(TrustEvent { by: by?, at: at?, extra })
+    Some(OkfTrustEvent { by: by?, at: at?, extra })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{frontmatter_from, frontmatter_value, json_value, value_json};
+    use super::{ORDER, frontmatter_from, frontmatter_value, json_value, value_json};
     use serde_json::json;
     use whiteboard_codec::frontmatter::Value;
-    use whiteboard_codec::okf::{Frontmatter, TrustEvent};
+    use whiteboard_codec::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
+
+    /// The contract's `x-wb-order` for the frontmatter, which the generator
+    /// does not emit as a constant, so `ORDER` is held to it here.
+    const CONTRACT: &str = include_str!("../../../../contracts/model/okf.schema.json");
+
+    #[test]
+    fn the_wire_names_frontmatter_keys_in_the_contracts_order() {
+        let contract: serde_json::Value = serde_json::from_str(CONTRACT).unwrap();
+        let order = &contract["$defs"]["OkfMarkdownFrontmatter"]["x-wb-order"];
+        assert_eq!(order.as_array().map(Vec::len), Some(ORDER.len()), "{order}");
+        assert_eq!(*order, json!(ORDER));
+    }
 
     #[test]
     fn every_kind_of_value_survives_the_wire_with_its_bits() {
@@ -261,12 +275,12 @@ mod tests {
 
     #[test]
     fn a_frontmatter_round_trips_through_the_object_the_host_holds() {
-        let event = TrustEvent {
+        let event = OkfTrustEvent {
             by: "me".to_owned(),
             at: "2025-01-01T00:00:00Z".to_owned(),
             extra: vec![("note".to_owned(), text("x"))],
         };
-        let fm = Frontmatter {
+        let fm = OkfMarkdownFrontmatter {
             r#type: "note".to_owned(),
             title: Some("t".to_owned()),
             description: Some("d".to_owned()),
@@ -297,7 +311,8 @@ mod tests {
             ]
         );
         assert_eq!(frontmatter_from(object), Some(fm));
-        let bare = Frontmatter { r#type: "x".to_owned(), ..Frontmatter::default() };
+        let bare =
+            OkfMarkdownFrontmatter { r#type: "x".to_owned(), ..OkfMarkdownFrontmatter::default() };
         assert_eq!(frontmatter_value(&bare), mapping(&[("type", text("x"))]));
     }
 

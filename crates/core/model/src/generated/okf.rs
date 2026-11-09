@@ -5,7 +5,7 @@
 use crate::Map;
 
 /// The core OKF facets every document may carry.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct CoreFacets {
     /// What kind of concept this is.
     pub r#type: String,
@@ -42,7 +42,7 @@ pub type OkfActor = String;
 pub type OkfTimestamp = String;
 
 /// One trust stamp: who, and when. Keys a producer added are kept.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct OkfTrustEvent {
     /// Who or what acted.
     pub by: OkfActor,
@@ -53,7 +53,7 @@ pub struct OkfTrustEvent {
 }
 
 /// Document frontmatter: the core facets plus the trust family and the facet buckets.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct OkfMarkdownFrontmatter {
     /// What kind of concept this is.
     pub r#type: String,

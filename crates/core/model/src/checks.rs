@@ -8,7 +8,7 @@ use crate::Map;
 /// The characters `String.prototype.trim` strips: ECMAScript's `WhiteSpace`
 /// and `LineTerminator`. Not `char::is_whitespace`, which counts U+0085 and
 /// misses U+FEFF.
-fn is_js_space(c: char) -> bool {
+pub fn is_js_space(c: char) -> bool {
     matches!(
         c,
         '\u{9}'..='\u{d}'
