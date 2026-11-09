@@ -13,9 +13,9 @@
       "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI"
     },
     "core/codec": {
-      "lines": 97,
-      "regions": 96,
-      "reason": "first measured 2026-11-09 at 98.70% lines and 97.82% regions, with the recorded TypeScript answers replayed natively (tests/recorded_oracle.rs), the examples and the properties; what is left is the refusals of constructs a recorded text cannot reach cheaply (a property before a flow indicator, a multi-line explicit key). The floor sits a point under"
+      "lines": 98,
+      "regions": 97,
+      "reason": "first measured 2026-11-09 at 98.70% lines and 97.82% regions, with the recorded TypeScript answers replayed natively (tests/recorded_oracle.rs), the examples and the properties; what is left is the refusals of constructs a recorded text cannot reach cheaply (a property before a flow indicator, a multi-line explicit key). Raised to 98 and 97 once the OKF envelope joined, replayed from okf.jsonl (tests/okf_oracle.rs) beside its examples and properties: 98.67% lines and 97.99% regions. The floor sits a point under"
     },
     "core/det": {
       "lines": 98,

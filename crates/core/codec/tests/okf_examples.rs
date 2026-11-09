@@ -233,6 +233,36 @@ fn an_actor_is_a_single_line_without_surrounding_white_space() {
     assert!(parse(&format!("---\ntype: a\ngenerated:\n  by: \"x\\u180e\"\n  {at}\n---\n")).is_ok());
 }
 
+/// Whether a document whose `generated.by` is `actor` (an escaped double-quoted scalar) is read.
+fn actor_is_read(actor: &str) -> bool {
+    let at = "at: 2026-01-02T03:04:05Z";
+    parse(&format!("---\ntype: a\ngenerated:\n  by: \"{actor}\"\n  {at}\n---\n")).is_ok()
+}
+
+#[test]
+fn an_actor_is_trimmed_by_exactly_the_characters_javascript_trims() {
+    let trimmed = [
+        '\u{9}', '\u{b}', '\u{c}', '\u{d}', ' ', '\u{a0}', '\u{1680}', '\u{2000}', '\u{2005}',
+        '\u{200a}', '\u{2028}', '\u{2029}', '\u{202f}', '\u{205f}', '\u{3000}', '\u{feff}',
+    ];
+    let kept = [
+        '\u{8}', '\u{e}', '\u{1f}', '!', '\u{85}', '\u{a1}', '\u{167f}', '\u{1681}', '\u{180e}',
+        '\u{1fff}', '\u{200b}', '\u{2027}', '\u{202a}', '\u{2030}', '\u{205e}', '\u{2060}',
+        '\u{2fff}', '\u{3001}', '\u{fefe}', '\u{ff00}',
+    ];
+    let escaped = |c: char| format!("\\u{:04x}", u32::from(c));
+    for c in trimmed {
+        assert!(!actor_is_read(&format!("x{}", escaped(c))), "{c:?} trailing");
+        assert!(!actor_is_read(&format!("{}x", escaped(c))), "{c:?} leading");
+        // Inside, only a carriage return makes it two lines.
+        assert_eq!(actor_is_read(&format!("x{}y", escaped(c))), c != '\u{d}', "{c:?} inside");
+    }
+    for c in kept {
+        assert!(actor_is_read(&format!("x{}", escaped(c))), "{c:?} trailing");
+        assert!(actor_is_read(&format!("{}x", escaped(c))), "{c:?} leading");
+    }
+}
+
 #[test]
 fn a_timestamp_has_an_explicit_utc_offset() {
     let stamp = |at: &str| {

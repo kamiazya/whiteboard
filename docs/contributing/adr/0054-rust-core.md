@@ -705,6 +705,18 @@ and `serializeOkf` then strips one newline as content), which the Rust writer
 reproduces and a test pins; `yaml` 2.9 folds a long string's more-indented line (one starting with a space) at a space, which a reader keeps as a line break, so that space comes back as a newline, again reproduced and pinned; and the Rust writer refuses collections nested past
 64 levels, which the TypeScript writes.
 
+**Shipped (step 6, second increment).** `whiteboard_codec::okf` holds `parse`
+(`parseOkf`), `serialize` (`serializeOkf`) and `has_frontmatter`
+(`hasOkfFrontmatter`) over crate-local document types, held by a second recorded
+oracle, `packages/codec/src/okf/oracle/okf.jsonl` (1,200 documents and 500 writer
+inputs; replayed by `crates/core/codec/tests/okf_oracle.rs`), where every
+document, YAML refusal class, schema issue path and code, and written byte agrees,
+with these declared deviations: refusal message text is not compared, a lone
+UTF-16 surrogate cannot reach a Rust `&str` (the oracle counts those cases and the
+future wasm boundary must refuse them as the TypeScript does), and the Rust types
+write the modelled keys and a trust event's `by` and `at` in the schema's order
+rather than the caller's. Still no wasm export or switch.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

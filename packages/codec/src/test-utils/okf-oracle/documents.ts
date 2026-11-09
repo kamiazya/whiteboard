@@ -5,14 +5,7 @@ import { AWKWARD, FRAGMENTS, KEYS, STRINGS } from '../frontmatter-oracle/corpus-
 /** The frontmatter objects and bodies the oracle's documents are built from. */
 export type Obj = Record<string, unknown>
 
-export const GOOD_ACTORS = [
-  'human:alice',
-  'agent/1.0',
-  'process:nightly',
-  'team:ga4-docs',
-  'é',
-  'x y',
-]
+const GOOD_ACTORS = ['human:alice', 'agent/1.0', 'process:nightly', 'team:ga4-docs', 'é', 'x y']
 export const BAD_ACTORS: unknown[] = [
   '',
   ' x',
@@ -39,7 +32,7 @@ export const GOOD_TIMES = [
   '2026-01-02T03:04:05-00:30',
   '0000-00-00T00:00:00Z',
 ]
-export const BAD_TIMES: unknown[] = [
+const BAD_TIMES: unknown[] = [
   '2026-01-02',
   '2026-01-02T03:04:05',
   '2026-01-02 03:04:05Z',

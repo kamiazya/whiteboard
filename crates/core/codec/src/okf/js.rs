@@ -117,34 +117,31 @@ fn to_js_string(value: &Value) -> String {
     }
 }
 
-/// `Number(text)`: white space around, empty as zero, `Infinity`, the prefixed
-/// integers, and decimal literals; anything else is NaN.
+/// `Number(text)` for what is compared with one: white space around,
+/// `Infinity`, the prefixed integers and decimal literals; anything else is
+/// NaN. The empty string and `-Infinity` need no arm of their own: they fall
+/// below one exactly as NaN does.
 fn string_to_number(text: &str) -> f64 {
     let text = text.trim_matches(is_js_space);
-    let digits = |rest: &str, radix: u32| {
-        if rest.is_empty() {
-            return f64::NAN;
-        }
-        rest.chars()
-            .try_fold(0.0, |sum, c| Some(sum * f64::from(radix) + f64::from(c.to_digit(radix)?)))
-            .unwrap_or(f64::NAN)
-    };
-    match text {
-        "" => 0.0,
-        "Infinity" | "+Infinity" => f64::INFINITY,
-        "-Infinity" => f64::NEG_INFINITY,
-        _ => {
-            if let Some(rest) = text.strip_prefix("0x").or_else(|| text.strip_prefix("0X")) {
-                digits(rest, 16)
-            } else if let Some(rest) = text.strip_prefix("0o").or_else(|| text.strip_prefix("0O")) {
-                digits(rest, 8)
-            } else if let Some(rest) = text.strip_prefix("0b").or_else(|| text.strip_prefix("0B")) {
-                digits(rest, 2)
-            } else if text.chars().all(|c| c.is_ascii_digit() || ".eE+-".contains(c)) {
-                text.parse().unwrap_or(f64::NAN)
-            } else {
-                f64::NAN
-            }
+    if matches!(text, "Infinity" | "+Infinity") {
+        return f64::INFINITY;
+    }
+    for (prefixes, radix) in [(["0x", "0X"], 16), (["0o", "0O"], 8), (["0b", "0B"], 2)] {
+        if let Some(rest) = prefixes.iter().find_map(|prefix| text.strip_prefix(prefix)) {
+            return integer(rest, radix);
         }
     }
+    if text.chars().all(|c| c.is_ascii_digit() || ".eE+-".contains(c)) {
+        text.parse().unwrap_or(f64::NAN)
+    } else {
+        f64::NAN
+    }
+}
+
+/// The digits of `rest` in `radix`, or NaN when one is not. No digits at all
+/// read as zero, which is below one just as the NaN `Number` makes of them is.
+fn integer(rest: &str, radix: u32) -> f64 {
+    rest.chars()
+        .try_fold(0.0, |sum, c| Some(sum * f64::from(radix) + f64::from(c.to_digit(radix)?)))
+        .unwrap_or(f64::NAN)
 }
