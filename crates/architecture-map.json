@@ -343,7 +343,8 @@
         "whiteboard-ops"
       ],
       "allowedThirdParty": {
-        "wasm-bindgen": "the JS boundary itself; pinned = to the wasm-bindgen-cli that post-processes the artifact"
+        "wasm-bindgen": "the JS boundary itself; pinned = to the wasm-bindgen-cli that post-processes the artifact",
+        "serde_json": "the OKF exports' document wire: a frontmatter value is arbitrary nested data, which no flat typed array holds. Pure Rust, no I/O, runs unchanged on wasm32 and native; deny.toml already bans unbounded_depth and arbitrary_precision, so the 128-level recursion limit is part of the entry's depth cap"
       },
       "absorbs": ["packages/core-wasm (artifact half)"]
     },

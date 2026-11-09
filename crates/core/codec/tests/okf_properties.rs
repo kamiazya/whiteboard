@@ -293,6 +293,30 @@ fn soup() -> impl Strategy<Value = String> {
     prop::collection::vec(prop::sample::select(pieces), 0..24).prop_map(|p| p.concat())
 }
 
+/// Fenced texts whose YAML reads but whose frontmatter the schema refuses, one
+/// way per field, so the schema stage is reached on every run rather than when
+/// damage happens to land on a value.
+fn schema_breaks() -> impl Strategy<Value = String> {
+    let breaks = &[
+        "type: 1",
+        "type: ''",
+        "type: []",
+        "title: [a]",
+        "tags: x",
+        "tags: [1]",
+        "view: {a: 1}",
+        "facets: 1",
+        "facets: {Bad: 1}",
+        "generated: 1",
+        "generated: {by: '', at: 2026-01-02T03:04:05Z}",
+        "generated: {by: human:a, at: now}",
+        "verified: [1]",
+        "verified: [{by: human:a}]",
+    ][..];
+    (prop::sample::select(breaks), prop::sample::select(&["", "description: d\n"][..]))
+        .prop_map(|(line, before)| format!("---\n{before}{line}\n---\nbody\n"))
+}
+
 /// Whether a string the document holds is one the writer loses a character of.
 fn holds_lossy_text(doc: &Document) -> bool {
     fn lossy(value: &Value) -> bool {
@@ -329,7 +353,7 @@ fn the_split_and_the_reader_agree_and_what_is_read_writes_back_stably() {
     let unfenced = Floor::new("a text with no block");
     let schema = Floor::new("a text the schema refused");
     let stable = Floor::new("a text read, written and read again");
-    check(prop_oneof![3 => damage(), 1 => soup()], None, |text| {
+    check(prop_oneof![3 => damage(), 1 => soup(), 1 => schema_breaks()], None, |text| {
         let first = parse(&text);
         prop_assert_eq!(has_frontmatter(&text), first != Err(Failure::NoFence), "{:?}", text);
         accepted.draw(first.is_ok());

@@ -8,9 +8,9 @@
       "reason": "a minimal binary that exists so the hardening and reproducibility gates have a subject; it has no tests and nothing to cover"
     },
     "bindings/wasm": {
-      "lines": 74,
-      "regions": 68,
-      "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI"
+      "lines": 82,
+      "regions": 77,
+      "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI. Raised to 82 lines and 77 regions with the OKF exports, replayed natively from okf.jsonl (tests/okf_oracle.rs) beside the exports' own tests: 82.97% lines and 77.43% regions locally"
     },
     "core/codec": {
       "lines": 98,

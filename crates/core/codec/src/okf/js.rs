@@ -7,7 +7,7 @@ use std::cmp::Ordering;
 use whiteboard_det::format::js_number_to_string;
 
 /// The index JavaScript gives an array-index key, or `None`.
-fn array_index(key: &str) -> Option<u32> {
+pub fn array_index(key: &str) -> Option<u32> {
     let canonical = key == "0" || (!key.starts_with('0') && !key.is_empty());
     if !canonical || !key.bytes().all(|b| b.is_ascii_digit()) {
         return None;
@@ -17,7 +17,7 @@ fn array_index(key: &str) -> Option<u32> {
 
 /// `value` with every mapping's keys in the order JavaScript enumerates them:
 /// array indices ascending, then the rest as written.
-pub(super) fn enumeration_order(value: Value) -> Value {
+pub fn enumeration_order(value: Value) -> Value {
     match value {
         Value::Seq(items) => Value::Seq(items.into_iter().map(enumeration_order).collect()),
         Value::Map(entries) => {

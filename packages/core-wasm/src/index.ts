@@ -5,6 +5,14 @@
 import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
+import {
+  type OkfDocument,
+  type OkfErrors,
+  type OkfGlue,
+  type OkfParseResult,
+  parseOkf,
+  serializeOkf,
+} from './okf.js'
 import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
 
@@ -12,7 +20,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '14'
+export const EXPECTED_ABI = '15'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {
@@ -26,9 +34,11 @@ export class CoreAbiMismatch extends Error {
  * An operation refused its input, with the registry's refusal code:
  * `input-too-large` when the encoded wire is past the entry's caps in
  * `crates/input-caps.json`, refused here before the artifact is called, as
- * the export would refuse it; `malformed` when the artifact's answer cannot
- * be accounted for, which for a wire this shim built is a shim defect. A
- * composition root answers either from the TypeScript.
+ * the export would refuse it; `malformed` when the input is not one the shim
+ * sends (an OKF text holding a lone surrogate, a document the wire does not
+ * carry) or the artifact's answer cannot be accounted for, which for a wire
+ * this shim built is a shim defect. A composition root answers either from
+ * the TypeScript.
  */
 export class CoreInputRefused extends Error {
   constructor(
@@ -37,6 +47,19 @@ export class CoreInputRefused extends Error {
   ) {
     super(`${operation} refused its input: ${code}`)
     this.name = 'CoreInputRefused'
+  }
+}
+
+/**
+ * A frontmatter value has no YAML spelling (`reason` names why). The
+ * TypeScript throws `OkfNotYamlSafeError` with an issue list the Rust writer
+ * does not produce, so a root answers this from the TypeScript, which then
+ * throws its own.
+ */
+export class CoreOkfUnwritable extends Error {
+  constructor(readonly reason: string) {
+    super(`serializeOkf: the frontmatter has no YAML spelling: ${reason}`)
+    this.name = 'CoreOkfUnwritable'
   }
 }
 
@@ -62,6 +85,21 @@ export interface Core {
     budget: RoutingBudget,
     labels: readonly LabelRect[],
   ): RoutedLayout
+
+  /**
+   * `parseOkf` of a whole document. Throws `CoreInputRefused` for a text it
+   * will not send (one holding a lone surrogate, or past the entry's caps),
+   * which a root answers from the TypeScript.
+   */
+  parseOkf(text: string): OkfParseResult
+
+  /**
+   * `serializeOkf` of a document: the artifact writes the frontmatter and
+   * the body is appended here. Throws `CoreOkfUnwritable` for a value with no
+   * YAML spelling and `CoreInputRefused` for a document the wire does not
+   * carry; a root answers both from the TypeScript.
+   */
+  serializeOkf(doc: OkfDocument): string
 }
 
 const ends = ['none', 'arrow'] as const
@@ -163,7 +201,14 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   glue.initSync({ module: source })
   const abi = glue.abi_version()
   if (abi !== EXPECTED_ABI) throw new CoreAbiMismatch(abi)
+  const okf: OkfGlue = glue
+  const errors: OkfErrors = {
+    refused: (operation, code) => new CoreInputRefused(operation, code),
+    unwritable: (reason) => new CoreOkfUnwritable(reason),
+  }
   return {
+    parseOkf: (text) => parseOkf(okf, errors, text),
+    serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
       const wire = encodeLayout(nodes, edges, styleOf, overrides, budget, labels)
       if (wire.input.byteLength > EDGE_ROUTE_LAYOUT_CAPS.maxBytes) {

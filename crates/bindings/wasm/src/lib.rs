@@ -15,13 +15,15 @@ pub mod edge_router_leaves;
 pub mod edge_rules;
 #[path = "generated/input_caps.rs"]
 pub mod input_caps;
+pub mod okf;
+pub mod okf_wire;
 pub mod routing_wire;
 pub mod spatial_edges;
 
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
 /// on its first mismatched call.
-pub const ABI_VERSION: &str = "14";
+pub const ABI_VERSION: &str = "15";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]

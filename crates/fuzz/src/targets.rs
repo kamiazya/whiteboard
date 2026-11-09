@@ -230,3 +230,78 @@ fn value_strings(value: &Value) -> Vec<&str> {
         _ => Vec::new(),
     }
 }
+
+/// The answer's first array element, `["<tag>",...`, or a finding.
+fn answer_tag(answer: &str) -> &str {
+    let tag = answer.strip_prefix("[\"").and_then(|rest| rest.split_once('"'));
+    assert!(tag.is_some(), "the answer {answer:?} does not open with a tag");
+    tag.map_or("", |(tag, _)| tag)
+}
+
+/// `okf_parse`, the export a host calls, on any UTF-8 text: it must answer one
+/// of its three documented shapes and never panic or run past its budget; it
+/// refuses exactly the text past its cap; and it reads exactly what the codec
+/// reads, with a body offset in UTF-16 units that leaves the body as the
+/// text's own tail, counted by std's encoder rather than the export's.
+///
+/// # Panics
+///
+/// When the export panics, disagrees with the codec, or answers off its shape.
+pub fn okf_wasm_parse(data: &[u8]) {
+    use whiteboard_wasm::input_caps::OKF_PARSE;
+    use whiteboard_wasm::okf::okf_parse;
+
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let answer = okf_parse(text);
+    if text.len() > OKF_PARSE.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\"]");
+        return;
+    }
+    let read = whiteboard_codec::okf::parse(text);
+    let tag = answer_tag(&answer);
+    assert!(matches!(tag, "ok" | "err"), "{tag} is no answer to a text within the cap");
+    assert_eq!(tag == "ok", read.is_ok(), "the export and the codec disagree about {text:?}");
+    let (Ok(doc), Some(offset)) = (
+        read,
+        answer
+            .strip_prefix("[\"ok\",")
+            .and_then(|rest| rest.split_once(',')?.0.parse::<usize>().ok()),
+    ) else {
+        assert_eq!(tag, "err", "an ok answer without a numeric offset: {answer:.80}");
+        return;
+    };
+    let units: Vec<u16> = text.encode_utf16().collect();
+    let tail = units.get(offset..);
+    assert!(tail.is_some(), "the offset {offset} is past the text");
+    let body = String::from_utf16(tail.unwrap_or_default());
+    assert_eq!(body.ok().as_deref(), Some(doc.body.as_str()), "the offset does not leave the body");
+}
+
+/// `okf_serialize`, the export a host calls, on any UTF-8 text read as a
+/// document wire (the decode a host's bytes reach: JSON, the value wire, the
+/// frontmatter schema): it must answer one of its three documented shapes
+/// and never panic or run past its budget, refuse exactly the wire past its
+/// cap, and write only a head that opens and closes with a fence.
+///
+/// # Panics
+///
+/// When the export panics or answers off its shape.
+pub fn okf_wasm_serialize(data: &[u8]) {
+    use whiteboard_wasm::input_caps::OKF_SERIALIZE;
+    use whiteboard_wasm::okf::okf_serialize;
+
+    let Ok(wire) = std::str::from_utf8(data) else {
+        return;
+    };
+    let answer = okf_serialize(wire);
+    if wire.len() > OKF_SERIALIZE.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\"]");
+        return;
+    }
+    let fenced = answer.starts_with("[\"ok\",\"---\\n") && answer.ends_with("\\n---\\n\"]");
+    let named = answer.starts_with("[\"unwritable\",\"") && answer.ends_with("\"]");
+    let refused = answer == "[\"refused\",\"malformed\"]";
+    assert!(fenced || named || refused, "{answer:.120} is not an answer");
+}

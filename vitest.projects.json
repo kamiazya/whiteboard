@@ -9,6 +9,7 @@
   "packages/plugin-visual/vitest.node.config.ts",
   "packages/plugin-visual/vitest.jsdom.config.ts",
   "packages/codec/vitest.node.config.ts",
+  "packages/codec/vitest.rust.config.ts",
   "tools/arch-lint/vitest.node.config.ts",
   "packages/loro-adapter/vitest.node.config.ts",
   "packages/search/vitest.node.config.ts",

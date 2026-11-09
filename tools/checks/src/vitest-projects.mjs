@@ -122,6 +122,13 @@ export const PROJECTS_RUN_ELSEWHERE = {
     mechanism: 'flag',
     marker: '--project=core-wasm-rust',
   },
+  // The OKF envelope held to its Rust twin through the staged artifact: runs
+  // in the rust job after `stage:wasm`, the only job that has it.
+  'packages/codec/vitest.rust.config.ts': {
+    job: 'rust',
+    mechanism: 'flag',
+    marker: '--project=codec-rust',
+  },
   // Small but given its own test-unit step so canvas-viewer coverage reads as
   // one block in CI logs; not folded into the shared-layer step.
   'packages/canvas-viewer/vitest.node.config.ts': {

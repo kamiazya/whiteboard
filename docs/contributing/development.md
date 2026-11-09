@@ -361,7 +361,7 @@ pnpm typecheck               # tsc --noEmit in every workspace package that defi
 pnpm smoke:e2e               # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 pnpm check:local             # every gate CI's check job runs
 pnpm test:browser            # when the change touches real-browser behavior
-pnpm test                    # optional: every project at once, not required; full suite (see vitest.projects.json): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, core-wasm node/rust, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser/rust, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower; the two rust projects need the wasm artifact: `pnpm rust:build:wasm`, then `pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm`)
+pnpm test                    # optional: every project at once, not required; full suite (see vitest.projects.json): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node/rust, loro-adapter node, search node, core-wasm node/rust, reference-graph node, server-core node, workspace-index node, history node, scene node, extension node, arch-lint-node, canvas-render node/browser/rust, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser/browser-window-state (Playwright projects are slower; the three rust projects need the wasm artifact: `pnpm rust:build:wasm`, then `pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm`)
 ```
 
 ### What a pull request runs
@@ -372,7 +372,7 @@ The selection fails closed. A change to a root build, install or test config (th
 
 `pnpm test:affected` runs the same selection locally against `origin/main` (`--base <ref>` for another base). It leaves `mcp-smoke` to CI, since that project needs a widget build first. To see what the selection would have saved over recent history, run `node tools/checks/src/affected-replay.mjs --count 50`, which replays it over `main`'s merged pull requests and prices each run with job timings measured from real CI runs (`affected-replay.mjs profile` re-measures them).
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the thirty-one configured in `vitest.projects.json`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the thirty-two configured in `vitest.projects.json`; the table in [CONTRIBUTING.md](../../CONTRIBUTING.md) lists what each project covers, so everything it does not cover is not run):
 
 ```bash
 pnpm test --project mcp-node

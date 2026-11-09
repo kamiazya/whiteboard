@@ -19,7 +19,7 @@
     "./package.json": "./package.json"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.rust.json",
     "test": "vitest run"
   },
   "dependencies": {
@@ -33,6 +33,7 @@
     "yaml": "catalog:"
   },
   "devDependencies": {
+    "@kamiazya/whiteboard-core-wasm": "workspace:*",
     "micromark-util-types": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
