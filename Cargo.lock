@@ -534,6 +534,7 @@ dependencies = [
  "serde_json",
  "wasm-bindgen-test",
  "whiteboard-det",
+ "whiteboard-model",
  "whiteboard-proptest",
 ]
 
@@ -558,6 +559,13 @@ dependencies = [
 
 [[package]]
 name = "whiteboard-log"
+version = "0.0.0"
+dependencies = [
+ "wasm-bindgen-test",
+]
+
+[[package]]
+name = "whiteboard-model"
 version = "0.0.0"
 dependencies = [
  "wasm-bindgen-test",

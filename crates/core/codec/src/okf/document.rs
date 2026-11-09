@@ -1,10 +1,10 @@
 //! The OKF document the envelope reads and writes, and why it was refused.
 
-use crate::frontmatter::{Refusal, Value};
+use crate::frontmatter::Refusal;
 
 /// A mapping in the order JavaScript enumerates its keys: integer-like keys
 /// ascending, then the rest as written.
-pub type Map = Vec<(String, Value)>;
+pub use whiteboard_model::Map;
 
 /// An OKF Markdown document: the frontmatter and the body after its fences.
 ///

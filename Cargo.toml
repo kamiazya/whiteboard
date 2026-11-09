@@ -6,6 +6,7 @@ resolver = "3"
 members = [
   "crates/core/det",
   "crates/core/log",
+  "crates/core/model",
   "crates/core/edge-routing",
   "crates/core/codec",
   "crates/bindings/wasm",

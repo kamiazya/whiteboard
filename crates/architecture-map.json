@@ -63,7 +63,7 @@
     "whiteboard-model": {
       "path": "crates/core/model",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "serde types generated from contracts/model plus the invariants a schema cannot express",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det"],

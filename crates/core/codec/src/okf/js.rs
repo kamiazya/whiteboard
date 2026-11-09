@@ -6,35 +6,7 @@ use crate::frontmatter::Value;
 use std::cmp::Ordering;
 use whiteboard_det::format::js_number_to_string;
 
-/// The index JavaScript gives an array-index key, or `None`.
-pub fn array_index(key: &str) -> Option<u32> {
-    let canonical = key == "0" || (!key.starts_with('0') && !key.is_empty());
-    if !canonical || !key.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    key.parse::<u32>().ok().filter(|&n| n != u32::MAX)
-}
-
-/// `value` with every mapping's keys in the order JavaScript enumerates them:
-/// array indices ascending, then the rest as written.
-pub fn enumeration_order(value: Value) -> Value {
-    match value {
-        Value::Seq(items) => Value::Seq(items.into_iter().map(enumeration_order).collect()),
-        Value::Map(entries) => {
-            let (mut indexed, rest): (Vec<_>, Vec<_>) =
-                entries.into_iter().partition(|(key, _)| array_index(key).is_some());
-            indexed.sort_by_key(|(key, _)| array_index(key));
-            Value::Map(
-                indexed
-                    .into_iter()
-                    .chain(rest)
-                    .map(|(key, item)| (key, enumeration_order(item)))
-                    .collect(),
-            )
-        }
-        other => other,
-    }
-}
+pub use whiteboard_model::{array_index, enumeration_order};
 
 /// The characters `trim` strips: ECMAScript's `WhiteSpace` and `LineTerminator`.
 /// Not `char::is_whitespace`, which counts U+0085 and misses U+FEFF.

@@ -404,9 +404,9 @@ describe('a repo-rooted path in AGENTS.md, a contributor doc, a rule or a skill 
   it('resolves a crate path, and a planned crate by its declared directory alone', () => {
     expect(resolvesExactly('crates/core/det/src/lib.rs', tracked)).toBe(true)
     expect(resolvesExactly('crates/architecture-map.json', tracked)).toBe(true)
-    expect(resolvesExactly('crates/core/model', tracked)).toBe(true)
-    expect(resolvesExactly('crates/core/model/', tracked)).toBe(true)
-    expect(resolvesExactly('crates/core/model/src/lib.rs', tracked)).toBe(false)
+    expect(resolvesExactly('crates/core/search', tracked)).toBe(true)
+    expect(resolvesExactly('crates/core/search/', tracked)).toBe(true)
+    expect(resolvesExactly('crates/core/search/src/lib.rs', tracked)).toBe(false)
     expect(resolvesExactly('crates/core/no-such-crate', tracked)).toBe(false)
   })
 
