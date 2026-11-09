@@ -613,7 +613,7 @@ fn pattern_source(source: &str) -> Result<(), &'static str> {
     let Some(body) = body else {
         return Err("must be anchored: start with `^` and end with `$`");
     };
-    let escaped_end = body.len() - body.trim_end_matches('\\').len();
+    let escaped_end = body.bytes().rev().take_while(|&b| b == b'\\').count();
     if escaped_end % 2 == 1 {
         Err("must be anchored: the final `$` is escaped")
     } else if body.is_empty() || !body.bytes().all(|b| (0x20..=0x7e).contains(&b) && b != b'/') {

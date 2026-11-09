@@ -408,6 +408,76 @@ fn only_the_model_crate_imports_what_each_plain_type_reaches_for() {
 }
 
 #[test]
+fn a_record_is_any_value_and_nothing_else() {
+    let record = |values: &str| {
+        format!(
+            r#""Bag": {{ "description": "A bag.", "type": "object", "additionalProperties": {values} }}"#
+        )
+    };
+    assert!(outputs(&plain(&record(r#"{ "x-wb-any": true }"#), IN_MODEL, false)).is_ok());
+    for values in [
+        r#"{ "x-wb-any": true, "type": "string" }"#,
+        r#"{ "x-wb-any": false }"#,
+        r#"{ "x-wb-any": true, "x-wb-minUtf16": 1 }"#,
+        r#"{ "type": "string" }"#,
+    ] {
+        let errors = outputs(&plain(&record(values), IN_MODEL, false)).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.contains("a record is `additionalProperties")),
+            "{values}: {errors:?}"
+        );
+    }
+}
+
+#[test]
+fn a_ref_cycle_names_only_the_definitions_caught_in_it() {
+    let object = |name: &str, target: &str| {
+        format!(
+            r##""{name}": {{
+      "description": "A node.",
+      "type": "object",
+      "properties": {{ "next": {{ "$ref": "#/$defs/{target}", "description": "Next." }} }},
+      "required": [],
+      "x-wb-order": ["next"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    }}"##
+        )
+    };
+    let leaf = r#""Leaf": { "description": "A leaf.", "type": "string" }"#;
+    let defs =
+        [leaf.to_owned(), object("Ring", "Loop"), object("Loop", "Ring"), object("Twig", "Leaf")]
+            .join(",\n    ");
+    let errors = outputs(&plain(&defs, IN_MODEL, false)).unwrap_err();
+    assert!(
+        errors.iter().any(|e| e.ends_with("$defs: a `$ref` cycle among Loop, Ring")),
+        "{errors:?}"
+    );
+}
+
+#[test]
+fn a_pattern_whose_closing_anchor_is_escaped_is_refused() {
+    let stamp = |pattern: &str| {
+        plain(
+            &format!(
+                r#""Stamp": {{ "description": "A stamp.", "type": "string", "pattern": "{pattern}", "x-wb-matcher": "stamp", "x-wb-message": "m" }}"#
+            ),
+            IN_MODEL,
+            true,
+        )
+    };
+    let refused = |pattern: &str| {
+        outputs(&stamp(pattern))
+            .err()
+            .is_some_and(|errors| errors.iter().any(|e| e.contains("the final `$` is escaped")))
+    };
+    assert!(refused(r"^a\\$"));
+    assert!(refused(r"^a\\\\\\$"));
+    assert!(!refused(r"^a\\\\$"));
+    assert!(outputs(&stamp(r"^a\\\\$")).is_ok());
+}
+
+#[test]
 fn the_names_a_contract_leans_on_are_listed_for_each_language() {
     let contract = dialect::parse(MODEL).unwrap();
     let checked = dialect::check(&contract).unwrap();
