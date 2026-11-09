@@ -139,6 +139,7 @@ const config :Workerd.Config = (
       const v = spawn(bin, ['--version'])
       let t = ''
       v.stdout.on('data', (d) => (t += d))
+      v.on('error', () => r('unknown'))
       v.on('close', () => r(t.trim().replace(/^workerd /, '')))
     })
     answer.runtime = `workerd ${version}`
