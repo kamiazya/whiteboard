@@ -380,12 +380,34 @@ describe('verify and packaged-smoke build over the same artifact a release ships
 // default and fail without its wasm, so every workflow that runs one has to
 // put the artifact in place first.
 describe('every workflow that builds the web app restores the core wasm first', () => {
-  const WEB_BUILD = /whiteboard-web build|pnpm build\b|publish:dry-run:docker/
+  // The extension's bridge and read-plane smokes build the web app inside
+  // their script (smoke-kit's buildAll), so their step names no build.
+  const EXTENSION_WEB_BUILDS = ['smoke:bridge', 'smoke:read-plane']
+  const WEB_BUILD = new RegExp(
+    `whiteboard-web build|pnpm build\\b|publish:dry-run:docker|whiteboard-extension (${EXTENSION_WEB_BUILDS.join('|')})\\b`,
+  )
+
+  it('names every extension smoke whose script builds the web app', () => {
+    const scripts = (
+      JSON.parse(read('apps/extension/package.json')) as { scripts: Record<string, string> }
+    ).scripts
+    const building = Object.entries(scripts)
+      .filter(([, command]) => {
+        const file = /node (scripts\/\S+\.mjs)/.exec(command)?.[1]
+        return file !== undefined && /\bbuildAll\(\)/.test(read(`apps/extension/${file}`))
+      })
+      .map(([name]) => name)
+    // smoke:bridge:firefox reuses the Chromium smoke's build (BRIDGE_SMOKE_PREBUILT).
+    expect(building.filter((name) => name !== 'smoke:bridge:firefox').sort()).toEqual(
+      [...EXTENSION_WEB_BUILDS].sort(),
+    )
+  })
 
   it.each([
     { file: 'preview-pr-build.yml', workflow: previewPr, id: 'build' },
     { file: 'deploy-preview.yml', workflow: previewLatest, id: 'build-latest' },
     { file: 'ci.yml', workflow: ci, id: 'dry-run-docker' },
+    { file: 'ci.yml', workflow: ci, id: 'extension-smokes' },
   ])('$file job $id', ({ workflow, id }) => {
     const steps = stepsOf(workflow, id)
     const at = steps.findIndex((s) => s.uses === './.github/actions/core-wasm')

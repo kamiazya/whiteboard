@@ -887,6 +887,11 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The bridge and read-plane smokes build the web app, which routes edges
+      # with the Rust core and refuses to build without its wasm.
+      - uses: ./.github/actions/core-wasm
+        if: steps.scope.outputs.run == 'true'
+
       # ADR-0050's bridge in a real browser: a real daemon on its socket, the
       # native host `whiteboard native-host` installs, the built extension,
       # headless Chromium. Branded Chrome (WHITEBOARD_CHROME_PATH) ignores
