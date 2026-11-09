@@ -3,12 +3,45 @@ import { z } from 'zod'
 
 /** Why a non-container value cannot round-trip through YAML, or `undefined` when it can. */
 function scalarUnsafety(node: unknown): string | undefined {
+  if (typeof node === 'string') return textUnsafety(node)
   if (node === undefined) return 'undefined is not yaml-safe'
   if (typeof node === 'number' && !Number.isFinite(node)) return `${node} is not yaml-safe`
   if (typeof node === 'bigint' || typeof node === 'function' || typeof node === 'symbol') {
     return `${typeof node} is not yaml-safe`
   }
   return undefined
+}
+
+/**
+ * A string the frontmatter YAML subset has no spelling for. A lone UTF-16
+ * surrogate is not a Unicode scalar value, so no UTF-8 reader can hold it; a
+ * byte-order mark is refused by the reader wherever it sits, and `yaml` writes
+ * one raw.
+ */
+const UNWRITABLE_TEXT =
+  /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|\uFEFF/
+
+function textUnsafety(text: string): string | undefined {
+  const found = UNWRITABLE_TEXT.exec(text)
+  if (found === null) return undefined
+  return found[0] === '\uFEFF'
+    ? 'a byte-order mark is not yaml-safe'
+    : 'a lone UTF-16 surrogate is not yaml-safe'
+}
+
+/**
+ * A key is text too. Its issue sits on the mapping holding it, since the key
+ * itself may be the unprintable part.
+ */
+function reportUnsafeKeys(
+  ctx: z.RefinementCtx,
+  children: readonly [string | number, unknown][],
+  path: (string | number)[],
+): void {
+  for (const [key] of children) {
+    const unsafe = typeof key === 'string' ? textUnsafety(key) : undefined
+    if (unsafe !== undefined) ctx.addIssue({ code: 'custom', message: unsafe, path })
+  }
 }
 
 /** Whether `node` is an object the store keeps as written: an array, or a record with no class. */
@@ -84,6 +117,7 @@ export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((
     const children: [string | number, unknown][] = Array.isArray(node)
       ? [...node.entries()]
       : Object.entries(node)
+    reportUnsafeKeys(ctx, children, path)
     for (const [key, item] of children) walk(item, [...path, key])
 
     ancestors.pop()

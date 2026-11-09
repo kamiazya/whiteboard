@@ -580,6 +580,32 @@ nested hundreds deep exports as hundreds of times its size. A document stored
 with deeper frontmatter before this limit still reads and exports in full; it
 is re-importing that export which is refused.
 
+**Frontmatter is a restricted subset of YAML 1.2.** What this server writes is
+always inside it, and a frontmatter outside it is refused with a message naming
+the construct (`document.set`, `document.create` and `POST
+/api/v1/workspaces/{id}/documents` answer `400 {"error":"okf_parse_failed"}`). Block and
+flow mappings and lists, plain, single- and double-quoted scalars, `|` and `>`
+block scalars, comments and a long key written as `? key` are read. Refused:
+
+- tags (`!x`, `!!str`, `!!set`, `!!binary`), `%` directives, and `---` or `...`
+  document markers inside the frontmatter;
+- a byte-order mark anywhere, a carriage return that is not part of a CRLF line
+  ending, raw control characters below U+0020 other than tab and line feed, and
+  the control characters U+007F to U+009F outside double quotes (inside double
+  quotes they are read);
+- a tab used as indentation, in any construct, including continuation lines;
+- a list or mapping used as a key (`[a, b]: 1`, `? {a: 1}`), a pair inside a
+  flow list (`[a: 1]`), `?` inside a flow mapping, an empty key (`: x`), and an
+  explicit `? key` for a key short enough to write inline (the explicit form is
+  read only for a key written in more than 1,024 characters);
+- a lone UTF-16 surrogate in a key or value, whether written raw or as an
+  escape such as `"\uD800"`. The write side refuses it too, and a byte-order
+  mark in a value, with `okf_not_yaml_safe`: a document stored with either before
+  these limits still reads, but its export is reported as a per-document failure.
+
+Tags in particular were read before and are refused now, so `x: !!set {a, b}`
+is no longer a value this server stores.
+
 ## Who wrote a document
 
 `wb_workspace_edit` takes an optional `actor` for the whole batch, and records
@@ -618,16 +644,13 @@ Two consequences worth knowing:
   refused with a typed error rather than stored as something else — a write
   over `/api/v1` answers `400 okf_not_yaml_safe`, naming the key:
   - `NaN`, `Infinity` and `undefined`, which YAML cannot carry;
-  - a YAML type that is not a plain list or mapping — `!!set`, `!!omap` — and
-    `!!binary`, which the store would flatten to an empty mapping or a list of
-    byte values; write a plain list or mapping, or a string;
+  - a lone UTF-16 surrogate or a byte-order mark in a key or value;
   - an integer a double cannot hold exactly, in practice one past 2^53
     (9007199254740992), which would be rounded to the nearest double and read
     back as a different number; write it as a quoted string.
 - A spelling that means the same number is normalised, not refused: `0x10`
   reads back as `16`, `0o17` as `15`, `1e3` as `1000`, `1.0` as `1`. A value
-  written as `012` reads back as `12`, as YAML 1.2 defines it. A mapping key
-  that is a list or mapping, not a string, is stored under its text (`? [a, b]` becomes the key `"[ a, b ]"`), and a number
+  written as `012` reads back as `12`, as YAML 1.2 defines it. A number
   used as a key becomes a string.
 
 Values are not validated against the OKF spec: a malformed `verified` block is

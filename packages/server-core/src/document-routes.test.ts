@@ -167,8 +167,25 @@ describe('canvas CRUD routes', () => {
     expect(apiErrorReason(refused)).toContain('weird: NaN is not yaml-safe')
   })
 
+  it('POST a markdown document whose frontmatter holds a tag refuses it as unparseable, naming the tag', async () => {
+    const app = makeApp()
+    const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        path: 'note',
+        kind: 'markdown',
+        markdown: '---\ntype: note\nx: !!set {a, b}\n---\n\nbody\n',
+        createWorkspace: true,
+      }),
+    })
+    expect(res.status).toBe(400)
+    const refused = await res.json()
+    expect(refused).toMatchObject({ error: 'okf_parse_failed' })
+    expect(apiErrorReason(refused)).toContain('tags are not allowed in OKF frontmatter')
+  })
+
   it.each([
-    ['a !!set', 'x: !!set {a, b}', 'x: Set is not yaml-safe'],
     ['an integer past 2^53', 'x: 9007199254740993', 'x: bigint is not yaml-safe'],
   ])('POST a markdown document whose frontmatter holds %s refuses it with the key named', async (_label, line, reason) => {
     const app = makeApp()

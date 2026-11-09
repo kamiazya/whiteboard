@@ -85,6 +85,18 @@ rather than in a string, so joining its runs yields `tightenthis`.
   order is not preserved. Facet values are validated against `yamlSafeValueSchema` before emission;
   a non-yaml-safe value (undefined/NaN/Infinity/bigint/function/symbol/cyclic) is a typed error,
   not a corrupt YAML file.
+- **OKF frontmatter is a restricted YAML subset, read and written** (ADR-0054's frontmatter
+  spike, owner questions q21/q22). `parseYamlKeepingWrittenIntegers` refuses tags, directives and
+  document markers, a BOM, a lone CR, raw C0, C1 outside double quotes, tab indentation, collection
+  keys, a pair inside a flow list, `?` in flow, an empty key, an explicit `? key` other than the
+  long-key form `yaml` writes past 1024 units, and lone surrogates. The Rust port must agree with
+  it in BOTH directions, so a construct is never quietly let back in. `serializeOkf` writes through
+  a `Document` with `doubleQuotedAsJSON: true` and forces double quotes on tab-led and space-only
+  lines: a bare `yaml.stringify` writes tab-indented block scalars, raw BOMs, and mis-folds
+  double-quoted text so it reads back different. `yamlSafeValueSchema` refuses a lone surrogate or
+  a BOM in a key or value. `frontmatter-subset.property.test.ts` is the guard that the writer stays
+  inside what the reader accepts. A regex over YAML text never uses `/m`: JavaScript's `^` also
+  breaks at U+2028 and U+2029.
 - Root frontmatter keys this codebase does not model are PRESERVED, not dropped (OKF §4.1). `parseOkf`
   routes every non-reserved root key into `facetsRaw` and `serializeOkf` spreads them back at the
   root, in the same canonical key order as `facets` — the bucket itself is never emitted as a

@@ -66,4 +66,29 @@ describe('yamlSafeValueSchema', () => {
     expect(yamlSafeValueSchema.safeParse([1, undefined]).success).toBe(false)
     expect(yamlSafeValueSchema.safeParse({ a: Number.NaN }).success).toBe(false)
   })
+
+  describe('a string the YAML subset cannot carry', () => {
+    it.each([
+      ['a high surrogate alone', 'x\uD800y'],
+      ['a low surrogate alone', 'x\uDC00y'],
+      ['a high surrogate at the end', 'x\uD83D'],
+      ['a reversed pair', '\uDE00\uD83D'],
+      ['a byte-order mark', 'x\uFEFFy'],
+    ])('rejects %s as a value, at any depth', (_label, text) => {
+      const result = yamlSafeValueSchema.safeParse({ a: [{ b: text }] })
+      expect(result.success).toBe(false)
+      expect(result.error?.issues[0]?.path).toEqual(['a', 0, 'b'])
+    })
+
+    it('rejects a lone surrogate in a key and names the key', () => {
+      const result = yamlSafeValueSchema.safeParse({ a: { 'k\uD800': 1 } })
+      expect(result.success).toBe(false)
+      expect(result.error?.issues[0]?.message).toMatch(/lone UTF-16 surrogate/)
+      expect(result.error?.issues[0]?.path).toEqual(['a'])
+    })
+
+    it('accepts a well-formed surrogate pair', () => {
+      expect(yamlSafeValueSchema.safeParse({ a: 'x\u{1F600}y', '\u{1F600}': 1 }).success).toBe(true)
+    })
+  })
 })
