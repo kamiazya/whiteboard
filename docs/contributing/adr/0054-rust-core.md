@@ -24,7 +24,18 @@ cut once there is more than one crate worth distinguishing.
 (`packages/canvas-render/src/layout/edges`, Rust in `crates/core/edge-routing`,
 one wasm export `edge_route_layout` reached through
 `@kamiazya/whiteboard-core-wasm`) is at stage 2, `differential`, in the daemon
-and the web editor under development and in CI, and `ts` in a release. It is
+and the web editor under development and in CI, and `ts` in a release. Every
+released build now CARRIES the artifact while the default stays `ts`: the
+`@kamiazya/whiteboard-mcp` tarball (`dist/assets/core-wasm`, with its
+THIRD-PARTY-NOTICES), the Docker image and the Cloudflare Pages site, each
+built from cold in the release workflow (`.github/actions/core-wasm` with
+`use-cache: 'false'`). A release build that lacks it fails: `prepack` refuses
+the tarball, and `WHITEBOARD_SHIP_CORE_WASM=1` fails the web build and the
+image. The tarball smoke installs the package and runs in `differential` with
+mismatches throwing, so an install whose artifact does not load fails there.
+Moving the default is a setting change, not a packaging one. The wasm's Rust
+crates are not components of the SBOM (`generate-npm-sbom.mjs` lists npm
+packages only); the licence text is in the shipped THIRD-PARTY-NOTICES. It is
 listed in the `PORTED_FUNCTIONS` ledger (`tools/arch-lint/src/ported-functions.ts`).
 The switch may not move to `rust` until every row of its parity checklist,
 [parity/edge-routing.md](../parity/edge-routing.md), is met or not applicable.
