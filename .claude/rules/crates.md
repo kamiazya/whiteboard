@@ -39,7 +39,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-model` | core | planned | serde types generated from the contracts plus the invariants |
 | `whiteboard-facet-engine` | core | planned | facet registry, write validation, compat chain, derived form |
 | `whiteboard-scene` | core | planned | the scene vocabulary and the contribution traits |
-| `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer |
+| `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer and the OKF envelope, across the wasm boundary as `okf_parse` / `okf_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | planned | the bundled visual plugin as an ordinary contribution |
 | `whiteboard-canvas-render` | core | planned | composer, typesetter, line breaking, theme, SVG backend, digest |
@@ -94,7 +94,10 @@ the artifact exists), so the routing scoreboards judge the Rust side-choice
 search, repair and router together; the two `*.cost.test.ts` files that count
 TypeScript internals are excluded there, since under Rust they count nothing. Every target runs nightly
 in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
-restores read-only. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
+restores read-only. The same job runs `codec-rust`
+(`packages/codec/src/okf/wasm.rust.test.ts`), which holds `Core.parseOkf` and
+`Core.serializeOkf` to the TypeScript exactly and fails on CI if the artifact
+is absent. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
 steps and cache paths to the scripts.
 
 - **Toolchain** is `rust-toolchain.toml` (1.97.0, pinned exactly) and
@@ -119,7 +122,10 @@ steps and cache paths to the scripts.
   answers it: a sort whose comparator a NaN can break goes through
   `whiteboard-det`'s `js_sort_by`, never std's `sort_by`, which may panic
   on a comparator that is not a total order. Each fuzz target's seeds
-  live in `crates/fuzz/seeds/<target>`.
+  live in `crates/fuzz/seeds/<target>`. The OKF exports enforce theirs the
+  same way (`["refused", code]` past `maxBytes`), and the shim also refuses a
+  text that is not well-formed UTF-16 and a document the wire does not
+  carry; a root answers all of those from the TypeScript.
 - **`#[expect]` is ledgered**: `crates/expect-ledger.json` names every
   `#[expect]` with its reason, and `tools/arch-lint`'s
   `expect-ledger.test.ts` holds it equal to the source from both sides.
@@ -163,6 +169,8 @@ steps and cache paths to the scripts.
 - **Dependencies**: `deny.toml` keeps sources crates.io-only and bans
   `serde_json`'s `unbounded_depth` and `arbitrary_precision`; a third-party
   crate is allowed per crate in the map with its review as the reason.
+  `serde_json` ships in `whiteboard-wasm` (the OKF document wire), so it is
+  no longer xtask-only.
   `crates/unsafe-ledger.json` is a shrink-only count of the `unsafe` keyword
   in each dependency's source (`cargo xtask unsafe-ledger` lexes it, skipping
   comments and literals — it measures what arrived, not risk), held from
