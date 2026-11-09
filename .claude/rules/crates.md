@@ -36,7 +36,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-det` | core | present | JS-compatible number formatting, pinned math, UTF-16 helpers |
 | `whiteboard-log` | core | present | RFC 5424 levels, records, sinks, fields-first logging |
 | `whiteboard-edge-routing` | core | present | side choice, anchors, grid search, crossings, jumps, rounding |
-| `whiteboard-model` | core | present | the frontmatter value tree today; types generated from the contracts plus the invariants as the model track ports them |
+| `whiteboard-model` | core | present | the frontmatter value tree, and the OKF frontmatter types generated from `contracts/model` with their hand-written checks (`checks.rs`), which `whiteboard-codec` reads and writes |
 | `whiteboard-facet-engine` | core | planned | facet registry, write validation, compat chain, derived form |
 | `whiteboard-scene` | core | planned | the scene vocabulary and the contribution traits |
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer and the OKF envelope, across the wasm boundary as `okf_parse` / `okf_serialize` |
