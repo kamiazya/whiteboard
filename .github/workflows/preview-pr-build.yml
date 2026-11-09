@@ -31,6 +31,10 @@ jobs:
       - uses: ./.github/actions/setup-pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      # The build routes edges with the Rust core by default and fails without
+      # its wasm; restored from the cache keyed on its inputs.
+      - uses: ./.github/actions/core-wasm
+
       - name: Build apps/web
         run: pnpm --filter @kamiazya/whiteboard-web build
       - name: Upload built site

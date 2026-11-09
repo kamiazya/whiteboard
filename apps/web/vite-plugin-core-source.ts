@@ -17,8 +17,8 @@ export interface CoreSourceOptions {
 }
 
 /**
- * Keeps the Rust core's wasm out of a build that neither routes with it nor
- * carries it.
+ * Decides whether a build carries the Rust core's wasm, and fails it when the
+ * build routes with the core and none is staged.
  *
  * `layout-core.ts` reaches the artifact through one dynamic import of
  * `layout-core-source.ts`, and that module names the staged glue and the
@@ -28,12 +28,17 @@ export interface CoreSourceOptions {
  * with a stub means the real source is never read, and so its imports are
  * never resolved.
  *
- * A build routing in TypeScript still carries the wasm whenever it is
- * staged: a release ships the artifact before anything defaults to it, so the
- * switch is one setting rather than a rebuild of every channel.
+ * Only a build that opted out (`VITE_WHITEBOARD_CORE=ts`) may be stubbed. A
+ * production build routes with `rust` by default, and one that did so without
+ * the wasm would ship a stub that degrades every layout to the TypeScript
+ * with nothing failing, so it is a build error instead. The dev server is
+ * exempt: it falls back to the TypeScript per call and needs no artifact to
+ * start. An opted-out build still carries the wasm whenever it is staged, so
+ * a rollback is one setting rather than a rebuild of every channel.
  * `WHITEBOARD_SHIP_CORE_WASM=1` (the release jobs) makes an unstaged artifact
- * a build failure instead of a quiet omission; `0` drops it regardless. The
- * impl is read with the very function the app decides with at run time. Registered for the page and, through
+ * a build failure for that build too; `0` drops the wasm, which only an
+ * opted-out build may ask for. The impl is read with the very function the app
+ * decides with at run time. Registered for the page and, through
  * `worker.plugins`, for the layout worker's own bundle: each has its own graph.
  */
 export function coreSourcePlugin(options: CoreSourceOptions = {}): Plugin {
@@ -45,13 +50,25 @@ export function coreSourcePlugin(options: CoreSourceOptions = {}): Plugin {
     enforce: 'pre',
     configResolved(config) {
       const staged = artifactStaged()
+      const routesWithCore = coreSettingsFrom(config.env).impl !== 'ts'
+      const building = config.command === 'build'
       if (ship === '1' && !staged) {
         throw new Error(
           'WHITEBOARD_SHIP_CORE_WASM=1 but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first',
         )
       }
+      if (building && routesWithCore && !staged) {
+        throw new Error(
+          'this build routes edges with the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts to build without it',
+        )
+      }
+      if (building && routesWithCore && ship === '0') {
+        throw new Error(
+          'WHITEBOARD_SHIP_CORE_WASM=0 leaves the wasm out of a build that routes edges with the Rust core; set VITE_WHITEBOARD_CORE=ts as well',
+        )
+      }
       const carried = ship === '0' ? false : staged
-      stubbed = coreSettingsFrom(config.env).impl === 'ts' && !carried
+      stubbed = !routesWithCore && !carried
     },
     load(id) {
       if (!stubbed || !SOURCE_MODULE.test(id)) return undefined

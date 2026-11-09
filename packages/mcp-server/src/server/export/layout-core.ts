@@ -12,15 +12,16 @@ const log = getLogger('layout-core')
 
 /**
  * How this daemon routes a canvas's edges (ADR-0054's `CoreImpl`), from
- * its environment. `WHITEBOARD_CORE` is `ts` unless something sets it: the
- * dev scripts and CI's test jobs set `differential`, a release never does,
- * so a published daemon pays for no second routing. The wasm ships in the
- * package regardless, ready for the default to move. `WHITEBOARD_CORE_MISMATCH=throw` turns a reported difference into a
+ * its environment. `WHITEBOARD_CORE` is `rust` unless something sets it: the
+ * Rust core answers and a published daemon pays for no second routing. The
+ * dev scripts and CI's test jobs set `differential` to compare it with the
+ * TypeScript; `ts` is the rollback while the TypeScript exists.
+ * `WHITEBOARD_CORE_MISMATCH=throw` turns a reported difference into a
  * failure, which is what a test run wants; a person dogfooding wants the
  * log line and the drawing.
  */
 const layoutCoreSettingsSchema = z.object({
-  WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('ts'),
+  WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
@@ -95,7 +96,8 @@ function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => voi
  * staged glue and wasm read once, on the first layout that asks. The glue is
  * imported by PATH at run time, never bundled, so a build of this package
  * needs no artifact. An artifact that cannot be read degrades to the
- * TypeScript with a warning, unless mismatches throw: a test run that asked
+ * TypeScript with a warning carrying `event: 'core-load-failed'` (so a
+ * deployment can count it), unless mismatches throw: a test run that asked
  * for the core and did not get it has compared nothing.
  */
 export function layoutCoreLoader(
@@ -114,7 +116,10 @@ export function layoutCoreLoader(
         return { routing, impl: { routeLayout: impl }, onMismatch: reporter(settings) }
       } catch (err) {
         if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') throw err
-        log.warning({ dir, err }, 'the Rust core did not load; routing in TypeScript')
+        log.warning(
+          { event: 'core-load-failed', dir, err },
+          'the Rust core did not load; routing in TypeScript',
+        )
         return undefined
       }
     })()

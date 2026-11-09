@@ -83,17 +83,30 @@ describe('where the daemon finds the core artifact', () => {
 })
 
 describe('the daemon layout core', () => {
-  it('reads ts, log and the staged artifacts when nothing is set', () => {
+  it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
-      WHITEBOARD_CORE: 'ts',
+      WHITEBOARD_CORE: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
   })
 
-  it('loads nothing under ts', async () => {
-    const load = layoutCoreLoader(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() }))
+  it('loads nothing under ts, the rollback setting', async () => {
+    const load = layoutCoreLoader(
+      layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'ts', WHITEBOARD_CORE_DIR: emptyDir() }),
+    )
     expect(await load()).toBeUndefined()
+  })
+
+  it('warns with a countable event and routes in TypeScript when the default core cannot load', async () => {
+    const capture = captureLogsForTests('warning')
+    try {
+      const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
+      expect(await layoutCoreLoader(settings)()).toBeUndefined()
+      expect(capture.records.filter((r) => r.data?.event === 'core-load-failed')).toHaveLength(1)
+    } finally {
+      capture.restore()
+    }
   })
 
   it('warns and routes in TypeScript when the artifact cannot be read', async () => {
@@ -126,6 +139,11 @@ describe('the daemon layout core', () => {
   })
 
   describe.runIf(built)('over the staged artifact', () => {
+    it('routes with the Rust core when nothing is set', async () => {
+      const core = await layoutCoreLoader(layoutCoreSettingsFrom({}))()
+      expect(core?.impl.routeLayout).toBe('rust')
+    })
+
     it('loads once, and a differential layout over it reports nothing', async () => {
       const capture = captureLogsForTests('warning')
       try {

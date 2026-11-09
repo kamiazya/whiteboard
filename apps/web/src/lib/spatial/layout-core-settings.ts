@@ -4,10 +4,11 @@ import { z } from 'zod'
  * How this app routes a canvas's edges (ADR-0054's `CoreImpl`), from the
  * build's environment: the web counterpart of the daemon's
  * `WHITEBOARD_CORE` / `WHITEBOARD_CORE_MISMATCH`. The dev server runs
- * `differential`; a production build is `ts`, so a release pays for no
- * second routing (it still carries the wasm, unused until this default moves). A test run stays on `ts` until its
- * CI job sets `VITE_WHITEBOARD_CORE`, because a jsdom page has no fetch to
- * load the artifact with. `VITE_WHITEBOARD_CORE_MISMATCH=throw` fails the
+ * `differential`; a production build is `rust`, so a release pays for no
+ * second routing and its build requires the staged wasm
+ * (`VITE_WHITEBOARD_CORE=ts` is the rollback and builds without it). A test
+ * run stays on `ts` until its CI job sets `VITE_WHITEBOARD_CORE`, because a
+ * jsdom page has no fetch to load the artifact with. `VITE_WHITEBOARD_CORE_MISMATCH=throw` fails the
  * layout that found a difference, which is what a test run wants.
  *
  * An unknown value is refused rather than defaulted: a typo that fell back
@@ -27,7 +28,7 @@ interface CoreEnv {
 }
 
 export function coreSettingsFrom(env: CoreEnv): CoreSettings {
-  const devDefault = env.DEV === true && env.MODE !== 'test' ? 'differential' : 'ts'
+  const devDefault = env.MODE === 'test' ? 'ts' : env.DEV === true ? 'differential' : 'rust'
   return coreSettingsSchema.parse({
     impl: env.VITE_WHITEBOARD_CORE || devDefault,
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',

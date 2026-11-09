@@ -41,6 +41,22 @@ The switch may not move to `rust` until every row of its parity checklist,
 [parity/edge-routing.md](../parity/edge-routing.md), is met or not applicable.
 The decisions below are unchanged.
 
+**Status note (2026-11-09, the first switch moves).** Edge routing now
+defaults to `rust` in the daemon (`WHITEBOARD_CORE`) and in a production web
+build (`VITE_WHITEBOARD_CORE`); `differential` stays the default of the dev
+server and of CI's test jobs, and a plain test run stays on `ts` because a
+jsdom page cannot fetch the artifact. Rollback is `WHITEBOARD_CORE=ts` for the
+daemon and a web build with `VITE_WHITEBOARD_CORE=ts` (a build needs the
+staged wasm otherwise, and fails without it rather than shipping a stub). A
+daemon whose artifact cannot load still answers in TypeScript and logs a
+warning carrying `event: 'core-load-failed'`. The parity checklist's rows are
+met; row 1 (the flat `Float64Array` wire, decision 9) is accepted as the
+declared deviation and row 10 rests on CI's differential runs (owner decision
+q18). The `PORTED_FUNCTIONS` entry stays at stage 2: the ledger's stage 3 makes
+the TypeScript export a re-export of the shim, which is the TypeScript's
+deletion and would remove the rollback, so the entry moves when the TypeScript
+is deleted, the release after the first one that defaults to `rust`.
+
 ## Context
 
 **Everything except the UI is TypeScript today, and it already runs in three

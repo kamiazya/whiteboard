@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { coreSettingsFrom } from './layout-core-settings.js'
 
 describe('coreSettingsFrom', () => {
-  it('routes in TypeScript in a production build', () => {
+  it('routes in Rust in a production build', () => {
     expect(coreSettingsFrom({ DEV: false, MODE: 'production' })).toEqual({
-      impl: 'ts',
+      impl: 'rust',
       mismatch: 'log',
     })
   })
@@ -27,6 +27,9 @@ describe('coreSettingsFrom', () => {
     ).toBe('differential')
     expect(
       coreSettingsFrom({ DEV: true, MODE: 'development', VITE_WHITEBOARD_CORE: 'ts' }).impl,
+    ).toBe('ts')
+    expect(
+      coreSettingsFrom({ DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE: 'ts' }).impl,
     ).toBe('ts')
   })
 
