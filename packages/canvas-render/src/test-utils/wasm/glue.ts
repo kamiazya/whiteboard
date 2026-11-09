@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { EXPECTED_ABI } from '@kamiazya/whiteboard-core-wasm'
 
 /**
  * The wasm artifact `pnpm rust:build:wasm` writes, loaded once for the
@@ -40,8 +41,12 @@ export interface WasmGlue {
   edge_route_layout(input: Float64Array): Float64Array
 }
 
-/** The surface these tests were written against; a stale artifact fails on this, not on its first mismatched call. */
-export const EXPECTED_ABI = '14'
+/**
+ * The surface these tests were written against: the shim's, since the shim
+ * and the artifact come from one commit. A stale artifact fails on this, not
+ * on its first mismatched call.
+ */
+export { EXPECTED_ABI }
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 
