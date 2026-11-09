@@ -17,6 +17,7 @@ const RECT: &str = r#"{
         "x": { "type": "number", "description": "Left." }
       },
       "required": ["x", "w"],
+      "x-wb-order": ["x", "w"],
       "additionalProperties": false,
       "x-wb-unknownKeys": "refuse"
     }
@@ -58,9 +59,10 @@ fn a_construct_outside_the_dialect_is_refused_by_name() {
         (r#""minimum": 0,"#, r#""minimum": null,"#),
         (
             r#""type": "number", "description": "Left.""#,
-            r#""type": "string", "description": "Left.""#,
+            r#""type": "boolean", "description": "Left.""#,
         ),
-        (r#""x-wb-unknownKeys": "refuse""#, r#""x-wb-unknownKeys": "strip""#),
+        (r#""x-wb-unknownKeys": "refuse""#, r#""x-wb-unknownKeys": "ignore""#),
+        (r#""minimum": 0,"#, r#""x-wb-nope": 1,"#),
         (
             r#""x": { "type": "number", "description": "Left." }"#,
             r#""x": { "type": "number", "description": "Left." }, "x": { "type": "number", "description": "Again." }"#,
@@ -74,7 +76,8 @@ fn a_construct_outside_the_dialect_is_refused_by_name() {
 #[test]
 fn dialect_rules_the_parse_cannot_see_are_checked() {
     for (from, to, expect) in [
-        (r#"["x", "w"]"#, r#"["x"]"#, "every property must be required"),
+        (r#""required": ["x", "w"]"#, r#""required": ["x"]"#, "required numbers"),
+        (r#""x-wb-order": ["x", "w"]"#, r#""x-wb-order": ["x"]"#, "x-wb-order"),
         (
             r#""additionalProperties": false"#,
             r#""additionalProperties": true"#,
@@ -97,11 +100,10 @@ fn dialect_rules_the_parse_cannot_see_are_checked() {
 
 #[test]
 fn a_field_named_by_a_rust_keyword_is_refused() {
-    let text =
-        mutated(r#""x": {"#, r#""type": {"#).replacen(r#"["x", "w"]"#, r#"["type", "w"]"#, 1);
+    let text = mutated(r#""x": {"#, r#""self": {"#).replace(r#"["x", "w"]"#, r#"["self", "w"]"#);
     let errors = outputs(&text).unwrap_err();
     assert!(
-        errors.iter().any(|e| e.contains("$defs.Rect.type: not a lowercase identifier")),
+        errors.iter().any(|e| e.contains("$defs.Rect.self: not a name both languages take")),
         "{errors:?}"
     );
 }
@@ -111,9 +113,359 @@ fn a_definition_or_contract_with_nothing_in_it_is_refused() {
     let empty_def = RECT
         .replacen(r#""w": { "type": "number", "minimum": 0, "description": "Width." },"#, "", 1)
         .replacen(r#""x": { "type": "number", "description": "Left." }"#, "", 1)
-        .replacen(r#"["x", "w"]"#, "[]", 1);
+        .replacen(r#""required": ["x", "w"]"#, r#""required": []"#, 1)
+        .replacen(r#""x-wb-order": ["x", "w"]"#, r#""x-wb-order": []"#, 1);
     let errors = outputs(&empty_def).unwrap_err();
     assert!(errors.iter().any(|e| e.contains("declares no property")), "{errors:?}");
+}
+
+/// A contract in the model's shape: no serde, no `.describe()`, a hand-written
+/// check module beside each output, every construct the model contract uses.
+const MODEL: &str = r##"{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "M",
+  "description": "D.",
+  "x-wb-emit": {
+    "zod": "packages/p/src/generated/m.zod.ts",
+    "rust": "crates/core/model/src/generated/m.rs"
+  },
+  "x-wb-checks": {
+    "zod": "packages/p/src/contract-checks.ts",
+    "rust": "crates/core/model/src/checks.rs"
+  },
+  "x-wb-describe": false,
+  "x-wb-rustSerde": false,
+  "x-wb-readonlyTypes": false,
+  "$defs": {
+    "Event": {
+      "description": "An event.",
+      "type": "object",
+      "properties": {
+        "at": { "$ref": "#/$defs/Stamp", "description": "When." },
+        "by": { "$ref": "#/$defs/Actor", "description": "Who." },
+        "note": { "type": "string", "description": "Why." }
+      },
+      "required": ["by", "at"],
+      "x-wb-order": ["by", "at", "note"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "keep"
+    },
+    "Actor": {
+      "description": "An actor.",
+      "type": "string",
+      "x-wb-minUtf16": 1,
+      "x-wb-check": "single_line"
+    },
+    "Stamp": {
+      "description": "A timestamp.",
+      "type": "string",
+      "pattern": "^\\d{4}(Z|[+-]\\d{2})$",
+      "x-wb-matcher": "stamp",
+      "x-wb-message": "a stamp is a year and a zone"
+    },
+    "Bag": {
+      "description": "Anything by name.",
+      "type": "object",
+      "additionalProperties": { "x-wb-any": true },
+      "x-wb-check": "bag_keys"
+    },
+    "Doc": {
+      "description": "A document.",
+      "type": "object",
+      "properties": {
+        "type": { "type": "string", "description": "Kind." },
+        "tags": { "type": "array", "items": { "type": "string" }, "description": "Labels." },
+        "events": { "type": "array", "items": { "$ref": "#/$defs/Event" }, "description": "Log." },
+        "bag": { "$ref": "#/$defs/Bag", "description": "Extras." },
+        "anything": { "x-wb-any": true, "description": "Whatever." },
+        "extraBag": { "$ref": "#/$defs/Bag", "description": "More extras." }
+      },
+      "required": ["type"],
+      "x-wb-order": ["type", "tags", "events", "bag", "anything", "extraBag"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    }
+  }
+}"##;
+
+fn model_mutated(from: &str, to: &str) -> String {
+    let text = MODEL.replacen(from, to, 1);
+    assert_ne!(text, MODEL, "{from} did not match");
+    text
+}
+
+fn model_zod() -> String {
+    outputs(MODEL).unwrap().remove(0).1
+}
+
+fn model_rust() -> String {
+    outputs(MODEL).unwrap().remove(1).1
+}
+
+#[test]
+fn definitions_come_out_in_dependency_order_whatever_their_names() {
+    let zod = model_zod();
+    let at = |name: &str| zod.find(&format!("export const {name}Schema")).unwrap();
+    assert!(at("actor") < at("event") && at("stamp") < at("event"));
+    assert!(at("event") < at("doc") && at("bag") < at("doc"));
+    let rust = model_rust();
+    assert!(rust.find("pub struct Event").unwrap() < rust.find("pub struct Doc").unwrap());
+}
+
+#[test]
+fn a_string_bound_in_utf16_units_a_check_and_a_pattern_reach_zod() {
+    let zod = model_zod();
+    assert!(zod.starts_with(&emit::header("c.schema.json")));
+    assert!(zod.contains(
+        "import { z } from 'zod'\nimport { bagKeys, singleLine } from '../contract-checks.js'\n"
+    ));
+    assert!(zod.contains("export const actorSchema = z.string().min(1).superRefine(singleLine)\n"));
+    assert!(zod.contains(
+        "export const stampSchema = z.string().regex(/^\\d{4}(Z|[+-]\\d{2})$/, 'a stamp is a year and a zone')\n"
+    ));
+    let long = model_mutated("a stamp is a year and a zone", &"a long stamp message ".repeat(3));
+    let broken = &outputs(&long).unwrap()[0].1;
+    assert!(broken.contains(
+        "export const stampSchema = z\n  .string()\n  .regex(/^\\d{4}(Z|[+-]\\d{2})$/, 'a long"
+    ));
+    assert!(zod.contains(
+        "export const bagSchema = z.record(z.string(), z.unknown()).superRefine(bagKeys)\n"
+    ));
+    assert!(!zod.contains("describe"), "{zod}");
+}
+
+#[test]
+fn optional_fields_array_ref_any_and_record_reach_zod_in_order() {
+    let zod = model_zod();
+    let doc = &zod[zod.find("export const docSchema").unwrap()..];
+    let fields: Vec<&str> = doc.lines().skip(1).take(6).map(str::trim).collect();
+    assert_eq!(
+        fields,
+        [
+            "type: z.string(),",
+            "tags: z.array(z.string()).optional(),",
+            "events: z.array(eventSchema).optional(),",
+            "bag: bagSchema.optional(),",
+            "anything: z.unknown().optional(),",
+            "extraBag: bagSchema.optional(),",
+        ]
+    );
+    assert!(zod.contains("export type Doc = z.infer<typeof docSchema>\n"));
+}
+
+#[test]
+fn unknown_keys_are_refused_stripped_or_kept_by_the_zod_object_it_picks() {
+    let zod = model_zod();
+    assert!(zod.contains("export const eventSchema = z.looseObject({"));
+    assert!(zod.contains("export const docSchema = z.object({"));
+    assert!(outputs(RECT).unwrap()[0].1.contains(".strictObject({"));
+}
+
+#[test]
+fn the_plain_rust_types_carry_options_vecs_values_and_the_kept_keys() {
+    let rust = model_rust();
+    assert!(rust.contains("use crate::{Map, Value};"));
+    assert!(!rust.contains("serde") && !rust.contains("MapOnly"), "{rust}");
+    assert!(rust.contains("#[derive(Debug, Clone, PartialEq)]\npub struct Event {"));
+    assert!(rust.contains("    pub by: Actor,\n    /// When.\n    pub at: Stamp,"));
+    assert!(rust.contains("    pub note: Option<String>,\n    /// Keys the contract does not name, in the order written.\n    pub extra: Map,\n}"));
+    assert!(rust.contains("pub r#type: String,"));
+    assert!(rust.contains("pub tags: Option<Vec<String>>,"));
+    assert!(rust.contains("pub events: Option<Vec<Event>>,"));
+    assert!(rust.contains("pub anything: Option<Value>,"));
+    assert!(rust.contains("pub extra_bag: Option<Bag>,"));
+    assert!(rust.contains("pub type Actor = String;"));
+    assert!(rust.contains("pub type Bag = Map;"));
+    let doc = &rust[rust.find("pub struct Doc").unwrap()..];
+    assert!(!doc.contains("pub extra:"), "a stripped object keeps no unknown keys");
+}
+
+#[test]
+fn a_named_check_and_matcher_are_pointed_at_in_the_rust_docs() {
+    let rust = model_rust();
+    assert!(rust.contains("/// Checked by `crate::checks::single_line`."));
+    assert!(rust.contains("/// Checked by `crate::checks::bag_keys`."));
+    assert!(rust.contains("/// Matched by `crate::checks::stamp`."));
+}
+
+#[test]
+fn the_names_a_contract_leans_on_are_listed_for_each_language() {
+    let contract = dialect::parse(MODEL).unwrap();
+    let checked = dialect::check(&contract).unwrap();
+    assert_eq!(checked.zod_checks, ["bag_keys", "single_line"]);
+    assert_eq!(checked.rust_names, ["bag_keys", "single_line", "stamp"]);
+}
+
+#[test]
+fn a_name_missing_from_a_hand_written_module_is_reported() {
+    let ts = "export function singleLine(v: string) {}\nexport const bagKeys = () => {}\n";
+    let rs =
+        "pub fn single_line(a: &str) -> bool { true }\npub fn stamp(a: &str) -> bool { true }\n";
+    assert!(missing_zod_checks(ts, &["single_line", "bag_keys"]).is_empty());
+    assert_eq!(missing_zod_checks(ts, &["single_line", "nope"]), ["nope"]);
+    assert_eq!(missing_rust_checks(rs, &["single_line", "bag_keys"]), ["bag_keys"]);
+    assert_eq!(missing_rust_checks("// pub fn stamp(", &["stamp"]), ["stamp"]);
+}
+
+fn assert_refused(cases: &[(&str, &str, &str)]) {
+    for (from, to, expect) in cases {
+        let text = model_mutated(from, to);
+        if let Err(e) = dialect::parse(&text) {
+            assert!(e.contains(expect), "{expect}: {e}");
+        } else {
+            let errors = outputs(&text).unwrap_err();
+            assert!(errors.iter().any(|e| e.contains(expect)), "{expect}: {errors:?}");
+        }
+    }
+}
+
+#[test]
+fn an_object_rule_the_model_dialect_states_is_refused_by_name() {
+    assert_refused(&[
+        (r#""x-wb-order": ["by", "at", "note"]"#, r#""x-wb-order": ["by", "at"]"#, "x-wb-order"),
+        (
+            r#""x-wb-order": ["by", "at", "note"]"#,
+            r#""x-wb-order": ["by", "at", "note", "at"]"#,
+            "x-wb-order",
+        ),
+        (
+            r#""x-wb-order": ["by", "at", "note"]"#,
+            r#""x-wb-order": ["by", "at", "zzz"]"#,
+            "x-wb-order",
+        ),
+        (r#""required": ["by", "at"]"#, r#""required": ["by", "zzz"]"#, "required"),
+        (r##""#/$defs/Actor""##, r##""#/$defs/Nowhere""##, "unknown definition"),
+        (r##""#/$defs/Actor""##, r#""other.json#/Actor""#, "#/$defs/"),
+        (r#""x-wb-check": "single_line""#, r#""x-wb-check": "SingleLine""#, "snake_case"),
+    ]);
+}
+
+#[test]
+fn a_string_array_or_record_rule_the_model_dialect_states_is_refused_by_name() {
+    assert_refused(&[
+        (r#""pattern": "^\\d{4}(Z|[+-]\\d{2})$""#, r#""pattern": "\\d{4}$""#, "anchored"),
+        (r#""pattern": "^\\d{4}(Z|[+-]\\d{2})$""#, r#""pattern": "^a/b$""#, "pattern"),
+        (r#""pattern": "^\\d{4}(Z|[+-]\\d{2})$""#, r#""pattern": "^a\\$""#, "pattern"),
+        (
+            r#""x-wb-message": "a stamp is a year and a zone""#,
+            r#""x-wb-message": "a \"stamp\"""#,
+            "x-wb-message",
+        ),
+        (r#""x-wb-matcher": "stamp","#, "", "pattern needs"),
+        (
+            r#""x-wb-minUtf16": 1,"#,
+            r#""x-wb-minUtf16": 1, "minimum": 1,"#,
+            "does not apply to a string",
+        ),
+        (
+            r#""items": { "type": "string" }"#,
+            r#""items": { "type": "object", "properties": {} }"#,
+            "name an object in $defs",
+        ),
+        (
+            r#""x-wb-any": true, "description": "Whatever.""#,
+            r#""x-wb-any": false, "description": "Whatever.""#,
+            "x-wb-any",
+        ),
+        (
+            r#""additionalProperties": { "x-wb-any": true }"#,
+            r#""additionalProperties": { "type": "string" }"#,
+            "record",
+        ),
+        (
+            r#""additionalProperties": true,
+      "x-wb-unknownKeys": "keep""#,
+            r#""additionalProperties": false,
+      "x-wb-unknownKeys": "keep""#,
+            "additionalProperties",
+        ),
+        (r#""x-wb-check": "bag_keys""#, r#""x-wb-check": "bag_keys", "x-wb-nope": 1"#, "x-wb-nope"),
+    ]);
+}
+
+#[test]
+fn a_cycle_between_definitions_is_refused() {
+    let cyclic = model_mutated(
+        r#""note": { "type": "string", "description": "Why." }"#,
+        r##""note": { "$ref": "#/$defs/Doc", "description": "Why." }"##,
+    );
+    let errors = outputs(&cyclic).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("cycle")), "{errors:?}");
+}
+
+#[test]
+fn a_kept_object_cannot_name_the_field_that_holds_its_extra_keys() {
+    let text = MODEL.replace("note", "extra");
+    let errors = outputs(&text).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("Event.extra") && e.contains("keep")), "{errors:?}");
+}
+
+#[test]
+fn two_names_that_are_one_rust_field_are_refused() {
+    let text = model_mutated(
+        r#""extraBag": { "$ref""#,
+        r#""extra_bag": { "x-wb-any": true, "description": "X." }, "extraBag": { "$ref""#,
+    )
+    .replacen(r#""anything", "extraBag"]"#, r#""anything", "extra_bag", "extraBag"]"#, 1);
+    let errors = outputs(&text).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("both name")), "{errors:?}");
+}
+
+#[test]
+fn the_check_modules_are_declared_beside_the_outputs_when_a_check_is_used() {
+    for (from, to, expect) in [
+        (
+            r#""x-wb-checks": {
+    "zod": "packages/p/src/contract-checks.ts",
+    "rust": "crates/core/model/src/checks.rs"
+  },"#,
+            "",
+            "x-wb-checks",
+        ),
+        (
+            "packages/p/src/contract-checks.ts",
+            "packages/q/src/contract-checks.ts",
+            "x-wb-checks.zod",
+        ),
+        (
+            "packages/p/src/contract-checks.ts",
+            "packages/p/src/deep/contract-checks.ts",
+            "x-wb-checks.zod",
+        ),
+        ("crates/core/model/src/checks.rs", "crates/core/other/src/checks.rs", "x-wb-checks.rust"),
+        ("crates/core/model/src/checks.rs", "crates/core/model/src/checks.ts", "x-wb-checks.rust"),
+    ] {
+        let errors = outputs(&model_mutated(from, to)).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains(expect)), "{expect}: {errors:?}");
+    }
+}
+
+#[test]
+fn serde_emission_stays_to_closed_objects_of_numbers() {
+    let errors = outputs(&model_mutated(r#""x-wb-rustSerde": false"#, r#""x-wb-rustSerde": true"#))
+        .unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("x-wb-rustSerde")), "{errors:?}");
+    let described = model_mutated(r#""x-wb-describe": false"#, r#""x-wb-describe": true"#);
+    let errors = outputs(&described).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("optional")), "{errors:?}");
+}
+
+#[test]
+fn any_value_and_record_types_need_the_model_crate_to_name_them() {
+    let text = model_mutated("crates/core/model/src/generated", "crates/core/other/src/generated")
+        .replace("crates/core/model/src/checks.rs", "crates/core/other/src/checks.rs");
+    let errors = outputs(&text).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("whiteboard-model")), "{errors:?}");
+}
+
+#[test]
+fn the_readonly_wrapper_on_exported_types_is_a_contract_choice() {
+    let readonly = model_mutated(r#""x-wb-readonlyTypes": false"#, r#""x-wb-readonlyTypes": true"#);
+    assert!(
+        outputs(&readonly).unwrap()[0]
+            .1
+            .contains("export type Doc = Readonly<z.infer<typeof docSchema>>\n")
+    );
 }
 
 #[test]

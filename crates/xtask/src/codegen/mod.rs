@@ -18,6 +18,7 @@
 mod caps;
 mod dialect;
 mod emit;
+mod parse;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write as _;
@@ -54,6 +55,53 @@ fn generate(
         (contract.emit.zod.clone(), zod, false),
         (contract.emit.rust.clone(), emit::rust(&checked, source), true),
     ])
+}
+
+/// The names of `wanted` that the TypeScript module does not export, each in
+/// the camelCase the generated import spells. A text scan: it finds the
+/// declaration, and that it behaves is the differential's to show.
+fn missing_zod_checks(text: &str, wanted: &[&str]) -> Vec<String> {
+    let declared = |camel: &str| {
+        ["export function ", "export const "].iter().any(|kw| {
+            text.lines().any(|line| {
+                line.strip_prefix(kw).is_some_and(|rest| {
+                    rest.strip_prefix(camel).is_some_and(|after| {
+                        !after.starts_with(|c: char| c.is_alphanumeric() || c == '_')
+                    })
+                })
+            })
+        })
+    };
+    wanted.iter().filter(|name| !declared(&emit::camel(name))).map(|n| (*n).to_owned()).collect()
+}
+
+/// The names of `wanted` that the Rust module does not declare `pub fn`.
+fn missing_rust_checks(text: &str, wanted: &[&str]) -> Vec<String> {
+    let declared = |name: &str| {
+        text.lines().any(|line| {
+            line.strip_prefix("pub fn ")
+                .and_then(|rest| rest.strip_prefix(name))
+                .is_some_and(|after| after.starts_with(['(', '<']))
+        })
+    };
+    wanted.iter().filter(|name| !declared(name)).map(|n| (*n).to_owned()).collect()
+}
+
+/// A contract's named checks and matchers exist in the hand-written modules
+/// it declares, in each language that leans on them.
+fn verify_checks(root: &Path, contract: &dialect::Contract) -> Result<(), Vec<String>> {
+    let checked = dialect::check(contract)?;
+    let Some(modules) = &contract.checks else { return Ok(()) };
+    let mut v = Vec::new();
+    for (path, names, missing) in [
+        (&modules.zod, &checked.zod_checks, missing_zod_checks as fn(&str, &[&str]) -> Vec<String>),
+        (&modules.rust, &checked.rust_names, missing_rust_checks),
+    ] {
+        let text = std::fs::read_to_string(root.join(path))
+            .map_err(|e| vec![format!("cannot read {path}: {e}")])?;
+        v.extend(missing(&text, names).into_iter().map(|n| format!("{path}: declares no `{n}`")));
+    }
+    if v.is_empty() { Ok(()) } else { Err(v) }
 }
 
 /// rustfmt under the workspace's `rustfmt.toml`, so the checked-in Rust is
@@ -190,9 +238,14 @@ fn generate_all(root: &Path) -> Result<BTreeMap<String, String>, Vec<String>> {
         let source = path.strip_prefix(root).unwrap_or(&path).to_string_lossy().into_owned();
         let text = std::fs::read_to_string(&path)
             .map_err(|e| vec![format!("cannot read {source}: {e}")])?;
-        let files = dialect::parse(&text)
-            .map_err(|e| vec![format!("{source}: {e}")])
-            .and_then(|contract| generate(&contract, &source));
+        let files = dialect::parse(&text).map_err(|e| vec![format!("{source}: {e}")]).and_then(
+            |contract| {
+                verify_checks(root, &contract).map_err(|e| {
+                    e.into_iter().map(|m| format!("{source}: {m}")).collect::<Vec<_>>()
+                })?;
+                generate(&contract, &source)
+            },
+        );
         let files = files.unwrap_or_else(|errors| {
             v.extend(errors);
             Vec::new()

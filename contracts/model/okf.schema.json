@@ -1,0 +1,137 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "OKF frontmatter",
+  "description": "The root keys of the frontmatter of an OKF document: core facets, the trust family, and the two buckets for facets and unknown keys.",
+  "x-wb-emit": {
+    "zod": "packages/model/src/generated/okf.zod.ts",
+    "rust": "crates/core/model/src/generated/okf.rs"
+  },
+  "x-wb-checks": {
+    "zod": "packages/model/src/contract-checks.ts",
+    "rust": "crates/core/model/src/checks.rs"
+  },
+  "x-wb-describe": false,
+  "x-wb-rustSerde": false,
+  "x-wb-readonlyTypes": false,
+  "$defs": {
+    "OkfActor": {
+      "description": "Who or what acted: a non-blank single-line string, held to no fixed shape.",
+      "type": "string",
+      "x-wb-minUtf16": 1,
+      "x-wb-check": "okf_actor"
+    },
+    "OkfTimestamp": {
+      "description": "An ISO 8601 datetime with an explicit UTC offset (OKF section 5).",
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "x-wb-matcher": "okf_timestamp",
+      "x-wb-message": "an OKF timestamp is an ISO 8601 datetime with an explicit UTC offset"
+    },
+    "OkfTrustEvent": {
+      "description": "One trust stamp: who, and when. Keys a producer added are kept.",
+      "type": "object",
+      "properties": {
+        "by": { "$ref": "#/$defs/OkfActor", "description": "Who or what acted." },
+        "at": { "$ref": "#/$defs/OkfTimestamp", "description": "When they did." }
+      },
+      "required": ["by", "at"],
+      "x-wb-order": ["by", "at"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "keep"
+    },
+    "ExtensionFacets": {
+      "description": "Extension facets by namespace.name/vN key, each payload carried unvalidated.",
+      "type": "object",
+      "additionalProperties": { "x-wb-any": true },
+      "x-wb-check": "extension_facet_keys"
+    },
+    "FacetsRaw": {
+      "description": "Unknown root keys preserved verbatim, none of them a reserved root key.",
+      "type": "object",
+      "additionalProperties": { "x-wb-any": true },
+      "x-wb-check": "facets_raw_keys"
+    },
+    "CoreFacets": {
+      "description": "The core OKF facets every document may carry.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "What kind of concept this is."
+        },
+        "title": { "type": "string", "description": "The name of the concept." },
+        "description": { "type": "string", "description": "A summary of the concept." },
+        "resource": {
+          "type": "string",
+          "description": "A URI of the asset the concept describes."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-form labels."
+        },
+        "view": {
+          "type": "string",
+          "description": "The extension facet a reader renders by default."
+        }
+      },
+      "required": ["type"],
+      "x-wb-order": ["type", "title", "description", "resource", "tags", "view"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "OkfMarkdownFrontmatter": {
+      "description": "Document frontmatter: the core facets plus the trust family and the facet buckets.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "What kind of concept this is."
+        },
+        "title": { "type": "string", "description": "The name of the concept." },
+        "description": { "type": "string", "description": "A summary of the concept." },
+        "resource": {
+          "type": "string",
+          "description": "A URI of the asset the concept describes."
+        },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Free-form labels."
+        },
+        "view": {
+          "type": "string",
+          "description": "The extension facet a reader renders by default."
+        },
+        "generated": {
+          "$ref": "#/$defs/OkfTrustEvent",
+          "description": "How the current content was produced."
+        },
+        "verified": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/OkfTrustEvent" },
+          "description": "Who or what has confirmed the content."
+        },
+        "facets": { "$ref": "#/$defs/ExtensionFacets", "description": "The extension facets." },
+        "facetsRaw": { "$ref": "#/$defs/FacetsRaw", "description": "Unknown root keys, preserved." }
+      },
+      "required": ["type"],
+      "x-wb-order": [
+        "type",
+        "title",
+        "description",
+        "resource",
+        "tags",
+        "view",
+        "generated",
+        "verified",
+        "facets",
+        "facetsRaw"
+      ],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    }
+  }
+}

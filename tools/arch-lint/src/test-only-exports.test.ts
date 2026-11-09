@@ -218,6 +218,20 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/model/src/generated/okf.zod.ts#coreFacetsSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
+  'packages/model/src/generated/okf.zod.ts#extensionFacetsSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
+  'packages/model/src/generated/okf.zod.ts#facetsRawSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
+  'packages/model/src/generated/okf.zod.ts#okfActorSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
+  'packages/model/src/generated/okf.zod.ts#okfTimestampSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
+  'packages/model/src/generated/okf.zod.ts#okfTrustEventSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
+  'packages/model/src/generated/okf.zod.ts#okfMarkdownFrontmatterSchema':
+    'a generated contract definition, read by okf-contract.test.ts until the hand-written schema it mirrors is swapped for it; the contract emits every definition, so none can be dropped alone',
   'packages/codec/src/okf/okf-core.ts#OKF_TOLERATED_DIFFERENCES':
     "QR-21's ledger of what the OKF differential tolerates; exported so the live differential (wasm.rust.test.ts) holds the other side of each entry, that its case still differs, rather than a second list of the cases",
   'packages/codec/src/okf/okf-core.ts#messageTolerated':
