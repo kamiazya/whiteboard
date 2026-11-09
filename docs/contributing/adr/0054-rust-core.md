@@ -553,6 +553,99 @@ code rather than argued: the port moves `layout/edges` as a whole, behind one
 call per layout. The per-edge export is the spike's scaffold, not the shape of
 the port.
 
+#### The markdown stringify spike (2026-11-09): no twin, and no caller yet
+
+Step 6 names this spike first. Can a Rust stack write an OKF body byte for
+byte as `stringifyMarkdownBody` (remark-stringify with the codec's GFM, math
+and `referenceLiteral` extensions) writes it? The corpus was harvested at run
+time from the codec's own 47 test files: 595 distinct mdast roots and 605
+distinct markdown strings, fast-check cases included.
+
+| Pipeline | Byte-identical |
+|---|---|
+| the codec's own tree into `mdast_util_to_markdown` 0.0.2 | 355 / 595: 320 / 357 trees with no reference, 35 / 238 with one |
+| `markdown` 1.0.0 (markdown-rs) parse, then the same stringifier | 288 / 605 |
+| `comrak` 0.59.0 parse and `format_commonmark` | 141 / 605 |
+
+`mdast_util_to_markdown`, the Rust port shipped beside markdown-rs, is the
+closest twin. Its options already equal remark-stringify's defaults, so
+configuration is no lever. It has:
+- no handler or `unsafe` hook, so it cannot be taught `referenceLiteral`;
+- no GFM output (a table errors, a task-list checkbox is dropped, GFM's
+  unsafe patterns are missing);
+- one port bug that puts a space before inline `html`, which alone accounts
+  for 142 of the differences;
+- a lag behind mdast-util-to-markdown 2.1.x in character-reference encoding
+  and in `safe()`.
+
+Byte identity therefore means forking it into `crates/` and porting the
+to-markdown halves of gfm-table, strikethrough, task-list and
+autolink-literal. That is estimated at one to two weeks, plus the
+differential lane this spike built.
+
+The writer has no production caller. `serializeOkf` writes `doc.body` verbatim, and
+`stringifyMarkdownBody` is held ready for a bundle export that does not exist
+yet (`test-only-exports.test.ts`). So step 6's codec round-trip is the OKF
+string round-trip: frontmatter plus a verbatim body, with no markdown writer
+on the Rust path. Owner question q20 puts this to the owner; the provisional
+answer is to keep stringify in TypeScript until the bundle export gives it a
+caller, and to port it then with this spike's harness as its gate.
+
+#### The frontmatter spike (2026-11-09): a restricted reader and a ported writer hold
+
+The other half of step 6's gate is the restricted frontmatter parser,
+differentially fuzzed against npm `yaml` (decision 25).
+
+What is used was surveyed over 227 frontmatters, the repo's markdown and the
+codec's OKF fixtures:
+- block and flow maps and sequences, plain or quoted keys, plain, double- and
+  single-quoted scalars;
+- no tags, anchors, block scalars, tabs or CR.
+
+What `yaml.stringify` writes adds more, and a reader must accept it all:
+- `|` and `>` block scalars;
+- scalars folded at 80 columns;
+- the explicit `? key` form, which it uses for any key longer than 1024
+  UTF-16 units.
+
+The subset is that union. Tags, directives, document markers, collection
+keys, tab indentation and an implicit empty key are refused. Values resolve
+by npm's own core-schema rules: the written-integer rule, duplicate keys
+compared by resolved value, and JavaScript's own-key order.
+
+**Reader.** A hand-written Rust reader for the subset was checked, on a
+holdout of 30,000 seeded cases never used for tuning, against the codec's
+real `parseYamlKeepingWrittenIntegers`:
+- it never accepted an input the TypeScript refuses, and never answered a
+  different value;
+- it refused 688 inputs the TypeScript accepts, all outside the subset;
+- it disagreed on 7 mutated inputs about the refusal class.
+
+`saphyr-parser` 0.3.3's events under the same resolver disagreed on 2.4%,
+66 of them by accepting what the TypeScript refuses. `serde_yml` and its
+`libyml` carry RUSTSEC-2025-0068 and RUSTSEC-2025-0067; `serde_yaml` and
+`yaml-rust` are unmaintained.
+
+**Writer.** A port of `stringify` that measures in UTF-16 code units was
+byte-identical on 24,000 of 24,000 generated frontmatters, which included
+3,569 block scalars and 1,737 explicit keys. The instrument was
+mutation-checked: a line width of 79 makes 87 of 4,000 outputs differ.
+
+Three findings shape the port:
+- **The TypeScript reader is not restricted.** `frontmatter-yaml.ts` refuses
+  only anchors, aliases and depth past 32, and passes the rest of YAML 1.2.
+  Zero disagreement in both directions needs the TypeScript to refuse the
+  same subset first. That is owner question q21; the provisional answer is
+  yes.
+- **Lone surrogates.** The TypeScript stores and writes lone UTF-16
+  surrogates, which a Rust `String` cannot hold. They caused 420 of the
+  8,000 writer round-trips to differ. Owner question q22's provisional
+  answer is to refuse them at write.
+- **npm `yaml` 2.9.0's quote bug.** It finds a closing quote with
+  `indexOf`, so whether a malformed quoted scalar parses depends on a quote
+  further down the document. It is ledgered rather than copied, and `yaml`
+  stays pinned while the differential is the gate.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 
@@ -834,7 +927,7 @@ through a ledgered exception.
 | 3 | This step (decision 8): skeleton, gates, schema pipeline on the geometry contract, harness | each gate in QR-1…QR-32 has a running job, mutation-checked |
 | 4 | det precursor in TypeScript (decision 11) | goldens and scoreboards moved once, with reasons |
 | 5 | Geometry contract and `edge-routing` — the routing spike, then the port | parity checklist; routing scoreboards identical |
-| 6 | `model`, `facet-engine`, `scene`, `codec`, `plugin-visual` data half | codec round-trips byte-identical; markdown-rs stringify spiked first; the restricted frontmatter parser differentially fuzzed against npm `yaml` |
+| 6 | `model`, `facet-engine`, `scene`, `codec`, `plugin-visual` data half | the OKF round-trip (frontmatter plus a verbatim body) byte-identical; the restricted frontmatter parser differentially fuzzed against npm `yaml`, with zero disagreement once the TypeScript refuses the same subset. Markdown stringify stays in TypeScript until it has a caller (both spiked 2026-11-09, above) |
 | 7 | `canvas-render` (scene-across-boundary decided first) | SVG golden byte-identical on TypeScript, native and wasm |
 | 8 | `search` | search-quality scoreboard identical; Unicode-table diff ledgered |
 | 9 | The loro cohort: `crdt`, `workspace-index`, `history`, `reference-graph` | bidirectional fixtures; deep-value differential |
@@ -848,7 +941,7 @@ through a ledgered exception.
 |---|---|---|
 | 1 | Byte-identical SVG against the oracle fails on `toFixed` ties, transcendentals or map order | The det precursor (decision 11), before any port |
 | 2 | UTF-16 semantics — comparison, lengths, loro indices, `maxLength` | `det`'s UTF-16 operations; every contract offset declares its unit |
-| 3 | Markdown/YAML parity: markdown-rs parses, but there is no remark-stringify twin; the YAML crates are archived or unsound | The restricted frontmatter parser, differentially fuzzed against npm `yaml` (decision 25); stringify spiked before step 6 |
+| 3 | Markdown/YAML parity: markdown-rs parses, but there is no remark-stringify twin; the YAML crates are archived or unsound | The restricted frontmatter parser, differentially fuzzed against npm `yaml` (decision 25); stringify spiked before step 6 (2026-11-09: the closest twin matches 89.6% without references and needs a fork, and the writer has no production caller yet) |
 | 4 | Line breaking: `css-line-break` strict (CSS kinsoku) against a UAX #14 crate with no strictness levels | Spike before step 7 |
 | 5 | Highlighting has no Rust twin of highlight.js | Host seam through the transition |
 | 6 | Two loro engines: size, version pin, `_utf16` APIs | One-cohort migration; lock-step guard |
