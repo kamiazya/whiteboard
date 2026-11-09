@@ -32,6 +32,10 @@ export interface PortedFunction {
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'routeLayout',
+    // Stays 2 although the switch defaults to `rust`: stage 3 makes the
+    // TypeScript export a re-export of the shim, which deletes the
+    // implementation the `ts` and `differential` settings (the rollback) run.
+    // It moves with the TypeScript's deletion.
     stage: 2,
     ts: { file: 'packages/canvas-render/src/layout/edges/layout-core.ts', export: 'routeLayout' },
     switch: {

@@ -962,6 +962,12 @@ jobs:
         if: steps.detect.outputs.docker == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The image's web build routes edges with the Rust core and fails without
+      # the wasm, which the image cannot build (no Rust toolchain). It enters
+      # through the build context, as in the release.
+      - uses: ./.github/actions/core-wasm
+        if: steps.detect.outputs.docker == 'true'
+
       - name: Docker build dry-run
         if: steps.detect.outputs.docker == 'true'
         run: pnpm publish:dry-run:docker

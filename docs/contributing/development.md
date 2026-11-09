@@ -333,6 +333,9 @@ Two layers close that gap:
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket); with this checkout's dev daemon already running, its daemon half reuses it and exits 0 while Vite keeps running — only a half that FAILS ends the other
 pnpm mcp             # the stdio MCP server only, from source (tsx), on .dev-data
 pnpm build           # dist/server (apps/web's `build` ends with `copy-into-mcp-dist.mjs`, which copies dist/web-app in)
+                     # the web build routes edges with the Rust core by default, so it fails until
+                     # `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` has staged the wasm;
+                     # `VITE_WHITEBOARD_CORE=ts pnpm build` builds without it (no Rust toolchain needed)
 pnpm build:mcp       # the server alone: canvas-viewer's widget first, then `@kamiazya/whiteboard-mcp`'s build (a `pnpm --filter` build does not build its workspace dependencies, so the bare filter form fails on a clean checkout with "widget build output not found")
 pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit

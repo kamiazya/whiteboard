@@ -42,6 +42,8 @@ interface Workflow {
 const read = (path: string): string => readFileSync(join(REPO_ROOT, path), 'utf-8')
 const ci = parseYaml(read('.github/workflows/ci.yml')) as Workflow
 const release = parseYaml(read('.github/workflows/release.yml')) as Workflow
+const previewPr = parseYaml(read('.github/workflows/preview-pr-build.yml')) as Workflow
+const previewLatest = parseYaml(read('.github/workflows/deploy-preview.yml')) as Workflow
 const nightly = parseYaml(read('.github/workflows/rust-fuzz-nightly.yml')) as Workflow
 
 const RUST_JOBS = ['rust', 'rust-fuzz-pr', 'rust-mutants']
@@ -371,5 +373,48 @@ describe('verify and packaged-smoke build over the same artifact a release ships
       WHITEBOARD_CORE: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
+  })
+})
+
+// The web build and the image's web build route edges with the Rust core by
+// default and fail without its wasm, so every workflow that runs one has to
+// put the artifact in place first.
+describe('every workflow that builds the web app restores the core wasm first', () => {
+  const WEB_BUILD = /whiteboard-web build|pnpm build\b|publish:dry-run:docker/
+
+  it.each([
+    { file: 'preview-pr-build.yml', workflow: previewPr, id: 'build' },
+    { file: 'deploy-preview.yml', workflow: previewLatest, id: 'build-latest' },
+    { file: 'ci.yml', workflow: ci, id: 'dry-run-docker' },
+  ])('$file job $id', ({ workflow, id }) => {
+    const steps = stepsOf(workflow, id)
+    const at = steps.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const build = steps.findIndex((s) => WEB_BUILD.test(s.run ?? ''))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(build).toBeGreaterThan(at)
+  })
+
+  it('has no other job that builds the web app without it', () => {
+    const builders = [
+      ['ci.yml', ci],
+      ['release.yml', release],
+      ['preview-pr-build.yml', previewPr],
+      ['deploy-preview.yml', previewLatest],
+    ] as const
+    const unrestored = builders.flatMap(([file, workflow]) =>
+      Object.entries(workflow.jobs).flatMap(([id, job]) => {
+        const steps = job.steps ?? []
+        const build = steps.findIndex((s) => WEB_BUILD.test(s.run ?? ''))
+        const at = steps.findIndex((s) => s.uses === './.github/actions/core-wasm')
+        return build >= 0 && (at < 0 || at > build) ? [`${file}#${id}`] : []
+      }),
+    )
+    expect(unrestored).toEqual([])
+  })
+
+  it('has a dry-run image build that requires the wasm, as the release image does', () => {
+    expect(read('packages/mcp-server/scripts/release/publish-dry-run-docker.mjs')).toContain(
+      'WHITEBOARD_SHIP_CORE_WASM=1',
+    )
   })
 })

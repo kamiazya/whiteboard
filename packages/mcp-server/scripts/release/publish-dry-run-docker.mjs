@@ -14,7 +14,7 @@
 // this file; see the note above the build arguments.
 
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { formatCacheReport, parseBuildxProgress } from './buildx-progress.mjs'
@@ -68,10 +68,21 @@ mkdirSync(OUT_DIR, { recursive: true })
 // Read NODE_VERSION from .node-version (single source of truth).
 const nodeVersion = readFileSync(join(REPO_ROOT, '.node-version'), 'utf-8').trim()
 
+// The image's web build routes edges with the Rust core and needs its wasm
+// in the build context; the image has no Rust toolchain to make it.
+if (!existsSync(join(REPO_ROOT, 'packages/core-wasm/artifacts/whiteboard_wasm_bg.wasm'))) {
+  process.stderr.write(
+    '[publish-dry-run:docker] packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first\n',
+  )
+  fail('core wasm staged')
+}
+
 const buildArgs = [
   'build',
   '--build-arg',
   `NODE_VERSION=${nodeVersion}`,
+  '--build-arg',
+  'WHITEBOARD_SHIP_CORE_WASM=1',
   '-f',
   DOCKERFILE,
   '-t',
