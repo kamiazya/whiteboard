@@ -651,8 +651,9 @@ Three findings shape the port:
 - **The oracle is pinned.** The catalog asked for `yaml` `^2.8.4` and only the
   lockfile resolved 2.9.0, while the published `@kamiazya/whiteboard-mcp`
   keeps `yaml` external, so an install could resolve another 2.x. The catalog
-  now names 2.9.0 exactly, which the published package carries, so the
-  differential measures the reader that ships.
+  now names 2.9.0 exactly, so the differential measures the reader that
+  ships from the next release on. Release 0.0.20 still declares `^2.8.4`;
+  until a release carries the pin, an install of it can resolve another 2.x.
 
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
