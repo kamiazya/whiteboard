@@ -36,11 +36,12 @@ const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[
 const MAX_TEXT = 1500
 const READER_SEED = 0x0f1e2d
 const WRITER_SEED = 0x3c4b5a
-/** The checkout's root, which `git` answers for any directory inside it. */
-const REPO_ROOT = execFileSync('git', ['rev-parse', '--show-toplevel'], {
-  cwd: import.meta.dirname,
-  encoding: 'utf8',
-}).trim()
+/** The checkout's root, which `git` answers for any directory inside it. Asked only while recording. */
+const repoRoot = (): string =>
+  execFileSync('git', ['rev-parse', '--show-toplevel'], {
+    cwd: import.meta.dirname,
+    encoding: 'utf8',
+  }).trim()
 
 type Random = () => number
 
@@ -192,18 +193,19 @@ function mutate(d: Dice, text: string): string {
 
 /** Frontmatters the repository's markdown files carry, and the OKF fixtures of the codec's own tests. */
 function repositoryFrontmatters(): string[] {
+  const root = repoRoot()
   const tracked = (glob: string) =>
-    execFileSync('git', ['ls-files', glob], { cwd: REPO_ROOT, encoding: 'utf8' })
+    execFileSync('git', ['ls-files', glob], { cwd: root, encoding: 'utf8' })
       .split('\n')
       .filter(Boolean)
   const found: string[] = []
   const fence = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?/
   for (const file of tracked('*.md')) {
-    const match = fence.exec(readFileSync(join(REPO_ROOT, file), 'utf8'))
+    const match = fence.exec(readFileSync(join(root, file), 'utf8'))
     if (match?.[1] !== undefined) found.push(match[1])
   }
   for (const file of tracked('packages/*/src/**/*.test.ts')) {
-    const text = readFileSync(join(REPO_ROOT, file), 'utf8')
+    const text = readFileSync(join(root, file), 'utf8')
     for (const m of text.matchAll(/(['"`])---\\n((?:(?!\1).)*?)\\n---/g)) {
       try {
         const yaml = JSON.parse(

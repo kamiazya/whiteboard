@@ -96,13 +96,18 @@ impl Parser {
     }
 
     /// Properties on a line of their own: the node is on the next line, or
-    /// there is none and the properties stand on an empty one.
+    /// there is none and the properties stand on an empty one. The next line
+    /// can hold properties alone again, so each such line counts against the
+    /// parse depth: nothing else bounds this recursion.
     fn properties_alone(&mut self, parent: Indent, props: Props) -> Parsed<Node> {
         self.end_line()?;
         if self.eof() || !deeper(self.col(), parent) {
             return Ok(Node::null().with_props(props));
         }
-        Ok(self.block_node(parent, true)?.with_props(props))
+        self.enter()?;
+        let node = self.block_node(parent, true);
+        self.leave();
+        Ok(node?.with_props(props))
     }
 
     fn compact_sequence(&mut self, column: usize, allowed: bool, props: Props) -> Parsed<Node> {

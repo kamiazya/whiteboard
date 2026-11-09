@@ -620,3 +620,21 @@ fn the_parse_goes_on_past_the_depth_it_refuses_so_malformed_is_named_malformed()
     let siblings = format!("a: [{}]", "[],".repeat(70));
     assert_eq!(read(&siblings), map(&[("a", Value::Seq(vec![Value::Seq(vec![]); 70]))]));
 }
+
+#[test]
+fn properties_on_lines_of_their_own_are_bounded_by_the_parse_depth() {
+    // Each property-only line hands the node to the next line, so a text of
+    // them nests one level per line; the depth cap has to count them, or a
+    // text under MAX_BYTES recurses until the stack runs out.
+    for property in ["!t\n", "&a\n"] {
+        let lines = MAX_BYTES / property.len() - 1;
+        assert_eq!(parse(&property.repeat(lines)), Err(Refusal::Depth), "{property:?}");
+        assert_eq!(
+            parse(&format!("a:\n{}", format!("  {property}").repeat(lines / 2))),
+            Err(Refusal::Depth)
+        );
+    }
+    // Under the cap the reading is unchanged: a tag on its own line is still
+    // the subset refusal it was.
+    assert_eq!(class("!t\nx\n"), "subset");
+}

@@ -106,6 +106,12 @@ pub fn frontmatter_parse(data: &[u8]) {
         return;
     };
     let again = parse(&written);
+    // Folding and indentation can carry a value read under the cap past it,
+    // and the reader refuses what is over the cap whatever it says.
+    if written.len() > whiteboard_codec::frontmatter::MAX_BYTES {
+        assert_eq!(again, Err(whiteboard_codec::frontmatter::Refusal::TooLarge));
+        return;
+    }
     assert!(
         again.as_ref().is_ok_and(|read| same(read, &value)),
         "{value:?} written as {written:?} reads back as {again:?}"
