@@ -10,7 +10,7 @@ code — or would be re-invented per crate, differently each time.
 today, with the paths that implement it. The Rust column is the REQUIRED
 mechanism for Rust code. A Cargo workspace (`crates/`) exists and edge
 routing is ported into it (defaulting to `rust`, with `differential` in
-development and CI; rollback is `WHITEBOARD_CORE=ts` or `VITE_WHITEBOARD_CORE=ts`; its checklist is [parity/edge-routing.md](parity/edge-routing.md)).
+development and CI; rollback is `WHITEBOARD_CORE=ts` or `VITE_WHITEBOARD_CORE=ts`; its checklist is [parity/edge-routing.md](parity/edge-routing.md)). The OKF envelope (`parseOkf`, `serializeOkf`) is ported too and runs `differential` in development and CI while a release answers in TypeScript; its checklist is [parity/okf-codec.md](parity/okf-codec.md).
 Its gates are run by `pnpm rust:check`, `pnpm rust:release:check` and the
 `pnpm rust:fuzz:*` scripts and by ci.yml's `rust` and `rust-fuzz-pr` jobs; a
 Rust entry that names a path or a task under `crates/` or `cargo xtask`
