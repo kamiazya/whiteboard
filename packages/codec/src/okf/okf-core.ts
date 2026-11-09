@@ -84,10 +84,24 @@ function canonicalValue(value: unknown): unknown {
 }
 
 /**
+ * QR-21's ledger of what the OKF differential tolerates: one entry per case,
+ * with its reason. Every comparison of the two readers asks it rather than
+ * restating a case, and the live differential (`wasm.rust.test.ts`) counts
+ * each entry's case actually differing, so an entry that stops being needed
+ * fails there instead of hiding a regression.
+ */
+export const OKF_TOLERATED_DIFFERENCES = {
+  'yaml-refusal-message':
+    "a refusal at stage `yaml` is held equal on its stage and its `malformed YAML frontmatter: ` prefix, not its words: the TypeScript carries the `yaml` package's message (with line and column), and the Rust reader names the class of fault (owner decision q25)",
+} as const
+
+/** Whether a refusal's message is outside the comparison, per `OKF_TOLERATED_DIFFERENCES`. */
+export const messageTolerated = (stage: string): boolean => stage === 'yaml'
+
+/**
  * What the two readers are held equal on: the document whole, a refusal's
- * stage and each issue's path and code. The message is compared too, except
- * a YAML refusal's: the TypeScript carries the `yaml` package's words and
- * the Rust reader names the class of fault (a declared deviation).
+ * stage and each issue's path and code, and its message unless the ledger
+ * above tolerates it.
  */
 function canonicalParse(result: CodecParseResult<OkfMarkdownDocument>): string {
   if (result.ok) {
@@ -97,7 +111,7 @@ function canonicalParse(result: CodecParseResult<OkfMarkdownDocument>): string {
   return JSON.stringify([
     'err',
     stage,
-    stage === 'yaml' ? '' : message,
+    messageTolerated(stage) ? '' : message,
     issues.map((issue) => [issue.path.map(String), issue.code]),
   ])
 }
