@@ -29,6 +29,21 @@ function textUnsafety(text: string): string | undefined {
     : 'a lone UTF-16 surrogate is not yaml-safe'
 }
 
+/**
+ * A key is text too. Its issue sits on the mapping holding it, since the key
+ * itself may be the unprintable part.
+ */
+function reportUnsafeKeys(
+  ctx: z.RefinementCtx,
+  children: readonly [string | number, unknown][],
+  path: (string | number)[],
+): void {
+  for (const [key] of children) {
+    const unsafe = typeof key === 'string' ? textUnsafety(key) : undefined
+    if (unsafe !== undefined) ctx.addIssue({ code: 'custom', message: unsafe, path })
+  }
+}
+
 /** Whether `node` is an object the store keeps as written: an array, or a record with no class. */
 function isPlainContainer(node: object): boolean {
   if (Array.isArray(node)) return true
@@ -77,13 +92,6 @@ export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((
   // ancestors is.
   const ancestors: object[] = []
 
-  // A key is text too; the issue sits on the mapping holding it, since the key
-  // itself may be the unprintable part.
-  function reportUnsafeKey(key: string | number, path: (string | number)[]): void {
-    const unsafe = typeof key === 'string' ? textUnsafety(key) : undefined
-    if (unsafe !== undefined) ctx.addIssue({ code: 'custom', message: unsafe, path })
-  }
-
   function walk(node: unknown, path: (string | number)[]): void {
     const unsafe = scalarUnsafety(node)
     if (unsafe !== undefined) {
@@ -109,10 +117,8 @@ export const yamlSafeValueSchema: z.ZodType<unknown> = z.unknown().superRefine((
     const children: [string | number, unknown][] = Array.isArray(node)
       ? [...node.entries()]
       : Object.entries(node)
-    for (const [key, item] of children) {
-      reportUnsafeKey(key, path)
-      walk(item, [...path, key])
-    }
+    reportUnsafeKeys(ctx, children, path)
+    for (const [key, item] of children) walk(item, [...path, key])
 
     ancestors.pop()
   }
