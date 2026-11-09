@@ -50,7 +50,7 @@ export const TOLERATED_TESTS: readonly {
 
 const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
-/** Every test name but those above, for `vitest.rust.config.ts`'s `testNamePattern`. */
+/** Every test name but those above: `setup.ts` skips the rest. */
 export const runsUnderRust = new RegExp(
   `^(?!.*(?:${TOLERATED_TESTS.flatMap((t) => t.titles.map((title) => `${escape(title)}$`)).join('|')}))`,
 )

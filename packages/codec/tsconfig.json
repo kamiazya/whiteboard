@@ -12,5 +12,5 @@
     "skipLibCheck": true
   },
   "include": ["src", "vitest.node.config.ts"],
-  "exclude": ["src/**/*.rust.test.ts"]
+  "exclude": ["src/**/*.rust.test.ts", "src/test-utils/okf-wasm"]
 }
