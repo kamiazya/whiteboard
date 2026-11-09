@@ -81,6 +81,19 @@ describe('serializeOkf', () => {
   })
 })
 
+describe('serializeOkf and a string the frontmatter subset cannot carry', () => {
+  it.each([
+    ['a lone surrogate in a value', { facetsRaw: { a: 'x\uD800' } }],
+    ['a lone surrogate in a key', { facetsRaw: { 'k\uDC00': 1 } }],
+    ['a lone surrogate in the title', { title: '\uD83D' }],
+    ['a byte-order mark in a value', { facetsRaw: { a: '\uFEFF' } }],
+  ])('refuses %s with the typed error', (_label, extra) => {
+    expect(() => serializeOkf({ frontmatter: { type: 'note', ...extra }, body: '' })).toThrow(
+      OkfNotYamlSafeError,
+    )
+  })
+})
+
 describe('OkfNotYamlSafeError', () => {
   // The message is what a caller logs or relays, and the name is how it is told from a serialiser defect.
   function thrownBy(): OkfNotYamlSafeError {
@@ -123,18 +136,25 @@ describe('a preserved root key that YAML parses into something the store cannot 
     return null
   }
 
-  // Each of these parses to a value a JSON-shaped store flattens: a Set and a
-  // Map to `{}`, bytes to an array of numbers, a digit run past 2^53 to its
-  // rounded neighbour. Refusing at the write keeps the author holding the
-  // content, where a silent normalisation would surface on a later read.
+  // A digit run past 2^53 parses to a rounded neighbour a JSON-shaped store
+  // would keep silently. Refusing at the write keeps the author holding the
+  // content, where the change would surface on a later read.
   it.each([
-    ['a !!set', 'x: !!set {a, b}', ['x']],
-    ['an !!omap', 'x: !!omap [a: 1]', ['x']],
-    ['a !!binary', 'x: !!binary abc', ['x']],
     ['an integer past 2^53', 'x: 9007199254740993', ['x']],
     ['an integer past 2^53 nested in a list', 'x: [1, 12345678901234567890]', ['x', 1]],
   ])('refuses %s, naming the key', (_label, line, path) => {
     expect(refusalPaths(frontmatterOf(line))).toEqual([path])
+  })
+
+  // The reader refuses a tag before the write is ever reached.
+  it.each([
+    ['a !!set', 'x: !!set {a, b}'],
+    ['an !!omap', 'x: !!omap [a: 1]'],
+    ['a !!binary', 'x: !!binary abc'],
+  ])('never parses %s, so the store cannot be handed a Set, Map or bytes', (_label, line) => {
+    const parsed = parseOkf(frontmatterOf(line))
+    expect(parsed.ok).toBe(false)
+    if (!parsed.ok) expect(parsed.error.message).toMatch(/tags are not allowed/)
   })
 
   // Value-preserving: the same number, spelled the way YAML 1.2's core
