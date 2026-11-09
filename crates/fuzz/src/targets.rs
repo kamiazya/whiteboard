@@ -2,6 +2,7 @@
 //! against something computed by DIFFERENT machinery, or asserts an
 //! invariant the entry promises; reusing the entry's own helpers as the
 //! oracle would agree with whatever it got wrong.
+use whiteboard_codec::frontmatter::Value;
 
 /// The template target. `whiteboard-det` has no untrusted-input entry, so
 /// this exists to carry the pipeline (registry, caps, corpus, regressions,
@@ -88,7 +89,7 @@ fn count_at(out: &[f64], at: usize) -> usize {
 ///
 /// When the reader panics, or a written value reads back as another.
 pub fn frontmatter_parse(data: &[u8]) {
-    use whiteboard_codec::frontmatter::{Value, parse, stringify};
+    use whiteboard_codec::frontmatter::{parse, stringify};
 
     let Ok(text) = std::str::from_utf8(data) else {
         return;
@@ -109,27 +110,27 @@ pub fn frontmatter_parse(data: &[u8]) {
         again.as_ref().is_ok_and(|read| same(read, &value)),
         "{value:?} written as {written:?} reads back as {again:?}"
     );
+}
 
-    fn ends_in_two_newlines(value: &Value) -> bool {
-        match value {
-            Value::String(text) => text.ends_with("\n\n"),
-            Value::Seq(items) => items.iter().any(ends_in_two_newlines),
-            Value::Map(entries) => entries.iter().any(|(_, item)| ends_in_two_newlines(item)),
-            _ => false,
-        }
+fn ends_in_two_newlines(value: &Value) -> bool {
+    match value {
+        Value::String(text) => text.ends_with("\n\n"),
+        Value::Seq(items) => items.iter().any(ends_in_two_newlines),
+        Value::Map(entries) => entries.iter().any(|(_, item)| ends_in_two_newlines(item)),
+        _ => false,
     }
+}
 
-    /// Equality that tells `-0` from `0` and counts `NaN` as itself.
-    fn same(a: &Value, b: &Value) -> bool {
-        match (a, b) {
-            (Value::Number(x), Value::Number(y)) => x.to_bits() == y.to_bits(),
-            (Value::Seq(x), Value::Seq(y)) => {
-                x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same(p, q))
-            }
-            (Value::Map(x), Value::Map(y)) => {
-                x.len() == y.len() && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
-            }
-            _ => a == b,
+/// Equality that tells `-0` from `0` and counts `NaN` as itself.
+fn same(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x.to_bits() == y.to_bits(),
+        (Value::Seq(x), Value::Seq(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same(p, q))
         }
+        (Value::Map(x), Value::Map(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
+        }
+        _ => a == b,
     }
 }
