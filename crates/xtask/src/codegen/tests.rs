@@ -109,6 +109,29 @@ fn a_field_named_by_a_rust_keyword_is_refused() {
 }
 
 #[test]
+fn a_key_rust_could_not_spell_back_is_refused_and_camel_case_is_taken() {
+    let renamed = |to: &str| {
+        model_mutated(r#""note": {"#, &format!(r#""{to}": {{"#))
+            .replace(r#""at", "note"]"#, &format!(r#""at", "{to}"]"#))
+    };
+    for bad in ["Left", "le-ft", "left_Edge", "left__edge", "left_", "le ft"] {
+        let errors = outputs(&renamed(bad)).unwrap_err();
+        let want = format!("$defs.Event.{bad}: not a lowercase identifier");
+        assert!(errors.iter().any(|e| e.contains(&want)), "{bad}: {errors:?}");
+    }
+    for good in ["leftEdge", "left_edge", "x2"] {
+        assert!(outputs(&renamed(good)).is_ok(), "{good}");
+    }
+}
+
+#[test]
+fn a_contract_whose_definitions_are_not_an_object_is_refused_naming_the_shape() {
+    let text = RECT.replacen(r#""$defs": {"#, r#""$defs": [], "x": {"#, 1);
+    let error = dialect::parse(&text).unwrap_err();
+    assert!(error.contains("expected an object"), "{error}");
+}
+
+#[test]
 fn a_definition_or_contract_with_nothing_in_it_is_refused() {
     let empty_def = RECT
         .replacen(r#""w": { "type": "number", "minimum": 0, "description": "Width." },"#, "", 1)
@@ -289,6 +312,18 @@ fn a_named_check_and_matcher_are_pointed_at_in_the_rust_docs() {
 }
 
 #[test]
+fn an_array_of_checked_strings_points_at_its_check_in_the_rust_docs() {
+    let line = "/// Checked by `crate::checks::single_line`.";
+    let before = model_rust().matches(line).count();
+    let text = model_mutated(
+        r#""items": { "type": "string" }, "description": "Labels.""#,
+        r#""items": { "type": "string", "x-wb-check": "single_line" }, "description": "Labels.""#,
+    );
+    let after = outputs(&text).unwrap().remove(1).1.matches(line).count();
+    assert_eq!(after, before + 1);
+}
+
+#[test]
 fn the_names_a_contract_leans_on_are_listed_for_each_language() {
     let contract = dialect::parse(MODEL).unwrap();
     let checked = dialect::check(&contract).unwrap();
@@ -303,6 +338,11 @@ fn a_name_missing_from_a_hand_written_module_is_reported() {
         "pub fn single_line(a: &str) -> bool { true }\npub fn stamp(a: &str) -> bool { true }\n";
     assert!(missing_zod_checks(ts, &["single_line", "bag_keys"]).is_empty());
     assert_eq!(missing_zod_checks(ts, &["single_line", "nope"]), ["nope"]);
+    let longer = "export function singleLines() {}\nexport const bagKeys_2 = 1\n";
+    assert_eq!(
+        missing_zod_checks(longer, &["single_line", "bag_keys"]),
+        ["single_line", "bag_keys"]
+    );
     assert_eq!(missing_rust_checks(rs, &["single_line", "bag_keys"]), ["bag_keys"]);
     assert_eq!(missing_rust_checks("// pub fn stamp(", &["stamp"]), ["stamp"]);
 }
