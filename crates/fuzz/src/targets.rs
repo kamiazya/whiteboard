@@ -97,9 +97,9 @@ pub fn frontmatter_parse(data: &[u8]) {
     let Ok(value) = parse(text) else {
         return;
     };
-    // `serializeOkf` drops a newline from a last value that ends in two, and
-    // the Rust writer answers as it does, so such a value does not read back.
-    if ends_in_two_newlines(&value) {
+    // Two writings `serializeOkf` gets wrong, which the Rust writer copies
+    // byte for byte, so such a value does not read back as itself.
+    if any_string(&value, serialize_okf_loses) {
         return;
     }
     let Ok(written) = stringify(&value) else {
@@ -118,11 +118,20 @@ pub fn frontmatter_parse(data: &[u8]) {
     );
 }
 
-fn ends_in_two_newlines(value: &Value) -> bool {
+/// What `serializeOkf` cannot write back: a last value ending in two
+/// newlines loses one, and a multi-line string with a line that starts with
+/// a space or tab can be folded at a space on that more-indented line, which
+/// a reader keeps as a line break.
+fn serialize_okf_loses(text: &str) -> bool {
+    text.ends_with("\n\n")
+        || (text.contains('\n') && text.split('\n').any(|line| line.starts_with([' ', '\t'])))
+}
+
+fn any_string(value: &Value, holds: fn(&str) -> bool) -> bool {
     match value {
-        Value::String(text) => text.ends_with("\n\n"),
-        Value::Seq(items) => items.iter().any(ends_in_two_newlines),
-        Value::Map(entries) => entries.iter().any(|(_, item)| ends_in_two_newlines(item)),
+        Value::String(text) => holds(text),
+        Value::Seq(items) => items.iter().any(|item| any_string(item, holds)),
+        Value::Map(entries) => entries.iter().any(|(_, item)| any_string(item, holds)),
         _ => false,
     }
 }

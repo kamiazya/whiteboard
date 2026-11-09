@@ -587,6 +587,22 @@ fn a_last_value_ending_in_two_newlines_loses_one_as_serialize_okf_does() {
 }
 
 #[test]
+fn a_long_more_indented_line_is_folded_at_a_space_as_serialize_okf_does() {
+    // `yaml` 2.9 writes a long string that starts with a space and ends in a
+    // newline as a folded scalar and folds its first, more-indented line,
+    // where a reader keeps the line break: the space comes back as a
+    // newline. These are the bytes `serializeOkf` writes for this value, and
+    // the loss is shared until both are changed together.
+    let a = "word0 word1 word2 word3 word4 wordkkkkkkkkkkkk+kkkkkken text";
+    let first = format!(" {}+{}4", "k".repeat(11), "k".repeat(51));
+    let second = format!("word3{}8 wor{}d3kk", "k".repeat(25), "k".repeat(15));
+    let value = map(&[("a", s(a)), ("c", s(&format!("{first} {second}\n")))]);
+    let written = write(&value);
+    assert_eq!(written, format!("a: {a}\nc: >2\n  {first}\n  {second}"));
+    assert_eq!(read(&written), map(&[("a", s(a)), ("c", s(&format!("{first}\n{second}\n")))]));
+}
+
+#[test]
 fn writes_a_block_scalar_at_the_root_as_yaml_does() {
     for (text, expected) in [
         (" a\nb", "|1-\n a\nb"),

@@ -672,10 +672,10 @@ when the TypeScript stops answering as recorded, and
 `crates/core/codec/tests/recorded_oracle.rs` replays it natively: every value,
 refusal class and byte agrees. Nothing in TypeScript calls the Rust yet: there
 is no wasm export and no switch, so the `PORTED_FUNCTIONS` entries, which start
-at stage 2, come with the export. Two findings: `serializeOkf` loses a newline
+at stage 2, come with the export. Three findings: `serializeOkf` loses a newline
 from a last value that ends in two (`yaml` keeps a `|+` scalar's blank lines
 and `serializeOkf` then strips one newline as content), which the Rust writer
-reproduces and a test pins; and the Rust writer refuses collections nested past
+reproduces and a test pins; `yaml` 2.9 folds a long string's more-indented line (one starting with a space) at a space, which a reader keeps as a line break, so that space comes back as a newline, again reproduced and pinned; and the Rust writer refuses collections nested past
 64 levels, which the TypeScript writes.
 
 The integrator adopted these from the gap research the same day; like the
