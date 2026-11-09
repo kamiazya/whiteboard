@@ -76,6 +76,10 @@
       "project": ["src/**/*.ts"]
     },
     "packages/codec": {
+      // Layer 1's shims are reached through vitest.rust.config.ts's resolver
+      // and setup file, which name them by path: nothing imports them, so
+      // knip would read them as dead and every export as unused.
+      "ignore": ["src/test-utils/okf-wasm/**"],
       "project": ["src/**/*.ts"]
     },
     "tools/arch-lint": {

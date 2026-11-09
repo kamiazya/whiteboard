@@ -65,12 +65,11 @@ const RESERVED: [&str; 10] = [
     "__proto__",
 ];
 
-/// What `serializeOkf` cannot write back: a last value ending in two
-/// newlines loses one, and a multi-line string with a line that starts with a
-/// space or tab can be folded at a space on that more-indented line.
+/// What `serializeOkf` cannot write back: a multi-line string with a line
+/// that starts with a space or tab can be folded at a space on that
+/// more-indented line.
 fn written_back(text: &str) -> bool {
-    !(text.ends_with("\n\n")
-        || (text.contains('\n') && text.split('\n').any(|line| line.starts_with([' ', '\t']))))
+    !(text.contains('\n') && text.split('\n').any(|line| line.starts_with([' ', '\t'])))
 }
 
 fn awkward() -> impl Strategy<Value = String> {

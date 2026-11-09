@@ -218,6 +218,21 @@ fn the_long_explicit_key_yaml_writes_is_read() {
     assert_eq!(read(&format!("? \"{long}\"\n: 1")), map(&[(&long, n(1.0))]));
     assert_eq!(read(&format!("? {long}")), map(&[(&long, Value::Null)]));
     assert_eq!(read(&format!("? {long}\n:\n  - a")), map(&[(&long, Value::Seq(vec![s("a")]))]));
+    // An indicator followed by a non-blank starts a plain scalar, so a long
+    // key may begin with one; the writer emits these as they are.
+    for start in ["?!", "-x", ":x"] {
+        let key = format!("{start}{long}");
+        assert_eq!(read(&format!("? {key}\n: 1")), map(&[(&key, n(1.0))]), "{start}");
+        assert_eq!(
+            read(&format!("a:\n  - ? {key}\n    : 1")),
+            map(&[("a", Value::Seq(vec![map(&[(&key, n(1.0))])]))]),
+            "{start} in a list"
+        );
+    }
+    // Followed by a blank they are a nested explicit key and a list as a key:
+    // collection keys, outside the subset as the TypeScript says.
+    assert_eq!(class(&format!("? ? {long}\n: 1")), "subset");
+    assert_eq!(class(&format!("? - {long}\n: 1")), "subset");
 }
 
 #[test]

@@ -34,7 +34,12 @@ pub(super) fn document(doc: &Document) -> Result<String, Unwritable> {
         );
     }
     let yaml = stringify(&enumeration_order(Value::Map(entries)))?;
-    Ok(format!("---\n{yaml}\n---\n{}", doc.body))
+    // `stringify` drops the line break the writer ends with. When what is left
+    // still ends in one, the last value is a keep-chomped block whose final
+    // line break is its own, and the reader stops at the line break before the
+    // fence, so it goes back: as `serializeOkf` keeps it.
+    let fence = if yaml.ends_with('\n') { "\n\n---\n" } else { "\n---\n" };
+    Ok(format!("---\n{yaml}{fence}{}", doc.body))
 }
 
 /// The keys the schema models, present ones only, in the schema's order.

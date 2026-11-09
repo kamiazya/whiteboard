@@ -211,3 +211,17 @@ describe('serializeOkf spreads facetsRaw back at the root (OKF §4.1)', () => {
     ).toThrow(/yaml-safe/)
   })
 })
+
+describe('a last value ending in blank lines', () => {
+  it.each([
+    ['a value with two trailing newlines', { a: 'x\n\n' }],
+    ['a value of newlines only', { a: '\n\n' }],
+    ['one nested under a key past 1024 units', { [' '.repeat(1024)]: { 'a a': '\n\n' } }],
+    ['one in a list', { a: ['x', 'y\n\n\n'] }],
+  ])('reads back what was written: %s', (_label, facetsRaw) => {
+    const text = serializeOkf({ frontmatter: { type: 'note', facetsRaw }, body: 'b' })
+    const parsed = parseOkf(text)
+    expect(parsed.ok && parsed.value.frontmatter.facetsRaw).toEqual(facetsRaw)
+    expect(parsed.ok && parsed.value.body).toBe('b')
+  })
+})
