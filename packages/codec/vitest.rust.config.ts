@@ -8,6 +8,9 @@ export default defineProject({
     name: 'codec-rust',
     environment: 'node',
     include: ['src/**/*.rust.test.ts'],
+    // The slowest test (the generated-text property) took 830-870ms over
+    // four local runs; the ceiling leaves room for a loaded CI runner, and
+    // a test that needs it is a regression worth a failure.
     testTimeout: 30_000,
   },
 })
