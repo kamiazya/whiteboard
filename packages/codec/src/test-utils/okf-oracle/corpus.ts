@@ -109,17 +109,26 @@ const MUTATIONS: Mutation[] = [
   (t) => t.replace(/^---/, '--'),
   (t) => t.replace(/\n---/, '\n---\n---'),
   (t) => t.replace(/\r?\n/, '\r\n'),
-  (t) => t.replace(/\n/, '\n__proto__: 1\n'),
-  (t) => t.replace(/\n/, '\nx: {"__proto__": 1}\n'),
-  (t) => t.replace(/\n/, '\nverified:\n  by: human:a\n  at: 2026-01-02T03:04:05Z\n'),
-  (t) => t.replace(/\n/, '\ngenerated: {by: " x", at: now}\n'),
-  (t) => t.replace(/\n/, '\nfacets:\n  Bad: 1\n'),
-  (t) => t.replace(/\n/, '\nfacetsRaw: {type: x}\n'),
-  (t) => t.replace(/\n/, '\nx: &a [1]\ny: *a\n'),
-  (t) => t.replace(/\n/, `\nd: ${'['.repeat(33)}${']'.repeat(33)}\n`),
+  (t) => atFirstLineBreak(t, '\n__proto__: 1\n'),
+  (t) => atFirstLineBreak(t, '\nx: {"__proto__": 1}\n'),
+  (t) => atFirstLineBreak(t, '\nverified:\n  by: human:a\n  at: 2026-01-02T03:04:05Z\n'),
+  (t) => atFirstLineBreak(t, '\ngenerated: {by: " x", at: now}\n'),
+  (t) => atFirstLineBreak(t, '\nfacets:\n  Bad: 1\n'),
+  (t) => atFirstLineBreak(t, '\nfacetsRaw: {type: x}\n'),
+  (t) => atFirstLineBreak(t, '\nx: &a [1]\ny: *a\n'),
+  (t) => atFirstLineBreak(t, `\nd: ${'['.repeat(33)}${']'.repeat(33)}\n`),
   (t) => t.replace(/type:/, 'Type:'),
   (t) => t.replace(/\n(---)/, '\n\ud800$1'),
 ]
+
+/**
+ * `text` with its first line break replaced by `insert`: a mutation adds a
+ * line just after the opening fence, so only the first break is meant.
+ */
+function atFirstLineBreak(text: string, insert: string): string {
+  const at = text.indexOf('\n')
+  return at < 0 ? text : text.slice(0, at) + insert + text.slice(at + 1)
+}
 
 function reachable(text: string, seen: Set<string>): boolean {
   if (seen.has(text) || text.length > MAX_TEXT) return false
