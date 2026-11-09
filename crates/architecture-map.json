@@ -93,7 +93,7 @@
     "whiteboard-codec": {
       "path": "crates/core/codec",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "OKF Markdown, JSON Canvas and OCIF serialize and parse",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-log", "whiteboard-model"],

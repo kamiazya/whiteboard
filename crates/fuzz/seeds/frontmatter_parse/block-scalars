@@ -1,0 +1,9 @@
+a: |
+  one
+  two
+b: >-
+  folded
+  text
+c: |2+
+   x
+

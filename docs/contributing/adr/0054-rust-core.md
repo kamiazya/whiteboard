@@ -647,13 +647,36 @@ Three findings shape the port:
   frontmatter that carries one.
 - **npm `yaml` 2.9.0's quote bug.** It finds a closing quote with
   `indexOf`, so whether a malformed quoted scalar parses depends on a quote
-  further down the document. It is ledgered rather than copied.
+  further down the document. The spike ledgered it rather than copying it; the
+  port copies it, because the recorded oracle showed the TypeScript accepting
+  such scalars and zero disagreement was the gate: a quoted scalar left open
+  (by the end of the text, or by a continuation line indented too little when
+  a closing quote exists further on) is read as closed by its last character
+  when that character is the quote, and refused otherwise.
 - **The oracle is pinned.** The catalog asked for `yaml` `^2.8.4` and only the
   lockfile resolved 2.9.0, while the published `@kamiazya/whiteboard-mcp`
   keeps `yaml` external, so an install could resolve another 2.x. The catalog
   now names 2.9.0 exactly, so the differential measures the reader that
   ships from the next release on. Release 0.0.20 still declares `^2.8.4`;
   until a release carries the pin, an install of it can resolve another 2.x.
+
+**Shipped (step 6, first increment).** `crates/core/codec` (`whiteboard-codec`,
+module `frontmatter`) holds the reader (`parse`, for
+`parseYamlKeepingWrittenIntegers`) and the writer (`stringify`, for the YAML
+`serializeOkf` puts between its fences), on `whiteboard-det` alone with its own
+ordered value type until `whiteboard-model` is ported. The gate is a recorded
+oracle, the mechanism routing uses: `packages/codec/src/okf/oracle/frontmatter.jsonl`
+holds the inputs and the TypeScript's answers (2,600 reader texts, accepted and
+refused by class, and 1,053 writer values, bytes or refusal), a codec test fails
+when the TypeScript stops answering as recorded, and
+`crates/core/codec/tests/recorded_oracle.rs` replays it natively: every value,
+refusal class and byte agrees. Nothing in TypeScript calls the Rust yet: there
+is no wasm export and no switch, so the `PORTED_FUNCTIONS` entries, which start
+at stage 2, come with the export. Three findings: `serializeOkf` loses a newline
+from a last value that ends in two (`yaml` keeps a `|+` scalar's blank lines
+and `serializeOkf` then strips one newline as content), which the Rust writer
+reproduces and a test pins; `yaml` 2.9 folds a long string's more-indented line (one starting with a space) at a space, which a reader keeps as a line break, so that space comes back as a newline, again reproduced and pinned; and the Rust writer refuses collections nested past
+64 levels, which the TypeScript writes.
 
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:

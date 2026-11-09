@@ -2,6 +2,7 @@
 //! against something computed by DIFFERENT machinery, or asserts an
 //! invariant the entry promises; reusing the entry's own helpers as the
 //! oracle would agree with whatever it got wrong.
+use whiteboard_codec::frontmatter::Value;
 
 /// The template target. `whiteboard-det` has no untrusted-input entry, so
 /// this exists to carry the pipeline (registry, caps, corpus, regressions,
@@ -75,4 +76,79 @@ fn count_at(out: &[f64], at: usize) -> usize {
     let n = out.get(at).copied().unwrap_or(f64::NAN);
     assert!(n >= 0.0 && n.fract() == 0.0 && n < 1e9, "{n} at {at} is not a count");
     n as usize
+}
+
+/// The frontmatter reader on any UTF-8 text: it must answer a value or a
+/// refusal, never panic or run past its budget, and a value it reads that the
+/// writer can spell must read back as itself. The check shares nothing with
+/// the reader but its output, so a reader and a writer that agree on a wrong
+/// reading would still pass; the recorded oracle is what holds both to the
+/// TypeScript.
+///
+/// # Panics
+///
+/// When the reader panics, or a written value reads back as another.
+pub fn frontmatter_parse(data: &[u8]) {
+    use whiteboard_codec::frontmatter::{parse, stringify};
+
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let Ok(value) = parse(text) else {
+        return;
+    };
+    // `serializeOkf` writes a mapping, so only a mapping is held to read
+    // back: a root scalar folded onto a line that starts with `%` is a
+    // directive to the subset, in the TypeScript as here. And two writings
+    // `serializeOkf` gets wrong are copied byte for byte, so those do not
+    // read back as themselves either.
+    if !matches!(value, Value::Map(_)) || any_string(&value, serialize_okf_loses) {
+        return;
+    }
+    let Ok(written) = stringify(&value) else {
+        return;
+    };
+    let again = parse(&written);
+    // Folding and indentation can carry a value read under the cap past it,
+    // and the reader refuses what is over the cap whatever it says.
+    if written.len() > whiteboard_codec::frontmatter::MAX_BYTES {
+        assert_eq!(again, Err(whiteboard_codec::frontmatter::Refusal::TooLarge));
+        return;
+    }
+    assert!(
+        again.as_ref().is_ok_and(|read| same(read, &value)),
+        "{value:?} written as {written:?} reads back as {again:?}"
+    );
+}
+
+/// What `serializeOkf` cannot write back: a last value ending in two
+/// newlines loses one, and a multi-line string with a line that starts with
+/// a space or tab can be folded at a space on that more-indented line, which
+/// a reader keeps as a line break.
+fn serialize_okf_loses(text: &str) -> bool {
+    text.ends_with("\n\n")
+        || (text.contains('\n') && text.split('\n').any(|line| line.starts_with([' ', '\t'])))
+}
+
+fn any_string(value: &Value, holds: fn(&str) -> bool) -> bool {
+    match value {
+        Value::String(text) => holds(text),
+        Value::Seq(items) => items.iter().any(|item| any_string(item, holds)),
+        Value::Map(entries) => entries.iter().any(|(_, item)| any_string(item, holds)),
+        _ => false,
+    }
+}
+
+/// Equality that tells `-0` from `0` and counts `NaN` as itself.
+fn same(a: &Value, b: &Value) -> bool {
+    match (a, b) {
+        (Value::Number(x), Value::Number(y)) => x.to_bits() == y.to_bits(),
+        (Value::Seq(x), Value::Seq(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|(p, q)| same(p, q))
+        }
+        (Value::Map(x), Value::Map(y)) => {
+            x.len() == y.len() && x.iter().zip(y).all(|((k, p), (l, q))| k == l && same(p, q))
+        }
+        _ => a == b,
+    }
 }

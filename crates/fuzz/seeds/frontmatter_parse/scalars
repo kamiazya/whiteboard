@@ -1,0 +1,9 @@
+type: note
+title: Hello
+tags:
+  - a
+  - b
+count: 42
+ratio: 0.5
+flag: true
+nothing: ~

@@ -187,4 +187,57 @@ exclude_re = [
   # survivors_grid_route.rs kills it in under a second. Column-pinned: the x
   # bound's mutant is judged.
   'grid_route\.rs:\d+:35: replace >= with < in expand$',
+  # codec cursor: a mutant that stops `eof`, `bump`, `skip` or
+  # `skip_to_line_end` from doing their one job leaves every loop over the
+  # cursor with nothing to end it, so the parse of any text hangs and the
+  # timeout is the only detection.
+  'cursor\.rs:\d+:\d+: replace Parser::(eof|bump|skip|skip_to_line_end)( -> bool)? with (true|false|\(\))$',
+  # codec cursor: `blank_at` answering false is the same hang on any text a
+  # scan stops at a blank in. frontmatter_examples.rs fails it in seconds,
+  # but the property, oracle replay and fuzz seed replay in the same
+  # workspace run never end, so the gate sees a timeout. Its `true` sibling
+  # is judged.
+  'cursor\.rs:\d+:\d+: replace Parser::blank_at -> bool with false$',
+  # codec cursor: the operators inside the same primitives (the end test,
+  # the space scan, the line-end scan, the alias name scan) turn a loop that
+  # advances to one that never ends; any text with a space, a line or an
+  # alias hangs. Column-pinned to those loops.
+  'cursor\.rs:\d+:(18|26|27|15|41|33): (replace|delete) .* in Parser::(eof|skip_spaces|skip_to_line_end|alias)$',
+  # codec props and verbatim_tag: the name scan's `&&` turned `||` never
+  # meets its stop, so any property hangs.
+  'block\.rs:\d+:(37|33): replace && with \|\| in Parser::(props|verbatim_tag)$',
+  # codec keep_more_indented: the scan's guards turned over never advance
+  # the position, so any folded block scalar hangs.
+  'block_string\.rs:\d+:(27|32): replace (&&|==) with (\|\||!=) in keep_more_indented$',
+  # codec block scalar scans (indent detection and the trailing-line trim):
+  # a guard turned over never advances or never stops, so any block scalar
+  # hangs.
+  'blockscalar\.rs:\d+:(38|29|33): replace (==|&&) with (!=|\|\|) in Parser::(block_indent|block_lines)$',
+  # codec fold: the scan's primitive (the unit at an index) and the more-
+  # indented-line walk answered wrongly never leave the loop that reads
+  # them, so folding any long scalar hangs.
+  'fold\.rs:\d+:\d+: replace (at -> u16 with 1|more_indented_end -> isize with (0|1|-1))$',
+  # codec fold: the operators of the more-indented-line walk, turned over,
+  # loop forever on any block scalar that folds. Column-pinned to the walk.
+  'fold\.rs:\d+:(16|33|30): replace (==|\|\|) with (!=|&&) in more_indented_end$',
+  # codec Decimal::mul_add: the carry loop's `> 0` turned `==` or `>=`, and
+  # `/= 10` turned `%= 10`, never reaches a zero carry, so any integer past
+  # 2^53 hangs.
+  'number\.rs:\d+:(21|19): replace (> with (==|>=)|/= with %=) in Decimal::mul_add$',
+  # codec plain and quoted scalar scans: the line walk and the continuation
+  # walk answered with a fixed position, or with an operator turned over,
+  # never reach the end of the scalar, so any multi-line scalar hangs.
+  'scalars\.rs:\d+:\d+: replace (\|\| with && in Parser::plain_line|Parser::blanks_into -> Option<Stop> with None|Parser::next_continuation -> Option<\(usize, usize\)> with Some\(\(\d, \d\)\)|== with != in Parser::(next_continuation|fold_into))$',
+  # codec explicit_key: a `?` with no key on its line is refused whatever is
+  # read after it, so `eof || column` read as `eof && column` only changes
+  # which node the discarded key is.
+  'block\.rs:\d+:37: replace \|\| with && in Parser::explicit_key$',
+  # codec fold_block: a trailing line of exactly the trim width holds no
+  # indentation to keep, so counting it as content (`>=`) writes the same
+  # text as not counting it.
+  'blockscalar\.rs:\d+:\d+: replace > with >= in fold_block$',
+  # codec radix_to_f64: the length guard only spares a long literal the
+  # digit-by-digit conversion; at exactly its bound the literal is past the
+  # largest double, so `parse` answers infinity either way.
+  'number\.rs:\d+:47: replace > with (==|>=) in radix_to_f64$',
 ]

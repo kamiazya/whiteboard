@@ -7,6 +7,7 @@ members = [
   "crates/core/det",
   "crates/core/log",
   "crates/core/edge-routing",
+  "crates/core/codec",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",
