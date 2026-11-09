@@ -97,9 +97,12 @@ pub fn frontmatter_parse(data: &[u8]) {
     let Ok(value) = parse(text) else {
         return;
     };
-    // Two writings `serializeOkf` gets wrong, which the Rust writer copies
-    // byte for byte, so such a value does not read back as itself.
-    if any_string(&value, serialize_okf_loses) {
+    // `serializeOkf` writes a mapping, so only a mapping is held to read
+    // back: a root scalar folded onto a line that starts with `%` is a
+    // directive to the subset, in the TypeScript as here. And two writings
+    // `serializeOkf` gets wrong are copied byte for byte, so those do not
+    // read back as themselves either.
+    if !matches!(value, Value::Map(_)) || any_string(&value, serialize_okf_loses) {
         return;
     }
     let Ok(written) = stringify(&value) else {
