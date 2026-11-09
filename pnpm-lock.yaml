@@ -70,7 +70,7 @@ catalogs:
       specifier: ^5.0.0
       version: 5.0.0
     yaml:
-      specifier: ^2.8.4
+      specifier: 2.9.0
       version: 2.9.0
     zod:
       specifier: 4.6.7

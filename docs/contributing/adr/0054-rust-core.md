@@ -648,11 +648,12 @@ Three findings shape the port:
 - **npm `yaml` 2.9.0's quote bug.** It finds a closing quote with
   `indexOf`, so whether a malformed quoted scalar parses depends on a quote
   further down the document. It is ledgered rather than copied.
-- **The oracle is not pinned yet.** The catalog asks for `yaml` `^2.8.4`; only
-  the lockfile resolves 2.9.0, and the published `@kamiazya/whiteboard-mcp`
-  keeps `yaml` external, so an install may resolve another 2.x. Before the
-  differential counts as a parity check, `yaml` becomes an exact version in
-  the catalog, which the published package then carries.
+- **The oracle is pinned.** The catalog asked for `yaml` `^2.8.4` and only the
+  lockfile resolved 2.9.0, while the published `@kamiazya/whiteboard-mcp`
+  keeps `yaml` external, so an install could resolve another 2.x. The catalog
+  now names 2.9.0 exactly, so the differential measures the reader that
+  ships from the next release on. Release 0.0.20 still declares `^2.8.4`;
+  until a release carries the pin, an install of it can resolve another 2.x.
 
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:

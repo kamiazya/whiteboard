@@ -54,7 +54,11 @@ catalog:
   remark-math: "^6.0.0"
   # Types only: the micromark extension codec registers on that pipeline.
   micromark-util-types: "^2.0.2"
-  yaml: "^2.8.4"
+  # Exact: the OKF frontmatter reader and writer are this version's behaviour,
+  # quirks included, and the Rust port is held to it by a differential
+  # (ADR-0054's frontmatter spike). A range would let an install resolve a
+  # different oracle from the one the differential measured.
+  yaml: "2.9.0"
   # canvas-render: UAX #14 line breaking + CSS `line-break` (Japanese kinsoku).
   # One version everywhere, because a break-opportunity difference between the
   # browser and Node would desync the byte-identical-SVG guarantee.
