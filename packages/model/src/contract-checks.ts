@@ -1,16 +1,14 @@
 import type { z } from 'zod'
 import { EXTENSION_FACET_KEY_PATTERN, RESERVED_ROOT_KEYS } from './facets.js'
 
-/**
- * The named checks of `contracts/model`'s `x-wb-check` keyword, in the
- * camelCase the generated Zod imports. Each is a `superRefine` callback so a
- * check can report several issues at paths of its own, and each has a Rust
- * twin of the snake_case name in `whiteboard-model`'s `checks.rs`; the pair is
- * held equal by the differential, not by this file.
- *
- * This module imports nothing the generated schemas import, which is what lets
- * them import it.
- */
+// The named checks of `contracts/model`'s `x-wb-check` keyword, in the
+// camelCase the generated Zod imports. Each is a `superRefine` callback so a
+// check can report several issues at paths of its own, and each has a Rust
+// twin of the snake_case name in `whiteboard-model`'s `checks.rs`; the pair is
+// held equal by the differential, not by this file.
+//
+// This module never imports the generated schemas, which is what lets them
+// import it without a cycle.
 
 /** OKF section 7's actor: a non-blank, single-line string with no surrounding whitespace. */
 export function okfActor(value: string, ctx: z.core.$RefinementCtx<string>): void {
