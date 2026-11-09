@@ -182,4 +182,9 @@ exclude_re = [
   # grid_route timeout: `hi / lo` gives negative or NaN costs, and the search
   # loops.
   'grid_route\.rs:\d+:\d+: replace - with / in expand$',
+  # grid_route timeout: the y bound turned `<` lets every in-range step off the
+  # grid, and lib runs_straight_when_nothing_is_in_the_way then never settles;
+  # survivors_grid_route.rs kills it in under a second. Column-pinned: the x
+  # bound's mutant is judged.
+  'grid_route\.rs:\d+:35: replace >= with < in expand$',
 ]
