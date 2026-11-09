@@ -1,4 +1,3 @@
-import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import { imageRefId } from '@kamiazya/whiteboard-model'
 import {
   createDocument,
@@ -29,6 +28,7 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from './files-source.js'
+import { currentOkfCodec } from './spatial/layout-core.js'
 
 /**
  * One answer, held until something says the data changed.
@@ -296,7 +296,7 @@ export function createDaemonFilesSource(
           'A canvas file cannot be imported into a workspace the daemon keeps yet. Import it into a browser-kept workspace, or paste its nodes into an open canvas.',
         )
       }
-      const markdown = serializeOkf({
+      const markdown = currentOkfCodec().serializeOkf({
         frontmatter: { ...imported.coreFacets, facets: imported.facets },
         body: imported.body,
       })

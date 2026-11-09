@@ -5,8 +5,19 @@ describe('coreSettingsFrom', () => {
   it('routes in Rust in a production build', () => {
     expect(coreSettingsFrom({ DEV: false, MODE: 'production' })).toEqual({
       impl: 'rust',
+      okf: 'ts',
       mismatch: 'log',
     })
+  })
+
+  it('reads OKF in the TypeScript unless the dev server or the environment says otherwise', () => {
+    expect(coreSettingsFrom({ DEV: false, MODE: 'production' }).okf).toBe('ts')
+    expect(coreSettingsFrom({ DEV: true, MODE: 'test' }).okf).toBe('ts')
+    expect(coreSettingsFrom({ DEV: true, MODE: 'development' }).okf).toBe('differential')
+    expect(
+      coreSettingsFrom({ DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_OKF: 'rust' }).okf,
+    ).toBe('rust')
+    expect(() => coreSettingsFrom({ VITE_WHITEBOARD_CORE_OKF: 'fast' })).toThrow()
   })
 
   it('runs both routings beside each other in the dev server', () => {

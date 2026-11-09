@@ -5,6 +5,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import '../../index.css'
 import type { ImportedDocument } from '../../lib/document-import.js'
+import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
@@ -43,6 +44,29 @@ describe('dropping a file on the document list', () => {
     expect(importDocument.mock.calls[0]).toMatchObject([
       'my-board',
       { kind: 'spatial', name: 'My Board' },
+    ])
+  })
+
+  it('imports a markdown note with its frontmatter, through the OKF core where the run asks for it', async () => {
+    // The page has its core by the time anyone drops a file; waiting for it
+    // here makes the core answer a run that sets VITE_WHITEBOARD_CORE_OKF.
+    await layoutCoreReady()
+    const importDocument = vi.fn(async () => {})
+    renderPanel(importDocument)
+    const panel = await screen.findByTestId('workspace-files-panel')
+
+    const text = '---\ntype: issue\ntitle: Ship it\ntags: [web]\n---\n# Ship it\n\nbody\n'
+    dropOn(panel, [new File([text], 'ship.md', { type: 'text/markdown' })])
+
+    await waitFor(() => expect(importDocument).toHaveBeenCalledOnce())
+    expect(importDocument.mock.calls[0]).toMatchObject([
+      'ship',
+      {
+        kind: 'markdown',
+        name: 'Ship it',
+        coreFacets: { type: 'issue', tags: ['web'] },
+        body: '# Ship it\n\nbody\n',
+      },
     ])
   })
 

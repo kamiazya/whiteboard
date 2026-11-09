@@ -8,10 +8,11 @@
  * importDocument`); this only decides WHAT is written and WHERE it is named.
  */
 
-import { parseOkf, parseSpatial } from '@kamiazya/whiteboard-codec'
+import { parseSpatial } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { pathBelow } from '@kamiazya/whiteboard-model'
 import { addressBaseFor } from './address-from-name.js'
+import { currentOkfCodec } from './spatial/layout-core.js'
 
 /** The `accept` of the file picker, and the extensions a drop is checked against. */
 export const IMPORT_ACCEPT = '.md,.markdown,.canvas,.json'
@@ -90,7 +91,7 @@ export function readImportedFile(fileName: string, text: string): ImportResult {
       },
     }
   }
-  const parsed = parseOkf(text)
+  const parsed = currentOkfCodec().parseOkf(text)
   if (!parsed.ok) return refused(fileName, `unreadable frontmatter (${parsed.error.message})`)
   // The title is the workspace's name, projected back on export, never held
   // twice; the trust family has its own bucket the import does not write.

@@ -74,6 +74,12 @@ describe('coreSourcePlugin', () => {
     )
   })
 
+  it('treats a build that reads OKF with the core as one that uses it, whatever routing says', () => {
+    const okfOnly = { ...TYPESCRIPT, VITE_WHITEBOARD_CORE_OKF: 'differential' }
+    expect(() => loadOf(okfOnly, { artifactStaged: false })).toThrow(/VITE_WHITEBOARD_CORE_OKF=ts/)
+    expect(loadOf(okfOnly, { artifactStaged: true })(SOURCE)).toBeUndefined()
+  })
+
   it('leaves every other module alone', () => {
     expect(loadOf(TYPESCRIPT)('/repo/apps/web/src/lib/spatial/layout-core.ts')).toBeUndefined()
   })
