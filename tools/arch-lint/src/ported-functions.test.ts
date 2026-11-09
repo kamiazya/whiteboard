@@ -35,8 +35,8 @@ function tree(files: Record<string, string> = {}): ReadFile {
 }
 
 describe('PORTED_FUNCTIONS against the tree', () => {
-  it('lists the edge-routing function and the real tree agrees with it', () => {
-    expect(PORTED_FUNCTIONS.map((f) => f.name)).toContain('routeLayout')
+  it('lists the ported functions and the real tree agrees with it', () => {
+    expect(PORTED_FUNCTIONS.map((f) => f.name)).toEqual(['routeLayout', 'parseOkf', 'serializeOkf'])
     expect(checkPortedFunctions(PORTED_FUNCTIONS, readReal)).toEqual([])
   })
 

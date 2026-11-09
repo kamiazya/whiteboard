@@ -1,10 +1,17 @@
-export type { CodecParseError, CodecParseResult, CodecParseStage } from './errors.js'
+export type {
+  CodecIssue,
+  CodecParseError,
+  CodecParseResult,
+  CodecParseStage,
+} from './errors.js'
 export { normalizeMdast } from './markdown/normalize.js'
 export {
   parseMarkdownBlockLines,
   parseMarkdownBody,
   stringifyMarkdownBody,
 } from './markdown/pipeline.js'
+export type { OkfCodec, OkfCodecCore, OkfMismatch } from './okf/okf-core.js'
+export { okfCodec } from './okf/okf-core.js'
 export { hasOkfFrontmatter, parseOkf } from './okf/parse.js'
 export type {
   OkfMarkdownDocument,

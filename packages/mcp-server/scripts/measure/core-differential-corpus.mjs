@@ -9,7 +9,7 @@
  *   node --import tsx/esm scripts/measure/core-differential-corpus.mjs [dataDir]
  *
  * The directory is `dataDir`, else `WHITEBOARD_DATA_DIR`, else `~/.whiteboard`.
- * The core is the one `layoutCoreLoader` loads from the staged artifact
+ * The core is the one `coreLoaders` loads from the staged artifact
  * (`pnpm stage:wasm`), or from `WHITEBOARD_CORE_DIR`.
  *
  * READ-ONLY BY COPY. The store layer cannot open a data dir without writing
@@ -32,7 +32,7 @@ import { createCanvasRenderSvgTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs'
 import { bootSelfHostDeps } from '../../src/di/boot-self-host-deps.ts'
-import { layoutCoreLoader, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
+import { coreLoaders, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
 import { closeDb } from '../../src/server/store/db/index.ts'
 import { databaseIsInsideDataDir } from '../../src/server/store/db/location.ts'
 
@@ -118,7 +118,7 @@ async function measureDeps(serverDeps, coreDir) {
   })
   let base
   try {
-    base = await layoutCoreLoader(settings)()
+    base = await coreLoaders(settings).layoutCore()
   } catch (err) {
     return { coreLoaded: false, coreError: String(err?.message ?? err), documents: [] }
   }

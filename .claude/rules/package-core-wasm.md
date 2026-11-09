@@ -44,7 +44,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
     count is checked BEFORE anything is allocated, since it is the
     artifact's word.
 
-  A composition root answers either refusal from the TypeScript.
+  A composition root answers either refusal from the TypeScript. For OKF that is codec's
+  switch (`okfCodec`), which treats any throw from these calls as a decline; for routing it
+  is canvas-render's `routeLayout`.
 
 ## What does NOT belong here
 

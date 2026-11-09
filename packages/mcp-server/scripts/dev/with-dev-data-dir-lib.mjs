@@ -69,9 +69,12 @@ export function resolveHookProjectRoot(env, cwd) {
  */
 export function resolveDevDataDirEnv(env, repoRoot) {
   // The dev daemon is where the Rust core is dogfooded (ADR-0054 stage 2):
-  // both routings run and the TypeScript's is drawn, unless the caller says
-  // otherwise.
-  const core = env.WHITEBOARD_CORE ? {} : { WHITEBOARD_CORE: 'differential' }
+  // both routings and both OKF readings run and the TypeScript's answer is
+  // used, unless the caller says otherwise.
+  const core = {
+    ...(env.WHITEBOARD_CORE ? {} : { WHITEBOARD_CORE: 'differential' }),
+    ...(env.WHITEBOARD_CORE_OKF ? {} : { WHITEBOARD_CORE_OKF: 'differential' }),
+  }
   if (env.WHITEBOARD_DATA_DIR) {
     return { ...env, ...core }
   }

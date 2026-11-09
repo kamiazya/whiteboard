@@ -13,7 +13,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
-import { layoutCoreLoader, layoutCoreSettingsFrom } from '../server/export/layout-core.js'
+import { coreLoaders, layoutCoreSettingsFrom } from '../server/export/layout-core.js'
 import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { mcpCallerNamespace, toolErrorText } from '../server/security/mcp-caller.js'
@@ -78,6 +78,9 @@ export function resolveServerDeps(
   const blobStore: BlobStore = container.get(TOKENS.BlobStore)
   const documentIndex: DocumentIndex = container.get(TOKENS.DocumentIndex)
   const scope = storeScopeOf(container)
+  // One wasm instance for every function the core answers, loaded on the
+  // first call that asks for it.
+  const core = coreLoaders(layoutCoreSettingsFrom(process.env))
   return {
     documentStore,
     blobStore,
@@ -97,10 +100,11 @@ export function resolveServerDeps(
     // declares a theme's family exactly where the PNG export would: from the
     // faces this daemon can measure, never from a second list.
     textMeasurer: () => createExportTextMeasurer({ fontsDir: scope.layout.fontsDir }),
-    // The Rust core a layout routes through, as the environment's switch
-    // says (ADR-0054's CoreImpl); `ts` unless a dev script or a test job
-    // sets it, and loaded on the first layout that asks.
-    layoutCore: layoutCoreLoader(layoutCoreSettingsFrom(process.env)),
+    // The Rust core a layout routes through and the one the OKF envelope
+    // reads and writes through, each as its environment switch says
+    // (ADR-0054's CoreImpl).
+    layoutCore: core.layoutCore,
+    okfCore: core.okfCore,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

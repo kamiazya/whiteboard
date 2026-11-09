@@ -47,6 +47,16 @@ describe('resolveDevDataDirEnv', () => {
     expect(resolveDevDataDirEnv({ WHITEBOARD_CORE: 'ts' }, repoRoot).WHITEBOARD_CORE).toBe('ts')
   })
 
+  it('reads OKF in differential unless WHITEBOARD_CORE_OKF says otherwise', () => {
+    expect(resolveDevDataDirEnv({}, repoRoot).WHITEBOARD_CORE_OKF).toBe('differential')
+    expect(resolveDevDataDirEnv({ WHITEBOARD_DATA_DIR: '/d' }, repoRoot).WHITEBOARD_CORE_OKF).toBe(
+      'differential',
+    )
+    expect(resolveDevDataDirEnv({ WHITEBOARD_CORE_OKF: 'ts' }, repoRoot).WHITEBOARD_CORE_OKF).toBe(
+      'ts',
+    )
+  })
+
   it('returns a new object and leaves the input env untouched (immutable update)', () => {
     const input = { FOO: 'bar' }
     const result = resolveDevDataDirEnv(input, repoRoot)

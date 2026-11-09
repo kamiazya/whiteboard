@@ -102,7 +102,12 @@ export function assertTarballFileList(entries: readonly string[]): void {
 // for the same reason, so an ambient override cannot stand in for the package.
 export function buildTarballSmokeChildEnv(processEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const { WHITEBOARD_DEV: _dev, WHITEBOARD_CORE_DIR: _dir, ...rest } = processEnv
-  return { ...rest, WHITEBOARD_CORE: 'differential', WHITEBOARD_CORE_MISMATCH: 'throw' }
+  return {
+    ...rest,
+    WHITEBOARD_CORE: 'differential',
+    WHITEBOARD_CORE_OKF: 'differential',
+    WHITEBOARD_CORE_MISMATCH: 'throw',
+  }
 }
 
 function listTarballEntries(tarballPath: string): string[] {

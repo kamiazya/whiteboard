@@ -12,6 +12,17 @@ export type CodecParseStage =
   | 'json-canvas-schema'
   | 'ocif-schema'
 
+/**
+ * One place a schema refused: where, which check, and why. Zod's issues are
+ * one shape of it; the Rust core's OKF reader answers this much and no more
+ * (ADR-0054), so a caller reads these three fields and nothing Zod-specific.
+ */
+export interface CodecIssue {
+  readonly code: string
+  readonly path: PropertyKey[]
+  readonly message: string
+}
+
 export interface CodecParseError {
   readonly stage: CodecParseStage
   readonly message: string
@@ -22,7 +33,7 @@ export interface CodecParseError {
    * report and carry an empty array instead of `undefined` so callers never
    * need an extra null-check to iterate over it.
    */
-  readonly issues: z.ZodError['issues']
+  readonly issues: readonly CodecIssue[]
 }
 
 export type CodecParseResult<T> = { ok: true; value: T } | { ok: false; error: CodecParseError }

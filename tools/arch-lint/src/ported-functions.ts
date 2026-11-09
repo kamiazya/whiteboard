@@ -51,6 +51,40 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       member: 'routeLayout',
     },
   },
+  {
+    name: 'parseOkf',
+    stage: 2,
+    ts: { file: 'packages/codec/src/okf/parse.ts', export: 'parseOkf' },
+    switch: {
+      file: 'packages/codec/src/okf/okf-core.ts',
+      interface: 'OkfCodecCore',
+      key: 'parseOkf',
+      option: 'ServerDeps.okfCore',
+    },
+    rust: { file: 'crates/bindings/wasm/src/okf.rs', fn: 'okf_parse' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'parseOkf',
+    },
+  },
+  {
+    name: 'serializeOkf',
+    stage: 2,
+    ts: { file: 'packages/codec/src/okf/serialize.ts', export: 'serializeOkf' },
+    switch: {
+      file: 'packages/codec/src/okf/okf-core.ts',
+      interface: 'OkfCodecCore',
+      key: 'serializeOkf',
+      option: 'ServerDeps.okfCore',
+    },
+    rust: { file: 'crates/bindings/wasm/src/okf.rs', fn: 'okf_serialize' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'serializeOkf',
+    },
+  },
 ]
 
 /** The text of a file, or `undefined` when it does not exist. */
