@@ -63,18 +63,20 @@ export interface OkfGlue {
   okf_serialize(frontmatter: string): string
 }
 
-// Worded here and not by the artifact. Three are the TypeScript's own words;
-// the YAML one cannot be, because the TypeScript's carries the `yaml`
-// package's message, which the Rust reader does not have. A schema issue's
-// message likewise names its code only.
+// Worded here and not by the artifact. The schema-stage refusals and the
+// depth refusal are the TypeScript's own words, and the anchor refusal is
+// theirs without the `(found ...)` the Rust reader does not report. A syntax
+// or subset refusal cannot be: the TypeScript carries the `yaml` package's
+// message or names the construct, where the Rust reader names the class of
+// fault. A schema issue's message likewise names its code only.
 const NO_FENCE =
   'document does not start with a --- frontmatter block. A minimal OKF document is `---`, a `type:` line, `---`, then the body'
 const RESERVED = 'frontmatter holds a key named "__proto__", which no document may hold'
 const SCHEMA = 'frontmatter failed OKF schema validation'
 const YAML: Record<string, string> = {
   syntax: 'the YAML is malformed',
-  anchor: 'anchors and aliases are not supported',
-  depth: 'collections are nested too deeply',
+  anchor: 'YAML anchors and aliases are not allowed in OKF frontmatter',
+  depth: 'OKF frontmatter may nest at most 32 levels of mappings and lists',
   subset: 'the YAML is outside the subset the reader accepts',
 }
 const ISSUE: Record<OkfIssue['code'], string> = {

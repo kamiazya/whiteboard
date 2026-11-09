@@ -1,6 +1,7 @@
 /**
  * The OKF tests layer 1 does not run against the Rust core, each because its
- * only assertion reads the WORDS of a refusal at stage `yaml` — the
+ * only assertion reads the WORDS of a refusal at stage `yaml` that the shim
+ * cannot word as the TypeScript does (a tag, named with what it found) — the
  * difference `OKF_TOLERATED_DIFFERENCES['yaml-refusal-message']` tolerates
  * (owner decision q25). Everything else such a refusal says (its stage, and
  * that it is a refusal at all) the live differential holds exactly.
@@ -16,24 +17,6 @@ export const TOLERATED_TESTS: readonly {
   /** The names it runs under. */
   readonly titles: readonly string[]
 }[] = [
-  {
-    file: 'parse.test.ts',
-    source: 'reads %s 32 levels deep and refuses 33 at stage yaml',
-    titles: [
-      'reads mappings 32 levels deep and refuses 33 at stage yaml',
-      'reads lists 32 levels deep and refuses 33 at stage yaml',
-    ],
-  },
-  {
-    file: 'parse.test.ts',
-    source: 'counts block-style nesting the same way',
-    titles: ['counts block-style nesting the same way'],
-  },
-  {
-    file: 'parse.test.ts',
-    source: 'still writes a stored frontmatter nested deeper, and names the depth on re-import',
-    titles: ['still writes a stored frontmatter nested deeper, and names the depth on re-import'],
-  },
   {
     file: 'frontmatter-subset.test.ts',
     source: 'reports a refusal through parseOkf as a yaml-stage failure',
