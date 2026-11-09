@@ -307,6 +307,44 @@ fn a_name_missing_from_a_hand_written_module_is_reported() {
     assert_eq!(missing_rust_checks("// pub fn stamp(", &["stamp"]), ["stamp"]);
 }
 
+#[test]
+fn codegen_reads_each_declared_check_module_and_names_what_it_lacks() {
+    let root = std::env::temp_dir().join(format!("wb-verify-checks-{}", std::process::id()));
+    let ts = root.join("packages/p/src/contract-checks.ts");
+    let rs = root.join("crates/core/model/src/checks.rs");
+    let write = |path: &std::path::Path, text: &str| {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, text).unwrap();
+    };
+    let contract = dialect::parse(MODEL).unwrap();
+    let missing_file = verify_checks(&root, &contract).unwrap_err();
+    assert!(missing_file[0].starts_with("cannot read packages/p/src/contract-checks.ts"));
+    write(&ts, "export function singleLine() {}\nexport function bagKeys() {}\n");
+    write(&rs, "pub fn single_line() {}\npub fn bag_keys() {}\n");
+    assert_eq!(
+        verify_checks(&root, &contract).unwrap_err(),
+        ["crates/core/model/src/checks.rs: declares no `stamp`"]
+    );
+    write(&rs, "pub fn single_line() {}\npub fn bag_keys() {}\npub fn stamp() {}\n");
+    assert_eq!(verify_checks(&root, &contract), Ok(()));
+    let unchecked = dialect::parse(RECT).unwrap();
+    assert_eq!(verify_checks(&root.join("nowhere"), &unchecked), Ok(()));
+    std::fs::remove_dir_all(&root).unwrap();
+}
+
+#[test]
+fn a_definition_named_like_a_plain_rust_import_is_refused() {
+    for name in ["Map", "Value"] {
+        let text = model_mutated("\"Bag\": {", &format!("\"{name}\": {{"))
+            .replace("#/$defs/Bag", &format!("#/$defs/{name}"));
+        let errors = outputs(&text).unwrap_err();
+        assert!(
+            errors.iter().any(|e| e.contains("a name the generated code already uses")),
+            "{errors:?}"
+        );
+    }
+}
+
 fn assert_refused(cases: &[(&str, &str, &str)]) {
     for (from, to, expect) in cases {
         let text = model_mutated(from, to);

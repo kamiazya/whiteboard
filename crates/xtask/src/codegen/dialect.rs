@@ -33,6 +33,7 @@ const RESERVED_TYPES: &[&str] = &[
     "Err",
     "MapAccess",
     "MapAccessDeserializer",
+    "Map",
     "MapOnly",
     "None",
     "Ok",
@@ -46,6 +47,7 @@ const RESERVED_TYPES: &[&str] = &[
     "Some",
     "String",
     "Vec",
+    "Value",
     "Visitor",
 ];
 
