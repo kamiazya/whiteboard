@@ -7,7 +7,7 @@
 
 import { type OkfMarkdownFrontmatter, serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { currentOkfCodec } from './spatial/layout-core.js'
+import { currentOkfCodec } from './okf-codec.js'
 
 /** What a markdown document with no declared type is taken to be. */
 const BARE_BODY_TYPE = 'note'

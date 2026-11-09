@@ -28,7 +28,7 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from './files-source.js'
-import { currentOkfCodec } from './spatial/layout-core.js'
+import { currentOkfCodec } from './okf-codec.js'
 
 /**
  * One answer, held until something says the data changed.

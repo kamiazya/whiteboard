@@ -12,7 +12,7 @@ import { parseSpatial } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { pathBelow } from '@kamiazya/whiteboard-model'
 import { addressBaseFor } from './address-from-name.js'
-import { currentOkfCodec } from './spatial/layout-core.js'
+import { currentOkfCodec } from './okf-codec.js'
 
 /** The `accept` of the file picker, and the extensions a drop is checked against. */
 export const IMPORT_ACCEPT = '.md,.markdown,.canvas,.json'

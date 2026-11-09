@@ -1,10 +1,8 @@
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
-import {
-  type OkfCodec,
-  type OkfCodecCore,
-  type OkfMismatch,
-  okfCodec,
-} from '@kamiazya/whiteboard-codec'
+// Types only: this module is on the page's critical path, and a value import
+// of codec would carry its OKF reader (yaml, the schemas) into the boot bundle.
+// The codec itself is `okf-codec.ts`'s, which only the OKF call sites import.
+import type { OkfCodecCore, OkfMismatch } from '@kamiazya/whiteboard-codec'
 import { type CoreSettings, coreSettingsFrom } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
 
@@ -184,9 +182,5 @@ export const layoutCoreReady = (): Promise<LayoutCore | undefined> =>
 /** The core this realm has loaded so far, or `undefined`. */
 export const currentLayoutCore = (): LayoutCore | undefined => installed?.current()
 
-/**
- * The OKF envelope as this realm answers it now: through the core once it
- * has loaded and the switch asks for it, else in TypeScript. A realm that
- * never installed a core reads and writes in TypeScript.
- */
-export const currentOkfCodec = (): OkfCodec => okfCodec(installed?.currentOkf())
+/** The OKF core this realm has loaded so far, or `undefined` under `ts` or before the load. */
+export const currentOkfCore = (): OkfCodecCore | undefined => installed?.currentOkf()

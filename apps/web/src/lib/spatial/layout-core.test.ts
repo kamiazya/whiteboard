@@ -1,12 +1,8 @@
 import type { CoreMismatch } from '@kamiazya/whiteboard-canvas-render'
 import { okfCodec } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it, vi } from 'vitest'
-import {
-  createLayoutCoreHost,
-  currentLayoutCore,
-  currentOkfCodec,
-  layoutCoreReady,
-} from './layout-core.js'
+import { currentOkfCodec } from '../okf-codec.js'
+import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
 import type { CoreSettings } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
 
