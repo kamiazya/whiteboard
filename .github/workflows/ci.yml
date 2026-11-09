@@ -367,6 +367,7 @@ jobs:
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
           VITE_WHITEBOARD_CORE: differential
+          VITE_WHITEBOARD_CORE_OKF: differential
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/3
 
@@ -559,6 +560,7 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
+          VITE_WHITEBOARD_CORE_OKF: ${{ matrix.leg == 'browser' && 'differential' || '' }}
           VITE_WHITEBOARD_CORE_MISMATCH: ${{ matrix.leg == 'browser' && 'throw' || '' }}
         run: |
           read -r -a files <<< "$CHANGED_FILES"
@@ -578,6 +580,7 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
+          VITE_WHITEBOARD_CORE_OKF: ${{ matrix.leg == 'browser' && 'differential' || '' }}
           VITE_WHITEBOARD_CORE_MISMATCH: ${{ matrix.leg == 'browser' && 'throw' || '' }}
         run: |
           read -r -a files <<< "$CHANGED_FILES"

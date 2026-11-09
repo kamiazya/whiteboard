@@ -452,3 +452,15 @@ the artifact, and `vite-plugin-core-source.ts` stubs it in a `ts` build (page
 AND `worker.plugins`), because the bundler resolves every import before it
 prunes any — so a production build needs no wasm. A CI job that sets the
 variable restores the artifact with `.github/actions/core-wasm`.
+
+The same host answers the OKF envelope (`VITE_WHITEBOARD_CORE_OKF`, `ts` in a
+build and a test run, `differential` in the dev server): one load serves
+both switches, `currentOkfCodec()` (`lib/okf-codec.ts`) is what an OKF reader
+or writer in this app calls (an import, a download, a note sent to a daemon),
+and a build stubs the source only when BOTH switches read `ts`. The codec is
+`okf-codec.ts`'s and never `layout-core.ts`'s, which imports codec's types
+alone: `layout-core.ts` is on the page's critical path, and one value import
+of `okfCodec` there carried codec's OKF reader into the boot bundle, 147.9 KB
+to 230.9 KB gzip against `smoke:bundle-size`'s 150 KB budget. `WebCore` lives in its own module
+(`spatial/web-core.ts`) so the loader and the host can name it without
+importing each other.

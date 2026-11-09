@@ -28,7 +28,9 @@ export interface CoreSourceOptions {
  * with a stub means the real source is never read, and so its imports are
  * never resolved.
  *
- * Only a build that opted out (`VITE_WHITEBOARD_CORE=ts`) may be stubbed. A
+ * Only a build that opted out of the core for routing AND for OKF
+ * (`VITE_WHITEBOARD_CORE=ts`, with `VITE_WHITEBOARD_CORE_OKF` at its `ts`
+ * default) may be stubbed. A
  * production build routes with `rust` by default, and one that did so without
  * the wasm would ship a stub that degrades every layout to the TypeScript
  * with nothing failing, so it is a build error instead. The dev server is
@@ -50,29 +52,30 @@ export function coreSourcePlugin(options: CoreSourceOptions = {}): Plugin {
     enforce: 'pre',
     configResolved(config) {
       const staged = artifactStaged()
-      const routesWithCore = coreSettingsFrom(config.env).impl !== 'ts'
+      const settings = coreSettingsFrom(config.env)
+      const usesCore = settings.impl !== 'ts' || settings.okf !== 'ts'
       const building = config.command === 'build'
       if (ship === '1' && !staged) {
         throw new Error(
           'WHITEBOARD_SHIP_CORE_WASM=1 but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first',
         )
       }
-      if (building && routesWithCore && !staged) {
+      if (building && usesCore && !staged) {
         throw new Error(
-          'this build routes edges with the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts to build without it',
+          'this build uses the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts (and VITE_WHITEBOARD_CORE_OKF=ts, its default) to build without it',
         )
       }
-      if (building && routesWithCore && ship === '0') {
+      if (building && usesCore && ship === '0') {
         throw new Error(
-          'WHITEBOARD_SHIP_CORE_WASM=0 leaves the wasm out of a build that routes edges with the Rust core; set VITE_WHITEBOARD_CORE=ts as well',
+          'WHITEBOARD_SHIP_CORE_WASM=0 leaves the wasm out of a build that uses the Rust core; set VITE_WHITEBOARD_CORE=ts and VITE_WHITEBOARD_CORE_OKF=ts as well',
         )
       }
       const carried = ship === '0' ? false : staged
-      stubbed = !routesWithCore && !carried
+      stubbed = !usesCore && !carried
     },
     load(id) {
       if (!stubbed || !SOURCE_MODULE.test(id)) return undefined
-      return 'export async function loadWebCore() { throw new Error("this build routes edges in TypeScript and carries no Rust core") }'
+      return 'export async function loadWebCore() { throw new Error("this build answers in TypeScript and carries no Rust core") }'
     },
   }
 }

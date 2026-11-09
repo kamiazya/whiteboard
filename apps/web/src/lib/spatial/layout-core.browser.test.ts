@@ -9,6 +9,7 @@
 // artifact to load.
 
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import { okfCodec } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
@@ -63,8 +64,9 @@ describe('the real Rust core in a browser', () => {
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'differential', mismatch: 'throw' },
+        { impl: 'differential', okf: 'ts', mismatch: 'throw' },
         async () => ({
+          ...routing,
           routeLayout: (...args) => {
             calls += 1
             return routing.routeLayout(...args)
@@ -83,6 +85,41 @@ describe('the real Rust core in a browser', () => {
         expect(scene.nodes.length).toBeGreaterThan(0)
       }
       // The core was consulted for every board, so "no difference" compared something.
+      expect(calls).toBe(3)
+    },
+  )
+})
+
+describe('the real Rust core reading and writing OKF in a browser', () => {
+  it.skipIf('failure' in real)(
+    'reads and writes a note beside the TypeScript with no difference, thrown or otherwise',
+    async () => {
+      if ('failure' in real) return
+      const { routing } = real
+      let calls = 0
+      const host = createLayoutCoreHost(
+        { impl: 'ts', okf: 'differential', mismatch: 'throw' },
+        async () => ({
+          ...routing,
+          parseOkf: (text) => {
+            calls += 1
+            return routing.parseOkf(text)
+          },
+          serializeOkf: (doc) => {
+            calls += 1
+            return routing.serializeOkf(doc)
+          },
+        }),
+        silent(),
+      )
+      await host.ready()
+      const codec = okfCodec(host.currentOkf())
+      const text = '---\ntype: note\ntitle: Plan\ntags: [a, b]\nweight: -0.0\n---\n# 計画\n\nbody\n'
+      const parsed = codec.parseOkf(text)
+      if (!parsed.ok) throw new Error(parsed.error.message)
+      expect(codec.serializeOkf(parsed.value)).toContain('# 計画')
+      expect(codec.parseOkf('---\ntype: [\n---\n').ok).toBe(false)
+      // The core was consulted for every call, so "no difference" compared something.
       expect(calls).toBe(3)
     },
   )

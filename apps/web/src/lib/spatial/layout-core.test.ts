@@ -1,13 +1,17 @@
-import type { CoreMismatch, RoutingCore } from '@kamiazya/whiteboard-canvas-render'
+import type { CoreMismatch } from '@kamiazya/whiteboard-canvas-render'
+import { okfCodec } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it, vi } from 'vitest'
+import { currentOkfCodec } from '../okf-codec.js'
 import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
 import type { CoreSettings } from './layout-core-settings.js'
+import type { WebCore } from './web-core.js'
 
-const routing = {} as RoutingCore
-const settings = (impl: CoreSettings['impl'], mismatch: CoreSettings['mismatch'] = 'log') => ({
-  impl,
-  mismatch,
-})
+const routing = {} as WebCore
+const settings = (
+  impl: CoreSettings['impl'],
+  mismatch: CoreSettings['mismatch'] = 'log',
+  okf: CoreSettings['okf'] = 'ts',
+): CoreSettings => ({ impl, okf, mismatch })
 const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const differs: CoreMismatch = {
@@ -97,9 +101,60 @@ describe('createLayoutCoreHost', () => {
   })
 })
 
+describe('the OKF half of the host', () => {
+  it('loads for OKF alone, and answers no routing core while routing stays on ts', async () => {
+    const load = vi.fn(async () => routing)
+    const host = createLayoutCoreHost(settings('ts', 'log', 'differential'), load, silent())
+    expect(host.currentOkf()).toBeUndefined()
+    expect(await host.ready()).toBeUndefined()
+    expect(host.current()).toBeUndefined()
+    const okf = host.currentOkf()
+    expect(okf?.okf).toBe(routing)
+    expect(okf?.impl).toEqual({ parseOkf: 'differential', serializeOkf: 'differential' })
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('answers no OKF core while OKF stays on ts, from the one load routing made', async () => {
+    const load = vi.fn(async () => routing)
+    const host = createLayoutCoreHost(settings('rust'), load, silent())
+    await host.ready()
+    expect(host.currentOkf()).toBeUndefined()
+    expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('throws an OKF difference under throw, logs it under log, and only notes a decline', async () => {
+    const differsOkf = {
+      fn: 'parseOkf' as const,
+      kind: 'differs' as const,
+      ts: 'a',
+      rust: 'b',
+      text: '',
+    }
+    const strict = createLayoutCoreHost(
+      settings('ts', 'throw', 'differential'),
+      async () => routing,
+      silent(),
+    )
+    await strict.ready()
+    expect(() => strict.currentOkf()?.onMismatch?.(differsOkf)).toThrow(/OKF core differs/)
+    const log = silent()
+    const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
+    await lenient.ready()
+    lenient.currentOkf()?.onMismatch?.(differsOkf)
+    lenient.currentOkf()?.onMismatch?.({ fn: 'serializeOkf', kind: 'declined', err: new Error() })
+    expect(log.warn).toHaveBeenCalledTimes(1)
+    expect(log.debug).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('a realm that never installed a core', () => {
   it('has none and routes in TypeScript', async () => {
     expect(currentLayoutCore()).toBeUndefined()
     expect(await layoutCoreReady()).toBeUndefined()
+  })
+
+  it('reads and writes OKF in the TypeScript', () => {
+    const text = '---\ntype: note\n---\nbody\n'
+    expect(currentOkfCodec().parseOkf(text)).toEqual(okfCodec(undefined).parseOkf(text))
   })
 })
