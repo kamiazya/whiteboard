@@ -57,6 +57,19 @@ the TypeScript export a re-export of the shim, which is the TypeScript's
 deletion and would remove the rollback, so the entry moves when the TypeScript
 is deleted, the release after the first one that defaults to `rust`.
 
+**Status note (2026-11-09, the second module reaches `differential`).** The
+OKF envelope (`parseOkf`, `serializeOkf`) is ported to `whiteboard-codec`,
+reached through two wasm exports, `okf_parse` and `okf_serialize` (ABI 15),
+and switched by `okfCodec` in `packages/codec`. `WHITEBOARD_CORE_OKF` and
+`VITE_WHITEBOARD_CORE_OKF` run it `differential` in development and CI and
+leave it `ts` in a release; one wasm instance serves both modules in each
+realm. Its checklist is [parity/okf-codec.md](../parity/okf-codec.md), and the
+switch stays off `rust` until every row is met or not applicable. The one
+difference tolerated is a `yaml`-stage refusal's wording (owner decision q25).
+The TypeScript's deletion waits for the ops step (step 10, owner decision
+q26), since the daemon's tool layer is its last caller. The decisions below
+are unchanged.
+
 ## Context
 
 **Everything except the UI is TypeScript today, and it already runs in three
