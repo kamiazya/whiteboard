@@ -145,3 +145,28 @@ fn integer(rest: &str, radix: u32) -> f64 {
         .try_fold(0.0, |sum, c| Some(sum * f64::from(radix) + f64::from(c.to_digit(radix)?)))
         .unwrap_or(f64::NAN)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::is_js_space;
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    /// What `trim` strips in the JavaScript engine, recorded by
+    /// `packages/codec/src/okf/oracle/js-whitespace.test.ts`.
+    const RECORDED: &str =
+        include_str!("../../../../../packages/codec/src/okf/oracle/js-whitespace.jsonl");
+
+    #[test]
+    fn is_exactly_what_the_engine_strips_for_every_scalar_value() {
+        let recorded: Vec<u32> = RECORDED.lines().filter_map(|line| line.parse().ok()).collect();
+        assert!(recorded.len() > 20, "the recording names {} code points", recorded.len());
+        let mut stripped = Vec::new();
+        for cp in 0..=0x10_ffff_u32 {
+            if char::from_u32(cp).is_some_and(is_js_space) {
+                stripped.push(cp);
+            }
+        }
+        assert_eq!(stripped, recorded);
+    }
+}

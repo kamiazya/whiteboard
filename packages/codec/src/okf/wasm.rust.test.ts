@@ -8,6 +8,7 @@ import { Dice, mulberry32 } from '../test-utils/frontmatter-oracle/corpus.js'
 import { decode, encode } from '../test-utils/frontmatter-oracle/oracle.js'
 import { generatedText, unsafeDocument, validDocument } from '../test-utils/okf-oracle/corpus.js'
 import { decodeRecording, textFrom } from '../test-utils/okf-oracle/oracle.js'
+import { messageTolerated, OKF_TOLERATED_DIFFERENCES } from './okf-core.js'
 import { parseOkf } from './parse.js'
 import type { OkfMarkdownDocument } from './schema.js'
 import { OkfNotYamlSafeError, serializeOkf } from './serialize.js'
@@ -66,6 +67,7 @@ type ParsedOkf = ReturnType<Core['parseOkf']>
 const reach = {
   read: 0,
   yaml: 0,
+  messageDiffered: 0,
   noFence: 0,
   reserved: 0,
   schema: 0,
@@ -99,9 +101,10 @@ function expectRefusalsAgree(
 ): void {
   expect(rust.error.stage).toBe(ts.error.stage)
   expect(issueKeys(rust.error.issues)).toEqual(issueKeys(ts.error.issues))
-  if (ts.error.stage === 'yaml') {
+  if (messageTolerated(ts.error.stage)) {
     expect(rust.error.message).toMatch(/^malformed YAML frontmatter: /)
     expect(ts.error.message).toMatch(/^malformed YAML frontmatter: /)
+    if (rust.error.message !== ts.error.message) reach.messageDiffered++
   } else {
     expect(rust.error.message).toBe(ts.error.message)
   }
@@ -300,6 +303,10 @@ describe('generated texts and documents through the wasm', () => {
     // A comparison over one outcome passes for any subject, so say what was reached.
     expect(reach.read).toBeGreaterThan(600)
     expect(reach.yaml).toBeGreaterThan(300)
+    // The other side of OKF_TOLERATED_DIFFERENCES' one entry: the case it
+    // tolerates still differs, so the entry is still needed.
+    expect(Object.keys(OKF_TOLERATED_DIFFERENCES)).toEqual(['yaml-refusal-message'])
+    expect(reach.messageDiffered).toBeGreaterThan(300)
     expect(reach.noFence).toBeGreaterThan(200)
     expect(reach.reserved).toBeGreaterThan(50)
     expect(reach.schema).toBeGreaterThan(700)
