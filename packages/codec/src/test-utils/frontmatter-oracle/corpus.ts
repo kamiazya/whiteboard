@@ -45,7 +45,7 @@ const repoRoot = (): string =>
 
 type Random = () => number
 
-function mulberry32(seed: number): Random {
+export function mulberry32(seed: number): Random {
   let state = seed >>> 0
   return () => {
     state = (state + 0x6d2b79f5) >>> 0
@@ -56,7 +56,7 @@ function mulberry32(seed: number): Random {
   }
 }
 
-class Dice {
+export class Dice {
   constructor(private readonly random: Random) {}
   int(n: number): number {
     return Math.floor(this.random() * n)
@@ -230,7 +230,7 @@ const SIMPLE_ESCAPES: Record<string, string> = {
  * escapes plus `\'`. Anything else (a `\x` escape, a raw control character,
  * an escaped delimiter) is not a plain literal, and the text is skipped.
  */
-function decodeLiteral(body: string): string | undefined {
+export function decodeLiteral(body: string): string | undefined {
   let out = ''
   for (let i = 0; i < body.length; i++) {
     const ch = body[i] as string
@@ -351,7 +351,7 @@ export function readerCases(count: number): ReaderCase[] {
   return texts.map(readerCase)
 }
 
-function nastyString(d: Dice): string {
+export function nastyString(d: Dice): string {
   const r = d.int(100)
   if (r < 30) return d.pick(AWKWARD)
   if (r < 70) return Array.from({ length: d.int(12) }, () => d.pick(FRAGMENTS)).join('')
@@ -364,7 +364,7 @@ function nastyString(d: Dice): string {
   ).join('')
 }
 
-function writerValue(d: Dice, depth: number): unknown {
+export function writerValue(d: Dice, depth: number): unknown {
   const r = d.int(100)
   if (depth > 3 || r < 55) {
     const t = d.int(100)

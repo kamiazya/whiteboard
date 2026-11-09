@@ -1,0 +1,26 @@
+---
+type: concept
+title: A title
+description: "x: y"
+resource: ../a.md
+tags: [a, b]
+view: visual.shape/v0
+status: draft
+sources:
+  - a
+  - b
+generated:
+  by: agent/1.0
+  at: 2026-01-02T03:04:05Z
+  tool: x
+verified:
+  - by: human:alice
+    at: 2026-01-02T03:04:05.5+09:00
+facets:
+  visual.shape/v0:
+    kind: box
+    size: [1, 2.5]
+---
+# Heading
+
+body

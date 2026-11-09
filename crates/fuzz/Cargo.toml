@@ -53,6 +53,14 @@ doc = false
 bench = false
 required-features = ["libfuzzer"]
 
+[[bin]]
+name = "okf_parse"
+path = "fuzz_targets/okf_parse.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
 [workspace]
 members = ["."]
 

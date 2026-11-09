@@ -10,10 +10,13 @@
 //! `{"k":"w","v":value}` with `"y":text` or `"err":"unsafe"`. A value is
 //! `null`, a boolean, a string, an array, `{"f":hex}` for the bits of a
 //! number, `{"big":digits}` or `{"m":[[key,value],...]}` for a mapping in the
-//! order JavaScript enumerates its keys.
+//! order JavaScript enumerates its keys (`common`).
 
-use serde_json::{Value as Json, json};
-use whiteboard_codec::frontmatter::{Refusal, Value, parse, stringify};
+use serde_json::Value as Json;
+use whiteboard_codec::frontmatter::{Refusal, parse, stringify};
+mod common;
+
+use common::{decode, encode};
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -27,66 +30,6 @@ fn recording() -> Vec<Json> {
         lines.as_ref().err()
     );
     lines.unwrap_or_default()
-}
-
-/// The index JavaScript gives an array-index key, or `None`.
-fn array_index(key: &str) -> Option<u32> {
-    let canonical = key == "0" || (!key.starts_with('0') && !key.is_empty());
-    if !canonical || !key.bytes().all(|b| b.is_ascii_digit()) {
-        return None;
-    }
-    key.parse::<u32>().ok().filter(|&n| n != u32::MAX)
-}
-
-/// The recording's encoding of a value, with a mapping's keys in the order
-/// JavaScript enumerates them: array indices ascending, then the rest as written.
-fn encode(value: &Value) -> Json {
-    match value {
-        Value::Null => Json::Null,
-        Value::Bool(b) => json!(b),
-        Value::Number(n) => json!({"f": format!("{:016x}", n.to_bits())}),
-        Value::BigInt(digits) => json!({"big": digits}),
-        Value::String(s) => json!(s),
-        Value::Seq(items) => Json::Array(items.iter().map(encode).collect()),
-        Value::Map(entries) => {
-            let mut indexed: Vec<_> =
-                entries.iter().filter_map(|(k, v)| Some((array_index(k)?, k, v))).collect();
-            indexed.sort_by_key(|entry| entry.0);
-            let rest = entries.iter().filter(|(k, _)| array_index(k).is_none());
-            let ordered =
-                indexed.into_iter().map(|(_, k, v)| (k, v)).chain(rest.map(|(k, v)| (k, v)));
-            json!({"m": ordered.map(|(k, v)| json!([k, encode(v)])).collect::<Vec<_>>()})
-        }
-    }
-}
-
-fn decode(json: &Json) -> Value {
-    match json {
-        Json::Null => Value::Null,
-        Json::Bool(b) => Value::Bool(*b),
-        Json::String(s) => Value::String(s.clone()),
-        Json::Array(items) => Value::Seq(items.iter().map(decode).collect()),
-        Json::Object(object) => {
-            if let Some(bits) = object.get("f").and_then(Json::as_str) {
-                let bits = u64::from_str_radix(bits, 16);
-                assert!(bits.is_ok(), "{object:?} holds no 64 bits");
-                return Value::Number(f64::from_bits(bits.unwrap_or_default()));
-            }
-            if let Some(digits) = object.get("big").and_then(Json::as_str) {
-                return Value::BigInt(digits.to_string());
-            }
-            let pairs = object.get("m").and_then(Json::as_array);
-            assert!(pairs.is_some(), "{object:?} is no recorded value");
-            Value::Map(
-                pairs
-                    .unwrap_or(&Vec::new())
-                    .iter()
-                    .map(|p| (p[0].as_str().unwrap_or_default().to_string(), decode(&p[1])))
-                    .collect(),
-            )
-        }
-        Json::Number(_) => unreachable!("the recording encodes numbers as bits"),
-    }
 }
 
 fn class_of(refusal: Refusal) -> &'static str {
@@ -142,7 +85,8 @@ fn every_recorded_value_is_written_as_the_typescript_wrote_it() {
     let mut problems: Vec<String> = Vec::new();
     let (mut written, mut unwritable) = (0usize, 0usize);
     for case in &cases {
-        let answer = stringify(&decode(&case["v"]));
+        let answer =
+            stringify(&decode(&case["v"]).expect("a recorded writer value is representable"));
         match (answer, case.get("y").and_then(Json::as_str), case.get("err")) {
             (Ok(text), Some(y), _) if text == y => written += 1,
             (Err(_), None, Some(_)) => unwritable += 1,
