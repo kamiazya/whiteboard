@@ -192,6 +192,12 @@ exclude_re = [
   # cursor with nothing to end it, so the parse of any text hangs and the
   # timeout is the only detection.
   'cursor\.rs:\d+:\d+: replace Parser::(eof|bump|skip|skip_to_line_end)( -> bool)? with (true|false|\(\))$',
+  # codec cursor: `blank_at` answering false is the same hang on any text a
+  # scan stops at a blank in. frontmatter_examples.rs fails it in seconds,
+  # but the property, oracle replay and fuzz seed replay in the same
+  # workspace run never end, so the gate sees a timeout. Its `true` sibling
+  # is judged.
+  'cursor\.rs:\d+:\d+: replace Parser::blank_at -> bool with false$',
   # codec cursor: the operators inside the same primitives (the end test,
   # the space scan, the line-end scan, the alias name scan) turn a loop that
   # advances to one that never ends; any text with a space, a line or an
