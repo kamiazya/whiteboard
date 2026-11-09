@@ -207,17 +207,51 @@ function repositoryFrontmatters(): string[] {
   for (const file of tracked('packages/*/src/**/*.test.ts')) {
     const text = readFileSync(join(root, file), 'utf8')
     for (const m of text.matchAll(/(['"`])---\\n((?:(?!\1).)*?)\\n---/g)) {
-      try {
-        const yaml = JSON.parse(
-          `"${(m[2] ?? '').replace(/"/g, '\\"').replace(/\\'/g, "'")}"`,
-        ) as string
-        if (!yaml.includes('${')) found.push(yaml)
-      } catch {
-        // not a plain string literal
-      }
+      const yaml = decodeLiteral(m[2] ?? '')
+      if (yaml !== undefined && !yaml.includes('${')) found.push(yaml)
     }
   }
   return found
+}
+
+const SIMPLE_ESCAPES: Record<string, string> = {
+  '\\': '\\',
+  '/': '/',
+  "'": "'",
+  b: '\b',
+  f: '\f',
+  n: '\n',
+  r: '\r',
+  t: '\t',
+}
+
+/**
+ * The value of a string literal's body as a test file spells it: JSON's
+ * escapes plus `\'`. Anything else (a `\x` escape, a raw control character,
+ * an escaped delimiter) is not a plain literal, and the text is skipped.
+ */
+function decodeLiteral(body: string): string | undefined {
+  let out = ''
+  for (let i = 0; i < body.length; i++) {
+    const ch = body[i] as string
+    if (ch.charCodeAt(0) < 0x20) return undefined
+    if (ch !== '\\') {
+      out += ch
+      continue
+    }
+    const next = body[i + 1] ?? ''
+    const hex = next === 'u' ? body.slice(i + 2, i + 6) : ''
+    if (/^[0-9a-fA-F]{4}$/.test(hex)) {
+      out += String.fromCharCode(Number.parseInt(hex, 16))
+      i += 5
+    } else if (next in SIMPLE_ESCAPES) {
+      out += SIMPLE_ESCAPES[next]
+      i += 1
+    } else {
+      return undefined
+    }
+  }
+  return out
 }
 
 const STRUCTURE_WEIGHTS: [string, number][] = [
