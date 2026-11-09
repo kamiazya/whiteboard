@@ -1,5 +1,5 @@
 //! Literal (`|`) and folded (`>`) block scalars, line for line as `yaml`
-//! 2.9's lexer finds their lines and `resolveBlockScalar` folds them.
+//! 2.9's lexer finds their lines and its block-scalar resolver folds them.
 
 use super::cursor::{Indent, Parsed, Parser, deeper, syntax};
 use super::node::{Node, Style};
@@ -170,7 +170,7 @@ impl Parser {
     }
 }
 
-/// `resolveBlockScalar`: the scalar's text from its lines.
+/// The block-scalar resolver of `yaml` 2.9: the scalar's text from its lines.
 fn fold_block(lines: &[Line], parent: Indent, header: &Header, literal: bool) -> Parsed<String> {
     let keep = header.chomp == '+';
     let chomp_start =
