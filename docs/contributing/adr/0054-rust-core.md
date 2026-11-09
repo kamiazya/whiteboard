@@ -639,12 +639,20 @@ Three findings shape the port:
   yes.
 - **Lone surrogates.** The TypeScript stores and writes lone UTF-16
   surrogates, which a Rust `String` cannot hold. They caused 420 of the
-  8,000 writer round-trips to differ. Owner question q22's provisional
-  answer is to refuse them at write.
+  8,000 writer round-trips to differ. Refusing them at write is not enough:
+  a quoted scalar such as `x: "\uD800"` is inside the subset and the
+  TypeScript reads it today. So owner question q22's provisional answer is
+  to refuse a lone surrogate on BOTH sides, at write and at read, in the
+  TypeScript and the Rust alike, so that zero disagreement holds on a
+  frontmatter that carries one.
 - **npm `yaml` 2.9.0's quote bug.** It finds a closing quote with
   `indexOf`, so whether a malformed quoted scalar parses depends on a quote
-  further down the document. It is ledgered rather than copied, and `yaml`
-  stays pinned while the differential is the gate.
+  further down the document. It is ledgered rather than copied.
+- **The oracle is not pinned yet.** The catalog asks for `yaml` `^2.8.4`; only
+  the lockfile resolves 2.9.0, and the published `@kamiazya/whiteboard-mcp`
+  keeps `yaml` external, so an install may resolve another 2.x. Before the
+  differential counts as a parity check, `yaml` becomes an exact version in
+  the catalog, which the published package then carries.
 
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
@@ -927,7 +935,7 @@ through a ledgered exception.
 | 3 | This step (decision 8): skeleton, gates, schema pipeline on the geometry contract, harness | each gate in QR-1…QR-32 has a running job, mutation-checked |
 | 4 | det precursor in TypeScript (decision 11) | goldens and scoreboards moved once, with reasons |
 | 5 | Geometry contract and `edge-routing` — the routing spike, then the port | parity checklist; routing scoreboards identical |
-| 6 | `model`, `facet-engine`, `scene`, `codec`, `plugin-visual` data half | the OKF round-trip (frontmatter plus a verbatim body) byte-identical; the restricted frontmatter parser differentially fuzzed against npm `yaml`, with zero disagreement once the TypeScript refuses the same subset. Markdown stringify stays in TypeScript until it has a caller (both spiked 2026-11-09, above) |
+| 6 | `model`, `facet-engine`, `scene`, `codec`, `plugin-visual` data half | the OKF round trip (frontmatter plus a verbatim body) answers the same bytes from Rust as from the TypeScript for the same input; the restricted frontmatter parser differentially fuzzed against npm `yaml`, with zero disagreement once the TypeScript refuses the same subset. Markdown stringify stays in TypeScript until it has a caller (both spiked 2026-11-09, above) |
 | 7 | `canvas-render` (scene-across-boundary decided first) | SVG golden byte-identical on TypeScript, native and wasm |
 | 8 | `search` | search-quality scoreboard identical; Unicode-table diff ledgered |
 | 9 | The loro cohort: `crdt`, `workspace-index`, `history`, `reference-graph` | bidirectional fixtures; deep-value differential |
