@@ -48,9 +48,9 @@ export const TOLERATED_TESTS: readonly {
   },
 ]
 
-const escape = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+const escapeRegExp = (text: string): string => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 /** Every test name but those above: `setup.ts` skips the rest. */
 export const runsUnderRust = new RegExp(
-  `^(?!.*(?:${TOLERATED_TESTS.flatMap((t) => t.titles.map((title) => `${escape(title)}$`)).join('|')}))`,
+  `^(?!.*(?:${TOLERATED_TESTS.flatMap((t) => t.titles.map((title) => `${escapeRegExp(title)}$`)).join('|')}))`,
 )
