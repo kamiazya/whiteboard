@@ -24,7 +24,7 @@ const SEGMENT = '[a-z][a-z0-9-]*'
 const ALLOWLIST: Readonly<Record<string, string>> = {
   'packages/facet-engine/src/facet-grammar.ts':
     'the engine side: every registry, schema and plugin',
-  'packages/model/src/facets.ts': 'the model side: the stored `facets` bucket key',
+  'packages/model/src/facet-keys.ts': 'the model side: the stored `facets` bucket key',
   'packages/model/src/tags.ts': 'a scoped tag half is the same segment grammar (ADR-0040)',
 }
 

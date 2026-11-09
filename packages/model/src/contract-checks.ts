@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import { EXTENSION_FACET_KEY_PATTERN, RESERVED_ROOT_KEYS } from './facets.js'
+import { EXTENSION_FACET_KEY_PATTERN, RESERVED_ROOT_KEYS } from './facet-keys.js'
 
 // The named checks of `contracts/model`'s `x-wb-check` keyword, in the
 // camelCase the generated Zod imports. Each is a `superRefine` callback so a

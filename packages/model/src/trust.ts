@@ -1,5 +1,48 @@
 import { z } from 'zod'
+import { okfActorSchema, okfTimestampSchema, okfTrustEventSchema } from './generated/okf.zod.js'
 import { utf16Max } from './utf16-max.js'
+
+export type { OkfActor, OkfTimestamp, OkfTrustEvent } from './generated/okf.zod.js'
+// The three schemas below are generated from contracts/model and re-exported.
+// Their prose, kept for the reader of this module:
+//
+// OKF §7's actor convention: `<producer>/<version>` for an agent or tool,
+// `human:<id>` for a person, `process:<id>` for an automated process.
+//
+// Validated only as a non-blank single-line string, NOT against those three
+// shapes, because the list is not exhaustive and the spec itself steps
+// outside it — §5.1's own example writes `author: team:ga4-docs`. A schema
+// that enforced the three bullets would reject the specification's own
+// sample data.
+//
+// The one shape that carries meaning is the `human:` prefix, which §5.3
+// makes load-bearing for trust tiers. `isHumanActor` is the single place
+// that check lives.
+//
+// §5: "Every timestamp-valued key in OKF is an ISO 8601 datetime with an
+// explicit UTC offset." Stored in the `Z` form this codebase emits, and
+// accepted in any explicit-offset form so a document written elsewhere is
+// not rejected for choosing `+00:00`.
+//
+// `by` and `at` are required; anything else a producer wrote is KEPT.
+//
+// Loose rather than strict because §4.1 asks a consumer to preserve unknown
+// frontmatter keys, and a strict object does the opposite at the worst
+// moment: it rejects, and `parseOkf` then fails the WHOLE document rather
+// than the one key — so a valid v0.2 file from another producer does not
+// open at all. Dropping would be bad; refusing to read is worse.
+//
+// That the family grows is not speculation. `sources` already carries
+// `usage_count` and `last_modified` purely as credibility signals, and §5.1's
+// own example writes an actor form outside §7's three bullets — which is why
+// `okfActorSchema` above is validated loosely. The same reasoning applies to
+// the shape around the actor, and had not been carried across.
+//
+// The family's own root (`trustFacetsSchema`) stays strict: that one is this
+// codebase's storage bucket rather than a frontmatter surface, so a stray key
+// there means a caller wrote to the wrong bucket, not that a producer knew
+// something extra.
+export { okfActorSchema, okfTimestampSchema, okfTrustEventSchema }
 
 // OKF v0.2's trust family (SPEC §5.2): `generated` records how the current
 // content was produced, `verified` records who or what has confirmed it.
@@ -10,27 +53,6 @@ import { utf16Max } from './utf16-max.js'
 // (ADR-0013's `{namespace}.{name}/v{n}` bucket) and not core facets: they
 // carry their own storage bucket precisely so a client rewriting its own
 // tags cannot delete a stamp it never wrote. See ADR-0016.
-
-/**
- * OKF §7's actor convention: `<producer>/<version>` for an agent or tool,
- * `human:<id>` for a person, `process:<id>` for an automated process.
- *
- * Validated only as a non-blank single-line string, NOT against those three
- * shapes, because the list is not exhaustive and the spec itself steps
- * outside it — §5.1's own example writes `author: team:ga4-docs`. A schema
- * that enforced the three bullets would reject the specification's own
- * sample data.
- *
- * The one shape that carries meaning is the `human:` prefix, which §5.3
- * makes load-bearing for trust tiers. `isHumanActor` is the single place
- * that check lives.
- */
-export const okfActorSchema = z
-  .string()
-  .min(1)
-  .refine((value) => value.trim() === value && !/[\r\n]/.test(value), {
-    message: 'an OKF actor is a single-line string with no surrounding whitespace',
-  })
 
 /**
  * The most characters (UTF-16 code units) an actor may carry when it is
@@ -59,41 +81,6 @@ export const okfActorInputSchema = utf16Max(
   OKF_ACTOR_MAX_CHARS,
   `an actor is longer than ${OKF_ACTOR_LIMIT_PHRASE}`,
 )
-
-/**
- * §5: "Every timestamp-valued key in OKF is an ISO 8601 datetime with an
- * explicit UTC offset." Stored in the `Z` form this codebase emits, and
- * accepted in any explicit-offset form so a document written elsewhere is
- * not rejected for choosing `+00:00`.
- */
-export const okfTimestampSchema = z
-  .string()
-  .regex(
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$/,
-    'an OKF timestamp is an ISO 8601 datetime with an explicit UTC offset',
-  )
-
-/**
- * `by` and `at` are required; anything else a producer wrote is KEPT.
- *
- * Loose rather than strict because §4.1 asks a consumer to preserve unknown
- * frontmatter keys, and a strict object does the opposite at the worst
- * moment: it rejects, and `parseOkf` then fails the WHOLE document rather
- * than the one key — so a valid v0.2 file from another producer does not
- * open at all. Dropping would be bad; refusing to read is worse.
- *
- * That the family grows is not speculation. `sources` already carries
- * `usage_count` and `last_modified` purely as credibility signals, and §5.1's
- * own example writes an actor form outside §7's three bullets — which is why
- * `okfActorSchema` above is validated loosely. The same reasoning applies to
- * the shape around the actor, and had not been carried across.
- *
- * The family's own root (`trustFacetsSchema`) stays strict: that one is this
- * codebase's storage bucket rather than a frontmatter surface, so a stray key
- * there means a caller wrote to the wrong bucket, not that a producer knew
- * something extra.
- */
-export const okfTrustEventSchema = z.object({ by: okfActorSchema, at: okfTimestampSchema }).loose()
 
 /**
  * `verified` is a LIST of independent checks — a human sign-off plus a
