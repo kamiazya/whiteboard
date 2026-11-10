@@ -33,7 +33,6 @@ fn declined(why: Decline) -> Json {
         Decline::TooLarge => refused("input-too-large", "too-large"),
         Decline::TooDeep => refused("malformed", "too-deep"),
         Decline::LoneSurrogate => refused("malformed", "lone-surrogate"),
-        Decline::Url => refused("malformed", "url"),
         Decline::Unwritable => refused("malformed", "unwritable"),
     }
 }

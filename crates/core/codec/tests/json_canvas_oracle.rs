@@ -486,7 +486,6 @@ fn declined_rightly(why: Decline, text: &str) -> bool {
     match why {
         Decline::LoneSurrogate => spells_surrogate(text),
         Decline::TooDeep => nesting(text) > MAX_DEPTH,
-        Decline::Url => text.contains("\"link\""),
         Decline::TooLarge | Decline::Unwritable => false,
     }
 }
@@ -568,7 +567,7 @@ fn assert_reached(agreed: &[String], held_back: &[Decline], total: usize) {
     assert!(total > 1300, "{total} texts replayed");
     let declines = |why: Decline| held_back.iter().filter(|d| **d == why).count();
     assert!(held_back.len() < total / 20, "{} of {total} texts declined", held_back.len());
-    for why in [Decline::LoneSurrogate, Decline::TooDeep, Decline::Url] {
+    for why in [Decline::LoneSurrogate, Decline::TooDeep] {
         assert!(declines(why) > 2, "{} texts declined as {why:?}", declines(why));
     }
     assert!(count("value") > 650, "{} texts read to a document", count("value"));
@@ -614,18 +613,12 @@ fn write_mode(case: &Json) -> Mode {
     if case["m"] == "strict" { Mode::Strict } else { Mode::Extended }
 }
 
-fn has_link(canvas: &SpatialCanvas) -> bool {
-    canvas.nodes.iter().any(|n| {
-        n.resource.as_ref().is_some_and(|r| r.mime_type == "text/uri-list" && r.location.is_some())
-    })
-}
-
 #[test]
 fn every_recorded_canvas_is_written_as_the_typescript_wrote_it() {
     let recording = recording();
     let cases: Vec<&Json> = recording.iter().filter(|c| c["k"] == "w").collect();
     let mut problems: Vec<String> = Vec::new();
-    let (mut written, mut refused, mut declined) = (0usize, 0usize, 0usize);
+    let (mut written, mut refused) = (0usize, 0usize);
     for case in &cases {
         let canvas = canvas_of(&expand(&case["c"]));
         match (
@@ -639,7 +632,6 @@ fn every_recorded_canvas_is_written_as_the_typescript_wrote_it() {
             {
                 refused += 1;
             }
-            (Err(WriteFailure::Declined(Decline::Url)), ..) if has_link(&canvas) => declined += 1,
             (answer, y, err) => {
                 problems
                     .push(format!("rust {answer:?}, typescript {y:?} {err:?}, for {}", case["c"]));
@@ -656,5 +648,4 @@ fn every_recorded_canvas_is_written_as_the_typescript_wrote_it() {
     assert!(cases.len() > 550, "{} canvases replayed", cases.len());
     assert!(written > 400, "{written} canvases written");
     assert!(refused > 80, "{refused} canvases refused by the strict mode");
-    assert!(declined > 3 && declined < cases.len() / 10, "{declined} canvases declined");
 }

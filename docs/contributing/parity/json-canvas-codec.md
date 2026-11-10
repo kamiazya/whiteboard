@@ -108,6 +108,18 @@ each place the two disagree. None changes the TypeScript here.
    ignores a key it does not name; the facets-and-tags arm refuses one and the
    whole bucket is lost. `{"facets": {...}, "extra": 1}` loses its facets,
    `{"kind":"embed", "documentId": ..., "extra": 1}` does not.
+6. **A link's host is not run through UTS 46 (deliberate, owner decision q50
+   `lenient-idn`, provisional).** `URL.canParse` maps an international or
+   `xn--` host through UTS 46 and refuses what the tables disallow; the core
+   carries no such tables, so it accepts a non-ASCII or `xn--` host when,
+   after ASCII lower-casing, it holds no forbidden domain code point and the
+   ends-in-a-number rule holds. It therefore accepts where Node refuses a host
+   UTS 46 maps to a forbidden or empty one (`http://\u{ad}/`, a full-width
+   `:` or `%`, U+FFFD, a no-break space) and an `xn--` label with bad
+   punycode. Everything else in the host grammar (IPv6, percent-encoding,
+   `file:`) follows the WHATWG parser exactly. A full-width digit that UTS 46
+   maps to an ASCII one is not seen by the ends-in-a-number rule either.
+   `url/tests.rs` pins each accepted case as a deviation.
 
 ## What the port declines
 
@@ -123,16 +135,18 @@ asking the core, that the input is one that earns it (`earned.ts`).
 | `LoneSurrogate` | `malformed` / `lone-surrogate` | a `\uD800`-class escape not joined to its pair, or a raw unpaired surrogate in the text | a Rust `String` cannot hold it; `JSON.parse` keeps it. A raw one never reaches the export: the shim checks `isWellFormed` first |
 | `TooDeep` | `malformed` / `too-deep` | nesting past 64 on the way in | the reader recurses |
 | `TooLarge` | `input-too-large` / `too-large` | a text over 4 MiB, or a canvas wire over 4 MiB | the caps in `input-caps.json`; the wire of a canvas is about 18% bigger than the text written from it (3,802,356 bytes against 3,221,606 for the largest board measured), so the writer's cap is met by a board whose text is about 3.4 MiB |
-| `Url` | `malformed` / `url` | a link whose host needs UTS 46 (a non-ASCII or `xn--` host), percent-decoding, an IPv6 literal, or a `file` URL | the answer needs tables this crate does not carry |
 | `Unwritable` | `malformed` / `unwritable` | a value kept as big-integer digits | `JSON.stringify` throws on a bigint |
 | (the wire) | `malformed` / `wire` | a canvas the wire does not carry: a key the contract does not name, a field of another kind, a class instance, a function, a lone surrogate in a string or key, a hole or an `undefined` in a list, nesting past 100, or a wire past serde_json's own depth | the export reads the canvas strictly, and what it does not read the TypeScript answers. A key set to `undefined` is not among them: it is left out, as `JSON.stringify` leaves it |
 
-In the recorded corpus the core reads 765 of 1,400 texts to a canvas and
-refuses 425 at the schema, 142 as not JSON and 5 as carrying comments, which
-are the TypeScript's answers exactly, and declines 63: 39 for a link, 21 for a
-surrogate escape and 3 for nesting. Of 600 canvases, 457 are written byte for
-byte, 128 are refused by the strict mode with the TypeScript's issues, and 15
-are declined for a link. Layer 1 meets **no** decline in its five suites.
+In the recorded corpus the core reads 780 of 1,400 texts to a canvas and
+refuses 449 at the schema, 142 as not JSON and 5 as carrying comments, which
+are the TypeScript's answers exactly, and declines 24: 21 for a
+surrogate escape and 3 for nesting. Of 600 canvases, 468 are written byte for
+byte and 132 are refused by the strict mode with the TypeScript's issues; none
+is declined. A link is never declined: its URL is judged by the core, so the
+39 links the core once declined (an IPv6, percent-encoded, international or
+`file` host) are answered, and each matches the recorded answer. Layer 1
+meets **no** decline in its five suites.
 
 ## Found by running the TypeScript's tests and a generator against the core
 

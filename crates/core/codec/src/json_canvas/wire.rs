@@ -7,7 +7,7 @@
 //! a node or an edge, and the three refinements on the document.
 
 use super::extension::{self, EdgeExtension, NodeExtension};
-use super::issue::{Code, Decline, Failure, Issue, PathStep};
+use super::issue::{Code, Failure, Issue, PathStep};
 use super::schema::{self, Flaws, Read, get, object};
 use std::collections::BTreeSet;
 use whiteboard_det::math::js_round;
@@ -27,7 +27,6 @@ struct Cx {
     issues: Vec<Issue>,
     /// How many of the issues stop Zod from going on with the value they are about.
     aborts: usize,
-    declined: Option<Decline>,
 }
 
 impl Cx {
@@ -220,13 +219,7 @@ fn kind(cx: &mut Cx, entries: &Map, wire_type: &str) -> Option<Kind> {
                     cx.refuse(Code::InvalidType);
                     None
                 }
-                Some(value) => match schema::link_url(value) {
-                    Ok(read) => cx.take(read),
-                    Err(why) => {
-                        cx.declined = Some(why);
-                        None
-                    }
-                },
+                Some(value) => cx.take(schema::link_url(value)),
             });
             url.map(Kind::Link)
         }
@@ -322,15 +315,12 @@ fn refine(cx: &mut Cx, nodes: &[SpatialNode], edges: &[CanvasEdge]) {
 
 /// Reads a parsed JSON Canvas document and lifts it into the model.
 pub(super) fn document(value: &Value) -> Result<SpatialCanvas, Failure> {
-    let mut cx = Cx { path: Vec::new(), issues: Vec::new(), aborts: 0, declined: None };
+    let mut cx = Cx { path: Vec::new(), issues: Vec::new(), aborts: 0 };
     let Some(root) = cx.entries(value) else { return Err(Failure::Schema(cx.issues)) };
     let nodes = list(&mut cx, root, "nodes", node);
     let edges = list(&mut cx, root, "edges", edge);
     if let (0, Some(nodes), Some(edges)) = (cx.aborts, nodes.as_deref(), edges.as_deref()) {
         refine(&mut cx, nodes, edges);
-    }
-    if let Some(why) = cx.declined {
-        return Err(Failure::Declined(why));
     }
     if !cx.issues.is_empty() {
         return Err(Failure::Schema(cx.issues));
