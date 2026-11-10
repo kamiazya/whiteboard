@@ -1,0 +1,53 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the asset tables, byte for byte > registers these asset ids in this order, with these values > ids 1`] = `
+{
+  "icons": [
+    "database",
+    "file",
+    "image",
+    "layers",
+    "link",
+    "lock",
+    "network",
+    "server",
+    "star",
+    "user",
+    "edge-straight",
+    "edge-orthogonal",
+    "edge-curved",
+    "line-jumps-off",
+    "line-jumps-on",
+    "category-icons",
+    "category-smileys",
+    "category-people",
+    "category-nature",
+    "category-food",
+    "category-travel",
+    "category-activities",
+    "category-objects",
+    "category-symbols",
+    "category-flags",
+    "signature",
+  ],
+  "registered": "f8c662ec39797b13e88bd508afef81641997ddd1318a02aa70eafcdd3fb0b94d",
+  "stencils": [
+    "datastore",
+    "service",
+    "gateway",
+    "queue",
+    "actor",
+    "external",
+  ],
+  "themes": [
+    "sketch",
+    "neon",
+  ],
+}
+`;
+
+exports[`the asset tables, byte for byte > serialises the themes, stencils and icons as they always have > icons 1`] = `"e85b6911712e4f8d29b6e37914946c9a1c88fb20c1d798ee47123e655eea1877"`;
+
+exports[`the asset tables, byte for byte > serialises the themes, stencils and icons as they always have > stencils 1`] = `"2a2fd156249e68720044e4a3ea52a4388e42b94926732f0b454d64420ff5eb10"`;
+
+exports[`the asset tables, byte for byte > serialises the themes, stencils and icons as they always have > themes 1`] = `"46f3b1bdefecc00cbace416a7423fa521831ccfa60e3c7cdbff7c9bd6a36ef7a"`;
