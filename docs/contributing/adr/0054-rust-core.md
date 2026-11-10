@@ -940,7 +940,7 @@ before the first port.
    - no bare `maxLength` (it counts code points; Zod `.max()` counts UTF-16
      units); `x-wb-maxUtf16` instead;
    - `pattern` from a portable subset, compiled by both engines in CI;
-   - every object declares `x-wb-unknownKeys: refuse | strip`; strict types
+   - every object declares `x-wb-unknownKeys: refuse | strip | keep`; strict types
      are closed, flat objects (serde cannot combine `deny_unknown_fields`
      with `flatten`);
    - no implicit `null`; defaults generated into both sides;

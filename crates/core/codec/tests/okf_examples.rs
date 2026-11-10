@@ -3,8 +3,8 @@
 
 use whiteboard_codec::frontmatter::{Refusal, Unwritable, Value};
 use whiteboard_codec::okf::{
-    Code, Document, Failure, Frontmatter, Issue, Step, TrustEvent, has_frontmatter, parse,
-    serialize,
+    Code, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step, has_frontmatter,
+    parse, serialize,
 };
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
@@ -39,11 +39,11 @@ fn path_text(path: &[Step]) -> String {
     steps.join(".")
 }
 
-fn plain(r#type: &str) -> Frontmatter {
-    Frontmatter { r#type: r#type.to_string(), ..Frontmatter::default() }
+fn plain(r#type: &str) -> OkfMarkdownFrontmatter {
+    OkfMarkdownFrontmatter { r#type: r#type.to_string(), ..OkfMarkdownFrontmatter::default() }
 }
 
-fn written(frontmatter: Frontmatter, body: &str) -> String {
+fn written(frontmatter: OkfMarkdownFrontmatter, body: &str) -> String {
     let out = serialize(&Document { frontmatter, body: body.to_string() });
     assert!(out.is_ok(), "{out:?}");
     out.unwrap_or_default()
@@ -360,7 +360,7 @@ fn a_preserved_key_that_is_modelled_takes_the_value_in_the_first_position() {
 fn the_writer_keeps_a_trust_event_in_by_at_then_the_rest_with_indices_first() {
     let mut fm = plain("n");
     let extra = vec![("tool".to_string(), text("x")), ("1".to_string(), Value::Bool(true))];
-    fm.verified = Some(vec![TrustEvent {
+    fm.verified = Some(vec![OkfTrustEvent {
         by: "human:a".to_string(),
         at: "2026-01-02T03:04:05Z".to_string(),
         extra,

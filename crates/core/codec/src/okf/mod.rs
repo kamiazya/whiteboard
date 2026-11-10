@@ -20,8 +20,9 @@ mod js;
 mod schema;
 mod write;
 
-pub use document::{Code, Document, Failure, Frontmatter, Issue, Map, Step, TrustEvent};
+pub use document::{Code, Document, Failure, Issue, Map, Step};
 pub use js::{array_index, enumeration_order};
+pub use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 
 use crate::frontmatter::{self, Unwritable, Value};
 

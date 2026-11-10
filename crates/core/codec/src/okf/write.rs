@@ -1,9 +1,10 @@
 //! `serializeOkf`: the frontmatter in canonical key order between fences,
 //! then the body as it was given.
 
-use super::document::{Document, Frontmatter, Map, TrustEvent};
+use super::document::{Document, Map};
 use super::js::{compare_code_units, enumeration_order};
 use crate::frontmatter::{Unwritable, Value, stringify};
+use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 
 pub(super) fn document(doc: &Document) -> Result<String, Unwritable> {
     let fm = &doc.frontmatter;
@@ -43,7 +44,7 @@ pub(super) fn document(doc: &Document) -> Result<String, Unwritable> {
 }
 
 /// The keys the schema models, present ones only, in the schema's order.
-fn modelled(fm: &Frontmatter) -> Map {
+fn modelled(fm: &OkfMarkdownFrontmatter) -> Map {
     let text = |name: &str, value: &Option<String>| {
         value.as_ref().map(|v| (name.to_string(), Value::String(v.clone())))
     };
@@ -68,7 +69,7 @@ fn modelled(fm: &Frontmatter) -> Map {
     .collect()
 }
 
-fn event(event: &TrustEvent) -> Value {
+fn event(event: &OkfTrustEvent) -> Value {
     let named = [
         ("by".to_string(), Value::String(event.by.clone())),
         ("at".to_string(), Value::String(event.at.clone())),
@@ -95,12 +96,12 @@ fn assign(entries: &mut Map, held: Option<usize>, name: String, value: Value) {
 mod tests {
     use super::document;
     use crate::frontmatter::Value;
-    use crate::okf::{Document, Frontmatter};
+    use crate::okf::{Document, OkfMarkdownFrontmatter};
     // On wasm32 the same tests run under Node (QR-21 layer 3).
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
-    fn written(frontmatter: Frontmatter) -> String {
+    fn written(frontmatter: OkfMarkdownFrontmatter) -> String {
         document(&Document { frontmatter, body: String::new() }).unwrap_or_default()
     }
 
@@ -116,8 +117,11 @@ mod tests {
             ("a".to_owned(), number(3.0)),
             ("a".to_owned(), number(4.0)),
         ];
-        let fm =
-            Frontmatter { r#type: "x".to_owned(), facets_raw: Some(raw), ..Frontmatter::default() };
+        let fm = OkfMarkdownFrontmatter {
+            r#type: "x".to_owned(),
+            facets_raw: Some(raw),
+            ..OkfMarkdownFrontmatter::default()
+        };
         assert_eq!(written(fm), "---\ntype: x\na: 4\nb: 1\n---\n");
     }
 
@@ -128,12 +132,12 @@ mod tests {
             ("title".to_owned(), Value::String("raw".to_owned())),
             ("type".to_owned(), Value::String("raw type".to_owned())),
         ];
-        let fm = Frontmatter {
+        let fm = OkfMarkdownFrontmatter {
             r#type: "x".to_owned(),
             title: Some("t".to_owned()),
             facets: Some(vec![("a.b/v1".to_owned(), Value::Null)]),
             facets_raw: Some(raw),
-            ..Frontmatter::default()
+            ..OkfMarkdownFrontmatter::default()
         };
         // `title` and `type` keep their modelled places with the raw values;
         // `facets` was first held by the preserved key and then replaced.

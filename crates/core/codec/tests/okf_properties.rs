@@ -4,7 +4,8 @@
 
 use whiteboard_codec::frontmatter::Value;
 use whiteboard_codec::okf::{
-    Document, Failure, Frontmatter, Map, TrustEvent, has_frontmatter, parse, serialize,
+    Document, Failure, Map, OkfMarkdownFrontmatter, OkfTrustEvent, has_frontmatter, parse,
+    serialize,
 };
 use whiteboard_proptest::proptest::prelude::{
     Strategy, any, prop, prop_assert, prop_assert_eq, prop_oneof,
@@ -119,13 +120,13 @@ fn payload() -> impl Strategy<Value = Value> {
     })
 }
 
-fn event() -> impl Strategy<Value = TrustEvent> {
+fn event() -> impl Strategy<Value = OkfTrustEvent> {
     (
         "[a-z]{1,5}[:/][a-z0-9.]{1,6}",
         prop::sample::select(&["2026-01-02T03:04:05Z", "2026-01-02T03:04:05.5+09:00"][..]),
         prop::collection::vec((key(), payload()), 0..3),
     )
-        .prop_map(|(by, at, extra)| TrustEvent {
+        .prop_map(|(by, at, extra)| OkfTrustEvent {
             by,
             at: at.to_string(),
             extra: distinct(extra).into_iter().filter(|(k, _)| k != "by" && k != "at").collect(),
@@ -136,7 +137,7 @@ fn record(keys: impl Strategy<Value = String>, least: usize) -> impl Strategy<Va
     prop::collection::vec((keys, payload()), least..4).prop_map(distinct)
 }
 
-fn frontmatter() -> impl Strategy<Value = Frontmatter> {
+fn frontmatter() -> impl Strategy<Value = OkfMarkdownFrontmatter> {
     let head = (
         text().prop_filter("a document needs a type", |t| !t.is_empty()),
         prop::option::of(text()),
@@ -153,7 +154,7 @@ fn frontmatter() -> impl Strategy<Value = Frontmatter> {
     );
     (head, tail).prop_map(|((r#type, title, description, resource, tags, view), tail)| {
         let (generated, verified, facets, facets_raw) = tail;
-        Frontmatter {
+        OkfMarkdownFrontmatter {
             r#type,
             title,
             description,
@@ -198,13 +199,13 @@ fn canonical(entries: Map) -> Map {
     enumeration(sorted)
 }
 
-fn normal_event(event: TrustEvent) -> TrustEvent {
-    TrustEvent { extra: enumeration(event.extra), ..event }
+fn normal_event(event: OkfTrustEvent) -> OkfTrustEvent {
+    OkfTrustEvent { extra: enumeration(event.extra), ..event }
 }
 
 fn normal(doc: Document) -> Document {
     let fm = doc.frontmatter;
-    let frontmatter = Frontmatter {
+    let frontmatter = OkfMarkdownFrontmatter {
         generated: fm.generated.map(normal_event),
         verified: fm.verified.map(|list| list.into_iter().map(normal_event).collect()),
         facets: fm.facets.map(canonical),

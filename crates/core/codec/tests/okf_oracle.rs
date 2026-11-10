@@ -21,7 +21,7 @@ use common::{decode, encode};
 use serde_json::{Value as Json, json};
 use whiteboard_codec::frontmatter::{Refusal, Unwritable, Value};
 use whiteboard_codec::okf::{
-    Code, Document, Failure, Frontmatter, Issue, Step, TrustEvent, parse, serialize,
+    Code, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step, parse, serialize,
 };
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
@@ -45,14 +45,14 @@ fn text_of(entries: &[(&str, &Option<String>)]) -> Vec<(String, Value)> {
         .collect()
 }
 
-fn event_value(event: &TrustEvent) -> Value {
+fn event_value(event: &OkfTrustEvent) -> Value {
     let named = [("by", &event.by), ("at", &event.at)]
         .map(|(name, held)| (name.to_string(), Value::String(held.clone())));
     Value::Map(named.into_iter().chain(event.extra.iter().cloned()).collect())
 }
 
 /// The object `parseOkf` hands back, field by field in the schema's order.
-fn frontmatter_value(fm: &Frontmatter) -> Value {
+fn frontmatter_value(fm: &OkfMarkdownFrontmatter) -> Value {
     let mut entries = vec![("type".to_string(), Value::String(fm.r#type.clone()))];
     entries.extend(text_of(&[
         ("title", &fm.title),
@@ -227,10 +227,10 @@ fn map_of(value: &Value) -> Result<Vec<(String, Value)>, String> {
     }
 }
 
-fn event_of(value: &Value) -> Result<TrustEvent, String> {
+fn event_of(value: &Value) -> Result<OkfTrustEvent, String> {
     let entries = map_of(value)?;
     let named = |name: &str| text_field(&entries, name).ok_or(format!("an event without a {name}"));
-    Ok(TrustEvent {
+    Ok(OkfTrustEvent {
         by: named("by")?,
         at: named("at")?,
         extra: entries.iter().filter(|(k, _)| k != "by" && k != "at").cloned().collect(),
@@ -257,7 +257,7 @@ fn document_of(case: &Json) -> Result<Option<Document>, String> {
         Some(Value::Seq(items)) => Some(items.iter().map(event_of).collect::<Result<_, _>>()?),
         _ => None,
     };
-    let frontmatter = Frontmatter {
+    let frontmatter = OkfMarkdownFrontmatter {
         r#type: text_field(&fm, "type").ok_or("no type")?,
         title: text_field(&fm, "title"),
         description: text_field(&fm, "description"),

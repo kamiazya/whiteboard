@@ -6,31 +6,8 @@ use crate::frontmatter::Value;
 use std::cmp::Ordering;
 use whiteboard_det::format::js_number_to_string;
 
+use whiteboard_model::checks::is_js_space;
 pub use whiteboard_model::{array_index, enumeration_order};
-
-/// The characters `trim` strips: ECMAScript's `WhiteSpace` and `LineTerminator`.
-/// Not `char::is_whitespace`, which counts U+0085 and misses U+FEFF.
-fn is_js_space(c: char) -> bool {
-    matches!(
-        c,
-        '\u{9}'..='\u{d}'
-            | ' '
-            | '\u{a0}'
-            | '\u{1680}'
-            | '\u{2000}'..='\u{200a}'
-            | '\u{2028}'
-            | '\u{2029}'
-            | '\u{202f}'
-            | '\u{205f}'
-            | '\u{3000}'
-            | '\u{feff}'
-    )
-}
-
-/// Whether `text.trim() === text`.
-pub(super) fn is_trimmed(text: &str) -> bool {
-    !text.starts_with(is_js_space) && !text.ends_with(is_js_space)
-}
 
 /// `compareCodeUnit`: UTF-16 code unit order, which differs from the byte
 /// order of UTF-8 for a supplementary character against U+E000 to U+FFFF.
