@@ -279,6 +279,7 @@ dependencies = [
  "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-edge-routing",
+ "whiteboard-model",
 ]
 
 [[package]]

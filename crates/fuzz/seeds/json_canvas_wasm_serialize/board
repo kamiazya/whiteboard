@@ -1,0 +1,1 @@
+["m","nodes",["s",["m","id","a","x",0,"y",0,"width",160,"height",90,"resource",["m","mimeType","text/markdown","content","hello"]],["m","id","b","x",300,"y",-40,"width",160,"height",90,"color","3"]],"edges",["s",["m","id","e","from",["m","node","a","side","right"],"to",["m","node","b","side","left","end","arrow"],"label","to"]]]

@@ -7,6 +7,20 @@
  */
 export type RefusalCode = 'input-too-large' | 'malformed'
 
+/** The caps of `whiteboard-wasm::json_canvas::json_canvas_parse`. */
+export const JSON_CANVAS_PARSE_CAPS = Object.freeze({
+  maxBytes: 4194304,
+  maxDepth: 64,
+  maxMillis: 3000,
+} as const)
+
+/** The caps of `whiteboard-wasm::json_canvas::json_canvas_serialize`. */
+export const JSON_CANVAS_SERIALIZE_CAPS = Object.freeze({
+  maxBytes: 4194304,
+  maxDepth: 64,
+  maxMillis: 3000,
+} as const)
+
 /** The caps of `whiteboard-wasm::okf::okf_parse`. */
 export const OKF_PARSE_CAPS = Object.freeze({
   maxBytes: 262144,

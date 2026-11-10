@@ -347,3 +347,65 @@ pub fn json_canvas_parse(data: &[u8]) {
     let rewritten = again.map(|second| serialize(&second, Mode::Extended));
     assert_eq!(rewritten, Ok(Ok(written.clone())), "{written:?} does not read back stably");
 }
+
+/// `json_canvas_parse`, the export a host calls, on any UTF-8 text: it must
+/// answer one of its documented shapes and never panic or run past its budget,
+/// refuse exactly the text past its cap, and read exactly what the codec
+/// reads, a refusal for each decline and an `ok` for each canvas.
+///
+/// # Panics
+///
+/// When the export panics, disagrees with the codec, or answers off its shape.
+pub fn json_canvas_wasm_parse(data: &[u8]) {
+    use whiteboard_codec::json_canvas::{Failure, parse};
+    use whiteboard_wasm::input_caps::JSON_CANVAS_PARSE;
+    use whiteboard_wasm::json_canvas::json_canvas_parse;
+
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let answer = json_canvas_parse(text);
+    if text.len() > JSON_CANVAS_PARSE.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
+        return;
+    }
+    let shape = match parse(text) {
+        Ok(_) => "[\"ok\",[\"m\",\"nodes\",[\"s\"",
+        Err(Failure::Syntax) => "[\"err\",\"json-syntax\",\"syntax\",[]]",
+        Err(Failure::Conversation) => "[\"err\",\"json-canvas-schema\",\"conversation\",[]]",
+        Err(Failure::Schema(_)) => "[\"err\",\"json-canvas-schema\",\"schema\",[[[",
+        Err(Failure::Declined(_)) => "[\"refused\",\"malformed\",\"",
+    };
+    assert!(answer.starts_with(shape), "{answer:.120} is not the codec's answer for {text:?}");
+}
+
+/// `json_canvas_serialize`, the export a host calls, on any UTF-8 text read as
+/// a canvas wire (the decode a host's bytes reach: JSON, the value wire, the
+/// canvas contract), in both modes: it must answer one of its documented
+/// shapes and never panic or run past its budget, refuse exactly the wire past
+/// its cap, and write only a text that opens and closes as an object.
+///
+/// # Panics
+///
+/// When the export panics or answers off its shape.
+pub fn json_canvas_wasm_serialize(data: &[u8]) {
+    use whiteboard_wasm::input_caps::JSON_CANVAS_SERIALIZE;
+    use whiteboard_wasm::json_canvas::json_canvas_serialize;
+
+    let Ok(wire) = std::str::from_utf8(data) else {
+        return;
+    };
+    for strict in [false, true] {
+        let answer = json_canvas_serialize(wire, strict);
+        if wire.len() > JSON_CANVAS_SERIALIZE.max_bytes {
+            assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
+            continue;
+        }
+        let written = answer.starts_with("{\"nodes\":[") && answer.ends_with('}');
+        let named = answer.starts_with("[\"schema\",[[[") && answer.ends_with("]]");
+        let refused =
+            answer.starts_with("[\"refused\",\"malformed\",\"") && answer.ends_with("\"]");
+        assert!(written || named || refused, "{answer:.120} is not an answer");
+        assert!(strict || !named, "the extended mode validates nothing: {answer:.120}");
+    }
+}
