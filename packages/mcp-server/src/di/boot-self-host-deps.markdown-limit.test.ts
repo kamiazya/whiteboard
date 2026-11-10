@@ -59,12 +59,18 @@ afterEach(async () => {
   clearDbCacheForTests()
   resetDataDirForTests()
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   await rm(served, { recursive: true, force: true })
   await rm(ambient, { recursive: true, force: true })
 })
 
 describe('a markdown document of exactly the declared limit, over the real store', () => {
   it('is created within the CPU budget', async () => {
+    // A document of exactly the limit is past the Rust parser's 256 KiB cap
+    // (the parity doc's decline P2), so the core declines it and the
+    // TypeScript answers. That is this test's subject, not a mismatch, and
+    // only this test is excused from a run that throws on declines.
+    vi.stubEnv('WHITEBOARD_CORE_MISMATCH', 'log')
     const { serverDeps: deps } = await bootSelfHostDeps(served)
     await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const markdown = proseOfLength(MARKDOWN_MAX_CHARS)
