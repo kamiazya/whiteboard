@@ -54,3 +54,5 @@ export {
 } from './spatial/projection.js'
 export type { SpatialSerializeMode } from './spatial/serialize.js'
 export { serializeSpatial } from './spatial/serialize.js'
+export type { SpatialCodec, SpatialCodecCore, SpatialMismatch } from './spatial/spatial-core.js'
+export { spatialCodec } from './spatial/spatial-core.js'

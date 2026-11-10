@@ -133,6 +133,7 @@ jobs:
         env:
           WHITEBOARD_CORE: differential
           WHITEBOARD_CORE_OKF: differential
+          WHITEBOARD_CORE_SPATIAL: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 

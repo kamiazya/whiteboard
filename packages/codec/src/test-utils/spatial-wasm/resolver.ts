@@ -9,10 +9,11 @@ const spatialDir = resolve(here, '../../spatial')
  * with `./parse.js` and `./serialize.js` answered by the Rust core
  * (`src/test-utils/spatial-wasm/`). Scoped to importers in `src/spatial/`,
  * since `okf/` has modules by the same names, and never for the live
- * differential, whose oracle is the TypeScript.
+ * differential, whose oracle is the TypeScript, or for the switch, whose `ts`
+ * side it is.
  */
 export function spatialWasmShims() {
-  const keepTypeScript = new Set(['wasm.rust.test.ts'])
+  const keepTypeScript = new Set(['wasm.rust.test.ts', 'spatial-core.ts', 'spatial-core.test.ts'])
   const shims: Record<string, string> = {
     './parse.js': resolve(here, 'parse.ts'),
     './serialize.js': resolve(here, 'serialize.ts'),

@@ -3,7 +3,12 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
-import type { OkfCodecCore, OkfMismatch } from '@kamiazya/whiteboard-codec'
+import type {
+  OkfCodecCore,
+  OkfMismatch,
+  SpatialCodecCore,
+  SpatialMismatch,
+} from '@kamiazya/whiteboard-codec'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import { z } from 'zod'
 import { findPackageRoot } from '../../shared/package-root.js'
@@ -27,10 +32,17 @@ const log = getLogger('layout-core')
  * (docs/contributing/parity/okf-codec.md). The dev scripts and CI's test jobs
  * set `differential`; `ts` is the rollback while the TypeScript exists. A text
  * the Rust core declines is answered by the TypeScript in every mode.
+ *
+ * `WHITEBOARD_CORE_SPATIAL` is the same switch for the JSON Canvas codec
+ * (every read and write of a JSON Canvas document). It is `ts` unless
+ * something sets it while its parity checklist is open
+ * (docs/contributing/parity/json-canvas-codec.md); the dev scripts and CI's
+ * test jobs set `differential`.
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_OKF: z.enum(['ts', 'differential', 'rust']).default('rust'),
+  WHITEBOARD_CORE_SPATIAL: z.enum(['ts', 'differential', 'rust']).default('ts'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
@@ -40,6 +52,7 @@ export function layoutCoreSettingsFrom(env: Readonly<Record<string, string | und
   return layoutCoreSettingsSchema.parse({
     WHITEBOARD_CORE: env.WHITEBOARD_CORE || undefined,
     WHITEBOARD_CORE_OKF: env.WHITEBOARD_CORE_OKF || undefined,
+    WHITEBOARD_CORE_SPATIAL: env.WHITEBOARD_CORE_SPATIAL || undefined,
     WHITEBOARD_CORE_MISMATCH: env.WHITEBOARD_CORE_MISMATCH || undefined,
     WHITEBOARD_CORE_DIR: env.WHITEBOARD_CORE_DIR || undefined,
   })
@@ -102,7 +115,7 @@ function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => voi
 }
 
 /** A decline as it is reported: the function and the core's reason, never the text or document. */
-function declineSummary(mismatch: Extract<OkfMismatch, { kind: 'declined' }>) {
+function declineSummary(mismatch: { readonly fn: string; readonly err: unknown }) {
   const { err } = mismatch
   return {
     fn: mismatch.fn,
@@ -111,41 +124,48 @@ function declineSummary(mismatch: Extract<OkfMismatch, { kind: 'declined' }>) {
 }
 
 /**
- * An OKF difference or decline, reported, or thrown under `throw`. A decline
- * is answered by the TypeScript, so only a run that asked to fail on one sees
- * it as a failure; otherwise it is a counted record (`event: 'okf-declined'`).
+ * A codec's difference or decline, reported, or thrown under `throw`. A
+ * decline is answered by the TypeScript, so only a run that asked to fail on
+ * one sees it as a failure; otherwise it is a counted record
+ * (`event: 'okf-declined'` or `'spatial-declined'`).
  */
-function okfReporter(settings: LayoutCoreSettings): (mismatch: OkfMismatch) => void {
+function codecReporter(
+  settings: LayoutCoreSettings,
+  codec: 'okf' | 'spatial',
+): (mismatch: OkfMismatch | SpatialMismatch) => void {
+  const name = codec === 'okf' ? 'OKF' : 'JSON Canvas'
   return (mismatch) => {
     if (mismatch.kind === 'declined') {
       const summary = declineSummary(mismatch)
       log.warning(
-        { event: 'okf-declined', ...summary },
+        { event: `${codec}-declined`, ...summary },
         'the Rust core declined; answered in TypeScript',
       )
       if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
-        throw new Error(`OKF core declined: ${JSON.stringify(summary)}`)
+        throw new Error(`${name} core declined: ${JSON.stringify(summary)}`)
       }
       return
     }
     const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }
     log.warning(summary, 'the Rust core and the TypeScript disagree')
     if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
-      throw new Error(`OKF core ${mismatch.kind}: ${JSON.stringify(summary)}`)
+      throw new Error(`${name} core ${mismatch.kind}: ${JSON.stringify(summary)}`)
     }
   }
 }
 
-/** The two `ServerDeps` factories the core serves, over one load. */
+/** The `ServerDeps` factories the core serves, over one load. */
 export interface CoreLoaders {
   readonly layoutCore: () => Promise<LayoutCore | undefined>
   readonly okfCore: () => Promise<OkfCodecCore | undefined>
+  readonly spatialCore: () => Promise<SpatialCodecCore | undefined>
 }
 
 /**
- * The `ServerDeps.layoutCore` and `ServerDeps.okfCore` factories: nothing
- * loaded while both switches read `ts`, else the staged glue and wasm read
- * once, on the first call that asks, and shared by both. The glue is
+ * The `ServerDeps.layoutCore`, `ServerDeps.okfCore` and
+ * `ServerDeps.spatialCore` factories: nothing loaded while every switch reads
+ * `ts`, else the staged glue and wasm read
+ * once, on the first call that asks, and shared by all. The glue is
  * imported by PATH at run time, never bundled, so a build of this package
  * needs no artifact. An artifact that cannot be read degrades to the
  * TypeScript with a warning carrying `event: 'core-load-failed'` (so a
@@ -155,8 +175,31 @@ export interface CoreLoaders {
 export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
   const routing = settings.WHITEBOARD_CORE
   const okf = settings.WHITEBOARD_CORE_OKF
+  const spatial = settings.WHITEBOARD_CORE_SPATIAL
+  const loadCore = coreLoader(settings)
+  return {
+    layoutCore: memoized(routing, loadCore, (core) => ({
+      routing: core,
+      impl: { routeLayout: routing },
+      onMismatch: reporter(settings),
+    })),
+    okfCore: memoized(okf, loadCore, (core) => ({
+      okf: core,
+      impl: { parseOkf: okf, serializeOkf: okf },
+      onMismatch: codecReporter(settings, 'okf'),
+    })),
+    spatialCore: memoized(spatial, loadCore, (core) => ({
+      spatial: core,
+      impl: { parseSpatial: spatial, serializeSpatial: spatial },
+      onMismatch: codecReporter(settings, 'spatial'),
+    })),
+  }
+}
+
+/** The staged glue and wasm, read once on the first call that asks. */
+function coreLoader(settings: LayoutCoreSettings): () => Promise<Core | undefined> {
   let loaded: Promise<Core | undefined> | undefined
-  const loadCore = (): Promise<Core | undefined> => {
+  return () => {
     loaded ??= (async () => {
       const dir = artifactDirectory(settings)
       try {
@@ -174,30 +217,18 @@ export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
     })()
     return loaded
   }
-  let layout: Promise<LayoutCore | undefined> | undefined
-  let okfCore: Promise<OkfCodecCore | undefined> | undefined
-  return {
-    layoutCore: () => {
-      if (routing === 'ts') return Promise.resolve(undefined)
-      layout ??= loadCore().then((core) =>
-        core === undefined
-          ? undefined
-          : { routing: core, impl: { routeLayout: routing }, onMismatch: reporter(settings) },
-      )
-      return layout
-    },
-    okfCore: () => {
-      if (okf === 'ts') return Promise.resolve(undefined)
-      okfCore ??= loadCore().then((core) =>
-        core === undefined
-          ? undefined
-          : {
-              okf: core,
-              impl: { parseOkf: okf, serializeOkf: okf },
-              onMismatch: okfReporter(settings),
-            },
-      )
-      return okfCore
-    },
+}
+
+/** One switch's factory: nothing under `ts`, else what `wrap` makes of the core, built once. */
+function memoized<T>(
+  impl: 'ts' | 'differential' | 'rust',
+  loadCore: () => Promise<Core | undefined>,
+  wrap: (core: Core) => T,
+): () => Promise<T | undefined> {
+  let built: Promise<T | undefined> | undefined
+  return () => {
+    if (impl === 'ts') return Promise.resolve(undefined)
+    built ??= loadCore().then((core) => (core === undefined ? undefined : wrap(core)))
+    return built
   }
 }

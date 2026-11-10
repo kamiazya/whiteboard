@@ -74,6 +74,7 @@ export function resolveDevDataDirEnv(env, repoRoot) {
   const core = {
     ...(env.WHITEBOARD_CORE ? {} : { WHITEBOARD_CORE: 'differential' }),
     ...(env.WHITEBOARD_CORE_OKF ? {} : { WHITEBOARD_CORE_OKF: 'differential' }),
+    ...(env.WHITEBOARD_CORE_SPATIAL ? {} : { WHITEBOARD_CORE_SPATIAL: 'differential' }),
   }
   if (env.WHITEBOARD_DATA_DIR) {
     return { ...env, ...core }
