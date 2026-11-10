@@ -19,6 +19,8 @@ function fakeGlue(abi: string, out: number[]) {
     abi_version: () => abi,
     okf_parse: () => '["refused","malformed"]',
     okf_serialize: () => '["refused","malformed"]',
+    json_canvas_parse: () => '["refused","malformed","wire"]',
+    json_canvas_serialize: () => '["refused","malformed","wire"]',
     edge_route_layout: (input) => {
       sent.push(input)
       return Float64Array.from(out)

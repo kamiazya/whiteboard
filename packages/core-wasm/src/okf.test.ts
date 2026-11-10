@@ -18,6 +18,8 @@ function coreAnswering(answer: unknown) {
     edge_route_layout: () => new Float64Array(),
     okf_parse: reply,
     okf_serialize: reply,
+    json_canvas_parse: () => reply(''),
+    json_canvas_serialize: () => reply(''),
   }
   return { core: coreFrom(glue, new Uint8Array()), sent, marks }
 }
