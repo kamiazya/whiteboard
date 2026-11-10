@@ -23,10 +23,10 @@ import { OkfNotYamlSafeError, serializeOkf } from './serialize.js'
  *
  * What is held equal: the document (every value by its 64 bits, every
  * mapping in the order JavaScript enumerates it, the body verbatim), the
- * stage of a refusal and each schema issue's path and code. What differs by
- * decision is message text: the Rust side words a YAML refusal by its class
- * (the `yaml` package's message is not reproduced) and a schema issue by its
- * code; the other three refusals carry the TypeScript's own words.
+ * stage of a refusal and each schema issue's path, code and message. What
+ * differs by decision is message text: the Rust side words a YAML refusal by
+ * its class (the `yaml` package's message is not reproduced); the other
+ * refusals and every schema issue carry Zod's own words.
  *
  * A call the shim declines (`CoreInputRefused`) is what a root answers from
  * the TypeScript; each is allowed only where its reason holds, and counted. A
@@ -76,8 +76,8 @@ function asked<T>(call: () => T): Answer<T> {
 
 const isWellFormed = (text: string): boolean => text.isWellFormed()
 
-const issueKeys = (issues: readonly { path: PropertyKey[]; code: string }[]) =>
-  issues.map((issue) => ({ path: issue.path, code: issue.code }))
+const issueKeys = (issues: readonly { path: PropertyKey[]; code: string; message: string }[]) =>
+  issues.map((issue) => ({ path: issue.path, code: issue.code, message: issue.message }))
 
 function expectRefusalsAgree(
   rust: Extract<ParsedOkf, { ok: false }>,

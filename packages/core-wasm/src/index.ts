@@ -30,7 +30,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '17'
+export const EXPECTED_ABI = '18'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {

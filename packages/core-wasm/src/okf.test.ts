@@ -160,20 +160,36 @@ describe('the OKF shim reading', () => {
     })
     expect(
       refusal('frontmatter-schema', 'schema', [
-        [['type'], 'invalid_type'],
-        [['tags', 1], 'too_small'],
+        [['type'], 'invalid_type', 'string', 'undefined'],
+        [['tags', 1], 'too_small', 'string'],
         [['generated', 'at'], 'invalid_format'],
-        [['facets', 'x'], 'custom'],
+        [['facets', 'x'], 'custom', 'facet-key'],
       ]),
     ).toMatchObject({
       error: {
         stage: 'frontmatter-schema',
         message: 'frontmatter failed OKF schema validation',
         issues: [
-          { code: 'invalid_type', path: ['type'] },
-          { code: 'too_small', path: ['tags', 1] },
-          { code: 'invalid_format', path: ['generated', 'at'] },
-          { code: 'custom', path: ['facets', 'x'] },
+          {
+            code: 'invalid_type',
+            path: ['type'],
+            message: 'Invalid input: expected string, received undefined',
+          },
+          {
+            code: 'too_small',
+            path: ['tags', 1],
+            message: 'Too small: expected string to have >=1 characters',
+          },
+          {
+            code: 'invalid_format',
+            path: ['generated', 'at'],
+            message: expect.stringContaining('ISO 8601'),
+          },
+          {
+            code: 'custom',
+            path: ['facets', 'x'],
+            message: expect.stringContaining('extension facet key "x" must match'),
+          },
         ],
       },
     })
@@ -181,6 +197,38 @@ describe('the OKF shim reading', () => {
       expect(refusal('yaml', cls, [])).toMatchObject({
         error: { stage: 'yaml', message: expect.stringMatching(/^malformed YAML frontmatter: /) },
       })
+    }
+  })
+
+  it('words each code from its detail, and declines a detail it does not know', () => {
+    const worded = (...issue: unknown[]) =>
+      coreAnswering(['err', 'frontmatter-schema', 'schema', [issue]]).core.parseOkf(FENCED)
+    const message = (...issue: unknown[]) => {
+      const read = worded(...issue)
+      return read.ok ? undefined : read.error.issues[0]?.message
+    }
+    expect(message(['k'], 'invalid_type', 'array', 'null')).toBe(
+      'Invalid input: expected array, received null',
+    )
+    expect(message(['k'], 'too_small', 'array')).toBe('Too small: expected array to have >=1 items')
+    expect(message(['k'], 'too_small', 'unknown')).toBe('Too small: expected unknown to be >=1')
+    expect(message(['a'], 'custom', 'actor')).toMatch(/^an OKF actor is a single-line string/)
+    for (const bad of [
+      [['k'], 'invalid_type'],
+      [['k'], 'invalid_type', 'string'],
+      [['k'], 'invalid_type', 'string', 7],
+      [['k'], 'invalid_type', 'string', 'number', 'extra'],
+      [['k'], 'too_small'],
+      [['k'], 'too_small', 'set'],
+      [['k'], 'too_small', 'string', 'extra'],
+      [['k'], 'invalid_format', 'extra'],
+      [['k'], 'custom'],
+      [['k'], 'custom', 'other'],
+      [['k'], 'custom', 'actor', 'extra'],
+    ]) {
+      expect(() => worded(...bad), JSON.stringify(bad)).toThrow(
+        expect.objectContaining({ code: 'malformed' }),
+      )
     }
   })
 

@@ -21,7 +21,7 @@ mod schema;
 mod write;
 
 pub use crate::frontmatter::{Fault, Step};
-pub use document::{Code, Document, Failure, Issue, Map};
+pub use document::{Code, Detail, Document, Failure, Issue, Map};
 pub use js::{array_index, enumeration_order};
 pub use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 

@@ -70,7 +70,8 @@ export interface OkfGlue {
 // theirs without the `(found ...)` the Rust reader does not report. A syntax
 // or subset refusal cannot be: the TypeScript carries the `yaml` package's
 // message or names the construct, where the Rust reader names the class of
-// fault. A schema issue's message likewise names its code only.
+// fault. A schema issue is worded as Zod 4 words it, from the code and the
+// detail the artifact sends after it.
 const NO_FENCE =
   'document does not start with a --- frontmatter block. A minimal OKF document is `---`, a `type:` line, `---`, then the body'
 const RESERVED = 'frontmatter holds a key named "__proto__", which no document may hold'
@@ -81,25 +82,62 @@ const YAML: Record<string, string> = {
   depth: 'OKF frontmatter may nest at most 32 levels of mappings and lists',
   subset: 'the YAML is outside the subset the reader accepts',
 }
-const ISSUE: Record<OkfIssue['code'], string> = {
-  invalid_type: 'Invalid input: wrong type',
-  too_small: 'Too small',
-  invalid_format: 'Invalid string: wrong format',
-  custom: 'Invalid input',
+
+// What `min(1)` measured, in Zod's en locale: a string by its characters, a
+// list by its items, and anything else that has a `length` as a bare number.
+const MEASURED: Record<string, string> = {
+  string: 'Too small: expected string to have >=1 characters',
+  array: 'Too small: expected array to have >=1 items',
+  unknown: 'Too small: expected unknown to be >=1',
+}
+// The messages the model's contract gives its refinements and its pattern.
+const FORMAT = 'an OKF timestamp is an ISO 8601 datetime with an explicit UTC offset'
+const ACTOR = 'an OKF actor is a single-line string with no surrounding whitespace'
+const FACET_KEY = (key: unknown) =>
+  `extension facet key "${String(key)}" must match {namespace}.{name}/v{n}, e.g. "visual.shape/v0"`
+
+const isText = (x: unknown): x is string => typeof x === 'string'
+
+/** The message Zod 4 gives an issue of `code`, or undefined when its detail is not one the artifact sends. */
+function messageOf(
+  code: OkfIssue['code'],
+  path: readonly (string | number)[],
+  detail: readonly unknown[],
+): string | undefined {
+  const [first, second] = detail
+  switch (code) {
+    case 'invalid_type':
+      return detail.length === 2 && isText(first) && isText(second)
+        ? `Invalid input: expected ${first}, received ${second}`
+        : undefined
+    case 'too_small':
+      return detail.length === 1 && isText(first) && Object.hasOwn(MEASURED, first)
+        ? MEASURED[first]
+        : undefined
+    case 'invalid_format':
+      return detail.length === 0 ? FORMAT : undefined
+    case 'custom':
+      if (detail.length !== 1) return undefined
+      if (first === 'actor') return ACTOR
+      return first === 'facet-key' ? FACET_KEY(path.at(-1)) : undefined
+  }
 }
 
+const CODES: readonly string[] = ['invalid_type', 'too_small', 'invalid_format', 'custom']
 const isCode = (code: unknown): code is OkfIssue['code'] =>
-  typeof code === 'string' && Object.hasOwn(ISSUE, code)
+  typeof code === 'string' && CODES.includes(code)
 
 function issuesOf(wire: unknown): OkfIssue[] | undefined {
   if (!Array.isArray(wire)) return undefined
   const issues: OkfIssue[] = []
   for (const issue of wire as unknown[]) {
-    const [path, code] = Array.isArray(issue) ? (issue as unknown[]) : []
+    const [path, code, ...detail] = Array.isArray(issue) ? (issue as unknown[]) : []
     const steps = Array.isArray(path) ? (path as unknown[]) : undefined
     if (steps === undefined || !isCode(code)) return undefined
     if (!steps.every((s) => typeof s === 'string' || typeof s === 'number')) return undefined
-    issues.push({ code, path: steps as (string | number)[], message: ISSUE[code] })
+    const message = messageOf(code, steps as (string | number)[], detail)
+    if (message === undefined) return undefined
+    issues.push({ code, path: steps as (string | number)[], message })
   }
   return issues
 }

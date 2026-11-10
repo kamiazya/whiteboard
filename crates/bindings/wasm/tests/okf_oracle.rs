@@ -54,12 +54,27 @@ fn issues(err: &Json) -> Json {
     err.get("issues").cloned().unwrap_or(json!([]))
 }
 
+/// The recording holds an issue's path and code; the words Zod gives it are
+/// held by the shim's own test against the artifact, so what follows the code
+/// on the wire is dropped before the comparison.
+fn without_detail(mut answer: Json) -> Json {
+    if let Some(issues) = answer.get_mut(3).and_then(Json::as_array_mut) {
+        for issue in issues {
+            if let Some(parts) = issue.as_array_mut() {
+                parts.truncate(2);
+            }
+        }
+    }
+    answer
+}
+
 #[test]
 fn every_recorded_text_is_read_as_the_typescript_read_it() {
     let (mut read, mut refused, mut problems) = (0usize, 0usize, Vec::new());
     for case in recording().iter().filter(|c| c["k"] == "r" && c.get("lone").is_none()) {
         let text = case["t"].as_str().unwrap_or_default();
         let answer: Json = serde_json::from_str(&okf_parse(text, 0)).unwrap_or(Json::Null);
+        let answer = without_detail(answer);
         if let Some(ok) = case.get("ok") {
             let body = field(ok, "body").as_str().unwrap_or_default();
             let offset = answer[1].as_u64().unwrap_or(u64::MAX);

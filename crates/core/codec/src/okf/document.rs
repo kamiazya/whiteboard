@@ -31,12 +31,31 @@ pub enum Code {
     Custom,
 }
 
-/// One place the schema refused, as Zod reports it: where and why, without
-/// the message text.
+/// What Zod's message for an issue names beyond its code, in Zod's own words
+/// for it, so a host can say what was wrong without this crate holding prose.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Detail {
+    /// The code needs nothing more: `invalid_format` has one pattern, whose
+    /// words the schema carries.
+    Nothing,
+    /// `invalid_type`: the type the schema names (`string`, `array`,
+    /// `object`, `record`) and what the value was (`number`, `null`,
+    /// `undefined`, ...).
+    Type { expected: &'static str, received: &'static str },
+    /// `too_small`: what was measured, `string`, `array`, or `unknown` for
+    /// anything else that has a `length`.
+    Measured(&'static str),
+    /// `custom`: which refinement refused, `actor` or `facet-key`.
+    Rule(&'static str),
+}
+
+/// One place the schema refused, as Zod reports it: where and why, with the
+/// [`Detail`] its message needs and none of the text.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {
     pub path: Vec<Step>,
     pub code: Code,
+    pub detail: Detail,
 }
 
 /// Why a text was not read as an OKF document, by the stage the TypeScript

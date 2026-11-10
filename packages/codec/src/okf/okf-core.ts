@@ -104,8 +104,8 @@ export const messageTolerated = (stage: string): boolean => stage === 'yaml'
 
 /**
  * What the two readers are held equal on: the document whole, a refusal's
- * stage and each issue's path and code, and its message unless the ledger
- * above tolerates it.
+ * stage and each issue's path, code and message, and the refusal's message
+ * unless the ledger above tolerates it.
  */
 function canonicalParse(result: CodecParseResult<OkfMarkdownDocument>): string {
   if (result.ok) {
@@ -116,7 +116,7 @@ function canonicalParse(result: CodecParseResult<OkfMarkdownDocument>): string {
     'err',
     stage,
     messageTolerated(stage) ? '' : message,
-    issues.map((issue) => [issue.path.map(String), issue.code]),
+    issues.map((issue) => [issue.path.map(String), issue.code, issue.message]),
   ])
 }
 

@@ -5,7 +5,7 @@
 //! Zod reports every refusal it finds, fields in the order the schema
 //! declares them, so this does too, and an [`Issue`] is where and why.
 
-use super::document::{Code, Issue, Map};
+use super::document::{Code, Detail, Issue, Map};
 use super::js::length_below_one;
 use crate::frontmatter::Step;
 use crate::frontmatter::Value;
@@ -18,7 +18,7 @@ use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 /// schema refuses it. A value that is not a mapping is refused at the root.
 pub(super) fn frontmatter(value: Value) -> Result<OkfMarkdownFrontmatter, Vec<Issue>> {
     let Value::Map(entries) = value else {
-        return Err(vec![issue(&[], Code::InvalidType)]);
+        return Err(vec![wrong_type(&[], "object", Some(&value))]);
     };
     let (mut known, raw) = route(entries);
     let mut issues = Vec::new();
@@ -78,16 +78,50 @@ fn key(name: &str) -> Step {
     Step::Key(name.to_string())
 }
 
-fn issue(path: &[Step], code: Code) -> Issue {
-    Issue { path: path.to_vec(), code }
+fn issue(path: &[Step], code: Code, detail: Detail) -> Issue {
+    Issue { path: path.to_vec(), code, detail }
+}
+
+/// `invalid_type`: `expected` is Zod's word for the type, and a `None` value
+/// is a key the schema requires that is not there.
+fn wrong_type(path: &[Step], expected: &'static str, value: Option<&Value>) -> Issue {
+    let received = value.map_or("undefined", received);
+    issue(path, Code::InvalidType, Detail::Type { expected, received })
+}
+
+/// What Zod names a value it received: its `parsedType`, except that a
+/// number that is not finite is named by its value.
+fn received(value: &Value) -> &'static str {
+    match value {
+        Value::Null => "null",
+        Value::Bool(_) => "boolean",
+        Value::Number(n) if n.is_nan() => "NaN",
+        Value::Number(n) if n.is_infinite() => {
+            if n.is_sign_positive() {
+                "Infinity"
+            } else {
+                "-Infinity"
+            }
+        }
+        Value::Number(_) => "number",
+        Value::BigInt(_) => "bigint",
+        Value::String(_) => "string",
+        Value::Seq(_) => "array",
+        Value::Map(_) => "object",
+    }
+}
+
+/// `too_small` of `min(1)` on a string, or on what the check measured instead.
+fn too_small(path: &[Step], measured: &'static str) -> Issue {
+    issue(path, Code::TooSmall, Detail::Measured(measured))
 }
 
 fn text(value: Value, path: &[Step], issues: &mut Vec<Issue>) -> Option<String> {
-    if let Value::String(text) = value {
-        return Some(text);
-    }
-    issues.push(issue(path, Code::InvalidType));
-    None
+    let Value::String(text) = value else {
+        issues.push(wrong_type(path, "string", Some(&value)));
+        return None;
+    };
+    Some(text)
 }
 
 /// A string at `path`. Under `min(1)` a value that is no string but has a
@@ -99,23 +133,29 @@ fn text_measured(
     issues: &mut Vec<Issue>,
 ) -> Option<String> {
     if non_empty && !matches!(value, Value::String(_)) && length_below_one(&value) {
-        issues.push(issue(path, Code::InvalidType));
-        issues.push(issue(path, Code::TooSmall));
+        issues.push(wrong_type(path, "string", Some(&value)));
+        issues.push(too_small(path, measured(&value)));
         return None;
     }
     text(value, path, issues)
+}
+
+/// What `min(1)` measured in a value that is no string: a list's items, or
+/// the `length` of anything else.
+fn measured(value: &Value) -> &'static str {
+    if matches!(value, Value::Seq(_)) { "array" } else { "unknown" }
 }
 
 /// `z.string().min(1)`, required.
 fn required_text(value: Option<Value>, name: &str, issues: &mut Vec<Issue>) -> Option<String> {
     let path = [key(name)];
     let Some(value) = value else {
-        issues.push(issue(&path, Code::InvalidType));
+        issues.push(wrong_type(&path, "string", None));
         return None;
     };
     let found = text_measured(value, &path, true, issues)?;
     if found.is_empty() {
-        issues.push(issue(&path, Code::TooSmall));
+        issues.push(too_small(&path, "string"));
     }
     Some(found)
 }
@@ -125,8 +165,9 @@ fn optional_text(value: Option<Value>, name: &str, issues: &mut Vec<Issue>) -> O
 }
 
 fn optional_tags(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<String>> {
-    let Value::Seq(items) = value? else {
-        issues.push(issue(&[key("tags")], Code::InvalidType));
+    let value = value?;
+    let Value::Seq(items) = value else {
+        issues.push(wrong_type(&[key("tags")], "array", Some(&value)));
         return None;
     };
     let tags: Vec<Option<String>> = items
@@ -138,8 +179,9 @@ fn optional_tags(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<St
 }
 
 fn verified(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<OkfTrustEvent>> {
-    let Value::Seq(items) = value? else {
-        issues.push(issue(&[key("verified")], Code::InvalidType));
+    let value = value?;
+    let Value::Seq(items) = value else {
+        issues.push(wrong_type(&[key("verified")], "array", Some(&value)));
         return None;
     };
     let events: Vec<Option<OkfTrustEvent>> = items
@@ -153,7 +195,7 @@ fn verified(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Vec<OkfTrus
 /// `okfTrustEventSchema`: `by` and `at` required, anything else kept.
 fn event(value: Value, path: &[Step], issues: &mut Vec<Issue>) -> Option<OkfTrustEvent> {
     let Value::Map(entries) = value else {
-        issues.push(issue(path, Code::InvalidType));
+        issues.push(wrong_type(path, "object", Some(&value)));
         return None;
     };
     let (mut named, extra): (Map, Map) =
@@ -169,46 +211,47 @@ fn event_text(
     path: &[Step],
     name: &str,
     non_empty: bool,
-    problem: fn(&str) -> Option<Code>,
+    problem: fn(&str) -> Option<(Code, Detail)>,
     issues: &mut Vec<Issue>,
 ) -> Option<String> {
     let at = [path, &[key(name)]].concat();
     let Some(value) = value else {
-        issues.push(issue(&at, Code::InvalidType));
+        issues.push(wrong_type(&at, "string", None));
         return None;
     };
     let found = text_measured(value, &at, non_empty, issues)?;
-    if let Some(code) = problem(&found) {
-        issues.push(issue(&at, code));
+    if let Some((code, detail)) = problem(&found) {
+        issues.push(issue(&at, code, detail));
         return None;
     }
     Some(found)
 }
 
 /// `okfActorSchema`: a non-empty single line with no surrounding white space.
-fn actor_problem(actor: &str) -> Option<Code> {
+fn actor_problem(actor: &str) -> Option<(Code, Detail)> {
     if actor.is_empty() {
-        Some(Code::TooSmall)
+        Some((Code::TooSmall, Detail::Measured("string")))
     } else if !okf_actor(actor) {
-        Some(Code::Custom)
+        Some((Code::Custom, Detail::Rule("actor")))
     } else {
         None
     }
 }
 
 /// `okfTimestampSchema`: matched by the model's `okf_timestamp`.
-fn timestamp_problem(timestamp: &str) -> Option<Code> {
-    if okf_timestamp(timestamp) { None } else { Some(Code::InvalidFormat) }
+fn timestamp_problem(timestamp: &str) -> Option<(Code, Detail)> {
+    if okf_timestamp(timestamp) { None } else { Some((Code::InvalidFormat, Detail::Nothing)) }
 }
 
 /// `extensionFacetsSchema`: a mapping whose keys are `{namespace}.{name}/v{n}`.
 fn facets(value: Option<Value>, issues: &mut Vec<Issue>) -> Option<Map> {
-    let Value::Map(entries) = value? else {
-        issues.push(issue(&[key("facets")], Code::InvalidType));
+    let value = value?;
+    let Value::Map(entries) = value else {
+        issues.push(wrong_type(&[key("facets")], "record", Some(&value)));
         return None;
     };
     for name in extension_facet_keys(&entries) {
-        issues.push(issue(&[key("facets"), key(name)], Code::Custom));
+        issues.push(issue(&[key("facets"), key(name)], Code::Custom, Detail::Rule("facet-key")));
     }
     Some(entries)
 }
