@@ -252,8 +252,9 @@ describe('the shim declines what the artifact cannot be sent', () => {
       edges: [],
       lines: undefined,
     } as unknown as SpatialCanvas
+    const before = reach.written
     for (const mode of ['strict', 'extended'] as const) expectWritesAgree(canvas, mode)
-    expect(reach.written).toBeGreaterThan(0)
+    expect(reach.written).toBeGreaterThan(before)
   })
 })
 
