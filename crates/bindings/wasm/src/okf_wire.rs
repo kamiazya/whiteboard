@@ -13,9 +13,7 @@
 use serde_json::{Value as Json, json};
 use std::collections::BTreeSet;
 use whiteboard_codec::frontmatter::Value;
-use whiteboard_codec::okf::{
-    Map, OkfMarkdownFrontmatter, OkfTrustEvent, array_index, enumeration_order,
-};
+use whiteboard_codec::okf::{Map, OkfMarkdownFrontmatter, OkfTrustEvent, enumeration_order};
 
 /// The wire of a value.
 pub(crate) fn value_json(value: &Value) -> Json {
@@ -79,8 +77,8 @@ fn entries(pairs: &[Json]) -> Option<Map> {
         .collect()
 }
 
-/// The root keys of a frontmatter, in the order the host's object holds them
-/// (the schema's), which is also the order the wire must name them in.
+/// The root keys of a frontmatter, in the schema's order: the order a read
+/// hands them over in, and the keys a write accepts, in any order.
 const ORDER: [&str; 10] = [
     "type",
     "title",
@@ -129,24 +127,21 @@ fn event_value(event: &OkfTrustEvent) -> Value {
     Value::Map(named.into_iter().chain(event.extra.iter().cloned()).collect())
 }
 
-/// The frontmatter a host's object stands for, or `None` when it is not
-/// exactly what `frontmatter_value` makes of one: a mapping whose keys are
-/// the schema's, each at most once and in the schema's order, `type` among
-/// them, each of the kind the schema gives it, and trust events that name
-/// `by` then `at` before anything else. The writer emits in the order
-/// `parseOkf` hands the keys over in, so an object built in another order is
-/// not this wire's to write.
+/// The frontmatter a host's object stands for, or `None` when it is not one
+/// the schema allows: a mapping whose keys are the schema's, each at most
+/// once and in any order, `type` among them, each of the kind the schema gives
+/// it, and trust events that name `by` and `at`. The order is the caller's to
+/// keep, and the writer keeps it from the wire, not from what this returns.
 pub(crate) fn frontmatter_from(value: Value) -> Option<OkfMarkdownFrontmatter> {
     let Value::Map(entries) = value else { return None };
     let mut fm = OkfMarkdownFrontmatter::default();
     let mut held = None::<String>;
-    let mut at = 0;
+    let mut seen = [false; ORDER.len()];
     for (name, item) in entries {
         let place = ORDER.iter().position(|k| *k == name)?;
-        if place < at {
+        if std::mem::replace(seen.get_mut(place)?, true) {
             return None;
         }
-        at = place.checked_add(1)?;
         match name.as_str() {
             "type" => held = Some(string(item)?),
             "title" => fm.title = Some(string(item)?),
@@ -184,19 +179,15 @@ fn events(value: Value) -> Option<Vec<OkfTrustEvent>> {
 
 fn event(value: Value) -> Option<OkfTrustEvent> {
     let entries = map(value)?;
-    // A host enumerates integer-like keys first, so they are set aside; the
-    // writer puts them where the host would.
-    let mut named = entries.iter().filter(|(name, _)| array_index(name).is_none());
-    if named.next()?.0 != "by" || named.next()?.0 != "at" {
-        return None;
-    }
     let mut by = None;
     let mut at = None;
     let mut extra = Map::new();
     for (name, item) in entries {
         match name.as_str() {
-            "by" => by = Some(string(item)?),
-            "at" => at = Some(string(item)?),
+            // A host object holds a key once, so a wire naming one twice is no object.
+            "by" if by.is_none() => by = Some(string(item)?),
+            "at" if at.is_none() => at = Some(string(item)?),
+            "by" | "at" => return None,
             _ => extra.push((name, item)),
         }
     }
@@ -317,14 +308,35 @@ mod tests {
     }
 
     #[test]
-    fn an_object_the_schema_would_not_write_in_this_order_is_refused() {
+    fn root_keys_and_trust_event_keys_are_allowed_in_any_order() {
+        let cases = [
+            mapping(&[("title", text("t")), ("type", text("x"))]),
+            mapping(&[
+                ("type", text("x")),
+                ("generated", mapping(&[("at", text("t")), ("by", text("me"))])),
+            ]),
+            mapping(&[
+                ("facets", mapping(&[])),
+                ("type", text("x")),
+                (
+                    "generated",
+                    mapping(&[("by", text("me")), ("note", text("n")), ("at", text("t"))]),
+                ),
+            ]),
+        ];
+        for case in cases {
+            assert!(frontmatter_from(case.clone()).is_some(), "{case:?}");
+        }
+    }
+
+    #[test]
+    fn an_object_the_schema_does_not_allow_is_refused() {
         let event = |pairs: &[(&str, Value)]| mapping(pairs);
         let good_event = event(&[("by", text("me")), ("at", text("t"))]);
         let cases = [
             Value::Null,
             mapping(&[]),
             mapping(&[("title", text("t"))]),
-            mapping(&[("title", text("t")), ("type", text("x"))]),
             mapping(&[("type", text("x")), ("type", text("y"))]),
             mapping(&[("type", text("x")), ("other", text("y"))]),
             mapping(&[("type", Value::Null)]),
@@ -335,14 +347,14 @@ mod tests {
             mapping(&[("type", text("x")), ("facetsRaw", Value::Null)]),
             mapping(&[("type", text("x")), ("generated", Value::Null)]),
             mapping(&[("type", text("x")), ("generated", event(&[("at", text("t"))]))]),
-            mapping(&[
-                ("type", text("x")),
-                ("generated", event(&[("at", text("t")), ("by", text("me"))])),
-            ]),
             mapping(&[("type", text("x")), ("generated", event(&[("by", text("me"))]))]),
             mapping(&[
                 ("type", text("x")),
-                ("generated", event(&[("by", text("me")), ("note", text("n")), ("at", text("t"))])),
+                ("generated", event(&[("by", text("me")), ("by", text("you")), ("at", text("t"))])),
+            ]),
+            mapping(&[
+                ("type", text("x")),
+                ("generated", event(&[("by", text("me")), ("at", text("t")), ("at", text("u"))])),
             ]),
             mapping(&[
                 ("type", text("x")),

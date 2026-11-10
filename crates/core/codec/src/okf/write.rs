@@ -1,4 +1,4 @@
-//! `serializeOkf`: the frontmatter in canonical key order between fences,
+//! `serializeOkf`: the frontmatter in its caller's key order between fences,
 //! then the body as it was given.
 
 use super::document::{Document, Map};
@@ -8,31 +8,44 @@ use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 
 pub(super) fn document(doc: &Document) -> Result<String, Vec<Fault>> {
     let fm = &doc.frontmatter;
-    let mut entries = modelled(fm);
-    // `facetsRaw` is spread at the root it came from, and `facets` last, so
-    // a key held twice keeps the position of its first holder and takes the
-    // value of its last, as an object spread does.
-    let modelled_len = entries.len();
-    for (name, item) in canonical(fm.facets_raw.as_deref()) {
+    let mut root = modelled(fm);
+    root.extend(fm.facets.clone().map(|facets| ("facets".to_string(), Value::Map(facets))));
+    root.extend(fm.facets_raw.clone().map(|raw| ("facetsRaw".to_string(), Value::Map(raw))));
+    in_order(root, &doc.body)
+}
+
+/// Writes a frontmatter whose root keys are in the order its caller built
+/// them, as `serializeOkf` does: `{...rest, ...facetsRaw, facets}`, so every
+/// key but `facets` and `facetsRaw` keeps its place, and those two come last.
+pub(super) fn in_order(root: Map, body: &str) -> Result<String, Vec<Fault>> {
+    let mut entries = Map::new();
+    let (mut facets, mut facets_raw) = (None, None);
+    for (name, item) in root {
+        match (name.as_str(), item) {
+            ("facets", Value::Map(record)) => facets = Some(record),
+            ("facetsRaw", Value::Map(record)) => facets_raw = Some(record),
+            (_, item) => entries.push((name, item)),
+        }
+    }
+    // `facetsRaw` is spread after the rest, and `facets` last, so a key held
+    // twice keeps the position of its first holder and takes the value of its
+    // last, as an object spread does.
+    let rest_len = entries.len();
+    for (name, item) in canonical(facets_raw.as_deref()) {
         // The preserved keys arrive sorted and a record holds a key once, so a
-        // key can only meet a modelled one or, if held twice, the one just
+        // key can only meet one of the rest or, if held twice, the one just
         // before it. Searching all of `entries` made a record of many keys
         // quadratic.
         let held =
-            entries.iter().take(modelled_len).position(|(held, _)| *held == name).or_else(|| {
-                let last = entries.len().checked_sub(1).filter(|last| *last >= modelled_len);
+            entries.iter().take(rest_len).position(|(held, _)| *held == name).or_else(|| {
+                let last = entries.len().checked_sub(1).filter(|last| *last >= rest_len);
                 last.filter(|last| entries.get(*last).is_some_and(|(held, _)| *held == name))
             });
         assign(&mut entries, held, name, item);
     }
-    if fm.facets.is_some() {
+    if facets.is_some() {
         let held = entries.iter().position(|(held, _)| held == "facets");
-        assign(
-            &mut entries,
-            held,
-            "facets".to_string(),
-            Value::Map(canonical(fm.facets.as_deref())),
-        );
+        assign(&mut entries, held, "facets".to_string(), Value::Map(canonical(facets.as_deref())));
     }
     let yaml = stringify(&enumeration_order(Value::Map(entries)))?;
     // `stringify` drops the line break the writer ends with. When what is left
@@ -40,7 +53,7 @@ pub(super) fn document(doc: &Document) -> Result<String, Vec<Fault>> {
     // line break is its own, and the reader stops at the line break before the
     // fence, so it goes back: as `serializeOkf` keeps it.
     let fence = if yaml.ends_with('\n') { "\n\n---\n" } else { "\n---\n" };
-    Ok(format!("---\n{yaml}{fence}{}", doc.body))
+    Ok(format!("---\n{yaml}{fence}{body}"))
 }
 
 /// The keys the schema models, present ones only, in the schema's order.

@@ -17,6 +17,7 @@ export function okfWasmShims() {
     'okf-core.ts',
     'wasm.rust.test.ts',
     'serialize-unsafe.rust.test.ts',
+    'serialize-order.rust.test.ts',
   ])
   const shims: Record<string, string> = {
     './parse.js': resolve(here, 'parse.ts'),

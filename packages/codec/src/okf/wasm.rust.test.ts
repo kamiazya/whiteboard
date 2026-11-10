@@ -53,6 +53,7 @@ const reach = {
   written: 0,
   unwritable: 0,
   declined: 0,
+  reordered: 0,
 }
 
 type Answer<T> =
@@ -134,24 +135,16 @@ const ORDER = [
 ]
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
-const isIndexKey = (key: string): boolean => /^(0|[1-9]\d*)$/.test(key) && Number(key) < 2 ** 32 - 1
 const isStrings = (v: unknown): boolean => Array.isArray(v) && v.every((s) => typeof s === 'string')
 
 function isEvent(v: unknown): boolean {
-  if (!isRecord(v)) return false
-  const named = Object.keys(v).filter((key) => !isIndexKey(key))
-  return (
-    named[0] === 'by' && named[1] === 'at' && typeof v.by === 'string' && typeof v.at === 'string'
-  )
+  return isRecord(v) && typeof v.by === 'string' && typeof v.at === 'string'
 }
 
-/** Whether the wire carries a frontmatter: the schema's keys in the schema's order, each of its kind. */
+/** Whether the wire carries a frontmatter: the schema's keys in any order, `type` among them, each of its kind. */
 function carried(frontmatter: Record<string, unknown>): boolean {
   const keys = Object.keys(frontmatter)
-  const places = keys.map((key) => ORDER.indexOf(key))
-  if (places.includes(-1) || places.some((at, i) => i > 0 && at <= (places[i - 1] as number))) {
-    return false
-  }
+  if (keys.some((key) => !ORDER.includes(key))) return false
   const kind: Record<string, (v: unknown) => boolean> = {
     type: (v) => typeof v === 'string',
     title: (v) => typeof v === 'string',
@@ -164,7 +157,7 @@ function carried(frontmatter: Record<string, unknown>): boolean {
     facets: isRecord,
     facetsRaw: isRecord,
   }
-  return keys[0] === 'type' && keys.every((key) => kind[key]?.(frontmatter[key]))
+  return keys.includes('type') && keys.every((key) => kind[key]?.(frontmatter[key]))
 }
 
 function expectWritesAgree(doc: OkfMarkdownDocument): void {
@@ -301,7 +294,7 @@ describe('generated texts and documents through the wasm', () => {
   )
 
   fcTest.prop([seeds], withDefaults({ numRuns: 600 }))(
-    'a document in any key order is written as the TypeScript writes it, or declined',
+    'a document in any key order is written as the TypeScript writes it',
     (seed) => {
       const d = new Dice(mulberry32(seed))
       const { frontmatter, body } = validDocument(d)
@@ -313,7 +306,10 @@ describe('generated texts and documents through the wasm', () => {
           entries[i] as [string, unknown],
         ]
       }
+      const written = reach.written
       expectWritesAgree({ frontmatter: Object.fromEntries(entries), body } as OkfMarkdownDocument)
+      const moved = entries.some(([name], at) => name !== Object.keys(frontmatter)[at])
+      if (moved && reach.written > written) reach.reordered++
     },
   )
 
@@ -331,6 +327,7 @@ describe('generated texts and documents through the wasm', () => {
     expect(reach.loneSurrogate).toBeGreaterThan(80)
     expect(reach.written).toBeGreaterThan(1200)
     expect(reach.unwritable).toBeGreaterThan(350)
-    expect(reach.declined).toBeGreaterThan(350)
+    // The caller's key order is written, not declined (owner decision q36).
+    expect(reach.reordered).toBeGreaterThan(350)
   })
 })

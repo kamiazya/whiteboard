@@ -87,16 +87,23 @@ describe('a file whose id is spelled like a document action', () => {
 
 // Suffixes drawn from the routes' own vocabulary, with a verb drawn apart from
 // them, so the generator lands on every (verb, suffix) pair the router does
-// not mount as well as the ones it does.
+// not mount as well as the ones it does. Uniform over every pair, a version
+// route is about one draw in nine, so two arms aim at the version routes:
+// one draws a mounted (verb, suffix) pair, one a version suffix under any verb.
 const ROUTES = [...VERSION_ROUTES, ...WORKSPACE_ROUTES, ...CONTENT_ROUTES, ['POST', '/export']]
+const METHOD = fc.constantFrom('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE')
+const pair = fc.oneof(
+  fc.constantFrom(...VERSION_ROUTES).map(([method, suffix]) => ({ method, suffix })),
+  fc.record({ method: METHOD, suffix: fc.constantFrom(...VERSION_ROUTES.map(([, s]) => s)) }),
+  fc.record({ method: METHOD, suffix: fc.constantFrom(...ROUTES.map(([, s]) => s)) }),
+)
 const request = fc
   .record({
-    method: fc.constantFrom('GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE'),
-    suffix: fc.constantFrom(...ROUTES.map(([, suffix]) => suffix)),
+    pair,
     id: fc.constantFrom('01ABC', 'versions', 'document'),
     trailingSlash: fc.boolean(),
   })
-  .map(({ method, suffix, id, trailingSlash }) => ({
+  .map(({ pair: { method, suffix }, id, trailingSlash }) => ({
     method,
     url: `${document(suffix.replace(':id', id))}${trailingSlash ? '/' : ''}`,
   }))
@@ -127,6 +134,6 @@ it('the generator reaches the version routes and their lookalikes', () => {
   const sample = fc.sample(request, 2000)
   const versioned = sample.filter((r) => expectedRule(r) !== null)
   const lookalikes = sample.filter((r) => expectedRule(r) === null && r.url.includes('/versions'))
-  expect(versioned.length).toBeGreaterThan(200)
-  expect(lookalikes.length).toBeGreaterThan(200)
+  expect(versioned.length).toBeGreaterThan(600)
+  expect(lookalikes.length).toBeGreaterThan(300)
 })

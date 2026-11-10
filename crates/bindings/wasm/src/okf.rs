@@ -18,8 +18,8 @@ use crate::input_caps::{OKF_PARSE, OKF_SERIALIZE};
 use crate::okf_wire::{frontmatter_from, frontmatter_value, json_value, value_json};
 use serde_json::{Value as Json, json};
 use wasm_bindgen::prelude::wasm_bindgen;
-use whiteboard_codec::frontmatter::{Fault, Refusal, Unwritable};
-use whiteboard_codec::okf::{Code, Document, Failure, Step, parse_marked, serialize};
+use whiteboard_codec::frontmatter::{Fault, Refusal, Unwritable, Value};
+use whiteboard_codec::okf::{Code, Failure, Step, parse_marked, serialize_in_order};
 
 fn refused(code: &str) -> Json {
     json!(["refused", code])
@@ -102,8 +102,8 @@ fn code(code: Code) -> &'static str {
 /// before the body; `["unwritable", faults]` when a value has no YAML
 /// spelling, each fault a `[path, reason]` in the order the TypeScript's
 /// `yamlSafeValueSchema` reports them (a path step is a key or a list index);
-/// or `["refused", code]` for a wire past `maxBytes` or one that is
-/// no frontmatter in the order the schema writes it.
+/// or `["refused", code]` for a wire past `maxBytes` or one that is no
+/// frontmatter the schema allows. Root keys are written in the wire's order.
 #[wasm_bindgen]
 #[must_use]
 pub fn okf_serialize(frontmatter: &str) -> String {
@@ -114,15 +114,17 @@ fn written(wire: &str) -> Json {
     if wire.len() > OKF_SERIALIZE.max_bytes {
         return refused(TOO_LARGE);
     }
-    let Some(frontmatter) = serde_json::from_str::<Json>(wire)
+    // The schema is checked on the typed frontmatter, and the mapping itself
+    // is written, so its root keys keep the order the host built them in.
+    let Some(Value::Map(root)) = serde_json::from_str::<Json>(wire)
         .ok()
         .as_ref()
         .and_then(json_value)
-        .and_then(frontmatter_from)
+        .filter(|value| frontmatter_from(value.clone()).is_some())
     else {
         return refused(MALFORMED);
     };
-    match serialize(&Document { frontmatter, body: String::new() }) {
+    match serialize_in_order(root, "") {
         Ok(head) => json!(["ok", head]),
         Err(faults) if faults.iter().any(|fault| fault.why == Unwritable::Overflow) => {
             refused(TOO_LARGE)
@@ -172,6 +174,30 @@ mod tests {
 
     fn written(wire: &Json) -> Json {
         serde_json::from_str(&okf_serialize(&wire.to_string())).unwrap_or(Json::Null)
+    }
+
+    #[test]
+    fn a_write_keeps_the_root_keys_and_event_keys_in_the_wires_order() {
+        let wire = json!([
+            "m",
+            "facets",
+            ["m", "b", "1", "a", "2"],
+            "tags",
+            ["s", "x"],
+            "type",
+            "note",
+            "title",
+            "T",
+            "generated",
+            ["m", "at", "t", "by", "me"]
+        ]);
+        assert_eq!(
+            written(&wire),
+            json!([
+                "ok",
+                "---\ntags:\n  - x\ntype: note\ntitle: T\ngenerated:\n  at: t\n  by: me\nfacets:\n  a: \"2\"\n  b: \"1\"\n---\n"
+            ])
+        );
     }
 
     #[test]
