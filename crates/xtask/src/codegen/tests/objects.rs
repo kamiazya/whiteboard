@@ -251,3 +251,15 @@ fn a_published_text_rule_the_dialect_states_is_refused_by_name() {
         "{errors:?}"
     );
 }
+
+#[test]
+fn a_line_of_exactly_biomes_width_is_kept_and_one_column_more_is_refused() {
+    let number = |letters: usize| {
+        let description = "a".repeat(letters);
+        format!(r#""N": {{ "description": "{description}", "type": "number" }}"#)
+    };
+    let zod = outputs(&plain(&number(93), IN_MODEL, false)).unwrap().remove(0).1;
+    assert!(zod.lines().any(|l| l.starts_with("/** a") && l.chars().count() == 100), "{zod}");
+    let errors = outputs(&plain(&number(94), IN_MODEL, false)).unwrap_err();
+    assert!(errors.iter().any(|e| e.contains("a line past biome's 100 columns")), "{errors:?}");
+}
