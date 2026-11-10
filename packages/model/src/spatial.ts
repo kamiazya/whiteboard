@@ -1,29 +1,30 @@
 import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
+import {
+  arrowheadSchema,
+  bendsSchema,
+  canvasColorSchema,
+  canvasPointSchema,
+  type EdgeSide,
+  edgeSideSchema,
+  nodePositionSchema,
+  nodeSizeSchema,
+} from './generated/spatial.zod.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
 import { integerSchema } from './integer.js'
 import { nodeResourceSchema } from './node-resource.js'
 import { storedTagsSchema } from './tags.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
-// JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
-// six numbered presets or a 6-digit hex string.
-export const canvasColorSchema = z.union([
-  z.enum(['1', '2', '3', '4', '5', '6']),
-  z
-    .string()
-    .regex(
-      /^#[0-9a-fA-F]{6}$/,
-      'must be a preset "1"–"6" or a 6-digit hex color such as "#1a2b3c"',
-    ),
-])
-
-// Registered because it is the most-repeated subschema the canvas tools
-// publish — nine sites in `wb_canvas_edit` alone (every node arm's `add` and
-// `patch`, plus the edge and the line).
-z.globalRegistry.add(canvasColorSchema, { id: 'CanvasColor' })
-
-export type CanvasColor = z.infer<typeof canvasColorSchema>
+// The leaf schemas are generated from `contracts/model/spatial.schema.json`
+// and keep the names they had here. The colour is JSON Canvas 1.0's
+// (https://jsoncanvas.org/spec/1.0/): a numbered preset or a 6-digit hex string.
+export {
+  type CanvasColor,
+  canvasColorSchema,
+  type EdgeSide,
+  edgeSideSchema,
+} from './generated/spatial.zod.js'
 
 /**
  * What a node, an edge or the canvas may attach beyond its own fields: a
@@ -63,16 +64,16 @@ export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
  *
  * Finite, not merely numeric: `JSON.stringify(Infinity)` is `null` and a NaN
  * corner is not a corner, so widening to a float is not widening to any number
- * at all. Sizes still reject negatives; zero stays valid, because a node
- * collapsed on one axis is a layout concern rather than a parse error.
+ * at all. Zod 4's `z.number()` already refuses both, which is why the contract
+ * says only `number`. Sizes still reject negatives; zero stays valid, because
+ * a node collapsed on one axis is a layout concern rather than a parse error.
  *
  * Exported because every payload that ECHOES stored geometry has to accept
  * what the model stores. A read declaring `int` beside a model that holds a
  * fraction does not reject an input — it makes the tool answer with something
  * its own `outputSchema` refuses, which the MCP SDK raises as a failed call.
  */
-export const nodePositionSchema = z.number().finite()
-export const nodeSizeSchema = z.number().finite().nonnegative()
+export { nodePositionSchema, nodeSizeSchema } from './generated/spatial.zod.js'
 
 /**
  * What every node has, whatever it shows.
@@ -177,38 +178,15 @@ export type SpatialNode = z.infer<typeof spatialNodeSchema>
  */
 export const MAX_BENDS = 64
 
-const canvasPointSchema = z.object({ x: nodePositionSchema, y: nodePositionSchema }).strict()
-z.globalRegistry.add(canvasPointSchema, { id: 'CanvasPoint' })
-
 /**
  * Hand-placed waypoints, declared ONCE for both the relation and the ink that
- * carry them. It was written out twice, identically, which is the drift this
- * package exists to prevent — and it cost bytes twice over, since a tool
- * emitting an `add` and a `patch` arm for each element spelled the same
- * description four times.
- *
- * Named in zod's global registry for the reason `EdgeEnd` is: the SDK's
- * conversion path inlines an unregistered subschema at every site, and this
- * one has four.
+ * carry them (`Bends` in the generated contract, named in zod's global
+ * registry because the SDK's conversion path inlines an unregistered
+ * subschema at every site, and this one has four).
  */
-const bendsFieldSchema = z
-  .array(canvasPointSchema)
-  .min(1)
-  .max(MAX_BENDS)
-  .optional()
-  .describe(
-    'Points to draw the line through, in order. Omit it: the route is computed around what is in the way.',
-  )
-z.globalRegistry.add(bendsFieldSchema, { id: 'Bends' })
+const bendsFieldSchema = bendsSchema.optional()
 
-export const edgeSideSchema = z.enum(['top', 'right', 'bottom', 'left'])
-
-export type EdgeSide = z.infer<typeof edgeSideSchema>
-
-const arrowheadSchema = z
-  .enum(['none', 'arrow'])
-  .optional()
-  .describe('The arrowhead drawn at this end.')
+const arrowheadFieldSchema = arrowheadSchema.optional().describe('The arrowhead drawn at this end.')
 
 // Described on the stored shape because every writer's schema is derived from
 // it: the description says what leaving a side out buys, since a router that
@@ -242,7 +220,7 @@ export const edgeEndSchema = z
   .object({
     node: nodeIdSchema.describe('The node this end attaches to.'),
     side: attachedSideSchema,
-    end: arrowheadSchema,
+    end: arrowheadFieldSchema,
   })
   .strict()
 
@@ -289,14 +267,14 @@ export const lineEndSchema = z.discriminatedUnion('kind', [
       kind: z.literal('node'),
       node: nodeIdSchema.describe('The node this end attaches to.'),
       side: attachedSideSchema,
-      end: arrowheadSchema,
+      end: arrowheadFieldSchema,
     })
     .strict(),
   z
     .object({
       kind: z.literal('point'),
       point: canvasPointSchema.describe('Where this end sits, in canvas coordinates.'),
-      end: arrowheadSchema,
+      end: arrowheadFieldSchema,
     })
     .strict(),
 ])
@@ -536,27 +514,13 @@ export function findDuplicateId(ids: string[]): string | undefined {
  * `straight` is the default and the only shape JSON Canvas itself implies:
  * direct segments, bending only to clear an obstacle.
  */
-export const edgeRoutingStyleSchema = z.enum(['straight', 'orthogonal', 'curved'])
-
-export type EdgeRoutingStyle = z.infer<typeof edgeRoutingStyleSchema>
-
-/**
- * Line jumps draw a small arc where one edge crosses another, so crossing
- * lines stay readable. The same enum serves the canvas and a per-edge
- * override alike.
- */
-export const lineJumpsSchema = z.enum(['none', 'arc'])
-
-export type LineJumps = z.infer<typeof lineJumpsSchema>
-
-/**
- * The RESOLVED answer to "how are these edges drawn" — what a resolver hands
- * the layout, never a stored shape (the stored shape is the facet).
- */
-export const edgeRoutingSchema = z.object({
-  style: edgeRoutingStyleSchema.optional(),
-  lineJumps: lineJumpsSchema.optional(),
-})
+export {
+  type EdgeRoutingStyle,
+  edgeRoutingSchema,
+  edgeRoutingStyleSchema,
+  type LineJumps,
+  lineJumpsSchema,
+} from './generated/spatial.zod.js'
 
 /**
  * A comment as the canvas DRAWS it: one pin and one bubble. Not stored and not

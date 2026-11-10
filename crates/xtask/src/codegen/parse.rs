@@ -83,8 +83,20 @@ pub(super) struct Node {
     pub(super) message: Option<String>,
     #[serde(rename = "x-wb-check", default, deserialize_with = "present")]
     pub(super) check: Option<String>,
+    #[serde(rename = "enum", default, deserialize_with = "present")]
+    pub(super) values: Option<Vec<String>>,
     #[serde(default, deserialize_with = "present")]
     pub(super) items: Option<Box<Node>>,
+    #[serde(rename = "minItems", default, deserialize_with = "present")]
+    pub(super) min_items: Option<u32>,
+    #[serde(rename = "maxItems", default, deserialize_with = "present")]
+    pub(super) max_items: Option<u32>,
+    #[serde(rename = "anyOf", default, deserialize_with = "present")]
+    pub(super) any_of: Option<Vec<Node>>,
+    /// Whether the Zod half registers the definition under its own name in
+    /// Zod's global registry, which is where a tool schema's `$ref` takes it from.
+    #[serde(rename = "x-wb-registered", default, deserialize_with = "present")]
+    pub(super) registered: Option<bool>,
     #[serde(rename = "$ref", default, deserialize_with = "present")]
     pub(super) reference: Option<String>,
     #[serde(rename = "x-wb-any", default, deserialize_with = "present")]
@@ -135,7 +147,8 @@ pub(crate) fn parse(text: &str) -> Result<Contract, String> {
 }
 
 impl Node {
-    /// The keywords present beyond `description` and `type`, by name.
+    /// The keywords present beyond `description`, `type` and `x-wb-registered`
+    /// (which belongs to a definition whatever its form), by name.
     pub(super) fn keywords(&self) -> Vec<&'static str> {
         [
             (self.minimum.is_some(), "minimum"),
@@ -144,7 +157,11 @@ impl Node {
             (self.matcher.is_some(), "x-wb-matcher"),
             (self.message.is_some(), "x-wb-message"),
             (self.check.is_some(), "x-wb-check"),
+            (self.values.is_some(), "enum"),
             (self.items.is_some(), "items"),
+            (self.min_items.is_some(), "minItems"),
+            (self.max_items.is_some(), "maxItems"),
+            (self.any_of.is_some(), "anyOf"),
             (self.reference.is_some(), "$ref"),
             (self.any.is_some(), "x-wb-any"),
             (self.properties.is_some(), "properties"),

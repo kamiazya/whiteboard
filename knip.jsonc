@@ -73,7 +73,12 @@
       }
     },
     "packages/model": {
-      "project": ["src/**/*.ts"]
+      "project": ["src/**/*.ts"],
+      "ignoreIssues": {
+        // A generated module exports its whole contract, a schema and its
+        // inferred type per definition, whether or not a consumer reads each.
+        "src/generated/spatial.zod.ts": ["exports", "types"]
+      }
     },
     "packages/codec": {
       // Layer 1's shims are reached through vitest.rust.config.ts's resolver

@@ -1,6 +1,7 @@
 use super::*;
 
 mod plain;
+mod shapes;
 
 const RECT: &str = r#"{
   "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -428,7 +429,7 @@ fn a_string_array_or_record_rule_the_model_dialect_states_is_refused_by_name() {
         (r#""pattern": "^\\d{4}(Z|[+-]\\d{2})$""#, r#""pattern": "^a\\$""#, "pattern"),
         (
             r#""x-wb-message": "a stamp is a year and a zone""#,
-            r#""x-wb-message": "a \"stamp\"""#,
+            r#""x-wb-message": "a stamp's""#,
             "x-wb-message",
         ),
         (r#""x-wb-matcher": "stamp","#, "", "pattern needs"),

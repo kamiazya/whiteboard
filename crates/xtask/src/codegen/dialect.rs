@@ -4,10 +4,13 @@
 //! Every keyword is a typed field under `deny_unknown_fields`, so a construct
 //! the emitters do not implement is refused by name rather than dropped from
 //! one language's output. What is accepted: numbers with an inclusive
-//! `minimum`; strings with a UTF-16 minimum, a pattern and a named check;
-//! arrays, `$ref`s to a definition, any-values and records of them; and
+//! `minimum`, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
+//! JSON cannot write them, and a Rust `f64` read from JSON cannot be one);
+//! strings with a UTF-16 minimum, a pattern and a named check, or a closed
+//! `enum` of values; arrays with an inclusive length bound, `$ref`s to a
+//! definition, any-values and records of them; `anyOf` over definitions; and
 //! objects whose unknown keys are refused, stripped or kept, with optional
-//! fields. It grows when a contract needs a construct, with that construct's
+//! fields. A definition may be `x-wb-registered`. It grows when a contract needs a construct, with that construct's
 //! emission in both languages in the same change.
 //!
 //! Field order is `x-wb-order`, which must list every property once: a JSON
@@ -18,6 +21,10 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) use super::parse::Unknown;
 use super::parse::{Additional, Kind, Node};
 pub(crate) use super::parse::{Contract, parse};
+
+mod shapes;
+pub(super) use shapes::variant_name;
+use shapes::{lower_array, lower_enum, lower_union};
 
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
@@ -62,12 +69,29 @@ const RUST_KEYWORDS: &[&str] = &[
 
 /// A schema once its form is known and its keywords checked.
 pub(super) enum Ty<'a> {
-    Number { min: Option<f64> },
-    Str { min_utf16: Option<u32>, pattern: Option<Pattern<'a>>, check: Option<&'a str> },
-    Array(Box<Ty<'a>>),
+    Number {
+        min: Option<f64>,
+    },
+    Str {
+        min_utf16: Option<u32>,
+        pattern: Option<Pattern<'a>>,
+        check: Option<&'a str>,
+    },
+    /// A list of one element schema, its length bounded inclusively.
+    Array {
+        item: Box<Ty<'a>>,
+        min: Option<u32>,
+        max: Option<u32>,
+    },
+    /// A closed set of string values.
+    Enum(Vec<&'a str>),
+    /// One of several definitions, named by reference.
+    Union(Vec<&'a str>),
     Ref(&'a str),
     Any,
-    Record { check: Option<&'a str> },
+    Record {
+        check: Option<&'a str>,
+    },
     Object(Object<'a>),
 }
 
@@ -108,6 +132,8 @@ pub(super) struct Checked<'a> {
 pub(super) struct CheckedDef<'a> {
     pub(super) name: &'a str,
     pub(super) description: &'a str,
+    /// Whether the Zod half registers it in Zod's global registry under `name`.
+    pub(super) registered: bool,
     pub(super) ty: Ty<'a>,
 }
 
@@ -115,7 +141,8 @@ impl<'a> Ty<'a> {
     fn refs(&self, out: &mut Vec<&'a str>) {
         match self {
             Ty::Ref(name) => out.push(name),
-            Ty::Array(item) => item.refs(out),
+            Ty::Array { item, .. } => item.refs(out),
+            Ty::Union(members) => out.extend(members),
             Ty::Object(object) => object.fields.iter().for_each(|f| f.ty.refs(out)),
             _ => {}
         }
@@ -132,7 +159,7 @@ impl<'a> Ty<'a> {
                 zod.extend(check);
                 rust.extend(check);
             }
-            Ty::Array(item) => item.names(zod, rust),
+            Ty::Array { item, .. } => item.names(zod, rust),
             Ty::Object(object) => object.fields.iter().for_each(|f| f.ty.names(zod, rust)),
             _ => {}
         }
@@ -143,7 +170,7 @@ impl<'a> Ty<'a> {
         match self {
             Ty::Any => wanted == Uses::Value,
             Ty::Record { .. } => wanted == Uses::Map,
-            Ty::Array(item) => item.uses(wanted),
+            Ty::Array { item, .. } => item.uses(wanted),
             Ty::Object(object) => {
                 (wanted == Uses::Map && object.unknown == Unknown::Keep)
                     || object.fields.iter().any(|f| f.ty.uses(wanted))
@@ -254,7 +281,14 @@ fn check_def<'a>(
     {
         v.push(format!("{at}: an optional field is not implemented with x-wb-describe"));
     }
-    Some(CheckedDef { name, description: description?, ty })
+    let registered = node.registered.is_some();
+    if node.registered == Some(false) {
+        v.push(format!("{at}.x-wb-registered: is `true` or absent"));
+    }
+    if contract.describe && registered {
+        v.push(format!("{at}: x-wb-registered is not implemented with x-wb-describe"));
+    }
+    Some(CheckedDef { name, description: description?, registered, ty })
 }
 
 fn serde_shape(ty: &Ty<'_>) -> bool {
@@ -297,6 +331,9 @@ const DEFS_PREFIX: &str = "#/$defs/";
 /// `top` is a definition: only there may an object be written out, so a
 /// nested one is named and referenced and its type has a name in both languages.
 fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
+    if !top && node.registered.is_some() {
+        v.push(format!("{at}: x-wb-registered belongs on a definition"));
+    }
     if let Some(reference) = &node.reference {
         only(node, &["$ref"], "a reference", at, v);
         if node.kind.is_some() {
@@ -307,6 +344,9 @@ fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option
             return None;
         };
         return Some(Ty::Ref(name));
+    }
+    if node.any_of.is_some() {
+        return lower_union(node, at, top, v);
     }
     if let Some(any) = node.any {
         only(node, &["x-wb-any"], "an any-value", at, v);
@@ -327,15 +367,9 @@ fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option
             }
             Some(Ty::Number { min: node.minimum })
         }
+        Some(Kind::String) if node.values.is_some() => lower_enum(node, at, top, v),
         Some(Kind::String) => Some(lower_string(node, at, v)),
-        Some(Kind::Array) => {
-            only(node, &["items"], "an array", at, v);
-            let Some(items) = &node.items else {
-                v.push(format!("{at}: an array declares its `items`"));
-                return None;
-            };
-            Some(Ty::Array(Box::new(lower(items, &format!("{at}.items"), false, v)?)))
-        }
+        Some(Kind::Array) => lower_array(node, at, v),
         Some(Kind::Object) if node.properties.is_some() => lower_object(node, at, top, v),
         Some(Kind::Object) => lower_record(node, at, v),
     }
@@ -355,7 +389,7 @@ fn lower_string<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
             if let Err(e) = pattern_source(source) {
                 v.push(format!("{at}.pattern: {e}"));
             }
-            if let Err(e) = prose(message) {
+            if let Err(e) = refusal(message) {
                 v.push(format!("{at}.x-wb-message: {e}"));
             }
             Some(Pattern { source, message, matcher })
@@ -501,6 +535,18 @@ fn prose(text: &str) -> Result<(), &'static str> {
         Err("empty")
     } else if text.contains(['\n', '\r', '\\', '\'', '"', '`']) || text.contains("*/") {
         Err("must be one line without quotes, backslashes, backticks or `*/`")
+    } else {
+        Ok(())
+    }
+}
+
+/// The text Zod refuses with. It lands only in a single-quoted string literal,
+/// so double quotes and non-ASCII punctuation are the author's to use.
+fn refusal(text: &str) -> Result<(), &'static str> {
+    if text.trim().is_empty() {
+        Err("empty")
+    } else if text.contains(['\n', '\r', '\\', '\'']) {
+        Err("must be one line without single quotes or backslashes")
     } else {
         Ok(())
     }

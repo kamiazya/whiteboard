@@ -12,6 +12,8 @@
 pub mod checks;
 #[path = "generated/okf.rs"]
 pub mod okf;
+#[path = "generated/spatial.rs"]
+pub mod spatial;
 
 /// A frontmatter value: what `yaml`'s core schema makes of a document, as
 /// `toJS()` hands it to the TypeScript.
@@ -72,6 +74,27 @@ mod tests {
     use super::{Value, array_index, enumeration_order};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    #[test]
+    fn a_generated_enum_names_its_wire_values_both_ways_and_defaults_to_the_first() {
+        use super::spatial::{
+            Arrowhead, CanvasColor, CanvasColorPreset, EdgeRoutingStyle, EdgeSide, LineJumps,
+        };
+        macro_rules! round_trip {
+            ($enum:ident: $($wire:literal),+) => {
+                $(assert_eq!($enum::from_wire($wire).map($enum::as_str), Some($wire));)+
+                assert_eq!($enum::from_wire("Top"), None);
+                assert_eq!($enum::from_wire(""), None);
+                assert_eq!($enum::default().as_str(), [$($wire),+][0]);
+            };
+        }
+        round_trip!(Arrowhead: "none", "arrow");
+        round_trip!(CanvasColorPreset: "1", "2", "3", "4", "5", "6");
+        round_trip!(EdgeRoutingStyle: "straight", "orthogonal", "curved");
+        round_trip!(EdgeSide: "top", "right", "bottom", "left");
+        round_trip!(LineJumps: "none", "arc");
+        assert_eq!(CanvasColor::default(), CanvasColor::CanvasColorPreset(CanvasColorPreset::V1));
+    }
 
     #[test]
     fn an_array_index_is_a_canonical_decimal_below_two_to_the_thirty_two_minus_one() {

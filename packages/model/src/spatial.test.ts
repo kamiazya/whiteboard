@@ -6,6 +6,8 @@ import {
   canvasLineSchema,
   findDuplicateId,
   MAX_BENDS,
+  nodePositionSchema,
+  nodeSizeSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
 } from './spatial.js'
@@ -249,6 +251,23 @@ describe('canvasEdgeSchema', () => {
     expect(MAX_BENDS).toBe(64)
     expect(canvasEdgeSchema.safeParse(withBends(64)).success).toBe(true)
     expect(canvasEdgeSchema.safeParse(withBends(65)).success).toBe(false)
+  })
+})
+
+describe('node geometry', () => {
+  it('takes a fraction and refuses what JSON cannot carry', () => {
+    for (const schema of [nodePositionSchema, nodeSizeSchema]) {
+      expect(schema.safeParse(1.5).success).toBe(true)
+      for (const value of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+        expect(schema.safeParse(value).success).toBe(false)
+      }
+    }
+  })
+
+  it('refuses a negative size and takes zero, and takes a negative position', () => {
+    expect(nodeSizeSchema.safeParse(-1).success).toBe(false)
+    expect(nodeSizeSchema.safeParse(0).success).toBe(true)
+    expect(nodePositionSchema.safeParse(-1).success).toBe(true)
   })
 })
 

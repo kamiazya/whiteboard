@@ -3,7 +3,7 @@
 use super::*;
 
 /// A plain-Rust contract holding `defs`, its Rust half emitted at `rust`.
-fn plain(defs: &str, rust: &str, checks: bool) -> String {
+pub(super) fn plain(defs: &str, rust: &str, checks: bool) -> String {
     let checks = if checks {
         r#""x-wb-checks": { "zod": "packages/p/src/contract-checks.ts", "rust": "crates/core/model/src/checks.rs" },"#
     } else {
@@ -24,7 +24,7 @@ fn plain(defs: &str, rust: &str, checks: bool) -> String {
     )
 }
 
-const IN_MODEL: &str = "crates/core/model/src/generated/p.rs";
+pub(super) const IN_MODEL: &str = "crates/core/model/src/generated/p.rs";
 const ELSEWHERE: &str = "crates/core/c/src/generated/p.rs";
 
 #[test]
