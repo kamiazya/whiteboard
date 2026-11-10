@@ -22,6 +22,7 @@ fn an_ipv6_literal_is_parsed_by_the_whatwg_grammar() {
             "http://[1:2:3:4:5:6:7::]/",
             "http://[::ffff:192.168.0.1]/",
             "http://[1:2:3:4:5:6:1.2.3.4]/",
+            "http://[1::1.2.3.4]/",
             "http://[::1.2.3.0]/",
             "http://u@[::1]/",
             "foo://[::1]",
@@ -35,6 +36,8 @@ fn an_ipv6_literal_is_parsed_by_the_whatwg_grammar() {
 fn a_malformed_ipv6_literal_fails() {
     all(
         &[
+            "http://[1:2:3:4:5:1.2.3.4]/",
+            "http://[1:1.2.3.4]/",
             "http://[::1/",
             "http://[1:2:3:4:5:6:7:8:9]/",
             "http://[1:2:3:4:5:6:7:8::]/",

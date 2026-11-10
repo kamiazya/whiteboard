@@ -213,8 +213,10 @@ fn ipv6_valid(text: &str) -> bool {
         let Some((_, after)) = rest.split_at_checked(digits) else { return false };
         rest = match after.split_first() {
             Some((b'.', _)) => {
+                // The IPv4 tail fills the last two pieces, so without `::` exactly six precede it.
                 return digits > 0
                     && pieces <= 6
+                    && (compressed || pieces == 6)
                     && std::str::from_utf8(rest).is_ok_and(strict_ipv4);
             }
             Some((b':', tail)) if !tail.is_empty() => tail,
