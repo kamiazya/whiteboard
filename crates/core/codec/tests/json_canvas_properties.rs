@@ -51,8 +51,14 @@ fn text() -> impl Strategy<Value = String> {
     ]
 }
 
+/// A finite double with no negative zero: mostly a fraction with a short
+/// binary expansion, since a double drawn at random is almost always so large
+/// that it is a whole number.
 fn finite() -> impl Strategy<Value = f64> {
-    any::<f64>().prop_map(|x| if x.is_finite() { x + 0.0 } else { 0.0 })
+    prop_oneof![
+        3 => (any::<i32>(), 0u32..12).prop_map(|(n, k)| f64::from(n) / f64::from(1u32 << k)),
+        1 => any::<f64>().prop_map(|x| if x.is_finite() { x + 0.0 } else { 0.0 }),
+    ]
 }
 
 fn whole() -> impl Strategy<Value = f64> {
@@ -246,9 +252,12 @@ fn canvas() -> impl Strategy<Value = SpatialCanvas> {
                 })
                 .boxed()
         };
-        let lines = maybe((0..3usize).prop_flat_map(move |n| {
-            (0..n).map(|at| line(format!("l{at}"), count)).collect::<Vec<_>>()
-        }));
+        let lines = prop::option::weighted(
+            0.7,
+            (0..4usize).prop_flat_map(move |n| {
+                (0..n).map(|at| line(format!("l{at}"), count)).collect::<Vec<_>>()
+            }),
+        );
         (nodes, edges, lines, maybe(facets()), maybe(tags())).prop_map(
             |(nodes, edges, lines, facets, tags)| SpatialCanvas {
                 nodes,
@@ -280,13 +289,11 @@ fn what_the_extended_writer_writes_the_reader_reads_back_as_the_same_canvas() {
                 .any(|n| n.resource.as_ref().is_some_and(|r| r.mime_type == "text/uri-list")),
         );
         facetted.draw(canvas.facets.as_ref().is_some_and(|f| !f.is_empty()));
-        fractional.draw(
-            canvas
-                .lines
-                .iter()
-                .flatten()
-                .any(|l| matches!(&l.from, LineEnd::LineEndPoint(p) if p.point.x.fract() != 0.0)),
-        );
+        fractional.draw(canvas.lines.iter().flatten().any(|l| {
+            [&l.from, &l.to]
+                .into_iter()
+                .any(|end| matches!(end, LineEnd::LineEndPoint(p) if p.point.x.fract() != 0.0))
+        }));
         let written = serialize(&canvas, Mode::Extended);
         prop_assert!(written.is_ok(), "{canvas:?} has no spelling: {written:?}");
         let written = written.unwrap_or_default();
@@ -295,12 +302,12 @@ fn what_the_extended_writer_writes_the_reader_reads_back_as_the_same_canvas() {
         prop_assert_eq!(read.unwrap_or_default(), canvas, "{}", written);
         Ok(())
     });
-    embeds.assert(40);
-    ink.assert(40);
+    embeds.assert(60);
+    ink.assert(60);
     bent.assert(40);
-    linked.assert(40);
+    linked.assert(30);
     facetted.assert(40);
-    fractional.assert(20);
+    fractional.assert(40);
 }
 
 /// What JSON Canvas 1.0 itself states of a canvas: no extension anywhere.
@@ -397,8 +404,8 @@ fn a_damaged_text_is_refused_or_settles_after_one_trip() {
         }
         Ok(())
     });
-    read.assert(20);
-    refused.assert(20);
+    read.assert(50);
+    refused.assert(50);
 }
 
 #[test]
