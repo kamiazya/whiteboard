@@ -24,8 +24,7 @@ pub(super) fn lower_enum<'a>(
     }
     let mut variants = BTreeSet::new();
     for value in values {
-        if value.is_empty() || !value.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
-        {
+        if !is_word(value) {
             v.push(format!("{at}.enum: `{value}` is not lowercase letters and digits"));
             continue;
         }
@@ -59,6 +58,38 @@ pub(super) fn lower_union<'a>(
     v: &mut Vec<String>,
 ) -> Option<Ty<'a>> {
     only(node, &["anyOf"], "a union", at, v);
+    let members = node.any_of.as_deref().unwrap_or_default();
+    let members = union_members(node, members, "anyOf", at, top, v)?;
+    Some(Ty::Union { members, discriminator: None })
+}
+
+/// A union chosen by a property: `oneOf` over `$ref`s to objects, and the
+/// `discriminator` naming the property whose constant value picks the member.
+pub(super) fn lower_discriminated<'a>(
+    node: &'a Node,
+    at: &str,
+    top: bool,
+    v: &mut Vec<String>,
+) -> Option<Ty<'a>> {
+    only(node, &["oneOf", "discriminator"], "a discriminated union", at, v);
+    let members = node.one_of.as_deref().unwrap_or_default();
+    let members = union_members(node, members, "oneOf", at, top, v)?;
+    let Some(discriminator) = &node.discriminator else {
+        v.push(format!("{at}: a oneOf needs its discriminator"));
+        return None;
+    };
+    Some(Ty::Union { members, discriminator: Some(&discriminator.property) })
+}
+
+/// The definitions a union names, in order; none when it is not a definition.
+fn union_members<'a>(
+    node: &'a Node,
+    members: &'a [Node],
+    keyword: &str,
+    at: &str,
+    top: bool,
+    v: &mut Vec<String>,
+) -> Option<Vec<&'a str>> {
     if node.kind.is_some() {
         v.push(format!("{at}: a union carries no `type`"));
     }
@@ -66,13 +97,12 @@ pub(super) fn lower_union<'a>(
         v.push(format!("{at}: name a union in $defs and `$ref` it"));
         return None;
     }
-    let members = node.any_of.as_deref().unwrap_or_default();
     if members.len() < 2 {
-        v.push(format!("{at}.anyOf: a union has at least two members"));
+        v.push(format!("{at}.{keyword}: a union has at least two members"));
     }
     let mut names: Vec<&str> = Vec::new();
     for (i, member) in members.iter().enumerate() {
-        let member_at = format!("{at}.anyOf[{i}]");
+        let member_at = format!("{at}.{keyword}[{i}]");
         let target = member.reference.as_deref().and_then(|r| r.strip_prefix(DEFS_PREFIX));
         let Some(name) = target else {
             v.push(format!("{member_at}: a union member is a `{DEFS_PREFIX}<name>` reference"));
@@ -87,12 +117,36 @@ pub(super) fn lower_union<'a>(
         }
         names.push(name);
     }
-    Some(Ty::Union(names))
+    Some(names)
+}
+
+/// A string that is always one value, written as lowercase letters and digits
+/// so a Rust constant can spell it and an enum could name it.
+pub(super) fn lower_const<'a>(
+    node: &'a Node,
+    at: &str,
+    top: bool,
+    v: &mut Vec<String>,
+) -> Option<Ty<'a>> {
+    only(node, &["const"], "a constant", at, v);
+    if top {
+        v.push(format!("{at}: a constant belongs on a property"));
+        return None;
+    }
+    let value = node.constant.as_deref().unwrap_or_default();
+    if !is_word(value) {
+        v.push(format!("{at}.const: `{value}` is not lowercase letters and digits"));
+    }
+    Some(Ty::Literal(value))
+}
+
+fn is_word(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit())
 }
 
 /// An array of one element schema, optionally bounded in length.
 pub(super) fn lower_array<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Option<Ty<'a>> {
-    only(node, &["items", "minItems", "maxItems"], "an array", at, v);
+    only(node, &["items", "minItems", "maxItems", "default"], "an array", at, v);
     let Some(items) = &node.items else {
         v.push(format!("{at}: an array declares its `items`"));
         return None;

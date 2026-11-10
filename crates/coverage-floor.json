@@ -43,9 +43,9 @@
       "reason": "first measured 2026-11-08 at 98.63% lines and 96.90% regions"
     },
     "xtask": {
-      "lines": 71,
-      "regions": 69,
-      "reason": "first measured 2026-11-08 at 57.43% lines and 55.14% regions; raised to 60.48% and 58.05% once the coverage command's logic was split out and tested (the mutation gate's first catch), and to 65.53% and 63.55% once a test ran the whole codegen over the repository (the mutation gate's catch on the input-caps generator).  Raised to 71 and 69 with the dialect's optional fields, references, strings and plain Rust types (71.23% and 69.76%). The commands that build, run tools or need a release toolchain are exercised by running them in rust:check, not by unit tests"
+      "lines": 75,
+      "regions": 74,
+      "reason": "first measured 2026-11-08 at 57.43% lines and 55.14% regions; raised to 60.48% and 58.05% once the coverage command's logic was split out and tested (the mutation gate's first catch), and to 65.53% and 63.55% once a test ran the whole codegen over the repository (the mutation gate's catch on the input-caps generator).  Raised to 71 and 69 with the dialect's optional fields, references, strings and plain Rust types (71.23% and 69.76%), and to 75 and 74 with the dialect's booleans, integers, constants, unions, object checks, extension and external definitions (75.66% and 74.23%). The commands that build, run tools or need a release toolchain are exercised by running them in rust:check, not by unit tests"
     }
   }
 }

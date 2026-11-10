@@ -93,6 +93,30 @@ pub(super) struct Node {
     pub(super) max_items: Option<u32>,
     #[serde(rename = "anyOf", default, deserialize_with = "present")]
     pub(super) any_of: Option<Vec<Node>>,
+    #[serde(rename = "oneOf", default, deserialize_with = "present")]
+    pub(super) one_of: Option<Vec<Node>>,
+    /// The property whose constant value names the member of a `oneOf`.
+    #[serde(default, deserialize_with = "present")]
+    pub(super) discriminator: Option<Discriminator>,
+    /// A string that is always this one value.
+    #[serde(rename = "const", default, deserialize_with = "present")]
+    pub(super) constant: Option<String>,
+    /// What an absent array reads as; only `[]` parses, since `Never`
+    /// has no value to deserialize.
+    #[serde(default, deserialize_with = "present")]
+    pub(super) default: Option<Vec<Never>>,
+    /// The object whose properties this one adds to.
+    #[serde(rename = "x-wb-extends", default, deserialize_with = "present")]
+    pub(super) extends: Option<String>,
+    /// A property that reads as absent when its value is malformed.
+    #[serde(rename = "x-wb-lenient", default, deserialize_with = "present")]
+    pub(super) lenient: Option<bool>,
+    /// The text a model reads for a property, published as its `.describe()`.
+    #[serde(rename = "x-wb-describe", default, deserialize_with = "present")]
+    pub(super) published: Option<String>,
+    /// The module whose hand-written Zod schema stands for this definition.
+    #[serde(rename = "x-wb-external", default, deserialize_with = "present")]
+    pub(super) external: Option<String>,
     /// Whether the Zod half registers the definition under its own name in
     /// Zod's global registry, which is where a tool schema's `$ref` takes it from.
     #[serde(rename = "x-wb-registered", default, deserialize_with = "present")]
@@ -113,6 +137,17 @@ pub(super) struct Node {
     pub(super) unknown_keys: Option<Unknown>,
 }
 
+/// A type with no value, so a list of it can only be empty.
+#[derive(Debug, Deserialize)]
+pub(super) enum Never {}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Discriminator {
+    #[serde(rename = "propertyName")]
+    pub(super) property: String,
+}
+
 #[derive(Debug, Deserialize)]
 pub(super) enum Kind {
     #[serde(rename = "number")]
@@ -123,6 +158,10 @@ pub(super) enum Kind {
     Array,
     #[serde(rename = "object")]
     Object,
+    #[serde(rename = "boolean")]
+    Boolean,
+    #[serde(rename = "integer")]
+    Integer,
 }
 
 #[derive(Debug, Deserialize)]
@@ -147,8 +186,9 @@ pub(crate) fn parse(text: &str) -> Result<Contract, String> {
 }
 
 impl Node {
-    /// The keywords present beyond `description`, `type` and `x-wb-registered`
-    /// (which belongs to a definition whatever its form), by name.
+    /// The keywords present beyond `description`, `type`, the decorations of a
+    /// property (`x-wb-lenient`, `x-wb-describe`) and of a definition
+    /// (`x-wb-registered`, `x-wb-external`), by name.
     pub(super) fn keywords(&self) -> Vec<&'static str> {
         [
             (self.minimum.is_some(), "minimum"),
@@ -162,6 +202,11 @@ impl Node {
             (self.min_items.is_some(), "minItems"),
             (self.max_items.is_some(), "maxItems"),
             (self.any_of.is_some(), "anyOf"),
+            (self.one_of.is_some(), "oneOf"),
+            (self.discriminator.is_some(), "discriminator"),
+            (self.constant.is_some(), "const"),
+            (self.default.is_some(), "default"),
+            (self.extends.is_some(), "x-wb-extends"),
             (self.reference.is_some(), "$ref"),
             (self.any.is_some(), "x-wb-any"),
             (self.properties.is_some(), "properties"),
