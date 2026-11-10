@@ -17,12 +17,18 @@ import { z } from 'zod'
  * (`VITE_WHITEBOARD_CORE_OKF=ts` is the rollback), `differential` in the dev
  * server, `ts` in a test run.
  *
+ * `VITE_WHITEBOARD_CORE_SPATIAL` is the same switch for the JSON Canvas codec
+ * (an imported `.canvas` file, a downloaded or copied board, an editable PNG's source).
+ * It is `differential` in the dev server and `ts` everywhere else until its
+ * parity checklist is met (docs/contributing/parity/json-canvas-codec.md).
+ *
  * An unknown value is refused rather than defaulted: a typo that fell back
  * to `ts` would compare nothing and read as a pass.
  */
 const coreSettingsSchema = z.object({
   impl: z.enum(['ts', 'differential', 'rust']),
   okf: z.enum(['ts', 'differential', 'rust']),
+  spatial: z.enum(['ts', 'differential', 'rust']),
   mismatch: z.enum(['log', 'throw']),
 })
 export type CoreSettings = z.infer<typeof coreSettingsSchema>
@@ -30,6 +36,7 @@ export type CoreSettings = z.infer<typeof coreSettingsSchema>
 interface CoreEnv {
   readonly VITE_WHITEBOARD_CORE?: string
   readonly VITE_WHITEBOARD_CORE_OKF?: string
+  readonly VITE_WHITEBOARD_CORE_SPATIAL?: string
   readonly VITE_WHITEBOARD_CORE_MISMATCH?: string
   readonly DEV?: boolean
   readonly MODE?: string
@@ -40,6 +47,9 @@ export function coreSettingsFrom(env: CoreEnv): CoreSettings {
   return coreSettingsSchema.parse({
     impl: env.VITE_WHITEBOARD_CORE || devDefault,
     okf: env.VITE_WHITEBOARD_CORE_OKF || devDefault,
+    spatial:
+      env.VITE_WHITEBOARD_CORE_SPATIAL ||
+      (env.DEV === true && env.MODE !== 'test' ? 'differential' : 'ts'),
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',
   })
 }

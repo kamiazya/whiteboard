@@ -9,7 +9,7 @@
 // artifact to load.
 
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
-import { okfCodec } from '@kamiazya/whiteboard-codec'
+import { okfCodec, spatialCodec } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
@@ -64,7 +64,7 @@ describe('the real Rust core in a browser', () => {
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'differential', okf: 'ts', mismatch: 'throw' },
+        { impl: 'differential', okf: 'ts', spatial: 'ts', mismatch: 'throw' },
         async () => ({
           ...routing,
           routeLayout: (...args) => {
@@ -98,7 +98,7 @@ describe('the real Rust core reading and writing OKF in a browser', () => {
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'ts', okf: 'differential', mismatch: 'throw' },
+        { impl: 'ts', okf: 'differential', spatial: 'ts', mismatch: 'throw' },
         async () => ({
           ...routing,
           parseOkf: (text) => {
@@ -121,6 +121,41 @@ describe('the real Rust core reading and writing OKF in a browser', () => {
       expect(codec.parseOkf('---\ntype: [\n---\n').ok).toBe(false)
       // The core was consulted for every call, so "no difference" compared something.
       expect(calls).toBe(3)
+    },
+  )
+})
+
+describe('the real Rust core reading and writing JSON Canvas in a browser', () => {
+  it.skipIf('failure' in real)(
+    'reads and writes a board beside the TypeScript with no difference, thrown or otherwise',
+    async () => {
+      if ('failure' in real) return
+      const { routing } = real
+      let calls = 0
+      const host = createLayoutCoreHost(
+        { impl: 'ts', okf: 'ts', spatial: 'differential', mismatch: 'throw' },
+        async () => ({
+          ...routing,
+          parseSpatial: (text) => {
+            calls += 1
+            return routing.parseSpatial(text)
+          },
+          serializeSpatial: (canvas, mode) => {
+            calls += 1
+            return routing.serializeSpatial(canvas, mode)
+          },
+        }),
+        silent(),
+      )
+      await host.ready()
+      const codec = spatialCodec(host.currentSpatial())
+      const text = codec.serializeSpatial(board('orthogonal'), 'extended')
+      const parsed = codec.parseSpatial(text)
+      if (!parsed.ok) throw new Error(parsed.error.message)
+      expect(codec.serializeSpatial(parsed.value, 'strict')).toContain('"nodes"')
+      expect(codec.parseSpatial('{').ok).toBe(false)
+      // The core was consulted for every call, so "no difference" compared something.
+      expect(calls).toBe(4)
     },
   )
 })

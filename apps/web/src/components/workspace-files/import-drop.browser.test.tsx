@@ -29,14 +29,17 @@ function renderPanel(importDocument: (path: string, d: ImportedDocument) => Prom
 }
 
 describe('dropping a file on the document list', () => {
-  it('imports a canvas file and stops the browser navigating to it', async () => {
+  it('imports a canvas file, through the JSON Canvas core where the run asks for it, and stops the browser navigating to it', async () => {
+    // As for the note below: the page has its core by the time anyone drops a
+    // file, so a run that sets VITE_WHITEBOARD_CORE_SPATIAL reads it in the core.
+    await layoutCoreReady()
     const importDocument = vi.fn(async () => {})
     renderPanel(importDocument)
     const panel = await screen.findByTestId('workspace-files-panel')
 
-    const file = new File(['{"nodes":[],"edges":[]}'], 'My Board.canvas', {
-      type: 'application/json',
-    })
+    const board =
+      '{"nodes":[{"id":"a","type":"text","text":"hi","x":0,"y":0,"width":10,"height":10}],"edges":[]}'
+    const file = new File([board], 'My Board.canvas', { type: 'application/json' })
     const event = dropOn(panel, [file])
 
     expect(event.defaultPrevented).toBe(true)

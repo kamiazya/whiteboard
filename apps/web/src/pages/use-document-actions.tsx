@@ -14,7 +14,6 @@
  * `destructive-copy.ts`'s. This holds only the shape that is the same either
  * way.
  */
-import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Braces, Copy, FolderInput, Trash2 } from 'lucide-react'
@@ -30,6 +29,7 @@ import {
   WITHOUT_ANNOTATIONS,
 } from '../lib/duplicate-without-comments.js'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
+import { currentSpatialCodec } from '../lib/spatial-codec.js'
 import { useAnnounceNotice } from './document-notice.js'
 import { useDeleteDocument } from './use-delete-document.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
@@ -86,7 +86,7 @@ function CopyAsJsonCanvasItem({ canvas }: { canvas: SpatialCanvas }) {
   return (
     <DropdownMenuItem
       onSelect={() => {
-        const json = serializeSpatial(canvas, 'extended')
+        const json = currentSpatialCodec().serializeSpatial(canvas, 'extended')
         announce(null)
         void navigator.clipboard
           ?.writeText(json)

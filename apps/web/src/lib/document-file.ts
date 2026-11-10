@@ -5,9 +5,10 @@
  * `document-import.ts` reads them back.
  */
 
-import { type OkfMarkdownFrontmatter, serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { currentOkfCodec } from './okf-codec.js'
+import { currentSpatialCodec } from './spatial-codec.js'
 
 /** What a markdown document with no declared type is taken to be. */
 const BARE_BODY_TYPE = 'note'
@@ -36,5 +37,7 @@ export function markdownDocumentFile(input: MarkdownDocumentFileInput): Blob {
 
 /** An image is written as an `asset:` reference to the workspace's file, not as bytes. */
 export function spatialDocumentFile(canvas: SpatialCanvas): Blob {
-  return new Blob([serializeSpatial(canvas, 'extended')], { type: 'application/json' })
+  return new Blob([currentSpatialCodec().serializeSpatial(canvas, 'extended')], {
+    type: 'application/json',
+  })
 }

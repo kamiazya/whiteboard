@@ -6,8 +6,24 @@ describe('coreSettingsFrom', () => {
     expect(coreSettingsFrom({ DEV: false, MODE: 'production' })).toEqual({
       impl: 'rust',
       okf: 'rust',
+      spatial: 'ts',
       mismatch: 'log',
     })
+  })
+
+  it('reads JSON Canvas in TypeScript unless asked, and differential in the dev server', () => {
+    expect(coreSettingsFrom({ DEV: false, MODE: 'production' }).spatial).toBe('ts')
+    expect(coreSettingsFrom({ DEV: true, MODE: 'test' }).spatial).toBe('ts')
+    expect(coreSettingsFrom({ DEV: true, MODE: 'development' }).spatial).toBe('differential')
+    expect(
+      coreSettingsFrom({ DEV: true, MODE: 'test', VITE_WHITEBOARD_CORE_SPATIAL: 'differential' })
+        .spatial,
+    ).toBe('differential')
+    expect(
+      coreSettingsFrom({ DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_SPATIAL: 'rust' })
+        .spatial,
+    ).toBe('rust')
+    expect(() => coreSettingsFrom({ VITE_WHITEBOARD_CORE_SPATIAL: 'fast' })).toThrow()
   })
 
   it('reads OKF in Rust in a build, differential in the dev server, TypeScript in a test run', () => {
