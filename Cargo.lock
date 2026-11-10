@@ -567,8 +567,10 @@ dependencies = [
 name = "whiteboard-facet-engine"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "wasm-bindgen-test",
  "whiteboard-model",
+ "whiteboard-proptest",
 ]
 
 [[package]]

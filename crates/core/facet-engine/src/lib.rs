@@ -1,7 +1,8 @@
 //! The facet engine's asset shapes (ADR-0054 decision 12): the types
 //! generated from `contracts/facets/engine` and the matchers the contract's
-//! patterns stand for. The registry, write validation and the compat chain
-//! join as the engine track ports them.
+//! patterns stand for, the interpreter that judges a payload by a contract
+//! file, and the registry of facets built over it. The compat chain and the
+//! derived form join as the engine track ports them.
 
 // Core is total: an out-of-bounds index or an overflowing integer is a
 // panic, and a panic poisons the wasm instance. A justified exception is an
@@ -16,3 +17,5 @@ pub mod checks;
 pub mod engine;
 #[path = "generated/plugin_manifest.rs"]
 pub mod plugin_manifest;
+pub mod registry;
+pub mod schema;

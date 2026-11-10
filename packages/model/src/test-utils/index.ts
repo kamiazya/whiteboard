@@ -5,9 +5,11 @@
  * only ever imported from test files.
  */
 export * from './arbitraries.js'
+export * from './broken-variants.js'
 export * from './fast-check.js'
 export * from './nodes.js'
 export * from './reachability-floor.js'
+export * from './schema-oracle.js'
 export * from './utf16-bound.js'
 export * from './workspace-id-for.js'
 export * from './zod-arbitrary.js'

@@ -77,6 +77,7 @@ describe('the visual plugin definition', () => {
 
   it('supplies each pointer the generated schema of the definition it names', () => {
     const pointers = Object.entries(VISUAL_HOST.schemas)
+    expect(pointers.length).toBeGreaterThan(10)
     expect(pointers.length).toBe(manifest.facets.length)
     for (const [pointer, schema] of pointers) {
       const definition = pointer.split('#/$defs/')[1] ?? ''

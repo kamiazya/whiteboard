@@ -37,7 +37,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-log` | core | present | RFC 5424 levels, records, sinks, fields-first logging |
 | `whiteboard-edge-routing` | core | present | side choice, anchors, grid search, crossings, jumps, rounding |
 | `whiteboard-model` | core | present | the frontmatter value tree, and the OKF frontmatter types generated from `contracts/model` with their hand-written checks (`checks.rs`), which `whiteboard-codec` reads and writes |
-| `whiteboard-facet-engine` | core | present | the theme, icon and stencil asset shapes, generated from `contracts/facets/engine`, the plugin manifest types from `contracts/plugin`, and the matchers of their patterns; the registry, write validation, compat chain and derived form follow |
+| `whiteboard-facet-engine` | core | present | the theme, icon and stencil asset shapes, generated from `contracts/facets/engine`, the plugin manifest types from `contracts/plugin`, and the matchers of their patterns; the interpreter of the contract dialect (`schema`: a contract file's definitions judge a payload as the generated Zod does, in path and code) and the registry over plugin manifests (`registry`: targets, asset refs, `validate_facet_write`); the compat chain and derived form follow |
 | `whiteboard-scene` | core | planned | the scene vocabulary and the contribution traits |
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
@@ -151,6 +151,15 @@ steps and cache paths to the scripts.
   through it, and `rust-proptest-prelude.test.ts` refuses a runner, config,
   `proptest!` or seed built elsewhere. A property runs on wasm32 too, so it
   counts in `cross-target` like any test.
+- **The facet engine's answers are recorded the same way**:
+  `packages/facet-engine/src/oracle/contract-schemas.jsonl` (the engine contract's
+  asset schemas and the plugin manifest, through their generated Zod) and
+  `packages/plugin-visual/src/oracle/facet-write.jsonl` (the bundled registry's
+  write path) are replayed by `crates/core/facet-engine/tests/schema_oracle.rs`
+  and `crates/core/plugin-visual/tests/facet_write_oracle.rs`; a replaying test
+  in each package asks today's TypeScript the recorded questions again, and
+  `WHITEBOARD_RECORD_ORACLE=1` re-records. Held in path, code and order, not in
+  message (q43; `docs/contributing/parity/facet-engine.md`).
 - **The TypeScript's answers are recorded for native tests**:
   `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
   what the TypeScript composer answers to 309 layouts, replayed bit for bit
