@@ -155,6 +155,32 @@ impl VisualStrokeWidth {
     }
 }
 
+/// A symbol that is one emoji or character.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VisualSymbolEmoji {
+    /// The character: one extended grapheme cluster, so a flag or a family is one.
+    ///
+    /// Checked by `crate::checks::single_grapheme`.
+    pub char: String,
+}
+
+impl VisualSymbolEmoji {
+    /// What `kind` is always written as.
+    pub const KIND: &str = "emoji";
+}
+
+/// A symbol drawn from the registered icon set, by name.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct VisualSymbolIcon {
+    /// The name of the icon.
+    pub name: String,
+}
+
+impl VisualSymbolIcon {
+    /// What `kind` is always written as.
+    pub const KIND: &str = "icon";
+}
+
 /// Where the text of a node sits inside the space it has.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum VisualTextAlign {
@@ -215,6 +241,21 @@ pub struct VisualStencilFacet {
 pub struct VisualStrokeFacet {
     /// The named weight.
     pub width: VisualStrokeWidth,
+}
+
+/// visual.symbol/v0: what symbolises this object, as an icon or one emoji.
+#[derive(Debug, Clone, PartialEq)]
+pub enum VisualSymbolFacet {
+    /// A `VisualSymbolIcon`.
+    VisualSymbolIcon(VisualSymbolIcon),
+    /// A `VisualSymbolEmoji`.
+    VisualSymbolEmoji(VisualSymbolEmoji),
+}
+
+impl Default for VisualSymbolFacet {
+    fn default() -> Self {
+        Self::VisualSymbolIcon(VisualSymbolIcon::default())
+    }
 }
 
 /// visual.text/v0: where the text of a node sits; absent means its default.

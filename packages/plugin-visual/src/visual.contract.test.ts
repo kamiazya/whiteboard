@@ -415,6 +415,12 @@ describe('visual.symbol', () => {
     )
   })
 
+  // The Rust twin's grapheme tables are Unicode 17.0 and its test asserts that;
+  // the host's own release is the other half of the claim they agree.
+  it('counts graphemes with the Unicode release the Rust crate implements', () => {
+    expect(process.versions.unicode).toBe('17.0')
+  })
+
   it('derives a variants form over the discriminant and keeps its picker', () => {
     const variant = (label: string, name: string) => ({
       label,

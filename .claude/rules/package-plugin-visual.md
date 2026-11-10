@@ -19,7 +19,7 @@ that want the shipped set, not a privileged registry.
 
 ## The simple facets' payloads are generated
 
-`shape`, `text`, `edges`, `ink`, `stroke`, `theme`, `stencil` and `axes` have
+`shape`, `text`, `edges`, `ink`, `stroke`, `theme`, `stencil`, `axes` and `symbol` have
 their Zod in `src/generated/visual.zod.ts`, emitted by `cargo xtask codegen`
 from `contracts/facets/visual/visual.schema.json` beside the Rust types of
 `crates/core/plugin-visual`. Edit the contract, not the output. `data.ts`
@@ -30,8 +30,19 @@ and stripped payloads, each refusal's code, message and path, the JSON Schema
 
 The edge vocabularies come from `model` through `src/model-vocabulary.ts`
 (an `x-wb-external` module must be a sibling of the output), and the facet-key
-patterns are the engine's spelled again, held equal by that test. `symbol`,
-`tags` and `stencils` stay hand-written until the dialect can state them.
+patterns are the engine's spelled again, held equal by that test. `tags` and
+`stencils` stay hand-written until the dialect can state them.
+
+`symbol` is a union whose published description is the contract's
+`x-wb-describe` on the union definition (the rest of the contract publishes
+none). Its one-grapheme rule is the named check `single_grapheme`:
+`src/contract-checks.ts` counts with `Intl.Segmenter`, and the crate's
+`checks.rs` with `unicode-segmentation`, pinned exactly because its tables are
+a determinism input (QR-20b). Both follow Unicode 17.0 (Node 24's ICU, which
+`.node-version` pins); a test asserts the crate's release. Measured when it
+landed, with no difference: all 1,914 catalog characters and 30,000 random
+sequences of combining, joining, regional, Hangul and Indic code points agreed
+on cluster count. A crate bump is its own change, with that comparison re-run.
 
 ## There is no second plugin, and there was one
 

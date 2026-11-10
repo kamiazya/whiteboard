@@ -2,6 +2,18 @@
 //! what a pattern says in the generated Zod, written once more here without a
 //! regex engine and held equal to it by the cases both languages' tests share.
 
+use unicode_segmentation::UnicodeSegmentation;
+
+/// The contract's `single_grapheme`: the text is exactly one extended grapheme
+/// cluster (UAX #29), so a flag, a ZWJ family or a skin-toned hand is one and
+/// two emoji are not. The empty string is none. The TypeScript twin counts with
+/// `Intl.Segmenter`; both follow Unicode 17.0, which `UNICODE_VERSION` below
+/// holds the table to.
+pub fn single_grapheme(text: &str) -> bool {
+    let mut clusters = text.graphemes(true);
+    clusters.next().is_some() && clusters.next().is_none()
+}
+
 /// `[a-z][a-z0-9-]*`: one segment of a facet key.
 fn segment(text: &str) -> bool {
     let mut chars = text.chars();
@@ -35,6 +47,48 @@ mod tests {
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
     // The same strings `visual.contract.test.ts` refuses and takes.
+    // The strings `visual.contract.test.ts` takes and refuses.
+    #[test]
+    fn a_single_grapheme_is_one_cluster_however_many_code_points() {
+        for good in [
+            "\u{2705}",
+            "\u{26a0}\u{fe0f}",
+            "\u{1f468}\u{200d}\u{1f469}\u{200d}\u{1f467}\u{200d}\u{1f466}",
+            "\u{1f1ef}\u{1f1f5}",
+            "1\u{fe0f}\u{20e3}",
+            "\u{1f44d}\u{1f3fd}",
+            "\u{91cd}",
+            "e\u{301}",
+            "\u{1f3f3}\u{fe0f}\u{200d}\u{1f308}",
+            "\u{1f469}\u{1f3fd}\u{200d}\u{1f4bb}",
+            "\u{1f3f4}\u{e0067}\u{e0062}\u{e0065}\u{e006e}\u{e0067}\u{e007f}",
+            "\r\n",
+            "\u{1100}\u{1161}\u{11a8}",
+        ] {
+            assert!(single_grapheme(good), "{good:?}");
+        }
+        for bad in [
+            "",
+            "ab",
+            "\u{2705}\u{1f525}",
+            "\u{1f1ef}\u{1f1f5}\u{1f1fa}\u{1f1f8}",
+            "\u{1f44d}\u{1f44d}",
+            "a\u{200b}b",
+            "\n\n",
+            " a",
+        ] {
+            assert!(!single_grapheme(bad), "{bad:?}");
+        }
+    }
+
+    // QR-20b: a bump of the crate moves which strings are one symbol, so it is
+    // a PR of its own; the table the TypeScript twin's `Intl.Segmenter` carries
+    // under `.node-version` is the same release.
+    #[test]
+    fn the_grapheme_tables_are_the_unicode_release_the_oracle_follows() {
+        assert_eq!(unicode_segmentation::UNICODE_VERSION, (17, 0, 0));
+    }
+
     #[test]
     fn a_namespaced_id_is_two_key_segments_and_nothing_else() {
         for good in ["visual.sketch", "a-b.c-d", "visual.x1", "z.a9-"] {
