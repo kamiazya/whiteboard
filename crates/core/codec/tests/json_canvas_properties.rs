@@ -2,7 +2,7 @@
 //! reads back as itself, the strict mode keeps exactly what JSON Canvas 1.0
 //! states, and a damaged text is either refused or settles after one trip.
 
-use whiteboard_codec::json_canvas::{Mode, SpatialCanvas, parse, serialize};
+use whiteboard_codec::json_canvas::{Failure, Mode, SpatialCanvas, parse, serialize};
 use whiteboard_model::spatial::{
     Arrowhead, BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine,
     CanvasPoint, EdgeEnd, EdgeSide, LineEnd, LineEndNode, LineEndPoint, NodeEmbed, NodeResource,
@@ -408,10 +408,53 @@ fn a_damaged_text_is_refused_or_settles_after_one_trip() {
     refused.assert(50);
 }
 
+/// Texts built from the pieces a JSON Canvas file is made of, so that the
+/// reader meets a number, a string, an escape and a bracket in every order.
+fn soup() -> impl Strategy<Value = String> {
+    let pieces = &[
+        "{",
+        "}",
+        "[",
+        "]",
+        ",",
+        ":",
+        "\"",
+        "\\",
+        "\\u00e9",
+        "\\ud83d\\ude00",
+        "-",
+        "-0",
+        "0",
+        "1",
+        "12.5e3",
+        ".",
+        "e",
+        "E+",
+        "true",
+        "null",
+        "fals",
+        " ",
+        "\n",
+        "\"nodes\"",
+        "\"x-whiteboard\"",
+        "\"type\":\"text\"",
+        "{}",
+        "[]",
+        "\"a\"",
+    ][..];
+    prop::collection::vec(prop::sample::select(pieces), 0..24).prop_map(|p| p.concat())
+}
+
 #[test]
 fn any_text_is_answered_without_a_panic() {
-    check(any::<String>(), None, |text| {
-        let _ = parse(&text);
+    let syntax = Floor::new("a text that is not JSON");
+    let past_json = Floor::new("a text that is JSON");
+    check(prop_oneof![1 => any::<String>(), 1 => soup(), 2 => damaged()], None, |text| {
+        let outcome = parse(&text);
+        syntax.draw(outcome == Err(Failure::Syntax));
+        past_json.draw(!matches!(outcome, Err(Failure::Syntax | Failure::Declined(_))));
         Ok(())
     });
+    syntax.assert(70);
+    past_json.assert(25);
 }

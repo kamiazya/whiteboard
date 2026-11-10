@@ -559,16 +559,15 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
         cases.len(),
         &problems[..problems.len().min(8)]
     );
-    // An agreement over nothing passes, so say what the recording reached.
+    assert_reached(&agreed, &held_back, cases.len());
+}
+
+/// An agreement over nothing passes, so say what the recording reached.
+fn assert_reached(agreed: &[String], held_back: &[Decline], total: usize) {
     let count = |what: &str| agreed.iter().filter(|v| v.as_str() == what).count();
-    assert!(cases.len() > 1300, "{} texts replayed", cases.len());
+    assert!(total > 1300, "{total} texts replayed");
     let declines = |why: Decline| held_back.iter().filter(|d| **d == why).count();
-    assert!(
-        held_back.len() < cases.len() / 20,
-        "{} of {} texts declined",
-        held_back.len(),
-        cases.len()
-    );
+    assert!(held_back.len() < total / 20, "{} of {total} texts declined", held_back.len());
     for why in [Decline::LoneSurrogate, Decline::TooDeep, Decline::Url] {
         assert!(declines(why) > 2, "{} texts declined as {why:?}", declines(why));
     }
