@@ -269,7 +269,10 @@ fn check_index_order(order: &[String], at: &str, v: &mut Vec<String>) {
 }
 
 /// A property that defaults to `{}` names an object that accepts it: every
-/// property optional, nothing to check and nothing inherited.
+/// property optional and none defaulted, nothing to check and nothing
+/// inherited. Zod returns a default without parsing it, so a defaulted
+/// property inside would be filled in by the Rust half and absent from the
+/// Zod one.
 pub(super) fn check_ref_defaults(defs: &[CheckedDef<'_>], v: &mut Vec<String>) {
     for def in defs {
         let Ty::Object(object) = &def.ty else { continue };
@@ -277,12 +280,12 @@ pub(super) fn check_ref_defaults(defs: &[CheckedDef<'_>], v: &mut Vec<String>) {
             let Ty::Ref(target) = field.ty else { continue };
             let accepts = defs.iter().find(|d| d.name == target).is_some_and(|d| {
                 matches!(&d.ty, Ty::Object(t)
-                    if t.check.is_none() && t.extends.is_none() && t.fields.iter().all(|f| f.optional))
+                    if t.check.is_none() && t.extends.is_none() && t.fields.iter().all(|f| f.optional && !f.default_empty))
             });
             if !accepts {
                 v.push(format!(
                     "$defs.{}.{}: a default `{{}}` names an object whose properties are all \
-                     optional; `{target}` is not one",
+                     optional and none defaulted; `{target}` is not one",
                     def.name, field.name
                 ));
             }

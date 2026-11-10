@@ -6,7 +6,7 @@ import { SAMPLE_THEME_TOKENS } from './testing/sample-theme-tokens.js'
 import { iconAssetSchema, namespacedIdSchema, themeTokensSchema } from './theme-tokens.js'
 
 // The engine's asset schemas (theme tokens, icon, stencil, namespaced id) are
-// generated from `contracts/facets/engine.schema.json`. What a generated
+// generated from `contracts/facets/engine/engine.schema.json`. What a generated
 // schema must keep is what a reader can observe of the hand-written one:
 // which payloads parse and to what, the code, message, path and ORDER of
 // every refusal, the JSON Schema it publishes, and the types it infers.

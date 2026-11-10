@@ -156,15 +156,23 @@ fn a_default_on_a_reference_is_refused_unless_the_object_it_names_accepts_nothin
         "required": [], "x-wb-order": ["c"],
         "additionalProperties": false, "x-wb-unknownKeys": "refuse"
       }"#;
+    let defaulted = swapped(
+        INNER,
+        r#""b": { "type": "boolean", "description": "B." }"#,
+        r#""b": { "type": "array", "items": { "type": "string" }, "default": [], "description": "B." }"#,
+    );
     let derived = with_inner(&format!("{INNER}, {extended}"))
         .replace(r##""$ref": "#/$defs/Inner""##, r##""$ref": "#/$defs/Derived""##);
     for (defs, target) in [
         (with_inner(&one_required), "Inner"),
         (with_inner(&checked), "Inner"),
+        (with_inner(&defaulted), "Inner"),
         (with_inner(name).replace("Name\"", "Inner\""), "Inner"),
         (derived, "Derived"),
     ] {
-        let expect = format!("names an object whose properties are all optional; `{target}`");
+        let expect = format!(
+            "names an object whose properties are all optional and none defaulted; `{target}`"
+        );
         let errors = outputs(&plain(&defs, IN_MODEL, true)).unwrap_err();
         assert!(errors.iter().any(|e| e.contains(&expect)), "{expect}: {errors:?}");
     }
