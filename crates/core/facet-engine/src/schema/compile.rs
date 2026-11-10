@@ -83,6 +83,30 @@ const NODE_KEYWORDS: &[&str] = &[
     "x-wb-unknownKeys",
 ];
 
+/// What every typed node may carry whatever its type: its metadata, and the
+/// `default` its parent object reads off it.
+const TYPED_COMMON: &[&str] =
+    &["description", "type", "default", "x-wb-describe", "x-wb-registered", "x-wb-external"];
+const STRING_KEYWORDS: &[&str] =
+    &["const", "enum", "x-wb-minUtf16", "pattern", "x-wb-matcher", "x-wb-message", "x-wb-check"];
+const NUMBER_KEYWORDS: &[&str] = &["minimum", "exclusiveMinimum"];
+const ARRAY_KEYWORDS: &[&str] = &["items", "minItems", "maxItems", "x-wb-maxItemsMessage"];
+const RECORD_KEYWORDS: &[&str] = &[
+    "additionalProperties",
+    "propertyNames",
+    "maxProperties",
+    "x-wb-maxPropertiesMessage",
+    "x-wb-check",
+];
+const OBJECT_KEYWORDS: &[&str] = &[
+    "properties",
+    "required",
+    "additionalProperties",
+    "x-wb-order",
+    "x-wb-unknownKeys",
+    "x-wb-check",
+];
+
 const DEFS_PREFIX: &str = "#/$defs/";
 
 fn refuse<T>(at: &str, refusal: Refusal) -> Compiled<T> {
@@ -144,6 +168,18 @@ fn as_bound(value: &Value, at: &str) -> Compiled<f64> {
 
 fn texts(value: &Value, at: &str) -> Compiled<Vec<String>> {
     as_list(value, at)?.iter().map(|item| as_text(item, at).map(str::to_owned)).collect()
+}
+
+/// A keyword this node's own type never reads would be dropped, so it is
+/// refused: the shared list above only says the dialect has the word.
+fn check_own_keywords(map: &Map, own: &[&str], at: &str) -> Compiled<()> {
+    let found = map
+        .iter()
+        .find(|(name, _)| !TYPED_COMMON.contains(&name.as_str()) && !own.contains(&name.as_str()));
+    match found {
+        Some((name, _)) => refuse(at, Refusal::UnknownKeyword(name.clone())),
+        None => Ok(()),
+    }
 }
 
 fn check_keywords(map: &Map, allowed: &[&str], at: &str) -> Compiled<()> {
@@ -347,7 +383,10 @@ impl Compiler<'_> {
         match as_text(kind, at)? {
             "string" => self.string(map, at),
             "number" => self.number(map, at),
-            "boolean" => Ok(self.push(Node::Bool)),
+            "boolean" => {
+                check_own_keywords(map, &[], at)?;
+                Ok(self.push(Node::Bool))
+            }
             "array" => self.array(scope, owner, map, at),
             "object" if get(map, "properties").is_some() => self.object(scope, owner, map, at),
             "object" => self.record(scope, owner, map, at),
@@ -357,6 +396,7 @@ impl Compiler<'_> {
     }
 
     fn string(&mut self, map: &Map, at: &str) -> Compiled<usize> {
+        check_own_keywords(map, STRING_KEYWORDS, at)?;
         if let Some(constant) = get(map, "const") {
             let constant = as_text(constant, at)?.to_owned();
             return Ok(self.push(Node::Literal(constant)));
@@ -401,12 +441,14 @@ impl Compiler<'_> {
     }
 
     fn number(&mut self, map: &Map, at: &str) -> Compiled<usize> {
+        check_own_keywords(map, NUMBER_KEYWORDS, at)?;
         let min = get(map, "minimum").map(|n| as_bound(n, at)).transpose()?;
         let above = get(map, "exclusiveMinimum").map(|n| as_bound(n, at)).transpose()?;
         Ok(self.push(Node::Num { min, above }))
     }
 
     fn array(&mut self, scope: &Scope<'_>, owner: DefId, map: &Map, at: &str) -> Compiled<usize> {
+        check_own_keywords(map, ARRAY_KEYWORDS, at)?;
         let Some(items) = get(map, "items") else { return malformed(at, "an array has no items") };
         let item = self.node(scope, owner, items, &format!("{at}.items"))?;
         let min = get(map, "minItems").map(|n| as_count(n, at)).transpose()?;
@@ -426,6 +468,7 @@ impl Compiler<'_> {
         if get(map, "x-wb-check").is_some() {
             return refuse(at, Refusal::ModelOnly("x-wb-check on a record"));
         }
+        check_own_keywords(map, RECORD_KEYWORDS, at)?;
         let Some(value) = get(map, "additionalProperties") else {
             return malformed(at, "a record has no additionalProperties");
         };
@@ -455,6 +498,7 @@ impl Compiler<'_> {
         if get(map, "x-wb-check").is_some() {
             return refuse(at, Refusal::ModelOnly("x-wb-check on an object"));
         }
+        check_own_keywords(map, OBJECT_KEYWORDS, at)?;
         let (Some(properties), Some(order)) = (get(map, "properties"), get(map, "x-wb-order"))
         else {
             return malformed(at, "an object has properties and x-wb-order");
@@ -464,8 +508,10 @@ impl Compiler<'_> {
             Some(list) => texts(list, at)?,
             None => Vec::new(),
         };
+        let order = texts(order, at)?;
+        check_declared(map, properties, &required, &order, refuse_unknown, at)?;
         let mut fields = Vec::new();
-        for name in texts(order, at)? {
+        for name in order {
             let field_at = format!("{at}.{name}");
             let Some(property) = get(properties, &name) else {
                 return malformed(&field_at, "x-wb-order names a property that is not declared");
@@ -503,6 +549,32 @@ impl Compiler<'_> {
             ),
             None => Ok(()),
         }
+    }
+}
+
+/// What an object states about its properties agrees with itself: nothing
+/// declared goes unordered and nothing required goes undeclared, since either
+/// would be dropped rather than applied. The `additionalProperties` flag
+/// restates `x-wb-unknownKeys`, as the emitters require.
+fn check_declared(
+    map: &Map,
+    properties: &Map,
+    required: &[String],
+    order: &[String],
+    refuse_unknown: bool,
+    at: &str,
+) -> Compiled<()> {
+    if get(map, "additionalProperties").is_some_and(|flag| *flag != Value::Bool(!refuse_unknown)) {
+        return malformed(at, "additionalProperties disagrees with x-wb-unknownKeys");
+    }
+    if let Some(name) = required.iter().find(|name| get(properties, name).is_none()) {
+        return malformed(&format!("{at}.{name}"), "a required name is not a declared property");
+    }
+    match properties.iter().find(|(name, _)| !order.contains(name)) {
+        Some((name, _)) => {
+            malformed(&format!("{at}.{name}"), "a property is missing from x-wb-order")
+        }
+        None => Ok(()),
     }
 }
 

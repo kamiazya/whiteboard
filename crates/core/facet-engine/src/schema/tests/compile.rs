@@ -434,3 +434,110 @@ fn malformed_nested_3() -> Vec<(Json, &'static str)> {
         ),
     ]
 }
+
+#[test]
+fn a_keyword_the_node_s_own_type_never_reads_is_refused_by_name() {
+    let object = |extra: (&str, Json)| {
+        let mut node = json!({ "type": "object", "properties": { "a": { "type": "boolean" } },
+            "x-wb-order": ["a"], "x-wb-unknownKeys": "strip" });
+        node[extra.0] = extra.1;
+        node
+    };
+    let cases = [
+        (json!({ "type": "number", "enum": [1, 2] }), "enum"),
+        (json!({ "type": "number", "const": 1 }), "const"),
+        (json!({ "type": "boolean", "const": true }), "const"),
+        (json!({ "type": "boolean", "minimum": 1 }), "minimum"),
+        (json!({ "type": "string", "minimum": 3 }), "minimum"),
+        (json!({ "type": "string", "minItems": 1 }), "minItems"),
+        (json!({ "type": "number", "pattern": "^x$" }), "pattern"),
+        (json!({ "type": "number", "x-wb-minUtf16": 1 }), "x-wb-minUtf16"),
+        (json!({ "type": "array", "items": { "type": "boolean" }, "minimum": 1 }), "minimum"),
+        (json!({ "type": "array", "items": { "type": "boolean" }, "enum": [] }), "enum"),
+        (
+            json!({ "type": "object", "additionalProperties": { "x-wb-any": true }, "maxItems": 1 }),
+            "maxItems",
+        ),
+        (
+            json!({ "type": "object", "additionalProperties": { "x-wb-any": true },
+            "x-wb-order": [] }),
+            "x-wb-order",
+        ),
+        (
+            json!({ "type": "object", "additionalProperties": { "x-wb-any": true },
+            "x-wb-unknownKeys": "strip" }),
+            "x-wb-unknownKeys",
+        ),
+        (object(("maxProperties", json!(2))), "maxProperties"),
+        (object(("propertyNames", json!({ "type": "boolean" }))), "propertyNames"),
+        (object(("items", json!({ "type": "boolean" }))), "items"),
+    ];
+    for (node, name) in cases {
+        assert_eq!(refusal(&json!({ "A": node })), Refusal::UnknownKeyword(name.into()), "{name}");
+    }
+}
+
+#[test]
+fn the_keywords_each_type_does_read_still_compile() {
+    let defs = json!({
+        "S": { "type": "string", "description": "d", "x-wb-minUtf16": 1, "pattern": "^x$",
+            "x-wb-matcher": "lower", "x-wb-message": "m", "x-wb-check": "even" },
+        "E": { "type": "string", "enum": ["a"] },
+        "L": { "type": "string", "const": "a" },
+        "N": { "type": "number", "minimum": 0, "exclusiveMinimum": 1 },
+        "B": { "type": "boolean", "x-wb-describe": "d" },
+        "A": { "type": "array", "items": { "type": "boolean" }, "minItems": 1, "maxItems": 2,
+            "x-wb-maxItemsMessage": "m" },
+        "R": { "type": "object", "additionalProperties": { "x-wb-any": true },
+            "propertyNames": { "type": "string" }, "maxProperties": 1,
+            "x-wb-maxPropertiesMessage": "m" },
+        "O": { "type": "object", "properties": { "a": { "type": "boolean" } }, "required": ["a"],
+            "x-wb-order": ["a"], "x-wb-unknownKeys": "refuse" },
+    });
+    assert!(load(&defs).is_ok());
+}
+
+#[test]
+fn an_object_property_missing_from_its_order_is_refused_by_name() {
+    let refused = load(&json!({ "A": { "type": "object", "properties": {
+        "a": { "type": "boolean" }, "b": { "type": "boolean" } },
+        "x-wb-order": ["a"], "x-wb-unknownKeys": "strip" } }))
+    .err()
+    .expect("refused");
+    assert_eq!(refused.at, "c.json#/$defs/A.b");
+    assert_eq!(refused.refusal, Refusal::Malformed("a property is missing from x-wb-order"));
+}
+
+#[test]
+fn a_required_name_that_declares_no_property_is_refused() {
+    let refused = load(&json!({ "A": { "type": "object", "properties": {
+        "a": { "type": "boolean" } }, "required": ["a", "ghost"],
+        "x-wb-order": ["a"], "x-wb-unknownKeys": "strip" } }))
+    .err()
+    .expect("refused");
+    assert_eq!(refused.at, "c.json#/$defs/A.ghost");
+    assert_eq!(refused.refusal, Refusal::Malformed("a required name is not a declared property"));
+}
+
+#[test]
+fn an_additional_properties_flag_that_disagrees_with_the_unknown_key_policy_is_refused() {
+    let object = |policy: &str, flag: Json| {
+        json!({ "A": { "type": "object", "properties": { "a": { "type": "boolean" } },
+            "x-wb-order": ["a"], "x-wb-unknownKeys": policy, "additionalProperties": flag } })
+    };
+    for (policy, flag) in [
+        ("strip", json!(false)),
+        ("refuse", json!(true)),
+        ("strip", json!(1)),
+        ("refuse", json!(0)),
+    ] {
+        let defs = object(policy, flag);
+        assert_eq!(
+            refusal(&defs),
+            Refusal::Malformed("additionalProperties disagrees with x-wb-unknownKeys"),
+            "{defs}"
+        );
+    }
+    assert!(load(&object("strip", json!(true))).is_ok());
+    assert!(load(&object("refuse", json!(false))).is_ok());
+}
