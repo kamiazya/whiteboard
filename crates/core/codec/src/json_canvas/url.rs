@@ -214,8 +214,8 @@ fn ipv6_valid(text: &str) -> bool {
         rest = match after.split_first() {
             Some((b'.', _)) => {
                 // The IPv4 tail fills the last two pieces, so without `::` exactly six precede it.
-                return digits > 0
-                    && pieces <= 6
+                // `rest` keeps the digits, so a tail with none fails on its empty first part.
+                return pieces <= 6
                     && (compressed || pieces == 6)
                     && std::str::from_utf8(rest).is_ok_and(strict_ipv4);
             }
