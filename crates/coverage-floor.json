@@ -30,7 +30,7 @@
     "core/facet-engine": {
       "lines": 100,
       "regions": 100,
-      "reason": "first measured 2026-11-10 at 100.00% lines and regions: the generated asset types and the three pattern matchers, covered by their own tests"
+      "reason": "first measured 2026-11-10 at 100.00% lines and regions: the generated asset types and the three pattern matchers, covered by their own tests. The contract interpreter and the registry joined at 100.00% lines, regions and functions: every compile refusal has its own unit test, and the two recorded oracles, the properties and the registry cases cover the rest, with no defensive branch left unreachable"
     },
     "core/log": {
       "lines": 100,

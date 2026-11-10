@@ -130,6 +130,19 @@ fn a_keyword_of_the_wrong_shape_is_refused_where_it_stands() {
 }
 
 #[test]
+fn a_default_other_than_an_empty_list_or_object_is_refused() {
+    for default in [json!(3), json!("x"), json!([1]), json!({ "k": 1 }), json!(null)] {
+        let defs = json!({ "A": { "type": "object", "properties": { "a": { "type": "boolean",
+            "default": default } }, "x-wb-unknownKeys": "strip", "x-wb-order": ["a"] } });
+        assert_eq!(
+            refusal(&defs),
+            Refusal::Malformed("a default is an empty list or an empty object"),
+            "{defs}"
+        );
+    }
+}
+
+#[test]
 fn a_bound_that_is_not_finite_is_refused() {
     for bound in [f64::INFINITY, f64::NAN] {
         let number = ordered(&[("type", text("number")), ("minimum", Value::Number(bound))]);
