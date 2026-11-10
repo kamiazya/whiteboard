@@ -338,6 +338,24 @@ mod tests {
     }
 
     #[test]
+    fn a_frontmatter_of_numbers_the_reader_takes_is_within_the_writes_cap() {
+        // A number is the densest value in the wire against its YAML: 24 bytes
+        // against `  - 0` and a line break. A list of zeros whose YAML fills the
+        // reader's cap is what the write's cap is sized for.
+        let zero = json!(["f", format!("{:016x}", 0f64.to_bits())]);
+        let count = OKF_PARSE.max_bytes / 6 - 8;
+        let zeros: Json =
+            std::iter::once(json!("s")).chain(std::iter::repeat_n(zero, count)).collect();
+        let wire = json!(["m", "type", "x", "facetsRaw", ["m", "a", zeros]]);
+        assert!(wire.to_string().len() <= OKF_SERIALIZE.max_bytes);
+        let answer = written(&wire);
+        assert_eq!(answer[0], json!("ok"));
+        let head = answer[1].as_str().unwrap_or_default();
+        assert!(head.len() <= OKF_PARSE.max_bytes, "{}", head.len());
+        assert!(head.len() > OKF_PARSE.max_bytes - 64, "{}", head.len());
+    }
+
+    #[test]
     fn a_wire_that_is_no_frontmatter_or_is_past_the_cap_is_refused() {
         let refused =
             |wire: &str| serde_json::from_str::<Json>(&okf_serialize(wire)).unwrap_or(Json::Null);

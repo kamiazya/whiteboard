@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { type Core, CoreInputRefused, CoreOkfUnwritable } from '@kamiazya/whiteboard-core-wasm'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
+import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { Dice, mulberry32 } from '../test-utils/frontmatter-oracle/corpus.js'
@@ -212,13 +213,15 @@ describe('the shim declines what the artifact cannot be sent', () => {
   const framed = (frontmatter: string) => `${fence}type: x\n${frontmatter}\n---\n`
 
   it('declines a head past the cap whether its units or its bytes pass it', () => {
+    // The cap is three UTF-8 bytes for each unit the model admits (crates/input-caps.json).
+    const cap = 3 * MARKDOWN_MAX_CHARS
     // 3 bytes a unit: under the cap in units, over it in bytes.
-    const euros = framed(`description: ${'€'.repeat(100_000)}`)
-    expect(euros.length).toBeLessThan(262_144)
+    const euros = framed(`description: ${'€'.repeat(cap / 3 + 100)}`)
+    expect(euros.length).toBeLessThan(cap)
     expect(asked(() => core.parseOkf(euros))).toEqual({ refused: 'input-too-large' })
-    const plain = framed(`description: ${'a'.repeat(262_144)}`)
+    const plain = framed(`description: ${'a'.repeat(cap)}`)
     expect(asked(() => core.parseOkf(plain))).toEqual({ refused: 'input-too-large' })
-    const fits = framed(`description: ${'a'.repeat(262_144 - framed('description: ').length)}`)
+    const fits = framed(`description: ${'a'.repeat(cap - framed('description: ').length)}`)
     expect(asked(() => core.parseOkf(fits))).toHaveProperty('answered')
   })
 
@@ -228,6 +231,32 @@ describe('the shim declines what the artifact cannot be sent', () => {
       const answer = asked(() => core.parseOkf(head + body))
       expect(answer).toMatchObject({ answered: { ok: true, value: { body } } })
     }
+  })
+
+  it('reads and writes a document at the model limit spelled in three-byte characters', () => {
+    // The frontmatter is the whole document, and every unit of it but the
+    // fences and keys is three UTF-8 bytes: the largest head the model admits.
+    const open = '---\ntype: x\ndescription: '
+    const close = '\n---\n'
+    const text = `${open}${'€'.repeat(MARKDOWN_MAX_CHARS - open.length - close.length)}${close}`
+    expect(text.length).toBe(MARKDOWN_MAX_CHARS)
+    const read = asked(() => core.parseOkf(text))
+    expect(read).toEqual({ answered: parseOkf(text) })
+    const doc = (parseOkf(text) as { value: OkfMarkdownDocument }).value
+    expect(asked(() => core.serializeOkf(doc))).toEqual({ answered: serializeOkf(doc) })
+  })
+
+  it('writes a document of numbers at the model limit, whose wire is the densest', () => {
+    // A number is 24 bytes of wire and as few as 6 of YAML: the write's cap
+    // is set from the reader's by this ratio, so this is the case that fills it.
+    const zeros = Array.from({ length: Math.floor((MARKDOWN_MAX_CHARS - 32) / 6) }, () => 0)
+    const doc = {
+      frontmatter: { type: 'x', facetsRaw: { a: zeros } },
+      body: '',
+    } as OkfMarkdownDocument
+    const ts = serializeOkf(doc)
+    expect(ts.length).toBeLessThanOrEqual(MARKDOWN_MAX_CHARS)
+    expect(asked(() => core.serializeOkf(doc))).toEqual({ answered: ts })
   })
 
   it('reads a body holding a lone surrogate as the TypeScript does, which keeps it', () => {

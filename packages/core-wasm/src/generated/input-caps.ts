@@ -23,16 +23,16 @@ export const JSON_CANVAS_SERIALIZE_CAPS = Object.freeze({
 
 /** The caps of `whiteboard-wasm::okf::okf_parse`. */
 export const OKF_PARSE_CAPS = Object.freeze({
-  maxBytes: 262144,
+  maxBytes: 786432,
   maxDepth: 64,
-  maxMillis: 500,
+  maxMillis: 2000,
 } as const)
 
 /** The caps of `whiteboard-wasm::okf::okf_serialize`. */
 export const OKF_SERIALIZE_CAPS = Object.freeze({
-  maxBytes: 262144,
+  maxBytes: 4718592,
   maxDepth: 64,
-  maxMillis: 250,
+  maxMillis: 3000,
 } as const)
 
 /** The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`. */

@@ -26,11 +26,11 @@ pub const JSON_CANVAS_SERIALIZE: InputCaps =
 
 /// The caps of `whiteboard-wasm::okf::okf_parse`.
 pub const OKF_PARSE: InputCaps =
-    InputCaps { max_bytes: 262_144, max_depth: 64, max_millis: 500, max_nodes: None };
+    InputCaps { max_bytes: 786_432, max_depth: 64, max_millis: 2000, max_nodes: None };
 
 /// The caps of `whiteboard-wasm::okf::okf_serialize`.
 pub const OKF_SERIALIZE: InputCaps =
-    InputCaps { max_bytes: 262_144, max_depth: 64, max_millis: 250, max_nodes: None };
+    InputCaps { max_bytes: 4_718_592, max_depth: 64, max_millis: 3000, max_nodes: None };
 
 /// The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`.
 pub const EDGE_ROUTE_LAYOUT: InputCaps =

@@ -71,19 +71,22 @@ whole project (586 files) and codec's layer 1 found one decline in `mcp-node`
 | P2 | A text over 256 KiB was not sent: a document at `MARKDOWN_MAX_CHARS` took the TypeScript's path | `wasm.rust.test.ts` "reads a body of any size" (5 MB), "declines a head past the cap whether its units or its bytes pass it"; `boot-self-host-deps.markdown-limit.test.ts` now requires no decline and keeps its CPU budget | The cap measures the head, which is all Rust reads. A body of any size is read by the core. The registry (`crates/input-caps.json`) says so, and the cap stays a bound on what crosses. |
 | S4 | An unwritable value lost its path | `serialize.test.ts`'s seven tests, now answered by the core; Rust `frontmatter_examples.rs` and `okf_examples.rs` (paths and order); `okf.rs` unit tests; `wasm.rust.test.ts` and `serialize-unsafe.rust.test.ts` hold the places equal to the TypeScript's, 1500 mixed documents each | ABI 16: the writer reports every place as `[path, reason]` in walk order (a reserved key first, at the root; a mapping's unprintable keys before its entries), and `okf_serialize` answers `["unwritable", faults]`. The shim words each reason as the TypeScript does. |
 | S1, partly | A frontmatter the wire does not carry | `wasm.rust.test.ts` counts them (`reach.declined`) and requires each to be a document the schema does not hold | A document with a value that has no YAML spelling is answered as S4 whether or not the wire carries it: the shim walks it. What still declines, as `CoreInputRefused` `malformed`, is a document the TypeScript writes: a root key the schema does not name, a field of another kind, a value nested past the shim's wire depth. The `OkfMarkdownDocument` type forbids each. |
-| S2, partly | A wire over the serialize cap | `okf.test.ts` "refuses a wire past the cap, and sends one at it" | Still declines as `CoreInputRefused` `input-too-large`: a frontmatter whose wire is past 256 KiB, and a head past it on a read. The wire is longer than the YAML (a double is 22 bytes of it), so a frontmatter of about 12,000 numbers (some 50 KiB of YAML) reaches the serialize cap, and the TypeScript has no cap. |
+| S2 | A wire over the serialize cap, or a head over the parse cap | `wasm.rust.test.ts` "reads and writes a document at the model limit spelled in three-byte characters" and "writes a document of numbers at the model limit, whose wire is the densest"; `okf.rs` "a frontmatter of numbers the reader takes is within the write's cap"; `okf.test.ts` "refuses a wire past the cap, and sends one at it" | Closed by raising the caps (owner decision q37). A document holds at most `MARKDOWN_MAX_CHARS` UTF-16 units, three UTF-8 bytes each at most, so the frontmatter cap is 768 KiB, which every head the model admits fits. The write's cap is six times that, 4.5 MiB, because a number is 24 bytes of wire against at least 6 of YAML. `maxMillis` was measured again at the new caps (`crates/input-caps.json`): on Node wasm the slowest read is 272 ms and the slowest write 436 ms, and the caps are 2000 and 3000 ms. A frontmatter past the model's limit still declines as `input-too-large`, and the TypeScript has no cap. |
 | S6 | More faults than the answer may hold | `frontmatter_examples.rs` "faults past the budget end the list with an overflow"; `okf.rs` "faults that would not fit the budget are a refusal" (60 keys of 1000 bytes over 5000 NaN leaves, 185 KB of wire) | Declines as `input-too-large`: the walk stops once the faults weigh `MAX_FAULT_BYTES` (1 MiB) and the export refuses. Without the bound that wire answered 301 MB. A document with thousands of unwritable leaves is refused where the TypeScript throws its typed error. |
 | S5 | A value nested past 64 collections | `okf.test.ts` "refuses a value nested past the writer as an input past the cap" | Declines as `input-too-large`, the entry's `maxDepth`. The TypeScript writes it, as YAML its own reader refuses past 32. |
 | S3 | A frontmatter whose root keys are not in schema order | `serialize-order.rust.test.ts` (any order, compared byte for byte with the TypeScript, no decline); `okf.rs` "a write keeps the root keys and event keys in the wire's order"; `okf_wire.rs` "root keys and trust event keys are allowed in any order" | The core writes the root mapping in the order the wire carries it, as `serializeOkf` writes the object it was given, and checks the typed frontmatter only for what the schema allows (owner decision q36: the caller's order is kept, so exported bytes do not move). A trust event's keys keep their order too. An earlier change put the keys in schema order before either implementation instead; that changed exported bytes and is reverted. |
 
-What is left is S1 (partly), S2 (partly), S5 and S6, and it is the same decision
-each time: the core refuses an input the TypeScript takes because the input is
-past a cap the registry declares or is not a document the types allow. They are
-`CoreInputRefused` and typed, and no OKF suite reaches them, but a large enough
-frontmatter can, and the TypeScript answers them today and its deletion would turn each into
-a refusal where the TypeScript wrote. That is a tolerated difference, and
-recording one needs an owner decision (q26's deadline: before the TypeScript is
-deleted), which this change does not take.
+What is left is S1 (partly), S5 and S6: the core refuses an input the
+TypeScript takes because it is nested past the writer's depth, carries more
+unwritable values than the answer may hold, or is not a document the types
+allow (a root key the schema does not name, a field of another kind). Owner
+decision q37 records S1 and S5 as tolerated differences: once the TypeScript is
+deleted they are refused with their reason (`CoreInputRefused`, typed) where the
+TypeScript wrote. S6 is the same kind of refusal, of a document whose every
+unwritable place the TypeScript would also refuse to write, only with its own
+typed error. A value nested past 32 collections is one the TypeScript's own
+reader refuses, and a document outside the types is one no caller can build
+without a cast.
 
 ## Boundary cost (QR-22b)
 
