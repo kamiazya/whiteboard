@@ -293,3 +293,14 @@ fn a_bounded_record_inside_a_list_is_named_and_referenced_instead() {
     }"##;
     refused_with(&[NAME, inline].join(",\n"), CORE, "name a bounded record in $defs");
 }
+
+#[test]
+fn a_check_on_a_records_entries_is_named_like_any_other() {
+    let bag = r##""Bag": {
+      "description": "A bag.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/Name" },
+      "additionalProperties": { "type": "string", "x-wb-check": "NotSnake" }
+    }"##;
+    refused_with(&[NAME, bag].join(",\n"), CORE, "check `NotSnake`: must be snake_case");
+}
