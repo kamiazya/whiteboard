@@ -235,3 +235,44 @@ fn an_import_line_wider_than_biomes_width_breaks_one_name_to_a_line() {
     assert_eq!(lines.next(), Some(format!("  b{}Schema,", "a".repeat(30)).as_str()), "{broken}");
     assert_eq!(lines.next(), Some("} from '../x.js'"), "{broken}");
 }
+
+const PLAIN_EITHER: &str = r##""Either": {
+      "description": "An a or a b.",
+      "anyOf": [{ "$ref": "#/$defs/ArmA" }, { "$ref": "#/$defs/ArmB" }],
+      "x-wb-describe": "What a model reads: an a or a b."
+    }"##;
+
+#[test]
+fn a_union_publishes_its_text_in_zod_alone() {
+    let (zod, rust) = emitted(&defs(PLAIN_EITHER));
+    assert!(
+        zod.contains(
+            "export const eitherSchema = z\n  .union([armASchema, armBSchema])\n  .describe('What a model reads: an a or a b.')\n"
+        ),
+        "{zod}"
+    );
+    assert!(!rust.contains("What a model reads"), "{rust}");
+    let (bare, _) = emitted(&defs(&swapped(
+        PLAIN_EITHER,
+        r#""x-wb-describe": "What a model reads: an a or a b.""#,
+        r#""x-wb-registered": true"#,
+    )));
+    assert!(!bare.contains("describe("), "{bare}");
+}
+
+#[test]
+fn a_definition_publishes_text_only_as_a_union_and_only_where_the_contract_does_not() {
+    let number = r#""N": { "description": "N.", "type": "number", "x-wb-describe": "N." }"#;
+    refused(number, "x-wb-describe belongs on a union or a property");
+    let described = plain(&defs(PLAIN_EITHER), IN_MODEL, false)
+        .replace(r#""x-wb-describe": false"#, r#""x-wb-describe": true"#);
+    let errors = outputs(&described).unwrap_err();
+    assert!(
+        errors.iter().any(|e| e.contains("the contract already publishes every description")),
+        "{errors:?}"
+    );
+    refused(
+        &defs(&swapped(PLAIN_EITHER, "What a model reads: an a or a b.", "it's")),
+        "single quotes",
+    );
+}

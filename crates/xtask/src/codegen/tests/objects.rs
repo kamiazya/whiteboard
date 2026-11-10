@@ -255,7 +255,7 @@ fn a_published_text_rule_the_dialect_states_is_refused_by_name() {
         refused(&defs, expect);
     }
     let top = r#""Flag": { "description": "F.", "type": "string", "x-wb-describe": "F." }"#;
-    refused(top, "x-wb-describe belongs on a property");
+    refused(top, "x-wb-describe belongs on a union or a property");
     let described = plain(PUBLISHED, IN_MODEL, false)
         .replace(r#""x-wb-describe": false"#, r#""x-wb-describe": true"#);
     let errors = outputs(&described).unwrap_err();

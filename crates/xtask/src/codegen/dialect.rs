@@ -16,7 +16,7 @@
 //! `x-wb-registered`, or `x-wb-external` when its Zod half is a hand-written
 //! module's. An object may carry a named `x-wb-check` and may `x-wb-extends`
 //! a plain one; a property may be `x-wb-lenient`, `default` to an empty list,
-//! or carry the text a model reads as `x-wb-describe`. It grows when a contract
+//! or carry the text a model reads as `x-wb-describe`, as may a union definition. It grows when a contract
 //! needs a construct, with that construct's emission in both languages in the
 //! same change.
 //!
@@ -167,6 +167,8 @@ pub(super) struct CheckedDef<'a> {
     pub(super) registered: bool,
     /// The module whose hand-written Zod schema stands for it, if any.
     pub(super) external: Option<&'a str>,
+    /// The text a model reads for a union, published as its `.describe()`.
+    pub(super) published: Option<&'a str>,
     pub(super) ty: Ty<'a>,
 }
 
@@ -332,7 +334,31 @@ fn check_def<'a>(
     if let Some(module) = external {
         check_external(contract, module, registered, &at, v);
     }
-    Some(CheckedDef { name, description: description?, registered, external, ty })
+    let published = published_text(contract, node, &ty, &at, v);
+    Some(CheckedDef { name, description: description?, registered, external, published, ty })
+}
+
+/// The text a union publishes where the contract does not publish every
+/// description: only a union carries one, since an object's properties carry
+/// theirs.
+fn published_text<'a>(
+    contract: &Contract,
+    node: &'a Node,
+    ty: &Ty<'_>,
+    at: &str,
+    v: &mut Vec<String>,
+) -> Option<&'a str> {
+    let text = node.published.as_deref()?;
+    if contract.describe {
+        v.push(format!("{at}: the contract already publishes every description"));
+    }
+    if !matches!(ty, Ty::Union { .. }) {
+        v.push(format!("{at}: x-wb-describe belongs on a union or a property"));
+    }
+    if let Err(e) = refusal(text) {
+        v.push(format!("{at}.x-wb-describe: {e}"));
+    }
+    Some(text)
 }
 
 /// What the contract's own switches allow a definition to hold.
@@ -438,12 +464,11 @@ const DEFS_PREFIX: &str = "#/$defs/";
 /// `top` is a definition: only there may an object be written out, so a
 /// nested one is named and referenced and its type has a name in both languages.
 fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
-    for (there, keyword) in
-        [(node.lenient.is_some(), "x-wb-lenient"), (node.published.is_some(), "x-wb-describe")]
-    {
-        if there {
-            v.push(format!("{at}: {keyword} belongs on a property"));
-        }
+    if node.lenient.is_some() {
+        v.push(format!("{at}: x-wb-lenient belongs on a property"));
+    }
+    if node.published.is_some() && !top {
+        v.push(format!("{at}: x-wb-describe belongs on a property or a union"));
     }
     lower_form(node, at, top, v)
 }

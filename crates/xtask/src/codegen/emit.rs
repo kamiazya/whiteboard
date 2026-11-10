@@ -362,7 +362,7 @@ fn zod_imports(checked: &Checked<'_>) -> String {
 }
 
 fn zod_def(out: &mut String, contract: &Contract, def: &CheckedDef<'_>) {
-    let CheckedDef { name, description, registered, ty, .. } = def;
+    let CheckedDef { name, description, registered, published, ty, .. } = def;
     let schema = schema_name(name);
     let _ = write!(out, "\n/** {description} */\n");
     match ty {
@@ -371,6 +371,8 @@ fn zod_def(out: &mut String, contract: &Contract, def: &CheckedDef<'_>) {
             let mut chain = zod_chain(other);
             if contract.describe {
                 chain = chain.then("describe", vec![js_string(description)]);
+            } else if let Some(text) = published {
+                chain = chain.then("describe", vec![js_string(text)]);
             }
             let _ = writeln!(out, "{}", chain.render(0, &format!("export const {schema} = "), ""));
         }
