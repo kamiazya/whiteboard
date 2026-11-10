@@ -1,0 +1,613 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`the visual plugin definition > declares these facets, each with its targets, asset refs, editor and payload schema 1`] = `
+{
+  "displayName": "Visual style",
+  "facets": [
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Semantic axes",
+      "editor": null,
+      "key": "visual.axes/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "axes": {
+            "items": {
+              "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\/v[0-9]+$",
+              "type": "string",
+            },
+            "maxItems": 64,
+            "type": "array",
+          },
+        },
+        "required": [
+          "axes",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "canvas",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Edges",
+      "editor": {
+        "fields": {
+          "lineJumps": {
+            "label": "Line jumps",
+            "layout": "cards",
+            "options": [
+              {
+                "glyph": {
+                  "id": "visual.line-jumps-off",
+                  "kind": "asset",
+                },
+                "label": "Off",
+                "value": "none",
+              },
+              {
+                "glyph": {
+                  "id": "visual.line-jumps-on",
+                  "kind": "asset",
+                },
+                "label": "On",
+                "value": "arc",
+              },
+            ],
+            "widget": "segmented",
+          },
+          "routing": {
+            "label": "Edge routing",
+            "layout": "cards",
+            "options": [
+              {
+                "glyph": {
+                  "id": "visual.edge-straight",
+                  "kind": "asset",
+                },
+                "label": "Straight",
+                "value": "straight",
+              },
+              {
+                "glyph": {
+                  "id": "visual.edge-orthogonal",
+                  "kind": "asset",
+                },
+                "label": "Orthogonal",
+                "value": "orthogonal",
+              },
+              {
+                "glyph": {
+                  "id": "visual.edge-curved",
+                  "kind": "asset",
+                },
+                "label": "Curved",
+                "value": "curved",
+              },
+            ],
+            "widget": "segmented",
+          },
+        },
+      },
+      "key": "visual.edges/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "lineJumps": {
+            "enum": [
+              "none",
+              "arc",
+            ],
+            "type": "string",
+          },
+          "routing": {
+            "enum": [
+              "straight",
+              "orthogonal",
+              "curved",
+            ],
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+      "targets": [
+        "canvas",
+        "edge",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Ink",
+      "editor": null,
+      "key": "visual.ink/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "group": {
+            "minLength": 1,
+            "type": "string",
+          },
+        },
+        "required": [
+          "group",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "edge",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Stroke",
+      "editor": null,
+      "key": "visual.stroke/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "width": {
+            "enum": [
+              "medium",
+              "thick",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "width",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "edge",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Shape",
+      "editor": {
+        "picker": {
+          "options": [
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "square",
+              },
+              "label": "Rectangle",
+              "payload": null,
+            },
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "circle",
+              },
+              "label": "Ellipse",
+              "payload": {
+                "kind": "ellipse",
+              },
+            },
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "diamond",
+              },
+              "label": "Diamond",
+              "payload": {
+                "kind": "diamond",
+              },
+            },
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "hexagon",
+              },
+              "label": "Hexagon",
+              "payload": {
+                "kind": "hexagon",
+              },
+            },
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "octagon",
+              },
+              "label": "Octagon",
+              "payload": {
+                "kind": "octagon",
+              },
+            },
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "parallelogram",
+              },
+              "label": "Parallelogram",
+              "payload": {
+                "kind": "parallelogram",
+              },
+            },
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "cylinder",
+              },
+              "label": "Cylinder",
+              "payload": {
+                "kind": "cylinder",
+              },
+            },
+          ],
+        },
+      },
+      "key": "visual.shape/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "enum": [
+              "ellipse",
+              "diamond",
+              "hexagon",
+              "parallelogram",
+              "cylinder",
+              "octagon",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "kind",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "node",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Text placement",
+      "editor": {
+        "picker": {
+          "options": [
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "none",
+              },
+              "label": "Default placement",
+              "payload": null,
+            },
+            {
+              "label": "Top",
+              "payload": {
+                "align": "start",
+              },
+            },
+            {
+              "label": "Middle",
+              "payload": {
+                "align": "center",
+              },
+            },
+          ],
+        },
+      },
+      "key": "visual.text/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "align": {
+            "enum": [
+              "start",
+              "center",
+            ],
+            "type": "string",
+          },
+        },
+        "required": [
+          "align",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "node",
+      ],
+    },
+    {
+      "assetRefs": {
+        "theme": "themes",
+      },
+      "compat": [],
+      "displayName": "Theme",
+      "editor": {
+        "picker": {
+          "layout": "cards",
+          "specimenIcon": "visual.signature",
+        },
+      },
+      "key": "visual.theme/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "theme": {
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "theme",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "canvas",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Symbol",
+      "editor": {
+        "picker": {
+          "catalog": {
+            "entry": {
+              "field": "char",
+              "label": "Any character or emoji",
+              "payload": {
+                "kind": "emoji",
+              },
+              "placeholder": "Search, or paste a symbol",
+            },
+            "label": "Search symbols",
+            "load": "<catalog loader>",
+          },
+          "options": [
+            {
+              "glyph": {
+                "kind": "shape",
+                "name": "none",
+              },
+              "label": "No symbol",
+              "payload": null,
+            },
+          ],
+        },
+      },
+      "key": "visual.symbol/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "anyOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "kind": {
+                "const": "icon",
+                "type": "string",
+              },
+              "name": {
+                "minLength": 1,
+                "type": "string",
+              },
+            },
+            "required": [
+              "kind",
+              "name",
+            ],
+            "type": "object",
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "char": {
+                "minLength": 1,
+                "type": "string",
+              },
+              "kind": {
+                "const": "emoji",
+                "type": "string",
+              },
+            },
+            "required": [
+              "kind",
+              "char",
+            ],
+            "type": "object",
+          },
+        ],
+        "description": "What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas — a node at full size already shows its own content — so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (\`priority:high\`) AND declare its key in the workspace tag library: a declared value carries a colour, so the boxes wearing it are drawn in it and the board legend names it. A tag nobody declared is recorded and drawn in nothing.",
+      },
+      "targets": [
+        "node",
+        "canvas",
+        "document",
+      ],
+    },
+    {
+      "assetRefs": {
+        "stencil": "stencils",
+      },
+      "compat": [],
+      "displayName": "Stencil",
+      "editor": {
+        "fields": {
+          "stencil": {
+            "label": "Stencil",
+            "widget": "segmented",
+          },
+        },
+      },
+      "key": "visual.stencil/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "stencil": {
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+            "type": "string",
+          },
+        },
+        "required": [
+          "stencil",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "node",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Stencil library",
+      "editor": null,
+      "key": "visual.stencils/v0",
+      "schema": {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "stencils": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "color": {
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "displayName": {
+                  "minLength": 1,
+                  "type": "string",
+                },
+                "facets": {
+                  "additionalProperties": {},
+                  "default": {},
+                  "propertyNames": {
+                    "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\/v[0-9]+$",
+                    "type": "string",
+                  },
+                  "type": "object",
+                },
+              },
+              "required": [
+                "displayName",
+                "facets",
+              ],
+              "type": "object",
+            },
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string",
+            },
+            "type": "object",
+          },
+        },
+        "required": [
+          "stencils",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "document",
+      ],
+    },
+    {
+      "assetRefs": null,
+      "compat": [],
+      "displayName": "Tag library",
+      "editor": null,
+      "key": "visual.tags/v0",
+      "schema": {
+        "$defs": {
+          "CanvasColor": {
+            "anyOf": [
+              {
+                "enum": [
+                  "1",
+                  "2",
+                  "3",
+                  "4",
+                  "5",
+                  "6",
+                ],
+                "type": "string",
+              },
+              {
+                "pattern": "^#[0-9a-fA-F]{6}$",
+                "type": "string",
+              },
+            ],
+          },
+        },
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "additionalProperties": {
+              "additionalProperties": false,
+              "properties": {
+                "description": {
+                  "type": "string",
+                },
+                "exclusive": {
+                  "type": "boolean",
+                },
+                "values": {
+                  "additionalProperties": {
+                    "additionalProperties": false,
+                    "properties": {
+                      "color": {
+                        "$ref": "#/$defs/CanvasColor",
+                      },
+                      "description": {
+                        "type": "string",
+                      },
+                    },
+                    "type": "object",
+                  },
+                  "propertyNames": {
+                    "pattern": "^[a-z][a-z0-9-]*$",
+                    "type": "string",
+                  },
+                  "type": "object",
+                },
+              },
+              "type": "object",
+            },
+            "propertyNames": {
+              "pattern": "^[a-z][a-z0-9-]*$",
+              "type": "string",
+            },
+            "type": "object",
+          },
+        },
+        "required": [
+          "keys",
+        ],
+        "type": "object",
+      },
+      "targets": [
+        "document",
+      ],
+    },
+  ],
+  "id": "visual",
+}
+`;
+
+exports[`the visual plugin definition > registers the asset tables the data modules hold 1`] = `"8b35d6e5319c20794fb474b52f4b31f10f9726ae1aa5e816be6bb623fbaf8b8b"`;
