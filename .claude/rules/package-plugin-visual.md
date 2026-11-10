@@ -17,9 +17,9 @@ Nothing about being bundled is load-bearing. The engine does not import this
 package, and `bundledFacetRegistry` here is a convenience for the compositions
 that want the shipped set, not a privileged registry.
 
-## The simple facets' payloads are generated
+## The facets' payloads are generated
 
-`shape`, `text`, `edges`, `ink`, `stroke`, `theme`, `stencil`, `axes` and `symbol` have
+`shape`, `text`, `edges`, `ink`, `stroke`, `theme`, `stencil`, `axes`, `symbol`, `tags` and `stencils` have
 their Zod in `src/generated/visual.zod.ts`, emitted by `cargo xtask codegen`
 from `contracts/facets/visual/visual.schema.json` beside the Rust types of
 `crates/core/plugin-visual`. Edit the contract, not the output. `data.ts`
@@ -30,8 +30,17 @@ and stripped payloads, each refusal's code, message and path, the JSON Schema
 
 The edge vocabularies come from `model` through `src/model-vocabulary.ts`
 (an `x-wb-external` module must be a sibling of the output), and the facet-key
-patterns are the engine's spelled again, held equal by that test. `tags` and
-`stencils` stay hand-written until the dialect can state them.
+patterns are the engine's spelled again, held equal by that test. So are the
+tag identifier and stencil name grammars (the model's `TAG_IDENTIFIER_PATTERN`
+and the engine's `FACET_SEGMENT_PATTERN`), and a library's colours: a tag
+value's is the model's `canvasColorSchema` itself, and a stencil's is a string
+checked by the named check `canvas_color`, which words its refusal for the
+author and is `canvas_color` in `checks.rs` too. `library.contract.test.ts`
+pins the two library facets the way `visual.contract.test.ts` pins the rest,
+including the order of issues across a record's entries and that a stencil
+library over 256 is refused by its count alone (a pipe, so no entry is judged).
+`tag-library.ts` and `stencil-library.ts` keep what a library MEANS (the readers,
+the objection judgement, the paths) and re-export the generated facet schemas.
 
 `symbol` is a union whose published description is the contract's
 `x-wb-describe` on the union definition (the rest of the contract publishes

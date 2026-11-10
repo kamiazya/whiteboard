@@ -25,7 +25,10 @@ pub(super) fn plain(defs: &str, rust: &str, checks: bool) -> String {
 }
 
 pub(super) const IN_MODEL: &str = "crates/core/model/src/generated/p.rs";
-const ELSEWHERE: &str = "crates/core/c/src/generated/p.rs";
+/// A crate that may not depend on the model's `Value` and `Map`.
+const ELSEWHERE: &str = "crates/bindings/c/src/generated/p.rs";
+/// A core crate other than the model, which may.
+const CORE_ELSEWHERE: &str = "crates/core/c/src/generated/p.rs";
 
 #[test]
 fn a_check_nested_in_an_array_inside_an_object_is_listed() {
@@ -79,10 +82,16 @@ fn only_the_model_crate_imports_what_each_plain_type_reaches_for() {
     }"#;
     for (defs, map, value) in [(record, true, false), (list, false, true), (kept, true, false)] {
         let errors = outputs(&plain(defs, ELSEWHERE, false)).unwrap_err();
-        assert!(errors.iter().any(|e| e.contains("must emit there")), "{defs}: {errors:?}");
+        assert!(
+            errors.iter().any(|e| e.contains("must emit in a core crate")),
+            "{defs}: {errors:?}"
+        );
         let rust = outputs(&plain(defs, IN_MODEL, false)).unwrap().remove(1).1;
         assert_eq!(rust.contains("use crate::Map;"), map, "{defs}: {rust}");
         assert_eq!(rust.contains("use crate::Value;"), value, "{defs}: {rust}");
+        let rust = outputs(&plain(defs, CORE_ELSEWHERE, false)).unwrap().remove(1).1;
+        assert_eq!(rust.contains("use whiteboard_model::Map;"), map, "{defs}: {rust}");
+        assert_eq!(rust.contains("use whiteboard_model::Value;"), value, "{defs}: {rust}");
     }
 }
 

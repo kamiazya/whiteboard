@@ -226,15 +226,30 @@ try {
     env: { ...process.env, HOME: home, MOZ_HEADLESS: '1' },
     stdio: ['ignore', 'ignore', 'inherit'],
   })
-  for (let i = 0; i < 40; i += 1) {
-    if (
-      await fetch(`http://127.0.0.1:${GECKO_PORT}/status`).then(
-        () => true,
-        () => false,
-      )
+  // A cold runner has taken more than 10 s to bring geckodriver up; the
+  // first WebDriver call then failed as a bare `fetch failed`, which names
+  // nothing. Wait longer, stop at once if it exited, and say which it was.
+  let geckodriverExit = null
+  geckodriver.on('exit', (code, signal) => {
+    geckodriverExit = signal ?? code
+  })
+  let geckodriverReady = false
+  const geckodriverDeadline = Date.now() + 30_000
+  while (!geckodriverReady && geckodriverExit === null && Date.now() < geckodriverDeadline) {
+    geckodriverReady = await fetch(`http://127.0.0.1:${GECKO_PORT}/status`, {
+      signal: AbortSignal.timeout(1_000),
+    }).then(
+      () => true,
+      () => false,
     )
-      break
-    await new Promise((later) => setTimeout(later, 250))
+    if (!geckodriverReady) await new Promise((later) => setTimeout(later, 250))
+  }
+  if (!geckodriverReady) {
+    throw new Error(
+      geckodriverExit === null
+        ? `geckodriver did not answer on port ${GECKO_PORT} within 30 s`
+        : `geckodriver exited (${geckodriverExit}) before answering on port ${GECKO_PORT}`,
+    )
   }
 
   const dev = await openFirefox(join(EXTENSION_DIR, 'dist/firefox-development'))

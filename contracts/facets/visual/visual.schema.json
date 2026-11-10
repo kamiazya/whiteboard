@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Visual facets",
-  "description": "The payloads of the simple facets of the bundled visual plugin: how a node, an edge or a canvas is drawn. Facets whose payload the dialect cannot yet state stay hand-written beside this contract.",
+  "description": "The payloads of the facets of the bundled visual plugin: how a node, an edge or a canvas is drawn, and the tag and stencil libraries a document declares. Facets whose payload the dialect cannot yet state stay hand-written beside this contract.",
   "x-wb-emit": {
     "zod": "packages/plugin-visual/src/generated/visual.zod.ts",
     "rust": "crates/core/plugin-visual/src/generated/visual.rs"
@@ -192,6 +192,137 @@
       },
       "required": ["axes"],
       "x-wb-order": ["axes"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "TagIdentifier": {
+      "description": "A tag key or value: the identifier of the scoped-tag grammar, checked at the write.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "x-wb-matcher": "tag_identifier",
+      "x-wb-message": "a key or value must be a lowercase identifier, like \"health\""
+    },
+    "CanvasColor": {
+      "description": "A canvas colour: a numbered preset or a 6-digit hex string; the model vocabulary, spelled the same.",
+      "type": "string",
+      "x-wb-check": "canvas_color",
+      "x-wb-external": "../model-vocabulary.js"
+    },
+    "TagValueDeclaration": {
+      "description": "What a library declares of one value of a key.",
+      "type": "object",
+      "properties": {
+        "color": {
+          "$ref": "#/$defs/CanvasColor",
+          "description": "The colour a box or an edge carrying this value is drawn in when it has none of its own."
+        },
+        "description": { "type": "string", "description": "What the value means." }
+      },
+      "required": [],
+      "x-wb-order": ["color", "description"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "TagValues": {
+      "description": "The values a key admits, each with its own declaration.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/TagIdentifier" },
+      "additionalProperties": { "$ref": "#/$defs/TagValueDeclaration" }
+    },
+    "TagKeyDeclaration": {
+      "description": "What a library declares of one key.",
+      "type": "object",
+      "properties": {
+        "description": { "type": "string", "description": "What the key is for." },
+        "exclusive": {
+          "type": "boolean",
+          "description": "One value at a time: a thing carrying two values under this key is refused."
+        },
+        "values": {
+          "$ref": "#/$defs/TagValues",
+          "description": "The values this key admits; absent, any value is admitted, present, a value outside it is refused where it is written."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["description", "exclusive", "values"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "TagLibrary": {
+      "description": "What a workspace declares: its tag keys by name.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/TagIdentifier" },
+      "additionalProperties": { "$ref": "#/$defs/TagKeyDeclaration" }
+    },
+    "VisualTagsFacet": {
+      "description": "visual.tags/v0: the tag library a document declares, in a wrapper.",
+      "type": "object",
+      "properties": {
+        "keys": { "$ref": "#/$defs/TagLibrary", "description": "The declared keys." }
+      },
+      "required": ["keys"],
+      "x-wb-order": ["keys"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "StencilName": {
+      "description": "The bare name of a stencil, which the registry composes into an id.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "x-wb-matcher": "facet_segment",
+      "x-wb-message": "a stencil name must be a lowercase segment, like \"bucket\""
+    },
+    "StencilColor": {
+      "description": "The colour a stencil gives its node: a canvas colour, refused naming the presets.",
+      "type": "string",
+      "x-wb-minUtf16": 1,
+      "x-wb-check": "canvas_color"
+    },
+    "LibraryStencil": {
+      "description": "One stencil of a library: an appearance and facet payloads, never a position or a text.",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "What a picker calls it."
+        },
+        "color": {
+          "$ref": "#/$defs/StencilColor",
+          "description": "The node colour; absent, the stencil says nothing about colour."
+        },
+        "facets": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/FacetKey" },
+          "additionalProperties": { "x-wb-any": true },
+          "default": {},
+          "description": "Facet payloads by key, each checked against the schema its own plugin registered when the registry is built."
+        }
+      },
+      "required": ["displayName"],
+      "x-wb-order": ["displayName", "color", "facets"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "StencilLibrary": {
+      "description": "The stencils of a library by bare name, at most 256, counted before any is judged.",
+      "type": "object",
+      "propertyNames": { "$ref": "#/$defs/StencilName" },
+      "additionalProperties": { "$ref": "#/$defs/LibraryStencil" },
+      "maxProperties": 256,
+      "x-wb-maxPropertiesMessage": "a stencil library holds at most 256 stencils; this one has {count}"
+    },
+    "VisualStencilsFacet": {
+      "description": "visual.stencils/v0: the stencil library a document declares, in a wrapper.",
+      "type": "object",
+      "properties": {
+        "stencils": {
+          "$ref": "#/$defs/StencilLibrary",
+          "description": "The stencils by bare name."
+        }
+      },
+      "required": ["stencils"],
+      "x-wb-order": ["stencils"],
       "additionalProperties": true,
       "x-wb-unknownKeys": "strip"
     }
