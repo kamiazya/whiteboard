@@ -25,13 +25,11 @@
  */
 import {
   type CanvasColor,
-  canvasColorSchema,
   compareCodeUnit,
   type ExtensionFacets,
   parseScopedTag,
-  TAG_IDENTIFIER_PATTERN,
 } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
+import { type TagKeyDeclaration, visualTagsFacetSchema } from './generated/visual.zod.js'
 
 export const VISUAL_TAGS_KEY = 'visual.tags/v0'
 
@@ -49,53 +47,19 @@ export const VISUAL_TAGS_KEY = 'visual.tags/v0'
 export const TAG_LIBRARY_PATH = 'tags'
 
 /**
- * A key or a value: the scoped-tag grammar's own identifier. Checked here,
- * at the write, because a library declaring `Health` would describe a key
- * decision 1 refuses to write on anything.
- */
-const identifierSchema = z
-  .string()
-  .regex(TAG_IDENTIFIER_PATTERN, 'a key or value must be a lowercase identifier, like "health"')
-
-const tagValueDeclarationSchema = z
-  .object({
-    /** The colour a box or an edge carrying this value is drawn in when it has none of its own. */
-    color: canvasColorSchema.optional(),
-    description: z.string().optional(),
-  })
-  .strict()
-
-const tagKeyDeclarationSchema = z
-  .object({
-    description: z.string().optional(),
-    /** One value at a time: a thing carrying two values under this key is refused. */
-    exclusive: z.boolean().optional(),
-    /**
-     * The values this key ADMITS, each with its own declaration. Absent, the
-     * key admits any value and declares nothing about them; present, a
-     * value outside it is refused where it is written.
-     */
-    values: z.record(identifierSchema, tagValueDeclarationSchema).optional(),
-  })
-  .strict()
-
-/**
+ * The facet's payload and the library as a VALUE, for a contract that carries
+ * one (the daemon's `GET /document-tags`), generated from
+ * `contracts/facets/visual` so the wire and the facet cannot disagree about
+ * what a declaration is.
+ *
  * A wrapper object rather than a bare record, for the reason the stencil
  * library is one: ADR-0013 lets an optional field arrive without a version
- * bump, and a bare record has nowhere to put one.
+ * bump, and a bare record has nowhere to put one. A key or a value is the
+ * scoped-tag grammar's own identifier, checked at the write, because a
+ * library declaring `Health` would describe a key decision 1 refuses to write
+ * on anything.
  */
-export const visualTagsFacetSchema = z.object({
-  keys: z.record(identifierSchema, tagKeyDeclarationSchema),
-})
-
-/**
- * The library as a VALUE, for a contract that carries one (the daemon's
- * `GET /document-tags`): the facet's `keys` record, so the wire and the
- * facet cannot disagree about what a declaration is.
- */
-export const tagLibrarySchema = visualTagsFacetSchema.shape.keys
-
-type TagKeyDeclaration = z.infer<typeof tagKeyDeclarationSchema>
+export { tagLibrarySchema, visualTagsFacetSchema } from './generated/visual.zod.js'
 
 /** What a workspace declares: keys by name, each key's values by name. */
 export type TagLibrary = Readonly<Record<string, TagKeyDeclaration>>

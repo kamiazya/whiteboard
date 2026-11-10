@@ -1,3 +1,4 @@
+import { canvasColorSchema } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 
 // The named checks of `contracts/facets/visual`'s `x-wb-check` keyword, in the
@@ -24,6 +25,20 @@ export function singleGrapheme(value: string, ctx: z.core.$RefinementCtx<string>
     ctx.addIssue({
       code: 'custom',
       message: 'must be a single character or emoji, not a string',
+    })
+  }
+}
+
+/**
+ * A colour the model's canvas colour accepts, worded for the author of a
+ * stencil rather than as the model's own union refusal, which names a hex
+ * colour only and hides the presets they most likely meant.
+ */
+export function canvasColor(value: string, ctx: z.core.$RefinementCtx<string>): void {
+  if (!canvasColorSchema.safeParse(value).success) {
+    ctx.addIssue({
+      code: 'custom',
+      message: 'must be a preset "1" to "6" or a 6-digit hex color like "#ff0000"',
     })
   }
 }

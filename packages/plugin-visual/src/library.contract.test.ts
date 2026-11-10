@@ -131,7 +131,7 @@ describe('visual.tags', () => {
   })
 
   it('spells the model’s identifier grammar', () => {
-    const json = z.toJSONSchema(schema) as {
+    const json = z.toJSONSchema(schema) as unknown as {
       properties: { keys: { propertyNames: { pattern: string } } }
     }
     expect(json.properties.keys.propertyNames.pattern).toBe(TAG_IDENTIFIER_PATTERN.source)
@@ -245,7 +245,7 @@ describe('visual.stencils', () => {
   })
 
   it('spells the engine’s grammars, which the generated schema cannot import', () => {
-    const json = z.toJSONSchema(schema) as {
+    const json = z.toJSONSchema(schema) as unknown as {
       properties: {
         stencils: {
           propertyNames: { pattern: string }

@@ -11,21 +11,11 @@
  * forty-two combinations, never mind 256. A library that wants more is
  * several vocabularies, and the named upgrade for that is more than one
  * library document (`STENCIL_LIBRARY_PATH`).
+ *
+ * The write-time refusal is the contract's `StencilLibrary.maxProperties`, and
+ * `library.contract.test.ts` holds the two numbers equal.
  */
 const MAX_STENCILS_PER_LIBRARY = 256
-
-/**
- * Counted BEFORE any entry is judged, by a pipe rather than a refinement:
- * zod skips a refinement once an entry has failed, so an oversized library
- * of bad entries would be answered with one issue per entry — tens of
- * thousands in a single message — after paying for every parse.
- */
-const stencilCountSchema = z
-  .record(z.string(), z.unknown())
-  .refine((stencils) => Object.keys(stencils).length <= MAX_STENCILS_PER_LIBRARY, {
-    error: (issue) =>
-      `a stencil library holds at most ${MAX_STENCILS_PER_LIBRARY} stencils; this one has ${Object.keys(issue.input as object).length}`,
-  })
 
 /**
  * `visual.stencils/v0` — the facet that makes a DOCUMENT a workspace's
@@ -38,17 +28,10 @@ const stencilCountSchema = z
  * day this arrived, which is the budget doing its job rather than a
  * coincidence.)
  */
-import {
-  FACET_SEGMENT_PATTERN,
-  type StencilAssetInput,
-  stencilAssetSchema,
-} from '@kamiazya/whiteboard-facet-engine'
-import {
-  canvasColorSchema,
-  compareCodeUnit,
-  type ExtensionFacets,
-} from '@kamiazya/whiteboard-model'
+import type { StencilAssetInput } from '@kamiazya/whiteboard-facet-engine'
+import { compareCodeUnit, type ExtensionFacets } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { libraryStencilSchema, stencilNameSchema } from './generated/visual.zod.js'
 
 export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
 
@@ -72,27 +55,6 @@ export const VISUAL_STENCILS_KEY = 'visual.stencils/v0'
 export const STENCIL_LIBRARY_PATH = 'stencils'
 
 /**
- * The engine passes a stencil's `color` through uninterpreted, because the
- * colour of a node belongs to the FORMAT (see `stencil.ts`). This is the
- * format's half: the model's own colour schema is the predicate, so a
- * library cannot hold a colour a node could not carry. It narrows the
- * engine's own string rather than adopting the union, because the union's
- * refusal reads only "must be a 6-digit hex color" and hides the presets an
- * author most likely meant.
- */
-const stencilColorSchema = stencilAssetSchema.shape.color
-  .unwrap()
-  .refine((color) => canvasColorSchema.safeParse(color).success, {
-    message: 'must be a preset "1" to "6" or a 6-digit hex color like "#ff0000"',
-  })
-
-const libraryStencilSchema = stencilAssetSchema.extend({ color: stencilColorSchema.optional() })
-
-const stencilNameSchema = z
-  .string()
-  .regex(FACET_SEGMENT_PATTERN, 'a stencil name must be a lowercase segment, like "bucket"')
-
-/**
  * `visual.stencils/v0` — the facet that makes a DOCUMENT a workspace's
  * stencil library (ADR-0034 decision 4; the authoring format was settled on
  * 2026-09-11 and this is it).
@@ -104,19 +66,26 @@ const stencilNameSchema = z
  * workspace exactly as every other document does.
  *
  * Keyed by BARE name, because the registry composes `workspace.<name>` when
- * it builds the synthetic plugin. `stencilAssetSchema` is the engine's, so a
- * library stencil is the same shape as a bundled one and gets the same
- * refusals — including the strict rule that keeps position and text out of a
- * vocabulary.
+ * it builds the synthetic plugin. A library stencil is the engine's
+ * `stencilAssetSchema` shape restated in `contracts/facets/visual`, with the
+ * model's colour as the predicate on `color`, so it is the same shape as a
+ * bundled one and gets the same refusals — including the strict rule that
+ * keeps position and text out of a vocabulary. The colour is checked against
+ * the model rather than adopting its union, because the union's refusal reads
+ * only "must be a 6-digit hex color" and hides the presets an author most
+ * likely meant.
+ *
+ * The count is the contract's `StencilLibrary.maxProperties`, counted before
+ * any entry is judged: an oversized library of bad entries would otherwise be
+ * answered with one issue per entry, after paying for every parse. The
+ * reader's cap above is the same number.
  *
  * A wrapper object rather than a bare record, deliberately: ADR-0013 lets an
  * OPTIONAL field arrive without a version bump, and a bare record has
  * nowhere to put one. A library that later wants to say something about
  * ITSELF — who it is for, what it extends — can, without moving to v1.
  */
-export const visualStencilsFacetSchema = z.object({
-  stencils: stencilCountSchema.pipe(z.record(stencilNameSchema, libraryStencilSchema)),
-})
+export { visualStencilsFacetSchema } from './generated/visual.zod.js'
 
 /**
  * The stencil library a MARKDOWN document declares, as the registry's own

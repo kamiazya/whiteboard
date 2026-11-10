@@ -3,6 +3,7 @@
 //! regex engine and held equal to it by the cases both languages' tests share.
 
 use unicode_segmentation::UnicodeSegmentation;
+use whiteboard_model::checks::canvas_color_hex;
 
 /// The contract's `single_grapheme`: the text is exactly one extended grapheme
 /// cluster (UAX #29), so a flag, a ZWJ family or a skin-toned hand is one and
@@ -38,6 +39,24 @@ pub fn facet_key(text: &str) -> bool {
         && version
             .strip_prefix('v')
             .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// `^[a-z][a-z0-9-]*$`: the pattern of the contract's `TagIdentifier`, the
+/// scoped-tag grammar's key or value.
+pub fn tag_identifier(text: &str) -> bool {
+    segment(text)
+}
+
+/// `^[a-z][a-z0-9-]*$`: the pattern of the contract's `StencilName`, the
+/// engine's facet segment grammar.
+pub fn facet_segment(text: &str) -> bool {
+    segment(text)
+}
+
+/// The contract's `canvas_color`: a numbered preset `1` to `6` or a 6-digit hex
+/// colour, which is what the model's `CanvasColor` accepts.
+pub fn canvas_color(text: &str) -> bool {
+    matches!(text, "1" | "2" | "3" | "4" | "5" | "6") || canvas_color_hex(text)
 }
 
 #[cfg(test)]
@@ -130,6 +149,41 @@ mod tests {
             "",
         ] {
             assert!(!facet_key(bad), "{bad:?}");
+        }
+    }
+
+    // The strings `library.contract.test.ts` takes and refuses for a key, a
+    // value and a stencil name: one grammar, spelled twice in the contract.
+    #[test]
+    fn a_tag_identifier_and_a_facet_segment_are_one_lowercase_segment() {
+        for good in ["health", "a", "a-b", "x1", "z9-", "a--"] {
+            assert!(tag_identifier(good) && facet_segment(good), "{good}");
+        }
+        for bad in ["Health", "", "a_b", "1a", "-a", "a b", "a.b", "a\n", "\u{e9}", "a/b"] {
+            assert!(!tag_identifier(bad) && !facet_segment(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_canvas_colour_is_a_preset_or_six_hex_digits() {
+        for good in ["1", "6", "#ff0000", "#1A2b3C", "#000000"] {
+            assert!(canvas_color(good), "{good}");
+        }
+        for bad in [
+            "",
+            "0",
+            "7",
+            "12",
+            "red",
+            "#fff",
+            "#ff00",
+            "#ff00000",
+            "ff0000",
+            "#gg0000",
+            "#ff0000\n",
+            "1\n",
+        ] {
+            assert!(!canvas_color(bad), "{bad:?}");
         }
     }
 }

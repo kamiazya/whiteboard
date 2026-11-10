@@ -4,12 +4,17 @@
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
+use whiteboard_model::Value;
 use whiteboard_model::spatial as model;
-use whiteboard_plugin_visual::checks::{facet_key, namespaced_id};
+use whiteboard_plugin_visual::checks::{
+    canvas_color, facet_key, facet_segment, namespaced_id, tag_identifier,
+};
 use whiteboard_plugin_visual::visual::{
-    EdgeRoutingStyle, LineJumps, VisualAxesFacet, VisualEdgesFacet, VisualInkFacet,
-    VisualShapeFacet, VisualShapeKind, VisualStencilFacet, VisualStrokeFacet, VisualStrokeWidth,
-    VisualSymbolFacet, VisualSymbolIcon, VisualTextAlign, VisualTextFacet, VisualThemeFacet,
+    EdgeRoutingStyle, LibraryStencil, LineJumps, TagKeyDeclaration, TagValueDeclaration,
+    VisualAxesFacet, VisualEdgesFacet, VisualInkFacet, VisualShapeFacet, VisualShapeKind,
+    VisualStencilFacet, VisualStencilsFacet, VisualStrokeFacet, VisualStrokeWidth,
+    VisualSymbolFacet, VisualSymbolIcon, VisualTagsFacet, VisualTextAlign, VisualTextFacet,
+    VisualThemeFacet,
 };
 
 #[test]
@@ -94,4 +99,41 @@ fn a_symbol_with_nothing_chosen_is_an_icon_with_no_name() {
     let symbol = VisualSymbolFacet::default();
     assert_eq!(symbol, VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon::default()));
     assert_eq!(VisualSymbolIcon::KIND, "icon");
+}
+
+#[test]
+fn a_tag_library_holds_keys_by_identifier_and_values_with_a_colour() {
+    let value = TagValueDeclaration {
+        color: Some("#ff0000".to_owned()),
+        description: Some("fine".to_owned()),
+    };
+    let key = TagKeyDeclaration {
+        description: None,
+        exclusive: Some(true),
+        values: Some(vec![("ok".to_owned(), value.clone())]),
+    };
+    let facet = VisualTagsFacet { keys: vec![("health".to_owned(), key.clone())] };
+    assert!(facet.keys.iter().all(|(name, _)| tag_identifier(name)));
+    assert!(key.values.iter().flatten().all(|(name, _)| tag_identifier(name)));
+    assert!(value.color.as_deref().is_some_and(canvas_color));
+    assert_eq!(VisualTagsFacet::default().keys, Vec::new());
+    assert_eq!(
+        TagKeyDeclaration::default(),
+        TagKeyDeclaration { description: None, exclusive: None, values: None }
+    );
+}
+
+#[test]
+fn a_stencil_library_holds_stencils_by_segment_and_facets_by_key() {
+    let stencil = LibraryStencil {
+        display_name: "Bucket".to_owned(),
+        color: Some("5".to_owned()),
+        facets: vec![("visual.shape/v0".to_owned(), Value::Null)],
+    };
+    let facet = VisualStencilsFacet { stencils: vec![("bucket".to_owned(), stencil.clone())] };
+    assert!(facet.stencils.iter().all(|(name, _)| facet_segment(name)));
+    assert!(stencil.facets.iter().all(|(key, _)| facet_key(key)));
+    assert!(stencil.color.as_deref().is_some_and(canvas_color));
+    assert_eq!(LibraryStencil::default().facets, Vec::new());
+    assert_eq!(VisualStencilsFacet::default().stencils, Vec::new());
 }

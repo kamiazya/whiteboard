@@ -10,8 +10,6 @@ publish.workspace = true
 
 [dependencies]
 unicode-segmentation.workspace = true
-
-[dev-dependencies]
 whiteboard-model = { path = "../model" }
 
 # QR-21 layer 3: the same tests run natively and on wasm32 under Node.
