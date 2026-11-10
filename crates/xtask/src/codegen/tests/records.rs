@@ -304,3 +304,11 @@ fn a_check_on_a_records_entries_is_named_like_any_other() {
     }"##;
     refused_with(&[NAME, bag].join(",\n"), CORE, "check `NotSnake`: must be snake_case");
 }
+
+#[test]
+fn an_output_path_segment_is_lowercase_words_joined_by_dashes_or_underscores() {
+    assert!(outputs(&contract(&defs(), "crates/core/c/src/generated/r_s-2.rs")).is_ok());
+    for path in ["crates/core/c/src/generated/R.rs", "crates/core/c/src/generated/.rs"] {
+        refused_with(&defs(), path, "is not crates/<dir>/<dir>/src/generated/<name>.rs");
+    }
+}
