@@ -233,7 +233,7 @@ describe.runIf(built)('the daemon OKF core over the staged artifact', () => {
     }
   })
 
-  it('throws a difference under throw, logs it otherwise, and only notes a decline', async () => {
+  it('throws a difference under throw and logs it otherwise', async () => {
     const differs = {
       fn: 'parseOkf' as const,
       kind: 'differs' as const,
@@ -254,13 +254,53 @@ describe.runIf(built)('the daemon OKF core over the staged artifact', () => {
         layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'rust' }),
       ).okfCore()
       lenient?.onMismatch?.(differs)
-      strict?.onMismatch?.({ fn: 'serializeOkf', kind: 'declined', err: new Error('x') })
       expect(capture.records.map((r) => [r.level, r.msg])).toEqual([
         ['warning', 'the Rust core and the TypeScript disagree'],
-        ['debug', 'the Rust core declined; answered in TypeScript'],
       ])
     } finally {
       capture.restore()
     }
+  })
+
+  describe('a declined OKF call', () => {
+    const declined = {
+      fn: 'serializeOkf' as const,
+      kind: 'declined' as const,
+      err: new Error('refused: input-too-large'),
+    }
+
+    it('fails like a difference under throw', async () => {
+      const strict = await coreLoaders(
+        layoutCoreSettingsFrom({
+          WHITEBOARD_CORE_OKF: 'differential',
+          WHITEBOARD_CORE_MISMATCH: 'throw',
+        }),
+      ).okfCore()
+      expect(() => strict?.onMismatch?.(declined)).toThrow(
+        /OKF core declined: .*"fn":"serializeOkf".*input-too-large/,
+      )
+    })
+
+    it('is logged as an okf-declined record with its reason and no content otherwise', async () => {
+      const capture = captureLogsForTests('warning')
+      try {
+        const lenient = await coreLoaders(
+          layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'rust' }),
+        ).okfCore()
+        lenient?.onMismatch?.(declined)
+        expect(capture.records).toHaveLength(1)
+        expect(capture.records[0]).toMatchObject({
+          level: 'warning',
+          data: {
+            event: 'okf-declined',
+            fn: 'serializeOkf',
+            reason: 'Error: refused: input-too-large',
+          },
+        })
+        expect(JSON.stringify(capture.records[0])).not.toContain('"err"')
+      } finally {
+        capture.restore()
+      }
+    })
   })
 })

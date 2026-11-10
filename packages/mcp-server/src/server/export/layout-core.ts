@@ -101,14 +101,31 @@ function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => voi
   }
 }
 
-/** An OKF difference reported, or thrown under `throw`; a declined call is the shim's to make, and only noted. */
+/** A decline as it is reported: the function and the core's reason, never the text or document. */
+function declineSummary(mismatch: Extract<OkfMismatch, { kind: 'declined' }>) {
+  const { err } = mismatch
+  return {
+    fn: mismatch.fn,
+    reason: err instanceof Error ? `${err.name}: ${err.message}` : 'unknown',
+  }
+}
+
+/**
+ * An OKF difference or decline, reported, or thrown under `throw`. A decline
+ * is answered by the TypeScript, so only a run that asked to fail on one sees
+ * it as a failure; otherwise it is a counted record (`event: 'okf-declined'`).
+ */
 function okfReporter(settings: LayoutCoreSettings): (mismatch: OkfMismatch) => void {
   return (mismatch) => {
     if (mismatch.kind === 'declined') {
-      log.debug(
-        { fn: mismatch.fn, err: mismatch.err },
+      const summary = declineSummary(mismatch)
+      log.warning(
+        { event: 'okf-declined', ...summary },
         'the Rust core declined; answered in TypeScript',
       )
+      if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
+        throw new Error(`OKF core declined: ${JSON.stringify(summary)}`)
+      }
       return
     }
     const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }

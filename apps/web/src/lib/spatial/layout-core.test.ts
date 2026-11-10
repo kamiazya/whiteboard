@@ -122,7 +122,7 @@ describe('the OKF half of the host', () => {
     expect(load).toHaveBeenCalledTimes(1)
   })
 
-  it('throws an OKF difference under throw, logs it under log, and only notes a decline', async () => {
+  it('throws an OKF difference under throw and logs it under log', async () => {
     const differsOkf = {
       fn: 'parseOkf' as const,
       kind: 'differs' as const,
@@ -141,9 +141,40 @@ describe('the OKF half of the host', () => {
     const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
     await lenient.ready()
     lenient.currentOkf()?.onMismatch?.(differsOkf)
-    lenient.currentOkf()?.onMismatch?.({ fn: 'serializeOkf', kind: 'declined', err: new Error() })
     expect(log.warn).toHaveBeenCalledTimes(1)
-    expect(log.debug).toHaveBeenCalledTimes(1)
+  })
+
+  describe('a declined OKF call', () => {
+    const declined = {
+      fn: 'parseOkf' as const,
+      kind: 'declined' as const,
+      err: new Error('refused: input-too-large'),
+    }
+
+    it('fails like a difference under throw', async () => {
+      const strict = createLayoutCoreHost(
+        settings('ts', 'throw', 'differential'),
+        async () => routing,
+        silent(),
+      )
+      await strict.ready()
+      expect(() => strict.currentOkf()?.onMismatch?.(declined)).toThrow(
+        /OKF core declined: .*"fn":"parseOkf".*input-too-large/,
+      )
+    })
+
+    it('is logged as an okf-declined record with its reason and no content otherwise', async () => {
+      const log = silent()
+      const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
+      await lenient.ready()
+      lenient.currentOkf()?.onMismatch?.(declined)
+      expect(log.warn).toHaveBeenCalledWith('the Rust core declined; answered in TypeScript', {
+        event: 'okf-declined',
+        fn: 'parseOkf',
+        reason: 'Error: refused: input-too-large',
+      })
+      expect(log.debug).not.toHaveBeenCalled()
+    })
   })
 })
 
