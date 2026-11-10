@@ -104,6 +104,9 @@ describe('a markdown document of exactly the declared limit, over the real store
         ['okf-declined', 'core-load-failed'].includes(String(record.data?.event)) ||
         record.msg === 'the Rust core and the TypeScript disagree',
     )
+    // Under the core (`rust`, the default, or `differential`) the decline is
+    // this test's subject, so its absence means the core was never asked.
+    if ((process.env.WHITEBOARD_CORE_OKF ?? 'rust') !== 'ts') expect(core).not.toEqual([])
     for (const record of core) {
       expect(record.data).toMatchObject({ event: 'okf-declined', fn: 'parseOkf' })
       expect(String(record.data?.reason)).toMatch(/input-too-large/)
