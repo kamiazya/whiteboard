@@ -106,6 +106,7 @@ export function buildTarballSmokeChildEnv(processEnv: NodeJS.ProcessEnv): NodeJS
     ...rest,
     WHITEBOARD_CORE: 'differential',
     WHITEBOARD_CORE_OKF: 'differential',
+    WHITEBOARD_CORE_SPATIAL: 'differential',
     WHITEBOARD_CORE_MISMATCH: 'throw',
   }
 }

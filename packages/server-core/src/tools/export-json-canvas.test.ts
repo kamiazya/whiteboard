@@ -71,3 +71,37 @@ describe('exportJsonCanvas', () => {
     ).rejects.toThrow(SnapshotNotFoundError)
   })
 })
+
+describe('ServerDeps.spatialCore reaches the JSON Canvas export', () => {
+  test('the core writes the export under rust, in the mode the input names', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, { nodes: [NODE_WITH_EXTENSION], edges: [] })
+    })
+    await placeUnlessPlaced(store, WORKSPACE_ID, DOCUMENT_ID)
+    const modes: string[] = []
+    const deps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      spatialCore: async () => ({
+        spatial: {
+          parseSpatial: () => {
+            throw new Error('not asked')
+          },
+          serializeSpatial: (_canvas, mode) => {
+            modes.push(mode)
+            return 'written by the core'
+          },
+        },
+        impl: { parseSpatial: 'rust', serializeSpatial: 'rust' },
+      }),
+    })
+    const result = await exportJsonCanvas(deps, {
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      options: { strict: true },
+    })
+    expect(result.json).toBe('written by the core')
+    expect(modes).toEqual(['strict'])
+  })
+})

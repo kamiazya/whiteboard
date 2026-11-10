@@ -255,6 +255,7 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(unit[test]?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
       WHITEBOARD_CORE_OKF: 'differential',
+      WHITEBOARD_CORE_SPATIAL: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })

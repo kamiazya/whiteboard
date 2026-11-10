@@ -1,9 +1,9 @@
-import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { spatialCodecOf } from './spatial-codec.js'
 
 /**
  * `workspaceId` is passed to the store inside the `DocRef`: the daemon's
@@ -38,5 +38,6 @@ export async function exportJsonCanvas(
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
   const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
-  return { json: serializeSpatial(canvas, mode) }
+  const codec = await spatialCodecOf(deps)
+  return { json: codec.serializeSpatial(canvas, mode) }
 }

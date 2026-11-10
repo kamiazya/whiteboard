@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
-import { okfCodec } from '@kamiazya/whiteboard-codec'
+import { okfCodec, spatialCodec } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -92,9 +92,11 @@ describe('the daemon layout core', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
       WHITEBOARD_CORE_OKF: 'rust',
+      WHITEBOARD_CORE_SPATIAL: 'ts',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'fast' })).toThrow()
+    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_SPATIAL: 'fast' })).toThrow()
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
   })
 
@@ -147,6 +149,11 @@ describe('the daemon layout core', () => {
       WHITEBOARD_CORE_DIR: emptyDir(),
     })
     expect(await coreLoaders(settings).okfCore()).toBeUndefined()
+  })
+
+  it('loads nothing for JSON Canvas under ts, its default while its checklist is open', async () => {
+    const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
+    expect(await coreLoaders(settings).spatialCore()).toBeUndefined()
   })
 
   it('has the staged artifact wherever CI runs this file', () => {
@@ -302,5 +309,82 @@ describe.runIf(built)('the daemon OKF core over the staged artifact', () => {
         capture.restore()
       }
     })
+  })
+})
+
+describe.runIf(built)('the daemon JSON Canvas core over the staged artifact', () => {
+  const differential = layoutCoreSettingsFrom({
+    WHITEBOARD_CORE: 'differential',
+    WHITEBOARD_CORE_SPATIAL: 'differential',
+  })
+
+  it('shares its instance with the layout core', async () => {
+    const loaders = coreLoaders(differential)
+    const spatial = await loaders.spatialCore()
+    const layout = await loaders.layoutCore()
+    expect(spatial?.impl).toEqual({
+      parseSpatial: 'differential',
+      serializeSpatial: 'differential',
+    })
+    expect(spatial?.spatial).toBe(layout?.routing)
+  })
+
+  it('reads and writes a canvas in both modes with nothing to report', async () => {
+    const capture = captureLogsForTests('debug')
+    try {
+      const codec = spatialCodec(await coreLoaders(differential).spatialCore())
+      const text =
+        '{"nodes":[{"id":"a","type":"text","text":"hi","x":0,"y":0,"width":10,"height":10}],"edges":[]}'
+      const parsed = codec.parseSpatial(text)
+      if (!parsed.ok) throw new Error(parsed.error.message)
+      codec.serializeSpatial(parsed.value, 'extended')
+      codec.serializeSpatial(parsed.value, 'strict')
+      expect(capture.records).toEqual([])
+    } finally {
+      capture.restore()
+    }
+  })
+
+  it('throws a difference or a decline under throw, and logs a decline as spatial-declined otherwise', async () => {
+    const differs = {
+      fn: 'parseSpatial' as const,
+      kind: 'differs' as const,
+      ts: 'a',
+      rust: 'b',
+      text: '',
+    }
+    const declined = {
+      fn: 'serializeSpatial' as const,
+      kind: 'declined' as const,
+      err: new Error('refused: input-too-large'),
+    }
+    const strict = await coreLoaders(
+      layoutCoreSettingsFrom({
+        WHITEBOARD_CORE_SPATIAL: 'differential',
+        WHITEBOARD_CORE_MISMATCH: 'throw',
+      }),
+    ).spatialCore()
+    expect(() => strict?.onMismatch?.(differs)).toThrow(/JSON Canvas core differs/)
+    expect(() => strict?.onMismatch?.(declined)).toThrow(
+      /JSON Canvas core declined: .*"fn":"serializeSpatial".*input-too-large/,
+    )
+    const capture = captureLogsForTests('warning')
+    try {
+      const lenient = await coreLoaders(
+        layoutCoreSettingsFrom({ WHITEBOARD_CORE_SPATIAL: 'rust' }),
+      ).spatialCore()
+      lenient?.onMismatch?.(declined)
+      expect(capture.records).toHaveLength(1)
+      expect(capture.records[0]).toMatchObject({
+        level: 'warning',
+        data: {
+          event: 'spatial-declined',
+          fn: 'serializeSpatial',
+          reason: 'Error: refused: input-too-large',
+        },
+      })
+    } finally {
+      capture.restore()
+    }
   })
 })

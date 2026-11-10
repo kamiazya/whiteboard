@@ -15,8 +15,10 @@ const sourceOf = (file: string): string => readFileSync(new URL(file, here), 'ut
 const REACHES = /from '\.\/(parse|serialize|codecs)\.js'/
 
 describe('the spatial suites layer 1 runs against the Rust core', () => {
+  // The switch's own suite tests the switch, whose `ts` side the TypeScript
+  // is, so it stays on the TypeScript, as `okf-core.test.ts` does for OKF.
   const suites = readdirSync(here).filter(
-    (f) => f.endsWith('.test.ts') && !f.endsWith('.rust.test.ts'),
+    (f) => f.endsWith('.test.ts') && !f.endsWith('.rust.test.ts') && f !== 'spatial-core.test.ts',
   )
 
   it('finds the suites it should', () => {

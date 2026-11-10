@@ -85,6 +85,40 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       member: 'serializeOkf',
     },
   },
+  {
+    name: 'parseSpatial',
+    stage: 2,
+    ts: { file: 'packages/codec/src/spatial/parse.ts', export: 'parseSpatial' },
+    switch: {
+      file: 'packages/codec/src/spatial/spatial-core.ts',
+      interface: 'SpatialCodecCore',
+      key: 'parseSpatial',
+      option: 'ServerDeps.spatialCore',
+    },
+    rust: { file: 'crates/bindings/wasm/src/json_canvas.rs', fn: 'json_canvas_parse' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'parseSpatial',
+    },
+  },
+  {
+    name: 'serializeSpatial',
+    stage: 2,
+    ts: { file: 'packages/codec/src/spatial/serialize.ts', export: 'serializeSpatial' },
+    switch: {
+      file: 'packages/codec/src/spatial/spatial-core.ts',
+      interface: 'SpatialCodecCore',
+      key: 'serializeSpatial',
+      option: 'ServerDeps.spatialCore',
+    },
+    rust: { file: 'crates/bindings/wasm/src/json_canvas.rs', fn: 'json_canvas_serialize' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'serializeSpatial',
+    },
+  },
 ]
 
 /** The text of a file, or `undefined` when it does not exist. */

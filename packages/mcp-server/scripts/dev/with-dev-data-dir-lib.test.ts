@@ -47,6 +47,13 @@ describe('resolveDevDataDirEnv', () => {
     expect(resolveDevDataDirEnv({ WHITEBOARD_CORE: 'ts' }, repoRoot).WHITEBOARD_CORE).toBe('ts')
   })
 
+  it('reads JSON Canvas in differential unless WHITEBOARD_CORE_SPATIAL says otherwise', () => {
+    expect(resolveDevDataDirEnv({}, repoRoot).WHITEBOARD_CORE_SPATIAL).toBe('differential')
+    expect(
+      resolveDevDataDirEnv({ WHITEBOARD_CORE_SPATIAL: 'ts' }, repoRoot).WHITEBOARD_CORE_SPATIAL,
+    ).toBe('ts')
+  })
+
   it('reads OKF in differential unless WHITEBOARD_CORE_OKF says otherwise', () => {
     expect(resolveDevDataDirEnv({}, repoRoot).WHITEBOARD_CORE_OKF).toBe('differential')
     expect(resolveDevDataDirEnv({ WHITEBOARD_DATA_DIR: '/d' }, repoRoot).WHITEBOARD_CORE_OKF).toBe(
