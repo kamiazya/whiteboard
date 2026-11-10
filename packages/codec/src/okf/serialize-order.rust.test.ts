@@ -57,7 +57,10 @@ const build = (names: readonly string[]): OkfMarkdownDocument => ({
 /** The known root keys of a document, any subset, in any order, `type` among them. */
 const shuffledKeys = fc
   .tuple(fc.shuffledSubarray(SCHEMA_ORDER.slice(1)), fc.nat())
-  .map(([optional, at]) => optional.toSpliced(at % (optional.length + 1), 0, 'type'))
+  .map(([optional, at]) => {
+    const place = at % (optional.length + 1)
+    return [...optional.slice(0, place), 'type', ...optional.slice(place)]
+  })
 
 function overCore() {
   const reports: OkfMismatch[] = []
