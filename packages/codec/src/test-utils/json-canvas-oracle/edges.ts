@@ -6,7 +6,7 @@ const doc = (nodes: string, rest = ''): string => `{"nodes":[${nodes}]${rest}}`
 const link = (url: string): string => doc(`{${NODE},"type":"link","url":${JSON.stringify(url)}}`)
 
 /** JSON that a reader meets at its edges: syntax, shape, and the construct each Zod rule names. */
-export const SYNTAX_TEXTS: string[] = [
+const SYNTAX_TEXTS: string[] = [
   '',
   ' ',
   '\n',
@@ -91,7 +91,7 @@ export const SYNTAX_TEXTS: string[] = [
   '{"a":1E5}',
 ]
 
-export const SHAPE_TEXTS: string[] = [
+const SHAPE_TEXTS: string[] = [
   '{"nodes":null}',
   '{"nodes":{}}',
   '{"nodes":"x"}',
@@ -203,6 +203,6 @@ export function largeTexts(): string[] {
 }
 
 /** A link node for every URL, so `z.url()` is asked about each. */
-export const URL_TEXTS: string[] = URLS.map(link)
+const URL_TEXTS: string[] = URLS.map(link)
 
 export const EDGE_TEXTS: string[] = [...SYNTAX_TEXTS, ...SHAPE_TEXTS, ...URL_TEXTS]

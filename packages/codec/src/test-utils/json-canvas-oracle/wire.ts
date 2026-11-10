@@ -28,7 +28,7 @@ import {
 } from './pools.js'
 
 /** A value every string of which is well-formed, since a Rust `&str` cannot hold a lone surrogate. */
-export function clean(value: unknown): unknown {
+function clean(value: unknown): unknown {
   if (typeof value === 'string') return toWellFormed(value.slice(0, 48))
   if (Array.isArray(value)) return value.map(clean)
   if (value !== null && typeof value === 'object') {
@@ -38,7 +38,7 @@ export function clean(value: unknown): unknown {
 }
 
 export const text = (d: Dice): string => toWellFormed(nastyString(d).slice(0, 48))
-export const payload = (d: Dice): unknown => clean(writerValue(d, 3))
+const payload = (d: Dice): unknown => clean(writerValue(d, 3))
 
 /** A facet bucket: usually valid, sometimes one bad key (which costs the bucket), sometimes a `__proto__` key (which zod skips). */
 export function facets(d: Dice, damage = fault(d, 0.12)): unknown {
@@ -76,7 +76,7 @@ function embedExtension(d: Dice): Obj {
 }
 
 /** A node's `x-whiteboard`: the embed arm, the facets-only arm, or something neither accepts. */
-export function nodeExtension(d: Dice): unknown {
+function nodeExtension(d: Dice): unknown {
   const r = d.int(10)
   if (r < 4) return embedExtension(d)
   if (r < 8 || !FAULT.on) {
@@ -100,7 +100,7 @@ function bends(d: Dice): unknown {
   return Array.from({ length: 1 + d.int(3) }, () => ({ x: coordinate(d), y: coordinate(d) }))
 }
 
-export function edgeExtension(d: Dice): unknown {
+function edgeExtension(d: Dice): unknown {
   if (fault(d, 0.12)) return pick(d, [5, 'x', null, [], [{}], true])
   const ext: Obj = {}
   if (d.chance(0.5)) ext.facets = facets(d)
@@ -115,7 +115,7 @@ const url = (d: Dice): unknown =>
 const color = (d: Dice): unknown => (good(d, 0.9) ? pick(d, COLORS) : pick(d, BAD_COLORS))
 
 /** One JSON Canvas node, valid unless `damage` says otherwise. */
-export function wireNode(d: Dice, id: string): Obj {
+function wireNode(d: Dice, id: string): Obj {
   const type = pick(d, ['text', 'file', 'link', 'group', 'text', 'link'])
   const node: Obj = { id, x: coordinate(d), y: coordinate(d), width: size(d), height: size(d) }
   if (d.chance(0.3)) node.color = color(d)
@@ -135,7 +135,7 @@ export function wireNode(d: Dice, id: string): Obj {
   return node
 }
 
-export function wireEdge(d: Dice, id: string, from: string, to: string): Obj {
+function wireEdge(d: Dice, id: string, from: string, to: string): Obj {
   const edge: Obj = { id, fromNode: from, toNode: to }
   if (d.chance(0.5)) edge.fromSide = good(d, 0.9) ? pick(d, SIDES) : pick(d, BAD_SIDES)
   if (d.chance(0.5)) edge.toSide = good(d, 0.9) ? pick(d, SIDES) : pick(d, BAD_SIDES)
@@ -176,7 +176,7 @@ function lineEnd(d: Dice, ids: readonly string[]): unknown {
   ])
 }
 
-export function wireLine(d: Dice, id: string, ids: readonly string[]): Obj {
+function wireLine(d: Dice, id: string, ids: readonly string[]): Obj {
   const line: Obj = { id, from: lineEnd(d, ids), to: lineEnd(d, ids) }
   if (d.chance(0.3)) line.color = color(d)
   if (d.chance(0.3)) line.label = text(d)

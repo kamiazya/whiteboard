@@ -23,7 +23,7 @@ import {
  * other than `-0`, which is itself: a canvas holds hundreds of them and the
  * 16 hex digits of each were most of the recording. Anything else keeps its bits.
  */
-export type Compact = Encoded | number
+type Compact = Encoded | number
 
 function encode(value: unknown): Compact {
   if (typeof value === 'number' && Number.isSafeInteger(value) && !Object.is(value, -0))
@@ -90,7 +90,7 @@ const lineEnd = (e: Obj): Obj =>
  * whatever the producer wrote, and a Rust struct has none, so the recording
  * fixes one for both sides.
  */
-export function inSchemaOrder(canvas: SpatialCanvas): Obj {
+function inSchemaOrder(canvas: SpatialCanvas): Obj {
   const c = canvas as unknown as Obj
   const node = (n: Obj): Obj =>
     inOrder(

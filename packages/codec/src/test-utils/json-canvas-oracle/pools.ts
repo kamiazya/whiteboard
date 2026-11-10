@@ -1,7 +1,7 @@
 import type { Dice } from '../frontmatter-oracle/corpus.js'
 
 /** A JSON token written as the producer spelled it, which `JSON.stringify` could not. */
-export class Raw {
+class Raw {
   constructor(readonly text: string) {}
 }
 
