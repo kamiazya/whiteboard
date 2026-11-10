@@ -153,8 +153,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
   '.claude/rules/app-web.md#drawAs': 'names the deleted state to describe the chain it fed',
   '.claude/rules/app-web.md#AppShellWorkspaces':
     'a history sentence about the seam both implementations used to share',
-  '.claude/rules/package-model.md#bendsFieldSchema':
-    'the rule names the declaration the Bends registration replaced; the contract now declares it once, and the sentence is owed an edit',
   '.claude/rules/coverage-ledger.md#StateDotTone':
     'a worked example of a closed vocabulary, naming a type since removed',
   '.claude/rules/package-canvas-render.md#ResolvedDocBundle':
