@@ -483,16 +483,17 @@ impl Compiler<'_> {
     /// exactly the ones on a cycle and the ones that lead only to it.
     fn refuse_cycles(&self) -> Compiled<()> {
         let mut standing: Vec<bool> = self.defs.iter().map(|_| true).collect();
-        loop {
+        // Each round removes one definition or none, so as many rounds as
+        // there are definitions settle it.
+        for _ in &self.defs {
             let removable = standing.iter().enumerate().position(|(index, here)| {
                 *here
                     && self.edges.iter().all(|(from, to)| {
                         from.0 != index || !standing.get(to.0).copied().unwrap_or(false)
                     })
             });
-            match removable.and_then(|index| standing.get_mut(index)) {
-                Some(here) => *here = false,
-                None => break,
+            if let Some(here) = removable.and_then(|index| standing.get_mut(index)) {
+                *here = false;
             }
         }
         match standing.iter().position(|here| *here).and_then(|index| self.defs.get(index)) {

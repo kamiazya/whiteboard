@@ -6,21 +6,23 @@
  * definitions and a union chosen by a property, so the interpreter is held to
  * Zod over every construct the facet contracts use, not only the visual ones.
  */
-import { acceptedOrThrow, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
-import * as fc from 'fast-check'
-import type { z } from 'zod'
-import { iconAssetSchema, stencilAssetSchema, themeTokensSchema } from '../generated/engine.zod.js'
-import { pluginManifestSchema } from '../generated/plugin-manifest.zod.js'
-import { brokenVariant, randomFrom } from './broken-variants.js'
-import { SAMPLE_THEME_TOKENS } from './sample-theme-tokens.js'
 import {
   type Answer,
+  acceptedOrThrow,
   answerSchema,
+  arbitraryForSchema,
+  brokenVariant,
   decode,
   type Encoded,
   encode,
   hasLoneSurrogate,
-} from './schema-oracle.js'
+  randomFrom,
+} from '@kamiazya/whiteboard-model/test-utils'
+import * as fc from 'fast-check'
+import type { z } from 'zod'
+import { iconAssetSchema, stencilAssetSchema, themeTokensSchema } from '../generated/engine.zod.js'
+import { pluginManifestSchema } from '../generated/plugin-manifest.zod.js'
+import { SAMPLE_THEME_TOKENS } from '../testing/sample-theme-tokens.js'
 
 export const SCHEMAS = {
   ThemeTokens: themeTokensSchema,

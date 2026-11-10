@@ -569,7 +569,6 @@ version = "0.0.0"
 dependencies = [
  "serde_json",
  "wasm-bindgen-test",
- "whiteboard-det",
  "whiteboard-model",
  "whiteboard-proptest",
 ]

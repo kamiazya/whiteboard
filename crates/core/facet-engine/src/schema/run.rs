@@ -236,47 +236,21 @@ fn string(
     Res::done(Value::String(text.clone()), issues)
 }
 
-/// What Zod's length checks measure. They run on any value with a `length`,
-/// including one whose type check just refused it: a list given to a string
-/// schema, a string given to a list schema, an object that has a `length`.
-struct Measured<'a> {
-    units: f64,
-    text: Option<&'a str>,
-}
-
-fn measure(input: Option<&Value>) -> Option<Measured<'_>> {
+/// What Zod's length checks measure: they run on any value with a `length`,
+/// including one whose type check just refused it (a list given to a string
+/// schema, a string given to a list schema, an object that has a numeric
+/// `length`). A string's length is its code points, which is what Zod's
+/// UTF-16 shortcut always agrees with.
+fn measure(input: Option<&Value>) -> Option<f64> {
     match input {
-        Some(Value::String(text)) => {
-            Some(Measured { units: count(whiteboard_det::utf16::len(text)), text: Some(text) })
-        }
-        Some(Value::Seq(items)) => Some(Measured { units: count(items.len()), text: None }),
+        Some(Value::String(text)) => Some(count(text.chars().count())),
+        Some(Value::Seq(items)) => Some(count(items.len())),
         Some(Value::Map(entries)) => match lookup(entries, "length") {
-            Some(Value::Number(length)) => Some(Measured { units: *length, text: None }),
+            Some(Value::Number(length)) => Some(*length),
             _ => None,
         },
         _ => None,
     }
-}
-
-/// A string is counted in code points where the UTF-16 count alone cannot
-/// settle the bound, and otherwise in UTF-16 units, which is how Zod 4.6
-/// measures it.
-fn below(measured: &Measured<'_>, min: f64) -> bool {
-    let units = measured.units;
-    let length = match measured.text {
-        Some(text) if units >= min && units < min * 2.0 => count(text.chars().count()),
-        _ => units,
-    };
-    length < min
-}
-
-fn above(measured: &Measured<'_>, max: f64) -> bool {
-    let units = measured.units;
-    let length = match measured.text {
-        Some(text) if units > max => count(text.chars().count()),
-        _ => units,
-    };
-    length > max
 }
 
 fn length_issues(
@@ -285,11 +259,11 @@ fn length_issues(
     max: Option<(f64, &Option<String>)>,
 ) -> Vec<Issue> {
     let mut issues = Vec::new();
-    let Some(measured) = measure(input) else { return issues };
-    if min.is_some_and(|bound| below(&measured, bound)) {
+    let Some(length) = measure(input) else { return issues };
+    if min.is_some_and(|bound| length < bound) {
         issues.push(Issue::soft(Code::TooSmall));
     }
-    if let Some((_, message)) = max.filter(|(bound, _)| above(&measured, *bound)) {
+    if let Some((_, message)) = max.filter(|(bound, _)| length > *bound) {
         let detail = message.clone().map_or(Detail::None, Detail::Message);
         issues.push(Issue::soft(Code::TooBig).with(detail));
     }

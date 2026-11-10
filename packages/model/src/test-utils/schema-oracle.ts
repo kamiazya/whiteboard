@@ -22,7 +22,7 @@ export type Encoded =
   | { m: [string, Encoded][] }
   | Encoded[]
 
-export type EncodedDetail =
+type EncodedDetail =
   | null
   | { keys: string[] }
   | { arms: EncodedIssue[][] }

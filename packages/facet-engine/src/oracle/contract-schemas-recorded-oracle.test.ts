@@ -6,7 +6,7 @@ import {
   type RecordedCase,
   recordInputs,
   SCHEMAS,
-} from '../testing/contract-schemas-oracle.js'
+} from '../test-utils/contract-schemas-oracle.js'
 
 /**
  * The committed recording of the engine contract's asset schemas and the

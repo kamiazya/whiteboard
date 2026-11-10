@@ -11,24 +11,25 @@
  * purpose (`WHITEBOARD_RECORD_ORACLE=1`).
  */
 import type { AssetKind, FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import {
+  acceptedOrThrow,
+  arbitraryForSchema,
   brokenVariant,
   decode,
   type Encoded,
   type EncodedIssue,
   encode,
   encodeIssues,
-  facetEntries,
   hasLoneSurrogate,
   randomFrom,
-} from '@kamiazya/whiteboard-facet-engine/testing'
-import { acceptedOrThrow, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
+} from '@kamiazya/whiteboard-model/test-utils'
 import { fc } from './fast-check.js'
 
 const KINDS: readonly AssetKind[] = ['themes', 'icons', 'stencils']
 const TARGETS = ['document', 'canvas', 'node', 'edge'] as const
 
-export type WriteAnswer =
+type WriteAnswer =
   | { ok: Encoded }
   | { err: { stage: 'key' } }
   | { err: { stage: 'version'; current: string } }
@@ -66,7 +67,7 @@ function definitionOf(registry: FacetRegistry, key: string) {
  * as data. The stage is cross-checked against the registry's own verdict by
  * the caller, so this walk cannot drift from the function it records.
  */
-export function answerWrite(registry: FacetRegistry, key: string, payload: unknown): WriteAnswer {
+function answerWrite(registry: FacetRegistry, key: string, payload: unknown): WriteAnswer {
   if (!KEY_GRAMMAR.test(key)) return { err: { stage: 'key' } }
   const definition = definitionOf(registry, key)
   if (definition === undefined) return { ok: encode(payload) }
@@ -87,19 +88,19 @@ export function answerWrite(registry: FacetRegistry, key: string, payload: unkno
 }
 
 /** The stage a `validateFacetWrite` message names, which `answerWrite` must agree with. */
-export function stageOfMessage(message: string): 'key' | 'version' | 'schema' | 'asset' {
+function stageOfMessage(message: string): 'key' | 'version' | 'schema' | 'asset' {
   if (message.startsWith('malformed facet key')) return 'key'
   if (message.includes('is not the current version')) return 'version'
   if (message.includes('which no plugin registered')) return 'asset'
   return 'schema'
 }
 
-export function headerLine(registry: FacetRegistry): RecordedLine {
+function headerLine(registry: FacetRegistry): RecordedLine {
   const assets = Object.fromEntries(KINDS.map((kind) => [kind, registry.assetIds(kind)]))
   return { k: 'h', assets: assets as Record<AssetKind, readonly string[]> }
 }
 
-export function declarationLines(registry: FacetRegistry): RecordedLine[] {
+function declarationLines(registry: FacetRegistry): RecordedLine[] {
   const keys = [
     ...registeredKeys(registry),
     'visual.nothing/v0',
