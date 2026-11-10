@@ -121,6 +121,20 @@ paths:
   ADR-0013 decision 8: when views and slots land, neither the type nor any
   asset moves.
 
+- The asset schemas are GENERATED: `themeTokensSchema`, `iconAssetSchema`,
+  `stencilAssetSchema` and `namespacedIdSchema` come from
+  `contracts/facets/engine/engine.schema.json` through `cargo xtask codegen`,
+  into `src/generated/engine.zod.ts` beside the Rust types of
+  `crates/core/facet-engine`. Edit the contract, not the output;
+  `theme-tokens.ts` and `stencil.ts` keep their public names and the
+  `z.input` types. `engine.contract.test.ts` pins every observable of them:
+  accepted and stripped payloads, each refusal's code, message, path and order
+  (the fill and icon unions' branches included), the JSON Schema each
+  publishes, and the inferred types. The facet patterns are the engine's spelled
+  again by the generator, held equal by that test; `plugin-visual`'s contract
+  restates the stencil as `LibraryStencil`, since a contract cannot yet name
+  another's definition.
+
 ## What does NOT belong here
 
 - The `facets` bucket schemas — those are model's (`extensionFacetsSchema`).

@@ -76,6 +76,9 @@ pub(super) struct Node {
     pub(super) kind: Option<Kind>,
     #[serde(default, deserialize_with = "present")]
     pub(super) minimum: Option<f64>,
+    /// A bound the number must be strictly above.
+    #[serde(rename = "exclusiveMinimum", default, deserialize_with = "present")]
+    pub(super) exclusive_minimum: Option<f64>,
     #[serde(rename = "x-wb-minUtf16", default, deserialize_with = "present")]
     pub(super) min_utf16: Option<u32>,
     #[serde(default, deserialize_with = "present")]
@@ -241,6 +244,7 @@ impl Node {
     pub(super) fn keywords(&self) -> Vec<&'static str> {
         [
             (self.minimum.is_some(), "minimum"),
+            (self.exclusive_minimum.is_some(), "exclusiveMinimum"),
             (self.min_utf16.is_some(), "x-wb-minUtf16"),
             (self.pattern.is_some(), "pattern"),
             (self.matcher.is_some(), "x-wb-matcher"),

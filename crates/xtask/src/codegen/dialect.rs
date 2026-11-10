@@ -4,10 +4,11 @@
 //! Every keyword is a typed field under `deny_unknown_fields`, so a construct
 //! the emitters do not implement is refused by name rather than dropped from
 //! one language's output. What is accepted: numbers with an inclusive
-//! `minimum`, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
+//! `minimum` or an exclusive one, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
 //! JSON cannot write them, and a Rust `f64` read from JSON cannot be one);
 //! booleans and integers; strings with a UTF-16 minimum, a pattern and a named
-//! check, a closed `enum` of values, or a `const`; arrays with an inclusive
+//! check, a closed `enum` of values, or a `const` (a definition too, which a
+//! union may name); arrays with an inclusive
 //! length bound (and the sentence Zod refuses an overlong one with), `$ref`s
 //! to a definition, any-values and records of them, or a record whose keys
 //! are a string definition's and whose entries are one schema, bounded in
@@ -17,7 +18,8 @@
 //! stripped or kept, with optional fields. A definition may be
 //! `x-wb-registered`, or `x-wb-external` when its Zod half is a hand-written
 //! module's. An object may carry a named `x-wb-check` and may `x-wb-extends`
-//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list or record,
+//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list or record or,
+//! as a `$ref`, to an object whose properties are all optional,
 //! or carry the text a model reads as `x-wb-describe`, as may a union definition. It grows when a contract
 //! needs a construct, with that construct's emission in both languages in the
 //! same change.
@@ -28,7 +30,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 pub(super) use super::parse::Unknown;
-use super::parse::{Additional, Kind, Node};
+use super::parse::{Additional, Empty, Kind, Node};
 pub(crate) use super::parse::{Contract, parse};
 
 mod header;
@@ -36,7 +38,7 @@ mod objects;
 mod records;
 mod shapes;
 use header::check_header;
-use objects::{check_extensions, check_unions, lower_object};
+use objects::{check_extensions, check_ref_defaults, check_unions, lower_object};
 use records::{check_map_keys, lower_record};
 pub(super) use shapes::variant_name;
 use shapes::{lower_array, lower_const, lower_discriminated, lower_enum, lower_union};
@@ -85,7 +87,10 @@ const RUST_KEYWORDS: &[&str] = &[
 /// A schema once its form is known and its keywords checked.
 pub(super) enum Ty<'a> {
     Number {
+        /// Inclusive: the number may equal it.
         min: Option<f64>,
+        /// Exclusive: the number must exceed it.
+        above: Option<f64>,
     },
     Bool,
     /// A whole number; the safe-integer bounds are not published.
@@ -272,6 +277,7 @@ pub(super) fn check(contract: &Contract) -> Result<Checked<'_>, Vec<String>> {
     let (mut zod_checks, mut rust_names) = (Vec::new(), Vec::new());
     check_extensions(&defs, &mut v);
     check_unions(&defs, &mut v);
+    check_ref_defaults(&defs, &mut v);
     check_map_keys(&defs, &mut v);
     for def in &defs {
         let mut imported = Vec::new();
@@ -439,7 +445,7 @@ fn serde_shape(ty: &Ty<'_>) -> bool {
             && object.check.is_none()
             && object.extends.is_none()
             && object.fields.iter().all(|f| {
-                !f.optional && matches!(f.ty, Ty::Number { .. }) && f.rust == f.name
+                !f.optional && matches!(f.ty, Ty::Number { above: None, .. }) && f.rust == f.name
             })
     )
 }
@@ -503,9 +509,12 @@ fn lower_reference<'a>(
     at: &str,
     v: &mut Vec<String>,
 ) -> Option<Ty<'a>> {
-    only(node, &["$ref"], "a reference", at, v);
+    only(node, &["$ref", "default"], "a reference", at, v);
     if node.kind.is_some() {
         v.push(format!("{at}: a `$ref` carries no `type`"));
+    }
+    if matches!(node.default, Some(Empty::List)) {
+        v.push(format!("{at}: a `$ref`'s default is `{{}}`"));
     }
     let Some(name) = reference.strip_prefix(DEFS_PREFIX) else {
         v.push(format!("{at}.$ref: {reference} is not a `{DEFS_PREFIX}<name>` reference"));
@@ -538,13 +547,7 @@ fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> O
             v.push(format!("{at}: declares no `type`, `$ref` or `x-wb-any`"));
             None
         }
-        Some(Kind::Number) => {
-            only(node, &["minimum"], "a number", at, v);
-            if node.minimum.is_some_and(|m| !m.is_finite()) {
-                v.push(format!("{at}.minimum: not finite"));
-            }
-            Some(Ty::Number { min: node.minimum })
-        }
+        Some(Kind::Number) => Some(lower_number(node, at, v)),
         Some(Kind::Boolean) => {
             only(node, &[], "a boolean", at, v);
             Some(Ty::Bool)
@@ -553,13 +556,28 @@ fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> O
             only(node, &[], "an integer", at, v);
             Some(Ty::Integer)
         }
-        Some(Kind::String) if node.constant.is_some() => lower_const(node, at, top, v),
+        Some(Kind::String) if node.constant.is_some() => Some(lower_const(node, at, v)),
         Some(Kind::String) if node.values.is_some() => lower_enum(node, at, top, v),
         Some(Kind::String) => Some(lower_string(node, at, v)),
         Some(Kind::Array) => lower_array(node, at, v),
         Some(Kind::Object) if node.properties.is_some() => lower_object(node, at, top, v),
         Some(Kind::Object) => lower_record(node, at, v),
     }
+}
+
+fn lower_number<'a>(node: &Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
+    only(node, &["minimum", "exclusiveMinimum"], "a number", at, v);
+    for (bound, keyword) in
+        [(node.minimum, "minimum"), (node.exclusive_minimum, "exclusiveMinimum")]
+    {
+        if bound.is_some_and(|m| !m.is_finite()) {
+            v.push(format!("{at}.{keyword}: not finite"));
+        }
+    }
+    if node.minimum.is_some() && node.exclusive_minimum.is_some() {
+        v.push(format!("{at}: a number has a `minimum` or an `exclusiveMinimum`, not both"));
+    }
+    Ty::Number { min: node.minimum, above: node.exclusive_minimum }
 }
 
 fn lower_string<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
@@ -697,21 +715,34 @@ fn is_snake(name: &str) -> bool {
         && name.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
+/// A JSON key that is a canonical array index: JavaScript enumerates these
+/// before every other key, in ascending order, whatever order they are written.
+pub(super) fn is_index(name: &str) -> bool {
+    !name.is_empty()
+        && name.bytes().all(|b| b.is_ascii_digit())
+        && (name == "0" || !name.starts_with('0'))
+}
+
 /// A JSON key both languages take: `snake_case`, or `camelCase` that Rust reads as
-/// the `snake_case` it spells.
+/// the `snake_case` it spells, or a canonical array index.
 fn is_field(name: &str) -> bool {
-    name.starts_with(|c: char| c.is_ascii_lowercase())
+    let word = name.starts_with(|c: char| c.is_ascii_lowercase())
         && name.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
         && !(name.contains('_') && name.contains(|c: char| c.is_ascii_uppercase()))
         && !name.contains("__")
-        && !name.ends_with('_')
+        && !name.ends_with('_');
+    word || is_index(name)
 }
 
-/// The Rust field for a JSON key: `camelCase` becomes `snake_case`, and a keyword
-/// is a raw identifier. `None` for a key `is_field` refuses.
+/// The Rust field for a JSON key: `camelCase` becomes `snake_case`, a keyword
+/// is a raw identifier and an index is `n` and its digits. `None` for a key
+/// `is_field` refuses.
 fn rust_field(name: &str) -> Option<String> {
     if !is_field(name) {
         return None;
+    }
+    if is_index(name) {
+        return Some(format!("n{name}"));
     }
     let mut snake = String::new();
     for c in name.chars() {

@@ -283,6 +283,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the parameter type of createDocumentRouter, which the route tests’ option builder spells to fill in the seams a test supplies',
   'packages/server-core/src/api-errors.ts#apiErrorBodySchema':
     'the strict refusal-body contract ApiErrorBody derives from, re-exported through the barrel; the route fuzz holds every refusal to it',
+  'packages/facet-engine/src/facet-grammar.ts#FACET_NAMESPACED_ID_PATTERN':
+    'the engine spelling of the namespaced-id grammar, which the generated asset schemas and plugin-visual’s cannot import and which their contract tests hold equal',
   'packages/facet-engine/src/registry.ts#FacetPlugin':
     'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
   'packages/mcp-server/src/server/server-mode-people.ts#createServerModePeople':

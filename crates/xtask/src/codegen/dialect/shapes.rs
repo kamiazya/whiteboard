@@ -121,23 +121,16 @@ fn union_members<'a>(
 }
 
 /// A string that is always one value, written as lowercase letters and digits
-/// so a Rust constant can spell it and an enum could name it.
-pub(super) fn lower_const<'a>(
-    node: &'a Node,
-    at: &str,
-    top: bool,
-    v: &mut Vec<String>,
-) -> Option<Ty<'a>> {
+/// so a Rust constant can spell it and an enum could name it. On a property it
+/// is the type's constant; as a definition it is a `String` alias a union may
+/// name as a member.
+pub(super) fn lower_const<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
     only(node, &["const"], "a constant", at, v);
-    if top {
-        v.push(format!("{at}: a constant belongs on a property"));
-        return None;
-    }
     let value = node.constant.as_deref().unwrap_or_default();
     if !is_word(value) {
         v.push(format!("{at}.const: `{value}` is not lowercase letters and digits"));
     }
-    Some(Ty::Literal(value))
+    Ty::Literal(value)
 }
 
 fn is_word(value: &str) -> bool {
