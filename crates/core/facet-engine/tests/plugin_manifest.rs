@@ -66,19 +66,10 @@ fn each_glyph_arm_is_written_with_its_own_kind() {
     assert_eq!(Glyph::default(), Glyph::GlyphShape(GlyphShape { name: GlyphShapeName::Square }));
 }
 
-#[test]
-fn a_manifest_built_from_the_types_holds_what_its_contract_names() {
-    let option = PickerOption {
-        payload: Value::Null,
-        label: "No mark".to_owned(),
-        glyph: Some(Glyph::GlyphTheme(GlyphTheme {
-            id: "demo.look".to_owned(),
-            icon: "demo.dot".to_owned(),
-        })),
-        keywords: Some(vec!["none".to_owned()]),
-    };
-    let picker = Picker {
-        options: Some(vec![option.clone()]),
+/// A picker exercising every optional part: a theme glyph, a catalog with an entry.
+fn demo_picker(option: PickerOption) -> Picker {
+    Picker {
+        options: Some(vec![option]),
         specimen_icon: Some("demo.dot".to_owned()),
         layout: Some(PickerLayout::Cards),
         catalog: Some(PickerCatalog {
@@ -91,8 +82,12 @@ fn a_manifest_built_from_the_types_holds_what_its_contract_names() {
                 field: "char".to_owned(),
             }),
         }),
-    };
-    let field = FieldSpec {
+    }
+}
+
+/// A segmented field with an asset glyph.
+fn demo_field() -> FieldSpec {
+    FieldSpec {
         widget: FieldWidget::Segmented,
         label: Some("Routing".to_owned()),
         quick: Some(true),
@@ -103,8 +98,12 @@ fn a_manifest_built_from_the_types_holds_what_its_contract_names() {
             glyph: Some(Glyph::GlyphAsset(GlyphAsset { id: "demo.line".to_owned() })),
         }]),
         layout: Some(PickerLayout::Chips),
-    };
-    let facet = FacetDecl {
+    }
+}
+
+/// A facet carrying an editor and a retained version.
+fn demo_facet(picker: Picker) -> FacetDecl {
+    FacetDecl {
         name: "mark".to_owned(),
         display_name: "Mark".to_owned(),
         version: "v1".to_owned(),
@@ -113,7 +112,7 @@ fn a_manifest_built_from_the_types_holds_what_its_contract_names() {
         asset_refs: Some(vec![("theme".to_owned(), AssetKind::Themes)]),
         editor: Some(EditorSpec {
             picker: Some(picker),
-            fields: Some(vec![("routing".to_owned(), field)]),
+            fields: Some(vec![("routing".to_owned(), demo_field())]),
         }),
         compat: Some(vec![(
             "v0".to_owned(),
@@ -122,7 +121,21 @@ fn a_manifest_built_from_the_types_holds_what_its_contract_names() {
                 migrate: "demo.step".to_owned(),
             },
         )]),
+    }
+}
+
+#[test]
+fn a_manifest_built_from_the_types_holds_what_its_contract_names() {
+    let option = PickerOption {
+        payload: Value::Null,
+        label: "No mark".to_owned(),
+        glyph: Some(Glyph::GlyphTheme(GlyphTheme {
+            id: "demo.look".to_owned(),
+            icon: "demo.dot".to_owned(),
+        })),
+        keywords: Some(vec!["none".to_owned()]),
     };
+    let facet = demo_facet(demo_picker(option.clone()));
     let manifest = PluginManifest {
         id: "demo".to_owned(),
         display_name: "Demo".to_owned(),
