@@ -127,6 +127,13 @@ describe('the guard itself', () => {
     ])
   })
 
+  it('treats a JSON data import as a leaf of the closure', () => {
+    const host = fixtureHost({
+      'a/index.ts': `import manifest from './plugin.manifest.json' with { type: 'json' }\nexport const plugin = manifest`,
+    })
+    expect(reactEdgesFrom(['a/index.ts'], host)).toEqual([])
+  })
+
   it('does not count a type-only import, which is erased at emit', () => {
     const host = fixtureHost({
       'a/index.ts': `import type { ReactNode } from 'react'\nimport { type FC } from 'react'\nexport type T = ReactNode | FC`,

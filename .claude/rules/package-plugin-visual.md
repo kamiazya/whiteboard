@@ -23,7 +23,7 @@ that want the shipped set, not a privileged registry.
 their Zod in `src/generated/visual.zod.ts`, emitted by `cargo xtask codegen`
 from `contracts/facets/visual/visual.schema.json` beside the Rust types of
 `crates/core/plugin-visual`. Edit the contract, not the output. `data.ts`
-keeps what each facet MEANS (keys, targets, editors, resolvers).
+keeps what each facet MEANS (keys, resolvers); targets and editors are in the manifest.
 `visual.contract.test.ts` pins every observable of those schemas: accepted
 and stripped payloads, each refusal's code, message and path, the JSON Schema
 `wb_facet_list` serves, and the form `deriveFacetForm` derives.
@@ -52,6 +52,49 @@ a determinism input (QR-20b). Both follow Unicode 17.0 (Node 24's ICU, which
 landed, with no difference: all 1,914 catalog characters and 30,000 random
 sequences of combining, joining, regional, Hangul and Indic code points agreed
 on cluster count. A crate bump is its own change, with that comparison re-run.
+
+## The definition is a manifest instance
+
+`src/visual.manifest.json` IS the plugin definition: id, the 11 facets with
+their targets, asset refs and editor declarations (picker options, the symbol
+catalog's label and free-entry template, the edge routing and line jump
+segments, the theme picker's specimen icon), and the names of the three asset
+tables. `data.ts` builds `visualPlugin` with `pluginFromManifest(manifest,
+VISUAL_HOST)`, where `VISUAL_HOST` supplies what a document cannot hold: each
+facet's schema by the pointer at its contract definition, the symbol catalog
+loader as `visual.symbols`, and the theme, icon and stencil tables (still
+TypeScript) as `visual.themes`, `visual.icons`, `visual.stencils`. The manifest
+names them rather than holding them. Hand-written facet definitions are gone, so
+the rationale that sat beside each lives here:
+
+- `axes` is canvas only: an axis says something about a whole drawing and means
+  nothing on one node. It has no editor, since a derived form over a free list
+  of facet keys would write keys nobody can verify.
+- `edges` attaches to a canvas and an edge as one facet, because the question is
+  the same asked of either; its two axes are FIELDS, not a picker, so a pick
+  never restates the other axis. Neither row offers an absent value: the way back
+  to the theme's default is picking the value the theme already has.
+- `ink` and `stroke` attach to an edge, where a line's facets live; a group id
+  is an identity, so ink has no editor, and stroke width is chosen by the draw
+  tool and a drawing's own menu.
+- `shape`: rectangle is the ABSENT facet, the picker's `null` option.
+- `theme` is a card picker whose options come from the registry, one per
+  registered theme drawn with `visual.signature`; `stencil` declares only the
+  widget, and `assetRefs` makes the registry fill the choices, so a pack this
+  repo did not ship is selectable.
+- `stencils` and `tags` are document facets with no editor: a library is
+  authored as a document.
+- `symbol` attaches to all three targets; its picker lists absence inline and
+  everything else comes from the catalog.
+
+`src/manifest.test.ts` pins the registration as a JSON projection by snapshot,
+holds the manifest and `bundledFacetRegistry` to the same facets and asset
+kinds, and holds every `VISUAL_HOST.schemas` pointer to the generated schema of
+a definition of the contract; `crates/core/plugin-visual/tests/manifest.rs`
+reads the instance and the contract as the Rust core would and checks every
+pointer names an existing definition. `editors.ts` is only the catalog loader
+(the icon band, then the emoji sections by dynamic import), so the lazy chunk
+is unchanged.
 
 ## There is no second plugin, and there was one
 
@@ -237,7 +280,7 @@ before the term is a term, and a kana reading index is a different data set.
 ## The emoji catalog — reached by dynamic import, not a subpath
 
 `emojiSections()` (the picker's rows) lives in `emoji/sections.ts` and is
-reached only through `editors.ts`'s dynamic import (`SYMBOL_CATALOG.load`);
+reached only through `editors.ts`'s dynamic import (`symbolCatalogLoad`);
 there is no `/emoji` subpath. `emojiSlug()` (the shortcode vocabulary) lives
 in `emoji/slug.ts`, read by the `/emoji/*` subpaths. The tables are 190KB
 and the default entry is loaded wherever a document is READ, which is why

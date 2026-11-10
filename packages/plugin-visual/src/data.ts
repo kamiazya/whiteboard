@@ -1,5 +1,5 @@
-import type { FacetRegistry, IconAsset } from '@kamiazya/whiteboard-facet-engine'
-import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
+import type { FacetRegistry, IconAsset, PluginHost } from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, pluginFromManifest } from '@kamiazya/whiteboard-facet-engine'
 import type {
   EdgeRoutingStyle,
   ExtensionFacets,
@@ -9,12 +9,7 @@ import type {
 import { type edgeRoutingSchema, edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { z } from 'zod'
-import {
-  EDGE_ROUTING_OPTIONS,
-  LINE_JUMP_OPTIONS,
-  SYMBOL_CATALOG,
-  SYMBOL_PICKER_OPTIONS,
-} from './editors.js'
+import { symbolCatalogLoad } from './editors.js'
 import type {
   VisualEdgesFacet,
   VisualShapeFacet,
@@ -40,6 +35,7 @@ import { VISUAL_STENCILS } from './stencils.js'
 import { type StrokeWidth, VISUAL_STROKE_KEY, visualStrokeFacetSchema } from './stroke.js'
 import { visualTagsFacetSchema } from './tag-library.js'
 import { VISUAL_THEMES } from './themes.js'
+import manifest from './visual.manifest.json' with { type: 'json' }
 
 // The payloads of the simple facets below are generated from
 // `contracts/facets/visual`; what each one MEANS stays documented here.
@@ -194,292 +190,39 @@ const VISUAL_ASSET_ICONS: Readonly<Record<string, IconAsset>> = {
 }
 
 /**
- * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
- * through the same registry, validation and ordering as any deployment's
- * added plugins, and a deployment may disable it.
+ * What the manifest NAMES and only code can be: each facet's payload schema
+ * by the pointer at its contract definition, the symbol catalog's loader and
+ * the three asset tables. The tables stay TypeScript; the manifest refers to
+ * them by name.
  */
-export const visualPlugin = definePlugin({
-  id: 'visual',
-  displayName: 'Visual style',
-  facets: [
-    defineFacet({
-      name: 'axes',
-      displayName: 'Semantic axes',
-      version: 'v0',
-      // CANVAS only. An axis is a statement about the whole drawing — "on
-      // this board, colour means health" — and the same sentence attached to
-      // one node would say nothing a reader could act on.
-      targets: ['canvas'],
-      schema: visualAxesFacetSchema,
-      // No editor spec, deliberately: there is no control for this yet, and
-      // a derived form over a free list of facet keys would be a text box
-      // that writes a key nobody can verify. Written today through
-      // `wb_facet_set`, which is what a model reaches for, and the UI comes
-      // when there is a second axis worth picking from a list.
-    }),
-    defineFacet({
-      name: 'edges',
-      displayName: 'Edges',
-      version: 'v0',
-      // Both scopes, one facet: the question ("how is this drawn") is the
-      // same asked of a canvas and of one edge, and ADR-0013 decision 1's
-      // growth rule says that is one facet, not two. `visual.symbol` was
-      // widened the same way. The key stays `v0`: `targets` declares where a
-      // payload may attach and is not itself payload, so no stored value
-      // changes meaning and there is no migration to write.
-      targets: ['canvas', 'edge'],
-      schema: visualEdgesFacetSchema,
-      // FIELDS, not a picker: the two axes are independent — a person
-      // changing the routing is not restating the jumps — so a control
-      // writing whole payloads would make every pick a statement about
-      // both. The labels and glyphs live here so the vessel drawing this
-      // row names neither; it reads the declaration like any other.
-      editor: {
-        fields: {
-          // CARDS: three named routings and an on/off, whose words carry
-          // meaning the line alone does not — a curve is a curve, but which
-          // of them the board is FOLLOWING is a word. Same shape Settings
-          // gives theme and tab icon.
-          routing: {
-            widget: 'segmented',
-            label: 'Edge routing',
-            options: EDGE_ROUTING_OPTIONS,
-            layout: 'cards',
-          },
-          lineJumps: {
-            widget: 'segmented',
-            label: 'Line jumps',
-            options: LINE_JUMP_OPTIONS,
-            layout: 'cards',
-          },
-        },
-      },
-    }),
-    defineFacet({
-      name: 'ink',
-      displayName: 'Ink',
-      version: 'v0',
-      // EDGE target, which is where a LINE's facets live — the same bucket
-      // `visual.edges/v0` reads. Only ink is grouped today; the target says
-      // where a payload may attach, not what may use it.
-      targets: ['edge'],
-      schema: visualInkFacetSchema,
-      // No editor spec, deliberately, and for a sharper reason than
-      // `visual.axes` has: a group id is an identity, not a preference. A
-      // text box over it would let somebody type a group that does not
-      // exist, or break one apart by a typo. Grouping is made and unmade by
-      // the gesture that draws — and by the menu's Ungroup, which removes
-      // the facet rather than editing it.
-    }),
-    defineFacet({
-      name: 'stroke',
-      displayName: 'Stroke',
-      version: 'v0',
-      // EDGE target, where a line's facets live — the slot `visual.ink/v0`
-      // takes for the same reason.
-      targets: ['edge'],
-      schema: visualStrokeFacetSchema,
-      // No editor spec: the width is chosen by the draw tool's options and
-      // by a drawing's own menu, the two places a person picks a pen.
-    }),
-    defineFacet({
-      name: 'shape',
-      displayName: 'Shape',
-      version: 'v0',
-      targets: ['node'],
-      schema: visualShapeFacetSchema,
-      // Declared, not hand-written: the bundled plugin goes through the
-      // same catalog a third-party plugin would, so the mechanism is
-      // exercised by its first customer. `null` is the Rectangle option —
-      // rect is the ABSENT facet, not a stored value.
-      editor: {
-        picker: {
-          options: [
-            { payload: null, label: 'Rectangle', glyph: { kind: 'shape', name: 'square' } },
-            {
-              payload: { kind: 'ellipse' },
-              label: 'Ellipse',
-              glyph: { kind: 'shape', name: 'circle' },
-            },
-            {
-              payload: { kind: 'diamond' },
-              label: 'Diamond',
-              glyph: { kind: 'shape', name: 'diamond' },
-            },
-            {
-              payload: { kind: 'hexagon' },
-              label: 'Hexagon',
-              glyph: { kind: 'shape', name: 'hexagon' },
-            },
-            {
-              payload: { kind: 'octagon' },
-              label: 'Octagon',
-              glyph: { kind: 'shape', name: 'octagon' },
-            },
-            {
-              payload: { kind: 'parallelogram' },
-              label: 'Parallelogram',
-              glyph: { kind: 'shape', name: 'parallelogram' },
-            },
-            {
-              payload: { kind: 'cylinder' },
-              label: 'Cylinder',
-              glyph: { kind: 'shape', name: 'cylinder' },
-            },
-          ],
-        },
-      },
-    }),
-    defineFacet({
-      name: 'text',
-      displayName: 'Text placement',
-      version: 'v0',
-      targets: ['node'],
-      schema: visualTextFacetSchema,
-      editor: {
-        picker: {
-          options: [
-            {
-              payload: null,
-              label: 'Default placement',
-              glyph: { kind: 'shape', name: 'none' },
-            },
-            { payload: { align: 'start' }, label: 'Top' },
-            { payload: { align: 'center' }, label: 'Middle' },
-          ],
-        },
-      },
-    }),
-    defineFacet({
-      name: 'theme',
-      displayName: 'Theme',
-      version: 'v0',
-      targets: ['canvas'],
-      schema: visualThemeFacetSchema,
-      assetRefs: { theme: 'themes' },
-      editor: {
-        picker: {
-          // CARDS: a look has a NAME a person says out loud, and three cells
-          // give the specimen room to be seen. A chip-sized swatch of the
-          // same mark reads as a smudge.
-          layout: 'cards',
-          // The SAME mark once per registered theme, drawn through that
-          // theme's own `ink` and `glow`, plus a plain one for the bundled
-          // look. The mark is named here because it belongs to this plugin;
-          // the IDS come from the registry, so a deployment registering a
-          // third theme gets a third card and this file does not change.
-          // That is ADR-0030 decision 2's promise, and it was prose until
-          // 足場3b (user decision, 2026-09-12) — this list was written out
-          // by hand, so a registered theme was applicable and unselectable.
-          specimenIcon: 'visual.signature',
-        },
-      },
-    }),
-    defineFacet({
-      name: 'symbol',
-      displayName: 'Symbol',
-      version: 'v0',
-      // All three: a symbol answers "what symbolises this object", and the
-      // object may be a node, a spatial document's canvas, or a markdown
-      // document. Widening `targets` is a change to WHERE a payload may
-      // attach, never to the payload — so the version does not move.
-      targets: ['node', 'canvas', 'document'],
-      schema: visualSymbolFacetSchema,
-      // The facet that broke the ladder, now declared like the rest — and
-      // the one that then broke it a second way.
-      //
-      // Its choices straddle both schema arms, which a field-level control
-      // cannot express, so this facet had a hand-written React component
-      // and a hand-written component has no styling contract. The picker
-      // writes whole payloads, so the arms stop mattering, and the icon
-      // options name REGISTERED GEOMETRY rather than shipping a drawing.
-      //
-      // What that still could not say was "and anything else": a listed
-      // option is a listed option, so the emoji arm — open by schema since
-      // day one — was five characters wide. The catalog and its free entry
-      // are the vocabulary widened again rather than the escape hatch
-      // reopened.
-      editor: { picker: { options: SYMBOL_PICKER_OPTIONS, catalog: SYMBOL_CATALOG } },
-    }),
-    defineFacet({
-      name: 'stencil',
-      displayName: 'Stencil',
-      version: 'v0',
-      // `visual.stencil/v0` — which registered STENCIL this node wears
-      // ([ADR-0034](../../../docs/contributing/adr/0034-stencil-and-recipe.md)
-      // decision 5), by id. The payload carries NO appearance: applying a stencil
-      // expands its colour and facets onto the node itself, and this records where
-      // they came from.
-      //
-      // The record is what makes a dressed board legible rather than merely
-      // decorated. ADR-0033 scores the distinctions a drawing SHOWS against the
-      // ones its document DECLARES, and a stencil id is a declaration — so a board
-      // dressed by kind reads as carrying its constructs. Without it the identical
-      // drawing reads as `excess`, and the axis scores a real improvement as a
-      // defect.
-      //
-      // `assetRefs` does the same job it does for a theme: a write naming a
-      // stencil nobody registered is refused, with the registered ids listed.
-      //
-      // A node only. A stencil dresses ONE box; a canvas-wide appearance is
-      // what `visual.theme` already is, and the two answer different
-      // questions — a theme says how the whole board is drawn, a stencil
-      // says what one box IS.
-      targets: ['node'],
-      schema: visualStencilFacetSchema,
-      assetRefs: { stencil: 'stencils' },
-      // A PICKER, declared, rather than the text box the derived form would
-      // give a regex-validated string. Caught by `facet-panel.browser.test`
-      // the first time this facet shipped without it: the panel offered a
-      // free-entry field and a Save button for a value that must name a
-      // registered asset, so the one id a user could type by hand was a
-      // wrong one.
-      //
-      // The WIDGET is declared and the OPTIONS are not: `assetRefs` above
-      // says this field names a stencil, and the registry fills the choices
-      // from what it actually holds. That is what makes a pack this repo did
-      // not ship SELECTABLE and not merely applicable — the state it shipped
-      // in first, where `wb_facet_list` reported a stencil, `wb_canvas_edit`
-      // applied it, and the panel did not offer it.
-      editor: { fields: { stencil: { widget: 'segmented', label: 'Stencil' } } },
-    }),
-    defineFacet({
-      name: 'stencils',
-      displayName: 'Stencil library',
-      version: 'v0',
-      // A DOCUMENT only, and the singular/plural pair is the distinction:
-      // `visual.stencil` says which stencil one box WEARS, `visual.stencils`
-      // says which stencils a document DEFINES. One is worn, the other is
-      // drawn from.
-      targets: ['document'],
-      schema: visualStencilsFacetSchema,
-      // No `editor`, so the derived form answers `unsupported` — a record of
-      // records is outside the control vocabulary, and that is the honest
-      // signal rather than a half-rendered payload. The affordance for
-      // growing a vocabulary is editing the document, which is the whole
-      // reason a library is one.
-    }),
-    defineFacet({
-      name: 'tags',
-      displayName: 'Tag library',
-      version: 'v0',
-      // A DOCUMENT only, for the reason `stencils` is: this facet says which
-      // tags a document DECLARES for a workspace, not which tags anything
-      // wears — those are core OKF and no facet's (ADR-0040 decision 2).
-      targets: ['document'],
-      schema: visualTagsFacetSchema,
-      // No `editor`: a record of records is outside the derived form's
-      // vocabulary, and the affordance for growing a vocabulary is editing
-      // the document, which is what a library is.
-    }),
-  ],
-  // The vendored set, registered as ADR-0013 decision 3 assets so a
-  // declared picker — and any other realm holding the registry — can draw
-  // it from data. The kind existed and no plugin used it; the symbol
-  // picker is its first customer, and the reason the escape hatch is no
-  // longer needed.
-  assets: { themes: VISUAL_THEMES, icons: VISUAL_ASSET_ICONS, stencils: VISUAL_STENCILS },
-})
+export const VISUAL_HOST: PluginHost = {
+  schemas: {
+    'facets/visual/visual.schema.json#/$defs/VisualAxesFacet': visualAxesFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualEdgesFacet': visualEdgesFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualInkFacet': visualInkFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualStrokeFacet': visualStrokeFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualShapeFacet': visualShapeFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualTextFacet': visualTextFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualThemeFacet': visualThemeFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualSymbolFacet': visualSymbolFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualStencilFacet': visualStencilFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualStencilsFacet': visualStencilsFacetSchema,
+    'facets/visual/visual.schema.json#/$defs/VisualTagsFacet': visualTagsFacetSchema,
+  },
+  catalogs: { 'visual.symbols': symbolCatalogLoad },
+  assets: {
+    'visual.themes': VISUAL_THEMES,
+    'visual.icons': VISUAL_ASSET_ICONS,
+    'visual.stencils': VISUAL_STENCILS,
+  },
+}
+
+/**
+ * The bundled plugin, built from its manifest. Deliberately ordinary
+ * (ADR-0013 decision 3): it goes through the same registry, validation and
+ * ordering as any deployment's added plugins, and a deployment may disable it.
+ */
+export const visualPlugin = pluginFromManifest(manifest, VISUAL_HOST)
 
 export const bundledPlugins = [visualPlugin]
 

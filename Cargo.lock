@@ -593,8 +593,10 @@ version = "0.0.0"
 name = "whiteboard-plugin-visual"
 version = "0.0.0"
 dependencies = [
+ "serde_json",
  "unicode-segmentation",
  "wasm-bindgen-test",
+ "whiteboard-facet-engine",
  "whiteboard-model",
 ]
 

@@ -1,47 +1,9 @@
 /**
- * What each bundled facet's EDITOR declares — the picker options, the
- * catalog, and the two segmented rows.
- *
- * Beside `data.ts` rather than in it because they answer a different
- * question. That file says what a facet IS: its schema, where a payload may
- * attach, how an old one migrates. This one says how a person MEETS it, and
- * it is the half that changes when somebody looks at the panel and does not
- * like what they see — which, on this plugin, is most of the changes.
- *
- * Not a split for size. `data.ts` crossed the 800-line budget and the guard
- * is what asked the question, but the answer was already sitting there: two
- * subjects in one file, one of them growing.
+ * The symbol catalog's loader: the one part of a facet's editor that is code
+ * rather than data, so it stays out of `visual.manifest.json`, which names it.
  */
-import type {
-  FacetPickerCatalogSection,
-  FacetPickerCatalogSpec,
-  FacetPickerOption,
-  FacetSegmentedOption,
-} from '@kamiazya/whiteboard-facet-engine'
+import type { FacetPickerCatalogSection } from '@kamiazya/whiteboard-facet-engine'
 import { BUILT_IN_ICON_NAMES } from './icons/icons.js'
-
-/**
- * What the picker lists INLINE: absence, and nothing else.
- *
- * Neither a handful of hardcoded EMOJI nor the vendored ICONS belong here.
- * A few emoji are a few of the nineteen hundred the schema accepts — listing
- * more would not fix that, since a definition this file exports is loaded by
- * the renderer, the layout worker and the MCP server, none of which draws a
- * picker.
- *
- * The vendored icons are the catalog's first band instead: a row of
- * monochrome line drawings directly above a grid of full-colour emoji reads
- * as two unrelated palettes, and the row would be indistinguishable from the
- * CATEGORY row below it, which picks a view rather than a value. As a
- * category like any other, a grid is all monochrome or all colour and never
- * half of each.
- *
- * Absence stays inline because it is the one choice that belongs to no
- * category and has to be reachable without browsing to one.
- */
-export const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
-  { payload: null, label: 'No symbol', glyph: { kind: 'shape', name: 'none' } },
-]
 
 /**
  * Other words for what each vendored icon depicts, so a search by the
@@ -81,58 +43,19 @@ const ICON_SECTION: FacetPickerCatalogSection = {
 }
 
 /**
- * Every emoji Unicode publishes, searchable, plus the way to write one it
- * does not.
+ * The symbol picker's catalog, which the manifest names as `visual.symbols`:
+ * the vendored icons as a first band, then every emoji Unicode publishes.
  *
  * DERIVED from the standard rather than curated (`scripts/
  * generate-emoji-catalog.mjs`): "which two hundred emoji does this product
- * like" has no defensible answer and goes stale each Unicode release,
- * while the published set carries its own names and categories and is
- * already in the order a keyboard should show them.
+ * like" has no defensible answer and goes stale each Unicode release.
  *
- * `entry` is what makes the picker honestly open. Its template says the
- * typed text is the `char` of an emoji payload and nothing more — what a
- * char may BE stays `visualSymbolFacetSchema`'s answer, at the write
- * boundary, so a skin-toned hand or a flag sequence this build never
- * listed is still one press away, and a two-character string is still
- * refused with the schema's own words.
+ * A LOADER rather than rows because the plugin definition is read wherever a
+ * document is, and none of those draws a picker. The dynamic import is what
+ * keeps the emoji tables a separate chunk; the manifest holds the label and
+ * the free-entry template, which are data.
  */
-export const SYMBOL_CATALOG: FacetPickerCatalogSpec = {
-  label: 'Search symbols',
-  load: async () => [ICON_SECTION, ...(await import('./emoji/sections.js')).emojiSections()],
-  entry: {
-    label: 'Any character or emoji',
-    // The placeholder names the SEARCH box, because free entry is not a
-    // second control: typing a character the catalog lacks offers it as the
-    // leading result. Two inputs for one gesture — the search already matches
-    // a pasted character — would be one input too many.
-    placeholder: 'Search, or paste a symbol',
-    payload: { kind: 'emoji' },
-    field: 'char',
-  },
-}
-
-/**
- * `visual.edges/v0`'s two rows, as data.
- *
- * Every value here is a stored one — neither row offers `value: null`,
- * because neither axis has an "absent" a person picks. Absence means "let
- * the theme decide", and the way back to it is picking the value the theme
- * already has: the write path canonicalises a pick equal to the effective
- * default down to no stored facet, so the row returns to following the
- * theme without a separate control saying so.
- */
-export const EDGE_ROUTING_OPTIONS: readonly FacetSegmentedOption[] = [
-  { value: 'straight', label: 'Straight', glyph: { kind: 'asset', id: 'visual.edge-straight' } },
-  {
-    value: 'orthogonal',
-    label: 'Orthogonal',
-    glyph: { kind: 'asset', id: 'visual.edge-orthogonal' },
-  },
-  { value: 'curved', label: 'Curved', glyph: { kind: 'asset', id: 'visual.edge-curved' } },
-]
-
-export const LINE_JUMP_OPTIONS: readonly FacetSegmentedOption[] = [
-  { value: 'none', label: 'Off', glyph: { kind: 'asset', id: 'visual.line-jumps-off' } },
-  { value: 'arc', label: 'On', glyph: { kind: 'asset', id: 'visual.line-jumps-on' } },
+export const symbolCatalogLoad = async (): Promise<readonly FacetPickerCatalogSection[]> => [
+  ICON_SECTION,
+  ...(await import('./emoji/sections.js')).emojiSections(),
 ]

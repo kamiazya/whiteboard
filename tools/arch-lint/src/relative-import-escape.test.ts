@@ -96,6 +96,8 @@ const UNRESOLVED_IN_SHIPPED_SOURCE: Readonly<Record<string, string>> = {
     'an SVGR `?react` import: the component is generated from the .svg beside it',
   'apps/extension/src/manifest.ts -> ../package.json':
     'the extension package version, imported as data so the manifest stamps the one declared version',
+  'packages/plugin-visual/src/data.ts -> ./visual.manifest.json':
+    'the bundled plugin manifest, imported as data with a JSON import attribute and named by the plugin definition',
   'apps/web/src/main.tsx -> ./index.css': 'the global stylesheet, a side-effect import',
 }
 

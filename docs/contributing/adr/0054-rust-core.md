@@ -291,7 +291,15 @@ The bundled `visual` plugin is compiled into Rust as an ordinary implementer
 of the contribution traits. A DECLARATIVE manifest path is designed now:
 facet schemas in the neutral dialect, themes, shapes, icons, declarative
 decorations and migrations. Its schema is
-`contracts/plugin-manifest.json`.
+`contracts/plugin/plugin-manifest.schema.json`, emitted as Zod and Rust types
+like every other contract. As built, the manifest holds a plugin's id, its
+facets (targets, version, asset refs, editor declarations, compat entries) and
+the NAMES of what only code can be: a payload schema, a catalog loader, an
+asset table, a migration. The host supplies those by name, and
+`pluginFromManifest` runs the same definition-time checks a hand-written plugin
+meets. Declarative decorations are deferred (the emoji catalog and the
+asset tables stay TypeScript behind named references), and an interpreter that
+runs a manifest in the Rust core is a later step.
 
 | Alternative | Why rejected |
 |---|---|

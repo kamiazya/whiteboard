@@ -9,10 +9,12 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { visualPlugin } from './data.js'
-import { SYMBOL_CATALOG } from './editors.js'
+import { bundledFacetRegistry, VISUAL_HOST, visualPlugin } from './data.js'
+import { symbolCatalogLoad } from './editors.js'
+import * as generated from './generated/visual.zod.js'
 import { VISUAL_STENCILS } from './stencils.js'
 import { VISUAL_THEMES } from './themes.js'
+import manifest from './visual.manifest.json' with { type: 'json' }
 
 const CATALOG_LOADER = '<catalog loader>'
 
@@ -54,6 +56,33 @@ describe('the visual plugin definition', () => {
 
   it('loads the symbol catalog through the one loader', () => {
     const symbol = visualPlugin.facets.find((facet) => facet.name === 'symbol')
-    expect(symbol?.editor?.picker?.catalog?.load).toBe(SYMBOL_CATALOG.load)
+    expect(symbol?.editor?.picker?.catalog?.load).toBe(symbolCatalogLoad)
+  })
+
+  it('declares every facet the registry knows, and the registry knows every one it declares', () => {
+    const declared = manifest.facets.map((facet) => `${manifest.id}.${facet.name}/${facet.version}`)
+    const registered = bundledFacetRegistry.plugins.flatMap((plugin) =>
+      plugin.facets.map((facet) => `${plugin.id}.${facet.name}/${facet.version}`),
+    )
+    expect(declared.length).toBeGreaterThan(10)
+    expect([...declared].sort()).toEqual([...registered].sort())
+  })
+
+  it('declares an asset table for every asset kind the registry holds', () => {
+    const kinds = ['themes', 'icons', 'stencils'] as const
+    const held = kinds.filter((kind) => bundledFacetRegistry.assetIds(kind).length > 0)
+    expect(held).toEqual(['themes', 'icons', 'stencils'])
+    expect(Object.keys(manifest.assets).sort()).toEqual([...held].sort())
+  })
+
+  it('supplies each pointer the generated schema of the definition it names', () => {
+    const pointers = Object.entries(VISUAL_HOST.schemas)
+    expect(pointers.length).toBe(manifest.facets.length)
+    for (const [pointer, schema] of pointers) {
+      const definition = pointer.split('#/$defs/')[1] ?? ''
+      const exported = `${definition.charAt(0).toLowerCase()}${definition.slice(1)}Schema`
+      expect(Object.keys(generated), pointer).toContain(exported)
+      expect((generated as Record<string, unknown>)[exported], pointer).toBe(schema)
+    }
   })
 })
