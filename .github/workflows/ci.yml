@@ -1203,9 +1203,10 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=core-wasm-rust
 
-      # QR-21 layer 2 for the OKF envelope: parseOkf and serializeOkf against
-      # the artifact, after stage:wasm, which codec-rust reads it from.
-      - name: OKF envelope against the wasm (codec-rust)
+      # QR-21 layer 2 for the JSON Canvas codec: parseSpatial and
+      # serializeSpatial against the artifact, after stage:wasm, which
+      # codec-rust reads it from. The OKF envelope's went with its TypeScript.
+      - name: JSON Canvas codec against the wasm (codec-rust)
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=codec-rust
 
