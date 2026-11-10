@@ -36,5 +36,8 @@ export const RUST_SCOPE = {
     'packages/codec/src/okf',
     'packages/codec/src/test-utils/okf-oracle',
     'packages/codec/src/test-utils/frontmatter-oracle',
+    // The JSON Canvas codec's recording, and the generator that writes it.
+    'packages/codec/src/spatial/oracle',
+    'packages/codec/src/test-utils/json-canvas-oracle',
   ],
 }
