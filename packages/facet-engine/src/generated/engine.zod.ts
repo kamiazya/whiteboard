@@ -153,12 +153,12 @@ export type NodeStyleTokens = z.infer<typeof nodeStyleTokensSchema>
 
 /** The six numbered colour presets. */
 export const palettePresetsSchema = z.object({
-  1: presetAccentSchema,
-  2: presetAccentSchema,
-  3: presetAccentSchema,
-  4: presetAccentSchema,
-  5: presetAccentSchema,
-  6: presetAccentSchema,
+  '1': presetAccentSchema,
+  '2': presetAccentSchema,
+  '3': presetAccentSchema,
+  '4': presetAccentSchema,
+  '5': presetAccentSchema,
+  '6': presetAccentSchema,
 })
 export type PalettePresets = z.infer<typeof palettePresetsSchema>
 

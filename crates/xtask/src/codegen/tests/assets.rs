@@ -205,7 +205,7 @@ fn numbered_order(order: &str) -> String {
 fn a_numeric_key_is_a_zod_key_and_a_rust_field_named_n_and_its_digits() {
     let (zod, rust) = emitted(NUMBERED);
     assert!(
-        zod.contains("\n  0: z.string(),\n  1: z.string(),\n  9: z.string(),\n  10: z.string(),\n  name: z.string(),\n"),
+        zod.contains("\n  '0': z.string(),\n  '1': z.string(),\n  '9': z.string(),\n  '10': z.string(),\n  name: z.string(),\n"),
         "{zod}"
     );
     for field in ["n0", "n1", "n9", "n10", "name"] {

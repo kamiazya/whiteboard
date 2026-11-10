@@ -19,7 +19,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use super::dialect::{
-    Cap, Checked, CheckedDef, Contract, Field, Object, Pattern, Ty, Unknown, Uses, variant_name,
+    Cap, Checked, CheckedDef, Contract, Field, Object, Pattern, Ty, Unknown, Uses, is_index,
+    variant_name,
 };
 
 /// biome.json's `lineWidth`.
@@ -279,7 +280,11 @@ fn zod_field(field: &Field<'_>, indent: usize, describe: bool) -> String {
     } else if let Some(text) = field.published {
         chain = chain.then("describe", vec![js_string(text)]);
     }
-    chain.render(indent, &format!("{}: ", field.name), ",")
+    // An index key is quoted so its TypeScript key stays the string the JSON
+    // names, where a bare one would be the number.
+    let key =
+        if is_index(field.name) { format!("'{}'", field.name) } else { field.name.to_owned() };
+    chain.render(indent, &format!("{key}: "), ",")
 }
 
 /// An object as the chain biome keeps for one that is described, refined or
