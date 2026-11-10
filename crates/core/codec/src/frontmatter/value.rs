@@ -19,9 +19,11 @@ pub enum Refusal {
     TooLarge,
 }
 
-/// The most UTF-8 bytes `parse` reads; a longer text is refused. Frontmatter
-/// is a document's metadata, and a facet payload is a handful of kilobytes.
-pub const MAX_BYTES: usize = 262_144;
+/// The most UTF-8 bytes `parse` reads; a longer text is refused. A markdown
+/// document holds at most `MARKDOWN_MAX_CHARS` (256 Ki) UTF-16 units and a
+/// unit is at most three UTF-8 bytes, so the frontmatter of any document the
+/// model admits is within this, and the TypeScript is never asked instead.
+pub const MAX_BYTES: usize = 786_432;
 
 /// The most collections one value may sit inside, the root mapping included.
 pub const MAX_DEPTH: usize = 32;
