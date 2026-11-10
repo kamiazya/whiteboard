@@ -17,7 +17,7 @@ import { parseSource } from './ast-helpers.js'
  * to every consumer, and the shim initialises asynchronously) declares a
  * `realm` instead: the export is a dispatcher over the one core each realm
  * installs, never an implementation, and the files that held the
- * TypeScript must be gone. The OKF envelope is the second shape.
+ * TypeScript must be gone. The OKF envelope and the JSON Canvas codec are the second shape.
  */
 export interface PortedFunction {
   /** The name the function goes by in the TypeScript and in the switch. */
@@ -49,6 +49,16 @@ const OKF_TYPESCRIPT = [
   'packages/codec/src/okf/serialize.ts',
   'packages/codec/src/okf/frontmatter-yaml.ts',
   'packages/codec/src/okf/yaml-safe.ts',
+] as const
+
+/**
+ * Where the JSON Canvas codec's TypeScript implementation lived, which stage 4
+ * requires gone. The widget's TypeScript reader is not it: it answers no daemon
+ * or web call, and `spatial-reader-isolation.test.ts` keeps it so.
+ */
+const SPATIAL_TYPESCRIPT = [
+  'packages/codec/src/spatial/parse.ts',
+  'packages/codec/src/spatial/serialize.ts',
 ] as const
 
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
@@ -99,37 +109,27 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   {
     name: 'parseSpatial',
-    stage: 2,
-    ts: { file: 'packages/codec/src/spatial/parse.ts', export: 'parseSpatial' },
-    switch: {
-      file: 'packages/codec/src/spatial/spatial-core.ts',
-      interface: 'SpatialCodecCore',
-      key: 'parseSpatial',
-      option: 'ServerDeps.spatialCore',
-    },
+    stage: 4,
+    ts: { file: 'packages/codec/src/spatial/spatial-core.ts', export: 'parseSpatial' },
     rust: { file: 'crates/bindings/wasm/src/json_canvas.rs', fn: 'json_canvas_parse' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'parseSpatial',
     },
+    realm: { install: 'installSpatialCore', deleted: SPATIAL_TYPESCRIPT },
   },
   {
     name: 'serializeSpatial',
-    stage: 2,
-    ts: { file: 'packages/codec/src/spatial/serialize.ts', export: 'serializeSpatial' },
-    switch: {
-      file: 'packages/codec/src/spatial/spatial-core.ts',
-      interface: 'SpatialCodecCore',
-      key: 'serializeSpatial',
-      option: 'ServerDeps.spatialCore',
-    },
+    stage: 4,
+    ts: { file: 'packages/codec/src/spatial/spatial-core.ts', export: 'serializeSpatial' },
     rust: { file: 'crates/bindings/wasm/src/json_canvas.rs', fn: 'json_canvas_serialize' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'serializeSpatial',
     },
+    realm: { install: 'installSpatialCore', deleted: SPATIAL_TYPESCRIPT },
   },
 ]
 

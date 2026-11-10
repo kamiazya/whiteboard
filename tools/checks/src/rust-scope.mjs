@@ -19,7 +19,6 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/det-math.ts',
     'packages/canvas-render/src/det-math.rust.test.ts',
     'packages/canvas-render/vitest.rust.config.ts',
-    'packages/codec/vitest.rust.config.ts',
   ],
   trees: [
     '.cargo',
@@ -36,7 +35,7 @@ export const RUST_SCOPE = {
     'packages/codec/src/okf',
     'packages/codec/src/test-utils/okf-oracle',
     'packages/codec/src/test-utils/frontmatter-oracle',
-    // The JSON Canvas codec's recording, and the generator that writes it.
+    // The JSON Canvas codec's recording, replayed by the Rust crate and by codec-node.
     'packages/codec/src/spatial/oracle',
     'packages/codec/src/test-utils/json-canvas-oracle',
   ],

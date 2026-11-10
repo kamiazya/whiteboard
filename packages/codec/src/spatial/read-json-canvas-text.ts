@@ -4,12 +4,20 @@ import { jsonCanvasDocumentSchema } from './json-canvas.js'
 import { fromJsonCanvas } from './projection.js'
 
 /**
- * Read JSON Canvas text as a document. The text is validated against the WIRE
- * schema and then lifted by {@link fromJsonCanvas}: what arrives is a JSON
- * Canvas document, and what leaves is this product's model, with the one
- * conversion between them in the projection module.
+ * The TypeScript READER of JSON Canvas text, for the one realm with no Rust
+ * core: the MCP Apps widget iframe and the viewer that shares its code
+ * (`canvas-viewer`'s `parseViewerScene`). The daemon and the web app answer
+ * JSON Canvas through the core alone (`parseSpatial`, `serializeSpatial`), which
+ * has no fallback to this; arch-lint keeps them from importing it. There is no
+ * TypeScript writer: a viewer only reads.
+ *
+ * The text is validated against the WIRE schema and then lifted by
+ * {@link fromJsonCanvas}: what arrives is a JSON Canvas document, and what
+ * leaves is this product's model, with the one conversion between them in the
+ * projection module. It declines nothing, so a document the core refuses (past
+ * 4 MiB, a lone surrogate, nesting past 64) the viewer still draws.
  */
-export function parseSpatial(text: string): CodecParseResult<SpatialCanvas> {
+export function readJsonCanvasText(text: string): CodecParseResult<SpatialCanvas> {
   let rawValue: unknown
   try {
     rawValue = JSON.parse(text)

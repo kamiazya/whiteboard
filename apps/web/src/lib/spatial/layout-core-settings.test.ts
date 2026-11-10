@@ -5,33 +5,18 @@ describe('coreSettingsFrom', () => {
   it('routes in Rust in a production build', () => {
     expect(coreSettingsFrom({ DEV: false, MODE: 'production' })).toEqual({
       impl: 'rust',
-      spatial: 'rust',
       mismatch: 'log',
     })
   })
 
-  it('reads JSON Canvas in Rust in a build, differential in the dev server, TypeScript in a test run', () => {
-    expect(coreSettingsFrom({ DEV: false, MODE: 'production' }).spatial).toBe('rust')
-    expect(
-      coreSettingsFrom({ DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_SPATIAL: 'ts' })
-        .spatial,
-    ).toBe('ts')
-    expect(coreSettingsFrom({ DEV: true, MODE: 'test' }).spatial).toBe('ts')
-    expect(coreSettingsFrom({ DEV: true, MODE: 'development' }).spatial).toBe('differential')
-    expect(
-      coreSettingsFrom({ DEV: true, MODE: 'test', VITE_WHITEBOARD_CORE_SPATIAL: 'differential' })
-        .spatial,
-    ).toBe('differential')
-    expect(
-      coreSettingsFrom({ DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_SPATIAL: 'rust' })
-        .spatial,
-    ).toBe('rust')
-    expect(() => coreSettingsFrom({ VITE_WHITEBOARD_CORE_SPATIAL: 'fast' })).toThrow()
-  })
-
-  it('has no OKF switch left, so a variable that once set one changes nothing', () => {
-    const retired = { DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_OKF: 'ts' }
-    expect(coreSettingsFrom(retired)).not.toHaveProperty('okf')
+  it('has no OKF or JSON Canvas switch left, so a variable that once set one changes nothing', () => {
+    const retired = {
+      DEV: false,
+      MODE: 'production',
+      VITE_WHITEBOARD_CORE_OKF: 'ts',
+      VITE_WHITEBOARD_CORE_SPATIAL: 'ts',
+    }
+    expect(coreSettingsFrom(retired)).toEqual({ impl: 'rust', mismatch: 'log' })
   })
 
   it('runs both routings beside each other in the dev server', () => {

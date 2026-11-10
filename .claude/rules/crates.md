@@ -94,11 +94,9 @@ the artifact exists), so the routing scoreboards judge the Rust side-choice
 search, repair and router together; the two `*.cost.test.ts` files that count
 TypeScript internals are excluded there, since under Rust they count nothing. Every target runs nightly
 in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
-restores read-only. The same job runs `codec-rust`
-(`packages/codec/src/spatial/wasm.rust.test.ts`), which holds the JSON Canvas
-calls to the TypeScript exactly and fails on CI if the artifact is absent. The
-OKF envelope's differential went with its TypeScript (owner decision q40): its
-suites now run in `codec-node` against the core itself. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
+restores read-only. The OKF envelope's and the JSON Canvas codec's differentials went with their
+TypeScript (owner decision q40): their suites run in `codec-node` against the
+core itself, and the recorded oracles are replayed there. `ci-rust-jobs.test.ts` holds the jobs' tool versions,
 steps and cache paths to the scripts.
 
 - **Toolchain** is `rust-toolchain.toml` (1.97.0, pinned exactly) and

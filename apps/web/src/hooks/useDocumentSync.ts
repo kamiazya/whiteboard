@@ -1,5 +1,6 @@
 import type { ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 import type {
@@ -13,6 +14,7 @@ import type {
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
+import { codecsReady } from '../lib/codec-cores.js'
 import {
   type DocumentExportFormat,
   isCommentedPicture,
@@ -36,7 +38,6 @@ import type { EditorCommand } from '../lib/spatial/commands.js'
 import type { PictureExportOptions } from '../lib/spatial/picture-options.js'
 import { renderCanvasForExport } from '../lib/spatial/scene-render.js'
 import { pictureSubject } from '../lib/spatial/selection-picture.js'
-import { currentSpatialCodec } from '../lib/spatial-codec.js'
 import { dismissWriteRefusal, showWriteRefusal } from '../lib/write-refusal-store.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
@@ -553,7 +554,7 @@ export function useDocumentSync(
           facets: session?.getFacets() ?? facets,
         })
       }
-      if (format === 'canvas') return spatialDocumentFile(session?.getCanvas() ?? canvas)
+      if (format === 'canvas') return await spatialDocumentFile(session?.getCanvas() ?? canvas)
       // A note's export is its .md file; a picture is of a canvas.
       if (options.kind === 'markdown') return null
       const { canvas: exported, threads } = pictureSubject(session?.getCanvas() ?? canvas, options)
@@ -566,11 +567,12 @@ export function useDocumentSync(
           renderCanvasForExport(exported, { ...options, measure, threads, ...seams, comments }),
         FRAGMENT_ENGINES,
       )
+      await codecsReady()
       return savedPicture(pictureFormatOf(format), drawn, {
         // Editable PNG (the draw.io pattern): the extended JSON Canvas
         // document rides in an iTXt chunk under `whiteboard`, so the image
         // carries its own source, exact coordinates included.
-        source: () => currentSpatialCodec().serializeSpatial(exported, 'extended'),
+        source: () => serializeSpatial(exported, 'extended'),
       })
     },
     [canvas, markdownBody, documentName, coreFacets, facets],

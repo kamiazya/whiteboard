@@ -9,7 +9,9 @@ paths:
 
 - `scene.ts`: `ViewerScene` (model's `SpatialCanvas`, re-exported —
   never redeclared), the total `parseViewerScene`, delegating to
-  codec's `parseSpatial`.
+  codec's `readJsonCanvasText`, the TypeScript JSON Canvas reader the widget iframe keeps
+  because it has no Rust core. The daemon and the web app read through the core
+  (`parseSpatial`); arch-lint keeps them off this reader.
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
   (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls
@@ -56,8 +58,9 @@ paths:
 - Scene graph types, layout, or the SVG serializer itself — those are
   `canvas-render`'s job; this package only calls `renderSceneToSvg`.
 - OKF/JSON Canvas parsing internals — this package calls into
-  `codec`'s `parseSpatial`/`serializeSpatial`, it does not
-  reimplement them.
+  `codec`'s `readJsonCanvasText` and wire schema, it does not
+  reimplement them. Its tests write JSON Canvas through `serializeSpatial`, the core their
+  setup file installs.
 - Any editing affordance beyond the widget's comment (ADR-0024: click to
   pick an anchor, submit one `wb_thread_edit` `thread.add`) — the viewer itself is
   read-only, and the widget's one write goes through the host session to

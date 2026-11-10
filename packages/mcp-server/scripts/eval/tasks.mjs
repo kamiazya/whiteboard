@@ -85,7 +85,7 @@ const workspacePackages = () => {
     import('@kamiazya/whiteboard-canvas-render'),
     import('@kamiazya/whiteboard-canvas-render/scoring'),
   ]).then(([codec, render, scoring]) => ({
-    parseSpatial: codec.parseSpatial,
+    parseSpatial: codec.readJsonCanvasText, // as the widget reads: no Rust core in this script
     scoreFacets: scoring.scoreFacets,
     withDeclaredColours: render.withDeclaredColours,
   }))

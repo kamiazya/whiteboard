@@ -6,26 +6,52 @@ module: `parseSpatial` and `serializeSpatial` in `packages/codec/src/spatial`
 as the module stands, so a row says what is shown, not what is intended.
 
 The codec is reached through two wasm exports, `json_canvas_parse` and
-`json_canvas_serialize` (ABI 17), and `@kamiazya/whiteboard-core-wasm`'s
-`parseSpatial` and `serializeSpatial`. The `CoreImpl` switch is codec's
-`spatialCodec` (`src/spatial/spatial-core.ts`), set by `WHITEBOARD_CORE_SPATIAL`
-in the daemon and `VITE_WHITEBOARD_CORE_SPATIAL` in the web app. Every row below
-is `met` or `n/a`, and the switch has moved: both default to `rust` (a test run
-of the web app stays `ts`), with `=ts` as the rollback. Row 12's cost was the
-open question, and owner decision q39 took the core despite it. The TypeScript
-is deleted on the default schedule, the release after the first that defaults
-to `rust`. The cost is revisited once the migration is done, with the owner's
-suggestion from q39 as the first candidate: a binary or streamed boundary in
-place of JSON text in both directions, so the host stops re-parsing what the
-core already parsed. ADR-0054's final shape removes most of it anyway, since
-the ops that call the codec will be Rust too and the canvas will not cross.
+`json_canvas_serialize` (ABI 17, now 18), and `@kamiazya/whiteboard-core-wasm`'s
+`parseSpatial` and `serializeSpatial`.
+
+**Stage 4 (2026-11-10): the TypeScript is deleted.** The switch (`spatialCodec`,
+`SpatialImpl`, `SpatialMismatch`, `WHITEBOARD_CORE_SPATIAL`,
+`VITE_WHITEBOARD_CORE_SPATIAL`, `ServerDeps.spatialCore`) existed while the
+TypeScript did; it is gone with it. `parseSpatial` and `serializeSpatial`
+(`packages/codec/src/spatial/spatial-core.ts`) answer only through the core each
+realm installs (`installSpatialCore`), throwing `SpatialCoreNotInstalled` where
+none is: the daemon installs it at boot beside OKF's and refuses to start without
+it, the web page awaits `codecsReady()` before an import, download, copy or
+editable PNG, and every Node test realm installs it in its setup file. Owner
+decision q40 deleted the TypeScript as soon as the migration was complete, not in
+the release after the first that defaults to `rust` (q39's cost question stands:
+the Rust path is slower on the host, and the owner took it). The rows below record
+how the checklist was met while both implementations existed; where a row names
+the TypeScript, the switch, layer 1 or the differential, it describes what was
+shown before the deletion, and the sections on declines, the TypeScript that
+remains and the exit criteria say what each became.
+
+**What TypeScript JSON Canvas code remains, and why** (open owner question q49,
+answered provisionally with its recommended option `widget-ts-reader`, until the
+owner answers). The widget iframe (MCP Apps) and the viewer that shares its code
+have no core, so `canvas-viewer`'s `parseViewerScene` keeps a TypeScript READ
+path: `readJsonCanvasText` (`spatial/read-json-canvas-text.ts`: JSON text parse,
+the comments refusal, the wire schema) and the projection's lift (`fromJsonCanvas`).
+No daemon, server-core or web source may use it
+(`tools/arch-lint/src/spatial-reader-isolation.test.ts`), so a realm that fails to
+install the core fails loudly instead of answering from a second implementation.
+The registry projection (`toJsonCanvas`/`fromJsonCanvas`, the wire schema, the
+`JSON_CANVAS_PROJECTION` ledger, the loss tables and the OCIF lift) stays because
+the registry's confluence and completeness properties are about it; their text
+read and write go through the core. The TypeScript WRITER is deleted outright
+(`serialize.ts` and `strictDegrade`): nothing outside the registry needed it, and
+the registry's `write` and `writeForForeignReader` call the core.
 
 Ports, in order:
 - the spatial leaf types and the whole canvas, generated from
   `contracts/model/spatial.schema.json` into `whiteboard-model` (#2216, #2218);
 - the codec, held to `json-canvas.jsonl` (#2220);
 - the wasm exports, the shim, the layer 1 and layer 2 differentials and the
-  boundary measurement (this checklist, from row 6 on).
+  boundary measurement (this checklist, from row 6 on);
+- the switch, and the daemon and the web app on it (#2224, #2225), then the
+  default (`rust`);
+- stage 4: the TypeScript writer and the switch deleted (q40), the reader kept for
+  the widget (q49, provisional).
 
 ## What was ported
 
@@ -59,20 +85,20 @@ colour types) are the generated ones.
 | 3 | Clippy, fmt and the core lint set pass with no new `#[expect]` outside a ledger | met | `pnpm rust:check` passes. The port adds no `#[expect]` to the crate. |
 | 4 | Native unit tests red-first; every QR-14a property class present through the shared prelude, with reachability floors, committed regressions, no pinned seed, each mutation-checked | met | A parser and serializer are QR-14a's first class. The recorded oracle came first and was red until the codec was written; the examples and properties were written after the codec, against the oracle's answers. `tests/json_canvas_properties.rs` (4 properties, each with a reachability floor measured and set at about half of what its generator reaches): a canvas the projection can express reads back as itself (floors on an embed, ink, a bent edge, a link, facets and a fractional ink coordinate); the strict text states exactly what JSON Canvas does and nothing under `x-whiteboard`; a damaged text is refused or settles after one write and read; and a text from three sources (arbitrary, token soup, a damaged serialization) is answered without a panic. `tests/json_canvas_examples.rs` (34 tests) says each behaviour in words. Each property was shown to fail on a planted change, through `.claude/scripts/mutate.mjs`: dropping `versionRef` from the embed's projection fails the round trip; letting the strict mode keep a node's extension fails the strict property; ink that drifts by one on every write fails the round trip and the settling property; and a panic in the number reader fails the totality property. Damaged serializations are in the totality property's mix because arbitrary strings and token soup were 99% syntax errors (1 to 3 draws in 200 got past JSON) and never reached the schema. |
 | 5 | Every port implementation the module touches runs its conformance suite | n/a | The codec touches no store or sync port; it is a pure function of a text or a canvas. |
-| 6 | Layer 1: every TypeScript test passes against Rust, pinned numbers identical, no expectation edited | met | `pnpm --filter @kamiazya/whiteboard-codec exec vitest run -c vitest.rust.config.ts` (project `codec-rust`) runs the five spatial suites that reach `parseSpatial` or `serializeSpatial` (`parse`, `serialize`, `json-canvas-extension`, `extension-contract.property`, `codecs.property`: 56 tests) with `./parse.js` and `./serialize.js` answered by the core (`src/test-utils/spatial-wasm/`), unchanged and with no expectation edited. The core answers each, and a decline fails the test it happens in (`setup.ts`): **no test is excused a decline**, because none of these suites provokes one. Two things the run found are fixed, not tolerated (below): the refinement messages and the length check. One test is run on the TypeScript rather than the core, from the both-sided ledger `typescript-only.ts`: `strict mode re-validates the degraded document and throws if it is not schema-valid` replaces `./degrade.js` with a broken one through `vi.doMock`, which can only break the TypeScript's own composition; the core re-validates in Rust, which `the_strict_mode_refuses_a_canvas_the_wire_schema_refuses_and_the_extended_does_not` and the live differential hold. A suite that reaches neither function is not run (the projections, the degradation, the schemas the core does not port), and `spatial-layer-one.rust.test.ts` fails on a suite that reaches one and is not listed. |
-| 7 | Layer 2: property differential with exact equality, shown to fail on a planted change | met | `src/spatial/wasm.rust.test.ts` holds `Core.parseSpatial` and `Core.serializeSpatial` to the TypeScript live: the recorded corpus through the wasm (1,400 texts, 600 canvases), and three generated properties (1,500 texts, 1,000 model-shaped canvases some with fields set to `undefined`, 400 canvases from the model's own arbitrary), exact on the canvas (every number by its bits, key order, prototypes), a refusal's stage, message and each issue's path and code, a refinement's text, and the written bytes. Every decline is judged by machinery that shares nothing with the core (`earned.ts`: `JSON.parse`, a scan, a walk of the canvas against the contract's field names), and the run states what it reached. The properties found four defects the recorded oracle could not, each fixed: a number halfway between two spellings (`1365915630079496.25` printed `.3`), a value with a `length` (`[]` as an id) refused once where Zod refuses it twice, a refinement's message missing, and an edge's key order. Shown to fail on a planted change: see row 11 for the planted changes the mutation gate caught; the property itself failed on each defect above before its fix. |
+| 6 | Layer 1: every TypeScript test passes against Rust, pinned numbers identical, no expectation edited | met, then superseded by stage 4 | Layer 1 ran codec's five spatial suites (`parse`, `serialize`, `json-canvas-extension`, `extension-contract.property`, `codecs.property`) against the core with `./parse.js` and `./serialize.js` answered by it, no expectation edited and no decline met. With the TypeScript deleted the indirection is gone (`codec-rust`, the resolver and `spatial-layer-one.rust.test.ts` were removed): the same suites run in `codec-node` against the installed core directly, and `parse.test.ts` holds the core and the viewer's TypeScript reader to one set of assertions. The one test that replaced `./degrade.js` inside the TypeScript writer went with that writer; strict mode's re-validation is the core's, held by `the_strict_mode_refuses_a_canvas_the_wire_schema_refuses_and_the_extended_does_not` and by `spatial-core.test.ts`'s strict refusal, and the degradation cases `degrade.test.ts` held now run through the core in `serialize.test.ts`. |
+| 7 | Layer 2: property differential with exact equality, shown to fail on a planted change | met, then superseded by stage 4 | `wasm.rust.test.ts` held the core to the TypeScript live (the recorded corpus through the wasm, and generated texts and canvases) and was shown to fail on a planted change. The comparison needed a TypeScript writer and reader to stand opposite, so it went with the writer. What remains is the recorded oracle, which is evidence the core is judged by recorded TypeScript answers: `oracle/json-canvas-recorded-oracle.test.ts` replays the frozen recording (1,400 texts, 600 canvases) through the core and holds every decline to an input that earns it, judged without the core (`test-utils/json-canvas-oracle/earned.ts`), and replays the texts through the viewer's reader. |
 | 8 | Layer 3: shared fixtures and goldens byte-identical natively and on wasm | met | `cargo xtask cross-target` runs `whiteboard-codec`'s tests natively and on wasm32 under Node with the same count (108), the recorded replay, the examples and the properties among them. The first run on wasm32 found a property floor the generator reached too rarely (18 of 200 against 20: a double drawn at random is almost always a whole number); the ink is denser now and the floors sit at half of what it reaches. |
-| 9 | Every tolerated difference is a both-sided ledger entry | met (one difference not compared, one test on the TypeScript) | The core tolerates no difference in an answer it gives. Two things are not compared and are named: the **words of a Zod issue** (`Invalid input: wrong type` for its code, where Zod words the expected and received types; the same stance as the OKF shim, and the recorded oracle never compared them), except for a refinement the schema states in code, whose text is carried and held equal (`edge "e" references nonexistent toNode "x"`); and the one test in row 6 that replaces a module inside the TypeScript. The declines are listed below. |
-| 10 | `differential` has run in CI and in dogfooding with no unexplained mismatch | met (CI evidence) | The daemon runs JSON Canvas in `differential` in CI's `mcp-node` shards and the packaged smoke (#2224), and the web app's browser jobs and browser stress leg run it there too (#2225), each with mismatches throwing, so a difference or a decline fails the run (`event: 'spatial-declined'` is the logged record otherwise). The canvas drop test waits for the core and drops a board with a node, and making the differential report every parse fails it. Neither PR's CI reported a difference or a decline. As for routing and OKF (q18), the evidence is CI's runs, since only development data exists. |
+| 9 | Every tolerated difference is a both-sided ledger entry | met, then superseded by stage 4 | Unchanged by the deletion: the words of a Zod issue are not reproduced (the core names an issue by its code; a refinement stated in code carries its text), and the recording holds no message text. The one test run on the TypeScript went with the writer. Declines are no longer tolerated differences: each is a refusal (below). |
+| 10 | `differential` has run in CI and in dogfooding with no unexplained mismatch | met (CI evidence, before the deletion) | `differential` ran in CI's `mcp-node` shards and the packaged smoke (#2224) and in the web app's browser jobs and browser stress leg (#2225), each with mismatches throwing, with no difference and no decline. The setting no longer exists. |
 | 11 | `cargo mutants --in-diff` clean or ledgered; coverage at or above the crate's floor | met | `cargo mutants --in-diff` over this increment's Rust (`spatial-codec` to HEAD): 210 mutants in the exports, the wire, the length check, the refinement messages and the tie rule, 173 caught, 30 unviable, 7 missed, 0 timed out. All seven were closed: a write exactly at the cap was untested (the boundary the OKF export also pins); a `-Infinity` arm that `Number()` reads as `NaN` anyway was removed; and four survivors in the tie rule were one equivalent guard (a 15-digit spelling cannot be halfway, so the `k < 16` filter was a speed-up and was dropped), one match arm that Rust's own half-up rounding already satisfies (removed, and the odd-lower case is a test now), and `&&` in the halfway test, which needed a value just past halfway whose lower spelling is even (four, from a search against `String(x)`, pinned). The three files that changed were run again: 68 mutants, 67 caught, 1 unviable, 0 missed. Coverage (`cargo xtask coverage`): `bindings/wasm` 87.99% lines and 82.47% regions against floors of 82 and 77 (raised to 87 and 82), `core/codec` 99.14% and 98.24% (floors raised from 98 and 97 to 99 and 98), `core/det` 99.73% and 99.60% (98 and 98 to 99 and 99). |
-| 12 | One call per user operation; boundary cost measured on browser, Node and workerd against the TypeScript, result in the PR body | met; the switch decided by the owner (q39) | One call per operation holds: a read is one `json_canvas_parse` and a write one `json_canvas_serialize`, and `scripts/spatial-boundary.mjs` fails if the Rust batches make any other number of wasm calls or the TypeScript batches make any. **The Rust path is slower than the TypeScript at every size, on every runtime measured: reads by 5x to 8x and writes by 15x to 25x** (the ratio is Rust over TypeScript) (Node 24 and Chromium 153; no workerd binary here, so workerd is unmeasured), [below](#boundary-cost-qr-22b). A typical board (60 nodes, 80 edges, 17 KiB) is read in 0.23 ms by the TypeScript and 1.8 ms through the core, and written in 0.06 ms against 1.1 ms. The cost is not the crossing: of the 1.8 ms, the export alone is 1.2 ms (the reader, the schema, the lift, building the wire), the host's `JSON.parse` of its answer 0.13 ms and the rest the shim building the canvas from it. It is that `JSON.parse` and `JSON.stringify` are native in every host and the TypeScript's whole read is a native parse plus Zod, where the core parses the text again in wasm (about 14 MB/s here) and sends the result back across as text; a write has no native step to beat, because the TypeScript's is a projection and `JSON.stringify`. So the Rust path buys nothing for time on the host. The owner chose `rust` anyway (decision q39): the cost is a few milliseconds on a typical board, paid on an import, an export or a copy rather than per frame, and the TypeScript's deletion is what the migration is for. |
+| 12 | One call per user operation; boundary cost measured on browser, Node and workerd against the TypeScript, result in the PR body | met; the switch decided by the owner (q39) | One call per operation holds: a read is one `json_canvas_parse` and a write one `json_canvas_serialize`. The boundary instrument compared the core with the TypeScript and was deleted with the TypeScript (below); its last measurement stays in the section that records it. |
 | 13 | Artifact size within its ledger, peak memory reported, Workers budgets measured | met for the size and the memory; the Workers budgets are unmeasured | Size: `crates/wasm-size-ledger.json`'s ceiling is raised by hand from 907500 to 1095500 for the 1094982-byte cargo artifact, 187954 more than before; the shipped, stripped module is 632603 bytes against 526644. Nothing called the codec before, so the linker had dropped it; the exports make the reader, the schema, the URL check, the projection, the writer and the canvas wire reachable. Memory, by `scripts/spatial-boundary.mjs`: 1.13 MiB after init, 1.38 MiB after the 17 KiB boards, 12.88 MiB after a 700 KiB one and **51.75 MiB after the 3.1 MiB one** (about 16 times the text, from the text, the tree, the answer and the wire all being live at once), the same on Node and Chromium; linear memory does not shrink, so an instance that has read a large board keeps it. Startup (`coreFrom`, module compiled) is 2.6 to 3.3 ms on Node and 2.8 to 3.2 ms on Chromium. The Workers budgets (CPU and memory per request) need a workerd binary this environment does not have and are not measured. |
 | 14 | Every untrusted-input entry has caps and a fuzz target, seeded and run, no open crash | met | `crates/input-caps.json` declares both exports, `whiteboard-wasm::json_canvas::json_canvas_parse` and `json_canvas_serialize`, each with `maxBytes` 4 MiB, `maxDepth` and `maxMillis` and the measurement behind them, naming the fuzz targets `json_canvas_wasm_parse` and `json_canvas_wasm_serialize`. The first reads any text and holds the export to the codec's own answer for it (a canvas, a refusal of each class, or a decline) and to its documented shapes; the second reads any text as a canvas wire, in both modes, and holds the answer to its documented shapes, the extended mode never answering a schema refusal. Seeds: the seven texts of `json_canvas_parse` (its links split into an accepted and a declined seed) and seven wires (`crates/fuzz/seeds/json_canvas_wasm_*`), checked by `the_canvas_seeds_are_wires_the_export_decodes`. `cargo xtask inputs` holds the registry and `crates/fuzz` equal. A 60 s local run of each target (`RUST_FUZZ_SECONDS=60 node tools/checks/src/rust-fuzz.mjs pr --targets json_canvas_wasm_parse,json_canvas_wasm_serialize`) found nothing; the serialize target made 4.46M executions. The `maxMillis` of each is measured on Node wasm at the cap (parse 1146 ms worst, serialize 344 ms; the figures are in the registry entry). |
 | 15 | Logging through the `log` facade; `thiserror` convention; poison-and-recover covers held state | n/a | The crate does not log. It answers a refusal or a decline as a value, and holds no state across calls. |
-| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | met (stage 2) | `tools/arch-lint/src/ported-functions.ts` lists `parseSpatial` and `serializeSpatial`, each against `SpatialCodecCore`'s key, `ServerDeps.spatialCore`, the export it reaches and the shim member; the checker holds every key of the switch listed and every entry real. Stage 3 (the TypeScript export a re-export of the shim) moves with the TypeScript's deletion. |
-| 17 | Any Unicode table comes from a pinned crate with a version-asserting test | met (no table) | The codec carries none: it uses `is_js_space` (`whiteboard-model`, checked against the engine by the OKF checklist's row 17) and declines the hosts that need UTS 46 (below). |
+| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | met (stage 4, in its realm shape) | `tools/arch-lint/src/ported-functions.ts` lists `parseSpatial` and `serializeSpatial` at stage 4 with a `realm`: the export in `packages/codec/src/spatial/spatial-core.ts` dispatches to the core `installSpatialCore` installs, no switch is left, and `parse.ts` and `serialize.ts` must not exist. The widget's reader is not those files: it answers no daemon or web call, which `spatial-reader-isolation.test.ts` holds. |
+| 17 | Any Unicode table comes from a pinned crate with a version-asserting test | met (no table) | The codec carries none: it uses `is_js_space` (`whiteboard-model`, checked against the engine by the OKF checklist's row 17) and accepts an international host without UTS 46 rather than carry its tables (deviation 6, below). |
 | 18 | Exit criteria (QR-33b) recorded in the PR | met | [Below](#qr-33b-exit-criteria). |
-| 19 | Docs reflect the shipped state | met | ADR-0054 carries a dated status note for the exports (2026-11-10), with the boundary result, and the earlier note for the port. |
+| 19 | Docs reflect the shipped state | met | `docs/reference/configuration.md` no longer lists `WHITEBOARD_CORE_SPATIAL` or `VITE_WHITEBOARD_CORE_SPATIAL`, and says the daemon and every build need the wasm for JSON Canvas too. The codec, canvas-viewer, core-wasm and app-web rules describe the stage-4 shape, and ADR-0054 carries a dated status note. |
 
 ## Divergences between the TypeScript and the contract
 
@@ -123,12 +149,31 @@ each place the two disagree. None changes the TypeScript here.
 
 ## What the port declines
 
-A decline is the core refusing to answer so that the caller asks the
-TypeScript. At the crate it is a `Decline`; through the export it is
-`["refused", code, class]` with the registry's code and the class of input that
-earned it, and the shim throws it as a `CoreInputRefused` carrying both
-(`code`, `detail`). The live differential counts each and checks, without
-asking the core, that the input is one that earns it (`earned.ts`).
+A decline is the core refusing to answer. At the crate it is a `Decline`; through
+the export it is `["refused", code, class]` with the registry's code and the class
+of input that earned it, and the shim throws it as a `CoreInputRefused` carrying
+both (`code`, `detail`). While the TypeScript existed the caller asked it instead.
+With it deleted, codec answers a decline itself (`spatial-core.ts`), and it is no
+longer a counted `spatial-declined` record: the caller sees the refusal.
+
+- **A read** that declines is a `CodecParseResult` failure at stage
+  `json-canvas-schema` whose message carries the core's reason. The model bounds
+  what a document may hold, so the schema stage is the one that fits; callers
+  already report a failed parse with its message (an import says "not valid JSON
+  Canvas (...)").
+- **A write** that declines throws a `ZodError` with one issue at the root carrying
+  the core's reason, where the strict mode's own refusal is a `ZodError` over the
+  core's places (`CoreSpatialInvalid`). The daemon's `exportJsonCanvas` reports
+  either as `DocumentSerializeError` for that document. Any other throw from the
+  core is a defect and stays loud.
+- **Decided for the deletion.** A text past 4 MiB, a lone surrogate and nesting past
+  64 are refused on read: a document the model would not hold. A canvas whose wire
+  is past 4 MiB, one the wire does not carry (a class instance, a function, a hole in
+  a list, a lone surrogate) and a value `JSON.stringify` throws on (a big integer) are
+  refused on write, as the typed refusal. None of these is a document a user
+  writes by hand. A link is never declined: an IPv6, percent-encoded, international
+  or `file` host is judged by the core itself (q50, deviation 6). The viewer's
+  reader declines none of them.
 
 | Decline (crate) | Export code and class | Input | Why |
 |---|---|---|---|
@@ -136,7 +181,11 @@ asking the core, that the input is one that earns it (`earned.ts`).
 | `TooDeep` | `malformed` / `too-deep` | nesting past 64 on the way in | the reader recurses |
 | `TooLarge` | `input-too-large` / `too-large` | a text over 4 MiB, or a canvas wire over 4 MiB | the caps in `input-caps.json`; the wire of a canvas is about 18% bigger than the text written from it (3,802,356 bytes against 3,221,606 for the largest board measured), so the writer's cap is met by a board whose text is about 3.4 MiB |
 | `Unwritable` | `malformed` / `unwritable` | a value kept as big-integer digits | `JSON.stringify` throws on a bigint |
-| (the wire) | `malformed` / `wire` | a canvas the wire does not carry: a key the contract does not name, a field of another kind, a class instance, a function, a lone surrogate in a string or key, a hole or an `undefined` in a list, nesting past 100, or a wire past serde_json's own depth | the export reads the canvas strictly, and what it does not read the TypeScript answers. A key set to `undefined` is not among them: it is left out, as `JSON.stringify` leaves it |
+| (the wire) | `malformed` / `wire` | a canvas the wire does not carry | the export reads the canvas strictly |
+
+`spatial-core.test.ts` pins each mapping through the staged core, and
+`json-canvas-recorded-oracle.test.ts` holds every decline over the recording to an
+input that earns it.
 
 In the recorded corpus the core reads 780 of 1,400 texts to a canvas and
 refuses 449 at the schema, 142 as not JSON and 5 as carrying comments, which
@@ -181,9 +230,9 @@ None changes what the TypeScript answers except the last.
 
 ## Boundary cost (QR-22b)
 
-Instrument: `packages/codec/src/test-utils/spatial-wasm/boundary.ts`, driven by
-`scripts/spatial-boundary.mjs`
-(`node packages/codec/scripts/spatial-boundary.mjs --rounds=9 --batch-ms=50`;
+Instrument (deleted with the TypeScript it compared against, 2026-11-10; it is in
+the history before that commit): `packages/codec/src/test-utils/spatial-wasm/boundary.ts`, driven by
+`scripts/spatial-boundary.mjs` (`--rounds=9 --batch-ms=50`;
 `--runtime=node,chromium,workerd`, `--workerd=<binary>`, `--json=<path>`), built
 and checked as the OKF one is (`okf-codec.md`): one bundle with no alias so the
 TypeScript side is the real `parseSpatial` and `serializeSpatial`, the wasm
@@ -250,6 +299,6 @@ projecting and writing the text, 1.1.
 | Criterion | Recorded |
 |---|---|
 | Port shape | Structure-preserving. `json_canvas/{wire,extension,schema,project}.rs` follow `json-canvas.ts`, `projection.ts` and `parse.ts`/`serialize.ts`; `json.rs`, `stringify.rs` and `url.rs` exist to keep the host behaviours the TypeScript leans on. |
-| TypeScript deletion deadline | ADR-0054's default: the release after the first one that defaults to `rust`. |
-| Rollback | `WHITEBOARD_CORE_SPATIAL=ts` in the daemon, read at start, and `VITE_WHITEBOARD_CORE_SPATIAL=ts` for a web build; each read when its process starts or its build runs. |
-| Freeze lift | `packages/codec/src/spatial` is frozen for feature work until the switch is `rust` and the TypeScript is deleted (ADR-0054 decision 23). |
+| TypeScript deletion deadline | Done, under owner decision q40 (2026-11-10): the TypeScript of a ported module is deleted as soon as its migration is complete, which supersedes the release-after-default schedule. What remains is the widget's reader, provisionally (q49). |
+| Rollback | None. There is no TypeScript to fall back to in the daemon or the web app; a defect in the core is fixed in `crates/` and the artifact rebuilt. The daemon and a web build refuse to start or build without the artifact. |
+| Freeze lift | Lifted for the writer and the daemon and web read path: features go to Rust only (ADR-0054 decision 23). The projection, the wire schema and the widget's reader remain TypeScript and are not frozen. |

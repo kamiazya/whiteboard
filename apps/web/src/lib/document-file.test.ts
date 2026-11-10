@@ -1,4 +1,5 @@
 import { parseOkf, parseSpatial } from '@kamiazya/whiteboard-codec'
+import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { markdownDocumentFile, spatialDocumentFile } from './document-file.js'
 
@@ -34,10 +35,10 @@ describe('markdownDocumentFile', () => {
 describe('spatialDocumentFile', () => {
   it('writes extended JSON Canvas that parses back to the same nodes', async () => {
     const canvas = {
-      nodes: [{ id: 'n1', type: 'text' as const, x: 1, y: 2, width: 100, height: 50, text: 'hi' }],
+      nodes: [textNode({ id: 'n1', x: 1, y: 2, width: 100, height: 50, text: 'hi' })],
       edges: [],
     }
-    const blob = spatialDocumentFile(canvas)
+    const blob = await spatialDocumentFile(canvas)
     const parsed = parseSpatial(await blob.text())
     expect(parsed.ok).toBe(true)
     if (parsed.ok) expect(parsed.value.nodes[0]?.id).toBe('n1')

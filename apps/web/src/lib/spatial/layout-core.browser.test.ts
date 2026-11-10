@@ -11,16 +11,19 @@
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import {
   installOkfCore,
+  installSpatialCore,
   okfCoreInstalled,
   parseOkf,
+  parseSpatial,
   serializeOkf,
-  spatialCodec,
+  serializeSpatial,
+  spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { codecsReady } from '../codec-cores.js'
 import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js'
-import { okfReady } from '../okf-codec.js'
 import { startLayoutCore } from '../page-layout-core.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
@@ -71,7 +74,7 @@ describe('the real Rust core in a browser', () => {
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'differential', spatial: 'ts', mismatch: 'throw' },
+        { impl: 'differential', mismatch: 'throw' },
         async () => ({
           ...routing,
           routeLayout: (...args) => {
@@ -107,7 +110,7 @@ describe('the real Rust core reading and writing OKF in a browser', () => {
       const previous = installOkfCore(undefined)
       try {
         expect(okfCoreInstalled()).toBe(false)
-        await okfReady()
+        await codecsReady()
         expect(okfCoreInstalled()).toBe(true)
         const parsed = parseOkf(text)
         if (!parsed.ok) throw new Error(parsed.error.message)
@@ -131,37 +134,34 @@ describe('the real Rust core reading and writing OKF in a browser', () => {
 
 describe('the real Rust core reading and writing JSON Canvas in a browser', () => {
   it.skipIf('failure' in real)(
-    'reads and writes a board beside the TypeScript with no difference, thrown or otherwise',
+    'reads and writes a board through the plain exports once the page awaits the core',
     async () => {
-      if ('failure' in real) return
-      const { routing } = real
-      let calls = 0
-      const host = createLayoutCoreHost(
-        { impl: 'ts', spatial: 'differential', mismatch: 'throw' },
-        async () => ({
-          ...routing,
-          parseSpatial: (text) => {
-            calls += 1
-            return routing.parseSpatial(text)
-          },
-          serializeSpatial: (canvas, mode) => {
-            calls += 1
-            return routing.serializeSpatial(canvas, mode)
-          },
-        }),
-        silent(),
-      )
-      await host.ready()
-      const codec = spatialCodec(host.currentSpatial())
-      const text = codec.serializeSpatial(board('orthogonal'), 'extended')
-      const parsed = codec.parseSpatial(text)
-      if (!parsed.ok) throw new Error(parsed.error.message)
-      expect(codec.serializeSpatial(parsed.value, 'strict')).toContain('"nodes"')
-      expect(codec.parseSpatial('{').ok).toBe(false)
-      // The core was consulted for every call, so "no difference" compared something.
-      expect(calls).toBe(4)
+      // The realm's own installation is put back, since it is process-global.
+      const previous = installSpatialCore(undefined)
+      try {
+        expect(spatialCoreInstalled()).toBe(false)
+        await codecsReady()
+        expect(spatialCoreInstalled()).toBe(true)
+        const text = serializeSpatial(board('orthogonal'), 'extended')
+        const parsed = parseSpatial(text)
+        if (!parsed.ok) throw new Error(parsed.error.message)
+        expect(serializeSpatial(parsed.value, 'strict')).toContain('"nodes"')
+        expect(parseSpatial('{').ok).toBe(false)
+      } finally {
+        installSpatialCore(previous)
+      }
     },
   )
+
+  it('fails loudly, not silently, when no core is installed', () => {
+    const previous = installSpatialCore(undefined)
+    try {
+      expect(() => parseSpatial('{"nodes":[],"edges":[]}')).toThrow(/installSpatialCore/)
+      expect(() => serializeSpatial(board('straight'), 'extended')).toThrow(/installSpatialCore/)
+    } finally {
+      installSpatialCore(previous)
+    }
+  })
 })
 
 describe.runIf(REQUIRED)('the page core', () => {

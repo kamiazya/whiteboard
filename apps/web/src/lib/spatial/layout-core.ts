@@ -1,9 +1,8 @@
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 // Types only: this module is on the page's critical path, and a value import
 // of codec would carry its readers (the schemas) into the boot bundle.
-// Installing the OKF core into codec is `okf-codec.ts`'s, which only the OKF
-// call sites import.
-import type { OkfCore, SpatialCodecCore, SpatialMismatch } from '@kamiazya/whiteboard-codec'
+// Installing the OKF and JSON Canvas cores into codec is `codec-cores.ts`'s,
+// which only the call sites that read or write them import.
 import { type CoreSettings, coreSettingsFrom } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
 
@@ -21,13 +20,12 @@ export interface LayoutCoreHost {
   /** The loaded core, or `undefined` before it loads. Starts the load, and throws a failed one under `throw`. */
   current(): LayoutCore | undefined
   /**
-   * Starts the load on first call and settles with the OKF core, whatever the
-   * routing and JSON Canvas switches read: OKF has no TypeScript to answer in
-   * its place, so a load that fails rejects (and the next call tries again).
+   * Starts the load on first call and settles with the core the OKF and JSON
+   * Canvas codecs answer through, whatever the routing switch reads: they have
+   * no TypeScript to answer in their place, so a load that fails rejects (and
+   * the next call tries again).
    */
-  okf(): Promise<OkfCore>
-  /** The same for the JSON Canvas codec. */
-  currentSpatial(): SpatialCodecCore | undefined
+  codecs(): Promise<WebCore>
 }
 
 /**
@@ -52,40 +50,6 @@ function summarize(mismatch: CoreMismatch) {
     : { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
 }
 
-/** A decline as it is reported: the function and the core's reason, never the text or document. */
-function declineSummary(mismatch: { readonly fn: string; readonly err: unknown }) {
-  const { err } = mismatch
-  return {
-    fn: mismatch.fn,
-    reason: err instanceof Error ? `${err.name}: ${err.message}` : 'unknown',
-  }
-}
-
-/** The JSON Canvas codec's difference or decline, reported, or thrown under `throw` (`spatial-declined`). */
-function spatialReporter(
-  settings: CoreSettings,
-  log: CoreLog,
-): (mismatch: SpatialMismatch) => void {
-  return (mismatch) => {
-    if (mismatch.kind === 'declined') {
-      const summary = declineSummary(mismatch)
-      log.warn('the Rust core declined; answered in TypeScript', {
-        event: 'spatial-declined',
-        ...summary,
-      })
-      if (settings.mismatch === 'throw') {
-        throw new Error(`JSON Canvas core declined: ${JSON.stringify(summary)}`)
-      }
-      return
-    }
-    const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }
-    log.warn('the Rust core and the TypeScript disagree', summary)
-    if (settings.mismatch === 'throw') {
-      throw new Error(`JSON Canvas core ${mismatch.kind}: ${JSON.stringify(summary)}`)
-    }
-  }
-}
-
 function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMismatch) => void {
   return (mismatch) => {
     const summary = summarize(mismatch)
@@ -97,32 +61,15 @@ function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMi
   }
 }
 
-/** What one loaded instance answers, per switch: nothing for a switch that reads `ts`. */
-function coresFrom(
-  core: WebCore,
-  settings: CoreSettings,
-  log: CoreLog,
-): {
-  layout: LayoutCore | undefined
-  spatial: SpatialCodecCore | undefined
-} {
-  const layout: LayoutCore | undefined =
-    settings.impl === 'ts'
-      ? undefined
-      : {
-          routing: core,
-          impl: { routeLayout: settings.impl },
-          onMismatch: layoutReporter(settings, log),
-        }
-  const spatial: SpatialCodecCore | undefined =
-    settings.spatial === 'ts'
-      ? undefined
-      : {
-          spatial: core,
-          impl: { parseSpatial: settings.spatial, serializeSpatial: settings.spatial },
-          onMismatch: spatialReporter(settings, log),
-        }
-  return { layout, spatial }
+/** What one loaded instance answers for routing: nothing for a switch that reads `ts`. */
+function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): LayoutCore | undefined {
+  return settings.impl === 'ts'
+    ? undefined
+    : {
+        routing: core,
+        impl: { routeLayout: settings.impl },
+        onMismatch: layoutReporter(settings, log),
+      }
 }
 
 /** `load`, shared by every ask; a failed load is forgotten, so the next ask tries again. */
@@ -139,28 +86,28 @@ function loadAtMostOnce(load: () => Promise<WebCore>): () => Promise<WebCore> {
 
 /**
  * `load` is called once for all, on the first ask of whichever half asks. An
- * artifact that cannot load degrades routing and JSON Canvas to TypeScript
- * with a warning, unless mismatches throw: a test run that asked for the core and did not get it has
- * compared nothing. OKF cannot degrade, so `okf()` rejects instead.
+ * artifact that cannot load degrades routing to TypeScript with a warning,
+ * unless mismatches throw: a test run that asked for the core and did not get it
+ * has compared nothing. The codecs cannot degrade, so `codecs()` rejects instead.
  */
 export function createLayoutCoreHost(
   settings: CoreSettings,
   load: () => Promise<WebCore>,
   log: CoreLog,
 ): LayoutCoreHost {
-  let cores: ReturnType<typeof coresFrom> | undefined
+  let layout: LayoutCore | undefined
   let failure: { readonly err: unknown } | undefined
   let started: Promise<LayoutCore | undefined> | undefined
   const loadOnce = loadAtMostOnce(load)
-  // Routing and JSON Canvas load nothing while both read `ts`; OKF loads on its own ask.
-  const answersInRust = settings.impl !== 'ts' || settings.spatial !== 'ts'
+  // Routing loads nothing while it reads `ts`; the codecs load on their own ask.
+  const answersInRust = settings.impl !== 'ts'
 
   const start = (): Promise<LayoutCore | undefined> => {
     if (!answersInRust) return Promise.resolve(undefined)
     started ??= loadOnce().then(
       (core) => {
-        cores = coresFrom(core, settings, log)
-        return cores.layout
+        layout = layoutFrom(core, settings, log)
+        return layout
       },
       (err: unknown) => {
         failure = { err }
@@ -182,14 +129,10 @@ export function createLayoutCoreHost(
 
   return {
     ready: start,
-    okf: loadOnce,
+    codecs: loadOnce,
     current() {
       startAndRaise()
-      return cores?.layout
-    },
-    currentSpatial() {
-      startAndRaise()
-      return cores?.spatial
+      return layout
     },
   }
 }
@@ -222,6 +165,3 @@ export const layoutCoreReady = (): Promise<LayoutCore | undefined> =>
 
 /** The core this realm has loaded so far, or `undefined`. */
 export const currentLayoutCore = (): LayoutCore | undefined => installed?.current()
-
-/** The JSON Canvas core this realm has loaded so far, or `undefined` under `ts` or before the load. */
-export const currentSpatialCore = (): SpatialCodecCore | undefined => installed?.currentSpatial()

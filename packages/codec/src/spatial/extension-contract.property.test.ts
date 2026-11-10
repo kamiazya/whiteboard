@@ -8,9 +8,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { parseSpatial } from './parse.js'
 import { toJsonCanvas } from './projection.js'
-import { serializeSpatial } from './serialize.js'
+import { parseSpatial, serializeSpatial } from './spatial-core.js'
 
 const CANVAS_KEYS = new Set(['nodes', 'edges', 'x-whiteboard'])
 const SHARED_NODE_KEYS = ['id', 'x', 'y', 'width', 'height', 'color', 'x-whiteboard', 'type']

@@ -35,10 +35,10 @@ export default defineConfig({
   test: {
     name: 'web-jsdom',
     environment: 'jsdom',
-    // The second installs the Rust OKF core (codec's okf-core-setup); a missing artifact fails the project.
+    // The second installs the Rust OKF core (codec's core-setup); a missing artifact fails the project.
     setupFiles: [
       './vitest.setup.ts',
-      '../../packages/codec/src/test-utils/okf-core-setup/node.setup.ts',
+      '../../packages/codec/src/test-utils/core-setup/node.setup.ts',
     ],
     // Safety net behind vitest.setup.ts's scheduler drain: React's scheduler
     // can still fire deferred work after jsdom teardown (window gone →

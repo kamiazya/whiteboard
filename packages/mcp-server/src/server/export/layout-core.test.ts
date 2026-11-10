@@ -5,10 +5,13 @@ import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import {
   installOkfCore,
+  installSpatialCore,
   okfCoreInstalled,
   parseOkf,
+  parseSpatial,
   serializeOkf,
-  spatialCodec,
+  serializeSpatial,
+  spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -17,7 +20,7 @@ import { captureLogsForTests } from '../log.js'
 import {
   artifactDirectory,
   coreLoaders,
-  installOkfCoreAtBoot,
+  installCodecCoresAtBoot,
   type LayoutCoreSettings,
   layoutCoreSettingsFrom,
   packagedArtifacts,
@@ -98,10 +101,8 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
-      WHITEBOARD_CORE_SPATIAL: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
-    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_SPATIAL: 'fast' })).toThrow()
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
   })
 
@@ -146,14 +147,6 @@ describe('the daemon layout core', () => {
       WHITEBOARD_CORE_DIR: emptyDir(),
     })
     await expect(layoutCore(settings)()).rejects.toThrow()
-  })
-
-  it('loads nothing for JSON Canvas under ts, the rollback', async () => {
-    const settings = layoutCoreSettingsFrom({
-      WHITEBOARD_CORE_SPATIAL: 'ts',
-      WHITEBOARD_CORE_DIR: emptyDir(),
-    })
-    expect(await coreLoaders(settings).spatialCore()).toBeUndefined()
   })
 
   it('has the staged artifact wherever CI runs this file', () => {
@@ -213,126 +206,73 @@ describe('the daemon layout core', () => {
   })
 })
 
-describe('the daemon OKF core, installed at boot', () => {
-  // The installation is process-global; the test realm's core is put back.
-  let realm: ReturnType<typeof installOkfCore>
-  afterEach(() => installOkfCore(realm))
+describe('the daemon codec cores, installed at boot', () => {
+  // The installation is process-global; the test realm's cores are put back.
+  let okfRealm: ReturnType<typeof installOkfCore>
+  let spatialRealm: ReturnType<typeof installSpatialCore>
+  const removeRealmCores = () => {
+    okfRealm = installOkfCore(undefined)
+    spatialRealm = installSpatialCore(undefined)
+  }
+  afterEach(() => {
+    installOkfCore(okfRealm)
+    installSpatialCore(spatialRealm)
+  })
 
-  it('keeps a core the realm already installed, loading nothing', async () => {
-    realm = installOkfCore(undefined)
-    installOkfCore(realm)
-    await installOkfCoreAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() }))
+  it('keeps cores the realm already installed, loading nothing', async () => {
+    await installCodecCoresAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() }))
     expect(okfCoreInstalled()).toBe(true)
+    expect(spatialCoreInstalled()).toBe(true)
+    okfRealm = installOkfCore(undefined)
+    installOkfCore(okfRealm)
+    spatialRealm = installSpatialCore(undefined)
+    installSpatialCore(spatialRealm)
   })
 
   it('refuses to start without the core, naming where it looked and how to build it', async () => {
-    realm = installOkfCore(undefined)
+    removeRealmCores()
     const dir = emptyDir()
-    const boot = installOkfCoreAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: dir }))
+    const boot = installCodecCoresAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: dir }))
     await expect(boot).rejects.toThrow(dir)
     await expect(boot).rejects.toThrow(/build:wasm/)
     expect(okfCoreInstalled()).toBe(false)
-    // No fallback answers in the core's place: an OKF call stays a loud failure.
+    expect(spatialCoreInstalled()).toBe(false)
+    // No fallback answers in the core's place: a call stays a loud failure.
     expect(() => parseOkf('---\ntype: note\n---\nb')).toThrow(/before this realm installed/)
+    expect(() => parseSpatial('{}')).toThrow(/before this realm installed/)
+    expect(() => serializeSpatial({ nodes: [], edges: [] }, 'extended')).toThrow(
+      /before this realm installed/,
+    )
   })
 
   it.runIf(built)(
     'installs the staged core, which reads and writes through the plain exports',
     async () => {
-      realm = installOkfCore(undefined)
-      await installOkfCoreAtBoot(layoutCoreSettingsFrom({}))
+      removeRealmCores()
+      await installCodecCoresAtBoot(layoutCoreSettingsFrom({}))
       expect(okfCoreInstalled()).toBe(true)
+      expect(spatialCoreInstalled()).toBe(true)
       const parsed = parseOkf('---\ntype: note\ntags: [a, b]\n---\nbody\n')
       if (!parsed.ok) throw new Error(parsed.error.message)
       expect(serializeOkf(parsed.value)).toContain('tags:')
+      const canvas = parseSpatial(
+        '{"nodes":[{"id":"a","type":"text","text":"hi","x":0,"y":0,"width":10,"height":10}],"edges":[]}',
+      )
+      if (!canvas.ok) throw new Error(canvas.error.message)
+      expect(JSON.parse(serializeSpatial(canvas.value, 'strict')).nodes).toHaveLength(1)
     },
   )
 
   it.runIf(built)('shares one wasm instance with the layout core', async () => {
-    realm = installOkfCore(undefined)
+    removeRealmCores()
     const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'rust' })
-    await installOkfCoreAtBoot(settings)
-    const bootCore = installOkfCore(undefined)
-    // One load per directory: the routing core is the instance boot installed for OKF.
+    await installCodecCoresAtBoot(settings)
+    const bootOkf = installOkfCore(undefined)
+    const bootSpatial = installSpatialCore(undefined)
+    // One load per directory: the routing core is the instance boot installed for both codecs.
     const layout = await coreLoaders(settings).layoutCore()
-    expect(bootCore).toBeDefined()
-    expect(layout?.routing).toBe(bootCore)
-  })
-})
-
-describe.runIf(built)('the daemon JSON Canvas core over the staged artifact', () => {
-  const differential = layoutCoreSettingsFrom({
-    WHITEBOARD_CORE: 'differential',
-    WHITEBOARD_CORE_SPATIAL: 'differential',
-  })
-
-  it('shares its instance with the layout core', async () => {
-    const loaders = coreLoaders(differential)
-    const spatial = await loaders.spatialCore()
-    const layout = await loaders.layoutCore()
-    expect(spatial?.impl).toEqual({
-      parseSpatial: 'differential',
-      serializeSpatial: 'differential',
-    })
-    expect(spatial?.spatial).toBe(layout?.routing)
-  })
-
-  it('reads and writes a canvas in both modes with nothing to report', async () => {
-    const capture = captureLogsForTests('debug')
-    try {
-      const codec = spatialCodec(await coreLoaders(differential).spatialCore())
-      const text =
-        '{"nodes":[{"id":"a","type":"text","text":"hi","x":0,"y":0,"width":10,"height":10}],"edges":[]}'
-      const parsed = codec.parseSpatial(text)
-      if (!parsed.ok) throw new Error(parsed.error.message)
-      codec.serializeSpatial(parsed.value, 'extended')
-      codec.serializeSpatial(parsed.value, 'strict')
-      expect(capture.records).toEqual([])
-    } finally {
-      capture.restore()
-    }
-  })
-
-  it('throws a difference or a decline under throw, and logs a decline as spatial-declined otherwise', async () => {
-    const differs = {
-      fn: 'parseSpatial' as const,
-      kind: 'differs' as const,
-      ts: 'a',
-      rust: 'b',
-      text: '',
-    }
-    const declined = {
-      fn: 'serializeSpatial' as const,
-      kind: 'declined' as const,
-      err: new Error('refused: input-too-large'),
-    }
-    const strict = await coreLoaders(
-      layoutCoreSettingsFrom({
-        WHITEBOARD_CORE_SPATIAL: 'differential',
-        WHITEBOARD_CORE_MISMATCH: 'throw',
-      }),
-    ).spatialCore()
-    expect(() => strict?.onMismatch?.(differs)).toThrow(/JSON Canvas core differs/)
-    expect(() => strict?.onMismatch?.(declined)).toThrow(
-      /JSON Canvas core declined: .*"fn":"serializeSpatial".*input-too-large/,
-    )
-    const capture = captureLogsForTests('warning')
-    try {
-      const lenient = await coreLoaders(
-        layoutCoreSettingsFrom({ WHITEBOARD_CORE_SPATIAL: 'rust' }),
-      ).spatialCore()
-      lenient?.onMismatch?.(declined)
-      expect(capture.records).toHaveLength(1)
-      expect(capture.records[0]).toMatchObject({
-        level: 'warning',
-        data: {
-          event: 'spatial-declined',
-          fn: 'serializeSpatial',
-          reason: 'Error: refused: input-too-large',
-        },
-      })
-    } finally {
-      capture.restore()
-    }
+    expect(bootOkf).toBeDefined()
+    expect(bootSpatial).toBe(bootOkf)
+    expect(layout?.routing).toBe(bootOkf)
   })
 })

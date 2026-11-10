@@ -1,5 +1,4 @@
 import type { LayoutCore, MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCodecCore } from '@kamiazya/whiteboard-codec'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
@@ -115,13 +114,6 @@ export interface ServerDeps {
    * server that never renders never loads it.
    */
   layoutCore?: () => Promise<LayoutCore | undefined>
-  /**
-   * The Rust core's JSON Canvas codec and its switch (ADR-0054's `CoreImpl`),
-   * for every write and read of a JSON Canvas document. Optional and a
-   * memoized factory for the reason `layoutCore` is; absent means the
-   * TypeScript answers.
-   */
-  spatialCore?: () => Promise<SpatialCodecCore | undefined>
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

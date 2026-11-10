@@ -33,6 +33,8 @@ const NOT_READ_BY_SOURCE: Readonly<Record<string, string>> = {
   OTEL_EXPORTER_OTLP_TIMEOUT: 'the OpenTelemetry exporter reads it, as the docs say',
   WHITEBOARD_CORE_OKF:
     'retired with the OKF TypeScript; no source reads it, and the ADR and the parity checklist name it as history',
+  WHITEBOARD_CORE_SPATIAL:
+    'retired with the JSON Canvas TypeScript; no source reads it, and the ADR and the parity checklist name it as history',
 }
 
 const NAME_PATTERN = /\b((?:WHITEBOARD|MCP|OTEL)_[A-Z0-9_]*[A-Z0-9])\b/g

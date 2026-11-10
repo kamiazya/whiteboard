@@ -449,15 +449,19 @@ page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
 reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
 it routes in TypeScript. `layout-core-source.ts` is the one module that names
 the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
-`worker.plugins`): every build carries the wasm, because OKF has no TypeScript left. A CI job
+`worker.plugins`): every build carries the wasm, because OKF and JSON Canvas have no TypeScript left here. A CI job
 that builds or tests the app restores the artifact with `.github/actions/core-wasm`.
 
-The same host loads the OKF core (no switch: its TypeScript is deleted). `okfReady()`
-(`lib/okf-codec.ts`) awaits it and installs it into codec, and every OKF reader or writer in this
-app (an import, a download, a note sent to a daemon) awaits it before calling codec's plain
-`parseOkf`/`serializeOkf`, which throw `OkfCoreNotInstalled` until then; a load that fails rejects,
-since nothing answers in its place. Routing and JSON Canvas load nothing while both read `ts`;
-OKF loads on its first ask. The install is `okf-codec.ts`'s and never `layout-core.ts`'s, which
+The same host loads the core the OKF and JSON Canvas codecs answer through (no switch: their
+TypeScript is deleted here). `codecsReady()` (`lib/codec-cores.ts`) awaits it and installs it into
+codec, and every reader or writer of either in this app (an import, a download, a copy as JSON
+Canvas, an editable PNG, a note sent to a daemon) awaits it before calling codec's plain
+`parseOkf`/`serializeOkf`/`parseSpatial`/`serializeSpatial`, which throw `OkfCoreNotInstalled` or
+`SpatialCoreNotInstalled` until then; a load that fails rejects, since nothing answers in its place.
+Routing loads nothing while it reads `ts`; the codecs load on their first ask. The one TypeScript
+JSON Canvas reader that remains is the viewer's (`parseViewerScene`, in canvas-viewer): the app's
+own source never imports codec's `readJsonCanvasText` (`spatial-reader-isolation.test.ts`). The
+install is `codec-cores.ts`'s and never `layout-core.ts`'s, which
 imports codec's types alone: `layout-core.ts` is on the page's critical path, and one value import
 of codec's readers there carried them into the boot bundle, 147.9 KB
 to 230.9 KB gzip against `smoke:bundle-size`'s 150 KB budget. `WebCore` lives in its own module

@@ -1,40 +1,34 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { readerCases, writerCases } from '../../test-utils/json-canvas-oracle/corpus.js'
+import { readDeclineEarned } from '../../test-utils/json-canvas-oracle/earned.js'
 import {
-  answerAgain,
   decodeRecording,
-  encodeRecording,
   type Issues,
   type ReaderCase,
+  readerCase,
   type WriterCase,
+  writerCase,
 } from '../../test-utils/json-canvas-oracle/oracle.js'
+import { readJsonCanvasText } from '../read-json-canvas-text.js'
+import { parseSpatial, serializeSpatial } from '../spatial-core.js'
 
 /**
- * The committed recording of the TypeScript's JSON Canvas answers equals what
- * the TypeScript answers today. The Rust crate replays that recording natively
- * (`crates/core/codec/tests/json_canvas_oracle.rs`), so `parseSpatial` and
- * `serializeSpatial`'s port is judged by this one, and cargo-mutants and the
- * coverage floor judge it by the same oracle; a recording left behind a
- * TypeScript change would judge it against an answer nobody gives.
- *
- * The recording holds the inputs, not just the answers, so this test asks the
- * TypeScript the same questions again and needs no generator. Re-record after a
- * deliberate change to the parser, the projection or the serialiser with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project codec-node json-canvas-recorded-oracle`.
+ * The committed recording of the JSON Canvas codec's answers, which the Rust
+ * crate replays natively (`crates/core/codec/tests/json_canvas_oracle.rs`),
+ * equals what the core answers through its wasm shim, and what the viewer's
+ * TypeScript reader answers. It was taken from the TypeScript codec before its
+ * writer was deleted and is frozen: it holds the inputs as well as the answers,
+ * so these tests need no generator, and a change that moves an answer must say
+ * so by editing the recording by hand.
  *
  * Message text is not recorded: the Rust port words its refusals in its own
- * types, so the two agree on the stage and, for a schema refusal, each Zod
- * issue's path and code.
+ * types, so the readers agree on the stage and, for a schema refusal, each Zod
+ * issue's path and code. A read the core declines (a lone surrogate, nesting
+ * past its reader) is held to the inputs that earn it, judged without the core
+ * (`earned.ts`); a recorded write is never declined, and the viewer reader
+ * declines nothing.
  */
 const FILE = new URL('./json-canvas.jsonl', import.meta.url)
-
-const READER_CASES = 1400
-const WRITER_CASES = 600
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, encodeRecording([...readerCases(READER_CASES), ...writerCases(WRITER_CASES)]))
-}
 
 describe('the recorded JSON Canvas oracle', () => {
   const recorded = decodeRecording(readFileSync(FILE, 'utf8'))
@@ -86,8 +80,37 @@ describe('the recorded JSON Canvas oracle', () => {
     expect(writers.filter((c) => c.m === 'strict').length, 'strict writes').toBeGreaterThan(250)
   })
 
-  it('equals what the TypeScript answers today', () => {
-    const parted = recorded.findIndex((c) => JSON.stringify(answerAgain(c)) !== JSON.stringify(c))
-    expect(parted, 'the first recorded case the TypeScript no longer answers as recorded').toBe(-1)
+  it('reads every recorded text through the core as recorded, declining only what it may', () => {
+    const declined: string[] = []
+    for (const recording of readers) {
+      const answer = readerCase(parseSpatial, recording.t)
+      if ('declined' in answer) {
+        expect(
+          readDeclineEarned(answer.declined, recording.t),
+          `declined as ${answer.declined}`,
+        ).toBe(true)
+        declined.push(answer.declined)
+      } else {
+        expect(answer, recording.t.slice(0, 400)).toEqual(recording)
+      }
+    }
+    // The decline is the exception: most texts are answered, and each class is met.
+    expect(declined.length, 'declined texts').toBeLessThan(readers.length / 15)
+    for (const reason of ['lone-surrogate', 'too-deep']) {
+      expect(declined, `a text declined as ${reason}`).toContain(reason)
+    }
+  })
+
+  it('writes every recorded canvas through the core as recorded, declining none', () => {
+    for (const recording of writers) {
+      expect(writerCase(serializeSpatial, recording.c, recording.m)).toEqual(recording)
+    }
+  })
+
+  it('reads every recorded text through the viewer reader as recorded, declining nothing', () => {
+    const parted = readers.findIndex(
+      (c) => JSON.stringify(readerCase(readJsonCanvasText, c.t)) !== JSON.stringify(c),
+    )
+    expect(parted, 'the first recorded text the viewer reader no longer reads as recorded').toBe(-1)
   })
 })

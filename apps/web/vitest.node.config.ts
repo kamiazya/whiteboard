@@ -15,5 +15,8 @@ export default defineConfig({
     // test file added without editing this line used to run NOWHERE while
     // CI stayed green (src/** belongs to web-jsdom/web-browser).
     include: ['*.test.ts', 'scripts/**/*.test.ts'],
+    // Installs the Rust codec cores: a script guard reads the docs' .canvas
+    // sources through parseSpatial, which has no TypeScript fallback.
+    setupFiles: ['../../packages/codec/src/test-utils/core-setup/node.setup.ts'],
   },
 })

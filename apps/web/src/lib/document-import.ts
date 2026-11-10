@@ -8,12 +8,11 @@
  * importDocument`); this only decides WHAT is written and WHERE it is named.
  */
 
-import { parseOkf } from '@kamiazya/whiteboard-codec'
+import { parseOkf, parseSpatial } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { pathBelow } from '@kamiazya/whiteboard-model'
 import { addressBaseFor } from './address-from-name.js'
-import { okfReady } from './okf-codec.js'
-import { currentSpatialCodec } from './spatial-codec.js'
+import { codecsReady } from './codec-cores.js'
 
 /** The `accept` of the file picker, and the extensions a drop is checked against. */
 export const IMPORT_ACCEPT = '.md,.markdown,.canvas,.json'
@@ -66,7 +65,7 @@ async function readOkfNote(
   stem: string,
   pathBase: string,
 ): Promise<ImportResult> {
-  await okfReady()
+  await codecsReady()
   const parsed = parseOkf(text)
   if (!parsed.ok) return refused(fileName, `unreadable frontmatter (${parsed.error.message})`)
   // The title is the workspace's name, projected back on export, never held
@@ -99,7 +98,8 @@ export async function readImportedFile(fileName: string, text: string): Promise<
   const isCanvas = extension === '.canvas' || extension === '.json'
   const pathBase = addressBaseFor(stem, isCanvas ? 'spatial' : 'markdown')
   if (isCanvas) {
-    const parsed = currentSpatialCodec().parseSpatial(text)
+    await codecsReady()
+    const parsed = parseSpatial(text)
     if (!parsed.ok) return refused(fileName, `not valid JSON Canvas (${parsed.error.message})`)
     return { ok: true, document: { kind: 'spatial', canvas: parsed.value, name: stem, pathBase } }
   }

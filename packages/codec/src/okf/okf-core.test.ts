@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest'
-import { installOkfCoreForTests } from '../test-utils/okf-core-setup/install.js'
+import { installCoreForTests } from '../test-utils/core-setup/install.js'
 import {
   installOkfCore,
   OkfNotYamlSafeError,
@@ -27,7 +27,7 @@ const throwing = (err: Error) => ({
 
 describe('a realm with no core installed', () => {
   // The installation is process-global; the setup file's core is back for the next test.
-  afterEach(() => installOkfCoreForTests())
+  afterEach(() => installCoreForTests())
 
   it('refuses to read, and says what to do, rather than answering', () => {
     installOkfCore(undefined)
@@ -43,8 +43,8 @@ describe('a realm with no core installed', () => {
 })
 
 describe('the realm core', () => {
-  beforeAll(() => installOkfCoreForTests())
-  afterEach(() => installOkfCoreForTests())
+  beforeAll(() => installCoreForTests())
+  afterEach(() => installCoreForTests())
 
   it('answers the plain exports through the installed core', () => {
     const answer = { ok: true as const, value: { frontmatter: { type: 'from-core' }, body: '' } }

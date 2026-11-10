@@ -222,7 +222,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/core-wasm/src/index.ts#CoreOkfUnwritable':
     "the answer a composition root sees when a frontmatter value has no YAML spelling; codec's serializeOkf throws it as OkfNotYamlSafeError with the issues it carries, and okf-core.test.ts holds that mapping",
   'packages/core-wasm/src/index.ts#CoreSpatialInvalid':
-    "the answer a composition root sees when the strict JSON Canvas writer's validation refuses what it wrote; codec's switch will throw it as the ZodError the TypeScript throws, from the issues it carries, and codec-rust holds that those are the TypeScript's, in path, code and refinement text",
+    "the answer a composition root sees when the strict JSON Canvas writer's validation refuses what it wrote; codec's serializeSpatial throws it as a ZodError from the issues it carries, and spatial-core.test.ts holds that mapping",
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/mcp-server/src/server/export/layout-core.ts#packagedArtifacts':

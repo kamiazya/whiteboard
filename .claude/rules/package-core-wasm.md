@@ -50,8 +50,9 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
     artifact's word.
 
   A composition root answers either refusal from the TypeScript for routing (canvas-render's
-  `routeLayout`) and JSON Canvas. For OKF there is no TypeScript: codec's `parseOkf`/`serializeOkf`
-  turn a decline into a read failure and a typed write refusal.
+  `routeLayout`). For OKF and JSON Canvas there is no TypeScript: codec's
+  `parseOkf`/`serializeOkf`/`parseSpatial`/`serializeSpatial` turn a decline into a read failure and
+  a typed write refusal.
 
 ## What does NOT belong here
 

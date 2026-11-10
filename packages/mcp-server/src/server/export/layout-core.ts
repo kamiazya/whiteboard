@@ -5,9 +5,9 @@ import { pathToFileURL } from 'node:url'
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   installOkfCore,
+  installSpatialCore,
   okfCoreInstalled,
-  type SpatialCodecCore,
-  type SpatialMismatch,
+  spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import { z } from 'zod'
@@ -26,21 +26,13 @@ const log = getLogger('layout-core')
  * failure, which is what a test run wants; a person dogfooding wants the
  * log line and the drawing.
  *
- * The OKF envelope has no switch: its TypeScript is deleted
- * (docs/contributing/parity/okf-codec.md), so the daemon installs the core at
- * boot (`installOkfCoreAtBoot`) and refuses to start without it.
- *
- * `WHITEBOARD_CORE_SPATIAL` is the same switch for the JSON Canvas codec
- * (every read and write of a JSON Canvas document). It is `rust` unless
- * something sets it, like the others: the port passed its parity checklist
- * (docs/contributing/parity/json-canvas-codec.md), and the owner chose the
- * core despite its boundary cost (decision q39). The dev scripts and CI's
- * test jobs set `differential`; `ts` is the rollback while the TypeScript
- * exists.
+ * The OKF envelope and the JSON Canvas codec have no switch: their TypeScript
+ * is deleted (docs/contributing/parity/okf-codec.md,
+ * docs/contributing/parity/json-canvas-codec.md), so the daemon installs the
+ * core at boot (`installCodecCoresAtBoot`) and refuses to start without it.
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_SPATIAL: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
@@ -49,7 +41,6 @@ export type LayoutCoreSettings = z.infer<typeof layoutCoreSettingsSchema>
 export function layoutCoreSettingsFrom(env: Readonly<Record<string, string | undefined>>) {
   return layoutCoreSettingsSchema.parse({
     WHITEBOARD_CORE: env.WHITEBOARD_CORE || undefined,
-    WHITEBOARD_CORE_SPATIAL: env.WHITEBOARD_CORE_SPATIAL || undefined,
     WHITEBOARD_CORE_MISMATCH: env.WHITEBOARD_CORE_MISMATCH || undefined,
     WHITEBOARD_CORE_DIR: env.WHITEBOARD_CORE_DIR || undefined,
   })
@@ -111,52 +102,15 @@ function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => voi
   }
 }
 
-/** A decline as it is reported: the function and the core's reason, never the text or document. */
-function declineSummary(mismatch: { readonly fn: string; readonly err: unknown }) {
-  const { err } = mismatch
-  return {
-    fn: mismatch.fn,
-    reason: err instanceof Error ? `${err.name}: ${err.message}` : 'unknown',
-  }
-}
-
-/**
- * The JSON Canvas codec's difference or decline, reported, or thrown under
- * `throw`. A decline is answered by the TypeScript, so only a run that asked to
- * fail on one sees it as a failure; otherwise it is a counted record
- * (`event: 'spatial-declined'`).
- */
-function spatialReporter(settings: LayoutCoreSettings): (mismatch: SpatialMismatch) => void {
-  return (mismatch) => {
-    if (mismatch.kind === 'declined') {
-      const summary = declineSummary(mismatch)
-      log.warning(
-        { event: 'spatial-declined', ...summary },
-        'the Rust core declined; answered in TypeScript',
-      )
-      if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
-        throw new Error(`JSON Canvas core declined: ${JSON.stringify(summary)}`)
-      }
-      return
-    }
-    const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }
-    log.warning(summary, 'the Rust core and the TypeScript disagree')
-    if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
-      throw new Error(`JSON Canvas core ${mismatch.kind}: ${JSON.stringify(summary)}`)
-    }
-  }
-}
-
-/** The `ServerDeps` factories the core serves, over one load. */
+/** The `ServerDeps` factory the core serves, over one load. */
 export interface CoreLoaders {
   readonly layoutCore: () => Promise<LayoutCore | undefined>
-  readonly spatialCore: () => Promise<SpatialCodecCore | undefined>
 }
 
 /**
- * The `ServerDeps.layoutCore` and `ServerDeps.spatialCore` factories: nothing
- * loaded while both switches read `ts`, else the staged glue and wasm read
- * once, on the first call that asks, and shared by all. The glue is
+ * The `ServerDeps.layoutCore` factory: nothing loaded while the switch reads
+ * `ts`, else the staged glue and wasm read once, on the first call that asks
+ * (or at boot, which shares the one load). The glue is
  * imported by PATH at run time, never bundled, so a build of this package
  * needs no artifact. An artifact that cannot be read degrades to the
  * TypeScript with a warning carrying `event: 'core-load-failed'` (so a
@@ -165,7 +119,6 @@ export interface CoreLoaders {
  */
 export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
   const routing = settings.WHITEBOARD_CORE
-  const spatial = settings.WHITEBOARD_CORE_SPATIAL
   const loadCore = coreLoader(settings)
   return {
     layoutCore: memoized(routing, loadCore, (core) => ({
@@ -173,17 +126,12 @@ export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
       impl: { routeLayout: routing },
       onMismatch: reporter(settings),
     })),
-    spatialCore: memoized(spatial, loadCore, (core) => ({
-      spatial: core,
-      impl: { parseSpatial: spatial, serializeSpatial: spatial },
-      onMismatch: spatialReporter(settings),
-    })),
   }
 }
 
 /**
  * The glue and wasm in `dir`, read once per directory for the whole process,
- * so the OKF install at boot and the lazy routing and JSON Canvas loads share
+ * so the codec install at boot and the lazy routing load share
  * one instance. A load that failed is forgotten, so the next ask tries again.
  */
 const loadedByDirectory = new Map<string, Promise<Core>>()
@@ -224,22 +172,24 @@ function coreLoader(settings: LayoutCoreSettings): () => Promise<Core | undefine
 }
 
 /**
- * Installs the Rust core as this process's OKF codec, before anything is
- * served. The envelope has no TypeScript to degrade to, so a daemon that
+ * Installs the Rust core as this process's OKF and JSON Canvas codecs, before
+ * anything is served. Neither has a TypeScript to degrade to, so a daemon that
  * cannot load the artifact refuses to start, naming where it looked, rather
- * than failing its first read of a markdown document. A realm that already
- * installed one (a test realm) keeps it.
+ * than failing its first read of a document. A realm that already installed
+ * both (a test realm) keeps them.
  */
-export async function installOkfCoreAtBoot(
+export async function installCodecCoresAtBoot(
   settings: LayoutCoreSettings = layoutCoreSettingsFrom(process.env),
 ): Promise<void> {
-  if (okfCoreInstalled()) return
+  if (okfCoreInstalled() && spatialCoreInstalled()) return
   const dir = artifactDirectory(settings)
   try {
-    installOkfCore(await loadCoreFrom(dir))
+    const core = await loadCoreFrom(dir)
+    if (!okfCoreInstalled()) installOkfCore(core)
+    if (!spatialCoreInstalled()) installSpatialCore(core)
   } catch (err) {
     throw new Error(
-      `the Rust core is required to read and write OKF Markdown and did not load from ${dir}; build it with \`pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm\` or point WHITEBOARD_CORE_DIR at a directory holding it`,
+      `the Rust core is required to read and write OKF Markdown and JSON Canvas and did not load from ${dir}; build it with \`pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm\` or point WHITEBOARD_CORE_DIR at a directory holding it`,
       { cause: err },
     )
   }
