@@ -20,19 +20,19 @@ const POINT: &str = r#""Point": {
       "x-wb-unknownKeys": "refuse"
     }"#;
 
-fn emitted(defs: &str) -> (String, String) {
+pub(super) fn emitted(defs: &str) -> (String, String) {
     let mut files = outputs(&plain(defs, IN_MODEL, false)).unwrap();
     let rust = files.remove(1).1;
     (files.remove(0).1, rust)
 }
 
-fn refused(defs: &str, expect: &str) {
+pub(super) fn refused(defs: &str, expect: &str) {
     let errors = outputs(&plain(defs, IN_MODEL, false)).unwrap_err();
     assert!(errors.iter().any(|e| e.contains(expect)), "{expect}: {errors:?}");
 }
 
 /// `defs` with `from` replaced by `to`, asserting the replacement hit.
-fn swapped(defs: &str, from: &str, to: &str) -> String {
+pub(super) fn swapped(defs: &str, from: &str, to: &str) -> String {
     let text = defs.replacen(from, to, 1);
     assert_ne!(text, defs, "{from} did not match");
     text

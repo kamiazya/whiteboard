@@ -50,6 +50,8 @@ const scopeModule = (await import(
  * edge fails, so the list cannot go on excusing an import that was fixed.
  */
 const ESCAPES: Readonly<Record<string, string>> = {
+  'packages/model/src/contract-external.test.ts -> contracts/model/spatial.schema.json':
+    'holds the hand-written half of each x-wb-external definition to the shape the contract gives its generated Rust type, so it has to read the contract as data',
   'packages/mcp-server/src/server/release/publish-dry-run-policy.test.ts -> tools/arch-lint/src/job-section.js':
     'a release-policy test that reads one workflow job through the arch-lint helper; the daemon-side twin of a guard that could not move (tool-arch-lint.md, "Repo-policy guards live here")',
   'packages/mcp-server/src/server/release/publish-production-policy.test.ts -> tools/arch-lint/src/job-section.js':

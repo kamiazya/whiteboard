@@ -78,7 +78,8 @@ mod tests {
     #[test]
     fn a_generated_enum_names_its_wire_values_both_ways_and_defaults_to_the_first() {
         use super::spatial::{
-            Arrowhead, CanvasColor, CanvasColorPreset, EdgeRoutingStyle, EdgeSide, LineJumps,
+            Arrowhead, BackgroundStyle, CanvasColor, CanvasColorPreset, EdgeRoutingStyle, EdgeSide,
+            LineEnd, LineEndNode, LineJumps,
         };
         macro_rules! round_trip {
             ($enum:ident: $($wire:literal),+) => {
@@ -89,11 +90,15 @@ mod tests {
             };
         }
         round_trip!(Arrowhead: "none", "arrow");
+        round_trip!(BackgroundStyle: "cover", "ratio", "repeat");
         round_trip!(CanvasColorPreset: "1", "2", "3", "4", "5", "6");
         round_trip!(EdgeRoutingStyle: "straight", "orthogonal", "curved");
         round_trip!(EdgeSide: "top", "right", "bottom", "left");
         round_trip!(LineJumps: "none", "arc");
         assert_eq!(CanvasColor::default(), CanvasColor::CanvasColorPreset(CanvasColorPreset::V1));
+        assert_eq!(LineEnd::default(), LineEnd::LineEndNode(LineEndNode::default()));
+        assert_eq!(LineEndNode::KIND, "node");
+        assert_eq!(super::spatial::LineEndPoint::KIND, "point");
     }
 
     #[test]

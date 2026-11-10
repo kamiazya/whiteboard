@@ -107,7 +107,8 @@ paths:
   node-or-point union is `lineEndSchema`, on `canvasLineSchema`, and `canvas.lines` is where ink
   lives. A line may join two nodes: that is the expressiveness the split buys, and where freehand
   lands rather than growing a third concept.
-  - **`bendsFieldSchema` is declared ONCE for both.** It was written out twice, identically, on the
+  - **The bends field is declared ONCE for both** — as `Bends` in `contracts/model/spatial.schema.json`,
+    which generates the Zod and the Rust alike. It was written out twice, identically, on the
     edge and on the line — the drift this package exists to prevent, and it cost bytes twice over
     because a tool emitting an `add` and a `patch` arm for each element spelled the same
     description four times. It is registered as `Bends`, beside `CanvasPoint`, `CanvasColor` and
