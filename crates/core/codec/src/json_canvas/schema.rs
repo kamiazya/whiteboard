@@ -83,7 +83,7 @@ pub(super) fn int(value: &Value) -> Read<f64> {
         return refused(Code::InvalidType);
     }
     if n.abs() > MAX_SAFE_INTEGER {
-        let code = if n > 0.0 { Code::TooBig } else { Code::TooSmall };
+        let code = if n.is_sign_negative() { Code::TooSmall } else { Code::TooBig };
         return (Some(n), vec![continuing(code)]);
     }
     (Some(n), Vec::new())

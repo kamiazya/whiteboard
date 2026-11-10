@@ -245,6 +245,17 @@ fn ink_rides_the_root_extension_and_one_bad_line_costs_all_of_it() {
 }
 
 #[test]
+fn a_coordinate_spelled_past_the_largest_double_is_no_number_to_ink() {
+    let ink = |x: &str| {
+        let text = format!(
+            r#"{{"x-whiteboard":{{"lines":[{{"id":"l","from":{{"kind":"point","point":{{"x":{x},"y":0}}}},"to":{{"kind":"point","point":{{"x":1,"y":1}}}}}}]}}}}"#
+        );
+        read(&text).lines.map(|lines| lines.len())
+    };
+    assert_eq!((ink("1e308"), ink("1e999"), ink("-1e999")), (Some(1), None, None));
+}
+
+#[test]
 fn the_model_s_own_checks_on_ink_are_not_the_wire_s() {
     // `parseSpatial` validates the wire, not `spatialCanvasIntegrity`: a line
     // that names a node the canvas lacks, or an id an edge already holds, reads.
