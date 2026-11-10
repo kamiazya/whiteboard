@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import * as facets from './facets.js'
-import * as okf from './generated/okf.zod.js'
+import { okfActorSchema, okfTimestampSchema } from './generated/okf.zod.js'
 import * as ids from './ids.js'
 import * as nodeResource from './node-resource.js'
 
@@ -32,7 +32,7 @@ const MODULES: Record<string, Record<string, unknown>> = {
   '../ids.js': ids,
   '../facets.js': facets,
   '../node-resource.js': nodeResource,
-  './okf.zod.js': okf,
+  './okf.zod.js': { okfActorSchema, okfTimestampSchema },
 }
 
 const schemaName = (def: string) => `${def.charAt(0).toLowerCase()}${def.slice(1)}Schema`
@@ -67,7 +67,7 @@ describe('the hand-written half of an external definition', () => {
     const message = contract.$defs.DocumentId?.['x-wb-message']
     const result = ids.documentIdSchema.safeParse('not-a-ulid')
     expect(result.error?.issues[0]?.message).toBe(message)
-    expect(okf.okfTimestampSchema.safeParse('2026-01-01').error?.issues[0]?.message).toBe(
+    expect(okfTimestampSchema.safeParse('2026-01-01').error?.issues[0]?.message).toBe(
       contract.$defs.OkfTimestamp?.['x-wb-message'],
     )
   })
