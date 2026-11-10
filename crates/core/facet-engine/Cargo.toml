@@ -9,7 +9,13 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+whiteboard-det = { path = "../det" }
 whiteboard-model = { path = "../model" }
+
+# The recorded oracle and the contracts are read as JSON; no shipped code does.
+[dev-dependencies]
+serde_json.workspace = true
+whiteboard-proptest = { path = "../../testing/proptest" }
 
 # QR-21 layer 3: the same tests run natively and on wasm32 under Node.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]
