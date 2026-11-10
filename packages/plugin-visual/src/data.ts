@@ -8,20 +8,26 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { type edgeRoutingSchema, edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
-import { z } from 'zod'
+import type { z } from 'zod'
 import {
   EDGE_ROUTING_OPTIONS,
   LINE_JUMP_OPTIONS,
   SYMBOL_CATALOG,
   SYMBOL_PICKER_OPTIONS,
 } from './editors.js'
-import type { VisualEdgesFacet, VisualShapeFacet, VisualTextFacet } from './generated/visual.zod.js'
+import type {
+  VisualEdgesFacet,
+  VisualShapeFacet,
+  VisualSymbolFacet,
+  VisualTextFacet,
+} from './generated/visual.zod.js'
 import {
   visualAxesFacetSchema,
   visualEdgesFacetSchema,
   visualInkFacetSchema,
   visualShapeFacetSchema,
   visualStencilFacetSchema,
+  visualSymbolFacetSchema,
   visualTextFacetSchema,
   visualThemeFacetSchema,
 } from './generated/visual.zod.js'
@@ -110,69 +116,24 @@ export const VISUAL_AXES_KEY = 'visual.axes/v0'
 
 /**
  * A node's badge: a named icon from the renderer's vendored set, or a
- * single emoji/character. A union on purpose — the two arms render through
- * different scene nodes (icon geometry vs a text glyph) and future arms
- * (an image symbol, say) extend the union rather than overloading one
- * field. An icon NAME is validated only for non-emptiness here: the vendored
- * set is canvas-render's, and this package cannot depend on it — a name the
- * renderer does not carry degrades to no badge at draw time.
+ * single emoji/character, generated from `contracts/facets/visual`. A union
+ * on purpose — the two arms render through different scene nodes (icon
+ * geometry vs a text glyph) and future arms (an image symbol, say) extend the
+ * union rather than overloading one field. An icon NAME is validated only for
+ * non-emptiness: the vendored set is canvas-render's, and this package cannot
+ * depend on it — a name the renderer does not carry degrades to no badge at
+ * draw time.
+ *
+ * The description `wb_facet_list` serves says WHERE the badge is drawn
+ * (surfaces too small to read the object, not the canvas) and names the
+ * channel that does work on a board, a declared scoped tag, because the name
+ * alone is the closest word in the table to "show it" and a caller acted on
+ * exactly that. Its example is deliberately a word no eval task uses: a
+ * description that quotes the task it is measured on measures the quote. It
+ * names the LIBRARY because an undeclared tag value carries no colour, and a
+ * description is a promise the product has to keep.
  */
-// An explicit locale, never the host's default: the same text must split the
-// same way on every machine (QR-20b).
-const graphemes = new Intl.Segmenter('en', { granularity: 'grapheme' })
-
-/**
- * ONE grapheme cluster — what "a badge" means. A cluster may be many code
- * points (a variation selector, a ZWJ family, a flag pair), which is why
- * this counts graphemes rather than length. Deliberately NOT emoji-only:
- * the scene node this draws through names a CJK character or a dingbat as
- * intended badge content, and a facet must not be narrower than the
- * substrate that renders it.
- */
-const isSingleGrapheme = (value: string): boolean => [...graphemes.segment(value)].length === 1
-
-export const visualSymbolFacetSchema = z
-  .union([
-    z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
-    z.object({
-      kind: z.literal('emoji'),
-      char: z
-        .string()
-        .min(1)
-        .refine(isSingleGrapheme, 'must be a single character or emoji, not a string'),
-    }),
-  ])
-  /**
-   * WHERE the badge is drawn, said in the answer `wb_facet_list` gives,
-   * because the name alone is the closest word in the table to "show it"
-   * and a caller acted on exactly that: asked to record health, it wrote a
-   * check and a cross on all five boxes and spent no colour, so a person
-   * looking at the board saw no health at all.
-   *
-   * The badge is for a surface too small to read its own content — a
-   * minimap, a row in the document browser, the tab's favicon — and a node
-   * at full size is not that, which is why the canvas stopped drawing it.
-   * So the sentence names both halves, and the channel that would have
-   * worked: a scoped tag, which colours the box and appears in the legend.
-   *
-   * Its EXAMPLE is deliberately a word no eval task uses. A description
-   * that quotes the task it is measured on measures the quote: the first
-   * draft said `health:failing`, which is the very distinction the
-   * two-axis task grades — and measured, that wording passed a trial the
-   * neutral one did not, so the quote was buying the pass.
-   *
-   * It names the LIBRARY because the first wording promised what the
-   * product does not do by default. "It colours the box" was read and
-   * acted on — three trials of three tagged every node, where the same
-   * task had never produced a single tag write before — and the board
-   * still showed nothing, because an undeclared value carries no colour.
-   * A description is a promise the product has to keep.
-   */
-  .describe(
-    'What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas \u2014 a node at full size already shows its own content \u2014 so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (`priority:high`) AND declare its key in the workspace tag library: a declared value carries a colour, so the boxes wearing it are drawn in it and the board legend names it. A tag nobody declared is recorded and drawn in nothing.',
-  )
-
-export type VisualSymbolFacet = z.infer<typeof visualSymbolFacetSchema>
+export { type VisualSymbolFacet, visualSymbolFacetSchema }
 
 export const VISUAL_SYMBOL_KEY = 'visual.symbol/v0'
 

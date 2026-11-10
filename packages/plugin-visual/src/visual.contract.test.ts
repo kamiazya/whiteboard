@@ -302,3 +302,137 @@ describe('the form derived from the schema alone', () => {
     ])
   })
 })
+
+// `visual.symbol` is a union of an icon and an emoji, and its description is
+// the answer `wb_facet_list` gives an agent about where a badge is drawn.
+describe('visual.symbol', () => {
+  const schema = schemaOf('symbol')
+
+  const unionIssues = (value: unknown) => {
+    const result = schema.safeParse(value)
+    if (result.success) return []
+    return result.error.issues.map((issue) => ({
+      code: issue.code,
+      message: issue.message,
+      path: issue.path,
+      arms:
+        issue.code === 'invalid_union'
+          ? issue.errors.map((arm) =>
+              arm.map(({ code, message, path }) => ({ code, message, path })),
+            )
+          : undefined,
+    }))
+  }
+
+  const invalidKind = (kind: string) => ({
+    code: 'invalid_value',
+    message: `Invalid input: expected "${kind}"`,
+    path: ['kind'],
+  })
+  const missing = (field: string) => ({
+    code: 'invalid_type',
+    message: 'Invalid input: expected string, received undefined',
+    path: [field],
+  })
+  const notObject = (received: string) => ({
+    code: 'invalid_type',
+    message: `Invalid input: expected object, received ${received}`,
+    path: [],
+  })
+  const union = (...arms: object[][]) => [
+    { code: 'invalid_union', message: 'Invalid input', path: [], arms },
+  ]
+  const SINGLE = {
+    code: 'custom',
+    message: 'must be a single character or emoji, not a string',
+    path: ['char'],
+  }
+  const TOO_SMALL = (field: string) => ({
+    code: 'too_small',
+    message: 'Too small: expected string to have >=1 characters',
+    path: [field],
+  })
+
+  it('takes an icon and an emoji and strips what neither names', () => {
+    expect(schema.parse({ kind: 'icon', name: 'star', extra: 1 })).toEqual({
+      kind: 'icon',
+      name: 'star',
+    })
+    expect(schema.parse({ kind: 'emoji', char: '\u2705', name: 'x' })).toEqual({
+      kind: 'emoji',
+      char: '\u2705',
+    })
+  })
+
+  it('takes one grapheme of any length: ZWJ families, flags, keycaps, skin tones, a letter', () => {
+    for (const char of [
+      '\u2705',
+      '\u26a0\ufe0f',
+      '\u{1f468}\u200d\u{1f469}\u200d\u{1f467}\u200d\u{1f466}',
+      '\u{1f1ef}\u{1f1f5}',
+      '1\ufe0f\u20e3',
+      '\u{1f44d}\u{1f3fd}',
+      '\u91cd',
+      'e\u0301',
+    ]) {
+      expect(schema.safeParse({ kind: 'emoji', char }).success, char).toBe(true)
+    }
+  })
+
+  it('refuses two graphemes and an empty character, each at the character', () => {
+    expect(issuesOf(schema, { kind: 'emoji', char: '\u2705\u{1f525}' })).toEqual([SINGLE])
+    expect(issuesOf(schema, { kind: 'emoji', char: 'ab' })).toEqual([SINGLE])
+    expect(issuesOf(schema, { kind: 'emoji', char: '' })).toEqual([TOO_SMALL('char'), SINGLE])
+    expect(issuesOf(schema, { kind: 'icon', name: '' })).toEqual([TOO_SMALL('name')])
+  })
+
+  it('answers a payload no arm takes with both arms refusals, in order', () => {
+    expect(unionIssues({})).toEqual(
+      union([invalidKind('icon'), missing('name')], [invalidKind('emoji'), missing('char')]),
+    )
+    expect(unionIssues(null)).toEqual(union([notObject('null')], [notObject('null')]))
+    expect(unionIssues('x')).toEqual(union([notObject('string')], [notObject('string')]))
+    expect(unionIssues({ kind: 'icon' })).toEqual(
+      union([missing('name')], [invalidKind('emoji'), missing('char')]),
+    )
+    expect(unionIssues({ kind: 'emoji' })).toEqual(
+      union([invalidKind('icon'), missing('name')], [missing('char')]),
+    )
+    expect(unionIssues({ kind: 'other', name: 'x' })).toEqual(
+      union([invalidKind('icon')], [invalidKind('emoji'), missing('char')]),
+    )
+    expect(unionIssues({ kind: 'icon', name: 3 })).toEqual(
+      union(
+        [{ ...missing('name'), message: 'Invalid input: expected string, received number' }],
+        [invalidKind('emoji'), missing('char')],
+      ),
+    )
+  })
+
+  it('publishes the JSON Schema and the description wb_facet_list serves, byte for byte', () => {
+    expect(JSON.stringify(z.toJSONSchema(schema))).toBe(
+      '{"$schema":"https://json-schema.org/draft/2020-12/schema","anyOf":[{"type":"object","properties":{"kind":{"type":"string","const":"icon"},"name":{"type":"string","minLength":1}},"required":["kind","name"],"additionalProperties":false},{"type":"object","properties":{"kind":{"type":"string","const":"emoji"},"char":{"type":"string","minLength":1}},"required":["kind","char"],"additionalProperties":false}],"description":"What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas \u2014 a node at full size already shows its own content \u2014 so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (`priority:high`) AND declare its key in the workspace tag library: a declared value carries a colour, so the boxes wearing it are drawn in it and the board legend names it. A tag nobody declared is recorded and drawn in nothing."}',
+    )
+  })
+
+  // The Rust twin's grapheme tables are Unicode 17.0 and its test asserts that;
+  // the host's own release is the other half of the claim they agree.
+  it('counts graphemes with the Unicode release the Rust crate implements', () => {
+    expect(process.versions.unicode).toBe('17.0')
+  })
+
+  it('derives a variants form over the discriminant and keeps its picker', () => {
+    const variant = (label: string, name: string) => ({
+      label,
+      fields: [{ ...text(name), label: name[0]?.toUpperCase() + name.slice(1) }],
+    })
+    expect(deriveFacetForm(schema)).toEqual({
+      kind: 'variants',
+      discriminant: 'kind',
+      discriminantLabel: 'Kind',
+      variants: [variant('icon', 'name'), variant('emoji', 'char')],
+    })
+    const form = bundledFacetRegistry.facetForm('visual.symbol/v0')
+    expect(form.kind).toBe('picker')
+  })
+})

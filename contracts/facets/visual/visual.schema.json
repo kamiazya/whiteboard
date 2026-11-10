@@ -7,6 +7,7 @@
     "rust": "crates/core/plugin-visual/src/generated/visual.rs"
   },
   "x-wb-checks": {
+    "zod": "packages/plugin-visual/src/contract-checks.ts",
     "rust": "crates/core/plugin-visual/src/checks.rs"
   },
   "x-wb-describe": false,
@@ -54,6 +55,40 @@
       "x-wb-order": ["kind"],
       "additionalProperties": true,
       "x-wb-unknownKeys": "strip"
+    },
+    "VisualSymbolIcon": {
+      "description": "A symbol drawn from the registered icon set, by name.",
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "const": "icon", "description": "Always icon." },
+        "name": { "type": "string", "x-wb-minUtf16": 1, "description": "The name of the icon." }
+      },
+      "required": ["kind", "name"],
+      "x-wb-order": ["kind", "name"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualSymbolEmoji": {
+      "description": "A symbol that is one emoji or character.",
+      "type": "object",
+      "properties": {
+        "kind": { "type": "string", "const": "emoji", "description": "Always emoji." },
+        "char": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "x-wb-check": "single_grapheme",
+          "description": "The character: one extended grapheme cluster, so a flag or a family is one."
+        }
+      },
+      "required": ["kind", "char"],
+      "x-wb-order": ["kind", "char"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualSymbolFacet": {
+      "description": "visual.symbol/v0: what symbolises this object, as an icon or one emoji.",
+      "anyOf": [{ "$ref": "#/$defs/VisualSymbolIcon" }, { "$ref": "#/$defs/VisualSymbolEmoji" }],
+      "x-wb-describe": "What SYMBOLISES this object, for surfaces too small to read it: the minimap, a row in the document browser, the tab favicon. NOT drawn on a canvas — a node at full size already shows its own content — so a badge written to say what a box IS or how it is DOING is invisible to anyone reading the board. To record state or kind on a board, write a scoped tag instead (`priority:high`) AND declare its key in the workspace tag library: a declared value carries a colour, so the boxes wearing it are drawn in it and the board legend names it. A tag nobody declared is recorded and drawn in nothing."
     },
     "VisualTextAlign": {
       "description": "Where the text of a node sits inside the space it has.",
