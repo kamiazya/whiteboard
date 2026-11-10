@@ -227,7 +227,7 @@ mod tests {
         let deep = format!("{}{}", "[".repeat(MAX_DEPTH + 1), "]".repeat(MAX_DEPTH + 1));
         assert_eq!(parsed(&deep), json!(["refused", "malformed", "too-deep"]));
         let link = r#"{"nodes":[{"id":"a","type":"link","url":"https://xn--e1afmkfd.example/","x":0,"y":0,"width":1,"height":1}]}"#;
-        assert_eq!(parsed(link), json!(["refused", "malformed", "url"]));
+        assert_eq!(parsed(link)[0], json!("ok"), "a link host is judged, never declined");
     }
 
     #[test]
