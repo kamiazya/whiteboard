@@ -235,11 +235,12 @@ fn zod_plain_chain(ty: &Ty<'_>) -> Chain {
             .then("int", vec![])
             .then("meta", vec!["{ minimum: undefined, maximum: undefined }".to_owned()]),
         Ty::Literal(value) => Chain::new("literal", vec![js_string(value)]),
-        Ty::Number { min } => {
+        Ty::Number { min, above } => {
             let chain = Chain::new("number", vec![]);
-            match min {
-                Some(m) => chain.then("min", vec![js_number(*m)]),
-                None => chain,
+            match (min, above) {
+                (Some(m), _) => chain.then("min", vec![js_number(*m)]),
+                (None, Some(a)) => chain.then("gt", vec![js_number(*a)]),
+                (None, None) => chain,
             }
         }
         Ty::Enum(values) => {
@@ -509,13 +510,13 @@ fn rust_ty(ty: &Ty<'_>) -> String {
         Ty::Number { .. } => "f64".to_owned(),
         Ty::Bool => "bool".to_owned(),
         Ty::Integer => "i64".to_owned(),
-        Ty::Str { .. } => "String".to_owned(),
+        Ty::Str { .. } | Ty::Literal(_) => "String".to_owned(),
         Ty::Array { item, .. } => format!("Vec<{}>", rust_ty(item)),
         Ty::Ref(name) => (*name).to_owned(),
         Ty::Any => "Value".to_owned(),
         Ty::Record { .. } => "Map".to_owned(),
         Ty::Map { key, value, .. } => format!("Vec<({key}, {})>", rust_ty(value)),
-        Ty::Object(_) | Ty::Enum(_) | Ty::Union { .. } | Ty::Literal(_) => String::new(),
+        Ty::Object(_) | Ty::Enum(_) | Ty::Union { .. } => String::new(),
     }
 }
 
@@ -624,7 +625,7 @@ fn rust_serde_type(out: &mut String, name: &str, description: &str, object: &Obj
     let fields: Vec<(&str, Option<f64>)> = object
         .fields
         .iter()
-        .map(|f| (f.name, if let Ty::Number { min } = f.ty { min } else { None }))
+        .map(|f| (f.name, if let Ty::Number { min, .. } = f.ty { min } else { None }))
         .collect();
     let docs: Vec<&str> = object.fields.iter().map(|f| f.description).collect();
     let _ = write!(

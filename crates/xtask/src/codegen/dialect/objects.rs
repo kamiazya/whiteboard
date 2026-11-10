@@ -4,8 +4,8 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use super::{
-    Additional, CheckedDef, Field, Node, Object, Ty, Unknown, described, is_field, lower_form,
-    only, refusal, rust_field,
+    Additional, CheckedDef, Field, Node, Object, Ty, Unknown, described, is_field, is_index,
+    lower_form, only, refusal, rust_field,
 };
 
 pub(super) fn lower_object<'a>(
@@ -49,6 +49,7 @@ pub(super) fn lower_object<'a>(
     if ordered.len() != order.len() || ordered != declared {
         v.push(format!("{at}.x-wb-order: must list every property exactly once"));
     }
+    check_index_order(order, at, v);
     let fields = lower_fields(node, properties, &required, at, v);
     let (check, extends) = (node.check.as_deref(), node.extends.as_deref());
     Some(Ty::Object(Object { fields, unknown, check, extends }))
@@ -247,6 +248,44 @@ pub(super) fn check_unions(defs: &[CheckedDef<'_>], v: &mut Vec<String>) {
                 ));
             }
             seen.push((value, member));
+        }
+    }
+}
+
+/// Array-index keys come first in ascending order: JavaScript enumerates them
+/// so, and a contract that wrote another order would have the Zod half and the
+/// Rust struct disagree about which field follows which.
+fn check_index_order(order: &[String], at: &str, v: &mut Vec<String>) {
+    let indexes: Vec<&String> = order.iter().filter(|n| is_index(n)).collect();
+    let leading = order.iter().take_while(|n| is_index(n)).count();
+    // A canonical index is ordered as a number by its length, then its digits.
+    let ascending = indexes.windows(2).all(|w| (w[0].len(), w[0]) < (w[1].len(), w[1]));
+    if leading != indexes.len() || !ascending {
+        v.push(format!(
+            "{at}.x-wb-order: a numeric key comes before every other, in ascending order, \
+             as JavaScript enumerates them"
+        ));
+    }
+}
+
+/// A property that defaults to `{}` names an object that accepts it: every
+/// property optional, nothing to check and nothing inherited.
+pub(super) fn check_ref_defaults(defs: &[CheckedDef<'_>], v: &mut Vec<String>) {
+    for def in defs {
+        let Ty::Object(object) = &def.ty else { continue };
+        for field in object.fields.iter().filter(|f| f.default_empty) {
+            let Ty::Ref(target) = field.ty else { continue };
+            let accepts = defs.iter().find(|d| d.name == target).is_some_and(|d| {
+                matches!(&d.ty, Ty::Object(t)
+                    if t.check.is_none() && t.extends.is_none() && t.fields.iter().all(|f| f.optional))
+            });
+            if !accepts {
+                v.push(format!(
+                    "$defs.{}.{}: a default `{{}}` names an object whose properties are all \
+                     optional; `{target}` is not one",
+                    def.name, field.name
+                ));
+            }
         }
     }
 }

@@ -1,5 +1,6 @@
 use super::*;
 
+mod assets;
 mod choices;
 mod objects;
 mod plain;

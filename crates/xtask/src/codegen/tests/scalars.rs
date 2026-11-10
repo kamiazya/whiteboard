@@ -138,6 +138,4 @@ fn a_constant_rule_the_dialect_states_is_refused_by_name() {
     ] {
         refused(&swapped(KINDED, from, to), expect);
     }
-    let top = r#""Tag": { "description": "A tag.", "type": "string", "const": "node" }"#;
-    refused(top, "a constant belongs on a property");
 }
