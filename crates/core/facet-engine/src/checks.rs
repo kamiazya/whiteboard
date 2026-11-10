@@ -35,6 +35,33 @@ pub fn hex_color(text: &str) -> bool {
         .is_some_and(|digits| digits.len() == 6 && digits.bytes().all(|b| b.is_ascii_hexdigit()))
 }
 
+/// `^[a-z][a-z0-9-]*$`: the pattern of the plugin manifest's `Segment`, a
+/// plugin id or a facet name.
+pub fn facet_segment(text: &str) -> bool {
+    segment(text)
+}
+
+/// `^v[0-9]+$`: the pattern of the manifest's `FacetVersion`.
+pub fn version_tag(text: &str) -> bool {
+    text.strip_prefix('v')
+        .is_some_and(|digits| !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_digit()))
+}
+
+/// `^facets\/[a-z-]+\/[a-z-]+\.schema\.json#\/\$defs\/[A-Za-z]+$`: the pattern
+/// of the manifest's `SchemaRef`, a pointer at a definition of a plugin's own
+/// contract file.
+pub fn schema_ref(text: &str) -> bool {
+    let dashed =
+        |part: &str| !part.is_empty() && part.bytes().all(|b| b.is_ascii_lowercase() || b == b'-');
+    let Some(rest) = text.strip_prefix("facets/") else { return false };
+    let Some((directory, rest)) = rest.split_once('/') else { return false };
+    let Some((file, definition)) = rest.split_once(".schema.json#/$defs/") else { return false };
+    dashed(directory)
+        && dashed(file)
+        && !definition.is_empty()
+        && definition.bytes().all(|b| b.is_ascii_alphabetic())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -108,6 +135,53 @@ mod tests {
             "oklch(0.98 0 0)",
         ] {
             assert!(!hex_color(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_segment_is_a_lowercase_word_of_digits_and_dashes() {
+        for good in ["visual", "a", "a-b", "x1-", "z9"] {
+            assert!(facet_segment(good), "{good}");
+        }
+        for bad in ["", "A", "1a", "-a", "a.b", "a_b", "a\n", "a b", "\u{e9}"] {
+            assert!(!facet_segment(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_version_tag_is_v_and_digits() {
+        for good in ["v0", "v12", "v007"] {
+            assert!(version_tag(good), "{good}");
+        }
+        for bad in ["", "v", "0", "V0", "v-1", "v0x", "vv0", "v0\n", "v1.0"] {
+            assert!(!version_tag(bad), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn a_schema_ref_points_at_a_definition_of_a_contract_file() {
+        for good in [
+            "facets/visual/visual.schema.json#/$defs/VisualShapeFacet",
+            "facets/a-b/c-d.schema.json#/$defs/X",
+        ] {
+            assert!(schema_ref(good), "{good}");
+        }
+        for bad in [
+            "",
+            "visual/visual.schema.json#/$defs/X",
+            "facets/visual.schema.json#/$defs/X",
+            "facets//visual.schema.json#/$defs/X",
+            "facets/visual/.schema.json#/$defs/X",
+            "facets/Visual/visual.schema.json#/$defs/X",
+            "facets/visual/visual.schema.json#/$defs/",
+            "facets/visual/visual.schema.json#/$defs/X1",
+            "facets/visual/visual.schema.json#/$defs/X\n",
+            "facets/visual/visual.schema.json#/defs/X",
+            "facets/visual/visual.schema.json#/$defs/a/b",
+            "facets/visual/a/visual.schema.json#/$defs/X",
+            "facets/visual/visual.schema.jsonx#/$defs/X",
+        ] {
+            assert!(!schema_ref(bad), "{bad:?}");
         }
     }
 }

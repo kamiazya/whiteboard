@@ -1,0 +1,553 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Plugin manifest",
+  "description": "A plugin as data (ADR-0054 decision 12): its id, its facets with where each attaches and how each is edited, and the names of what the host supplies — payload schemas, catalog loaders, asset tables, migrations. A manifest holds no code.",
+  "x-wb-emit": {
+    "zod": "packages/facet-engine/src/generated/plugin-manifest.zod.ts",
+    "rust": "crates/core/facet-engine/src/generated/plugin_manifest.rs"
+  },
+  "x-wb-checks": {
+    "rust": "crates/core/facet-engine/src/checks.rs"
+  },
+  "x-wb-describe": false,
+  "x-wb-rustSerde": false,
+  "x-wb-readonlyTypes": false,
+  "$defs": {
+    "Segment": {
+      "description": "One lowercase segment: a plugin id or a facet name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "x-wb-matcher": "facet_segment",
+      "x-wb-message": "must be a lowercase segment, like \"visual\""
+    },
+    "DisplayName": {
+      "description": "A human-facing name: a non-empty string.",
+      "type": "string",
+      "x-wb-minUtf16": 1
+    },
+    "FacetVersion": {
+      "description": "A facet version tag: v and a number.",
+      "type": "string",
+      "pattern": "^v[0-9]+$",
+      "x-wb-matcher": "version_tag",
+      "x-wb-message": "must be a version tag like \"v0\""
+    },
+    "FacetTarget": {
+      "description": "What a facet may attach to.",
+      "type": "string",
+      "enum": ["document", "canvas", "node", "edge"]
+    },
+    "SchemaRef": {
+      "description": "A pointer at a definition of the plugin contract; the host maps it to a validator.",
+      "type": "string",
+      "pattern": "^facets\\/[a-z-]+\\/[a-z-]+\\.schema\\.json#\\/\\$defs\\/[A-Za-z]+$",
+      "x-wb-matcher": "schema_ref",
+      "x-wb-message": "must point at a contract definition, like \"facets/visual/visual.schema.json#/$defs/VisualShapeFacet\""
+    },
+    "HostRef": {
+      "description": "The namespaced name of something the host supplies: a catalog, an asset table or a migration.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "x-wb-matcher": "namespaced_id",
+      "x-wb-message": "must be a namespaced name like \"visual.symbols\""
+    },
+    "AssetKind": {
+      "description": "The kind of registered asset a field names.",
+      "type": "string",
+      "enum": ["themes", "icons", "stencils"]
+    },
+    "FieldName": {
+      "description": "A field of a payload, or the key of a record: a non-empty string.",
+      "type": "string",
+      "x-wb-minUtf16": 1
+    },
+    "GlyphShapeName": {
+      "description": "A silhouette the engine can draw.",
+      "type": "string",
+      "enum": [
+        "square",
+        "circle",
+        "diamond",
+        "hexagon",
+        "octagon",
+        "parallelogram",
+        "cylinder",
+        "none"
+      ]
+    },
+    "GlyphShape": {
+      "description": "A glyph drawn as one of the engine silhouettes.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "shape",
+          "description": "Always shape."
+        },
+        "name": {
+          "$ref": "#/$defs/GlyphShapeName",
+          "description": "Which silhouette."
+        }
+      },
+      "required": ["kind", "name"],
+      "x-wb-order": ["kind", "name"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "GlyphChar": {
+      "description": "A glyph that is one character or emoji.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "char",
+          "description": "Always char."
+        },
+        "value": {
+          "type": "string",
+          "description": "The character.",
+          "x-wb-minUtf16": 1
+        }
+      },
+      "required": ["kind", "value"],
+      "x-wb-order": ["kind", "value"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "GlyphAsset": {
+      "description": "A glyph drawn from a registered icon.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "asset",
+          "description": "Always asset."
+        },
+        "id": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The registered icon id."
+        }
+      },
+      "required": ["kind", "id"],
+      "x-wb-order": ["kind", "id"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "GlyphTheme": {
+      "description": "A registered icon drawn the way a registered theme draws.",
+      "type": "object",
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "theme",
+          "description": "Always theme."
+        },
+        "id": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The theme id."
+        },
+        "icon": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The icon id."
+        }
+      },
+      "required": ["kind", "id", "icon"],
+      "x-wb-order": ["kind", "id", "icon"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "Glyph": {
+      "description": "What an option is drawn as, chosen by its kind.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/GlyphShape"
+        },
+        {
+          "$ref": "#/$defs/GlyphChar"
+        },
+        {
+          "$ref": "#/$defs/GlyphAsset"
+        },
+        {
+          "$ref": "#/$defs/GlyphTheme"
+        }
+      ],
+      "discriminator": {
+        "propertyName": "kind"
+      }
+    },
+    "Keywords": {
+      "description": "Extra words something is findable by.",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "PickerOption": {
+      "description": "One choice of a picker: the whole payload it writes and how to meet it.",
+      "type": "object",
+      "properties": {
+        "payload": {
+          "x-wb-any": true,
+          "description": "The payload this option writes; null says the facet should not exist."
+        },
+        "label": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "What the option is called."
+        },
+        "glyph": {
+          "$ref": "#/$defs/Glyph",
+          "description": "What the option is drawn as."
+        },
+        "keywords": {
+          "$ref": "#/$defs/Keywords",
+          "description": "Extra words the option is findable by."
+        }
+      },
+      "required": ["payload", "label"],
+      "x-wb-order": ["payload", "label", "glyph", "keywords"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "PickerOptions": {
+      "description": "The listed choices of a picker.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PickerOption"
+      }
+    },
+    "PickerLayout": {
+      "description": "How a row of options is drawn.",
+      "type": "string",
+      "enum": ["chips", "cards"]
+    },
+    "EntryPayload": {
+      "description": "The template a typed value is folded into.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/FieldName"
+      },
+      "additionalProperties": {
+        "x-wb-any": true
+      }
+    },
+    "CatalogEntry": {
+      "description": "Free entry into a catalog, declared as data.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "What the entry is called."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "An example of what to type."
+        },
+        "payload": {
+          "$ref": "#/$defs/EntryPayload",
+          "description": "The payload template the typed text is folded into."
+        },
+        "field": {
+          "$ref": "#/$defs/FieldName",
+          "description": "Where in the payload the text goes."
+        }
+      },
+      "required": ["label", "payload", "field"],
+      "x-wb-order": ["label", "placeholder", "payload", "field"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "PickerCatalog": {
+      "description": "More choices than a definition carries, loaded when a picker opens.",
+      "type": "object",
+      "properties": {
+        "label": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "What names the search box."
+        },
+        "source": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The loader the host gives the catalog sections."
+        },
+        "entry": {
+          "$ref": "#/$defs/CatalogEntry",
+          "description": "Free entry, when the catalog is open."
+        }
+      },
+      "required": ["label", "source"],
+      "x-wb-order": ["label", "source", "entry"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "Picker": {
+      "description": "A control writing whole payloads.",
+      "type": "object",
+      "properties": {
+        "options": {
+          "$ref": "#/$defs/PickerOptions",
+          "description": "The choices, written out."
+        },
+        "specimenIcon": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The icon every theme card draws."
+        },
+        "layout": {
+          "$ref": "#/$defs/PickerLayout",
+          "description": "How the listed options are drawn."
+        },
+        "catalog": {
+          "$ref": "#/$defs/PickerCatalog",
+          "description": "The searchable catalog."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["options", "specimenIcon", "layout", "catalog"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "FieldWidget": {
+      "description": "The widgets a field may be shown with.",
+      "type": "string",
+      "enum": ["text", "number", "toggle", "choice", "segmented"]
+    },
+    "SegmentedOption": {
+      "description": "One segment of a segmented control.",
+      "type": "object",
+      "properties": {
+        "value": {
+          "type": "string",
+          "description": "The value the segment writes. Strings only: the engine type also admits null to clear a facet, which no bundled plugin uses and a manifest does not declare."
+        },
+        "label": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "What the segment is called."
+        },
+        "glyph": {
+          "$ref": "#/$defs/Glyph",
+          "description": "What the segment is drawn as."
+        }
+      },
+      "required": ["value", "label"],
+      "x-wb-order": ["value", "label", "glyph"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "SegmentedOptions": {
+      "description": "The segments of a segmented control.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/SegmentedOption"
+      }
+    },
+    "FieldSpec": {
+      "description": "How one field of a payload is shown.",
+      "type": "object",
+      "properties": {
+        "widget": {
+          "$ref": "#/$defs/FieldWidget",
+          "description": "The control."
+        },
+        "label": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "What the field is called."
+        },
+        "quick": {
+          "type": "boolean",
+          "description": "Whether the field belongs in a one-tap quick band."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "An example of what to type."
+        },
+        "options": {
+          "$ref": "#/$defs/SegmentedOptions",
+          "description": "The segments, for a segmented control."
+        },
+        "layout": {
+          "$ref": "#/$defs/PickerLayout",
+          "description": "How a segmented control is drawn."
+        }
+      },
+      "required": ["widget"],
+      "x-wb-order": ["widget", "label", "quick", "placeholder", "options", "layout"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "FieldSpecs": {
+      "description": "Field specs by field name.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/FieldName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/FieldSpec"
+      }
+    },
+    "EditorSpec": {
+      "description": "How a facet is met: one picker, or a form over its fields.",
+      "type": "object",
+      "properties": {
+        "picker": {
+          "$ref": "#/$defs/Picker",
+          "description": "One control writing whole payloads."
+        },
+        "fields": {
+          "$ref": "#/$defs/FieldSpecs",
+          "description": "A form over the schema own fields."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["picker", "fields"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "AssetRefs": {
+      "description": "The kind of asset each named field holds the id of.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/FieldName"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/AssetKind"
+      }
+    },
+    "CompatEntry": {
+      "description": "An older version of a facet: its retained schema and the step to the next.",
+      "type": "object",
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/SchemaRef",
+          "description": "The retained schema of that version."
+        },
+        "migrate": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The pure migration, supplied by the host, to the shape of the next version."
+        }
+      },
+      "required": ["schema", "migrate"],
+      "x-wb-order": ["schema", "migrate"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "CompatEntries": {
+      "description": "Retained older versions by version tag.",
+      "type": "object",
+      "propertyNames": {
+        "$ref": "#/$defs/FacetVersion"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/CompatEntry"
+      }
+    },
+    "FacetDecl": {
+      "description": "One facet a plugin declares.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Segment",
+          "description": "The facet machine name."
+        },
+        "displayName": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "The facet human-facing name."
+        },
+        "version": {
+          "$ref": "#/$defs/FacetVersion",
+          "description": "The facet version."
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/FacetTarget"
+          },
+          "minItems": 1,
+          "description": "What the facet may attach to, at least one."
+        },
+        "schema": {
+          "$ref": "#/$defs/SchemaRef",
+          "description": "The facet payload schema."
+        },
+        "assetRefs": {
+          "$ref": "#/$defs/AssetRefs",
+          "description": "Fields whose value is the id of a registered asset."
+        },
+        "editor": {
+          "$ref": "#/$defs/EditorSpec",
+          "description": "How the facet is edited."
+        },
+        "compat": {
+          "$ref": "#/$defs/CompatEntries",
+          "description": "Older versions still readable."
+        }
+      },
+      "required": ["name", "displayName", "version", "targets", "schema"],
+      "x-wb-order": [
+        "name",
+        "displayName",
+        "version",
+        "targets",
+        "schema",
+        "assetRefs",
+        "editor",
+        "compat"
+      ],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "FacetDecls": {
+      "description": "The facets of a plugin.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FacetDecl"
+      }
+    },
+    "ManifestAssets": {
+      "description": "The asset tables a plugin registers, by the name the host gives each.",
+      "type": "object",
+      "properties": {
+        "themes": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The theme table."
+        },
+        "icons": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The icon table."
+        },
+        "stencils": {
+          "$ref": "#/$defs/HostRef",
+          "description": "The stencil table."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["themes", "icons", "stencils"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    },
+    "PluginManifest": {
+      "description": "A plugin as data: its facets and how each is edited; code it needs is named.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Segment",
+          "description": "The plugin id, which is also its facet-key namespace."
+        },
+        "displayName": {
+          "$ref": "#/$defs/DisplayName",
+          "description": "The plugin human-facing name."
+        },
+        "facets": {
+          "$ref": "#/$defs/FacetDecls",
+          "description": "The facets."
+        },
+        "assets": {
+          "$ref": "#/$defs/ManifestAssets",
+          "description": "The asset tables."
+        }
+      },
+      "required": ["id", "displayName", "facets"],
+      "x-wb-order": ["id", "displayName", "facets", "assets"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    }
+  }
+}
