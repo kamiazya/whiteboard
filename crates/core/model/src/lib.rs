@@ -77,13 +77,22 @@ mod tests {
 
     #[test]
     fn a_generated_enum_names_its_wire_values_both_ways_and_defaults_to_the_first() {
-        use super::spatial::{CanvasColor, CanvasColorPreset, EdgeSide};
-        for side in [EdgeSide::Top, EdgeSide::Right, EdgeSide::Bottom, EdgeSide::Left] {
-            assert_eq!(EdgeSide::from_wire(side.as_str()), Some(side));
+        use super::spatial::{
+            Arrowhead, CanvasColor, CanvasColorPreset, EdgeRoutingStyle, EdgeSide, LineJumps,
+        };
+        macro_rules! round_trip {
+            ($enum:ident: $($wire:literal),+) => {
+                $(assert_eq!($enum::from_wire($wire).map($enum::as_str), Some($wire));)+
+                assert_eq!($enum::from_wire("Top"), None);
+                assert_eq!($enum::from_wire(""), None);
+                assert_eq!($enum::default().as_str(), [$($wire),+][0]);
+            };
         }
-        assert_eq!(EdgeSide::from_wire("Top"), None);
-        assert_eq!(EdgeSide::default().as_str(), "top");
-        assert_eq!(CanvasColorPreset::from_wire("6"), Some(CanvasColorPreset::V6));
+        round_trip!(Arrowhead: "none", "arrow");
+        round_trip!(CanvasColorPreset: "1", "2", "3", "4", "5", "6");
+        round_trip!(EdgeRoutingStyle: "straight", "orthogonal", "curved");
+        round_trip!(EdgeSide: "top", "right", "bottom", "left");
+        round_trip!(LineJumps: "none", "arc");
         assert_eq!(CanvasColor::default(), CanvasColor::CanvasColorPreset(CanvasColorPreset::V1));
     }
 
