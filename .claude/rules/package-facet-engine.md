@@ -210,3 +210,29 @@ segment, version and namespaced-id grammars and the glyph silhouettes;
   editor's derived form depends on that (its draft keeps a previous
   variant's field). An agent writer that must refuse one asks
   `firstUnrecognizedKey(sent, parsed)`, as server-core's `facet-write.ts` does.
+
+## The Rust twin of the write path (ADR-0054, step 6, S6)
+
+`crates/core/facet-engine`'s `schema` and `registry` modules answer what
+`validateFacetWrite`, `targetsOf` and `assetRefsOf` answer, and read the same
+contract files the generated Zod comes from: a plugin's payload schemas are
+data (owner decision q41), judged by an interpreter of the contract dialect, in
+the issues' path and code and order and not in their message (q43). Nothing here
+calls it yet: the wasm export and the switch are S8.
+
+- **The oracle is Zod's own behaviour, not the contract's text.** Two recordings
+  hold it, both regenerated with `WHITEBOARD_RECORD_ORACLE=1` and both asked again
+  by a test that fails when today's TypeScript stops equalling them:
+  `src/oracle/contract-schemas.jsonl` (written through `src/test-utils/contract-schemas-oracle.ts`,
+  the engine contract's asset schemas and the plugin manifest) and, in
+  `plugin-visual`, `src/oracle/facet-write.jsonl`. The encoding and the damaged-input
+  generator are `packages/model/src/test-utils/schema-oracle.ts` and `broken-variants.ts`.
+- **A change to a contract's constructs moves three things**: the dialect's parse in
+  `crates/xtask`, the emitters, and the interpreter in `crates/core/facet-engine/src/schema`,
+  which refuses a keyword it does not know by name, so a new keyword fails
+  `crates/core/plugin-visual/tests/contract_drift.rs` rather than being judged with
+  a rule quietly missing.
+- Findings about Zod 4.6.7 that the first draft got wrong (a list past its bound is
+  refused alone, length checks run on any value with a `length`, ...) are in
+  `docs/contributing/parity/facet-engine.md`.
+

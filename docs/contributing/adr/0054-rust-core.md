@@ -874,6 +874,24 @@ provisionally until the owner answers; the alternative is a core in the widget. 
 TypeScript writer is deleted outright. Declines are refusals where the TypeScript
 answered ([the parity checklist](../parity/json-canvas-codec.md)).
 
+**Shipped (step 6, S6).** `whiteboard_facet_engine::schema` interprets the
+contract dialect at run time (owner decision q41): a contract file's `$defs`
+compile into nodes and `Contracts::validate` judges a payload as the generated
+Zod does, issue for issue in path and code and in order (the message may differ,
+q43), so a plugin's payload schemas are data and a plugin not built into the
+binary is judged by the same walk. The host supplies a contract's matchers,
+named checks and `x-wb-external` definitions by name, and the model-only
+constructs are refused at load by name. `whiteboard_facet_engine::registry`
+builds over plugin manifests and answers `targets_of`, `asset_refs_of` and
+`validate_facet_write` in the TypeScript registry's stage order. Both are held
+to two recorded oracles (819 cases of the engine contract's asset schemas and
+the plugin manifest; 2,768 lines of the bundled registry's declarations and
+writes), replayed natively and on wasm32. The oracle found six behaviours of
+Zod 4.6.7 the plan did not name (a list past its bound is refused alone, the
+length checks run on any value with a `length`, among them); they are in
+[the parity checklist](../parity/facet-engine.md). There is no wasm export and
+no switch yet: the export, the shim and the `PORTED_FUNCTIONS` entries are S8.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

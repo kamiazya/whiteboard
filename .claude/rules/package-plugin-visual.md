@@ -485,3 +485,15 @@ stayed green — two affordances aiming at the same pixel.
   the data half, because apps/web may import this package and not
   server-core, and one judgement is what keeps a row and a tool from
   admitting different things.
+
+## The write path is recorded for the Rust registry
+
+`src/oracle/facet-write.jsonl` is the bundled registry's write path (declarations,
+and writes at the key, version, schema and asset stages, with each refusal's issues
+in path, code and order) as `src/test-utils/facet-write-oracle.ts` draws it from the
+facets' own schemas, and `facet-write-recorded-oracle.test.ts` asks today's registry
+every recorded question again. `crates/core/plugin-visual/tests/facet_write_oracle.rs`
+replays it through the Rust registry, with this plugin's matchers, checks and the
+model's `CanvasColor` as the host; re-record with `WHITEBOARD_RECORD_ORACLE=1` after
+a deliberate change to a facet's schema or a plugin asset table.
+
