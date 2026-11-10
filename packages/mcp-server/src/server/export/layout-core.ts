@@ -34,15 +34,17 @@ const log = getLogger('layout-core')
  * the Rust core declines is answered by the TypeScript in every mode.
  *
  * `WHITEBOARD_CORE_SPATIAL` is the same switch for the JSON Canvas codec
- * (every read and write of a JSON Canvas document). It is `ts` unless
- * something sets it while its parity checklist is open
- * (docs/contributing/parity/json-canvas-codec.md); the dev scripts and CI's
- * test jobs set `differential`.
+ * (every read and write of a JSON Canvas document). It is `rust` unless
+ * something sets it, like the others: the port passed its parity checklist
+ * (docs/contributing/parity/json-canvas-codec.md), and the owner chose the
+ * core despite its boundary cost (decision q39). The dev scripts and CI's
+ * test jobs set `differential`; `ts` is the rollback while the TypeScript
+ * exists.
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_OKF: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_SPATIAL: z.enum(['ts', 'differential', 'rust']).default('ts'),
+  WHITEBOARD_CORE_SPATIAL: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })

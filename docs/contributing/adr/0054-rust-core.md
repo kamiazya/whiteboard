@@ -818,6 +818,17 @@ boundary section has the numbers. That is what the switch's default is decided
 on, and it is not decided here: there is no switch. See
 [parity/json-canvas-codec.md](../parity/json-canvas-codec.md).
 
+**Status note (2026-11-10, the third module defaults to `rust`).** The JSON
+Canvas codec is switched by `spatialCodec` in `packages/codec`, set by
+`WHITEBOARD_CORE_SPATIAL` in the daemon and `VITE_WHITEBOARD_CORE_SPATIAL` in
+the web app, which ran it `differential` in CI's daemon, browser and packaged
+jobs with no difference or decline. Every row of its checklist is met or not
+applicable, and both settings now default to `rust` (a test run of the web app
+stays `ts`), with `=ts` as the rollback. The boundary cost above was the open
+question, and the owner took the core despite it (decision q39): the TypeScript
+is deleted on the default schedule, the release after the first that defaults
+to `rust`.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

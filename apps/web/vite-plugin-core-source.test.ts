@@ -18,7 +18,12 @@ function loadOf(env: Env, shipping: Shipping = {}, command = 'build'): Load {
   return plugin.load as Load
 }
 const PRODUCTION = { DEV: false, MODE: 'production' }
-const TYPESCRIPT = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts', VITE_WHITEBOARD_CORE_OKF: 'ts' }
+const TYPESCRIPT = {
+  ...PRODUCTION,
+  VITE_WHITEBOARD_CORE: 'ts',
+  VITE_WHITEBOARD_CORE_OKF: 'ts',
+  VITE_WHITEBOARD_CORE_SPATIAL: 'ts',
+}
 
 const SOURCE = '/repo/apps/web/src/lib/spatial/layout-core-source.ts'
 
@@ -78,6 +83,13 @@ describe('coreSourcePlugin', () => {
     const routingOnly = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts' }
     expect(() => loadOf(routingOnly, { artifactStaged: false })).toThrow(
       /VITE_WHITEBOARD_CORE_OKF=ts/,
+    )
+  })
+
+  it('does not treat routing and OKF in TypeScript as an opt-out, since JSON Canvas defaults to the core', () => {
+    const twoOfThree = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts', VITE_WHITEBOARD_CORE_OKF: 'ts' }
+    expect(() => loadOf(twoOfThree, { artifactStaged: false })).toThrow(
+      /VITE_WHITEBOARD_CORE_SPATIAL=ts/,
     )
   })
 

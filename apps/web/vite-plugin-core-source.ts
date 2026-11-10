@@ -29,8 +29,8 @@ export interface CoreSourceOptions {
  * never resolved.
  *
  * Only a build that opted out of the core for routing, OKF AND JSON Canvas
- * (`VITE_WHITEBOARD_CORE=ts`, `VITE_WHITEBOARD_CORE_OKF=ts`, and
- * `VITE_WHITEBOARD_CORE_SPATIAL` unset or `ts`) may be stubbed. A
+ * (`VITE_WHITEBOARD_CORE=ts`, `VITE_WHITEBOARD_CORE_OKF=ts` and
+ * `VITE_WHITEBOARD_CORE_SPATIAL=ts`) may be stubbed. A
  * production build routes with `rust` by default, and one that did so without
  * the wasm would ship a stub that degrades every layout to the TypeScript
  * with nothing failing, so it is a build error instead. The dev server is
