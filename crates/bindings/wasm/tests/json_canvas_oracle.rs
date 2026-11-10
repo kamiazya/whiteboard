@@ -113,10 +113,9 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
         let text = case["t"].as_str().unwrap_or_default();
         let got = answer(&json_canvas_parse(text));
         if got[0] == "refused" {
-            // Only a surrogate escape, a link or a deep nesting is declined.
+            // Only a surrogate escape or a deep nesting is declined; a link is judged.
             let earned = match got[2].as_str() {
                 Some("lone-surrogate") => spells_surrogate(text),
-                Some("url") => text.contains("\"link\""),
                 Some("too-deep") => nesting(text) > whiteboard_codec::json_canvas::MAX_DEPTH,
                 _ => false,
             };
@@ -149,32 +148,25 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
         &problems[..problems.len().min(5)]
     );
     assert!(
-        read > 650 && refused > 550 && (40..100).contains(&declined),
+        read > 650 && refused > 550 && (15..40).contains(&declined),
         "{read} {refused} {declined}"
     );
 }
 
 #[test]
 fn every_recorded_canvas_is_written_as_the_typescript_wrote_it() {
-    let (mut written, mut refused, mut declined, mut problems) =
-        (0usize, 0usize, 0usize, Vec::new());
+    let (mut written, mut refused, mut problems) = (0usize, 0usize, Vec::new());
     for case in recording().iter().filter(|c| c["k"] == "w") {
         let canvas = wire(&case["c"]).to_string();
         let got = json_canvas_serialize(&canvas, case["m"] == "strict");
         if let Some(y) = case.get("y").and_then(Json::as_str) {
             if got == y {
                 written += 1;
-            } else if answer(&got) == json!(["refused", "malformed", "url"])
-                && y.contains("\"link\"")
-            {
-                declined += 1;
             } else {
                 problems.push(format!("wrote {got:.200}, expected {y:.200}"));
             }
         } else if answer(&got)[0] == "schema" && bare(&answer(&got)[1]) == case["err"]["issues"] {
             refused += 1;
-        } else if answer(&got) == json!(["refused", "malformed", "url"]) {
-            declined += 1;
         } else {
             problems.push(format!("wrote {got:.200}, the strict mode refused {}", case["err"]));
         }
@@ -185,8 +177,5 @@ fn every_recorded_canvas_is_written_as_the_typescript_wrote_it() {
         problems.len(),
         &problems[..problems.len().min(5)]
     );
-    assert!(
-        written > 400 && refused > 80 && (3..60).contains(&declined),
-        "{written} {refused} {declined}"
-    );
+    assert!(written > 400 && refused > 80, "{written} {refused}");
 }

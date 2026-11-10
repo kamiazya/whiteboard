@@ -490,7 +490,7 @@ fn a_links_value_is_its_text_trimmed_and_without_tabs_and_line_breaks() {
 }
 
 #[test]
-fn a_url_only_the_hosts_tables_can_judge_is_declined() {
+fn a_link_with_an_ipv6_percent_encoded_international_or_file_host_is_read() {
     for url in [
         "http://\u{e9}.com",
         "http://xn--nxasmq6b.com",
@@ -499,8 +499,12 @@ fn a_url_only_the_hosts_tables_can_judge_is_declined() {
         "file:///x",
         "foo://[::1]",
     ] {
-        assert_eq!(link(url), Err(Failure::Declined(Decline::Url)), "{url}");
+        assert!(link(url).is_ok(), "{url}");
     }
+    assert_eq!(
+        refused(&one_node(r#""type":"link","url":"http://[::1""#)),
+        vec![issue(vec![key("nodes"), PathStep::Index(0), key("url")], Code::InvalidFormat)]
+    );
 }
 
 // ------------------------------------------------------------------ declining
@@ -734,10 +738,7 @@ fn a_link_the_strict_mode_cannot_judge_is_declined_and_one_it_judges_is_checked(
         serialize(&linked("nonsense"), Mode::Strict),
         Err(WriteFailure::Schema(vec![issue(at, Code::InvalidFormat)]))
     );
-    assert_eq!(
-        serialize(&linked("http://[::1]"), Mode::Strict),
-        Err(WriteFailure::Declined(Decline::Url))
-    );
+    assert!(serialize(&linked("http://[::1]"), Mode::Strict).is_ok());
     assert!(serialize(&linked("nonsense"), Mode::Extended).is_ok());
 }
 

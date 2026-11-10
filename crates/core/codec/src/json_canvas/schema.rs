@@ -8,7 +8,7 @@
 //! the value in place, which is why a document can carry one and still be
 //! checked for duplicate ids.
 
-use super::issue::{Code, Decline};
+use super::issue::Code;
 use super::length;
 use super::url;
 use whiteboard_model::checks::canvas_color_hex;
@@ -137,15 +137,12 @@ pub(super) fn subpath(value: &Value) -> Read<&str> {
 }
 
 /// `z.url()`: the value is the trimmed text without tabs and line breaks, and
-/// it is valid when the host's URL parser accepts it. Declines when only that
-/// parser's tables can say.
-pub(super) fn link_url(value: &Value) -> Result<Read<String>, Decline> {
+/// it is valid when the host's URL parser accepts it.
+pub(super) fn link_url(value: &Value) -> Read<String> {
     let (text, mut flaws) = string(value);
-    let Some(text) = text else { return Ok((None, flaws)) };
-    match url::zod_url_valid(text) {
-        None => return Err(Decline::Url),
-        Some(false) => flaws.push(continuing(Code::InvalidFormat)),
-        Some(true) => {}
+    let Some(text) = text else { return (None, flaws) };
+    if !url::zod_url_valid(text) {
+        flaws.push(continuing(Code::InvalidFormat));
     }
-    Ok((Some(url::zod_url_value(text)), flaws))
+    (Some(url::zod_url_value(text)), flaws)
 }

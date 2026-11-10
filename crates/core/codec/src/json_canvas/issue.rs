@@ -42,10 +42,6 @@ pub enum Decline {
     TooDeep,
     /// A string with a lone UTF-16 surrogate, which a Rust `String` cannot hold.
     LoneSurrogate,
-    /// A link whose validity as a URL is decided by tables this crate does not
-    /// carry (an internationalised or `xn--` host, a percent-encoded host, an
-    /// IPv6 literal, a `file` URL).
-    Url,
     /// A value JSON has no spelling for.
     Unwritable,
 }
