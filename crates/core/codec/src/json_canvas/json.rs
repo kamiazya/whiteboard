@@ -44,13 +44,11 @@ struct Reader<'a> {
 }
 
 /// An object under construction: entries in first-seen order, indexed by key
-/// once it grows past what a scan answers quickly.
+/// so that a repeated key finds its first holder without a scan.
 struct Members {
     entries: Map,
     index: BTreeMap<String, usize>,
 }
-
-const SCAN_LIMIT: usize = 16;
 
 impl Members {
     fn new() -> Self {
@@ -58,23 +56,13 @@ impl Members {
     }
 
     fn insert(&mut self, key: String, value: Value) {
-        let held = if self.entries.len() <= SCAN_LIMIT {
-            self.entries.iter().position(|(held, _)| *held == key)
-        } else {
-            if self.index.is_empty() {
-                for (at, (held, _)) in self.entries.iter().enumerate() {
-                    self.index.insert(held.clone(), at);
-                }
+        if let Some(&at) = self.index.get(&key) {
+            if let Some(entry) = self.entries.get_mut(at) {
+                entry.1 = value;
             }
-            self.index.get(&key).copied()
-        };
-        if let Some(entry) = held.and_then(|at| self.entries.get_mut(at)) {
-            entry.1 = value;
             return;
         }
-        if !self.index.is_empty() {
-            self.index.insert(key.clone(), self.entries.len());
-        }
+        self.index.insert(key.clone(), self.entries.len());
         self.entries.push((key, value));
     }
 }

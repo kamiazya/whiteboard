@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { parseSpatial } from '../../spatial/parse.js'
-import { type SpatialSerializeMode, serializeSpatial } from '../../spatial/serialize.js'
+import { serializeSpatial } from '../../spatial/serialize.js'
 import {
   decode as decodeBits,
   type Encoded,
@@ -45,7 +45,7 @@ function decode(encoded: Compact): unknown {
   return decodeBits(encoded)
 }
 
-type Issues = [(string | number)[], string][]
+export type Issues = [(string | number)[], string][]
 
 type Refusal =
   | { stage: 'json-syntax' }
@@ -58,6 +58,9 @@ export type WriterCase = { k: 'w'; m: SpatialSerializeMode; c: Compact } & (
   | { err: { issues: Issues } }
 )
 export type RecordedCase = ReaderCase | WriterCase
+
+/** How a canvas is written: the second argument of `serializeSpatial`. */
+type SpatialSerializeMode = Parameters<typeof serializeSpatial>[1]
 
 type Obj = Record<string, unknown>
 

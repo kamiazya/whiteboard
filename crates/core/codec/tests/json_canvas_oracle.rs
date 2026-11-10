@@ -537,13 +537,13 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
     let recording = recording();
     let cases: Vec<&Json> = recording.iter().filter(|c| c["k"] == "r").collect();
     let mut agreed: Vec<String> = Vec::new();
-    let mut declined = 0usize;
+    let mut held_back: Vec<Decline> = Vec::new();
     let mut problems: Vec<String> = Vec::new();
     for case in &cases {
         match reader_verdict(case) {
             Verdict::Agrees(what) => agreed.push(what),
             Verdict::Declined(why) => {
-                declined += 1;
+                held_back.push(why);
                 let text = case["t"].as_str().unwrap_or_default();
                 if !declined_rightly(why, text) {
                     problems.push(format!("declined as {why:?} for no reason: {text:?}"));
@@ -562,18 +562,23 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
     // An agreement over nothing passes, so say what the recording reached.
     let count = |what: &str| agreed.iter().filter(|v| v.as_str() == what).count();
     assert!(cases.len() > 1300, "{} texts replayed", cases.len());
+    let declines = |why: Decline| held_back.iter().filter(|d| **d == why).count();
     assert!(
-        declined > 5 && declined < cases.len() / 20,
-        "{declined} of {} texts declined",
+        held_back.len() < cases.len() / 20,
+        "{} of {} texts declined",
+        held_back.len(),
         cases.len()
     );
-    assert!(count("value") > 100, "{} texts read to a document", count("value"));
+    for why in [Decline::LoneSurrogate, Decline::TooDeep, Decline::Url] {
+        assert!(declines(why) > 2, "{} texts declined as {why:?}", declines(why));
+    }
+    assert!(count("value") > 650, "{} texts read to a document", count("value"));
     assert!(
         count("refusal as schema") > 400,
         "{} texts refused by the schema",
         count("refusal as schema")
     );
-    assert!(count("refusal as syntax") > 40, "{} texts are not JSON", count("refusal as syntax"));
+    assert!(count("refusal as syntax") > 100, "{} texts are not JSON", count("refusal as syntax"));
     assert!(
         count("refusal as conversation") > 3,
         "{} files hold comments",
@@ -651,6 +656,6 @@ fn every_recorded_canvas_is_written_as_the_typescript_wrote_it() {
     );
     assert!(cases.len() > 550, "{} canvases replayed", cases.len());
     assert!(written > 400, "{written} canvases written");
-    assert!(refused > 40, "{refused} canvases refused by the strict mode");
-    assert!(declined < cases.len() / 10, "{declined} canvases declined");
+    assert!(refused > 80, "{refused} canvases refused by the strict mode");
+    assert!(declined > 3 && declined < cases.len() / 10, "{declined} canvases declined");
 }

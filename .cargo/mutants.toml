@@ -240,4 +240,8 @@ exclude_re = [
   # digit-by-digit conversion; at exactly its bound the literal is past the
   # largest double, so `parse` answers infinity either way.
   'number\.rs:\d+:47: replace > with (==|>=) in radix_to_f64$',
+  # codec json_canvas reader: a cursor that never advances leaves every loop
+  # over the text with nothing to end it, so the parse of any text hangs and
+  # the timeout is the only detection.
+  'json\.rs:\d+:\d+: replace Reader<.+>::bump with \(\)$',
 ]

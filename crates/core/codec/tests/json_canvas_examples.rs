@@ -195,6 +195,30 @@ fn an_edge_carries_its_extension_and_an_empty_bends_list_is_lost() {
 }
 
 #[test]
+fn a_list_of_bends_holds_at_most_sixty_four_points_on_an_edge_and_on_a_line() {
+    let points = |count: usize| {
+        let points: Vec<String> = (0..count).map(|at| format!(r#"{{"x":{at},"y":0}}"#)).collect();
+        points.join(",")
+    };
+    let edge = |count: usize| {
+        let text = format!(
+            r#"{{"nodes":[{{"id":"a",{BOX},"type":"group"}}],"edges":[{{"id":"e","fromNode":"a","toNode":"a","x-whiteboard":{{"bends":[{}]}}}}]}}"#,
+            points(count)
+        );
+        read(&text).edges.remove(0).bends.map(|bends| bends.len())
+    };
+    assert_eq!((edge(1), edge(64), edge(65)), (Some(1), Some(64), None));
+    let line = |count: usize| {
+        let text = format!(
+            r#"{{"x-whiteboard":{{"lines":[{{"id":"l","from":{{"kind":"point","point":{{"x":0,"y":0}}}},"to":{{"kind":"point","point":{{"x":1,"y":1}}}},"bends":[{}]}}]}}}}"#,
+            points(count)
+        );
+        read(&text).lines.map(|lines| lines.len())
+    };
+    assert_eq!((line(1), line(64), line(65)), (Some(1), Some(1), None));
+}
+
+#[test]
 fn ink_rides_the_root_extension_and_one_bad_line_costs_all_of_it() {
     let line = |extra: &str| {
         format!(
@@ -387,10 +411,27 @@ fn a_document_that_is_no_object_is_refused_at_its_root() {
     assert_eq!(refused(r#"{"edges":{}}"#), vec![issue(vec![key("edges")], Code::InvalidType)]);
 }
 
+#[test]
+fn a_repeated_key_in_a_large_object_still_keeps_its_first_place_and_last_value() {
+    let members: Vec<String> = (0..40).map(|at| format!(r#""k{at}":{at}"#)).collect();
+    let text = format!(
+        r#"{{"x-whiteboard":{{"facets":{{"a.b/v0":{{{},"k33":"last","k2":"again","k39":null}}}}}}}}"#,
+        members.join(",")
+    );
+    let Value::Map(payload) = read(&text).facets.unwrap_or_default().remove(0).1 else {
+        panic!("a map")
+    };
+    assert_eq!(payload.len(), 40);
+    assert_eq!(payload[33], ("k33".to_string(), Value::String("last".to_string())));
+    assert_eq!(payload[2], ("k2".to_string(), Value::String("again".to_string())));
+    assert_eq!(payload[39], ("k39".to_string(), Value::Null));
+    assert_eq!(payload[0], ("k0".to_string(), Value::Number(0.0)));
+}
+
 // ------------------------------------------------------------------ links
 
 #[test]
-fn a_link_is_a_url_the_host_parses_and_its_value_is_the_trimmed_text() {
+fn a_link_is_a_url_the_host_parses() {
     for ok in [
         "https://example.com",
         "HTTP://EXAMPLE.COM:8080/x?y#z",
@@ -398,6 +439,7 @@ fn a_link_is_a_url_the_host_parses_and_its_value_is_the_trimmed_text() {
         "http:example.com",
         "http:\\\\example.com",
         "http://1.2.3.4:65535",
+        "http://1.2.3.4.",
         "http://0x7f.1",
         "http://4294967295",
         "http://a:",
@@ -411,6 +453,10 @@ fn a_link_is_a_url_the_host_parses_and_its_value_is_the_trimmed_text() {
     ] {
         assert!(link(ok).is_ok(), "{ok}");
     }
+}
+
+#[test]
+fn a_link_that_is_no_url_is_a_format_error_at_its_url() {
     for bad in [
         "",
         "abc",
@@ -428,6 +474,9 @@ fn a_link_is_a_url_the_host_parses_and_its_value_is_the_trimmed_text() {
         "http://a<b",
         "http://a^b",
         "http://256.1.1.1",
+        "http://256.1.1.1.",
+        "http://a.9.",
+        "http://a.9",
         "http://1.2.3.4.5",
         "http://4294967296",
         "http://09",
@@ -445,8 +494,14 @@ fn a_link_is_a_url_the_host_parses_and_its_value_is_the_trimmed_text() {
             "{bad:?}"
         );
     }
-    let trimmed = link("\u{a0}\t https://exa\nmple.com \u{2003}").expect("a link");
-    let location = trimmed.nodes[0].resource.as_ref().and_then(|r| r.location.clone());
+}
+
+#[test]
+fn a_links_value_is_its_text_trimmed_and_without_tabs_and_line_breaks() {
+    let read = link("\u{a0}\t https://exa\nmple.com \u{2003}");
+    assert!(read.is_ok(), "{read:?}");
+    let canvas = read.unwrap_or_default();
+    let location = canvas.nodes[0].resource.as_ref().and_then(|r| r.location.clone());
     assert_eq!(location.as_deref(), Some("https://example.com"));
 }
 
@@ -477,8 +532,27 @@ fn what_a_rust_string_cannot_hold_or_the_core_caps_is_declined() {
     let deep = |levels: usize| format!("{}{}", "[".repeat(levels), "]".repeat(levels));
     assert_eq!(refused(&deep(MAX_DEPTH)), vec![issue(Vec::new(), Code::InvalidType)]);
     assert_eq!(parse(&deep(MAX_DEPTH + 1)), Err(Failure::Declined(Decline::TooDeep)));
-    let big = format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_BYTES));
-    assert_eq!(parse(&big), Err(Failure::Declined(Decline::TooLarge)));
+    let padded = |bytes: usize| {
+        let wrapper = r#"{"x-whiteboard":{"tags":[""#.len() + r#""]}}"#.len();
+        format!(r#"{{"x-whiteboard":{{"tags":["{}"]}}}}"#, "x".repeat(bytes - wrapper))
+    };
+    assert_eq!(padded(MAX_BYTES).len(), MAX_BYTES);
+    assert_eq!(read(&padded(MAX_BYTES)).tags.map(|t| t.len()), Some(1));
+    assert_eq!(parse(&padded(MAX_BYTES + 1)), Err(Failure::Declined(Decline::TooLarge)));
+    assert_eq!(
+        parse(&format!("{{\"a\":\"{}\"}}", "x".repeat(MAX_BYTES))),
+        Err(Failure::Declined(Decline::TooLarge))
+    );
+}
+
+#[test]
+fn the_caps_are_the_ones_the_registry_declares() {
+    let registry: serde_json::Value =
+        serde_json::from_str(include_str!("../../../input-caps.json")).unwrap_or_default();
+    let entry = &registry["entries"]["whiteboard-codec::json_canvas::parse"];
+    assert_eq!(entry["maxBytes"], json!(MAX_BYTES));
+    assert_eq!(entry["maxDepth"], json!(MAX_DEPTH));
+    assert_eq!(MAX_BYTES, 4 * 1024 * 1024);
 }
 
 // ------------------------------------------------------------------ writing

@@ -2,8 +2,8 @@
 //!
 //! Built field by field, in the order the TypeScript projection builds its
 //! object literals, so the keys come out in the same order. Geometry crosses
-//! as the nearest whole pixel, ink as the number JSON can carry back, and the
-//! extension key is left out entirely in the strict mode.
+//! as the nearest whole pixel, ink as it is, and the extension key is left out
+//! entirely in the strict mode.
 
 use super::issue::Mode;
 use whiteboard_det::math::js_round;
@@ -48,14 +48,16 @@ fn number(value: f64) -> Value {
     Value::Number(value)
 }
 
-/// `Math.round(value) + 0`: JSON has no negative zero.
+/// `Math.round(value)`. The TypeScript adds `+ 0` so that no `-0` is left in
+/// the object it hands on; the text written here prints `-0` as `0`, as
+/// `JSON.stringify` does, so there is nothing to normalise.
 fn pixel(value: f64) -> f64 {
-    js_round(value) + 0.0
+    js_round(value)
 }
 
-/// A coordinate JSON text can carry back, which is every number but `-0`.
-fn json_zero(value: f64) -> f64 {
-    value + 0.0
+/// A coordinate that crosses unrounded: ink is sub-pixel by nature.
+fn unrounded(value: f64) -> f64 {
+    value
 }
 
 fn color(color: Option<&CanvasColor>) -> Option<Value> {
@@ -201,7 +203,7 @@ fn line_end(end: &LineEnd) -> Value {
             .done(),
         LineEnd::LineEndPoint(free) => Obj::new()
             .put("kind", text("point"))
-            .put("point", point(&free.point, json_zero))
+            .put("point", point(&free.point, unrounded))
             .maybe("end", free.end.map(|head| text(head.as_str())))
             .done(),
     }
@@ -214,7 +216,7 @@ fn line(line: &CanvasLine) -> Value {
         .put("to", line_end(&line.to))
         .maybe("color", color(line.color.as_ref()))
         .maybe("label", label(line.label.as_ref()))
-        .maybe("bends", points(line.bends.as_ref(), json_zero))
+        .maybe("bends", points(line.bends.as_ref(), unrounded))
         .maybe("facets", facets(line.facets.as_ref()))
         .done()
 }

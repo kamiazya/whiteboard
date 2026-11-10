@@ -5,6 +5,7 @@ import {
   answerAgain,
   decodeRecording,
   encodeRecording,
+  type Issues,
   type ReaderCase,
   type WriterCase,
 } from '../../test-utils/json-canvas-oracle/oracle.js'
@@ -34,8 +35,6 @@ const WRITER_CASES = 600
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
   writeFileSync(FILE, encodeRecording([...readerCases(READER_CASES), ...writerCases(WRITER_CASES)]))
 }
-
-type Issues = Extract<ReaderCase, { err: { issues: unknown } }>['err']['issues']
 
 describe('the recorded JSON Canvas oracle', () => {
   const recorded = decodeRecording(readFileSync(FILE, 'utf8'))

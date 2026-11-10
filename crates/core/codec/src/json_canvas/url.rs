@@ -127,9 +127,6 @@ fn domain_valid(host: &str) -> Option<bool> {
 fn ends_in_number(host: &str) -> bool {
     let mut parts: Vec<&str> = host.split('.').collect();
     if parts.last() == Some(&"") {
-        if parts.len() == 1 {
-            return false;
-        }
         parts.pop();
     }
     let Some(last) = parts.last() else { return false };
@@ -161,7 +158,7 @@ fn ipv4_number(part: &str) -> Option<u64> {
 
 fn ipv4_valid(host: &str) -> bool {
     let mut parts: Vec<&str> = host.split('.').collect();
-    if parts.last() == Some(&"") && parts.len() > 1 {
+    if parts.last() == Some(&"") {
         parts.pop();
     }
     if parts.len() > 4 {

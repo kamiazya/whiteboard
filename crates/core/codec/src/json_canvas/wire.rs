@@ -255,19 +255,14 @@ fn node(cx: &mut Cx, value: &Value) -> Option<SpatialNode> {
             return None;
         }
     };
-    let mark = cx.aborts;
     let shared = shared(cx, entries);
     let kind = kind(cx, entries, wire_type);
-    if cx.aborts > mark {
-        return None;
-    }
     Some(node_from(shared?, kind?))
 }
 
 /// One element of `edges`, its keys read in the schema's order.
 fn edge(cx: &mut Cx, value: &Value) -> Option<CanvasEdge> {
     let entries = cx.entries(value)?;
-    let mark = cx.aborts;
     let id = cx.required(entries, "id", |v| owned(schema::node_id(v)));
     let from_node = cx.required(entries, "fromNode", |v| owned(schema::node_id(v)));
     let to_node = cx.required(entries, "toNode", |v| owned(schema::node_id(v)));
@@ -280,9 +275,6 @@ fn edge(cx: &mut Cx, value: &Value) -> Option<CanvasEdge> {
     let color = cx.optional(entries, "color", schema::color);
     let label = cx.optional(entries, "label", text);
     let extension = get(entries, "x-whiteboard").and_then(extension::edge);
-    if cx.aborts > mark {
-        return None;
-    }
     let extension = extension.unwrap_or(EdgeExtension { bends: None, facets: None, tags: None });
     Some(CanvasEdge {
         id: id?,
