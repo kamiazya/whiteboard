@@ -311,3 +311,60 @@ fn the_plain_rust_array_of_a_matched_string_points_at_its_matcher() {
     assert!(rust.contains("pub type Hexes = Vec<Hex>;"), "{rust}");
     assert!(rust.contains("Matched by `crate::checks::a_only`."), "{rust}");
 }
+
+#[test]
+fn an_array_bound_may_carry_the_sentence_zod_refuses_with() {
+    let said = swapped(
+        BENDS,
+        r#""maxItems": 64"#,
+        r#""maxItems": 64, "x-wb-maxItemsMessage": "more than 64 \"bends\"""#,
+    );
+    let (zod, rust) = emitted(&format!("{said}, {POINT}"));
+    assert!(zod.contains(r#".max(64, 'more than 64 "bends"')"#), "{zod}");
+    assert!(!rust.contains("more than 64"), "{rust}");
+    let (zod, _) = emitted(&format!("{BENDS}, {POINT}"));
+    assert!(zod.contains(".max(64)"), "{zod}");
+}
+
+#[test]
+fn a_max_items_message_with_nothing_to_speak_for_or_unspeakable_is_refused() {
+    let without = swapped(BENDS, r#""maxItems": 64"#, r#""x-wb-maxItemsMessage": "too many""#);
+    refused(&format!("{without}, {POINT}"), "needs a maxItems");
+    for (message, expect) in [("a bend's", "single quotes"), ("  ", "empty")] {
+        let text = swapped(
+            BENDS,
+            r#""maxItems": 64"#,
+            &format!(r#""maxItems": 64, "x-wb-maxItemsMessage": "{message}""#),
+        );
+        refused(&format!("{text}, {POINT}"), expect);
+    }
+    let on_a_string =
+        r#""S": { "description": "S.", "type": "string", "x-wb-maxItemsMessage": "x" }"#;
+    refused(on_a_string, "`x-wb-maxItemsMessage` does not apply to a string");
+}
+
+#[test]
+fn a_pattern_may_escape_the_slash_that_would_close_its_regex_literal() {
+    let key = |pattern: &str| {
+        format!(
+            r#""Key": {{ "description": "K.", "type": "string", "pattern": "{pattern}", "x-wb-matcher": "key", "x-wb-message": "m" }}"#
+        )
+    };
+    let zod = outputs(&plain(&key("^a\\\\/v$"), IN_MODEL, true)).unwrap().remove(0).1;
+    assert!(zod.contains(r".regex(/^a\/v$/, 'm')"), "{zod}");
+    for pattern in ["^a/v$", "^a[/]v$", "^a\\\\\\\\/v$"] {
+        let errors = outputs(&plain(&key(pattern), IN_MODEL, true)).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains("every `/` escaped")), "{pattern}: {errors:?}");
+    }
+}
+
+#[test]
+fn an_enum_past_the_line_width_breaks_its_array_the_way_biome_does() {
+    let long = r#""Long": { "description": "L.", "type": "string",
+      "enum": ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot", "golf", "hotel", "india", "juliet"] }"#;
+    let (zod, _) = emitted(long);
+    assert!(zod.contains("export const longSchema = z.enum([\n  'alpha',\n  'bravo',"), "{zod}");
+    assert!(zod.contains("  'juliet',\n])\n"), "{zod}");
+    let (zod, _) = emitted(SIDE);
+    assert!(zod.contains("z.enum(['top', 'right', '1'])"), "{zod}");
+}

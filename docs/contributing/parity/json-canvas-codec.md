@@ -14,7 +14,11 @@ is `met` or `n/a`, and the switch has moved: both default to `rust` (a test run
 of the web app stays `ts`), with `=ts` as the rollback. Row 12's cost was the
 open question, and owner decision q39 took the core despite it. The TypeScript
 is deleted on the default schedule, the release after the first that defaults
-to `rust`.
+to `rust`. The cost is revisited once the migration is done, with the owner's
+suggestion from q39 as the first candidate: a binary or streamed boundary in
+place of JSON text in both directions, so the host stops re-parsing what the
+core already parsed. ADR-0054's final shape removes most of it anyway, since
+the ops that call the codec will be Rust too and the canvas will not cross.
 
 Ports, in order:
 - the spatial leaf types and the whole canvas, generated from

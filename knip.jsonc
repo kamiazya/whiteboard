@@ -160,7 +160,12 @@
       // writes is committed so a clone builds offline, and it is re-run at
       // a Unicode release. Nothing imports it, and nothing should.
       "entry": ["scripts/*.mjs"],
-      "project": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.mjs"]
+      "project": ["src/**/*.ts", "src/**/*.tsx", "scripts/**/*.mjs"],
+      "ignoreIssues": {
+        // A generated module exports its whole contract, a schema and its
+        // inferred type per definition, whether or not a consumer reads each.
+        "src/generated/visual.zod.ts": ["exports", "types"]
+      }
     },
     "packages/canvas-viewer": {
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]

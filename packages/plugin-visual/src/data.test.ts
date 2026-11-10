@@ -17,7 +17,6 @@ import {
   resolveNodeTextAlign,
   resolveStrokeWidth,
   VISUAL_AXES_KEY,
-  VISUAL_AXES_MAX,
   VISUAL_EDGES_KEY,
   VISUAL_INK_KEY,
   VISUAL_SHAPE_KEY,
@@ -67,9 +66,7 @@ describe('visual.axes/v0', () => {
   const axes = (count: number) => Array.from({ length: count }, (_, i) => `x.k${i}/v0`)
 
   it('holds one board to 64 declared axes on write', () => {
-    // A literal, not the constant: every other case reads the limit back
-    // from itself, so a changed limit would pass them all.
-    expect(VISUAL_AXES_MAX).toBe(64)
+    // Literals: a limit read back from its own source would pass any change.
     expect(registry.validateFacetWrite(VISUAL_AXES_KEY, { axes: axes(64) }).ok).toBe(true)
     const over = registry.validateFacetWrite(VISUAL_AXES_KEY, { axes: axes(65) })
     expect(over.ok).toBe(false)

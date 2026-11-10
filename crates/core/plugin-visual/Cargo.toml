@@ -1,0 +1,19 @@
+[package]
+name = "whiteboard-plugin-visual"
+description = "The bundled visual plugin's facet payloads, generated from contracts/facets/visual."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dev-dependencies]
+whiteboard-model = { path = "../model" }
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

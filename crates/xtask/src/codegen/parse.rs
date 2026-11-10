@@ -58,7 +58,10 @@ pub(super) struct Emit {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(super) struct CheckModules {
-    pub(super) zod: String,
+    /// Absent where the Zod half needs no named check: a pattern is a regex
+    /// there and only its Rust matcher is hand-written.
+    #[serde(default, deserialize_with = "present")]
+    pub(super) zod: Option<String>,
     pub(super) rust: String,
 }
 
@@ -91,6 +94,9 @@ pub(super) struct Node {
     pub(super) min_items: Option<u32>,
     #[serde(rename = "maxItems", default, deserialize_with = "present")]
     pub(super) max_items: Option<u32>,
+    /// What Zod answers when a list is longer than `maxItems`.
+    #[serde(rename = "x-wb-maxItemsMessage", default, deserialize_with = "present")]
+    pub(super) max_items_message: Option<String>,
     #[serde(rename = "anyOf", default, deserialize_with = "present")]
     pub(super) any_of: Option<Vec<Node>>,
     #[serde(rename = "oneOf", default, deserialize_with = "present")]
@@ -201,6 +207,7 @@ impl Node {
             (self.items.is_some(), "items"),
             (self.min_items.is_some(), "minItems"),
             (self.max_items.is_some(), "maxItems"),
+            (self.max_items_message.is_some(), "x-wb-maxItemsMessage"),
             (self.any_of.is_some(), "anyOf"),
             (self.one_of.is_some(), "oneOf"),
             (self.discriminator.is_some(), "discriminator"),

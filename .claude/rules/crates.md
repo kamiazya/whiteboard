@@ -39,9 +39,9 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-model` | core | present | the frontmatter value tree, and the OKF frontmatter types generated from `contracts/model` with their hand-written checks (`checks.rs`), which `whiteboard-codec` reads and writes |
 | `whiteboard-facet-engine` | core | planned | facet registry, write validation, compat chain, derived form |
 | `whiteboard-scene` | core | planned | the scene vocabulary and the contribution traits |
-| `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer and the OKF envelope, across the wasm boundary as `okf_parse` / `okf_serialize` |
+| `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
-| `whiteboard-plugin-visual` | core | planned | the bundled visual plugin as an ordinary contribution |
+| `whiteboard-plugin-visual` | core | present | the simple visual facets' payload types, generated from `contracts/facets/visual`, and the matchers of their patterns; the plugin's contributions follow |
 | `whiteboard-canvas-render` | core | planned | composer, typesetter, line breaking, theme, SVG backend, digest |
 | `whiteboard-crdt` | core | planned | the loro bridge, workspace tree, file references, text limits |
 | `whiteboard-history` | core | planned | checkpoint scheduling, version retention, frontier encoding |

@@ -25,10 +25,12 @@ function bundledSilhouettes(): Map<string, string> {
   return silhouettes
 }
 
-/** The silhouettes `visual.shape/v0` accepts, from its enum. */
+/** The silhouettes `visual.shape/v0` accepts, from the contract that generates its schema. */
 function shapeKinds(): string[] {
-  const body = /kind: z\.enum\(\[([^\]]*)\]\)/.exec(read('packages/plugin-visual/src/data.ts'))?.[1]
-  return [...(body ?? '').matchAll(/'(\w+)'/g)].map((match) => match[1] as string)
+  const contract = JSON.parse(read('contracts/facets/visual/visual.schema.json')) as {
+    $defs: { VisualShapeKind: { enum: string[] } }
+  }
+  return contract.$defs.VisualShapeKind.enum
 }
 
 const page = read('docs/how-to/define-your-own-stencils.md')

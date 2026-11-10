@@ -87,20 +87,33 @@ fn missing_rust_checks(text: &str, wanted: &[&str]) -> Vec<String> {
     wanted.iter().filter(|name| !declared(name)).map(|n| (*n).to_owned()).collect()
 }
 
+/// The problems with one hand-written module: unreadable, or declaring none of
+/// the `names` a contract leans on that `missing` finds absent from it.
+fn unheld(
+    root: &Path,
+    path: &str,
+    names: &[&str],
+    missing: fn(&str, &[&str]) -> Vec<String>,
+) -> Vec<String> {
+    match std::fs::read_to_string(root.join(path)) {
+        Ok(text) => missing(&text, names)
+            .into_iter()
+            .map(|n| format!("{path}: declares no `{n}`"))
+            .collect(),
+        Err(e) => vec![format!("cannot read {path}: {e}")],
+    }
+}
+
 /// A contract's named checks and matchers exist in the hand-written modules
 /// it declares, in each language that leans on them.
 fn verify_checks(root: &Path, contract: &dialect::Contract) -> Result<(), Vec<String>> {
     let checked = dialect::check(contract)?;
     let Some(modules) = &contract.checks else { return Ok(()) };
     let mut v = Vec::new();
-    for (path, names, missing) in [
-        (&modules.zod, &checked.zod_checks, missing_zod_checks as fn(&str, &[&str]) -> Vec<String>),
-        (&modules.rust, &checked.rust_names, missing_rust_checks),
-    ] {
-        let text = std::fs::read_to_string(root.join(path))
-            .map_err(|e| vec![format!("cannot read {path}: {e}")])?;
-        v.extend(missing(&text, names).into_iter().map(|n| format!("{path}: declares no `{n}`")));
+    if let Some(path) = &modules.zod {
+        v.extend(unheld(root, path, &checked.zod_checks, missing_zod_checks));
     }
+    v.extend(unheld(root, &modules.rust, &checked.rust_names, missing_rust_checks));
     if v.is_empty() { Ok(()) } else { Err(v) }
 }
 

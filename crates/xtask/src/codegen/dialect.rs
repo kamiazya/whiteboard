@@ -8,7 +8,8 @@
 //! JSON cannot write them, and a Rust `f64` read from JSON cannot be one);
 //! booleans and integers; strings with a UTF-16 minimum, a pattern and a named
 //! check, a closed `enum` of values, or a `const`; arrays with an inclusive
-//! length bound, `$ref`s to a definition, any-values and records of them;
+//! length bound (and the sentence Zod refuses an overlong one with), `$ref`s
+//! to a definition, any-values and records of them;
 //! `anyOf` over definitions, or `oneOf` with the `discriminator` property
 //! whose constant picks the member; and objects whose unknown keys are refused,
 //! stripped or kept, with optional fields. A definition may be
@@ -95,6 +96,9 @@ pub(super) enum Ty<'a> {
         item: Box<Ty<'a>>,
         min: Option<u32>,
         max: Option<u32>,
+        /// What Zod refuses a list past `max` with, where the default is not
+        /// the sentence a reader needs.
+        max_message: Option<&'a str>,
     },
     /// A closed set of string values.
     Enum(Vec<&'a str>),
@@ -252,6 +256,11 @@ pub(super) fn check(contract: &Contract) -> Result<Checked<'_>, Vec<String>> {
     if (!zod_checks.is_empty() || !rust_names.is_empty()) && contract.checks.is_none() {
         v.push("x-wb-checks: a named check or matcher needs the modules that hold it".to_owned());
     }
+    if !zod_checks.is_empty() && contract.checks.as_ref().is_some_and(|m| m.zod.is_none()) {
+        v.push(
+            "x-wb-checks.zod: a named check needs the TypeScript module that holds it".to_owned(),
+        );
+    }
     if !contract.rust_serde
         && defs.iter().any(|d| d.ty.uses(Uses::Value) || d.ty.uses(Uses::Map))
         && !contract.emit.rust.starts_with("crates/core/model/src/")
@@ -285,7 +294,9 @@ fn check_header(contract: &Contract, v: &mut Vec<String>) {
         v.push(format!("x-wb-emit.rust: {e}"));
     }
     if let Some(modules) = &contract.checks {
-        if let Err(e) = sibling(&modules.zod, &contract.emit.zod, TargetKind::Zod) {
+        if let Some(zod) = &modules.zod
+            && let Err(e) = sibling(zod, &contract.emit.zod, TargetKind::Zod)
+        {
             v.push(format!("x-wb-checks.zod: {e}"));
         }
         if let Err(e) = sibling(&modules.rust, &contract.emit.rust, TargetKind::Rust) {
@@ -687,7 +698,8 @@ fn sibling(path: &str, output: &str, kind: TargetKind) -> Result<(), String> {
 }
 
 /// A pattern both a JavaScript regex literal and a hand-written Rust matcher
-/// can stand for: anchored, printable ASCII, no `/` to close the literal early.
+/// can stand for: anchored, printable ASCII, and any `/` escaped so it cannot
+/// close the literal early.
 /// Whether it means the same in both engines is the matcher's differential, not
 /// this scan's.
 fn pattern_source(source: &str) -> Result<(), &'static str> {
@@ -698,11 +710,22 @@ fn pattern_source(source: &str) -> Result<(), &'static str> {
     let escaped_end = body.bytes().rev().take_while(|&b| b == b'\\').count();
     if escaped_end % 2 == 1 {
         Err("must be anchored: the final `$` is escaped")
-    } else if body.is_empty() || !body.bytes().all(|b| (0x20..=0x7e).contains(&b) && b != b'/') {
-        Err("must be non-empty printable ASCII without `/`")
+    } else if body.is_empty() || !printable_with_slashes_escaped(body) {
+        Err("must be non-empty printable ASCII with every `/` escaped")
     } else {
         Ok(())
     }
+}
+
+fn printable_with_slashes_escaped(body: &str) -> bool {
+    let mut escaped = false;
+    for b in body.bytes() {
+        if !(0x20..=0x7e).contains(&b) || (b == b'/' && !escaped) {
+            return false;
+        }
+        escaped = !escaped && b == b'\\';
+    }
+    true
 }
 
 fn is_pascal(name: &str) -> bool {

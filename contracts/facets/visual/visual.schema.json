@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Visual facets",
+  "description": "The payloads of the simple facets of the bundled visual plugin: how a node, an edge or a canvas is drawn. Facets whose payload the dialect cannot yet state stay hand-written beside this contract.",
+  "x-wb-emit": {
+    "zod": "packages/plugin-visual/src/generated/visual.zod.ts",
+    "rust": "crates/core/plugin-visual/src/generated/visual.rs"
+  },
+  "x-wb-checks": {
+    "rust": "crates/core/plugin-visual/src/checks.rs"
+  },
+  "x-wb-describe": false,
+  "x-wb-rustSerde": false,
+  "x-wb-readonlyTypes": false,
+  "$defs": {
+    "NamespacedId": {
+      "description": "The id of a registered theme, stencil or icon: a plugin id and a name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "x-wb-matcher": "namespaced_id",
+      "x-wb-message": "must be a namespaced id like \"visual.diamond\""
+    },
+    "FacetKey": {
+      "description": "A facet key as ADR-0013 decision 2 grammars it: namespace, name and version.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\/v[0-9]+$",
+      "x-wb-matcher": "facet_key",
+      "x-wb-message": "must be a facet key like \"visual.shape/v0\""
+    },
+    "EdgeRoutingStyle": {
+      "description": "How an edge gets from one endpoint to the other once the router must step around something; the model vocabulary, spelled the same.",
+      "type": "string",
+      "enum": ["straight", "orthogonal", "curved"],
+      "x-wb-external": "../model-vocabulary.js"
+    },
+    "LineJumps": {
+      "description": "Whether a small arc is drawn where one edge crosses another; the model vocabulary, spelled the same.",
+      "type": "string",
+      "enum": ["none", "arc"],
+      "x-wb-external": "../model-vocabulary.js"
+    },
+    "VisualShapeKind": {
+      "description": "A silhouette a node may draw. The historic rect is the absent facet and has no value here.",
+      "type": "string",
+      "enum": ["ellipse", "diamond", "hexagon", "parallelogram", "cylinder", "octagon"]
+    },
+    "VisualShapeFacet": {
+      "description": "visual.shape/v0: what silhouette this node draws.",
+      "type": "object",
+      "properties": {
+        "kind": { "$ref": "#/$defs/VisualShapeKind", "description": "The silhouette." }
+      },
+      "required": ["kind"],
+      "x-wb-order": ["kind"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualTextAlign": {
+      "description": "Where the text of a node sits inside the space it has.",
+      "type": "string",
+      "enum": ["start", "center"]
+    },
+    "VisualTextFacet": {
+      "description": "visual.text/v0: where the text of a node sits; absent means its default.",
+      "type": "object",
+      "properties": {
+        "align": { "$ref": "#/$defs/VisualTextAlign", "description": "The placement." }
+      },
+      "required": ["align"],
+      "x-wb-order": ["align"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualEdgesFacet": {
+      "description": "visual.edges/v0: how edges are drawn, on a canvas or on one edge.",
+      "type": "object",
+      "properties": {
+        "routing": {
+          "$ref": "#/$defs/EdgeRoutingStyle",
+          "description": "How an edge steps around an obstacle."
+        },
+        "lineJumps": {
+          "$ref": "#/$defs/LineJumps",
+          "description": "Whether crossings are drawn with an arc."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["routing", "lineJumps"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualInkFacet": {
+      "description": "visual.ink/v0: which strokes are one thing, as the id of the group a line belongs to.",
+      "type": "object",
+      "properties": {
+        "group": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "The group id; lines sharing it are one object."
+        }
+      },
+      "required": ["group"],
+      "x-wb-order": ["group"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualStrokeWidth": {
+      "description": "A stored stroke weight. Thin is the historic weight of every line and is the absent facet.",
+      "type": "string",
+      "enum": ["medium", "thick"]
+    },
+    "VisualStrokeFacet": {
+      "description": "visual.stroke/v0: how heavy a stroke is drawn.",
+      "type": "object",
+      "properties": {
+        "width": { "$ref": "#/$defs/VisualStrokeWidth", "description": "The named weight." }
+      },
+      "required": ["width"],
+      "x-wb-order": ["width"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualThemeFacet": {
+      "description": "visual.theme/v0: how a canvas is drawn, as the id of a registered theme asset.",
+      "type": "object",
+      "properties": {
+        "theme": { "$ref": "#/$defs/NamespacedId", "description": "The theme asset id." }
+      },
+      "required": ["theme"],
+      "x-wb-order": ["theme"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualStencilFacet": {
+      "description": "visual.stencil/v0: which registered stencil a node wears, by id.",
+      "type": "object",
+      "properties": {
+        "stencil": { "$ref": "#/$defs/NamespacedId", "description": "The stencil asset id." }
+      },
+      "required": ["stencil"],
+      "x-wb-order": ["stencil"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "VisualAxes": {
+      "description": "The facet keys a canvas treats as semantic axes, at most 64.",
+      "type": "array",
+      "items": { "$ref": "#/$defs/FacetKey" },
+      "maxItems": 64,
+      "x-wb-maxItemsMessage": "more axes than the 64-axis limit for one board"
+    },
+    "VisualAxesFacet": {
+      "description": "visual.axes/v0: which of its own facets a canvas treats as semantic axes.",
+      "type": "object",
+      "properties": {
+        "axes": { "$ref": "#/$defs/VisualAxes", "description": "The facet keys." }
+      },
+      "required": ["axes"],
+      "x-wb-order": ["axes"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    }
+  }
+}
