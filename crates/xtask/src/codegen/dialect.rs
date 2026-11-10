@@ -9,13 +9,15 @@
 //! booleans and integers; strings with a UTF-16 minimum, a pattern and a named
 //! check, a closed `enum` of values, or a `const`; arrays with an inclusive
 //! length bound (and the sentence Zod refuses an overlong one with), `$ref`s
-//! to a definition, any-values and records of them;
+//! to a definition, any-values and records of them, or a record whose keys
+//! are a string definition's and whose entries are one schema, bounded in
+//! count;
 //! `anyOf` over definitions, or `oneOf` with the `discriminator` property
 //! whose constant picks the member; and objects whose unknown keys are refused,
 //! stripped or kept, with optional fields. A definition may be
 //! `x-wb-registered`, or `x-wb-external` when its Zod half is a hand-written
 //! module's. An object may carry a named `x-wb-check` and may `x-wb-extends`
-//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list,
+//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list or record,
 //! or carry the text a model reads as `x-wb-describe`, as may a union definition. It grows when a contract
 //! needs a construct, with that construct's emission in both languages in the
 //! same change.
@@ -29,9 +31,13 @@ pub(super) use super::parse::Unknown;
 use super::parse::{Additional, Kind, Node};
 pub(crate) use super::parse::{Contract, parse};
 
+mod header;
 mod objects;
+mod records;
 mod shapes;
+use header::check_header;
 use objects::{check_extensions, check_unions, lower_object};
+use records::{check_map_keys, lower_record};
 pub(super) use shapes::variant_name;
 use shapes::{lower_array, lower_const, lower_discriminated, lower_enum, lower_union};
 
@@ -113,7 +119,22 @@ pub(super) enum Ty<'a> {
     Record {
         check: Option<&'a str>,
     },
+    /// A record whose keys are a string definition's and whose entries are
+    /// one schema.
+    Map {
+        key: &'a str,
+        value: Box<Ty<'a>>,
+        cap: Option<Cap<'a>>,
+    },
     Object(Object<'a>),
+}
+
+/// How many entries a record may hold, and the sentence Zod refuses one with
+/// that holds more, where `{count}` stands for how many it holds.
+#[derive(Clone, Copy)]
+pub(super) struct Cap<'a> {
+    pub(super) max: u32,
+    pub(super) message: &'a str,
 }
 
 /// A string's `pattern`, the message Zod answers with and the Rust matcher
@@ -177,6 +198,10 @@ impl<'a> Ty<'a> {
         match self {
             Ty::Ref(name) => out.push(name),
             Ty::Array { item, .. } => item.refs(out),
+            Ty::Map { key, value, .. } => {
+                out.push(key);
+                value.refs(out);
+            }
             Ty::Union { members, .. } => out.extend(members),
             Ty::Object(object) => {
                 out.extend(object.extends);
@@ -198,6 +223,7 @@ impl<'a> Ty<'a> {
                 rust.extend(check);
             }
             Ty::Array { item, .. } => item.names(zod, rust),
+            Ty::Map { value, .. } => value.names(zod, rust),
             Ty::Object(object) => {
                 zod.extend(object.check);
                 rust.extend(object.check);
@@ -213,6 +239,7 @@ impl<'a> Ty<'a> {
             Ty::Any => wanted == Uses::Value,
             Ty::Record { .. } => wanted == Uses::Map,
             Ty::Array { item, .. } => item.uses(wanted),
+            Ty::Map { value, .. } => value.uses(wanted),
             Ty::Object(object) => {
                 (wanted == Uses::Map && object.unknown == Unknown::Keep)
                     || object.fields.iter().any(|f| f.ty.uses(wanted))
@@ -245,6 +272,7 @@ pub(super) fn check(contract: &Contract) -> Result<Checked<'_>, Vec<String>> {
     let (mut zod_checks, mut rust_names) = (Vec::new(), Vec::new());
     check_extensions(&defs, &mut v);
     check_unions(&defs, &mut v);
+    check_map_keys(&defs, &mut v);
     for def in &defs {
         let mut imported = Vec::new();
         let zod = if def.external.is_some() { &mut imported } else { &mut zod_checks };
@@ -263,15 +291,7 @@ pub(super) fn check(contract: &Contract) -> Result<Checked<'_>, Vec<String>> {
             "x-wb-checks.zod: a named check needs the TypeScript module that holds it".to_owned(),
         );
     }
-    if !contract.rust_serde
-        && defs.iter().any(|d| d.ty.uses(Uses::Value) || d.ty.uses(Uses::Map))
-        && !contract.emit.rust.starts_with("crates/core/model/src/")
-    {
-        v.push(
-            "x-wb-emit.rust: `Value` and `Map` are whiteboard-model's, so it must emit there"
-                .to_owned(),
-        );
-    }
+    check_model_types(contract, &defs, &mut v);
     for set in [&mut zod_checks, &mut rust_names] {
         set.sort_unstable();
         set.dedup();
@@ -279,31 +299,18 @@ pub(super) fn check(contract: &Contract) -> Result<Checked<'_>, Vec<String>> {
     if v.is_empty() { Ok(Checked { contract, defs, zod_checks, rust_names }) } else { Err(v) }
 }
 
-/// The contract's own keywords: dialect, prose, output targets and check modules.
-fn check_header(contract: &Contract, v: &mut Vec<String>) {
-    if contract.schema != DIALECT {
-        v.push(format!("$schema: {} is not {DIALECT}", contract.schema));
-    }
-    for (what, text) in [("title", &contract.title), ("description", &contract.description)] {
-        if let Err(e) = prose(text) {
-            v.push(format!("{what}: {e}"));
-        }
-    }
-    if let Err(e) = target(&contract.emit.zod, TargetKind::Zod) {
-        v.push(format!("x-wb-emit.zod: {e}"));
-    }
-    if let Err(e) = target(&contract.emit.rust, TargetKind::Rust) {
-        v.push(format!("x-wb-emit.rust: {e}"));
-    }
-    if let Some(modules) = &contract.checks {
-        if let Some(zod) = &modules.zod
-            && let Err(e) = sibling(zod, &contract.emit.zod, TargetKind::Zod)
-        {
-            v.push(format!("x-wb-checks.zod: {e}"));
-        }
-        if let Err(e) = sibling(&modules.rust, &contract.emit.rust, TargetKind::Rust) {
-            v.push(format!("x-wb-checks.rust: {e}"));
-        }
+/// `Value` and `Map` are the model crate's, so a contract that reaches for one
+/// emits where that crate may be named: a core crate.
+fn check_model_types(contract: &Contract, defs: &[CheckedDef<'_>], v: &mut Vec<String>) {
+    if !contract.rust_serde
+        && defs.iter().any(|d| d.ty.uses(Uses::Value) || d.ty.uses(Uses::Map))
+        && !contract.emit.rust.starts_with("crates/core/")
+    {
+        v.push(
+            "x-wb-emit.rust: `Value` and `Map` are whiteboard-model's, so it must emit in a \
+             core crate, which may depend on it"
+                .to_owned(),
+        );
     }
 }
 
@@ -368,6 +375,9 @@ fn check_fit(contract: &Contract, ty: &Ty<'_>, at: &str, v: &mut Vec<String>) {
             "{at}: x-wb-rustSerde emits closed objects of required numbers only; \
              set it to false for this construct"
         ));
+    }
+    if contract.describe && matches!(ty, Ty::Map { cap: Some(_), .. }) {
+        v.push(format!("{at}: a bounded record is not implemented with x-wb-describe"));
     }
     let Ty::Object(object) = ty else { return };
     if !contract.describe {
@@ -581,26 +591,6 @@ fn lower_string<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Ty<'a> {
     Ty::Str { min_utf16: node.min_utf16, pattern, check: node.check.as_deref() }
 }
 
-fn lower_record<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Option<Ty<'a>> {
-    only(node, &["additionalProperties", "x-wb-check"], "a record", at, v);
-    match &node.additional {
-        Some(Additional::Schema(value))
-            if value.any == Some(true)
-                && value.kind.is_none()
-                && value.keywords() == ["x-wb-any"] =>
-        {
-            Some(Ty::Record { check: node.check.as_deref() })
-        }
-        _ => {
-            v.push(format!(
-                "{at}: a record is `additionalProperties: {{ \"x-wb-any\": true }}`; \
-                 any other value type is not implemented"
-            ));
-            None
-        }
-    }
-}
-
 /// Text that lands in a doc comment and a string literal in both languages.
 fn prose(text: &str) -> Result<(), &'static str> {
     if text.trim().is_empty() {
@@ -622,39 +612,6 @@ fn refusal(text: &str) -> Result<(), &'static str> {
     } else {
         Ok(())
     }
-}
-
-#[derive(Clone, Copy)]
-enum TargetKind {
-    Zod,
-    Rust,
-}
-
-/// A target lands only where the stray-file scan looks and the Rust job's
-/// path scope reaches: `packages/<pkg>/src/generated/<stem>.zod.ts` and
-/// `crates/<layer>/<crate>/src/generated/<stem>.rs`.
-fn target(path: &str, kind: TargetKind) -> Result<(), String> {
-    let parts: Vec<&str> = path.split('/').collect();
-    let (root, dirs, suffix) = match kind {
-        TargetKind::Zod => ("packages", 1, ".zod.ts"),
-        TargetKind::Rust => ("crates", 2, ".rs"),
-    };
-    let shape_ok = parts.len() == dirs + 4
-        && parts.first() == Some(&root)
-        && parts.get(1..=dirs).is_some_and(|segs| segs.iter().all(|s| is_segment(s)))
-        && parts.get(dirs + 1) == Some(&"src")
-        && parts.get(dirs + 2) == Some(&"generated")
-        && parts.last().and_then(|f| f.strip_suffix(suffix)).is_some_and(is_segment);
-    if shape_ok {
-        Ok(())
-    } else {
-        Err(format!("{path} is not {root}/{}src/generated/<name>{suffix}", "<dir>/".repeat(dirs)))
-    }
-}
-
-fn is_segment(s: &str) -> bool {
-    !s.is_empty()
-        && s.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
 /// Definitions with every reference after what it names. A reference to
@@ -697,29 +654,6 @@ fn in_dependency_order<'a>(
         }
     }
     order.into_iter().filter_map(|name| lowered.remove(name)).collect()
-}
-
-/// A hand-written module beside a generated output: the same package or
-/// crate, directly under its `src`.
-fn sibling(path: &str, output: &str, kind: TargetKind) -> Result<(), String> {
-    let (root, dirs, suffix) = match kind {
-        TargetKind::Zod => ("packages", 1, ".ts"),
-        TargetKind::Rust => ("crates", 2, ".rs"),
-    };
-    let parts: Vec<&str> = path.split('/').collect();
-    let home: Vec<&str> = output.split('/').take(dirs + 1).collect();
-    let shape_ok = parts.len() == dirs + 3
-        && parts.get(..=dirs) == Some(home.as_slice())
-        && parts.get(dirs + 1) == Some(&"src")
-        && parts.last().and_then(|f| f.strip_suffix(suffix)).is_some_and(is_segment);
-    if shape_ok {
-        Ok(())
-    } else {
-        Err(format!(
-            "{path} is not {}src/<name>{suffix} in the output's own {root} directory",
-            home.join("/") + "/"
-        ))
-    }
 }
 
 /// A pattern both a JavaScript regex literal and a hand-written Rust matcher

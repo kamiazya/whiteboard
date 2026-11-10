@@ -3,6 +3,7 @@ use super::*;
 mod choices;
 mod objects;
 mod plain;
+mod records;
 mod scalars;
 mod shapes;
 
@@ -536,8 +537,9 @@ fn serde_emission_stays_to_closed_objects_of_numbers() {
 
 #[test]
 fn any_value_and_record_types_need_the_model_crate_to_name_them() {
-    let text = model_mutated("crates/core/model/src/generated", "crates/core/other/src/generated")
-        .replace("crates/core/model/src/checks.rs", "crates/core/other/src/checks.rs");
+    let text =
+        model_mutated("crates/core/model/src/generated", "crates/bindings/other/src/generated")
+            .replace("crates/core/model/src/checks.rs", "crates/bindings/other/src/checks.rs");
     let errors = outputs(&text).unwrap_err();
     assert!(errors.iter().any(|e| e.contains("whiteboard-model")), "{errors:?}");
 }

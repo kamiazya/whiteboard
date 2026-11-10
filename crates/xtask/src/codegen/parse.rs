@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use serde::Deserialize;
-use serde::de::{Deserializer, MapAccess, Visitor};
+use serde::de::{Deserializer, MapAccess, SeqAccess, Visitor};
 
 fn yes() -> bool {
     true
@@ -107,10 +107,20 @@ pub(super) struct Node {
     /// A string that is always this one value.
     #[serde(rename = "const", default, deserialize_with = "present")]
     pub(super) constant: Option<String>,
-    /// What an absent array reads as; only `[]` parses, since `Never`
-    /// has no value to deserialize.
+    /// What an absent array or record reads as; only `[]` and `{}` parse,
+    /// since `Never` has no value to deserialize.
     #[serde(default, deserialize_with = "present")]
-    pub(super) default: Option<Vec<Never>>,
+    pub(super) default: Option<Empty>,
+    /// The definition naming what a record's keys may be.
+    #[serde(rename = "propertyNames", default, deserialize_with = "present")]
+    pub(super) property_names: Option<Box<Node>>,
+    /// How many entries a record may hold.
+    #[serde(rename = "maxProperties", default, deserialize_with = "present")]
+    pub(super) max_properties: Option<u32>,
+    /// What Zod answers when a record holds more than `maxProperties`, with
+    /// `{count}` standing for how many it holds.
+    #[serde(rename = "x-wb-maxPropertiesMessage", default, deserialize_with = "present")]
+    pub(super) max_properties_message: Option<String>,
     /// The object whose properties this one adds to.
     #[serde(rename = "x-wb-extends", default, deserialize_with = "present")]
     pub(super) extends: Option<String>,
@@ -143,9 +153,42 @@ pub(super) struct Node {
     pub(super) unknown_keys: Option<Unknown>,
 }
 
-/// A type with no value, so a list of it can only be empty.
+/// A type with no value, so a list or a map of it can only be empty.
 #[derive(Debug, Deserialize)]
 pub(super) enum Never {}
+
+/// The one default the dialect takes: an empty list or an empty record.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(super) enum Empty {
+    List,
+    Record,
+}
+
+impl<'de> Deserialize<'de> for Empty {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        deserializer.deserialize_any(EmptyVisitor)
+    }
+}
+
+struct EmptyVisitor;
+
+impl<'de> Visitor<'de> for EmptyVisitor {
+    type Value = Empty;
+
+    fn expecting(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("an empty list or an empty object")
+    }
+
+    fn visit_seq<A: SeqAccess<'de>>(self, mut seq: A) -> Result<Empty, A::Error> {
+        seq.next_element::<Never>()?;
+        Ok(Empty::List)
+    }
+
+    fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Empty, A::Error> {
+        map.next_key::<Never>()?;
+        Ok(Empty::Record)
+    }
+}
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -213,6 +256,9 @@ impl Node {
             (self.discriminator.is_some(), "discriminator"),
             (self.constant.is_some(), "const"),
             (self.default.is_some(), "default"),
+            (self.property_names.is_some(), "propertyNames"),
+            (self.max_properties.is_some(), "maxProperties"),
+            (self.max_properties_message.is_some(), "x-wb-maxPropertiesMessage"),
             (self.extends.is_some(), "x-wb-extends"),
             (self.reference.is_some(), "$ref"),
             (self.any.is_some(), "x-wb-any"),

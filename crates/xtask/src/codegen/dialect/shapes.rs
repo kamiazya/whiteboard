@@ -153,6 +153,9 @@ pub(super) fn lower_array<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> 
         at,
         v,
     );
+    if matches!(node.default, Some(super::super::parse::Empty::Record)) {
+        v.push(format!("{at}: an array's default is `[]`"));
+    }
     if let Some(message) = &node.max_items_message {
         if node.max_items.is_none() {
             v.push(format!("{at}: x-wb-maxItemsMessage needs a maxItems to speak for"));

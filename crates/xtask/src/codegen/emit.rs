@@ -19,7 +19,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use super::dialect::{
-    Checked, CheckedDef, Contract, Field, Object, Pattern, Ty, Unknown, Uses, variant_name,
+    Cap, Checked, CheckedDef, Contract, Field, Object, Pattern, Ty, Unknown, Uses, variant_name,
 };
 
 /// biome.json's `lineWidth`.
@@ -220,6 +220,9 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
             Chain::new("record", vec!["z.string()".to_owned(), "z.unknown()".to_owned()]),
             *check,
         ),
+        Ty::Map { key, value, .. } => {
+            Chain::new("record", vec![schema_name(key), zod_chain(value).render(0, "", "")])
+        }
         other => zod_plain_chain(other),
     }
 }
@@ -253,7 +256,7 @@ fn zod_plain_chain(ty: &Ty<'_>) -> Chain {
         }
         Ty::Ref(name) => Chain::named(schema_name(name)),
         Ty::Any => Chain::new("unknown", vec![]),
-        Ty::Object(_) | Ty::Str { .. } | Ty::Array { .. } | Ty::Record { .. } => {
+        Ty::Object(_) | Ty::Str { .. } | Ty::Array { .. } | Ty::Record { .. } | Ty::Map { .. } => {
             Chain::named("z.object".to_owned())
         }
     }
@@ -262,7 +265,8 @@ fn zod_plain_chain(ty: &Ty<'_>) -> Chain {
 fn zod_field(field: &Field<'_>, indent: usize, describe: bool) -> String {
     let mut chain = zod_chain(&field.ty);
     if field.default_empty {
-        chain = chain.then("default", vec!["[]".to_owned()]);
+        let empty = if matches!(field.ty, Ty::Array { .. }) { "[]" } else { "{}" };
+        chain = chain.then("default", vec![empty.to_owned()]);
     } else if field.optional {
         chain = chain.then("optional", vec![]);
     }
@@ -367,6 +371,7 @@ fn zod_def(out: &mut String, contract: &Contract, def: &CheckedDef<'_>) {
     let _ = write!(out, "\n/** {description} */\n");
     match ty {
         Ty::Object(object) => zod_object(out, &schema, description, object, contract.describe),
+        Ty::Map { key, value, cap: Some(cap) } => zod_capped_map(out, &schema, key, value, *cap),
         other => {
             let mut chain = zod_chain(other);
             if contract.describe {
@@ -388,6 +393,27 @@ fn zod_def(out: &mut String, contract: &Contract, def: &CheckedDef<'_>) {
     };
 }
 
+/// A record bounded in count: the count is judged on the bare record before any
+/// entry is, so an oversized record of bad entries is answered with one issue
+/// rather than one per entry, and `pipe` hands what passed to the keyed record.
+fn zod_capped_map(out: &mut String, schema: &str, key: &str, value: &Ty<'_>, cap: Cap<'_>) {
+    let Cap { max, message } = cap;
+    let text = message.replace("{count}", "${Object.keys(issue.input as object).length}");
+    let _ = writeln!(
+        out,
+        "export const {schema} = z\n  .record(z.string(), z.unknown())\n  \
+         .refine((value) => Object.keys(value).length <= {max}, {{"
+    );
+    let flat = format!("    error: (issue) => `{text}`,");
+    if flat.chars().count() <= TS_LINE_WIDTH {
+        let _ = writeln!(out, "{flat}");
+    } else {
+        let _ = writeln!(out, "    error: (issue) =>\n      `{text}`,");
+    }
+    let keyed = Chain::new("record", vec![schema_name(key), zod_chain(value).render(0, "", "")]);
+    let _ = writeln!(out, "  }})\n{}", keyed.render(2, ".pipe(", ")"));
+}
+
 pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<String>> {
     let mut out = header(source);
     out.push_str("\nimport { z } from 'zod'\n");
@@ -398,10 +424,12 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
     within_width(out)
 }
 
-/// A line holding only a string literal and its comma, which biome leaves as
+/// A line holding only a string or template literal and its comma, which biome leaves as
 /// long as the string is: there is nowhere in it to break.
 fn lone_string(line: &str) -> bool {
-    line.trim_start().strip_prefix('\'').is_some_and(|rest| rest.ends_with("',"))
+    let line = line.trim_start();
+    line.strip_prefix('\'').is_some_and(|rest| rest.ends_with("',"))
+        || line.strip_prefix('`').is_some_and(|rest| rest.ends_with("`,"))
 }
 
 /// `out` when every line after its header fits biome's width: a longer line
@@ -453,10 +481,21 @@ pub(super) fn rust(checked: &Checked<'_>, source: &str) -> String {
         return out;
     }
     let uses = |wanted| checked.defs.iter().any(|d| d.ty.uses(wanted));
+    let model = if checked.contract.emit.rust.starts_with("crates/core/model/src/") {
+        "crate"
+    } else {
+        "whiteboard_model"
+    };
     match (uses(Uses::Map), uses(Uses::Value)) {
-        (true, true) => out.push_str("\nuse crate::{Map, Value};\n"),
-        (true, false) => out.push_str("\nuse crate::Map;\n"),
-        (false, true) => out.push_str("\nuse crate::Value;\n"),
+        (true, true) => {
+            let _ = writeln!(out, "\nuse {model}::{{Map, Value}};");
+        }
+        (true, false) => {
+            let _ = writeln!(out, "\nuse {model}::Map;");
+        }
+        (false, true) => {
+            let _ = writeln!(out, "\nuse {model}::Value;");
+        }
         (false, false) => {}
     }
     for def in &checked.defs {
@@ -475,6 +514,7 @@ fn rust_ty(ty: &Ty<'_>) -> String {
         Ty::Ref(name) => (*name).to_owned(),
         Ty::Any => "Value".to_owned(),
         Ty::Record { .. } => "Map".to_owned(),
+        Ty::Map { key, value, .. } => format!("Vec<({key}, {})>", rust_ty(value)),
         Ty::Object(_) | Ty::Enum(_) | Ty::Union { .. } | Ty::Literal(_) => String::new(),
     }
 }
@@ -488,6 +528,13 @@ fn rust_checked_by(ty: &Ty<'_>, indent: &str) -> String {
         Ty::Record { check } => (*check, None),
         Ty::Object(object) => (object.check, None),
         Ty::Array { item, .. } => return rust_checked_by(item, indent),
+        Ty::Map { value, cap, .. } => {
+            let mut out = rust_checked_by(value, indent);
+            if let Some(Cap { max, .. }) = cap {
+                let _ = writeln!(out, "{indent}///\n{indent}/// Holds at most {max} entries.");
+            }
+            return out;
+        }
         _ => (None, None),
     };
     for (verb, name) in [("Matched", matcher), ("Checked", check)] {
