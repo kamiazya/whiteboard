@@ -97,10 +97,11 @@ RUN pnpm install --offline --frozen-lockfile \
       --store-dir /pnpm/store \
       --config.enable-global-virtual-store=false
 
-# `1` makes the Rust core's wasm (packages/core-wasm/artifacts, built outside
-# the image: it needs a Rust toolchain this image does not carry) a
-# requirement: the web build fails without it and so does the check below. A
-# release passes it; unset, an image without the wasm still builds.
+# The Rust core's wasm (packages/core-wasm/artifacts, built outside the image:
+# it needs a Rust toolchain this image does not carry) is required either way:
+# the web build fails without it, and the daemon answers OKF only through it.
+# `1` adds the check below that the packaged daemon carries it too; a release
+# passes it.
 ARG WHITEBOARD_SHIP_CORE_WASM
 
 RUN pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
