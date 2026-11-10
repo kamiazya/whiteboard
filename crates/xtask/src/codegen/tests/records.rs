@@ -267,3 +267,29 @@ fn a_default_is_an_empty_list_or_an_empty_record_and_nothing_else() {
         assert!(dialect::parse(&text).is_err(), "{default} was accepted");
     }
 }
+
+#[test]
+fn a_bounded_record_inside_a_list_is_named_and_referenced_instead() {
+    let inline = r##""Holder": {
+      "description": "A holder.",
+      "type": "object",
+      "properties": {
+        "rows": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "propertyNames": { "$ref": "#/$defs/Name" },
+            "additionalProperties": { "x-wb-any": true },
+            "maxProperties": 2,
+            "x-wb-maxPropertiesMessage": "at most 2; has {count}"
+          },
+          "description": "Rows."
+        }
+      },
+      "required": ["rows"],
+      "x-wb-order": ["rows"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    }"##;
+    refused_with(&[NAME, inline].join(",\n"), CORE, "name a bounded record in $defs");
+}
