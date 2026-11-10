@@ -37,6 +37,17 @@ fn faults(value: &Value) -> Vec<Fault> {
     found.faults
 }
 
+/// Which of the three values a non-finite double is.
+fn non_finite(n: f64) -> Unwritable {
+    if n.is_nan() {
+        Unwritable::Nan
+    } else if n.is_sign_negative() {
+        Unwritable::NegativeInfinity
+    } else {
+        Unwritable::Infinity
+    }
+}
+
 struct Walk {
     faults: Vec<Fault>,
     reserved: bool,
@@ -49,11 +60,7 @@ impl Walk {
 
     fn visit(&mut self, value: &Value, path: &mut Vec<Step>) {
         match value {
-            Value::Number(n) if n.is_nan() => self.fault(path, Unwritable::Nan),
-            Value::Number(n) if n.is_infinite() => self.fault(
-                path,
-                if *n < 0.0 { Unwritable::NegativeInfinity } else { Unwritable::Infinity },
-            ),
+            Value::Number(n) if !n.is_finite() => self.fault(path, non_finite(*n)),
             Value::BigInt(_) => self.fault(path, Unwritable::BigInt),
             Value::String(text) if text.contains('\u{feff}') => {
                 self.fault(path, Unwritable::ByteOrderMark);

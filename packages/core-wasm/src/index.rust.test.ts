@@ -62,4 +62,15 @@ describe('the core-wasm shim over the built artifact', () => {
     if (!read.ok) return
     expect(core.serializeOkf(read.value)).toBe(text)
   })
+
+  it('counts a lone surrogate it is sent as one unit, and refuses one the mark stands for', () => {
+    // wasm-bindgen encodes a lone surrogate as U+FFFD, which is one UTF-16 unit
+    // to the artifact as the surrogate was, so an offset it answers still
+    // indexes the host's string.
+    const comment = '---\ntype: x # \ud800\n---\n'
+    expect(JSON.parse(okf_parse(comment, 0))).toEqual(['ok', comment.length, ['m', 'type', 'x']])
+    const value = '---\ntype: a\ue000\n---\n'
+    expect(JSON.parse(okf_parse(value, 0xe000))).toEqual(['err', 'yaml', 'subset', []])
+    expect(JSON.parse(okf_parse(value, 0))[0]).toBe('ok')
+  })
 })
