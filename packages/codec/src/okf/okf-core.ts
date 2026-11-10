@@ -1,4 +1,5 @@
 import type { CodecParseResult } from '../errors.js'
+import { inSchemaOrder } from './frontmatter-order.js'
 import { parseOkf as parseOkfTs } from './parse.js'
 import type { OkfMarkdownDocument } from './schema.js'
 import { serializeOkf as serializeOkfTs } from './serialize.js'
@@ -152,7 +153,8 @@ function parseWith(core: OkfCodecCore, text: string): CodecParseResult<OkfMarkdo
   return ts
 }
 
-function serializeWith(core: OkfCodecCore, doc: OkfMarkdownDocument): string {
+function serializeWith(core: OkfCodecCore, unordered: OkfMarkdownDocument): string {
+  const doc = inSchemaOrder(unordered)
   const impl = core.impl.serializeOkf
   if (impl === 'ts') return serializeOkfTs(doc)
   const rust = ask(() => core.okf.serializeOkf(doc))
@@ -176,7 +178,9 @@ function serializeWith(core: OkfCodecCore, doc: OkfMarkdownDocument): string {
  * that throws has declined, and the TypeScript answers in either mode.
  */
 export function okfCodec(core: OkfCodecCore | undefined): OkfCodec {
-  if (core === undefined) return { parseOkf: parseOkfTs, serializeOkf: serializeOkfTs }
+  if (core === undefined) {
+    return { parseOkf: parseOkfTs, serializeOkf: (doc) => serializeOkfTs(inSchemaOrder(doc)) }
+  }
   return {
     parseOkf: (text) => parseWith(core, text),
     serializeOkf: (doc) => serializeWith(core, doc),
