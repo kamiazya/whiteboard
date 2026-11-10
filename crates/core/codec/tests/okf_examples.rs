@@ -3,8 +3,8 @@
 
 use whiteboard_codec::frontmatter::{Fault, Refusal, Unwritable, Value};
 use whiteboard_codec::okf::{
-    Code, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step, has_frontmatter,
-    parse, parse_marked, serialize,
+    Code, Detail, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step,
+    has_frontmatter, parse, parse_marked, serialize,
 };
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
@@ -25,7 +25,7 @@ fn issues(text: &str) -> Vec<(String, Code)> {
     let Failure::Schema(found) = refusal(text) else {
         unreachable!("{text:?} is no schema refusal")
     };
-    found.iter().map(|Issue { path, code }| (path_text(path), *code)).collect()
+    found.iter().map(|Issue { path, code, .. }| (path_text(path), *code)).collect()
 }
 
 fn path_text(path: &[Step]) -> String {
@@ -442,4 +442,31 @@ fn a_mark_in_a_comment_or_the_body_is_nothing() {
 fn another_yaml_fault_is_named_before_the_mark_is_looked_for() {
     let read = parse_marked("---\na: [\u{e000}\n---\n", Some('\u{e000}'));
     assert!(matches!(read, Err(Failure::Yaml(Refusal::Syntax(_)))), "{read:?}");
+}
+
+#[test]
+fn an_invalid_type_names_what_was_expected_and_what_came() {
+    let received = |value: &str| {
+        let Failure::Schema(found) = refusal(&format!("---\ntype: x\ntitle: {value}\n---\n"))
+        else {
+            unreachable!("{value} is no schema refusal")
+        };
+        match found[0].detail {
+            Detail::Type { expected: "string", received } => received,
+            other => unreachable!("{other:?}"),
+        }
+    };
+    for (value, named) in [
+        ("true", "boolean"),
+        ("~", "null"),
+        ("[a]", "array"),
+        ("{a: b}", "object"),
+        (".nan", "NaN"),
+        (".inf", "Infinity"),
+        ("-.inf", "-Infinity"),
+        ("99999999999999999999", "bigint"),
+        ("1.5", "number"),
+    ] {
+        assert_eq!(received(value), named, "{value}");
+    }
 }

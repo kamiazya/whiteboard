@@ -172,7 +172,7 @@ describe('okfCodec', () => {
     expect(reports.map((r) => r.kind)).toEqual(['differs'])
   })
 
-  it('compares a refusal by stage and issue path and code, and a YAML one without its words', () => {
+  it('compares a refusal by stage and each issue path, code and message, and a YAML one without its words', () => {
     const yaml = '---\ntype: [\n---\n'
     const schema = '---\ntype: 1\n---\n'
     const reworded = (text: string): CodecParseResult<OkfMarkdownDocument> => {
@@ -183,7 +183,7 @@ describe('okfCodec', () => {
         error: {
           ...r.error,
           message: r.error.stage === 'yaml' ? 'other words' : r.error.message,
-          issues: r.error.issues.map((i) => ({ code: i.code, path: i.path, message: 'x' })),
+          issues: r.error.issues,
         },
       }
     }
@@ -210,6 +210,22 @@ describe('okfCodec', () => {
     )
     moved.codec.parseOkf(schema)
     expect(moved.reports.map((r) => r.kind)).toEqual(['differs'])
+
+    const worded = switched(
+      fakeCore({
+        parseOkf: (text) => {
+          const r = parseOkf(text)
+          if (r.ok) return r
+          return {
+            ok: false,
+            error: { ...r.error, issues: r.error.issues.map((i) => ({ ...i, message: 'x' })) },
+          }
+        },
+      }),
+      'differential',
+    )
+    worded.codec.parseOkf(schema)
+    expect(worded.reports.map((r) => r.kind)).toEqual(['differs'])
   })
 
   it('reports a different text from the writer', () => {

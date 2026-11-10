@@ -19,7 +19,7 @@ use crate::okf_wire::{frontmatter_from, frontmatter_value, json_value, value_jso
 use serde_json::{Value as Json, json};
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_codec::frontmatter::{Fault, Refusal, Unwritable, Value};
-use whiteboard_codec::okf::{Code, Failure, Step, parse_marked, serialize_in_order};
+use whiteboard_codec::okf::{Code, Detail, Failure, Step, parse_marked, serialize_in_order};
 
 fn refused(code: &str) -> Json {
     json!(["refused", code])
@@ -35,8 +35,10 @@ const MALFORMED: &str = "malformed";
 ///
 /// Out: `["ok", bodyOffset, frontmatter]` with the offset in UTF-16 units and
 /// the frontmatter as the object `parseOkf` hands over; `["err", stage, class,
-/// issues]` with `issues` a list of `[path, code]` (empty unless the class is
-/// `schema`); or `["refused", code]` for a text past `maxBytes`.
+/// issues]` with `issues` a list of `[path, code, ...detail]` (empty unless
+/// the class is `schema`), the detail being what Zod's message names: the type
+/// expected and the one received for `invalid_type`, what was measured for
+/// `too_small`, the refinement for `custom`, and nothing for `invalid_format`; or `["refused", code]` for a text past `maxBytes`.
 #[wasm_bindgen]
 #[must_use]
 pub fn okf_parse(text: &str, mark: u32) -> String {
@@ -78,11 +80,22 @@ fn failure(why: &Failure) -> Json {
                 .iter()
                 .map(|issue| {
                     let path: Vec<Json> = issue.path.iter().map(step).collect();
-                    json!([path, code(issue.code)])
+                    let mut wire = vec![json!(path), json!(code(issue.code))];
+                    wire.extend(detail(issue.detail));
+                    Json::Array(wire)
                 })
                 .collect();
             json!(["err", "frontmatter-schema", "schema", issues])
         }
+    }
+}
+
+/// What follows an issue's code on the wire: the words a message needs.
+fn detail(detail: Detail) -> Vec<Json> {
+    match detail {
+        Detail::Nothing => vec![],
+        Detail::Type { expected, received } => vec![json!(expected), json!(received)],
+        Detail::Measured(what) | Detail::Rule(what) => vec![json!(what)],
     }
 }
 
@@ -227,19 +240,68 @@ mod tests {
                 "err",
                 "frontmatter-schema",
                 "schema",
-                [[["type"], "invalid_type"], [["tags", 1], "invalid_type"]]
+                [
+                    [["type"], "invalid_type", "string", "number"],
+                    [["tags", 1], "invalid_type", "string", "number"]
+                ]
             ])
         );
         let at = |what: &str| parsed(&format!("---\ntype: x\n{what}\n---\n"))[3].clone();
-        assert_eq!(at("title: 1"), json!([[["title"], "invalid_type"]]));
+        assert_eq!(at("title: 1"), json!([[["title"], "invalid_type", "string", "number"]]));
         assert_eq!(
             at("generated: {by: '', at: x}"),
-            json!([[["generated", "by"], "too_small"], [["generated", "at"], "invalid_format"]])
+            json!([
+                [["generated", "by"], "too_small", "string"],
+                [["generated", "at"], "invalid_format"]
+            ])
         );
         assert_eq!(
             at("generated: {by: ' a', at: '2025-01-01T00:00:00Z'}"),
-            json!([[["generated", "by"], "custom"]])
+            json!([[["generated", "by"], "custom", "actor"]])
         );
+    }
+
+    #[test]
+    fn an_issue_carries_what_zods_message_names() {
+        let at = |what: &str| parsed(&format!("---\ntype: x\n{what}\n---\n"))[3].clone();
+        let type_issue = |what: &str, expected: &str, received: &str| {
+            assert_eq!(
+                at(what),
+                json!([[[what.split(':').next().unwrap()], "invalid_type", expected, received]]),
+                "{what}"
+            );
+        };
+        type_issue("title: true", "string", "boolean");
+        type_issue("title: ~", "string", "null");
+        type_issue("title: [a]", "string", "array");
+        type_issue("title: {a: b}", "string", "object");
+        type_issue("title: .nan", "string", "NaN");
+        type_issue("title: .inf", "string", "Infinity");
+        type_issue("title: -.inf", "string", "-Infinity");
+        type_issue("title: 99999999999999999999", "string", "bigint");
+        type_issue("title: 1.5", "string", "number");
+        type_issue("tags: a", "array", "string");
+        type_issue("verified: 1", "array", "number");
+        type_issue("facets: [a]", "record", "array");
+        type_issue("generated: a", "object", "string");
+        assert_eq!(
+            at("generated: {}"),
+            json!([
+                [["generated", "by"], "invalid_type", "string", "undefined"],
+                [["generated", "at"], "invalid_type", "string", "undefined"]
+            ])
+        );
+        assert_eq!(
+            at("generated: {by: [], at: x}")[1],
+            json!([["generated", "by"], "too_small", "array"])
+        );
+        assert_eq!(
+            at("title: x\ngenerated: {by: {length: 0}, at: 1}")[1],
+            json!([["generated", "by"], "too_small", "unknown"])
+        );
+        assert_eq!(at("facets: {Bad: 1}"), json!([[["facets", "Bad"], "custom", "facet-key"]]));
+        assert_eq!(parsed("---\n[a]\n---\n")[3], json!([[[], "invalid_type", "object", "array"]]));
+        assert_eq!(parsed("---\ntype: ''\n---\n")[3], json!([[["type"], "too_small", "string"]]));
     }
 
     #[test]
