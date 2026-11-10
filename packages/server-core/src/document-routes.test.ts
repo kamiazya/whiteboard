@@ -182,7 +182,8 @@ describe('canvas CRUD routes', () => {
     expect(res.status).toBe(400)
     const refused = await res.json()
     expect(refused).toMatchObject({ error: 'okf_parse_failed' })
-    expect(apiErrorReason(refused)).toContain('tags are not allowed in OKF frontmatter')
+    // The core names the class of a YAML refusal, not the parser's words (owner decision q25).
+    expect(apiErrorReason(refused)).toContain('malformed YAML frontmatter')
   })
 
   it.each([

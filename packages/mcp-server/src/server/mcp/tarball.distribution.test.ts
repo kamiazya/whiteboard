@@ -80,7 +80,6 @@ describe('buildTarballSmokeChildEnv', () => {
     const childEnv = buildTarballSmokeChildEnv({
       PATH: '/usr/bin',
       WHITEBOARD_CORE: 'ts',
-      WHITEBOARD_CORE_OKF: 'ts',
       WHITEBOARD_CORE_SPATIAL: 'ts',
       WHITEBOARD_CORE_DIR: '/checkout/artifacts',
     })
@@ -88,7 +87,6 @@ describe('buildTarballSmokeChildEnv', () => {
     expect(childEnv).toEqual({
       PATH: '/usr/bin',
       WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_OKF: 'differential',
       WHITEBOARD_CORE_SPATIAL: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })

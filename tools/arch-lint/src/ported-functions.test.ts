@@ -47,8 +47,25 @@ describe('PORTED_FUNCTIONS against the tree', () => {
   })
 
   it('reads the real switch keys, so an empty read cannot pass for agreement', () => {
-    const keys = switchKeys(readReal(entry.switch.file) as string, entry.switch.interface)
+    const slot = entry.switch as NonNullable<PortedFunction['switch']>
+    const keys = switchKeys(readReal(slot.file) as string, slot.interface)
     expect(keys).toEqual(['routeLayout'])
+  })
+})
+
+describe('the OKF envelope at stage 4', () => {
+  const okf = PORTED_FUNCTIONS.filter((f) => f.name === 'parseOkf' || f.name === 'serializeOkf')
+
+  it('is a realm dispatcher with its TypeScript gone and no switch left', () => {
+    expect(okf.map((f) => [f.stage, f.switch, f.realm?.install])).toEqual([
+      [4, undefined, 'installOkfCore'],
+      [4, undefined, 'installOkfCore'],
+    ])
+    for (const f of okf) {
+      // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.
+      expect(f.realm?.deleted.length).toBeGreaterThan(2)
+      for (const path of f.realm?.deleted ?? []) expect(readReal(path), path).toBeUndefined()
+    }
   })
 })
 
@@ -132,5 +149,46 @@ describe('the ledger checker', () => {
     expect(checkPortedFunctions([entry, entry], tree())).toEqual(
       expect.arrayContaining(['routeLayout: listed twice']),
     )
+  })
+
+  describe('a realm dispatcher at stage 4', () => {
+    const realm: PortedFunction = {
+      ...entry,
+      stage: 4,
+      switch: undefined,
+      realm: { install: 'installCore', deleted: ['old/impl.ts'] },
+    }
+    const dispatcher = 'export function installCore() {}\nexport function routeLayout() {}\n'
+
+    it('passes when the dispatcher and the installer are declared and the TypeScript is gone', () => {
+      expect(checkPortedFunctions([realm], tree({ [entry.ts.file]: dispatcher }))).toEqual([])
+    })
+
+    it('fails when a file where the TypeScript lived still exists', () => {
+      const read = tree({ [entry.ts.file]: dispatcher, 'old/impl.ts': 'export {}' })
+      expect(checkPortedFunctions([realm], read)).toEqual([
+        expect.stringContaining('old/impl.ts, where the TypeScript lived, still exists'),
+      ])
+    })
+
+    it('fails when no realm can install a core', () => {
+      const read = tree({ [entry.ts.file]: 'export function routeLayout() {}\n' })
+      expect(checkPortedFunctions([realm], read)).toEqual([
+        expect.stringContaining('declares no installCore'),
+      ])
+    })
+
+    it('fails when the dispatcher itself is gone', () => {
+      const read = tree({ [entry.ts.file]: 'export function installCore() {}\n' })
+      expect(checkPortedFunctions([realm], read)).toEqual([
+        expect.stringContaining('no longer exports a function named routeLayout'),
+      ])
+    })
+
+    it('is stage 4 only', () => {
+      expect(
+        checkPortedFunctions([{ ...realm, stage: 3 }], tree({ [entry.ts.file]: dispatcher })),
+      ).toEqual([expect.stringContaining("stage 4's shape, not stage 3's")])
+    })
   })
 })

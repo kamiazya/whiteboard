@@ -217,14 +217,10 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/codec/src/okf/okf-core.ts#OKF_TOLERATED_DIFFERENCES':
-    "QR-21's ledger of what the OKF differential tolerates; exported so the live differential (wasm.rust.test.ts) holds the other side of each entry, that its case still differs, rather than a second list of the cases",
-  'packages/codec/src/okf/okf-core.ts#messageTolerated':
-    "the one reading of OKF_TOLERATED_DIFFERENCES the switch's comparison makes; exported so the live differential tolerates exactly what the switch does, rather than restating the stage",
   'packages/core-wasm/src/index.ts#CoreAbiMismatch':
     "the refusal a composition root catches when its wasm artifact and this shim come from different commits; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/index.ts#CoreOkfUnwritable':
-    "the answer a composition root sees when a frontmatter value has no YAML spelling; codec's switch throws it as OkfNotYamlSafeError with the issues it carries, and codec-rust holds that those are the TypeScript's, in its order and words, wherever the TypeScript throws",
+    "the answer a composition root sees when a frontmatter value has no YAML spelling; codec's serializeOkf throws it as OkfNotYamlSafeError with the issues it carries, and okf-core.test.ts holds that mapping",
   'packages/core-wasm/src/index.ts#CoreSpatialInvalid':
     "the answer a composition root sees when the strict JSON Canvas writer's validation refuses what it wrote; codec's switch will throw it as the ZodError the TypeScript throws, from the issues it carries, and codec-rust holds that those are the TypeScript's, in path, code and refinement text",
   'packages/core-wasm/src/index.ts#CoreInputRefused':

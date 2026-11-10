@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseYamlKeepingWrittenIntegers } from './frontmatter-yaml.js'
-import { parseOkf } from './parse.js'
+import { parseOkf } from './okf-core.js'
 
 /**
  * YAML defines a `__proto__` mapping key as an OWN property, and a stored
@@ -29,17 +28,16 @@ describe('parseOkf refuses a key named __proto__', () => {
 
 describe('frontmatter YAML is read as YAML 1.2 core whatever it declares', () => {
   it('refuses a %YAML 1.1 directive, so 1.1 merges and booleans are unreachable', () => {
-    // `parseOkf`'s block pattern leaves no room for a directive; this pins the
-    // reader itself so a looser pattern cannot reopen 1.1's rules.
-    expect(() =>
-      parseYamlKeepingWrittenIntegers('%YAML 1.1\n---\nx:\n  <<: { a: 1 }\ny: yes\n'),
-    ).toThrow(/directives are not allowed/)
+    const result = parseOkf('---\n%YAML 1.1\n---\nx:\n  <<: { a: 1 }\ny: yes\n---\nbody\n')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.error.stage).toBe('yaml')
   })
 
   it('reads << as a plain key and yes as a string', () => {
-    expect(parseYamlKeepingWrittenIntegers('x:\n  <<: { a: 1 }\ny: yes\n')).toEqual({
-      x: { '<<': { a: 1 } },
-      y: 'yes',
-    })
+    const result = parseOkf('---\ntype: note\nx:\n  <<: { a: 1 }\ny: yes\n---\nbody\n')
+    expect(result.ok).toBe(true)
+    if (result.ok) {
+      expect(result.value.frontmatter.facetsRaw).toEqual({ x: { '<<': { a: 1 } }, y: 'yes' })
+    }
   })
 })

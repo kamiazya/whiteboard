@@ -546,7 +546,7 @@ export function useDocumentSync(
     async (format: SceneExportFormat, options: SceneExportOptions): Promise<Blob | null> => {
       const session = sessionRef.current
       if (format === 'md') {
-        return markdownDocumentFile({
+        return await markdownDocumentFile({
           body: session?.getMarkdownBody() ?? markdownBody,
           name: documentName,
           coreFacets: session?.getCoreFacets() ?? coreFacets,

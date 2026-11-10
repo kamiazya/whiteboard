@@ -16,7 +16,7 @@ const REACHES = /from '\.\/(parse|serialize|codecs)\.js'/
 
 describe('the spatial suites layer 1 runs against the Rust core', () => {
   // The switch's own suite tests the switch, whose `ts` side the TypeScript
-  // is, so it stays on the TypeScript, as `okf-core.test.ts` does for OKF.
+  // is, so it stays on the TypeScript.
   const suites = readdirSync(here).filter(
     (f) => f.endsWith('.test.ts') && !f.endsWith('.rust.test.ts') && f !== 'spatial-core.test.ts',
   )

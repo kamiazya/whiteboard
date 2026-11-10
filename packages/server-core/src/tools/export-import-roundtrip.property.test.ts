@@ -56,8 +56,8 @@ function containsProtoKey(value: unknown): boolean {
   return false
 }
 
-// Extension facet payloads must stay yaml-safe (see codec's
-// yaml-safe.ts) — jsonValue() already excludes undefined/NaN/bigint/
+// Extension facet payloads must stay yaml-safe (the core's
+// writer refuses anything else) — jsonValue() already excludes undefined/NaN/bigint/
 // function/symbol, so extensionFacetsArbitrary is already a yaml-safe
 // generator; no separate "yaml-safe" arbitrary is needed here.
 //

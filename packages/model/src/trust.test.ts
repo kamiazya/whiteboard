@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
   isHumanActor,
-  normalizeOkfVerified,
   OKF_ACTOR_MAX_CHARS,
   okfActorInputSchema,
   okfActorSchema,
@@ -59,27 +58,6 @@ describe('okfTimestampSchema (OKF §5)', () => {
   it('rejects a datetime with no offset and a bare date', () => {
     expect(okfTimestampSchema.safeParse('2026-06-20T22:53:05').success).toBe(false)
     expect(okfTimestampSchema.safeParse('2026-06-20').success).toBe(false)
-  })
-})
-
-describe('normalizeOkfVerified widens a bare mapping (OKF §5.2 MUST)', () => {
-  it('reads a single mapping as a one-element list', () => {
-    expect(normalizeOkfVerified({ by: 'human:a', at: '2026-06-25T09:00:00Z' })).toEqual([
-      { by: 'human:a', at: '2026-06-25T09:00:00Z' },
-    ])
-  })
-
-  it('leaves a list alone', () => {
-    const events = [
-      { by: 'human:a', at: '2026-06-25T09:00:00Z' },
-      { by: 'process:nightly', at: '2026-06-26T02:00:00Z' },
-    ]
-    expect(normalizeOkfVerified(events)).toEqual(events)
-  })
-
-  it('passes a value it cannot widen straight through, for the schema to reject', () => {
-    expect(normalizeOkfVerified('nope')).toBe('nope')
-    expect(normalizeOkfVerified(null)).toBe(null)
   })
 })
 

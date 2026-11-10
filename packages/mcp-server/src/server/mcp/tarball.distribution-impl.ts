@@ -95,7 +95,9 @@ export function assertTarballFileList(entries: readonly string[]): void {
 // Stripping the flag keeps this smoke pinned to the same dist-mode run a real
 // npm install gets.
 //
-// The core is asked for in `differential` and a failure to load it throws: an
+// The core is asked for in `differential` and a failure to load it throws (the
+// OKF envelope's core is installed at boot and the daemon refuses to start
+// without it): an
 // install has no sibling core-wasm package, so the only artifact it can find is
 // the one the tarball carries, and an absent or unloadable one must fail this
 // smoke rather than degrade to the TypeScript. WHITEBOARD_CORE_DIR is dropped
@@ -105,7 +107,6 @@ export function buildTarballSmokeChildEnv(processEnv: NodeJS.ProcessEnv): NodeJS
   return {
     ...rest,
     WHITEBOARD_CORE: 'differential',
-    WHITEBOARD_CORE_OKF: 'differential',
     WHITEBOARD_CORE_SPATIAL: 'differential',
     WHITEBOARD_CORE_MISMATCH: 'throw',
   }

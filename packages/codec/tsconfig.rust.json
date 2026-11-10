@@ -1,13 +1,13 @@
 {
-  // The wasm differential and layer 1's shims import core-wasm, whose glue is
+  // The wasm differential, layer 1's shims and the tests that install the core import core-wasm, whose glue is
   // typed against the DOM lib's WebAssembly and BufferSource; the package's own
   // config keeps that lib out.
   "extends": "./tsconfig.json",
   "compilerOptions": { "lib": ["ES2022", "ES2024.String", "DOM"] },
   "include": [
     "src/**/*.rust.test.ts",
-    "src/test-utils/okf-wasm",
     "src/test-utils/okf-core-setup",
+    "src/okf/okf-core.test.ts",
     "src/test-utils/spatial-wasm",
     "vitest.rust.config.ts"
   ],

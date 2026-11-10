@@ -1,5 +1,6 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { ensureWorkspaceId } from '../server/current-workspace.js'
+import { installOkfCoreAtBoot } from '../server/export/layout-core.js'
 import { getDb } from '../server/store/db/index.js'
 import { prepareDataDir } from '../server/store/db/prepare.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
@@ -28,8 +29,8 @@ async function prepareSelfHostDataDir(dataDir: string, trust: DataDirTrust): Pro
 
 /**
  * The one boot sequence every self-hosting composition root runs — the local
- * daemon, server mode and the stdio entry: prepare the data dir, open the
- * database, build `ServerDeps` over it. A root takes the database from here
+ * daemon, server mode and the stdio entry: load the Rust core OKF is answered
+ * through, prepare the data dir, open the database, build `ServerDeps` over it. A root takes the database from here
  * for its own stores (people, replica keys) so they see the same
  * post-migration handle the ports do.
  *
@@ -77,6 +78,9 @@ export async function bootSelfHostDeps(
   readonly dataLayout: DataLayout
   readonly scope: StoreScope
 }> {
+  // First, so a daemon without the core stops before it touches the data dir
+  // rather than serving a document it cannot read.
+  await installOkfCoreAtBoot()
   await prepareSelfHostDataDir(dataDir, options.dataDirTrust ?? 'owner')
   const db = await getDb(dataDir)
   const scope = storeScope(dataDir)

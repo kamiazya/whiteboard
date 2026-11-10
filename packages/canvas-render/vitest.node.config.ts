@@ -4,8 +4,8 @@ export default defineProject({
   test: {
     name: 'canvas-render-node',
     environment: 'node',
-    // Installs the Rust OKF core when WHITEBOARD_CORE_OKF asks for it, so this realm's plain
-    // parseOkf/serializeOkf run the differential (codec's okf-core-setup).
+    // Installs the Rust OKF core, which this realm's parseOkf/serializeOkf answer through
+    // (codec's okf-core-setup); a missing artifact fails the project by name.
     setupFiles: ['../../packages/codec/src/test-utils/okf-core-setup/node.setup.ts'],
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.browser.test.ts', 'src/**/*.rust.test.ts'],

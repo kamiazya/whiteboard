@@ -1,6 +1,7 @@
 //! Refusals that need only the source text, run before any parsing so a
 //! construct the grammar would reject with its own wording is named here. They
-//! are the first half of the subset `frontmatter-yaml.ts` states.
+//! are the first half of the subset the deleted TypeScript reader stated
+//! (docs/contributing/parity/okf-codec.md).
 
 use super::value::{MAX_BYTES, Refusal};
 

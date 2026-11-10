@@ -10,6 +10,14 @@ import { parseSource } from './ast-helpers.js'
  * its switch key exists fails, a function listed here that no longer exists
  * fails, and once the stage reaches `rust` the TypeScript export must be a
  * re-export of the shim rather than an implementation.
+ *
+ * Stage 4 has two shapes. A function whose callers can import the shim
+ * re-exports it. One whose callers are synchronous and reach it by import from
+ * a shared package that must not import the shim (it would carry the wasm glue
+ * to every consumer, and the shim initialises asynchronously) declares a
+ * `realm` instead: the export is a dispatcher over the one core each realm
+ * installs, never an implementation, and the files that held the
+ * TypeScript must be gone. The OKF envelope is the second shape.
  */
 export interface PortedFunction {
   /** The name the function goes by in the TypeScript and in the switch. */
@@ -17,8 +25,8 @@ export interface PortedFunction {
   /** ADR-0054's transition table: 2 differential, 3 rust, 4 TypeScript deleted. */
   readonly stage: 2 | 3 | 4
   readonly ts: { readonly file: string; readonly export: string }
-  /** The `CoreImpl` switch: a key of `<interface>['impl']`, set through `option`. */
-  readonly switch: {
+  /** The `CoreImpl` switch: a key of `<interface>['impl']`, set through `option`. Gone once the TypeScript is deleted. */
+  readonly switch?: {
     readonly file: string
     readonly interface: string
     readonly key: string
@@ -27,7 +35,21 @@ export interface PortedFunction {
   readonly rust: { readonly file: string; readonly fn: string }
   /** What the TypeScript export re-exports from once the stage is 3 or later. */
   readonly shim: { readonly module: string; readonly file: string; readonly member: string }
+  /**
+   * Stage 4's second shape: the export dispatches to the core the realm
+   * installed through `install`, declared in `ts.file`, and every file in
+   * `deleted` (where the TypeScript lived) no longer exists.
+   */
+  readonly realm?: { readonly install: string; readonly deleted: readonly string[] }
 }
+
+/** Where the OKF envelope's TypeScript lived, which stage 4 requires gone. */
+const OKF_TYPESCRIPT = [
+  'packages/codec/src/okf/parse.ts',
+  'packages/codec/src/okf/serialize.ts',
+  'packages/codec/src/okf/frontmatter-yaml.ts',
+  'packages/codec/src/okf/yaml-safe.ts',
+] as const
 
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
@@ -53,37 +75,27 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   {
     name: 'parseOkf',
-    stage: 2,
-    ts: { file: 'packages/codec/src/okf/parse.ts', export: 'parseOkf' },
-    switch: {
-      file: 'packages/codec/src/okf/okf-core.ts',
-      interface: 'OkfCodecCore',
-      key: 'parseOkf',
-      option: 'ServerDeps.okfCore',
-    },
+    stage: 4,
+    ts: { file: 'packages/codec/src/okf/okf-core.ts', export: 'parseOkf' },
     rust: { file: 'crates/bindings/wasm/src/okf.rs', fn: 'okf_parse' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'parseOkf',
     },
+    realm: { install: 'installOkfCore', deleted: OKF_TYPESCRIPT },
   },
   {
     name: 'serializeOkf',
-    stage: 2,
-    ts: { file: 'packages/codec/src/okf/serialize.ts', export: 'serializeOkf' },
-    switch: {
-      file: 'packages/codec/src/okf/okf-core.ts',
-      interface: 'OkfCodecCore',
-      key: 'serializeOkf',
-      option: 'ServerDeps.okfCore',
-    },
+    stage: 4,
+    ts: { file: 'packages/codec/src/okf/okf-core.ts', export: 'serializeOkf' },
     rust: { file: 'crates/bindings/wasm/src/okf.rs', fn: 'okf_serialize' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'serializeOkf',
     },
+    realm: { install: 'installOkfCore', deleted: OKF_TYPESCRIPT },
   },
   {
     name: 'parseSpatial',
@@ -187,19 +199,48 @@ export function switchKeys(text: string, interfaceName: string): string[] | unde
 const declaresRustFn = (text: string, name: string): boolean =>
   new RegExp(`\\bpub\\s+fn\\s+${name}\\s*[(<]`).test(text)
 
+/** Stage 4's second shape: a dispatcher over the realm's installed core, and the TypeScript gone. */
+function checkRealm(
+  f: PortedFunction,
+  realm: NonNullable<PortedFunction['realm']>,
+  declared: Set<string>,
+  read: ReadFile,
+): string[] {
+  const problems: string[] = []
+  if (!declared.has(f.ts.export)) {
+    problems.push(`${f.name}: ${f.ts.file} no longer exports a function named ${f.ts.export}`)
+  }
+  if (!declared.has(realm.install)) {
+    problems.push(
+      `${f.name}: ${f.ts.file} declares no ${realm.install}, so no realm can install the core`,
+    )
+  }
+  for (const path of realm.deleted) {
+    if (read(path) !== undefined) {
+      problems.push(`${f.name}: stage 4 but ${path}, where the TypeScript lived, still exists`)
+    }
+  }
+  return problems
+}
+
 /** How the TypeScript export stands against the entry's stage. */
 function checkTsExport(f: PortedFunction, read: ReadFile): string[] {
   const tsText = read(f.ts.file)
   if (tsText === undefined) return [`${f.name}: ${f.ts.file} does not exist`]
   const file = parseSource(f.ts.file, tsText, false)
-  const declared = declaredExports(file).has(f.ts.export)
+  const declared = declaredExports(file)
   const reexported = reexportsFrom(file, f.shim.module).has(f.ts.export)
   if (f.stage === 2) {
-    return declared
+    return declared.has(f.ts.export)
       ? []
       : [`${f.name}: ${f.ts.file} no longer exports a function named ${f.ts.export}`]
   }
-  if (declared) {
+  if (f.realm !== undefined) {
+    return f.stage === 4
+      ? checkRealm(f, f.realm, declared, read)
+      : [`${f.name}: a realm dispatcher is stage 4's shape, not stage ${f.stage}'s`]
+  }
+  if (declared.has(f.ts.export)) {
     return [
       `${f.name}: stage ${f.stage} but ${f.ts.file} still implements ${f.ts.export}; it must be \`export { ${f.ts.export} } from '${f.shim.module}'\``,
     ]
@@ -228,7 +269,7 @@ function checkRustSide(f: PortedFunction, read: ReadFile): string[] {
 /** Both directions between one switch interface's keys and the entries naming it. */
 function checkSwitch(
   slot: string,
-  listed: readonly PortedFunction[],
+  listed: readonly Switched[],
   keys: readonly string[] | undefined,
 ): string[] {
   if (keys === undefined) return [`${slot}: no \`impl\` type literal to read the switch keys from`]
@@ -241,7 +282,11 @@ function checkSwitch(
   return [...missing, ...unlisted]
 }
 
-const slotOf = (f: PortedFunction): string => `${f.switch.file}#${f.switch.interface}`
+/** An entry still held by a switch: stage 4's is gone with the TypeScript it chose between. */
+type Switched = PortedFunction & { readonly switch: NonNullable<PortedFunction['switch']> }
+const hasSwitch = (f: PortedFunction): f is Switched => f.switch !== undefined
+
+const slotOf = (f: Switched): string => `${f.switch.file}#${f.switch.interface}`
 
 /** Every way the ledger and the tree disagree, one sentence each. */
 export function checkPortedFunctions(ledger: readonly PortedFunction[], read: ReadFile): string[] {
@@ -250,9 +295,10 @@ export function checkPortedFunctions(ledger: readonly PortedFunction[], read: Re
     .filter((name) => names.filter((n) => n === name).length > 1)
     .map((name) => `${name}: listed twice`)
   const perEntry = ledger.flatMap((f) => [...checkTsExport(f, read), ...checkRustSide(f, read)])
-  const perSwitch = [...new Set(ledger.map(slotOf))].flatMap((slot) => {
-    const listed = ledger.filter((f) => slotOf(f) === slot)
-    const first = listed[0] as PortedFunction
+  const switched = ledger.filter(hasSwitch)
+  const perSwitch = [...new Set(switched.map(slotOf))].flatMap((slot) => {
+    const listed = switched.filter((f) => slotOf(f) === slot)
+    const first = listed[0] as Switched
     const text = read(first.switch.file)
     const keys = text === undefined ? undefined : switchKeys(text, first.switch.interface)
     return checkSwitch(slot, listed, keys)

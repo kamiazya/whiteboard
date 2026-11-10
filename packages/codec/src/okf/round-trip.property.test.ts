@@ -1,11 +1,10 @@
 import { coreFacetsArbitrary, facetsRawArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { parseOkf } from './parse.js'
+import { parseOkf, serializeOkf } from './okf-core.js'
 import type { OkfMarkdownFrontmatter } from './schema.js'
-import { serializeOkf } from './serialize.js'
 
-// Facet payloads must stay yaml-safe (see yaml-safe.ts) — jsonValue() already
+// Facet payloads must stay yaml-safe (the core's writer refuses anything else) — jsonValue() already
 // excludes undefined/NaN/bigint/function/symbol, so the model's own
 // extensionFacetsArbitrary (fc.jsonValue()-valued) is already a yaml-safe
 // generator; no separate "yaml-safe" arbitrary is needed here.

@@ -3,7 +3,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
-import { okfCodec, spatialCodec } from '@kamiazya/whiteboard-codec'
+import {
+  installOkfCore,
+  okfCoreInstalled,
+  parseOkf,
+  serializeOkf,
+  spatialCodec,
+} from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -11,13 +17,14 @@ import { captureLogsForTests } from '../log.js'
 import {
   artifactDirectory,
   coreLoaders,
+  installOkfCoreAtBoot,
   type LayoutCoreSettings,
   layoutCoreSettingsFrom,
   packagedArtifacts,
   stagedArtifacts,
 } from './layout-core.js'
 
-/** The routing factory alone, for the tests that read no OKF. */
+/** The routing factory alone. */
 const layoutCore = (settings: LayoutCoreSettings) => coreLoaders(settings).layoutCore
 
 // Where `stage:wasm` puts the artifact in this checkout. The rust job and
@@ -91,11 +98,9 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
-      WHITEBOARD_CORE_OKF: 'rust',
       WHITEBOARD_CORE_SPATIAL: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
-    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'fast' })).toThrow()
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_SPATIAL: 'fast' })).toThrow()
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
   })
@@ -141,14 +146,6 @@ describe('the daemon layout core', () => {
       WHITEBOARD_CORE_DIR: emptyDir(),
     })
     await expect(layoutCore(settings)()).rejects.toThrow()
-  })
-
-  it('loads nothing for OKF under ts, the rollback', async () => {
-    const settings = layoutCoreSettingsFrom({
-      WHITEBOARD_CORE_OKF: 'ts',
-      WHITEBOARD_CORE_DIR: emptyDir(),
-    })
-    expect(await coreLoaders(settings).okfCore()).toBeUndefined()
   })
 
   it('loads nothing for JSON Canvas under ts, the rollback', async () => {
@@ -216,102 +213,50 @@ describe('the daemon layout core', () => {
   })
 })
 
-describe.runIf(built)('the daemon OKF core over the staged artifact', () => {
-  const differential = layoutCoreSettingsFrom({
-    WHITEBOARD_CORE: 'differential',
-    WHITEBOARD_CORE_OKF: 'differential',
+describe('the daemon OKF core, installed at boot', () => {
+  // The installation is process-global; the test realm's core is put back.
+  let realm: ReturnType<typeof installOkfCore>
+  afterEach(() => installOkfCore(realm))
+
+  it('keeps a core the realm already installed, loading nothing', async () => {
+    realm = installOkfCore(undefined)
+    installOkfCore(realm)
+    await installOkfCoreAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() }))
+    expect(okfCoreInstalled()).toBe(true)
   })
 
-  it('shares one instance with the layout core', async () => {
-    const loaders = coreLoaders(differential)
-    const okf = await loaders.okfCore()
-    const layout = await loaders.layoutCore()
-    expect(okf?.impl).toEqual({ parseOkf: 'differential', serializeOkf: 'differential' })
-    expect(okf?.okf).toBe(layout?.routing)
+  it('refuses to start without the core, naming where it looked and how to build it', async () => {
+    realm = installOkfCore(undefined)
+    const dir = emptyDir()
+    const boot = installOkfCoreAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: dir }))
+    await expect(boot).rejects.toThrow(dir)
+    await expect(boot).rejects.toThrow(/build:wasm/)
+    expect(okfCoreInstalled()).toBe(false)
+    // No fallback answers in the core's place: an OKF call stays a loud failure.
+    expect(() => parseOkf('---\ntype: note\n---\nb')).toThrow(/before this realm installed/)
   })
 
-  it('reads and writes a document with nothing to report', async () => {
-    const capture = captureLogsForTests('debug')
-    try {
-      const codec = okfCodec(await coreLoaders(differential).okfCore())
-      const parsed = codec.parseOkf('---\ntype: note\ntags: [a, b]\n---\nbody\n')
+  it.runIf(built)(
+    'installs the staged core, which reads and writes through the plain exports',
+    async () => {
+      realm = installOkfCore(undefined)
+      await installOkfCoreAtBoot(layoutCoreSettingsFrom({}))
+      expect(okfCoreInstalled()).toBe(true)
+      const parsed = parseOkf('---\ntype: note\ntags: [a, b]\n---\nbody\n')
       if (!parsed.ok) throw new Error(parsed.error.message)
-      codec.serializeOkf(parsed.value)
-      expect(capture.records).toEqual([])
-    } finally {
-      capture.restore()
-    }
-  })
+      expect(serializeOkf(parsed.value)).toContain('tags:')
+    },
+  )
 
-  it('throws a difference under throw and logs it otherwise', async () => {
-    const differs = {
-      fn: 'parseOkf' as const,
-      kind: 'differs' as const,
-      ts: 'a',
-      rust: 'b',
-      text: '',
-    }
-    const strict = await coreLoaders(
-      layoutCoreSettingsFrom({
-        WHITEBOARD_CORE_OKF: 'differential',
-        WHITEBOARD_CORE_MISMATCH: 'throw',
-      }),
-    ).okfCore()
-    expect(() => strict?.onMismatch?.(differs)).toThrow(/OKF core differs/)
-    const capture = captureLogsForTests('debug')
-    try {
-      const lenient = await coreLoaders(
-        layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'rust' }),
-      ).okfCore()
-      lenient?.onMismatch?.(differs)
-      expect(capture.records.map((r) => [r.level, r.msg])).toEqual([
-        ['warning', 'the Rust core and the TypeScript disagree'],
-      ])
-    } finally {
-      capture.restore()
-    }
-  })
-
-  describe('a declined OKF call', () => {
-    const declined = {
-      fn: 'serializeOkf' as const,
-      kind: 'declined' as const,
-      err: new Error('refused: input-too-large'),
-    }
-
-    it('fails like a difference under throw', async () => {
-      const strict = await coreLoaders(
-        layoutCoreSettingsFrom({
-          WHITEBOARD_CORE_OKF: 'differential',
-          WHITEBOARD_CORE_MISMATCH: 'throw',
-        }),
-      ).okfCore()
-      expect(() => strict?.onMismatch?.(declined)).toThrow(
-        /OKF core declined: .*"fn":"serializeOkf".*input-too-large/,
-      )
-    })
-
-    it('is logged as an okf-declined record with its reason and no content otherwise', async () => {
-      const capture = captureLogsForTests('warning')
-      try {
-        const lenient = await coreLoaders(
-          layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'rust' }),
-        ).okfCore()
-        lenient?.onMismatch?.(declined)
-        expect(capture.records).toHaveLength(1)
-        expect(capture.records[0]).toMatchObject({
-          level: 'warning',
-          data: {
-            event: 'okf-declined',
-            fn: 'serializeOkf',
-            reason: 'Error: refused: input-too-large',
-          },
-        })
-        expect(JSON.stringify(capture.records[0])).not.toContain('"err"')
-      } finally {
-        capture.restore()
-      }
-    })
+  it.runIf(built)('shares one wasm instance with the layout core', async () => {
+    realm = installOkfCore(undefined)
+    const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'rust' })
+    await installOkfCoreAtBoot(settings)
+    const bootCore = installOkfCore(undefined)
+    // One load per directory: the routing core is the instance boot installed for OKF.
+    const layout = await coreLoaders(settings).layoutCore()
+    expect(bootCore).toBeDefined()
+    expect(layout?.routing).toBe(bootCore)
   })
 })
 

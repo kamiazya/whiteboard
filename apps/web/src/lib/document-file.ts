@@ -5,9 +5,9 @@
  * `document-import.ts` reads them back.
  */
 
-import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
+import { type OkfMarkdownFrontmatter, serializeOkf } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { currentOkfCodec } from './okf-codec.js'
+import { okfReady } from './okf-codec.js'
 import { currentSpatialCodec } from './spatial-codec.js'
 
 /** What a markdown document with no declared type is taken to be. */
@@ -25,13 +25,14 @@ export interface MarkdownDocumentFileInput {
  * The title is a projection of the workspace name, never stored content, so
  * an unnamed document writes none rather than borrowing its path.
  */
-export function markdownDocumentFile(input: MarkdownDocumentFileInput): Blob {
+export async function markdownDocumentFile(input: MarkdownDocumentFileInput): Promise<Blob> {
   const frontmatter: OkfMarkdownFrontmatter = {
     ...(input.coreFacets ?? { type: BARE_BODY_TYPE }),
     ...(input.name ? { title: input.name } : {}),
     facets: input.facets,
   }
-  const markdown = currentOkfCodec().serializeOkf({ frontmatter, body: input.body })
+  await okfReady()
+  const markdown = serializeOkf({ frontmatter, body: input.body })
   return new Blob([markdown], { type: 'text/markdown' })
 }
 

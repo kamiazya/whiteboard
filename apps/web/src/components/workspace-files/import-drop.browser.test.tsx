@@ -50,10 +50,7 @@ describe('dropping a file on the document list', () => {
     ])
   })
 
-  it('imports a markdown note with its frontmatter, through the OKF core where the run asks for it', async () => {
-    // The page has its core by the time anyone drops a file; waiting for it
-    // here makes the core answer a run that sets VITE_WHITEBOARD_CORE_OKF.
-    await layoutCoreReady()
+  it('imports a markdown note with its frontmatter, through the OKF core', async () => {
     const importDocument = vi.fn(async () => {})
     renderPanel(importDocument)
     const panel = await screen.findByTestId('workspace-files-panel')

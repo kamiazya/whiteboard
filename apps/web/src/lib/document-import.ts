@@ -8,10 +8,11 @@
  * importDocument`); this only decides WHAT is written and WHERE it is named.
  */
 
+import { parseOkf } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { pathBelow } from '@kamiazya/whiteboard-model'
 import { addressBaseFor } from './address-from-name.js'
-import { currentOkfCodec } from './okf-codec.js'
+import { okfReady } from './okf-codec.js'
 import { currentSpatialCodec } from './spatial-codec.js'
 
 /** The `accept` of the file picker, and the extensions a drop is checked against. */
@@ -58,7 +59,33 @@ function refused(fileName: string, detail: string): ImportResult {
   return { ok: false, reason: `${fileName} could not be imported: ${detail}` }
 }
 
-export function readImportedFile(fileName: string, text: string): ImportResult {
+/** A markdown file that opens with an OKF frontmatter block, read through the core. */
+async function readOkfNote(
+  fileName: string,
+  text: string,
+  stem: string,
+  pathBase: string,
+): Promise<ImportResult> {
+  await okfReady()
+  const parsed = parseOkf(text)
+  if (!parsed.ok) return refused(fileName, `unreadable frontmatter (${parsed.error.message})`)
+  // The title is the workspace's name, projected back on export, never held
+  // twice; the trust family has its own bucket the import does not write.
+  const { title, facets, generated: _g, verified: _v, ...core } = parsed.value.frontmatter
+  return {
+    ok: true,
+    document: {
+      kind: 'markdown',
+      body: parsed.value.body,
+      coreFacets: core,
+      facets: facets ?? {},
+      name: title?.trim() ? title.trim() : stem,
+      pathBase,
+    },
+  }
+}
+
+export async function readImportedFile(fileName: string, text: string): Promise<ImportResult> {
   const extension = extensionOf(fileName)
   if (!isImportableName(fileName)) {
     return {
@@ -91,22 +118,7 @@ export function readImportedFile(fileName: string, text: string): ImportResult {
       },
     }
   }
-  const parsed = currentOkfCodec().parseOkf(text)
-  if (!parsed.ok) return refused(fileName, `unreadable frontmatter (${parsed.error.message})`)
-  // The title is the workspace's name, projected back on export, never held
-  // twice; the trust family has its own bucket the import does not write.
-  const { title, facets, generated: _g, verified: _v, ...core } = parsed.value.frontmatter
-  return {
-    ok: true,
-    document: {
-      kind: 'markdown',
-      body: parsed.value.body,
-      coreFacets: core,
-      facets: facets ?? {},
-      name: title?.trim() ? title.trim() : stem,
-      pathBase,
-    },
-  }
+  return readOkfNote(fileName, text, stem, pathBase)
 }
 
 /**

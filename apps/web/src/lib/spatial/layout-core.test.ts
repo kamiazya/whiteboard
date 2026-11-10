@@ -1,7 +1,6 @@
 import type { CoreMismatch } from '@kamiazya/whiteboard-canvas-render'
-import { okfCodec, spatialCodec } from '@kamiazya/whiteboard-codec'
+import { spatialCodec } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it, vi } from 'vitest'
-import { currentOkfCodec } from '../okf-codec.js'
 import { currentSpatialCodec } from '../spatial-codec.js'
 import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
 import type { CoreSettings } from './layout-core-settings.js'
@@ -11,9 +10,8 @@ const routing = {} as WebCore
 const settings = (
   impl: CoreSettings['impl'],
   mismatch: CoreSettings['mismatch'] = 'log',
-  okf: CoreSettings['okf'] = 'ts',
   spatial: CoreSettings['spatial'] = 'ts',
-): CoreSettings => ({ impl, okf, spatial, mismatch })
+): CoreSettings => ({ impl, spatial, mismatch })
 const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const differs: CoreMismatch = {
@@ -106,84 +104,38 @@ describe('createLayoutCoreHost', () => {
 describe('the OKF half of the host', () => {
   it('loads for OKF alone, and answers no routing core while routing stays on ts', async () => {
     const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('ts', 'log', 'differential'), load, silent())
-    expect(host.currentOkf()).toBeUndefined()
+    const host = createLayoutCoreHost(settings('ts'), load, silent())
+    expect(load).not.toHaveBeenCalled()
+    expect(await host.okf()).toBe(routing)
     expect(await host.ready()).toBeUndefined()
     expect(host.current()).toBeUndefined()
-    const okf = host.currentOkf()
-    expect(okf?.okf).toBe(routing)
-    expect(okf?.impl).toEqual({ parseOkf: 'differential', serializeOkf: 'differential' })
     expect(load).toHaveBeenCalledTimes(1)
   })
 
-  it('answers no OKF core while OKF stays on ts, from the one load routing made', async () => {
+  it('shares the one load routing made', async () => {
     const load = vi.fn(async () => routing)
     const host = createLayoutCoreHost(settings('rust'), load, silent())
     await host.ready()
-    expect(host.currentOkf()).toBeUndefined()
+    expect(await host.okf()).toBe(routing)
     expect(load).toHaveBeenCalledTimes(1)
   })
 
-  it('throws an OKF difference under throw and logs it under log', async () => {
-    const differsOkf = {
-      fn: 'parseOkf' as const,
-      kind: 'differs' as const,
-      ts: 'a',
-      rust: 'b',
-      text: '',
-    }
-    const strict = createLayoutCoreHost(
-      settings('ts', 'throw', 'differential'),
-      async () => routing,
-      silent(),
-    )
-    await strict.ready()
-    expect(() => strict.currentOkf()?.onMismatch?.(differsOkf)).toThrow(/OKF core differs/)
-    const log = silent()
-    const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
-    await lenient.ready()
-    lenient.currentOkf()?.onMismatch?.(differsOkf)
-    expect(log.warn).toHaveBeenCalledTimes(1)
-  })
-
-  describe('a declined OKF call', () => {
-    const declined = {
-      fn: 'parseOkf' as const,
-      kind: 'declined' as const,
-      err: new Error('refused: input-too-large'),
-    }
-
-    it('fails like a difference under throw', async () => {
-      const strict = createLayoutCoreHost(
-        settings('ts', 'throw', 'differential'),
-        async () => routing,
-        silent(),
-      )
-      await strict.ready()
-      expect(() => strict.currentOkf()?.onMismatch?.(declined)).toThrow(
-        /OKF core declined: .*"fn":"parseOkf".*input-too-large/,
-      )
-    })
-
-    it('is logged as an okf-declined record with its reason and no content otherwise', async () => {
-      const log = silent()
-      const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
-      await lenient.ready()
-      lenient.currentOkf()?.onMismatch?.(declined)
-      expect(log.warn).toHaveBeenCalledWith('the Rust core declined; answered in TypeScript', {
-        event: 'okf-declined',
-        fn: 'parseOkf',
-        reason: 'Error: refused: input-too-large',
-      })
-      expect(log.debug).not.toHaveBeenCalled()
-    })
+  it('rejects when the artifact cannot load, whatever routing does, and tries again on the next ask', async () => {
+    const load = vi
+      .fn<() => Promise<WebCore>>()
+      .mockRejectedValueOnce(new Error('404'))
+      .mockResolvedValueOnce(routing)
+    const host = createLayoutCoreHost(settings('ts'), load, silent())
+    await expect(host.okf()).rejects.toThrow('404')
+    expect(await host.okf()).toBe(routing)
+    expect(load).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('the JSON Canvas half of the host', () => {
-  it('loads for JSON Canvas alone, and answers no routing or OKF core while those stay on ts', async () => {
+  it('loads for JSON Canvas alone, and answers no routing core while it stays on ts', async () => {
     const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('ts', 'log', 'ts', 'differential'), load, silent())
+    const host = createLayoutCoreHost(settings('ts', 'log', 'differential'), load, silent())
     expect(host.currentSpatial()).toBeUndefined()
     expect(await host.ready()).toBeUndefined()
     const spatial = host.currentSpatial()
@@ -192,7 +144,6 @@ describe('the JSON Canvas half of the host', () => {
       parseSpatial: 'differential',
       serializeSpatial: 'differential',
     })
-    expect(host.currentOkf()).toBeUndefined()
     expect(load).toHaveBeenCalledTimes(1)
   })
 
@@ -216,7 +167,7 @@ describe('the JSON Canvas half of the host', () => {
       err: new Error('refused: input-too-large'),
     }
     const strict = createLayoutCoreHost(
-      settings('ts', 'throw', 'ts', 'differential'),
+      settings('ts', 'throw', 'differential'),
       async () => routing,
       silent(),
     )
@@ -226,11 +177,7 @@ describe('the JSON Canvas half of the host', () => {
       /JSON Canvas core declined: .*"fn":"serializeSpatial".*input-too-large/,
     )
     const log = silent()
-    const lenient = createLayoutCoreHost(
-      settings('ts', 'log', 'ts', 'rust'),
-      async () => routing,
-      log,
-    )
+    const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
     await lenient.ready()
     lenient.currentSpatial()?.onMismatch?.(declined)
     expect(log.warn).toHaveBeenCalledWith('the Rust core declined; answered in TypeScript', {
@@ -245,11 +192,6 @@ describe('a realm that never installed a core', () => {
   it('has none and routes in TypeScript', async () => {
     expect(currentLayoutCore()).toBeUndefined()
     expect(await layoutCoreReady()).toBeUndefined()
-  })
-
-  it('reads and writes OKF in the TypeScript', () => {
-    const text = '---\ntype: note\n---\nbody\n'
-    expect(currentOkfCodec().parseOkf(text)).toEqual(okfCodec(undefined).parseOkf(text))
   })
 
   it('reads and writes JSON Canvas in the TypeScript', () => {

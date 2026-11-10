@@ -1,7 +1,7 @@
 import { compareCodeUnit, holdsReservedKey, RESERVED_MAP_KEY } from '@kamiazya/whiteboard-model'
 
-// Where a frontmatter value has no YAML spelling, worded as the TypeScript
-// writer's `yamlSafeValueSchema` words it (`packages/codec/src/okf/yaml-safe.ts`).
+// Where a frontmatter value has no YAML spelling, worded as the (deleted)
+// TypeScript writer's yaml-safe schema worded it.
 // The artifact reports the places it can see (a number, a bigint, a byte-order
 // mark, a reserved key) and the reason; this module words those, and walks the
 // value itself when the wire cannot carry it, since a value the host holds but

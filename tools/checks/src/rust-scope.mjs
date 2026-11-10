@@ -31,8 +31,8 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/test-utils/wasm',
     // The shim over the artifact, tested in the rust job (core-wasm-rust).
     'packages/core-wasm',
-    // codec-rust holds the OKF envelope to the Rust twin, and the Rust codec
-    // replays the recording that lives beside it.
+    // The Rust codec replays the OKF recordings that live beside the codec's
+    // own suites, which run on the core.
     'packages/codec/src/okf',
     'packages/codec/src/test-utils/okf-oracle',
     'packages/codec/src/test-utils/frontmatter-oracle',

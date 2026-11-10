@@ -86,21 +86,13 @@ export const okfActorInputSchema = utf16Max(
  * `verified` is a LIST of independent checks — a human sign-off plus a
  * nightly process, say — and "how recently" is the latest `at` (§5.2). A
  * single verifier MAY be written as a bare mapping, which §5.2 makes a MUST
- * for consumers to accept.
- *
- * That widening is a plain function rather than a `z.union(...).transform()`
- * on the stored/published shape, and deliberately so: a schema carrying a
- * transform cannot be represented in JSON Schema, and this one reaches
- * `wb_document_get`'s `outputSchema` — the MCP SDK converts it for
- * `tools/list` and fails the whole listing with "Transforms cannot be
- * represented in JSON Schema". So the reader normalises on the way IN and
- * every schema downstream states the one shape it holds: a list.
+ * for consumers to accept; the OKF reader widens it to a one-element list on
+ * the way in (`crates/core/codec`'s `schema.rs`), never a `z.union(...).transform()`
+ * here: a schema carrying a transform cannot be represented in JSON Schema,
+ * and this one reaches `wb_document_get`'s `outputSchema`, where the MCP SDK
+ * fails the whole `tools/list` with "Transforms cannot be represented in JSON
+ * Schema". So every schema downstream states the one shape it holds: a list.
  */
-export function normalizeOkfVerified(value: unknown): unknown {
-  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value
-  return [value]
-}
-
 export const trustFacetsSchema = z
   .object({
     generated: okfTrustEventSchema.optional(),

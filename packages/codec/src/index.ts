@@ -10,16 +10,20 @@ export {
   parseMarkdownBody,
   stringifyMarkdownBody,
 } from './markdown/pipeline.js'
-export type { OkfCodec, OkfCodecCore, OkfMismatch } from './okf/okf-core.js'
-export { installOkfCore, okfCodec, parseOkf, serializeOkf } from './okf/okf-core.js'
-export { hasOkfFrontmatter } from './okf/parse.js'
+export { hasOkfFrontmatter } from './okf/has-frontmatter.js'
+export type { OkfCore } from './okf/okf-core.js'
+export {
+  installOkfCore,
+  OkfNotYamlSafeError,
+  okfCoreInstalled,
+  parseOkf,
+  serializeOkf,
+} from './okf/okf-core.js'
 export type {
   OkfMarkdownDocument,
   OkfMarkdownFrontmatter,
 } from './okf/schema.js'
 export { okfMarkdownDocumentSchema, okfMarkdownFrontmatterSchema } from './okf/schema.js'
-export { OkfNotYamlSafeError } from './okf/serialize.js'
-export { yamlSafeValueSchema } from './okf/yaml-safe.js'
 export { documentReferenceMarkup, referenceMarkup } from './references/markup.js'
 export type { AliasResolver } from './references/resolve.js'
 export { resolveReferences } from './references/resolve.js'

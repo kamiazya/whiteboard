@@ -1,29 +1,18 @@
 import type { CodecParseResult } from '../errors.js'
-import { parseOkf as parseOkfTs } from './parse.js'
+import { codecFailure } from '../errors.js'
 import type { OkfMarkdownDocument } from './schema.js'
-import { OkfNotYamlSafeError, serializeOkf as serializeOkfTs } from './serialize.js'
-
-/**
- * ADR-0054's per-function switch for the OKF envelope: `ts` runs the
- * TypeScript alone; `differential` runs both, reports any difference and
- * answers with the TypeScript; `rust` answers with the core, the TypeScript
- * still present so rollback is flipping this back.
- */
-export type OkfImpl = 'ts' | 'differential' | 'rust'
 
 /**
  * The Rust core's OKF calls, as `@kamiazya/whiteboard-core-wasm`'s `Core`
  * answers them. Declared here, structurally, so this package never imports
- * the shim: the composition root holds both and hands one to the other.
+ * the shim: a realm's composition root holds both and hands one to the other.
  *
- * Either call may throw to DECLINE (the shim's `CoreInputRefused` for a head
- * past its cap or a document the wire does not carry). A decline is answered by
- * the TypeScript, in every mode, so a caller sees the TypeScript's own answer
- * and error class. `serializeOkf` may instead throw the core's answer for a
- * value with no YAML spelling: an error named `CoreOkfUnwritable` whose
- * `issues` are the places, with their paths and the TypeScript's words. That
- * is no decline: it is thrown as `OkfNotYamlSafeError`, the typed error the
- * TypeScript writer throws.
+ * Either call may throw to DECLINE (the shim's `CoreInputRefused`, for a head
+ * past its cap or a document outside `OkfMarkdownDocument`'s type). A decline
+ * is answered below, never by a second implementation. `serializeOkf` may
+ * instead throw the core's answer for a value with no YAML spelling, an error
+ * named `CoreOkfUnwritable` whose `issues` are the places, with their paths and
+ * words; that is thrown as `OkfNotYamlSafeError`.
  */
 export interface OkfCore {
   parseOkf(text: string): CodecParseResult<OkfMarkdownDocument>
@@ -31,124 +20,68 @@ export interface OkfCore {
 }
 
 /**
- * A difference `differential` mode found, or a call the core declined. The
- * two answers are given whole, each as one canonical string, so the report
- * needs nothing else to be read.
+ * The one throw `serializeOkf` makes on purpose: a frontmatter value YAML has
+ * no representation for, or a document the core refuses to write. A distinct
+ * class so a caller that wants to refuse THAT — a write, while the author
+ * still holds the content — can catch it without also catching a defect in the
+ * writer, which must stay loud.
  */
-export type OkfMismatch =
-  | {
-      readonly fn: 'parseOkf'
-      readonly kind: 'differs'
-      readonly ts: string
-      readonly rust: string
-      readonly text: string
-    }
-  | {
-      readonly fn: 'serializeOkf'
-      readonly kind: 'differs'
-      readonly ts: string
-      readonly rust: string
-      readonly doc: OkfMarkdownDocument
-    }
-  | { readonly fn: 'parseOkf' | 'serializeOkf'; readonly kind: 'declined'; readonly err: unknown }
-
-/** The core as a caller is handed it: the implementation, the switch per function, where a report goes. */
-export interface OkfCodecCore {
-  readonly okf: OkfCore
-  readonly impl: { readonly parseOkf: OkfImpl; readonly serializeOkf: OkfImpl }
-  readonly onMismatch?: (mismatch: OkfMismatch) => void
-}
-
-/** `parseOkf` and `serializeOkf` as the switch answers them. */
-export interface OkfCodec {
-  parseOkf(text: string): CodecParseResult<OkfMarkdownDocument>
-  serializeOkf(doc: OkfMarkdownDocument): string
-}
-
-const bits = new DataView(new ArrayBuffer(8))
-
-/**
- * A frontmatter value as plain JSON that tells apart everything a document
- * can hold: a number by its 64 bits (so `-0` is not `0`), a bigint from a
- * number, a list from a mapping, and a mapping's keys in the order
- * JavaScript enumerates them.
- */
-function canonicalValue(value: unknown): unknown {
-  if (typeof value === 'number') {
-    bits.setFloat64(0, value)
-    return ['f', bits.getBigUint64(0).toString(16)]
-  }
-  if (typeof value === 'bigint') return ['b', value.toString()]
-  if (value === undefined) return ['u']
-  if (Array.isArray(value)) return ['s', ...value.map(canonicalValue)]
-  if (typeof value === 'object' && value !== null) {
-    return ['m', ...Object.entries(value).flatMap(([k, v]) => [k, canonicalValue(v)])]
-  }
-  return value
-}
-
-/**
- * QR-21's ledger of what the OKF differential tolerates: one entry per case,
- * with its reason. Every comparison of the two readers asks it rather than
- * restating a case, and the live differential (`wasm.rust.test.ts`) counts
- * each entry's case actually differing, so an entry that stops being needed
- * fails there instead of hiding a regression.
- */
-export const OKF_TOLERATED_DIFFERENCES = {
-  'yaml-refusal-message':
-    "a refusal at stage `yaml` is held equal on its stage and its `malformed YAML frontmatter: ` prefix, not its words: the TypeScript carries the `yaml` package's message (with line and column), and the Rust reader names the class of fault (owner decision q25)",
-} as const
-
-/** Whether a refusal's message is outside the comparison, per `OKF_TOLERATED_DIFFERENCES`. */
-export const messageTolerated = (stage: string): boolean => stage === 'yaml'
-
-/**
- * What the two readers are held equal on: the document whole, a refusal's
- * stage and each issue's path, code and message, and the refusal's message
- * unless the ledger above tolerates it.
- */
-function canonicalParse(result: CodecParseResult<OkfMarkdownDocument>): string {
-  if (result.ok) {
-    return JSON.stringify(['ok', canonicalValue(result.value.frontmatter), result.value.body])
-  }
-  const { stage, message, issues } = result.error
-  return JSON.stringify([
-    'err',
-    stage,
-    messageTolerated(stage) ? '' : message,
-    issues.map((issue) => [issue.path.map(String), issue.code, issue.message]),
-  ])
-}
-
-type Answer<T> = { readonly value: T } | { readonly threw: unknown }
-
-function ask<T>(call: () => T): Answer<T> {
-  try {
-    return { value: call() }
-  } catch (threw) {
-    return { threw }
+export class OkfNotYamlSafeError extends Error {
+  constructor(readonly issues: readonly { path: PropertyKey[]; message: string }[]) {
+    super(
+      `serializeOkf: frontmatter contains a value that is not yaml-safe: ${issues
+        .map((issue) => `${issue.path.map(String).join('.')}: ${issue.message}`)
+        .join('; ')}`,
+    )
+    this.name = 'OkfNotYamlSafeError'
   }
 }
 
-const answered = <T>(answer: Answer<T>): T => {
-  if ('threw' in answer) throw answer.threw
-  return answer.value
+/**
+ * `parseOkf` or `serializeOkf` was called in a realm that never installed the
+ * core. There is no other implementation to answer with, so this is a wiring
+ * defect of the realm (a root that did not load the artifact before serving),
+ * never an input to handle.
+ */
+class OkfCoreNotInstalled extends Error {
+  constructor(fn: 'parseOkf' | 'serializeOkf') {
+    super(
+      `${fn} was called before this realm installed the Rust core; call installOkfCore with a loaded core first`,
+    )
+    this.name = 'OkfCoreNotInstalled'
+  }
 }
 
 /**
- * A writer's answer as one string: the text, the places it refused with the
- * words and order it named them in, or that it threw something else.
+ * The core this realm answers the envelope with, or none. Process-global on
+ * purpose: `parseOkf` and `serializeOkf` are synchronous exports that every
+ * caller reaches by import, with no dependency to thread a core through. A
+ * realm (a web page, a layout worker, the daemon, a test process) acquires its
+ * wasm instance asynchronously, installs it once, and every later call uses it
+ * synchronously.
  */
-const canonicalWrite = (answer: Answer<string>): string => {
-  if ('value' in answer) return JSON.stringify(['ok', answer.value])
-  if (!(answer.threw instanceof OkfNotYamlSafeError)) return JSON.stringify(['threw'])
-  const places = answer.threw.issues.map((issue) => [issue.path.map(String), issue.message])
-  return JSON.stringify(['unsafe', places])
+let installed: OkfCore | undefined
+
+/**
+ * Makes `core` answer this realm's `parseOkf` / `serializeOkf`; `undefined`
+ * removes it. Answers the core it replaced, so a caller that installs a stand-in
+ * for a while can put the real one back.
+ */
+export function installOkfCore(core: OkfCore | undefined): OkfCore | undefined {
+  const previous = installed
+  installed = core
+  return previous
 }
+
+/** Whether this realm has a core to answer with. */
+export const okfCoreInstalled = (): boolean => installed !== undefined
+
+const isNamed = (err: unknown, name: string): err is Error =>
+  err instanceof Error && err.name === name
 
 /** The typed error a core's unwritable answer stands for, or undefined when `err` is no such answer. */
 function unsafeOf(err: unknown): OkfNotYamlSafeError | undefined {
-  if (!(err instanceof Error) || err.name !== 'CoreOkfUnwritable') return undefined
+  if (!isNamed(err, 'CoreOkfUnwritable')) return undefined
   const issues: unknown = (err as { issues?: unknown }).issues
   const isStep = (step: unknown) => typeof step === 'string' || typeof step === 'number'
   const isIssue = (issue: unknown): issue is { path: (string | number)[]; message: string } => {
@@ -160,86 +93,42 @@ function unsafeOf(err: unknown): OkfNotYamlSafeError | undefined {
     : undefined
 }
 
-function parseWith(core: OkfCodecCore, text: string): CodecParseResult<OkfMarkdownDocument> {
-  const impl = core.impl.parseOkf
-  if (impl === 'ts') return parseOkfTs(text)
-  const rust = ask(() => core.okf.parseOkf(text))
-  if ('threw' in rust) {
-    core.onMismatch?.({ fn: 'parseOkf', kind: 'declined', err: rust.threw })
-    return parseOkfTs(text)
+/**
+ * Reads an OKF Markdown document through the realm's core. A text the core
+ * declines (a head past its cap) is a refusal at the schema stage carrying the
+ * core's reason, since the model bounds what a document's frontmatter may hold.
+ */
+export function parseOkf(text: string): CodecParseResult<OkfMarkdownDocument> {
+  if (installed === undefined) throw new OkfCoreNotInstalled('parseOkf')
+  try {
+    return installed.parseOkf(text)
+  } catch (err) {
+    if (!isNamed(err, 'CoreInputRefused')) throw err
+    return codecFailure(
+      'frontmatter-schema',
+      `the OKF reader refused this document: ${err.message}`,
+    )
   }
-  if (impl === 'rust') return rust.value
-  const ts = parseOkfTs(text)
-  const [tsValue, rustValue] = [canonicalParse(ts), canonicalParse(rust.value)]
-  if (tsValue !== rustValue) {
-    core.onMismatch?.({ fn: 'parseOkf', kind: 'differs', ts: tsValue, rust: rustValue, text })
-  }
-  return ts
 }
-
-function serializeWith(core: OkfCodecCore, doc: OkfMarkdownDocument): string {
-  const impl = core.impl.serializeOkf
-  if (impl === 'ts') return serializeOkfTs(doc)
-  const asked = ask(() => core.okf.serializeOkf(doc))
-  const unsafe = 'threw' in asked ? unsafeOf(asked.threw) : undefined
-  const rust: Answer<string> = unsafe === undefined ? asked : { threw: unsafe }
-  if ('threw' in rust && unsafe === undefined) {
-    core.onMismatch?.({ fn: 'serializeOkf', kind: 'declined', err: rust.threw })
-    return serializeOkfTs(doc)
-  }
-  if (impl === 'rust') return answered(rust)
-  const ts = ask(() => serializeOkfTs(doc))
-  const [tsValue, rustValue] = [canonicalWrite(ts), canonicalWrite(rust)]
-  if (tsValue !== rustValue) {
-    core.onMismatch?.({ fn: 'serializeOkf', kind: 'differs', ts: tsValue, rust: rustValue, doc })
-  }
-  return answered(ts)
-}
-
-const typescript: OkfCodec = { parseOkf: parseOkfTs, serializeOkf: serializeOkfTs }
 
 /**
- * The core this realm answers the envelope with, or none. Process-global on
- * purpose: `parseOkf` and `serializeOkf` are synchronous exports that every
- * caller reaches by import, with no dependency to thread a core through. A
- * realm (a web page, a layout worker, the daemon, a test process) acquires its
- * wasm instance asynchronously, installs it once, and every later call uses it
- * synchronously (ADR-0054's stage 3 shape).
+ * Writes an OKF Markdown document through the realm's core. A value with no
+ * YAML spelling, and a document the core declines (outside
+ * `OkfMarkdownDocument`'s type, or past its caps), both throw
+ * `OkfNotYamlSafeError`: the write is refused while the author still holds it.
  */
-let installed: OkfCodec | undefined
-
-/**
- * Makes `core` answer this realm's plain `parseOkf` / `serializeOkf` (and an
- * `okfCodec(undefined)`), each as its `impl` switch says; `undefined` returns
- * them to the TypeScript alone.
- */
-export function installOkfCore(core: OkfCodecCore | undefined): void {
-  installed = core === undefined ? undefined : okfCodec(core)
-}
-
-/** The codec of the realm's installed core, else the TypeScript's. */
-const realm: OkfCodec = {
-  parseOkf: (text) => (installed ?? typescript).parseOkf(text),
-  serializeOkf: (doc) => (installed ?? typescript).serializeOkf(doc),
-}
-
-/** `parseOkf` as this realm's installed core says to answer it, else the TypeScript. */
-export const parseOkf: OkfCodec['parseOkf'] = realm.parseOkf
-
-/** `serializeOkf` as this realm's installed core says to answer it, else the TypeScript. */
-export const serializeOkf: OkfCodec['serializeOkf'] = realm.serializeOkf
-
-/**
- * The OKF envelope as `core` says to answer it: by the TypeScript when its
- * switch reads `ts`, by the core under `rust`, and under `differential` by the
- * TypeScript with the core run beside it. A core that throws has declined, and
- * the TypeScript answers in either mode. With no core given, the realm's
- * installed one answers, else the TypeScript.
- */
-export function okfCodec(core: OkfCodecCore | undefined): OkfCodec {
-  if (core === undefined) return realm
-  return {
-    parseOkf: (text) => parseWith(core, text),
-    serializeOkf: (doc) => serializeWith(core, doc),
+export function serializeOkf(doc: OkfMarkdownDocument): string {
+  if (installed === undefined) throw new OkfCoreNotInstalled('serializeOkf')
+  try {
+    return installed.serializeOkf(doc)
+  } catch (err) {
+    const unsafe = unsafeOf(err)
+    if (unsafe !== undefined) throw unsafe
+    if (isNamed(err, 'CoreInputRefused')) {
+      throw new OkfNotYamlSafeError([
+        { path: [], message: `the OKF writer refused this document: ${err.message}` },
+      ])
+    }
+    throw err
   }
 }
