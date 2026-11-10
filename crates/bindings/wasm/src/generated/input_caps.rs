@@ -22,7 +22,7 @@ pub const JSON_CANVAS_PARSE: InputCaps =
 
 /// The caps of `whiteboard-wasm::json_canvas::json_canvas_serialize`.
 pub const JSON_CANVAS_SERIALIZE: InputCaps =
-    InputCaps { max_bytes: 4_194_304, max_depth: 64, max_millis: 3000, max_nodes: None };
+    InputCaps { max_bytes: 4_194_304, max_depth: 128, max_millis: 1000, max_nodes: None };
 
 /// The caps of `whiteboard-wasm::okf::okf_parse`.
 pub const OKF_PARSE: InputCaps =
