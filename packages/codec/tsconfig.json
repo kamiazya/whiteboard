@@ -12,5 +12,10 @@
     "skipLibCheck": true
   },
   "include": ["src", "vitest.node.config.ts"],
-  "exclude": ["src/**/*.rust.test.ts", "src/test-utils/okf-wasm", "src/test-utils/spatial-wasm"]
+  "exclude": [
+    "src/**/*.rust.test.ts",
+    "src/test-utils/okf-wasm",
+    "src/test-utils/spatial-wasm",
+    "src/test-utils/okf-core-setup"
+  ]
 }
