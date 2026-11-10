@@ -132,6 +132,9 @@ describe('the guard itself', () => {
       'a/index.ts': `import manifest from './plugin.manifest.json' with { type: 'json' }\nexport const plugin = manifest`,
     })
     expect(reactEdgesFrom(['a/index.ts'], host)).toEqual([])
+    const { files, imports } = walkValueImportClosure(['a/index.ts'], host)
+    expect(imports.map((reached) => reached.specifier)).toEqual(['./plugin.manifest.json'])
+    expect(files).toEqual(['a/index.ts'])
   })
 
   it('does not count a type-only import, which is erased at emit', () => {
