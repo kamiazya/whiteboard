@@ -330,7 +330,7 @@ pub fn okf_wasm_serialize(data: &[u8]) {
 /// When the codec panics, a canvas it read has no extended spelling, or its
 /// spelling does not read back stably.
 pub fn json_canvas_parse(data: &[u8]) {
-    use whiteboard_codec::json_canvas::{Mode, parse, serialize};
+    use whiteboard_codec::json_canvas::{Decline, Failure, MAX_BYTES, Mode, parse, serialize};
 
     let Ok(text) = std::str::from_utf8(data) else {
         return;
@@ -343,6 +343,12 @@ pub fn json_canvas_parse(data: &[u8]) {
     assert!(written.is_ok(), "{canvas:?} has no extended spelling: {written:?}");
     let written = written.unwrap_or_default();
     let again = parse(&written);
+    // A number writes longer than it may be spelt (`1e20` is 21 digits), so a
+    // spelling can outgrow the reader's cap; that one is declined, not refused.
+    if written.len() > MAX_BYTES {
+        assert_eq!(again, Err(Failure::Declined(Decline::TooLarge)), "{written:?} past the cap");
+        return;
+    }
     assert!(again.is_ok(), "{canvas:?} written as {written:?} is refused: {again:?}");
     let rewritten = again.map(|second| serialize(&second, Mode::Extended));
     assert_eq!(rewritten, Ok(Ok(written.clone())), "{written:?} does not read back stably");

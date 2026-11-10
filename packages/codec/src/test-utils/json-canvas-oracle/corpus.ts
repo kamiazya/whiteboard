@@ -173,9 +173,12 @@ function handCanvases(): SpatialCanvas[] {
 /** `count` writer inputs, each asked in both modes. */
 export function writerCases(count: number): WriterCase[] {
   const d = new Dice(mulberry32(WRITER_SEED))
+  // `modelCanvas` reads the flag while it draws, so it is set before the
+  // draws, never left to whatever the previous caller set it to: a writer
+  // input is a model canvas, so its draws are the fault-free ones.
+  FAULT.on = false
   const canvases = [...handCanvases()]
   while (canvases.length * 2 < count) canvases.push(modelCanvas(d))
-  FAULT.on = true
   return canvases.flatMap((canvas) => [
     writerCase(canvas, 'extended'),
     writerCase(canvas, 'strict'),

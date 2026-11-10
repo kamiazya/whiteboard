@@ -46,28 +46,58 @@ const key = fc.oneof(
   { weight: 1, arbitrary: fc.string({ maxLength: 3 }) },
 )
 
-const value: fc.Arbitrary<unknown> = fc.letrec<{ node: unknown }>((tie) => ({
-  node: fc.oneof(
-    { depthSize: 'small', maxDepth: 4 },
-    leaf,
-    fc.array(tie('node'), { maxLength: 3 }),
-    fc.array(tie('node'), { maxLength: 3 }).map(hole),
-    fc
-      .array(fc.tuple(key, tie('node')), { maxLength: 3 })
-      .map((entries) => Object.fromEntries(entries)),
-  ),
-})).node
+const safeLeaf = fc.oneof(
+  fc.string({ maxLength: 4 }),
+  fc.integer(),
+  fc.boolean(),
+  fc.constant(null),
+)
 
-const frontmatter = fc
-  .record(
-    {
-      title: value,
-      facets: fc.dictionary(fc.constantFrom('a.b/v1', 'c.d/v2', 'a.b/v0'), value, { maxKeys: 3 }),
-      facetsRaw: fc.dictionary(key, value, { maxKeys: 3 }),
-    },
-    { requiredKeys: [] },
-  )
-  .map((rest) => ({ type: 'note', ...rest }) as unknown as OkfMarkdownDocument['frontmatter'])
+const tree = (
+  atom: fc.Arbitrary<unknown>,
+  name: fc.Arbitrary<string>,
+  holes: boolean,
+): fc.Arbitrary<unknown> =>
+  fc.letrec<{ node: unknown }>((tie) => ({
+    node: fc.oneof(
+      { depthSize: 'small', maxDepth: 4 },
+      atom,
+      fc.array(tie('node'), { maxLength: 3 }),
+      fc.array(tie('node'), { maxLength: 3 }).map((items) => (holes ? hole(items) : items)),
+      fc
+        .array(fc.tuple(name, tie('node')), { maxLength: 3 })
+        .map((entries) => Object.fromEntries(entries)),
+    ),
+  })).node
+
+const frontmatterOf = (value: fc.Arbitrary<unknown>, name: fc.Arbitrary<string>) =>
+  fc
+    .record(
+      {
+        title: value,
+        facets: fc.dictionary(fc.constantFrom('a.b/v1', 'c.d/v2', 'a.b/v0'), value, {
+          maxKeys: 3,
+        }),
+        facetsRaw: fc.dictionary(name, value, { maxKeys: 3 }),
+      },
+      { requiredKeys: [] },
+    )
+    .map((rest) => ({ type: 'note', ...rest }) as unknown as OkfMarkdownDocument['frontmatter'])
+
+// Most draws mix every kind of value, so a document the TypeScript writes is
+// rare among them (about 50 of 1500, which sat on the floor's edge); a quarter
+// draw from writable atoms alone, holes excluded, so the writes are reached on
+// every run.
+const frontmatter = fc.oneof(
+  { weight: 3, arbitrary: frontmatterOf(tree(leaf, key, true), key) },
+  {
+    weight: 1,
+    arbitrary: frontmatterOf(
+      tree(safeLeaf, fc.constantFrom('a', 'b', '0', '10'), false),
+      fc.constantFrom('a', 'b', '0', '10'),
+    ),
+  },
+)
 
 const tally = { unsafe: 0, several: 0, written: 0, declined: 0 }
 
