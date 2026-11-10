@@ -16,6 +16,7 @@ pub const TARGETS: &[(&str, Target)] = &[
     ("det_utf16_len", targets::det_utf16_len),
     ("edge_route_layout", targets::edge_route_layout),
     ("frontmatter_parse", targets::frontmatter_parse),
+    ("json_canvas_parse", targets::json_canvas_parse),
     ("okf_parse", targets::okf_parse),
     ("okf_wasm_parse", targets::okf_wasm_parse),
     ("okf_wasm_serialize", targets::okf_wasm_serialize),

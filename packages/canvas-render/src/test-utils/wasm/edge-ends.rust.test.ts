@@ -97,10 +97,21 @@ function countNamedAndMoved(
   }
 }
 
+/**
+ * The first side choice moves its departure only off an occluded side, which
+ * the shared scene draws on half its canvases; half of these draws insist on
+ * the occluder, so the moved departure is reached well clear of its floor:
+ * from the shared scene alone it ranged 13-40 a run against a floor of 11.
+ */
+const occludedScene = fc.oneof(
+  scene,
+  scene.filter(([nodes]) => nodes.some((node) => node.id === 'occluder')),
+)
+
 describe.runIf(built)(
   'edge-sides.ts, edge-contact.ts, bend-route.ts and their Rust port answer the same',
   () => {
-    fcTest.prop([scene], withDefaults())('initial side choices', ([nodes, edges]) => {
+    fcTest.prop([occludedScene], withDefaults())('initial side choices', ([nodes, edges]) => {
       const wire = encodeRouting(nodes, edges)
       const choices = initialSideChoices(nodes, edges)
       const ts = [choices.size]

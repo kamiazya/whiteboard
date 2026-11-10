@@ -316,3 +316,40 @@ pub fn okf_wasm_serialize(data: &[u8]) {
         answer == "[\"refused\",\"malformed\"]" || answer == "[\"refused\",\"input-too-large\"]";
     assert!(fenced || named || refused, "{answer:.120} is not an answer");
 }
+
+/// The JSON Canvas codec on any UTF-8 text: it must answer a canvas, a refusal
+/// or a decline, never panic or run past its budget; a canvas it reads must be
+/// written in both modes without a panic; and the extended text must read
+/// back to a canvas that is written to the same text. The check shares nothing
+/// with the reader but its output, so a reader and a writer that agree on a
+/// wrong reading would still pass; the recorded oracle is what holds both to
+/// the TypeScript.
+///
+/// # Panics
+///
+/// When the codec panics, a canvas it read has no extended spelling, or its
+/// spelling does not read back stably.
+pub fn json_canvas_parse(data: &[u8]) {
+    use whiteboard_codec::json_canvas::{Decline, Failure, MAX_BYTES, Mode, parse, serialize};
+
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let Ok(canvas) = parse(text) else {
+        return;
+    };
+    let _ = serialize(&canvas, Mode::Strict);
+    let written = serialize(&canvas, Mode::Extended);
+    assert!(written.is_ok(), "{canvas:?} has no extended spelling: {written:?}");
+    let written = written.unwrap_or_default();
+    let again = parse(&written);
+    // A number writes longer than it may be spelt (`1e20` is 21 digits), so a
+    // spelling can outgrow the reader's cap; that one is declined, not refused.
+    if written.len() > MAX_BYTES {
+        assert_eq!(again, Err(Failure::Declined(Decline::TooLarge)), "{written:?} past the cap");
+        return;
+    }
+    assert!(again.is_ok(), "{canvas:?} written as {written:?} is refused: {again:?}");
+    let rewritten = again.map(|second| serialize(&second, Mode::Extended));
+    assert_eq!(rewritten, Ok(Ok(written.clone())), "{written:?} does not read back stably");
+}

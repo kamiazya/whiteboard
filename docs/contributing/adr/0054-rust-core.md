@@ -778,6 +778,28 @@ differential against the reader that ships is the generated one above, not a
 coverage-guided one. The `PORTED_FUNCTIONS` entries wait for the switch, which
 is the next increment: an entry needs a `CoreImpl` key to point at.
 
+**Shipped (step 6, the JSON Canvas codec).** `whiteboard_codec::json_canvas`
+holds `parse` (`parseSpatial`) and `serialize` (`serializeSpatial`, strict and
+extended) over `whiteboard-model`'s generated spatial types, held to a third
+recorded oracle, `packages/codec/src/spatial/oracle/json-canvas.jsonl` (1,400
+texts and 600 canvases, replayed by
+`crates/core/codec/tests/json_canvas_oracle.rs`). Every text reads, every
+refusal's stage and each Zod issue's path and code, and every written byte
+agree. The wire schema is read as Zod 4 reads it, so the port carries the
+behaviours the TypeScript leans on: an issue that continues or aborts, a union
+that reports the arm that only failed its pattern, a record that skips a
+`__proto__` key, a bucket that `.catch(undefined)` costs, and `z.url()`
+returning the trimmed text. Declared deviations: a refusal's message is not
+reproduced, and the core declines (so the caller asks the TypeScript) a lone
+UTF-16 surrogate written as an escape, nesting past 64 levels, a text over
+4 MiB, and a link whose validity needs the host's URL tables (a non-ASCII or
+`xn--` host, a percent-encoded host, an IPv6 literal, a `file` URL). The port
+also found five places where the TypeScript and the contract disagree, none
+changed here (the first is that `parseSpatial` never runs the model's own
+checks): they are in [parity/json-canvas-codec.md](../parity/json-canvas-codec.md),
+which is the checklist. Still no wasm export or switch: nothing in TypeScript
+calls the Rust, and the `PORTED_FUNCTIONS` entries wait for the switch.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 
