@@ -19,8 +19,10 @@ import { z } from 'zod'
  *
  * `VITE_WHITEBOARD_CORE_SPATIAL` is the same switch for the JSON Canvas codec
  * (an imported `.canvas` file, a downloaded or copied board, an editable PNG's source).
- * It is `differential` in the dev server and `ts` everywhere else until its
- * parity checklist is met (docs/contributing/parity/json-canvas-codec.md).
+ * It defaults as the others do (`VITE_WHITEBOARD_CORE_SPATIAL=ts` is the
+ * rollback): the port passed its parity checklist
+ * (docs/contributing/parity/json-canvas-codec.md), and the owner chose the
+ * core despite its boundary cost (decision q39).
  *
  * An unknown value is refused rather than defaulted: a typo that fell back
  * to `ts` would compare nothing and read as a pass.
@@ -47,9 +49,7 @@ export function coreSettingsFrom(env: CoreEnv): CoreSettings {
   return coreSettingsSchema.parse({
     impl: env.VITE_WHITEBOARD_CORE || devDefault,
     okf: env.VITE_WHITEBOARD_CORE_OKF || devDefault,
-    spatial:
-      env.VITE_WHITEBOARD_CORE_SPATIAL ||
-      (env.DEV === true && env.MODE !== 'test' ? 'differential' : 'ts'),
+    spatial: env.VITE_WHITEBOARD_CORE_SPATIAL || devDefault,
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',
   })
 }

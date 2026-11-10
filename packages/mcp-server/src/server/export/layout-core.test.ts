@@ -92,7 +92,7 @@ describe('the daemon layout core', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
       WHITEBOARD_CORE_OKF: 'rust',
-      WHITEBOARD_CORE_SPATIAL: 'ts',
+      WHITEBOARD_CORE_SPATIAL: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'fast' })).toThrow()
@@ -151,8 +151,11 @@ describe('the daemon layout core', () => {
     expect(await coreLoaders(settings).okfCore()).toBeUndefined()
   })
 
-  it('loads nothing for JSON Canvas under ts, its default while its checklist is open', async () => {
-    const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
+  it('loads nothing for JSON Canvas under ts, the rollback', async () => {
+    const settings = layoutCoreSettingsFrom({
+      WHITEBOARD_CORE_SPATIAL: 'ts',
+      WHITEBOARD_CORE_DIR: emptyDir(),
+    })
     expect(await coreLoaders(settings).spatialCore()).toBeUndefined()
   })
 
