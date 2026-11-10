@@ -6,7 +6,7 @@
 use std::collections::BTreeSet;
 
 use crate::Map;
-use crate::spatial::{CanvasComment, EdgeEnd, LineEnd, SpatialCanvas, SpatialNode};
+use crate::spatial::{CanvasComment, LineEnd, SpatialCanvas, SpatialNode};
 
 /// The characters `String.prototype.trim` strips: ECMAScript's `WhiteSpace`
 /// and `LineTerminator`. Not `char::is_whitespace`, which counts U+0085 and
@@ -174,11 +174,6 @@ pub struct CanvasIssue {
     pub message: String,
 }
 
-/// The node an edge's end names, which is always one.
-fn edge_end(end: &EdgeEnd) -> Option<&str> {
-    Some(end.node.as_str())
-}
-
 /// The node a line's end names, if it sits on one.
 fn line_end(end: &LineEnd) -> Option<&str> {
     match end {
@@ -239,7 +234,10 @@ pub fn spatial_canvas_integrity(canvas: &SpatialCanvas) -> Vec<CanvasIssue> {
         issues.push(CanvasIssue { path: vec![PathStep::Key("edges")], message });
     }
     let nodes: BTreeSet<&str> = node_ids().collect();
-    let edges = canvas.edges.iter().map(|e| (e.id.as_str(), edge_end(&e.from), edge_end(&e.to)));
+    let edges = canvas
+        .edges
+        .iter()
+        .map(|e| (e.id.as_str(), Some(e.from.node.as_str()), Some(e.to.node.as_str())));
     dangling_ends(&mut issues, &nodes, "edges", "edge", edges);
     let lines = lines.iter().map(|l| (l.id.as_str(), line_end(&l.from), line_end(&l.to)));
     dangling_ends(&mut issues, &nodes, "lines", "line", lines);
@@ -357,7 +355,10 @@ mod tests {
 
     mod spatial {
         use super::super::*;
-        use crate::spatial::{CanvasEdge, CanvasLine, LineEndNode, LineEndPoint};
+        use crate::spatial::{
+            BackgroundStyle, CanvasEdge, CanvasLine, EdgeEnd, LineEndNode, LineEndPoint,
+            NodeResource,
+        };
         #[cfg(target_arch = "wasm32")]
         use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -402,7 +403,7 @@ mod tests {
         fn a_node_showing_a_resource_carries_none_of_a_frames_fields() {
             let shows = |f: fn(&mut SpatialNode)| {
                 let mut n = node("a");
-                n.resource = Some(Default::default());
+                n.resource = Some(NodeResource::default());
                 f(&mut n);
                 n
             };
@@ -410,13 +411,13 @@ mod tests {
             assert!(!resource_node_is_not_frame(&shows(|n| n.label = Some(String::new()))));
             assert!(!resource_node_is_not_frame(&shows(|n| n.background = Some(String::new()))));
             assert!(!resource_node_is_not_frame(&shows(|n| {
-                n.background_style = Some(Default::default());
+                n.background_style = Some(BackgroundStyle::default());
             })));
             let mut frame = node("f");
             assert!(resource_node_is_not_frame(&frame));
             frame.label = Some("Caption".to_owned());
             frame.background = Some("b".to_owned());
-            frame.background_style = Some(Default::default());
+            frame.background_style = Some(BackgroundStyle::default());
             assert!(resource_node_is_not_frame(&frame));
         }
 
@@ -488,7 +489,7 @@ mod tests {
                 vec![edge("x", "a", "a")],
                 vec![line("x", on_node("a"), on_node("a"))],
             );
-            assert_eq!(spatial_canvas_integrity(&shared), [want.clone()]);
+            assert_eq!(spatial_canvas_integrity(&shared), std::slice::from_ref(&want));
             let twice = canvas(&["a"], vec![edge("x", "a", "a"), edge("x", "a", "a")], vec![]);
             assert_eq!(spatial_canvas_integrity(&twice), [want]);
             let node_named_alike = canvas(&["x"], vec![edge("x", "x", "x")], vec![]);
