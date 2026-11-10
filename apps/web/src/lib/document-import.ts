@@ -8,11 +8,11 @@
  * importDocument`); this only decides WHAT is written and WHERE it is named.
  */
 
-import { parseSpatial } from '@kamiazya/whiteboard-codec'
 import type { ExtensionFacets, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { pathBelow } from '@kamiazya/whiteboard-model'
 import { addressBaseFor } from './address-from-name.js'
 import { currentOkfCodec } from './okf-codec.js'
+import { currentSpatialCodec } from './spatial-codec.js'
 
 /** The `accept` of the file picker, and the extensions a drop is checked against. */
 export const IMPORT_ACCEPT = '.md,.markdown,.canvas,.json'
@@ -72,7 +72,7 @@ export function readImportedFile(fileName: string, text: string): ImportResult {
   const isCanvas = extension === '.canvas' || extension === '.json'
   const pathBase = addressBaseFor(stem, isCanvas ? 'spatial' : 'markdown')
   if (isCanvas) {
-    const parsed = parseSpatial(text)
+    const parsed = currentSpatialCodec().parseSpatial(text)
     if (!parsed.ok) return refused(fileName, `not valid JSON Canvas (${parsed.error.message})`)
     return { ok: true, document: { kind: 'spatial', canvas: parsed.value, name: stem, pathBase } }
   }

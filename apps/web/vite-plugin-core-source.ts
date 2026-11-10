@@ -28,8 +28,9 @@ export interface CoreSourceOptions {
  * with a stub means the real source is never read, and so its imports are
  * never resolved.
  *
- * Only a build that opted out of the core for routing AND for OKF
- * (`VITE_WHITEBOARD_CORE=ts` and `VITE_WHITEBOARD_CORE_OKF=ts`) may be stubbed. A
+ * Only a build that opted out of the core for routing, OKF AND JSON Canvas
+ * (`VITE_WHITEBOARD_CORE=ts`, `VITE_WHITEBOARD_CORE_OKF=ts`, and
+ * `VITE_WHITEBOARD_CORE_SPATIAL` unset or `ts`) may be stubbed. A
  * production build routes with `rust` by default, and one that did so without
  * the wasm would ship a stub that degrades every layout to the TypeScript
  * with nothing failing, so it is a build error instead. The dev server is
@@ -52,7 +53,7 @@ export function coreSourcePlugin(options: CoreSourceOptions = {}): Plugin {
     configResolved(config) {
       const staged = artifactStaged()
       const settings = coreSettingsFrom(config.env)
-      const usesCore = settings.impl !== 'ts' || settings.okf !== 'ts'
+      const usesCore = settings.impl !== 'ts' || settings.okf !== 'ts' || settings.spatial !== 'ts'
       const building = config.command === 'build'
       if (ship === '1' && !staged) {
         throw new Error(
@@ -61,12 +62,12 @@ export function coreSourcePlugin(options: CoreSourceOptions = {}): Plugin {
       }
       if (building && usesCore && !staged) {
         throw new Error(
-          'this build uses the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts and VITE_WHITEBOARD_CORE_OKF=ts to build without it',
+          'this build uses the Rust core but packages/core-wasm/artifacts has no wasm; run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first, or set VITE_WHITEBOARD_CORE=ts, VITE_WHITEBOARD_CORE_OKF=ts and VITE_WHITEBOARD_CORE_SPATIAL=ts to build without it',
         )
       }
       if (building && usesCore && ship === '0') {
         throw new Error(
-          'WHITEBOARD_SHIP_CORE_WASM=0 leaves the wasm out of a build that uses the Rust core; set VITE_WHITEBOARD_CORE=ts and VITE_WHITEBOARD_CORE_OKF=ts as well',
+          'WHITEBOARD_SHIP_CORE_WASM=0 leaves the wasm out of a build that uses the Rust core; set VITE_WHITEBOARD_CORE=ts, VITE_WHITEBOARD_CORE_OKF=ts and VITE_WHITEBOARD_CORE_SPATIAL=ts as well',
         )
       }
       const carried = ship === '0' ? false : staged

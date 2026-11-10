@@ -87,6 +87,14 @@ describe('coreSourcePlugin', () => {
     expect(loadOf(okfOnly, { artifactStaged: true })(SOURCE)).toBeUndefined()
   })
 
+  it('treats a build that reads JSON Canvas with the core as one that uses it', () => {
+    const spatialOnly = { ...TYPESCRIPT, VITE_WHITEBOARD_CORE_SPATIAL: 'differential' }
+    expect(() => loadOf(spatialOnly, { artifactStaged: false })).toThrow(
+      /VITE_WHITEBOARD_CORE_SPATIAL=ts/,
+    )
+    expect(loadOf(spatialOnly, { artifactStaged: true })(SOURCE)).toBeUndefined()
+  })
+
   it('leaves every other module alone', () => {
     expect(loadOf(TYPESCRIPT)('/repo/apps/web/src/lib/spatial/layout-core.ts')).toBeUndefined()
   })

@@ -58,6 +58,20 @@ const TEST_DAEMON_ACTOR = 'did:key:z6Mkf5rGMoatrSj1f4CyvuHBeXJELe9RPdzo2PKGNCKVt
 // some other device, or this daemon's own.
 const SOMEONE_ELSES_ACTOR = 'did:key:z6MkhaXgBZDvotDkL5257faiztiGiC2QtKLGpbnnEGta2doK'
 
+/** `canvas-a`'s versions once the auto-version the last edit scheduled has landed. */
+async function versionsOnceSaved(app: { request: (url: string) => Response | Promise<Response> }) {
+  const id = await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')
+  return vi.waitFor(async () => {
+    const res = await app.request(
+      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${id}/versions`,
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { versions: unknown[] }
+    expect(body.versions.length).toBeGreaterThanOrEqual(1)
+    return body
+  })
+}
+
 describe('versions router', () => {
   it('returns a Hono instance', () => {
     const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
@@ -103,17 +117,10 @@ describe('versions API', () => {
     )
     expect(resUpdate.status).toBe(200)
 
-    // Auto-version saving is best-effort and async, so wait briefly.
-    await new Promise((r) => setTimeout(r, 50))
-
-    const resList = await app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
-    )
-    expect(resList.status).toBe(200)
-    const body = (await resList.json()) as {
+    // Auto-version saving is best-effort and async: wait for the version, not for time.
+    const body = (await versionsOnceSaved(app)) as {
       versions: Array<{ auto: boolean; elementCount: number }>
     }
-    expect(body.versions.length).toBeGreaterThanOrEqual(1)
     expect(body.versions[0].auto).toBe(true)
     expect(body.versions[0].elementCount).toBe(1)
   })
@@ -410,12 +417,7 @@ describe('versions API', () => {
     )
     expect(resUpdate.status).toBe(200)
 
-    await new Promise((r) => setTimeout(r, 50))
-
-    const resList = await app.request(
-      `/api/workspaces/01M8BBN7JS60N0ZAR13NP8SXBF/documents/${await documentIdAt(serverDeps, '01M8BBN7JS60N0ZAR13NP8SXBF', 'canvas-a')}/versions`,
-    )
-    const body = (await resList.json()) as {
+    const body = (await versionsOnceSaved(app)) as {
       versions: Array<{ operator?: { kind: string; actor?: string; displayName?: string } }>
     }
     expect(body.versions[0]?.operator).toMatchObject({

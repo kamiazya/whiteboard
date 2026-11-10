@@ -272,6 +272,7 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(browser[test]?.env).toMatchObject({
       VITE_WHITEBOARD_CORE: 'differential',
       VITE_WHITEBOARD_CORE_OKF: 'differential',
+      VITE_WHITEBOARD_CORE_SPATIAL: 'differential',
       VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
@@ -284,7 +285,11 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(runs).toHaveLength(2)
     for (const run of runs) {
       // The whole expression: the browser leg compares and fails, the node leg is unset.
-      for (const name of ['VITE_WHITEBOARD_CORE', 'VITE_WHITEBOARD_CORE_OKF']) {
+      for (const name of [
+        'VITE_WHITEBOARD_CORE',
+        'VITE_WHITEBOARD_CORE_OKF',
+        'VITE_WHITEBOARD_CORE_SPATIAL',
+      ]) {
         expect(run.env?.[name]).toMatch(
           /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
         )
