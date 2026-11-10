@@ -67,9 +67,10 @@ wasm instance serves both modules in each realm. Its checklist is
 applicable, and the switch has since moved: both settings default to `rust`
 (a test run of the web app stays `ts`), with `=ts` as the rollback. The one
 difference tolerated is a `yaml`-stage refusal's wording (owner decision q25).
-The TypeScript's deletion waits for the ops step (step 10, owner decision
-q26), since the daemon's tool layer is its last caller. The decisions below
-are unchanged.
+The TypeScript is deleted on the default schedule, the release after the
+first one that defaults to `rust` (owner decision q26), which first needs the
+wasm initialised synchronously wherever the synchronous `parseOkf` and
+`serializeOkf` run. The decisions below are unchanged.
 
 ## Context
 
