@@ -188,6 +188,19 @@ fn an_object_check_or_extension_needs_the_forms_that_emit_it() {
     );
 }
 
+#[test]
+fn x_wb_describe_refuses_an_object_check_and_an_extension_each_alone() {
+    let message = "an object check or extension is not implemented with x-wb-describe";
+    let unchecked = swapped(&both(), ",\n      \"x-wb-check\": \"label_is_short\"", "");
+    let unextended = swapped(&both(), r#""x-wb-extends": "Base","#, "");
+    for defs in [unchecked, unextended] {
+        let described = plain(&defs, IN_MODEL, true)
+            .replace(r#""x-wb-describe": false"#, r#""x-wb-describe": true"#);
+        let errors = outputs(&described).unwrap_err();
+        assert!(errors.iter().any(|e| e.contains(message)), "{errors:?}");
+    }
+}
+
 const PUBLISHED: &str = r#""Pinned": {
       "description": "A pinned value.",
       "type": "object",
