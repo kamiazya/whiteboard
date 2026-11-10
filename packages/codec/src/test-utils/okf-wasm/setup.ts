@@ -1,7 +1,8 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
-import { afterEach, beforeEach, expect } from 'vitest'
+import type { RunnerTask } from 'vitest'
+import { afterEach, beforeAll, beforeEach, expect } from 'vitest'
 import { answered, declined } from './core.js'
-import { EXPECTED_DECLINES } from './declines.js'
+import { DECLINE_SHAPE, DECLINES_FILE, EXPECTED_DECLINES } from './declines.js'
 import { runsUnderRust } from './tolerated.js'
 
 /**
@@ -32,6 +33,13 @@ afterEach((context) => {
       declined.length,
       `${context.task.name}: expected the ${expected} decline`,
     ).toBeGreaterThan(0)
+    const { fn, reason } = DECLINE_SHAPE[expected]
+    for (const decline of declined) {
+      expect(decline.fn, `${context.task.name}: a decline other than ${expected}`).toBe(fn)
+      expect(decline.reason, `${context.task.name}: a decline other than ${expected}`).toMatch(
+        reason,
+      )
+    }
   }
 })
 
@@ -42,4 +50,24 @@ afterAllFloor([runsUnderRust], () => {
     answered.parseOkf + answered.serializeOkf,
     `${file}: the core answered nothing`,
   ).toBeGreaterThan(0)
+})
+
+const names = (task: RunnerTask): string[] =>
+  'tasks' in task ? task.tasks.flatMap(names) : [task.name]
+
+// Every test this file declares, a `-t` filter's left-out ones included.
+let collected: ReadonlySet<string> = new Set()
+let filepath = ''
+// biome-ignore lint/correctness/noEmptyPattern: vitest reads the hook's first parameter as a fixture pattern, so it must be a destructuring one
+beforeAll(({}, file) => {
+  collected = new Set(names(file))
+  filepath = 'filepath' in file ? file.filepath : ''
+})
+
+// An entry is only looked up when its test runs, so one whose test was renamed
+// or deleted would outlive it.
+afterAllFloor([runsUnderRust], () => {
+  if (!filepath.endsWith(DECLINES_FILE)) return
+  const stale = [...EXPECTED_DECLINES.keys()].filter((title) => !collected.has(title))
+  expect(stale, `${DECLINES_FILE}: allowed declines naming no test`).toEqual([])
 })
