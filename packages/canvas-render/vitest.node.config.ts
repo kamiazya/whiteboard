@@ -5,8 +5,8 @@ export default defineProject({
     name: 'canvas-render-node',
     environment: 'node',
     // Installs the Rust OKF core, which this realm's parseOkf/serializeOkf answer through
-    // (codec's okf-core-setup); a missing artifact fails the project by name.
-    setupFiles: ['../../packages/codec/src/test-utils/okf-core-setup/node.setup.ts'],
+    // (codec's core-setup); a missing artifact fails the project by name.
+    setupFiles: ['../../packages/codec/src/test-utils/core-setup/node.setup.ts'],
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.browser.test.ts', 'src/**/*.rust.test.ts'],
     // Vitest's default is 5s, which this project never chose — and the

@@ -1,7 +1,5 @@
 import type { CoreMismatch } from '@kamiazya/whiteboard-canvas-render'
-import { spatialCodec } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it, vi } from 'vitest'
-import { currentSpatialCodec } from '../spatial-codec.js'
 import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
 import type { CoreSettings } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
@@ -10,8 +8,7 @@ const routing = {} as WebCore
 const settings = (
   impl: CoreSettings['impl'],
   mismatch: CoreSettings['mismatch'] = 'log',
-  spatial: CoreSettings['spatial'] = 'ts',
-): CoreSettings => ({ impl, spatial, mismatch })
+): CoreSettings => ({ impl, mismatch })
 const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const differs: CoreMismatch = {
@@ -101,12 +98,12 @@ describe('createLayoutCoreHost', () => {
   })
 })
 
-describe('the OKF half of the host', () => {
-  it('loads for OKF alone, and answers no routing core while routing stays on ts', async () => {
+describe('the codecs half of the host', () => {
+  it('loads for the codecs alone, and answers no routing core while routing stays on ts', async () => {
     const load = vi.fn(async () => routing)
     const host = createLayoutCoreHost(settings('ts'), load, silent())
     expect(load).not.toHaveBeenCalled()
-    expect(await host.okf()).toBe(routing)
+    expect(await host.codecs()).toBe(routing)
     expect(await host.ready()).toBeUndefined()
     expect(host.current()).toBeUndefined()
     expect(load).toHaveBeenCalledTimes(1)
@@ -116,7 +113,7 @@ describe('the OKF half of the host', () => {
     const load = vi.fn(async () => routing)
     const host = createLayoutCoreHost(settings('rust'), load, silent())
     await host.ready()
-    expect(await host.okf()).toBe(routing)
+    expect(await host.codecs()).toBe(routing)
     expect(load).toHaveBeenCalledTimes(1)
   })
 
@@ -126,65 +123,9 @@ describe('the OKF half of the host', () => {
       .mockRejectedValueOnce(new Error('404'))
       .mockResolvedValueOnce(routing)
     const host = createLayoutCoreHost(settings('ts'), load, silent())
-    await expect(host.okf()).rejects.toThrow('404')
-    expect(await host.okf()).toBe(routing)
+    await expect(host.codecs()).rejects.toThrow('404')
+    expect(await host.codecs()).toBe(routing)
     expect(load).toHaveBeenCalledTimes(2)
-  })
-})
-
-describe('the JSON Canvas half of the host', () => {
-  it('loads for JSON Canvas alone, and answers no routing core while it stays on ts', async () => {
-    const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('ts', 'log', 'differential'), load, silent())
-    expect(host.currentSpatial()).toBeUndefined()
-    expect(await host.ready()).toBeUndefined()
-    const spatial = host.currentSpatial()
-    expect(spatial?.spatial).toBe(routing)
-    expect(spatial?.impl).toEqual({
-      parseSpatial: 'differential',
-      serializeSpatial: 'differential',
-    })
-    expect(load).toHaveBeenCalledTimes(1)
-  })
-
-  it('answers no JSON Canvas core while it stays on ts, from the one load routing made', async () => {
-    const host = createLayoutCoreHost(settings('rust'), async () => routing, silent())
-    await host.ready()
-    expect(host.currentSpatial()).toBeUndefined()
-  })
-
-  it('throws a difference or a decline under throw, and logs a decline as spatial-declined', async () => {
-    const differs = {
-      fn: 'parseSpatial' as const,
-      kind: 'differs' as const,
-      ts: 'a',
-      rust: 'b',
-      text: '',
-    }
-    const declined = {
-      fn: 'serializeSpatial' as const,
-      kind: 'declined' as const,
-      err: new Error('refused: input-too-large'),
-    }
-    const strict = createLayoutCoreHost(
-      settings('ts', 'throw', 'differential'),
-      async () => routing,
-      silent(),
-    )
-    await strict.ready()
-    expect(() => strict.currentSpatial()?.onMismatch?.(differs)).toThrow(/JSON Canvas core differs/)
-    expect(() => strict.currentSpatial()?.onMismatch?.(declined)).toThrow(
-      /JSON Canvas core declined: .*"fn":"serializeSpatial".*input-too-large/,
-    )
-    const log = silent()
-    const lenient = createLayoutCoreHost(settings('ts', 'log', 'rust'), async () => routing, log)
-    await lenient.ready()
-    lenient.currentSpatial()?.onMismatch?.(declined)
-    expect(log.warn).toHaveBeenCalledWith('the Rust core declined; answered in TypeScript', {
-      event: 'spatial-declined',
-      fn: 'serializeSpatial',
-      reason: 'Error: refused: input-too-large',
-    })
   })
 })
 
@@ -192,12 +133,5 @@ describe('a realm that never installed a core', () => {
   it('has none and routes in TypeScript', async () => {
     expect(currentLayoutCore()).toBeUndefined()
     expect(await layoutCoreReady()).toBeUndefined()
-  })
-
-  it('reads and writes JSON Canvas in the TypeScript', () => {
-    const text = '{"nodes":[],"edges":[]}'
-    expect(currentSpatialCodec().parseSpatial(text)).toEqual(
-      spatialCodec(undefined).parseSpatial(text),
-    )
   })
 })

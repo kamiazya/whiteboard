@@ -119,8 +119,8 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # Every project this job runs answers OKF through the Rust core, which
-      # has no TypeScript twin (ADR-0054 stage 4): the setup file installs it
+      # Every project this job runs answers OKF and JSON Canvas through the Rust core, which
+      # have no TypeScript twin (ADR-0054 stage 4): the setup file installs it
       # and fails the project when the artifact is missing. The daemon also
       # lays canvases out through it in differential (stage 2: both run, the
       # TypeScript answers), and a difference fails the test that drew it. The
@@ -135,7 +135,6 @@ jobs:
         if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
         env:
           WHITEBOARD_CORE: differential
-          WHITEBOARD_CORE_SPATIAL: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 
@@ -383,7 +382,6 @@ jobs:
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
           VITE_WHITEBOARD_CORE: differential
-          VITE_WHITEBOARD_CORE_SPATIAL: differential
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/3
 
@@ -576,7 +574,6 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          VITE_WHITEBOARD_CORE_SPATIAL: ${{ matrix.leg == 'browser' && 'differential' || '' }}
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: |
           read -r -a files <<< "$CHANGED_FILES"
@@ -596,7 +593,6 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          VITE_WHITEBOARD_CORE_SPATIAL: ${{ matrix.leg == 'browser' && 'differential' || '' }}
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: |
           read -r -a files <<< "$CHANGED_FILES"
@@ -1202,13 +1198,6 @@ jobs:
       - name: core-wasm shim over the artifact (core-wasm-rust)
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=core-wasm-rust
-
-      # QR-21 layer 2 for the JSON Canvas codec: parseSpatial and
-      # serializeSpatial against the artifact, after stage:wasm, which
-      # codec-rust reads it from. The OKF envelope's went with its TypeScript.
-      - name: JSON Canvas codec against the wasm (codec-rust)
-        if: steps.scope.outputs.run == 'true'
-        run: pnpm exec vitest run --project=codec-rust
 
       - name: Rust release gates (dist native, harden-check, repro-check, notices)
         if: steps.scope.outputs.run == 'true'

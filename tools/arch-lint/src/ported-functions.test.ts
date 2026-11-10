@@ -53,17 +53,19 @@ describe('PORTED_FUNCTIONS against the tree', () => {
   })
 })
 
-describe('the OKF envelope at stage 4', () => {
-  const okf = PORTED_FUNCTIONS.filter((f) => f.name === 'parseOkf' || f.name === 'serializeOkf')
+describe('the codecs at stage 4', () => {
+  const codecs = PORTED_FUNCTIONS.filter((f) => f.realm !== undefined)
 
-  it('is a realm dispatcher with its TypeScript gone and no switch left', () => {
-    expect(okf.map((f) => [f.stage, f.switch, f.realm?.install])).toEqual([
-      [4, undefined, 'installOkfCore'],
-      [4, undefined, 'installOkfCore'],
+  it('are realm dispatchers with their TypeScript gone and no switch left', () => {
+    expect(codecs.map((f) => [f.name, f.stage, f.switch, f.realm?.install])).toEqual([
+      ['parseOkf', 4, undefined, 'installOkfCore'],
+      ['serializeOkf', 4, undefined, 'installOkfCore'],
+      ['parseSpatial', 4, undefined, 'installSpatialCore'],
+      ['serializeSpatial', 4, undefined, 'installSpatialCore'],
     ])
-    for (const f of okf) {
+    for (const f of codecs) {
       // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.
-      expect(f.realm?.deleted.length).toBeGreaterThan(2)
+      expect(f.realm?.deleted.length).toBeGreaterThanOrEqual(2)
       for (const path of f.realm?.deleted ?? []) expect(readReal(path), path).toBeUndefined()
     }
   })

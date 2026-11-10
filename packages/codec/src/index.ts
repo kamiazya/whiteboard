@@ -45,18 +45,20 @@ export {
 } from './references/unique-name-resolver.js'
 export type { CensusFacet, SpatialModelCensus } from './spatial/census.js'
 export { censusSpatialModel, jsonSchemaLeafPaths } from './spatial/census.js'
-export { strictDegrade } from './spatial/degrade.js'
 export type { JsonCanvasDocument, XWhiteboard } from './spatial/json-canvas.js'
 export { jsonCanvasDocumentSchema } from './spatial/json-canvas.js'
 export { xWhiteboardJsonSchema } from './spatial/json-schema.js'
-export { parseSpatial } from './spatial/parse.js'
 export type { FieldProjection } from './spatial/projection.js'
 export {
   fromJsonCanvas,
   JSON_CANVAS_PROJECTION,
   toJsonCanvas,
 } from './spatial/projection.js'
-export type { SpatialSerializeMode } from './spatial/serialize.js'
-export { serializeSpatial } from './spatial/serialize.js'
-export type { SpatialCodec, SpatialCodecCore, SpatialMismatch } from './spatial/spatial-core.js'
-export { spatialCodec } from './spatial/spatial-core.js'
+export { readJsonCanvasText } from './spatial/read-json-canvas-text.js'
+export type { SpatialCore } from './spatial/spatial-core.js'
+export {
+  installSpatialCore,
+  parseSpatial,
+  serializeSpatial,
+  spatialCoreInstalled,
+} from './spatial/spatial-core.js'

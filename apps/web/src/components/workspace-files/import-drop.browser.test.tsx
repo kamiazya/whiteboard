@@ -29,9 +29,9 @@ function renderPanel(importDocument: (path: string, d: ImportedDocument) => Prom
 }
 
 describe('dropping a file on the document list', () => {
-  it('imports a canvas file, through the JSON Canvas core where the run asks for it, and stops the browser navigating to it', async () => {
+  it('imports a canvas file, through the JSON Canvas core, and stops the browser navigating to it', async () => {
     // As for the note below: the page has its core by the time anyone drops a
-    // file, so a run that sets VITE_WHITEBOARD_CORE_SPATIAL reads it in the core.
+    // file, and the import awaits it if not.
     await layoutCoreReady()
     const importDocument = vi.fn(async () => {})
     renderPanel(importDocument)

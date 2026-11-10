@@ -13,9 +13,8 @@
   },
   "include": ["src", "vitest.node.config.ts"],
   "exclude": [
-    "src/**/*.rust.test.ts",
-    "src/test-utils/spatial-wasm",
-    "src/test-utils/okf-core-setup",
-    "src/okf/okf-core.test.ts"
+    "src/test-utils/core-setup",
+    "src/okf/okf-core.test.ts",
+    "src/spatial/spatial-core.test.ts"
   ]
 }

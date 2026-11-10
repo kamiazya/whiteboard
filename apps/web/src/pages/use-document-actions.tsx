@@ -14,6 +14,7 @@
  * `destructive-copy.ts`'s. This holds only the shape that is the same either
  * way.
  */
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DuplicateDocumentRequest } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Braces, Copy, FolderInput, Trash2 } from 'lucide-react'
@@ -24,13 +25,13 @@ import {
   MoveOpenDocument,
   type OpenMovePicker,
 } from '../components/workspace-files/MoveOpenDocument.js'
+import { codecsReady } from '../lib/codec-cores.js'
 import {
   DUPLICATE_WITHOUT_COMMENTS,
   WITHOUT_ANNOTATIONS,
 } from '../lib/duplicate-without-comments.js'
 import type { WorkspaceFilesSource } from '../lib/files-source.js'
-import { currentSpatialCodec } from '../lib/spatial-codec.js'
-import { useAnnounceNotice } from './document-notice.js'
+import { type AnnounceNotice, useAnnounceNotice } from './document-notice.js'
 import { useDeleteDocument } from './use-delete-document.js'
 import { useDuplicateDocument } from './use-duplicate-document.js'
 
@@ -73,6 +74,22 @@ export interface DocumentActionSlots {
   readonly rowAlerts?: ReactNode
 }
 
+async function copyAsJsonCanvas(canvas: SpatialCanvas, announce: AnnounceNotice): Promise<void> {
+  await codecsReady()
+  const json = serializeSpatial(canvas, 'extended')
+  announce(null)
+  await navigator.clipboard
+    ?.writeText(json)
+    .then(() =>
+      announce(
+        json.includes('asset:')
+          ? 'Copied as JSON Canvas — images are referenced, not embedded'
+          : 'Copied as JSON Canvas',
+      ),
+    )
+    .catch(() => {})
+}
+
 /**
  * Text on the clipboard survives any chat/paste channel intact, which a
  * binary download cannot — the phone-friendly way to hand the exact canvas
@@ -86,18 +103,7 @@ function CopyAsJsonCanvasItem({ canvas }: { canvas: SpatialCanvas }) {
   return (
     <DropdownMenuItem
       onSelect={() => {
-        const json = currentSpatialCodec().serializeSpatial(canvas, 'extended')
-        announce(null)
-        void navigator.clipboard
-          ?.writeText(json)
-          .then(() =>
-            announce(
-              json.includes('asset:')
-                ? 'Copied as JSON Canvas — images are referenced, not embedded'
-                : 'Copied as JSON Canvas',
-            ),
-          )
-          .catch(() => {})
+        void copyAsJsonCanvas(canvas, announce)
       }}
     >
       <Braces aria-hidden="true" className="size-3.5" />

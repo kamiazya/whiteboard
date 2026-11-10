@@ -3,10 +3,9 @@ import type { CodecParseResult } from '../errors.js'
 import type { OcifDocument, OcifExtension } from './ocif.js'
 import { OCIF_PROJECTION } from './ocif-projection.js'
 import { parseOcif, toOcif } from './ocif-projection-io.js'
-import { parseSpatial } from './parse.js'
 import type { FieldProjection } from './projection.js'
 import { JSON_CANVAS_PROJECTION } from './projection.js'
-import { serializeSpatial } from './serialize.js'
+import { parseSpatial, serializeSpatial } from './spatial-core.js'
 
 /**
  * Every format a spatial document can be written as, in one place.

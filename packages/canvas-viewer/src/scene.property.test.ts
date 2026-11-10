@@ -6,16 +6,21 @@
  * locally (unique node ids, edges referencing only generated node ids).
  */
 
-import {
-  fromJsonCanvas,
-  serializeSpatial,
-  strictDegrade,
-  toJsonCanvas,
-} from '@kamiazya/whiteboard-codec'
+import { fromJsonCanvas, serializeSpatial, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { parseViewerScene } from './scene.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+
+/**
+ * What strict JSON Canvas 1.0 keeps of a wire document, stated here so the core's
+ * strict writer is judged by something that shares no code with it: the nodes and
+ * edges, each without its `x-whiteboard` key, and nothing canvas-level.
+ */
+const strictWire = (wire: ReturnType<typeof toJsonCanvas>) => ({
+  nodes: wire.nodes.map(({ 'x-whiteboard': _extension, ...node }) => node),
+  edges: wire.edges.map(({ 'x-whiteboard': _extension, ...edge }) => edge),
+})
 
 describe('scene parse/serialize properties', () => {
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
@@ -44,7 +49,7 @@ describe('scene parse/serialize properties', () => {
       const result = parseViewerScene(json)
       expect(result).toEqual({
         ok: true,
-        value: fromJsonCanvas(strictDegrade(toJsonCanvas(canvas))),
+        value: fromJsonCanvas(strictWire(toJsonCanvas(canvas)) as ReturnType<typeof toJsonCanvas>),
       })
     },
   )

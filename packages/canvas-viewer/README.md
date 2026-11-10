@@ -23,7 +23,7 @@ widget, HTML export). Private workspace package — never published to npm.
   `window.__WHITEBOARD_VIEWER_SCENE__`).
   Throws a `ViewerSceneError` if the scene payload fails schema validation.
 - `parseViewerScene` (from `./scene`) — a total parser over codec's
-  `parseSpatial` and wire schema; it never throws, it returns a
+  `readJsonCanvasText` and wire schema; it never throws, it returns a
   discriminated `{ ok, value | error }` result.
 - `createBrowserMeasureText` (from `./measure-text`) — the browser
   implementation of canvas-render's injected `MeasureText` seam (Canvas 2D

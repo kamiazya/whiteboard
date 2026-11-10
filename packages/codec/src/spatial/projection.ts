@@ -52,7 +52,7 @@ const AS_NODE_KIND = { kind: 'degraded', to: "the format's node kind" } as const
  *
  * `projection.test.ts` holds it in the four directions of
  * `.claude/rules/coverage-ledger.md` against the census's own path list, and
- * checks the `extension` half against what `strictDegrade` really drops — a
+ * checks the `extension` half against what the strict write really drops — a
  * declaration nothing compares to behaviour is a claim, not a guard.
  */
 export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> = {

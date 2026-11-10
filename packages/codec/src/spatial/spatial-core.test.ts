@@ -1,219 +1,202 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { ZodError } from 'zod'
-import type { CodecParseResult } from '../errors.js'
-import { parseSpatial } from './parse.js'
-import { serializeSpatial } from './serialize.js'
+import { installCoreForTests } from '../test-utils/core-setup/install.js'
 import {
-  type SpatialCore,
-  type SpatialImpl,
-  type SpatialMismatch,
-  spatialCodec,
+  installSpatialCore,
+  parseSpatial,
+  serializeSpatial,
+  spatialCoreInstalled,
 } from './spatial-core.js'
 
 const CANVAS: SpatialCanvas = {
-  nodes: [{ id: 'a', x: 0, y: 0, width: 10, height: 10, resource: { content: 'hi' } }],
+  nodes: [
+    {
+      id: 'a',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      resource: { mimeType: 'text/markdown', content: 'hi' },
+    },
+  ],
   edges: [],
 } as unknown as SpatialCanvas
-const TEXT = serializeSpatial(CANVAS, 'extended')
+const TEXT =
+  '{"nodes":[{"id":"a","type":"text","x":0,"y":0,"width":10,"height":10,"text":"hi"}],"edges":[]}'
 
-/** A core that answers as the TypeScript does, with one call replaced. */
-function fakeCore(overrides: Partial<SpatialCore> = {}): SpatialCore & { calls: number } {
-  const core = {
-    calls: 0,
-    parseSpatial(text: string) {
-      core.calls++
-      return (overrides.parseSpatial ?? parseSpatial)(text)
-    },
-    serializeSpatial(canvas: SpatialCanvas, mode: 'strict' | 'extended') {
-      core.calls++
-      return (overrides.serializeSpatial ?? serializeSpatial)(canvas, mode)
-    },
+const named = (name: string, extra: object = {}): Error =>
+  Object.assign(new Error(`${name} thrown by the core`), { name }, extra)
+
+/** A core whose every call throws `err`, standing for what the shim throws. */
+const throwing = (err: Error) => ({
+  parseSpatial: () => {
+    throw err
+  },
+  serializeSpatial: () => {
+    throw err
+  },
+})
+
+const thrownBy = (call: () => unknown): unknown => {
+  try {
+    call()
+  } catch (err) {
+    return err
   }
-  return core
+  return undefined
 }
 
-function switched(spatial: SpatialCore, impl: SpatialImpl) {
-  const reports: SpatialMismatch[] = []
-  const codec = spatialCodec({
-    spatial,
-    impl: { parseSpatial: impl, serializeSpatial: impl },
-    onMismatch: (m) => reports.push(m),
-  })
-  return { codec, reports }
-}
+describe('a realm with no core installed', () => {
+  // The installation is process-global; the setup file's core is back for the next test.
+  afterEach(() => installCoreForTests())
 
-const declining = () => {
-  throw new Error('declined')
-}
-
-/** What `@kamiazya/whiteboard-core-wasm` throws; declared by name and shape, so codec need not import it. */
-const invalid =
-  (issues: unknown = [{ path: ['edges', 0, 'toNode'], code: 'custom', message: 'no such node' }]) =>
-  () => {
-    throw Object.assign(new Error('strict refused'), { name: 'CoreSpatialInvalid', issues })
-  }
-
-describe('spatialCodec', () => {
-  it('answers with the TypeScript when no core is given', () => {
-    const codec = spatialCodec(undefined)
-    expect(codec.parseSpatial(TEXT)).toEqual(parseSpatial(TEXT))
-    expect(codec.serializeSpatial(CANVAS, 'strict')).toBe(serializeSpatial(CANVAS, 'strict'))
+  it('refuses to read, and says what to do, rather than answering', () => {
+    installSpatialCore(undefined)
+    expect(spatialCoreInstalled()).toBe(false)
+    expect(() => parseSpatial(TEXT)).toThrow(/before this realm installed the Rust core/)
+    expect(() => parseSpatial(TEXT)).toThrow(/installSpatialCore/)
   })
 
-  it('never asks the core under ts', () => {
-    const core = fakeCore()
-    const { codec } = switched(core, 'ts')
-    codec.parseSpatial(TEXT)
-    codec.serializeSpatial(CANVAS, 'extended')
-    expect(core.calls).toBe(0)
-  })
-
-  it('answers with the core under rust, and hands it the mode', () => {
-    const rustCanvas: CodecParseResult<SpatialCanvas> = {
-      ok: true,
-      value: { nodes: [], edges: [] } as unknown as SpatialCanvas,
-    }
-    const modes: string[] = []
-    const { codec } = switched(
-      fakeCore({
-        parseSpatial: () => rustCanvas,
-        serializeSpatial: (_, mode) => {
-          modes.push(mode)
-          return 'written by rust'
-        },
-      }),
-      'rust',
+  it('refuses to write', () => {
+    installSpatialCore(undefined)
+    expect(() => serializeSpatial(CANVAS, 'extended')).toThrow(
+      /before this realm installed the Rust core/,
     )
-    expect(codec.parseSpatial(TEXT)).toBe(rustCanvas)
-    expect(codec.serializeSpatial(CANVAS, 'strict')).toBe('written by rust')
-    expect(modes).toEqual(['strict'])
+  })
+})
+
+describe('the realm core', () => {
+  beforeAll(() => installCoreForTests())
+  afterEach(() => installCoreForTests())
+
+  it('answers the plain exports through the installed core', () => {
+    const answer = { ok: true as const, value: { nodes: [], edges: [] } }
+    installSpatialCore({ parseSpatial: () => answer, serializeSpatial: () => 'from core' })
+    expect(parseSpatial('anything')).toBe(answer)
+    expect(serializeSpatial(CANVAS, 'strict')).toBe('from core')
   })
 
-  it.each([
-    'rust',
-    'differential',
-  ] as const)('answers a declined call with the TypeScript under %s, and reports it', (impl) => {
-    const { codec, reports } = switched(
-      fakeCore({ parseSpatial: declining, serializeSpatial: declining }),
-      impl,
-    )
-    expect(codec.parseSpatial(TEXT)).toEqual(parseSpatial(TEXT))
-    expect(codec.serializeSpatial(CANVAS, 'extended')).toBe(serializeSpatial(CANVAS, 'extended'))
-    expect(reports.map((r) => [r.fn, r.kind])).toEqual([
-      ['parseSpatial', 'declined'],
-      ['serializeSpatial', 'declined'],
+  it('reads and writes through the staged Rust core', () => {
+    expect(spatialCoreInstalled()).toBe(true)
+    const read = parseSpatial(TEXT)
+    expect(read.ok && read.value).toMatchObject({
+      nodes: [{ id: 'a', resource: { mimeType: 'text/markdown', content: 'hi' } }],
+    })
+    expect(JSON.parse(serializeSpatial(CANVAS, 'extended'))).toEqual(JSON.parse(TEXT))
+  })
+
+  it('reports a text the core declines as a refusal at the schema stage, with the core reason', () => {
+    installSpatialCore(throwing(named('CoreInputRefused')))
+    const read = parseSpatial(TEXT)
+    expect(read.ok).toBe(false)
+    if (read.ok) return
+    expect(read.error.stage).toBe('json-canvas-schema')
+    expect(read.error.message).toMatch(/refused this document: CoreInputRefused thrown by the core/)
+  })
+
+  it('throws a ZodError at the root for a canvas the core declines to write', () => {
+    installSpatialCore(throwing(named('CoreInputRefused')))
+    const thrown = thrownBy(() => serializeSpatial(CANVAS, 'extended'))
+    expect(thrown).toBeInstanceOf(ZodError)
+    expect((thrown as ZodError).issues).toEqual([
+      {
+        code: 'custom',
+        path: [],
+        message: expect.stringContaining(
+          'refused this canvas: CoreInputRefused thrown by the core',
+        ),
+      },
     ])
   })
 
-  it('reports nothing when the two agree, and answers with the TypeScript', () => {
-    const { codec, reports } = switched(fakeCore(), 'differential')
-    expect(codec.parseSpatial(TEXT)).toEqual(parseSpatial(TEXT))
-    expect(codec.parseSpatial('{')).toEqual(parseSpatial('{'))
-    expect(codec.parseSpatial('{"nodes":7}')).toEqual(parseSpatial('{"nodes":7}'))
-    expect(codec.serializeSpatial(CANVAS, 'strict')).toBe(serializeSpatial(CANVAS, 'strict'))
-    expect(reports).toEqual([])
+  it("throws the core's strict-mode places as a ZodError", () => {
+    const issues = [{ path: ['edges', 0, 'toNode'], code: 'custom', message: 'no such node' }]
+    installSpatialCore(throwing(named('CoreSpatialInvalid', { issues })))
+    const thrown = thrownBy(() => serializeSpatial(CANVAS, 'strict'))
+    expect(thrown).toBeInstanceOf(ZodError)
+    expect((thrown as ZodError).issues).toEqual(issues)
   })
 
-  it('tells -0 from 0, a key holding undefined from an absent one, and two key orders apart', () => {
-    const variants: ((c: SpatialCanvas) => SpatialCanvas)[] = [
-      (c) => ({ ...c, nodes: c.nodes.map((n) => ({ ...n, x: -0 })) }),
-      (c) => ({ ...c, nodes: c.nodes.map((n) => ({ ...n, label: undefined })) }),
-      (c) => ({ edges: c.edges, nodes: c.nodes }) as SpatialCanvas,
-    ]
-    for (const variant of variants) {
-      const { codec, reports } = switched(
-        fakeCore({
-          parseSpatial: (text) => {
-            const r = parseSpatial(text)
-            return r.ok ? { ok: true, value: variant(r.value) } : r
-          },
-        }),
-        'differential',
-      )
-      codec.parseSpatial(TEXT)
-      expect(reports.map((r) => r.kind)).toEqual(['differs'])
+  it('keeps an unrecognised throw loud, for a read and a write', () => {
+    installSpatialCore(throwing(new RangeError('a defect')))
+    expect(() => parseSpatial(TEXT)).toThrow(RangeError)
+    expect(() => serializeSpatial(CANVAS, 'extended')).toThrow(RangeError)
+  })
+
+  it('does not take a strict-mode answer with malformed places for the Zod refusal', () => {
+    installSpatialCore(throwing(named('CoreSpatialInvalid', { issues: [{ path: 'edges' }] })))
+    expect(() => serializeSpatial(CANVAS, 'strict')).toThrow(/thrown by the core/)
+    expect(() => serializeSpatial(CANVAS, 'strict')).not.toThrow(ZodError)
+  })
+})
+
+describe('what the staged core cannot be sent, as a caller sees it', () => {
+  beforeAll(() => installCoreForTests())
+
+  const node = (id: string) =>
+    `{"nodes":[{"id":"${id}","type":"group","x":0,"y":0,"width":1,"height":1}]}`
+
+  it('refuses a text holding a lone surrogate, raw or escaped, and reads a paired one', () => {
+    for (const lone of ['\ud800', '\udc00', 'a\ud800b']) {
+      expect(parseSpatial(node(`a${lone}`))).toMatchObject({
+        ok: false,
+        error: { stage: 'json-canvas-schema', message: expect.stringContaining('lone-surrogate') },
+      })
+    }
+    expect(parseSpatial(node('\\ud800'))).toMatchObject({ ok: false })
+    expect(parseSpatial(node('\\ud83d\\ude00'))).toMatchObject({ ok: true })
+  })
+
+  it('refuses a text past 4 MiB whether its units or its bytes pass it, and reads one at it', () => {
+    const tail = (n: number) => `{"nodes":[],"x-pad":"${'a'.repeat(n)}"}`
+    const pad = 4 * 1024 * 1024 - tail(0).length
+    expect(parseSpatial(tail(pad))).toMatchObject({ ok: true })
+    for (const text of [tail(pad + 1), `{"nodes":[],"p":"${'€'.repeat(1_400_000)}"}`]) {
+      expect(parseSpatial(text)).toMatchObject({
+        ok: false,
+        error: { stage: 'json-canvas-schema', message: expect.stringContaining('too-large') },
+      })
     }
   })
 
-  it("compares a refusal by stage, message, each issue's path and code, and a refinement's words", () => {
-    const schema = '{"nodes":7}'
-    const reworded = (words: (code: string) => string) => (text: string) => {
-      const r = parseSpatial(text)
-      if (r.ok) return r
-      const issues = r.error.issues.map((i) => ({ ...i, message: words(i.code) }))
-      return { ok: false as const, error: { ...r.error, issues } }
+  it('refuses nesting past the reader, wherever it sits', () => {
+    const deep = `{"nodes":[],"x-whiteboard":{"facets":{"a.b/v0":${'['.repeat(80)}${']'.repeat(80)}}}}`
+    expect(parseSpatial(deep)).toMatchObject({
+      ok: false,
+      error: { stage: 'json-canvas-schema', message: expect.stringContaining('too-deep') },
+    })
+  })
+
+  it('refuses a link whose host needs tables the core lacks, and writes a plain one', () => {
+    const link = (url: string) =>
+      `{"nodes":[{"id":"a","type":"link","x":0,"y":0,"width":1,"height":1,"url":"${url}"}]}`
+    expect(parseSpatial(link('https://example.com/'))).toMatchObject({ ok: true })
+    expect(parseSpatial(link('https://bücher.example/'))).toMatchObject({
+      ok: false,
+      error: { stage: 'json-canvas-schema', message: expect.stringContaining('(url)') },
+    })
+  })
+
+  it('refuses to write a canvas the wire does not carry, and one JSON cannot spell', () => {
+    class Odd {}
+    const holder = (facet: unknown): SpatialCanvas =>
+      ({ nodes: [], edges: [], facets: { 'a.b/v0': facet } }) as unknown as SpatialCanvas
+    for (const facet of [new Odd(), '\ud800', [undefined], () => 1, 2n ** 60n]) {
+      const thrown = thrownBy(() => serializeSpatial(holder(facet), 'extended'))
+      expect(thrown, String(facet)).toBeInstanceOf(ZodError)
+      expect((thrown as ZodError).issues[0]?.message).toContain('refused this canvas')
     }
-    const agree = switched(fakeCore({ parseSpatial: reworded(() => 'x') }), 'differential')
-    agree.codec.parseSpatial(schema)
-    expect(agree.reports).toEqual([])
-
-    const moved = switched(
-      fakeCore({
-        parseSpatial: (text) => {
-          const r = parseSpatial(text)
-          if (r.ok) return r
-          const issues = r.error.issues.map((i) => ({ ...i, path: ['elsewhere'] }))
-          return { ok: false, error: { ...r.error, issues } }
-        },
-      }),
-      'differential',
-    )
-    moved.codec.parseSpatial(schema)
-    expect(moved.reports.map((r) => r.kind)).toEqual(['differs'])
-
-    const message = switched(
-      fakeCore({
-        parseSpatial: (text) => {
-          const r = parseSpatial(text)
-          return r.ok ? r : { ok: false, error: { ...r.error, message: 'other' } }
-        },
-      }),
-      'differential',
-    )
-    message.codec.parseSpatial('{')
-    expect(message.reports.map((r) => r.kind)).toEqual(['differs'])
   })
 
-  it('reports a different text from the writer, with the canvas and the mode', () => {
-    const { codec, reports } = switched(
-      fakeCore({ serializeSpatial: (canvas, mode) => `${serializeSpatial(canvas, mode)} ` }),
-      'differential',
-    )
-    expect(codec.serializeSpatial(CANVAS, 'extended')).toBe(serializeSpatial(CANVAS, 'extended'))
-    expect(reports).toMatchObject([
-      { fn: 'serializeSpatial', kind: 'differs', canvas: CANVAS, mode: 'extended' },
-    ])
-  })
-
-  describe("a core that refuses a canvas the strict mode's validation refuses", () => {
-    it('throws it under rust as the ZodError the TypeScript throws, and reports no decline', () => {
-      const { codec, reports } = switched(fakeCore({ serializeSpatial: invalid() }), 'rust')
-      let thrown: unknown
-      try {
-        codec.serializeSpatial(CANVAS, 'strict')
-      } catch (error) {
-        thrown = error
-      }
-      expect(thrown).toBeInstanceOf(ZodError)
-      expect((thrown as ZodError).issues).toEqual([
-        { path: ['edges', 0, 'toNode'], code: 'custom', message: 'no such node' },
-      ])
-      expect(reports).toEqual([])
-    })
-
-    it('reports it under differential when the TypeScript writes the canvas', () => {
-      const { codec, reports } = switched(fakeCore({ serializeSpatial: invalid() }), 'differential')
-      expect(codec.serializeSpatial(CANVAS, 'strict')).toBe(serializeSpatial(CANVAS, 'strict'))
-      expect(reports.map((r) => [r.fn, r.kind])).toEqual([['serializeSpatial', 'differs']])
-    })
-
-    it('treats a refusal of any other shape as a decline', () => {
-      for (const issues of [null, 'no', [{ path: 'x', code: 'custom', message: 'm' }]]) {
-        const { codec, reports } = switched(fakeCore({ serializeSpatial: invalid(issues) }), 'rust')
-        expect(codec.serializeSpatial(CANVAS, 'strict')).toBe(serializeSpatial(CANVAS, 'strict'))
-        expect(reports.map((r) => r.kind)).toEqual(['declined'])
-      }
-    })
+  it('refuses a strict write that is no JSON Canvas 1.0 document, naming the place', () => {
+    const dangling = {
+      nodes: [],
+      edges: [{ id: 'e', from: { node: 'missing' }, to: { node: 'missing' } }],
+    } as unknown as SpatialCanvas
+    const thrown = thrownBy(() => serializeSpatial(dangling, 'strict'))
+    expect(thrown).toBeInstanceOf(ZodError)
+    expect((thrown as ZodError).issues.length).toBeGreaterThan(0)
+    expect(() => serializeSpatial(dangling, 'extended')).not.toThrow()
   })
 })

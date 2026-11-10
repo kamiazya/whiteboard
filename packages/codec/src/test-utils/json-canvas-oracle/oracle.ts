@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { parseSpatial } from '../../spatial/parse.js'
-import { serializeSpatial } from '../../spatial/serialize.js'
+import type { CodecParseResult } from '../../errors.js'
+import type { serializeSpatial } from '../../spatial/spatial-core.js'
 import {
   decode as decodeBits,
   type Encoded,
@@ -8,8 +8,10 @@ import {
 } from '../frontmatter-oracle/oracle.js'
 
 /**
- * The TypeScript's answers that the Rust JSON Canvas codec is held to
- * (`crates/core/codec/tests/json_canvas_oracle.rs`).
+ * The answers recorded from the TypeScript JSON Canvas codec, before its writer
+ * was deleted, that the Rust codec is held to
+ * (`crates/core/codec/tests/json_canvas_oracle.rs`), and that the viewer's
+ * TypeScript reader is held to as well.
  *
  * A reader outcome is the document, encoded as the frontmatter oracle encodes a
  * value (a number is the hex of its 64 bits) with every object's keys in the
@@ -58,9 +60,6 @@ export type WriterCase = { k: 'w'; m: SpatialSerializeMode; c: Compact } & (
   | { err: { issues: Issues } }
 )
 export type RecordedCase = ReaderCase | WriterCase
-
-/** How a canvas is written: the second argument of `serializeSpatial`. */
-type SpatialSerializeMode = Parameters<typeof serializeSpatial>[1]
 
 type Obj = Record<string, unknown>
 
@@ -141,8 +140,25 @@ const issuesOf = (issues: readonly { path: PropertyKey[]; code: string }[]): Iss
     issue.code,
   ])
 
-export function readerCase(t: string): ReaderCase {
-  const result = parseSpatial(t)
+/** How a canvas is written: the second argument of `serializeSpatial`. */
+type SpatialSerializeMode = Parameters<typeof serializeSpatial>[1]
+
+/** A reader of JSON Canvas text: the core through codec's export, or the viewer's own. */
+export type Reader = (text: string) => CodecParseResult<SpatialCanvas>
+
+/** A writer of JSON Canvas text: the core through codec's export. */
+export type Writer = (canvas: SpatialCanvas, mode: SpatialSerializeMode) => string
+
+/** Why a reader or writer declined, as the codec words it: the core's detail, in parentheses. */
+const declineReason = (message: string): string | undefined =>
+  /refused its input: [\w-]+ \(([\w-]+)\)/.exec(message)?.[1]
+
+/** How a reader answers `t`: the document, a refusal, or `declined` with the core's reason. */
+export function readerCase(
+  read: Reader,
+  t: string,
+): ReaderCase | { k: 'r'; t: string; declined: string } {
+  const result = read(t)
   if (result.ok) return { k: 'r', t, ok: encode(inSchemaOrder(result.value)) }
   const { stage, message, issues } = result.error
   if (stage === 'json-syntax') return { k: 'r', t, err: { stage } }
@@ -153,34 +169,35 @@ export function readerCase(t: string): ReaderCase {
       err: { stage: 'json-canvas-schema', class: 'schema', issues: issuesOf(issues) },
     }
   }
+  const declined = declineReason(message)
+  if (declined !== undefined) return { k: 'r', t, declined }
   if (!message.startsWith('this file carries x-whiteboard.comments')) {
     throw new Error(`a refusal the oracle has no class for: ${message}`)
   }
   return { k: 'r', t, err: { stage: 'json-canvas-schema', class: 'conversation' } }
 }
 
-/** A canvas as the writer is asked about it: `encoded` is what the recording holds. */
-export function writerCase(canvas: SpatialCanvas, m: SpatialSerializeMode): WriterCase {
-  const c = encode(inSchemaOrder(canvas))
-  return answerWriter(c, m)
-}
-
 /** The canvas a recorded writer case holds. */
 export const canvasOf = (c: WriterCase['c']): SpatialCanvas => decode(c) as SpatialCanvas
 
-function answerWriter(c: Compact, m: SpatialSerializeMode): WriterCase {
-  const canvas = canvasOf(c)
+/** How a writer answers a recorded canvas: the text, the strict mode's issues, or `declined`. */
+export function writerCase(
+  write: Writer,
+  c: Compact,
+  m: SpatialSerializeMode,
+): WriterCase | { k: 'w'; m: SpatialSerializeMode; c: Compact; declined: string } {
   try {
-    return { k: 'w', m, c, y: serializeSpatial(canvas, m) }
+    return { k: 'w', m, c, y: write(canvasOf(c), m) }
   } catch (error) {
-    const issues = (error as { issues?: { path: PropertyKey[]; code: string }[] }).issues
+    const { issues, message } = error as {
+      issues?: { path: PropertyKey[]; code: string }[]
+      message?: string
+    }
     if (issues === undefined) throw error
+    const declined = declineReason(message ?? '')
+    if (declined !== undefined) return { k: 'w', m, c, declined }
     return { k: 'w', m, c, err: { issues: issuesOf(issues) } }
   }
-}
-
-export function encodeRecording(cases: readonly RecordedCase[]): string {
-  return `${cases.map((c) => JSON.stringify(c)).join('\n')}\n`
 }
 
 export function decodeRecording(text: string): RecordedCase[] {
@@ -188,9 +205,4 @@ export function decodeRecording(text: string): RecordedCase[] {
     .split('\n')
     .filter((line) => line !== '')
     .map((line) => JSON.parse(line) as RecordedCase)
-}
-
-/** What the TypeScript answers today for a recorded case's input. */
-export function answerAgain(recorded: RecordedCase): RecordedCase {
-  return recorded.k === 'r' ? readerCase(recorded.t) : answerWriter(recorded.c, recorded.m)
 }

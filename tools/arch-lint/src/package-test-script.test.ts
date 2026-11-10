@@ -118,11 +118,6 @@ function configsRunByScript(dir: string, script: string): string[] {
  * really does not run.
  */
 const SCRIPT_OMITS: Record<string, Omission> = {
-  'packages/codec': {
-    configs: ['packages/codec/vitest.rust.config.ts'],
-    reason:
-      'codec-rust loads the artifact `build:wasm` stages, which needs the Rust toolchain; CI runs it in the rust job, and `pnpm test` (the root aggregate) still includes it',
-  },
   'packages/core-wasm': {
     configs: ['packages/core-wasm/vitest.rust.config.ts'],
     reason:

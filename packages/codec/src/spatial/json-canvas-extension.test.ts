@@ -1,7 +1,7 @@
 import { MAX_BENDS, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { jsonCanvasDocumentSchema, jsonCanvasNodeSchema, xWhiteboardSchema } from './json-canvas.js'
-import { parseSpatial } from './parse.js'
+import { parseSpatial } from './spatial-core.js'
 
 const baseGeometry = { id: 'n1', x: 0, y: 0, width: 100, height: 100 }
 

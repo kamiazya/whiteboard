@@ -69,12 +69,9 @@ export function resolveHookProjectRoot(env, cwd) {
  */
 export function resolveDevDataDirEnv(env, repoRoot) {
   // The dev daemon is where the Rust core is dogfooded (ADR-0054 stage 2):
-  // edge routing and the JSON Canvas codec each run both implementations and
-  // the TypeScript's answer is used, unless the caller says otherwise.
-  const core = {
-    ...(env.WHITEBOARD_CORE ? {} : { WHITEBOARD_CORE: 'differential' }),
-    ...(env.WHITEBOARD_CORE_SPATIAL ? {} : { WHITEBOARD_CORE_SPATIAL: 'differential' }),
-  }
+  // edge routing runs both implementations and the TypeScript's answer is
+  // used, unless the caller says otherwise.
+  const core = env.WHITEBOARD_CORE ? {} : { WHITEBOARD_CORE: 'differential' }
   if (env.WHITEBOARD_DATA_DIR) {
     return { ...env, ...core }
   }

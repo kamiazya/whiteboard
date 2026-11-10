@@ -1,5 +1,9 @@
 import type { CodecParseError, CodecParseResult } from '@kamiazya/whiteboard-codec'
-import { fromJsonCanvas, jsonCanvasDocumentSchema, parseSpatial } from '@kamiazya/whiteboard-codec'
+import {
+  fromJsonCanvas,
+  jsonCanvasDocumentSchema,
+  readJsonCanvasText,
+} from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**
@@ -13,7 +17,9 @@ export type ViewerScene = SpatialCanvas
 /**
  * Total parser: never throws a raw ZodError/SyntaxError, mirroring
  * codec's own CodecParseResult contract. A string input goes through
- * parseSpatial (JSON-syntax stage included); an already-parsed value (e.g.
+ * codec's TypeScript reader, `readJsonCanvasText` (JSON-syntax stage included);
+ * the widget iframe has no Rust core to read through, and this is the one realm
+ * that keeps a TypeScript reader. An already-parsed value (e.g.
  * an embedded <script> JSON.parse() result, or an MCP structuredContent
  * payload) is validated directly against the schema.
  *
@@ -24,7 +30,7 @@ export type ViewerScene = SpatialCanvas
  * tracked it would break every third-party document the moment it did.
  */
 export function parseViewerScene(input: unknown): CodecParseResult<ViewerScene> {
-  if (typeof input === 'string') return parseSpatial(input)
+  if (typeof input === 'string') return readJsonCanvasText(input)
 
   const parsed = jsonCanvasDocumentSchema.safeParse(input)
   if (!parsed.success) {

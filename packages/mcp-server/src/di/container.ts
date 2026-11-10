@@ -100,11 +100,10 @@ export function resolveServerDeps(
     // declares a theme's family exactly where the PNG export would: from the
     // faces this daemon can measure, never from a second list.
     textMeasurer: () => createExportTextMeasurer({ fontsDir: scope.layout.fontsDir }),
-    // The Rust core a layout routes through and the one the JSON Canvas codec
-    // reads and writes through, each as its environment switch says (ADR-0054's
-    // CoreImpl). The OKF envelope is installed at boot, with no switch.
+    // The Rust core a layout routes through, as its environment switch says
+    // (ADR-0054's CoreImpl). The OKF envelope and the JSON Canvas codec are
+    // installed at boot, with no switch.
     layoutCore: core.layoutCore,
-    spatialCore: core.spatialCore,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

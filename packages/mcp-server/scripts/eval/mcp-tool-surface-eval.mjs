@@ -66,7 +66,9 @@ const { constantRatioMeasureText, createSpatialTheme, layoutSpatialCanvas, withD
 const { scoreComposition, scoreDrawing, scoreFacets } = await import(
   '@kamiazya/whiteboard-canvas-render/scoring'
 )
-const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
+// This script has no Rust core to read through; it reads what a model drew the way the
+// widget does, with codec's TypeScript reader.
+const { readJsonCanvasText: parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
 const arg = (name, fallback) => valued.get(name) ?? fallback
 

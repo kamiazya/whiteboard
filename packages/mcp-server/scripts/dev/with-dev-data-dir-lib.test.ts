@@ -47,13 +47,6 @@ describe('resolveDevDataDirEnv', () => {
     expect(resolveDevDataDirEnv({ WHITEBOARD_CORE: 'ts' }, repoRoot).WHITEBOARD_CORE).toBe('ts')
   })
 
-  it('reads JSON Canvas in differential unless WHITEBOARD_CORE_SPATIAL says otherwise', () => {
-    expect(resolveDevDataDirEnv({}, repoRoot).WHITEBOARD_CORE_SPATIAL).toBe('differential')
-    expect(
-      resolveDevDataDirEnv({ WHITEBOARD_CORE_SPATIAL: 'ts' }, repoRoot).WHITEBOARD_CORE_SPATIAL,
-    ).toBe('ts')
-  })
-
   it('returns a new object and leaves the input env untouched (immutable update)', () => {
     const input = { FOO: 'bar' }
     const result = resolveDevDataDirEnv(input, repoRoot)

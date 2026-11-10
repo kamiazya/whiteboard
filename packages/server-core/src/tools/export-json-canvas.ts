@@ -1,9 +1,10 @@
+import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
+import { ZodError, z } from 'zod'
 import { loadDocument } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
-import { spatialCodecOf } from './spatial-codec.js'
+import { DocumentSerializeError } from './errors.js'
 
 /**
  * `workspaceId` is passed to the store inside the `DocRef`: the daemon's
@@ -30,6 +31,12 @@ export type ExportJsonCanvasOutput = z.infer<typeof exportJsonCanvasOutputSchema
  *
  * Not an MCP tool: `wb_document_get` chooses this projection for a spatial
  * document.
+ *
+ * The writer is the realm's Rust core, which refuses what it cannot carry (a
+ * canvas past its cap, a link whose host it has no tables for) and, in strict
+ * mode, a canvas that is no JSON Canvas 1.0 document. Both arrive as a
+ * `ZodError`, reported as the one document's own failure so a batch read says
+ * which document and why.
  */
 export async function exportJsonCanvas(
   deps: ServerDeps,
@@ -38,6 +45,12 @@ export async function exportJsonCanvas(
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
   const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
-  const codec = await spatialCodecOf(deps)
-  return { json: codec.serializeSpatial(canvas, mode) }
+  try {
+    return { json: serializeSpatial(canvas, mode) }
+  } catch (error) {
+    if (error instanceof ZodError) {
+      throw new DocumentSerializeError(input.documentId, 'JSON Canvas', error)
+    }
+    throw error
+  }
 }

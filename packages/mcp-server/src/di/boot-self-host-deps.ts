@@ -1,6 +1,6 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { ensureWorkspaceId } from '../server/current-workspace.js'
-import { installOkfCoreAtBoot } from '../server/export/layout-core.js'
+import { installCodecCoresAtBoot } from '../server/export/layout-core.js'
 import { getDb } from '../server/store/db/index.js'
 import { prepareDataDir } from '../server/store/db/prepare.js'
 import type { TenantDatabase } from '../server/store/db/tenant-database.js'
@@ -80,7 +80,7 @@ export async function bootSelfHostDeps(
 }> {
   // First, so a daemon without the core stops before it touches the data dir
   // rather than serving a document it cannot read.
-  await installOkfCoreAtBoot()
+  await installCodecCoresAtBoot()
   await prepareSelfHostDataDir(dataDir, options.dataDirTrust ?? 'owner')
   const db = await getDb(dataDir)
   const scope = storeScope(dataDir)

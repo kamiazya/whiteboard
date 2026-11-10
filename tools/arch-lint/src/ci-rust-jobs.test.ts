@@ -82,7 +82,6 @@ describe('the rust job runs every Rust gate', () => {
     'pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm',
     'pnpm --filter @kamiazya/whiteboard-core-wasm typecheck:abi',
     'pnpm exec vitest run --project=core-wasm-rust',
-    'pnpm exec vitest run --project=codec-rust',
     'pnpm rust:release:check',
   ])('runs %s, gated on its own scope', (command) => {
     const step = stepsOf(ci, 'rust').find((s) => s.run?.trim() === command)
@@ -261,7 +260,6 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(unit[at]?.if).toBe("steps.scope.outputs.run == 'true'")
     expect(unit[test]?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_SPATIAL: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
@@ -277,12 +275,11 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(browser[at]?.if).toBe("steps.scope.outputs.run == 'true'")
     expect(browser[test]?.env).toMatchObject({
       VITE_WHITEBOARD_CORE: 'differential',
-      VITE_WHITEBOARD_CORE_SPATIAL: 'differential',
       VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
 
-  it('is restored for every stress leg, with routing and JSON Canvas on for the browser leg alone', () => {
+  it('is restored for every stress leg, with routing on for the browser leg alone', () => {
     const stress = stepsOf(ci, 'stress-changed-tests')
     const restore = stress.find((s) => s.uses === './.github/actions/core-wasm')
     expect(restore?.if).toBe("steps.changed.outputs.files != ''")
@@ -290,14 +287,14 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(runs).toHaveLength(2)
     for (const run of runs) {
       // The whole expression: the browser leg compares and fails, the node leg is unset.
-      for (const name of ['VITE_WHITEBOARD_CORE', 'VITE_WHITEBOARD_CORE_SPATIAL']) {
-        expect(run.env?.[name]).toMatch(
-          /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
-        )
-      }
+      expect(run.env?.VITE_WHITEBOARD_CORE).toMatch(
+        /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
+      )
       expect(run.env).toMatchObject({ VITE_WHITEBOARD_CORE_MISMATCH: 'throw' })
-      // OKF has no switch left to set: the realms that run it install the core.
-      expect(Object.keys(run.env ?? {}).filter((name) => /CORE_OKF/.test(name))).toEqual([])
+      // OKF and JSON Canvas have no switch left to set: the realms that run them install the core.
+      expect(Object.keys(run.env ?? {}).filter((name) => /CORE_(OKF|SPATIAL)/.test(name))).toEqual(
+        [],
+      )
     }
   })
 
