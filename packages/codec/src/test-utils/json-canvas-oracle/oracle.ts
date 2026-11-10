@@ -178,7 +178,7 @@ export function readerCase(
 }
 
 /** The canvas a recorded writer case holds. */
-export const canvasOf = (c: WriterCase['c']): SpatialCanvas => decode(c) as SpatialCanvas
+const canvasOf = (c: WriterCase['c']): SpatialCanvas => decode(c) as SpatialCanvas
 
 /** How a writer answers a recorded canvas: the text, the strict mode's issues, or `declined`. */
 export function writerCase(
