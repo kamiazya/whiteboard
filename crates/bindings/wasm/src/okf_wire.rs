@@ -136,9 +136,10 @@ pub(crate) fn frontmatter_from(value: Value) -> Option<OkfMarkdownFrontmatter> {
     let Value::Map(entries) = value else { return None };
     let mut fm = OkfMarkdownFrontmatter::default();
     let mut held = None::<String>;
-    let mut seen = BTreeSet::new();
+    let mut seen = [false; ORDER.len()];
     for (name, item) in entries {
-        if !ORDER.contains(&name.as_str()) || !seen.insert(name.clone()) {
+        let place = ORDER.iter().position(|k| *k == name)?;
+        if std::mem::replace(seen.get_mut(place)?, true) {
             return None;
         }
         match name.as_str() {
