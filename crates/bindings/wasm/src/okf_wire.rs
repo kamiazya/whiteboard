@@ -77,8 +77,8 @@ fn entries(pairs: &[Json]) -> Option<Map> {
         .collect()
 }
 
-/// The root keys of a frontmatter, in the order the host's object holds them
-/// (the schema's), which is also the order the wire must name them in.
+/// The root keys of a frontmatter, in the schema's order: the order a read
+/// hands them over in, and the keys a write accepts, in any order.
 const ORDER: [&str; 10] = [
     "type",
     "title",
