@@ -5,8 +5,9 @@
 //! Zod reports every refusal it finds, fields in the order the schema
 //! declares them, so this does too, and an [`Issue`] is where and why.
 
-use super::document::{Code, Issue, Map, Step};
+use super::document::{Code, Issue, Map};
 use super::js::length_below_one;
+use crate::frontmatter::Step;
 use crate::frontmatter::Value;
 use whiteboard_model::checks::{
     RESERVED_ROOT_KEYS, extension_facet_keys, okf_actor, okf_timestamp,

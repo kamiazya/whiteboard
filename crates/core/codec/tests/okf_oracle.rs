@@ -286,7 +286,9 @@ fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
         };
         match (serialize(&doc), case.get("y").and_then(Json::as_str), case.get("err")) {
             (Ok(text), Some(y), _) if text == y => written += 1,
-            (Err(Unwritable::TooDeep), ..) => problems.push(format!("too deep: {case}")),
+            (Err(faults), ..) if faults.iter().any(|f| f.why == Unwritable::TooDeep) => {
+                problems.push(format!("too deep: {case}"));
+            }
             (Err(_), None, Some(_)) => unwritable += 1,
             (answer, y, _) => {
                 problems.push(format!("rust {answer:?}, typescript {y:?}, for {}", case["d"]));

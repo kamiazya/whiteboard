@@ -29,9 +29,9 @@ export function instrumentGlue(glue: CoreGlue) {
       memory = exports.memory
       return exports
     },
-    okf_parse(text) {
+    okf_parse(text, mark) {
       calls += 1
-      return glue.okf_parse(text)
+      return glue.okf_parse(text, mark)
     },
     okf_serialize(frontmatter) {
       calls += 1

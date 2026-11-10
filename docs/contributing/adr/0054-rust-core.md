@@ -749,12 +749,16 @@ the hex of its 64 bits and a collection as one array, so a value nested to the
 writer's cap stays inside `serde_json`'s recursion limit. The body never
 crosses on the way out: a read answers the UTF-16 offset the body starts at and
 the shim slices its own string, a write answers everything before the body and
-the shim appends it, so the body is verbatim by construction. The shim refuses
-a text with a lone surrogate (it would cross as U+FFFD and Rust would accept
-what the TypeScript refuses), a text past the caps, and a document the wire
-does not carry (keys not in the schema's order, a value of another kind), all as
-`CoreInputRefused`, and a value with no YAML spelling as `CoreOkfUnwritable`;
-a root answers each from the TypeScript. Declared deviations: a YAML refusal's
+the shim appends it, so the body is verbatim by construction. A read is sent
+the head alone (the fences and the frontmatter), so a body of any size, or
+holding a lone surrogate, never crosses; a lone surrogate in the head crosses as
+a mark the artifact looks for among the strings and keys it read, which is the
+TypeScript's refusal of one. The shim refuses a head past the cap and a
+document the wire does not carry (a key the schema does not name, a value of
+another kind) as `CoreInputRefused`, which a root answers from the TypeScript,
+and a value with no YAML spelling as `CoreOkfUnwritable`, which carries each
+place with its path and the TypeScript's words and which the root throws as
+`OkfNotYamlSafeError`. Declared deviations: a YAML refusal's
 message names its class, not the `yaml` package's text, and a schema issue
 carries its path, code and a message naming the code, not Zod's extra fields.
 The three other refusal messages are the TypeScript's own words.

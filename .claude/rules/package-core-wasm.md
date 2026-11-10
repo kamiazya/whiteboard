@@ -30,9 +30,14 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   the anchors the side search settled (the editor freezes a drag from
   them), and writes the budget accounts back. It satisfies canvas-render's
   `RoutingCore` structurally, which is how a root hands it to the layout.
-  `parseOkf` / `serializeOkf` are one call each the same way: the body
-  never crosses (Rust answers a UTF-16 offset, the shim slices and appends),
-  and an unwritable document throws `CoreOkfUnwritable`.
+  `parseOkf` / `serializeOkf` are one call each the same way: only the head
+  (the fences and the frontmatter) crosses — the shim cuts it with
+  `parseOkf`'s own pattern, slices the body from its own string, and marks a
+  lone surrogate in the head so Rust can refuse it where the TypeScript does —
+  and an unwritable document throws `CoreOkfUnwritable` carrying the
+  TypeScript's `issues` (path and reason, in its order), which codec rethrows
+  as `OkfNotYamlSafeError`. A value only the host can hold is walked by
+  `okf-unsafe.ts`, a port of the TypeScript's own walk.
 - Refusing, as `CoreInputRefused` with a `code` from the generated
   `RefusalCode` (`src/generated/input-caps.ts`, `cargo xtask codegen` from
   `crates/input-caps.json`, so both languages refuse by one cap, QR-28b):

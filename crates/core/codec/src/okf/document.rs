@@ -1,6 +1,6 @@
 //! The OKF document the envelope reads and writes, and why it was refused.
 
-use crate::frontmatter::Refusal;
+use crate::frontmatter::{Refusal, Step};
 use whiteboard_model::okf::OkfMarkdownFrontmatter;
 
 /// A mapping in the order JavaScript enumerates its keys: integer-like keys
@@ -16,13 +16,6 @@ pub use whiteboard_model::Map;
 pub struct Document {
     pub frontmatter: OkfMarkdownFrontmatter,
     pub body: String,
-}
-
-/// A step of a path into the frontmatter: a key or a list index.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Step {
-    Key(String),
-    Index(usize),
 }
 
 /// The Zod issue codes the schema can raise.

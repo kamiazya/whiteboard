@@ -2,7 +2,7 @@ import type { CodecParseResult } from '../errors.js'
 import { inSchemaOrder } from './frontmatter-order.js'
 import { parseOkf as parseOkfTs } from './parse.js'
 import type { OkfMarkdownDocument } from './schema.js'
-import { serializeOkf as serializeOkfTs } from './serialize.js'
+import { OkfNotYamlSafeError, serializeOkf as serializeOkfTs } from './serialize.js'
 
 /**
  * ADR-0054's per-function switch for the OKF envelope: `ts` runs the
@@ -17,10 +17,14 @@ export type OkfImpl = 'ts' | 'differential' | 'rust'
  * answers them. Declared here, structurally, so this package never imports
  * the shim: the composition root holds both and hands one to the other.
  *
- * Either call may throw to DECLINE (the shim's `CoreInputRefused` for a text
- * past its cap or one holding a lone surrogate, `CoreOkfUnwritable` for a
- * value with no YAML spelling). A decline is answered by the TypeScript, in
- * every mode, so a caller sees the TypeScript's own answer and error class.
+ * Either call may throw to DECLINE (the shim's `CoreInputRefused` for a head
+ * past its cap or a document the wire does not carry). A decline is answered by
+ * the TypeScript, in every mode, so a caller sees the TypeScript's own answer
+ * and error class. `serializeOkf` may instead throw the core's answer for a
+ * value with no YAML spelling: an error named `CoreOkfUnwritable` whose
+ * `issues` are the places, with their paths and the TypeScript's words. That
+ * is no decline: it is thrown as `OkfNotYamlSafeError`, the typed error the
+ * TypeScript writer throws.
  */
 export interface OkfCore {
   parseOkf(text: string): CodecParseResult<OkfMarkdownDocument>
@@ -132,9 +136,30 @@ const answered = <T>(answer: Answer<T>): T => {
   return answer.value
 }
 
-/** A writer's answer as one string: the text, or that it refused. */
-const canonicalWrite = (answer: Answer<string>): string =>
-  'value' in answer ? JSON.stringify(['ok', answer.value]) : JSON.stringify(['threw'])
+/**
+ * A writer's answer as one string: the text, the places it refused with the
+ * words and order it named them in, or that it threw something else.
+ */
+const canonicalWrite = (answer: Answer<string>): string => {
+  if ('value' in answer) return JSON.stringify(['ok', answer.value])
+  if (!(answer.threw instanceof OkfNotYamlSafeError)) return JSON.stringify(['threw'])
+  const places = answer.threw.issues.map((issue) => [issue.path.map(String), issue.message])
+  return JSON.stringify(['unsafe', places])
+}
+
+/** The typed error a core's unwritable answer stands for, or undefined when `err` is no such answer. */
+function unsafeOf(err: unknown): OkfNotYamlSafeError | undefined {
+  if (!(err instanceof Error) || err.name !== 'CoreOkfUnwritable') return undefined
+  const issues: unknown = (err as { issues?: unknown }).issues
+  const isStep = (step: unknown) => typeof step === 'string' || typeof step === 'number'
+  const isIssue = (issue: unknown): issue is { path: (string | number)[]; message: string } => {
+    const { path, message } = (issue ?? {}) as { path?: unknown; message?: unknown }
+    return Array.isArray(path) && path.every(isStep) && typeof message === 'string'
+  }
+  return Array.isArray(issues) && issues.every(isIssue)
+    ? new OkfNotYamlSafeError(issues)
+    : undefined
+}
 
 function parseWith(core: OkfCodecCore, text: string): CodecParseResult<OkfMarkdownDocument> {
   const impl = core.impl.parseOkf
@@ -157,12 +182,14 @@ function serializeWith(core: OkfCodecCore, unordered: OkfMarkdownDocument): stri
   const doc = inSchemaOrder(unordered)
   const impl = core.impl.serializeOkf
   if (impl === 'ts') return serializeOkfTs(doc)
-  const rust = ask(() => core.okf.serializeOkf(doc))
-  if ('threw' in rust) {
+  const asked = ask(() => core.okf.serializeOkf(doc))
+  const unsafe = 'threw' in asked ? unsafeOf(asked.threw) : undefined
+  const rust: Answer<string> = unsafe === undefined ? asked : { threw: unsafe }
+  if ('threw' in rust && unsafe === undefined) {
     core.onMismatch?.({ fn: 'serializeOkf', kind: 'declined', err: rust.threw })
     return serializeOkfTs(doc)
   }
-  if (impl === 'rust') return rust.value
+  if (impl === 'rust') return answered(rust)
   const ts = ask(() => serializeOkfTs(doc))
   const [tsValue, rustValue] = [canonicalWrite(ts), canonicalWrite(rust)]
   if (tsValue !== rustValue) {

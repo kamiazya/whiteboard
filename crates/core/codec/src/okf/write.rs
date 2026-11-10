@@ -3,10 +3,10 @@
 
 use super::document::{Document, Map};
 use super::js::{compare_code_units, enumeration_order};
-use crate::frontmatter::{Unwritable, Value, stringify};
+use crate::frontmatter::{Fault, Value, stringify};
 use whiteboard_model::okf::{OkfMarkdownFrontmatter, OkfTrustEvent};
 
-pub(super) fn document(doc: &Document) -> Result<String, Unwritable> {
+pub(super) fn document(doc: &Document) -> Result<String, Vec<Fault>> {
     let fm = &doc.frontmatter;
     let mut entries = modelled(fm);
     // `facetsRaw` is spread at the root it came from, and `facets` last, so
