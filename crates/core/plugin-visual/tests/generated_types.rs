@@ -9,7 +9,7 @@ use whiteboard_plugin_visual::checks::{facet_key, namespaced_id};
 use whiteboard_plugin_visual::visual::{
     EdgeRoutingStyle, LineJumps, VisualAxesFacet, VisualEdgesFacet, VisualInkFacet,
     VisualShapeFacet, VisualShapeKind, VisualStencilFacet, VisualStrokeFacet, VisualStrokeWidth,
-    VisualTextAlign, VisualTextFacet, VisualThemeFacet,
+    VisualSymbolFacet, VisualSymbolIcon, VisualTextAlign, VisualTextFacet, VisualThemeFacet,
 };
 
 #[test]
@@ -87,4 +87,11 @@ fn a_sample_of_each_facet_holds_what_its_contract_names() {
 
     let axes = VisualAxesFacet { axes: vec!["visual.shape/v0".to_owned()] };
     assert!(axes.axes.iter().all(|key| facet_key(key)));
+}
+
+#[test]
+fn a_symbol_with_nothing_chosen_is_an_icon_with_no_name() {
+    let symbol = VisualSymbolFacet::default();
+    assert_eq!(symbol, VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon::default()));
+    assert_eq!(VisualSymbolIcon::KIND, "icon");
 }
