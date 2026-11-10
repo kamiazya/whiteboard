@@ -3,11 +3,12 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
-import type {
-  OkfCodecCore,
-  OkfMismatch,
-  SpatialCodecCore,
-  SpatialMismatch,
+import {
+  installOkfCore,
+  type OkfCodecCore,
+  type OkfMismatch,
+  type SpatialCodecCore,
+  type SpatialMismatch,
 } from '@kamiazya/whiteboard-codec'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import { z } from 'zod'
@@ -185,11 +186,17 @@ export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
       impl: { routeLayout: routing },
       onMismatch: reporter(settings),
     })),
-    okfCore: memoized(okf, loadCore, (core) => ({
-      okf: core,
-      impl: { parseOkf: okf, serializeOkf: okf },
-      onMismatch: codecReporter(settings, 'okf'),
-    })),
+    okfCore: memoized(okf, loadCore, (core) => {
+      const codecCore: OkfCodecCore = {
+        okf: core,
+        impl: { parseOkf: okf, serializeOkf: okf },
+        onMismatch: codecReporter(settings, 'okf'),
+      }
+      // This daemon's plain parseOkf/serializeOkf answer through it too, once
+      // a caller has asked for the core (the first call that reaches a codec).
+      installOkfCore(codecCore)
+      return codecCore
+    }),
     spatialCore: memoized(spatial, loadCore, (core) => ({
       spatial: core,
       impl: { parseSpatial: spatial, serializeSpatial: spatial },

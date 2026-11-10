@@ -277,7 +277,7 @@ describe('the core-wasm action builds what the rust job builds', () => {
     })
   })
 
-  it('is restored for every stress leg, and turned on for the browser leg alone', () => {
+  it('is restored for every stress leg, with routing and JSON Canvas on for the browser leg alone and OKF on for both', () => {
     const stress = stepsOf(ci, 'stress-changed-tests')
     const restore = stress.find((s) => s.uses === './.github/actions/core-wasm')
     expect(restore?.if).toBe("steps.changed.outputs.files != ''")
@@ -285,27 +285,45 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(runs).toHaveLength(2)
     for (const run of runs) {
       // The whole expression: the browser leg compares and fails, the node leg is unset.
-      for (const name of [
-        'VITE_WHITEBOARD_CORE',
-        'VITE_WHITEBOARD_CORE_OKF',
-        'VITE_WHITEBOARD_CORE_SPATIAL',
-      ]) {
+      for (const name of ['VITE_WHITEBOARD_CORE', 'VITE_WHITEBOARD_CORE_SPATIAL']) {
         expect(run.env?.[name]).toMatch(
           /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
         )
       }
-      expect(run.env?.VITE_WHITEBOARD_CORE_MISMATCH).toMatch(
-        /^\$\{\{ matrix\.leg == 'browser' && 'throw' \|\| '' \}\}$/,
-      )
+      // The OKF envelope is compared in every Node-hosted realm the node leg runs.
+      expect(run.env).toMatchObject({
+        VITE_WHITEBOARD_CORE_OKF: 'differential',
+        VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
+        WHITEBOARD_CORE_OKF: 'differential',
+        WHITEBOARD_CORE_MISMATCH: 'throw',
+      })
     }
   })
 
-  it('is not needed by test-jsdom, whose pages cannot fetch the wasm', () => {
+  it('is what test-shared restores before its projects run OKF in differential', () => {
+    const shared = stepsOf(ci, 'test-shared')
+    const at = shared.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const test = shared.findIndex((s) => s.run?.includes('run test-shared'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(test)
+    expect(shared[at]?.if).toBe("steps.scope.outputs.run == 'true'")
+    expect(shared[test]?.env).toMatchObject({
+      WHITEBOARD_CORE_OKF: 'differential',
+      WHITEBOARD_CORE_MISMATCH: 'throw',
+    })
+  })
+
+  it('is what test-jsdom restores before the web pages run OKF in differential, loaded by the Node process that hosts them', () => {
     const jsdom = stepsOf(ci, 'test-jsdom')
-    expect(jsdom.some((s) => s.uses === './.github/actions/core-wasm')).toBe(false)
-    expect(jsdom.some((s) => JSON.stringify(s.env ?? {}).includes('VITE_WHITEBOARD_CORE'))).toBe(
-      false,
-    )
+    const at = jsdom.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const test = jsdom.findIndex((s) => s.run?.includes('whiteboard-web test'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(test)
+    expect(jsdom[at]?.if).toBe("steps.scope.outputs.run == 'true'")
+    expect(jsdom[test]?.env).toEqual({
+      VITE_WHITEBOARD_CORE_OKF: 'differential',
+      VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
+    })
   })
 })
 

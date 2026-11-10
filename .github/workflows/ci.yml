@@ -213,6 +213,14 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # Every Node-hosted realm runs OKF through the Rust core in
+      # differential (ADR-0054): codec's plain parseOkf/serializeOkf dispatch
+      # through a core the project's setup file installs, and a difference or
+      # decline fails the test that caused it. The artifact comes from the
+      # cache keyed on its inputs, so a hit needs no Rust toolchain.
+      - uses: ./.github/actions/core-wasm
+        if: steps.scope.outputs.run == 'true'
+
       # Only the projects the change reaches, out of this job's derived
       # universe; affected-cli.mjs refuses a name outside it and an empty
       # list, which cannot get here because `run` is then false.
@@ -220,6 +228,8 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
+          WHITEBOARD_CORE_OKF: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-shared --shard=${{ matrix.shard }}/2
 
   test-jsdom:
@@ -277,8 +287,16 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The jsdom pages run OKF through the core too: the setup file loads the
+      # artifact in the Node process hosting the realm (no fetch involved).
+      - uses: ./.github/actions/core-wasm
+        if: steps.scope.outputs.run == 'true'
+
       - name: Test web (jsdom + node, shard ${{ matrix.shard }}/2)
         if: steps.scope.outputs.run == 'true'
+        env:
+          VITE_WHITEBOARD_CORE_OKF: differential
+          VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm --filter @kamiazya/whiteboard-web test -- --shard=${{ matrix.shard }}/2
 
   test-browser:
@@ -562,9 +580,13 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          VITE_WHITEBOARD_CORE_OKF: ${{ matrix.leg == 'browser' && 'differential' || '' }}
+          # Both legs compare OKF: the browser leg in its page, the node leg in the
+          # Node process hosting each realm (codec's okf-core-setup).
+          VITE_WHITEBOARD_CORE_OKF: differential
+          WHITEBOARD_CORE_OKF: differential
+          WHITEBOARD_CORE_MISMATCH: throw
           VITE_WHITEBOARD_CORE_SPATIAL: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          VITE_WHITEBOARD_CORE_MISMATCH: ${{ matrix.leg == 'browser' && 'throw' || '' }}
+          VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: |
           read -r -a files <<< "$CHANGED_FILES"
           for i in 1 2 3 4 5; do
@@ -583,9 +605,13 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          VITE_WHITEBOARD_CORE_OKF: ${{ matrix.leg == 'browser' && 'differential' || '' }}
+          # Both legs compare OKF: the browser leg in its page, the node leg in the
+          # Node process hosting each realm (codec's okf-core-setup).
+          VITE_WHITEBOARD_CORE_OKF: differential
+          WHITEBOARD_CORE_OKF: differential
+          WHITEBOARD_CORE_MISMATCH: throw
           VITE_WHITEBOARD_CORE_SPATIAL: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          VITE_WHITEBOARD_CORE_MISMATCH: ${{ matrix.leg == 'browser' && 'throw' || '' }}
+          VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: |
           read -r -a files <<< "$CHANGED_FILES"
           pnpm exec vitest run --project '${{ matrix.projects }}' --shard=${{ matrix.shard }}/${{ matrix.shards }} --repeats=3 --fsModuleCache --passWithNoTests "${files[@]}"

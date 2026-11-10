@@ -10,6 +10,7 @@ export default defineProject({
   test: {
     name: 'canvas-viewer-jsdom',
     environment: 'jsdom',
+    setupFiles: ['../codec/src/test-utils/okf-core-setup/node.setup.ts'],
     include: ['src/**/*.test.tsx'],
     exclude: ['src/**/*.browser.test.tsx'],
   },

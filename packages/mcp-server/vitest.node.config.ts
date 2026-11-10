@@ -61,7 +61,8 @@ export default mergeConfig(
       hookTimeout: 10_000,
       env: { WHITEBOARD_DATA_DIR: MCP_NODE_DATA_DIR },
       globalSetup: ['./vitest.data-dir-setup.ts'],
-      setupFiles: ['./vitest.log-setup.ts'],
+      // The second installs the Rust OKF core when WHITEBOARD_CORE_OKF asks for it (codec's okf-core-setup).
+      setupFiles: ['./vitest.log-setup.ts', '../codec/src/test-utils/okf-core-setup/node.setup.ts'],
     },
   }),
 )

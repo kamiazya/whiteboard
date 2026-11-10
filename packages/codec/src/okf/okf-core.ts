@@ -196,16 +196,48 @@ function serializeWith(core: OkfCodecCore, doc: OkfMarkdownDocument): string {
   return answered(ts)
 }
 
+const typescript: OkfCodec = { parseOkf: parseOkfTs, serializeOkf: serializeOkfTs }
+
 /**
- * The OKF envelope as `core` says to answer it: by the TypeScript when no
- * core is given or its switch reads `ts`, by the core under `rust`, and
- * under `differential` by the TypeScript with the core run beside it. A core
- * that throws has declined, and the TypeScript answers in either mode.
+ * The core this realm answers the envelope with, or none. Process-global on
+ * purpose: `parseOkf` and `serializeOkf` are synchronous exports that every
+ * caller reaches by import, with no dependency to thread a core through. A
+ * realm (a web page, a layout worker, the daemon, a test process) acquires its
+ * wasm instance asynchronously, installs it once, and every later call uses it
+ * synchronously (ADR-0054's stage 3 shape).
+ */
+let installed: OkfCodec | undefined
+
+/**
+ * Makes `core` answer this realm's plain `parseOkf` / `serializeOkf` (and an
+ * `okfCodec(undefined)`), each as its `impl` switch says; `undefined` returns
+ * them to the TypeScript alone.
+ */
+export function installOkfCore(core: OkfCodecCore | undefined): void {
+  installed = core === undefined ? undefined : okfCodec(core)
+}
+
+/** The codec of the realm's installed core, else the TypeScript's. */
+const realm: OkfCodec = {
+  parseOkf: (text) => (installed ?? typescript).parseOkf(text),
+  serializeOkf: (doc) => (installed ?? typescript).serializeOkf(doc),
+}
+
+/** `parseOkf` as this realm's installed core says to answer it, else the TypeScript. */
+export const parseOkf: OkfCodec['parseOkf'] = realm.parseOkf
+
+/** `serializeOkf` as this realm's installed core says to answer it, else the TypeScript. */
+export const serializeOkf: OkfCodec['serializeOkf'] = realm.serializeOkf
+
+/**
+ * The OKF envelope as `core` says to answer it: by the TypeScript when its
+ * switch reads `ts`, by the core under `rust`, and under `differential` by the
+ * TypeScript with the core run beside it. A core that throws has declined, and
+ * the TypeScript answers in either mode. With no core given, the realm's
+ * installed one answers, else the TypeScript.
  */
 export function okfCodec(core: OkfCodecCore | undefined): OkfCodec {
-  if (core === undefined) {
-    return { parseOkf: parseOkfTs, serializeOkf: serializeOkfTs }
-  }
+  if (core === undefined) return realm
   return {
     parseOkf: (text) => parseWith(core, text),
     serializeOkf: (doc) => serializeWith(core, doc),

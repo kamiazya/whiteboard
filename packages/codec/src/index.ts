@@ -11,14 +11,14 @@ export {
   stringifyMarkdownBody,
 } from './markdown/pipeline.js'
 export type { OkfCodec, OkfCodecCore, OkfMismatch } from './okf/okf-core.js'
-export { okfCodec } from './okf/okf-core.js'
-export { hasOkfFrontmatter, parseOkf } from './okf/parse.js'
+export { installOkfCore, okfCodec, parseOkf, serializeOkf } from './okf/okf-core.js'
+export { hasOkfFrontmatter } from './okf/parse.js'
 export type {
   OkfMarkdownDocument,
   OkfMarkdownFrontmatter,
 } from './okf/schema.js'
 export { okfMarkdownDocumentSchema, okfMarkdownFrontmatterSchema } from './okf/schema.js'
-export { OkfNotYamlSafeError, serializeOkf } from './okf/serialize.js'
+export { OkfNotYamlSafeError } from './okf/serialize.js'
 export { yamlSafeValueSchema } from './okf/yaml-safe.js'
 export { documentReferenceMarkup, referenceMarkup } from './references/markup.js'
 export type { AliasResolver } from './references/resolve.js'
