@@ -45,10 +45,26 @@ function summarize(mismatch: CoreMismatch) {
     : { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
 }
 
+/** A decline as it is reported: the function and the core's reason, never the text or document. */
+function declineSummary(mismatch: Extract<OkfMismatch, { kind: 'declined' }>) {
+  const { err } = mismatch
+  return {
+    fn: mismatch.fn,
+    reason: err instanceof Error ? `${err.name}: ${err.message}` : 'unknown',
+  }
+}
+
 function okfReporter(settings: CoreSettings, log: CoreLog): (mismatch: OkfMismatch) => void {
   return (mismatch) => {
     if (mismatch.kind === 'declined') {
-      log.debug('the Rust core declined; answered in TypeScript', mismatch)
+      const summary = declineSummary(mismatch)
+      log.warn('the Rust core declined; answered in TypeScript', {
+        event: 'okf-declined',
+        ...summary,
+      })
+      if (settings.mismatch === 'throw') {
+        throw new Error(`OKF core declined: ${JSON.stringify(summary)}`)
+      }
       return
     }
     const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }

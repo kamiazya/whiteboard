@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { wbDocumentCreate } from '@kamiazya/whiteboard-server-core'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { captureLogsForTests } from '../server/log.js'
 import { disposeAutoCompact, uninstallAutoCompact } from '../server/store/auto-compact.js'
 import { clearDbCacheForTests, closeDb } from '../server/store/db/index.js'
 import { clearDocCacheForTests } from '../server/store/doc-cache.js'
@@ -43,6 +44,7 @@ function proseOfLength(length: number): string {
 
 let served: string
 let ambient: string
+let logs: ReturnType<typeof captureLogsForTests> | undefined
 
 beforeEach(async () => {
   served = await mkdtemp(join(tmpdir(), 'wb-served-'))
@@ -51,6 +53,8 @@ beforeEach(async () => {
 })
 
 afterEach(async () => {
+  logs?.restore()
+  logs = undefined
   uninstallAutoCompact()
   await disposeAutoCompact()
   clearDocCacheForTests()
@@ -59,12 +63,19 @@ afterEach(async () => {
   clearDbCacheForTests()
   resetDataDirForTests()
   vi.useRealTimers()
+  vi.unstubAllEnvs()
   await rm(served, { recursive: true, force: true })
   await rm(ambient, { recursive: true, force: true })
 })
 
 describe('a markdown document of exactly the declared limit, over the real store', () => {
   it('is created within the CPU budget', async () => {
+    // A document of exactly the limit is past the Rust parser's 256 KiB cap
+    // (the parity doc's decline P2), so the core declines it and the
+    // TypeScript answers. That is this test's subject, not a mismatch, and
+    // only this test is excused from a run that throws on declines.
+    vi.stubEnv('WHITEBOARD_CORE_MISMATCH', 'log')
+    logs = captureLogsForTests('warning')
     const { serverDeps: deps } = await bootSelfHostDeps(served)
     await deps.documentIndex.createWorkspace({ workspaceId: '01ZVM89A4A1V9FS03Z9J64KEK1' })
     const markdown = proseOfLength(MARKDOWN_MAX_CHARS)
@@ -85,5 +96,20 @@ describe('a markdown document of exactly the declared limit, over the real store
       (await deps.liveDocuments.list('01ZVM89A4A1V9FS03Z9J64KEK1')).map((entry) => entry.path),
     ).toEqual(['big'])
     expect(cpuMs).toBeLessThan(CREATE_CPU_BUDGET_MS)
+    // The excuse covers the size decline and nothing else: any other decline,
+    // a mismatch, or a core that failed to load still fails this test. A run
+    // that keeps OKF on the TypeScript logs none of them.
+    const core = (logs?.records ?? []).filter(
+      (record) =>
+        ['okf-declined', 'core-load-failed'].includes(String(record.data?.event)) ||
+        record.msg === 'the Rust core and the TypeScript disagree',
+    )
+    // Under the core (`rust`, the default, or `differential`) the decline is
+    // this test's subject, so its absence means the core was never asked.
+    if ((process.env.WHITEBOARD_CORE_OKF ?? 'rust') !== 'ts') expect(core).not.toEqual([])
+    for (const record of core) {
+      expect(record.data).toMatchObject({ event: 'okf-declined', fn: 'parseOkf' })
+      expect(String(record.data?.reason)).toMatch(/input-too-large/)
+    }
   }, 30_000)
 })

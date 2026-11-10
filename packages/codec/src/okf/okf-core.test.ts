@@ -82,6 +82,35 @@ describe('okfCodec', () => {
     ])
   })
 
+  it.each([
+    'ts',
+    'differential',
+    'rust',
+  ] as const)('puts the root keys in schema order before the core and the TypeScript see them under %s', (impl) => {
+    const unordered = {
+      frontmatter: { type: 'note', tags: ['x'], title: 't', facets: {}, unknown: 1 },
+      body: '',
+    } as unknown as OkfMarkdownDocument
+    const seen: string[][] = []
+    const core = fakeCore({
+      serializeOkf: (doc) => {
+        seen.push(Object.keys(doc.frontmatter))
+        return serializeOkf(doc)
+      },
+    })
+    const { codec } = switched(core, impl)
+    const written = codec.serializeOkf(unordered)
+    expect(written).toBe('---\ntype: note\ntitle: t\ntags:\n  - x\nunknown: 1\nfacets: {}\n---\n')
+    if (impl !== 'ts') expect(seen).toEqual([['type', 'title', 'tags', 'facets', 'unknown']])
+  })
+
+  it('writes in schema order with no core at all', () => {
+    const doc = { frontmatter: { type: 'note', tags: ['x'], title: 't' }, body: '' }
+    expect(okfCodec(undefined).serializeOkf(doc)).toBe(
+      '---\ntype: note\ntitle: t\ntags:\n  - x\n---\n',
+    )
+  })
+
   it('reports nothing when the two agree, and answers with the TypeScript', () => {
     const { codec, reports } = switched(fakeCore(), 'differential')
     const ts = parseOkf(TEXT)
