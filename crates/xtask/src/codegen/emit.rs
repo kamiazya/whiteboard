@@ -17,7 +17,9 @@
 
 use std::fmt::Write as _;
 
-use super::dialect::{Checked, CheckedDef, Field, Object, Pattern, Ty, Unknown, Uses};
+use super::dialect::{
+    Checked, CheckedDef, Field, Object, Pattern, Ty, Unknown, Uses, variant_name,
+};
 
 /// biome.json's `lineWidth`.
 const TS_LINE_WIDTH: usize = 100;
@@ -177,7 +179,24 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
             }
             refine(chain, *check)
         }
-        Ty::Array(item) => Chain::new("array", vec![zod_chain(item).render(0, "", "")]),
+        Ty::Array { item, min, max } => {
+            let mut chain = Chain::new("array", vec![zod_chain(item).render(0, "", "")]);
+            if let Some(n) = min {
+                chain = chain.then("min", vec![n.to_string()]);
+            }
+            if let Some(n) = max {
+                chain = chain.then("max", vec![n.to_string()]);
+            }
+            chain
+        }
+        Ty::Enum(values) => {
+            let list: Vec<String> = values.iter().map(|v| js_string(v)).collect();
+            Chain::new("enum", vec![format!("[{}]", list.join(", "))])
+        }
+        Ty::Union(members) => {
+            let list: Vec<String> = members.iter().map(|m| schema_name(m)).collect();
+            Chain::new("union", vec![format!("[{}]", list.join(", "))])
+        }
         Ty::Ref(name) => Chain::named(schema_name(name)),
         Ty::Any => Chain::new("unknown", vec![]),
         Ty::Record { check } => refine(
@@ -236,7 +255,7 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
         let stem = modules.zod.rsplit('/').next().and_then(|f| f.strip_suffix(".ts")).unwrap_or("");
         let _ = writeln!(out, "import {{ {} }} from '../{stem}.js'", names.join(", "));
     }
-    for CheckedDef { name, description, ty } in &checked.defs {
+    for CheckedDef { name, description, registered, ty } in &checked.defs {
         let schema = schema_name(name);
         let _ = write!(out, "\n/** {description} */\n");
         match ty {
@@ -251,6 +270,9 @@ pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<Str
                 let _ =
                     writeln!(out, "{}", chain.render(0, &format!("export const {schema} = "), ""));
             }
+        }
+        if *registered {
+            let _ = writeln!(out, "z.globalRegistry.add({schema}, {{ id: '{name}' }})");
         }
         let infer = format!("z.infer<typeof {schema}>");
         let _ = if contract.readonly_types {
@@ -327,11 +349,11 @@ fn rust_ty(ty: &Ty<'_>) -> String {
     match ty {
         Ty::Number { .. } => "f64".to_owned(),
         Ty::Str { .. } => "String".to_owned(),
-        Ty::Array(item) => format!("Vec<{}>", rust_ty(item)),
+        Ty::Array { item, .. } => format!("Vec<{}>", rust_ty(item)),
         Ty::Ref(name) => (*name).to_owned(),
         Ty::Any => "Value".to_owned(),
         Ty::Record { .. } => "Map".to_owned(),
-        Ty::Object(_) => String::new(),
+        Ty::Object(_) | Ty::Enum(_) | Ty::Union(_) => String::new(),
     }
 }
 
@@ -342,7 +364,7 @@ fn rust_checked_by(ty: &Ty<'_>, indent: &str) -> String {
     let (check, matcher) = match ty {
         Ty::Str { check, pattern, .. } => (*check, pattern.as_ref().map(|p| p.matcher)),
         Ty::Record { check } => (*check, None),
-        Ty::Array(item) => return rust_checked_by(item, indent),
+        Ty::Array { item, .. } => return rust_checked_by(item, indent),
         _ => (None, None),
     };
     for (verb, name) in [("Matched", matcher), ("Checked", check)] {
@@ -353,11 +375,16 @@ fn rust_checked_by(ty: &Ty<'_>, indent: &str) -> String {
     out
 }
 
-fn rust_plain_type(out: &mut String, CheckedDef { name, description, ty }: &CheckedDef<'_>) {
-    let Ty::Object(object) = ty else {
-        let _ = write!(out, "\n/// {description}\n{}", rust_checked_by(ty, ""));
-        let _ = writeln!(out, "pub type {name} = {};", rust_ty(ty));
-        return;
+fn rust_plain_type(out: &mut String, CheckedDef { name, description, ty, .. }: &CheckedDef<'_>) {
+    let object = match ty {
+        Ty::Object(object) => object,
+        Ty::Enum(values) => return rust_enum(out, name, description, values),
+        Ty::Union(members) => return rust_union(out, name, description, members),
+        _ => {
+            let _ = write!(out, "\n/// {description}\n{}", rust_checked_by(ty, ""));
+            let _ = writeln!(out, "pub type {name} = {};", rust_ty(ty));
+            return;
+        }
     };
     let _ = write!(
         out,
@@ -419,4 +446,49 @@ fn rust_serde_type(out: &mut String, name: &str, description: &str, object: &Obj
     }
     let names: Vec<String> = fields.iter().map(|(f, _)| format!("{f}: wire.{f}")).collect();
     let _ = write!(out, "Ok(Self {{ {} }})\n}}\n}}\n", names.join(", "));
+}
+
+/// A closed set of strings as a Rust enum whose first value is its `Default`,
+/// so a struct holding one can still derive it.
+fn rust_enum(out: &mut String, name: &str, description: &str, values: &[&str]) {
+    let variants: Vec<String> = values.iter().map(|v| variant_name(v)).collect();
+    let _ = write!(
+        out,
+        "\n/// {description}\n#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]\npub enum {name} {{\n"
+    );
+    for (i, (variant, value)) in variants.iter().zip(values).enumerate() {
+        let default = if i == 0 { "    #[default]\n" } else { "" };
+        let _ = writeln!(out, "    /// Written `{value}`.\n{default}    {variant},");
+    }
+    let _ = write!(out, "}}\n\nimpl {name} {{\n    /// The value as the contract writes it.\n");
+    out.push_str("    pub const fn as_str(self) -> &'static str {\n        match self {\n");
+    for (variant, value) in variants.iter().zip(values) {
+        let _ = writeln!(out, "            Self::{variant} => \"{value}\",");
+    }
+    out.push_str(
+        "        }\n    }\n\n    /// The variant a written value names, if any.\n    \
+         pub fn from_wire(text: &str) -> Option<Self> {\n        match text {\n",
+    );
+    for (variant, value) in variants.iter().zip(values) {
+        let _ = writeln!(out, "            \"{value}\" => Some(Self::{variant}),");
+    }
+    out.push_str("            _ => None,\n        }\n    }\n}\n");
+}
+
+/// One of several definitions as a Rust enum of the types it names, the first
+/// member's `Default` standing for its own.
+fn rust_union(out: &mut String, name: &str, description: &str, members: &[&str]) {
+    let _ = write!(
+        out,
+        "\n/// {description}\n#[derive(Debug, Clone, PartialEq)]\npub enum {name} {{\n"
+    );
+    for member in members {
+        let _ = writeln!(out, "    /// A `{member}`.\n    {member}({member}),");
+    }
+    let first = members.first().copied().unwrap_or_default();
+    let _ = write!(
+        out,
+        "}}\n\nimpl Default for {name} {{\n    fn default() -> Self {{\n        \
+         Self::{first}({first}::default())\n    }}\n}}\n"
+    );
 }

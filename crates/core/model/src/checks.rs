@@ -55,6 +55,15 @@ fn byte(rest: &mut &[u8], want: u8) -> bool {
     }
 }
 
+/// `^#[0-9a-fA-F]{6}$`: the pattern of the contract's `CanvasColorHex`. Byte
+/// for byte, so a trailing newline is no match, as in JavaScript.
+pub fn canvas_color_hex(text: &str) -> bool {
+    match text.as_bytes().split_first() {
+        Some((b'#', digits)) => digits.len() == 6 && digits.iter().all(u8::is_ascii_hexdigit),
+        _ => false,
+    }
+}
+
 /// `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})$`: the
 /// pattern of the contract's `OkfTimestamp`, matched without a regex engine.
 pub fn okf_timestamp(text: &str) -> bool {
@@ -147,6 +156,29 @@ mod tests {
         ] {
             assert!(!okf_actor(&format!("{space}x")), "{space:?}");
             assert!(!okf_actor(&format!("x{space}")), "{space:?}");
+        }
+    }
+
+    #[test]
+    fn a_hex_colour_is_a_hash_and_six_hex_digits_and_nothing_else() {
+        for ok in ["#000000", "#1a2b3c", "#ABCDEF", "#aBcDeF"] {
+            assert!(canvas_color_hex(ok), "{ok:?}");
+        }
+        for bad in [
+            "",
+            "#",
+            "#12345",
+            "#1234567",
+            "123456",
+            "#12345g",
+            "#12345G",
+            " #123456",
+            "#123456\n",
+            "##12345",
+            "#１２３４５６",
+            "#12345é",
+        ] {
+            assert!(!canvas_color_hex(bad), "{bad:?}");
         }
     }
 

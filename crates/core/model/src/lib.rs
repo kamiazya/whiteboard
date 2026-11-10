@@ -12,6 +12,8 @@
 pub mod checks;
 #[path = "generated/okf.rs"]
 pub mod okf;
+#[path = "generated/spatial.rs"]
+pub mod spatial;
 
 /// A frontmatter value: what `yaml`'s core schema makes of a document, as
 /// `toJS()` hands it to the TypeScript.
@@ -72,6 +74,18 @@ mod tests {
     use super::{Value, array_index, enumeration_order};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    #[test]
+    fn a_generated_enum_names_its_wire_values_both_ways_and_defaults_to_the_first() {
+        use super::spatial::{CanvasColor, CanvasColorPreset, EdgeSide};
+        for side in [EdgeSide::Top, EdgeSide::Right, EdgeSide::Bottom, EdgeSide::Left] {
+            assert_eq!(EdgeSide::from_wire(side.as_str()), Some(side));
+        }
+        assert_eq!(EdgeSide::from_wire("Top"), None);
+        assert_eq!(EdgeSide::default().as_str(), "top");
+        assert_eq!(CanvasColorPreset::from_wire("6"), Some(CanvasColorPreset::V6));
+        assert_eq!(CanvasColor::default(), CanvasColor::CanvasColorPreset(CanvasColorPreset::V1));
+    }
 
     #[test]
     fn an_array_index_is_a_canonical_decimal_below_two_to_the_thirty_two_minus_one() {
