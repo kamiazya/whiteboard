@@ -1,7 +1,8 @@
 /**
  * The four sides of a node an edge can attach to are ONE vocabulary, declared
- * once in `packages/model` as `edgeSideSchema` and read everywhere else
- * through `EdgeSide`. A second spelling — a `'top' | 'right' | …` union, a
+ * once in `packages/model` as `edgeSideSchema` (generated from
+ * `contracts/model/spatial.schema.json`) and read everywhere else through
+ * `EdgeSide`. A second spelling — a `'top' | 'right' | …` union, a
  * `z.enum`, a literal array — compiles and parses today, and drifts the day
  * a fifth side (or a renamed one) is added to the first: the stored shape
  * would accept what the scene vocabulary refuses.
@@ -16,7 +17,7 @@ import { describe, expect, it } from 'vitest'
 import { REPO_ROOT, workspaceDirs } from './scan-roots.js'
 import { isTestPath, stripCommentsAndStrings, walkSourceFiles } from './source-scan.js'
 
-const THE_DECLARATION = 'packages/model/src/spatial.ts'
+const THE_DECLARATION = 'packages/model/src/generated/spatial.zod.ts'
 
 const SIDES = ['top', 'right', 'bottom', 'left'] as const
 
