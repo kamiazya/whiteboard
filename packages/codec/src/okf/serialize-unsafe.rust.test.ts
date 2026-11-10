@@ -33,7 +33,7 @@ const leaf = fc.oneof(
   { weight: 5, arbitrary: fc.oneof(fc.string({ maxLength: 4 }), fc.integer(), fc.boolean()) },
   { weight: 1, arbitrary: fc.constant(null) },
   { weight: 2, arbitrary: fc.constantFrom(Number.NaN, Infinity, -Infinity, 10n ** 20n) },
-  { weight: 3, arbitrary: fc.constantFrom('a﻿b', '\ud800', 'x\udc00y', '﻿') },
+  { weight: 3, arbitrary: fc.constantFrom('a\uFEFFb', '\ud800', 'x\udc00y', '\uFEFF') },
   {
     weight: 2,
     arbitrary: fc.constantFrom(undefined, () => 1, Symbol('s'), new Date(0), new Map(), new Set()),
@@ -42,7 +42,7 @@ const leaf = fc.oneof(
 
 const key = fc.oneof(
   { weight: 4, arbitrary: fc.constantFrom('a', 'b', 'c', '0', '1', '10', 'z') },
-  { weight: 2, arbitrary: fc.constantFrom('k﻿', '\ud800', '\udc00x', '__proto__') },
+  { weight: 2, arbitrary: fc.constantFrom('k\uFEFF', '\ud800', '\udc00x', '__proto__') },
   { weight: 1, arbitrary: fc.string({ maxLength: 3 }) },
 )
 

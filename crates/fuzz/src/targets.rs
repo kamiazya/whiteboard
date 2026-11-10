@@ -311,6 +311,8 @@ pub fn okf_wasm_serialize(data: &[u8]) {
     }
     let fenced = answer.starts_with("[\"ok\",\"---\\n") && answer.ends_with("\\n---\\n\"]");
     let named = answer.starts_with("[\"unwritable\",[[") && answer.ends_with("]]");
-    let refused = answer == "[\"refused\",\"malformed\"]";
+    // Too large also answers a wire within the cap whose faults would not fit the answer.
+    let refused =
+        answer == "[\"refused\",\"malformed\"]" || answer == "[\"refused\",\"input-too-large\"]";
     assert!(fenced || named || refused, "{answer:.120} is not an answer");
 }

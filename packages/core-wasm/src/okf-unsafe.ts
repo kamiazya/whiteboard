@@ -26,7 +26,7 @@ export const REASON_MESSAGE: Readonly<Record<string, string>> = Object.freeze({
 })
 
 const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/
-const BYTE_ORDER_MARK = '﻿'
+const BYTE_ORDER_MARK = '\uFEFF'
 
 function textUnsafety(text: string): string | undefined {
   if (text.includes(BYTE_ORDER_MARK)) return REASON_MESSAGE['byte-order-mark']

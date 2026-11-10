@@ -3,7 +3,7 @@
 
 use super::fold::Units;
 use super::quote::{Ctx, string, units};
-use super::value::{Fault, MAX_PARSE_DEPTH, Step, Unwritable, Value};
+use super::value::{Fault, MAX_FAULT_BYTES, MAX_PARSE_DEPTH, Step, Unwritable, Value};
 
 const NEWLINE: u16 = b'\n' as u16;
 const SPACE: u16 = b' ' as u16;
@@ -29,7 +29,7 @@ pub(super) fn document(value: &Value) -> Result<Units, Vec<Fault>> {
 /// order it reports them: a `__proto__` key anywhere first, at the root, then
 /// a walk that names a mapping's unprintable keys before its entries.
 fn faults(value: &Value) -> Vec<Fault> {
-    let mut found = Walk { faults: Vec::new(), reserved: false };
+    let mut found = Walk { faults: Vec::new(), reserved: false, weight: 0, full: false };
     found.visit(value, &mut Vec::new());
     if found.reserved {
         found.faults.insert(0, Fault { path: Vec::new(), why: Unwritable::ReservedKey });
@@ -51,14 +51,39 @@ fn non_finite(n: f64) -> Unwritable {
 struct Walk {
     faults: Vec<Fault>,
     reserved: bool,
+    /// Bytes the faults so far would take on the wire.
+    weight: usize,
+    /// The weight passed [`MAX_FAULT_BYTES`] and the list was ended.
+    full: bool,
+}
+
+/// What a fault at `path` costs on the wire: its keys, a few bytes a step and its reason.
+fn weight_of(path: &[Step]) -> usize {
+    let steps = path.iter().map(|step| match step {
+        Step::Key(name) => name.len().saturating_add(8),
+        Step::Index(_) => 8,
+    });
+    steps.fold(32, usize::saturating_add)
 }
 
 impl Walk {
     fn fault(&mut self, path: &[Step], why: Unwritable) {
-        self.faults.push(Fault { path: path.to_vec(), why });
+        if self.full {
+            return;
+        }
+        self.weight = self.weight.saturating_add(weight_of(path));
+        if self.weight > MAX_FAULT_BYTES {
+            self.full = true;
+            self.faults.push(Fault { path: Vec::new(), why: Unwritable::Overflow });
+        } else {
+            self.faults.push(Fault { path: path.to_vec(), why });
+        }
     }
 
     fn visit(&mut self, value: &Value, path: &mut Vec<Step>) {
+        if self.full {
+            return;
+        }
         match value {
             Value::Number(n) if !n.is_finite() => self.fault(path, non_finite(*n)),
             Value::BigInt(_) => self.fault(path, Unwritable::BigInt),

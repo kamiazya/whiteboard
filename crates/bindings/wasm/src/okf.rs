@@ -124,6 +124,9 @@ fn written(wire: &str) -> Json {
     };
     match serialize(&Document { frontmatter, body: String::new() }) {
         Ok(head) => json!(["ok", head]),
+        Err(faults) if faults.iter().any(|fault| fault.why == Unwritable::Overflow) => {
+            refused(TOO_LARGE)
+        }
         Err(faults) => json!(["unwritable", faults.iter().map(fault).collect::<Vec<_>>()]),
     }
 }
@@ -149,6 +152,7 @@ fn unwritable(why: Unwritable) -> &'static str {
         Unwritable::ReservedKey => "reserved-key",
         Unwritable::BigInt => "big-int",
         Unwritable::TooDeep => "too-deep",
+        Unwritable::Overflow => "overflow",
     }
 }
 
@@ -272,6 +276,23 @@ mod tests {
             deep = json!(["s", deep]);
         }
         assert_eq!(at(deep)[1][0][1], json!("too-deep"));
+    }
+
+    #[test]
+    fn faults_that_would_not_fit_the_budget_are_a_refusal_not_an_answer() {
+        // 60 mappings nested on 1000-byte keys, a list of NaN at the bottom: every
+        // fault repeats the whole path, and the answer would be megabytes.
+        let mut value = json!(["s"]);
+        for _ in 0..5000 {
+            value.as_array_mut().expect("a list").push(json!(["f", "7ff8000000000000"]));
+        }
+        for at in 0..60 {
+            value = json!(["m", format!("{at:0>1000}"), value]);
+        }
+        let wire = json!(["m", "type", "x", "facets", ["m", "a.b/v1", value]]);
+        // Within the wire's own cap, so the refusal is the fault budget's.
+        assert!(wire.to_string().len() < OKF_SERIALIZE.max_bytes);
+        assert_eq!(written(&wire), json!(["refused", "input-too-large"]));
     }
 
     #[test]

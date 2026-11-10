@@ -23,7 +23,9 @@ mod value;
 mod write;
 
 use cursor::Parser;
-pub use value::{Fault, MAX_BYTES, MAX_DEPTH, MAX_PARSE_DEPTH, Refusal, Step, Unwritable, Value};
+pub use value::{
+    Fault, MAX_BYTES, MAX_DEPTH, MAX_FAULT_BYTES, MAX_PARSE_DEPTH, Refusal, Step, Unwritable, Value,
+};
 
 /// Reads a frontmatter text (the YAML between the `---` fences) as `yaml`
 /// 2.9 reads it under the core schema, or says why it cannot.
