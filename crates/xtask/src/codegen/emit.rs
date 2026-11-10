@@ -15,10 +15,11 @@
 //! text is written in the shape biome keeps, and a line past biome's width
 //! is refused rather than emitted.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::fmt::Write as _;
 
 use super::dialect::{
-    Checked, CheckedDef, Field, Object, Pattern, Ty, Unknown, Uses, variant_name,
+    Checked, CheckedDef, Contract, Field, Object, Pattern, Ty, Unknown, Uses, variant_name,
 };
 
 /// biome.json's `lineWidth`.
@@ -162,6 +163,11 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
         None => chain,
     };
     match ty {
+        Ty::Bool => Chain::new("boolean", vec![]),
+        Ty::Integer => Chain::new("number", vec![])
+            .then("int", vec![])
+            .then("meta", vec!["{ minimum: undefined, maximum: undefined }".to_owned()]),
+        Ty::Literal(value) => Chain::new("literal", vec![js_string(value)]),
         Ty::Number { min } => {
             let chain = Chain::new("number", vec![]);
             match min {
@@ -193,9 +199,13 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
             let list: Vec<String> = values.iter().map(|v| js_string(v)).collect();
             Chain::new("enum", vec![format!("[{}]", list.join(", "))])
         }
-        Ty::Union(members) => {
+        Ty::Union { members, discriminator } => {
             let list: Vec<String> = members.iter().map(|m| schema_name(m)).collect();
-            Chain::new("union", vec![format!("[{}]", list.join(", "))])
+            let list = format!("[{}]", list.join(", "));
+            match discriminator {
+                Some(property) => Chain::new("discriminatedUnion", vec![js_string(property), list]),
+                None => Chain::new("union", vec![list]),
+            }
         }
         Ty::Ref(name) => Chain::named(schema_name(name)),
         Ty::Any => Chain::new("unknown", vec![]),
@@ -209,15 +219,24 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
 
 fn zod_field(field: &Field<'_>, indent: usize, describe: bool) -> String {
     let mut chain = zod_chain(&field.ty);
-    if field.optional {
+    if field.default_empty {
+        chain = chain.then("default", vec!["[]".to_owned()]);
+    } else if field.optional {
         chain = chain.then("optional", vec![]);
+    }
+    if field.lenient {
+        chain = chain.then("catch", vec!["undefined".to_owned()]);
     }
     if describe {
         chain = chain.then("describe", vec![js_string(field.description)]);
+    } else if let Some(text) = field.published {
+        chain = chain.then("describe", vec![js_string(text)]);
     }
     chain.render(indent, &format!("{}: ", field.name), ",")
 }
 
+/// An object as the chain biome keeps for one that is described, refined or
+/// extended, and as a bare constructor call otherwise.
 fn zod_object(
     out: &mut String,
     schema: &str,
@@ -230,58 +249,105 @@ fn zod_object(
         Unknown::Strip => "object",
         Unknown::Keep => "looseObject",
     };
-    if describe {
-        let _ = writeln!(out, "export const {schema} = z\n  .{ctor}({{");
-        for field in &object.fields {
-            let _ = writeln!(out, "{}", zod_field(field, 4, true));
-        }
-        let _ = writeln!(out, "  }})\n  .describe({})", js_string(description));
-    } else {
+    if !describe && object.check.is_none() && object.extends.is_none() {
         let _ = writeln!(out, "export const {schema} = z.{ctor}({{");
         for field in &object.fields {
             let _ = writeln!(out, "{}", zod_field(field, 2, false));
         }
         out.push_str("})\n");
+        return;
+    }
+    match object.extends {
+        Some(base) => {
+            let _ = writeln!(out, "export const {schema} = {}\n  .extend({{", schema_name(base));
+        }
+        None => {
+            let _ = writeln!(out, "export const {schema} = z\n  .{ctor}({{");
+        }
+    }
+    for field in &object.fields {
+        let _ = writeln!(out, "{}", zod_field(field, 4, describe));
+    }
+    out.push_str("  })\n");
+    if object.extends.is_some() {
+        out.push_str("  .strict()\n");
+    }
+    if describe {
+        let _ = writeln!(out, "  .describe({})", js_string(description));
+    }
+    if let Some(check) = object.check {
+        let _ = writeln!(out, "  .superRefine({})", camel(check));
     }
 }
 
+/// The import lines after `zod`'s own: the check module and each external
+/// definition's, grouped by module, nearest-last the way biome sorts them and
+/// each module's names in order.
+fn zod_imports(checked: &Checked<'_>) -> String {
+    let mut modules: BTreeMap<(bool, String), BTreeSet<String>> = BTreeMap::new();
+    let mut add = |module: &str, name: String| {
+        let sibling = module.starts_with("./");
+        modules.entry((sibling, module.to_owned())).or_default().insert(name);
+    };
+    if let Some(found) = checked.contract.checks.as_ref().filter(|_| !checked.zod_checks.is_empty())
+    {
+        let stem = found.zod.rsplit('/').next().and_then(|f| f.strip_suffix(".ts")).unwrap_or("");
+        for check in &checked.zod_checks {
+            add(&format!("../{stem}.js"), camel(check));
+        }
+    }
+    for def in &checked.defs {
+        if let Some(module) = def.external {
+            add(module, schema_name(def.name));
+        }
+    }
+    let mut out = String::new();
+    for ((_, module), names) in &modules {
+        let list: Vec<&str> = names.iter().map(String::as_str).collect();
+        let _ = writeln!(out, "import {{ {} }} from '{module}'", list.join(", "));
+    }
+    out
+}
+
+fn zod_def(out: &mut String, contract: &Contract, def: &CheckedDef<'_>) {
+    let CheckedDef { name, description, registered, ty, .. } = def;
+    let schema = schema_name(name);
+    let _ = write!(out, "\n/** {description} */\n");
+    match ty {
+        Ty::Object(object) => zod_object(out, &schema, description, object, contract.describe),
+        other => {
+            let mut chain = zod_chain(other);
+            if contract.describe {
+                chain = chain.then("describe", vec![js_string(description)]);
+            }
+            let _ = writeln!(out, "{}", chain.render(0, &format!("export const {schema} = "), ""));
+        }
+    }
+    if *registered {
+        let _ = writeln!(out, "z.globalRegistry.add({schema}, {{ id: '{name}' }})");
+    }
+    let infer = format!("z.infer<typeof {schema}>");
+    let _ = if contract.readonly_types {
+        writeln!(out, "export type {name} = Readonly<{infer}>")
+    } else {
+        writeln!(out, "export type {name} = {infer}")
+    };
+}
+
 pub(super) fn zod(checked: &Checked<'_>, source: &str) -> Result<String, Vec<String>> {
-    let contract = checked.contract;
     let mut out = header(source);
     out.push_str("\nimport { z } from 'zod'\n");
-    if let Some(modules) = &contract.checks.as_ref().filter(|_| !checked.zod_checks.is_empty()) {
-        let mut names: Vec<String> = checked.zod_checks.iter().map(|c| camel(c)).collect();
-        names.sort_unstable();
-        let stem = modules.zod.rsplit('/').next().and_then(|f| f.strip_suffix(".ts")).unwrap_or("");
-        let _ = writeln!(out, "import {{ {} }} from '../{stem}.js'", names.join(", "));
-    }
-    for CheckedDef { name, description, registered, ty } in &checked.defs {
-        let schema = schema_name(name);
-        let _ = write!(out, "\n/** {description} */\n");
-        match ty {
-            Ty::Object(object) => {
-                zod_object(&mut out, &schema, description, object, contract.describe);
-            }
-            other => {
-                let mut chain = zod_chain(other);
-                if contract.describe {
-                    chain = chain.then("describe", vec![js_string(description)]);
-                }
-                let _ =
-                    writeln!(out, "{}", chain.render(0, &format!("export const {schema} = "), ""));
-            }
-        }
-        if *registered {
-            let _ = writeln!(out, "z.globalRegistry.add({schema}, {{ id: '{name}' }})");
-        }
-        let infer = format!("z.infer<typeof {schema}>");
-        let _ = if contract.readonly_types {
-            writeln!(out, "export type {name} = Readonly<{infer}>")
-        } else {
-            writeln!(out, "export type {name} = {infer}")
-        };
+    out.push_str(&zod_imports(checked));
+    for def in checked.defs.iter().filter(|d| d.external.is_none()) {
+        zod_def(&mut out, checked.contract, def);
     }
     within_width(out)
+}
+
+/// A line holding only a string literal and its comma, which biome leaves as
+/// long as the string is: there is nowhere in it to break.
+fn lone_string(line: &str) -> bool {
+    line.trim_start().strip_prefix('\'').is_some_and(|rest| rest.ends_with("',"))
 }
 
 /// `out` when every line after its header fits biome's width: a longer line
@@ -290,7 +356,7 @@ pub(super) fn within_width(out: String) -> Result<String, Vec<String>> {
     let long: Vec<String> = out
         .lines()
         .skip(1)
-        .filter(|line| line.chars().count() > TS_LINE_WIDTH)
+        .filter(|line| line.chars().count() > TS_LINE_WIDTH && !lone_string(line))
         .map(|line| format!("a line past biome's {TS_LINE_WIDTH} columns; shorten it: {line}"))
         .collect();
     if long.is_empty() { Ok(out) } else { Err(long) }
@@ -340,7 +406,7 @@ pub(super) fn rust(checked: &Checked<'_>, source: &str) -> String {
         (false, false) => {}
     }
     for def in &checked.defs {
-        rust_plain_type(&mut out, def);
+        rust_plain_type(&mut out, def, &checked.defs);
     }
     out
 }
@@ -348,12 +414,14 @@ pub(super) fn rust(checked: &Checked<'_>, source: &str) -> String {
 fn rust_ty(ty: &Ty<'_>) -> String {
     match ty {
         Ty::Number { .. } => "f64".to_owned(),
+        Ty::Bool => "bool".to_owned(),
+        Ty::Integer => "i64".to_owned(),
         Ty::Str { .. } => "String".to_owned(),
         Ty::Array { item, .. } => format!("Vec<{}>", rust_ty(item)),
         Ty::Ref(name) => (*name).to_owned(),
         Ty::Any => "Value".to_owned(),
         Ty::Record { .. } => "Map".to_owned(),
-        Ty::Object(_) | Ty::Enum(_) | Ty::Union(_) => String::new(),
+        Ty::Object(_) | Ty::Enum(_) | Ty::Union { .. } | Ty::Literal(_) => String::new(),
     }
 }
 
@@ -364,6 +432,7 @@ fn rust_checked_by(ty: &Ty<'_>, indent: &str) -> String {
     let (check, matcher) = match ty {
         Ty::Str { check, pattern, .. } => (*check, pattern.as_ref().map(|p| p.matcher)),
         Ty::Record { check } => (*check, None),
+        Ty::Object(object) => (object.check, None),
         Ty::Array { item, .. } => return rust_checked_by(item, indent),
         _ => (None, None),
     };
@@ -375,11 +444,15 @@ fn rust_checked_by(ty: &Ty<'_>, indent: &str) -> String {
     out
 }
 
-fn rust_plain_type(out: &mut String, CheckedDef { name, description, ty, .. }: &CheckedDef<'_>) {
+fn rust_plain_type(
+    out: &mut String,
+    CheckedDef { name, description, ty, .. }: &CheckedDef<'_>,
+    defs: &[CheckedDef<'_>],
+) {
     let object = match ty {
         Ty::Object(object) => object,
         Ty::Enum(values) => return rust_enum(out, name, description, values),
-        Ty::Union(members) => return rust_union(out, name, description, members),
+        Ty::Union { members, .. } => return rust_union(out, name, description, members),
         _ => {
             let _ = write!(out, "\n/// {description}\n{}", rust_checked_by(ty, ""));
             let _ = writeln!(out, "pub type {name} = {};", rust_ty(ty));
@@ -388,18 +461,59 @@ fn rust_plain_type(out: &mut String, CheckedDef { name, description, ty, .. }: &
     };
     let _ = write!(
         out,
-        "\n/// {description}\n#[derive(Debug, Clone, PartialEq, Default)]\npub struct {name} {{\n"
+        "\n/// {description}\n{}#[derive(Debug, Clone, PartialEq, Default)]\npub struct {name} {{\n",
+        rust_checked_by(ty, "")
     );
-    for field in &object.fields {
-        let inner = rust_ty(&field.ty);
-        let wrapped = if field.optional { format!("Option<{inner}>") } else { inner };
-        let _ =
-            write!(out, "    /// {}\n{}", field.description, rust_checked_by(&field.ty, "    "));
-        let _ = writeln!(out, "    pub {}: {wrapped},", field.rust);
+    let inherited = object
+        .extends
+        .and_then(|base| defs.iter().find(|d| d.name == base))
+        .into_iter()
+        .filter_map(|d| if let Ty::Object(o) = &d.ty { Some(o.fields.iter()) } else { None })
+        .flatten();
+    let all: Vec<&Field<'_>> = inherited.chain(&object.fields).collect();
+    for field in &all {
+        rust_field(out, field);
     }
     if object.unknown == Unknown::Keep {
         out.push_str(
             "    /// Keys the contract does not name, in the order written.\n    pub extra: Map,\n",
+        );
+    }
+    out.push_str("}\n");
+    rust_constants(out, name, &all);
+}
+
+/// One struct field, or nothing for a constant, which is the type's own.
+fn rust_field(out: &mut String, field: &Field<'_>) {
+    if matches!(field.ty, Ty::Literal(_)) {
+        return;
+    }
+    let inner = rust_ty(&field.ty);
+    let wrapped =
+        if field.optional && !field.default_empty { format!("Option<{inner}>") } else { inner };
+    let _ = write!(out, "    /// {}\n{}", field.description, rust_checked_by(&field.ty, "    "));
+    if field.lenient {
+        out.push_str("    ///\n    /// A malformed value reads as absent.\n");
+    }
+    let _ = writeln!(out, "    pub {}: {wrapped},", field.rust);
+}
+
+/// The constants of a struct, one for each property that is always one value.
+fn rust_constants(out: &mut String, name: &str, fields: &[&Field<'_>]) {
+    let constants: Vec<(&Field<'_>, &str)> = fields
+        .iter()
+        .filter_map(|f| if let Ty::Literal(value) = f.ty { Some((*f, value)) } else { None })
+        .collect();
+    if constants.is_empty() {
+        return;
+    }
+    let _ = writeln!(out, "\nimpl {name} {{");
+    for (field, value) in constants {
+        let constant = field.rust.trim_start_matches("r#").to_ascii_uppercase();
+        let _ = writeln!(
+            out,
+            "    /// What `{}` is always written as.\n    pub const {constant}: &str = \"{value}\";",
+            field.name
         );
     }
     out.push_str("}\n");

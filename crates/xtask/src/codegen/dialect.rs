@@ -6,12 +6,18 @@
 //! one language's output. What is accepted: numbers with an inclusive
 //! `minimum`, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
 //! JSON cannot write them, and a Rust `f64` read from JSON cannot be one);
-//! strings with a UTF-16 minimum, a pattern and a named check, or a closed
-//! `enum` of values; arrays with an inclusive length bound, `$ref`s to a
-//! definition, any-values and records of them; `anyOf` over definitions; and
-//! objects whose unknown keys are refused, stripped or kept, with optional
-//! fields. A definition may be `x-wb-registered`. It grows when a contract needs a construct, with that construct's
-//! emission in both languages in the same change.
+//! booleans and integers; strings with a UTF-16 minimum, a pattern and a named
+//! check, a closed `enum` of values, or a `const`; arrays with an inclusive
+//! length bound, `$ref`s to a definition, any-values and records of them;
+//! `anyOf` over definitions, or `oneOf` with the `discriminator` property
+//! whose constant picks the member; and objects whose unknown keys are refused,
+//! stripped or kept, with optional fields. A definition may be
+//! `x-wb-registered`, or `x-wb-external` when its Zod half is a hand-written
+//! module's. An object may carry a named `x-wb-check` and may `x-wb-extends`
+//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list,
+//! or carry the text a model reads as `x-wb-describe`. It grows when a contract
+//! needs a construct, with that construct's emission in both languages in the
+//! same change.
 //!
 //! Field order is `x-wb-order`, which must list every property once: a JSON
 //! object carries no order a map keeps.
@@ -22,9 +28,11 @@ pub(super) use super::parse::Unknown;
 use super::parse::{Additional, Kind, Node};
 pub(crate) use super::parse::{Contract, parse};
 
+mod objects;
 mod shapes;
+use objects::{check_extensions, check_unions, lower_object};
 pub(super) use shapes::variant_name;
-use shapes::{lower_array, lower_enum, lower_union};
+use shapes::{lower_array, lower_const, lower_discriminated, lower_enum, lower_union};
 
 const DIALECT: &str = "https://json-schema.org/draft/2020-12/schema";
 
@@ -72,6 +80,11 @@ pub(super) enum Ty<'a> {
     Number {
         min: Option<f64>,
     },
+    Bool,
+    /// A whole number; the safe-integer bounds are not published.
+    Integer,
+    /// A string that is always this one value.
+    Literal(&'a str),
     Str {
         min_utf16: Option<u32>,
         pattern: Option<Pattern<'a>>,
@@ -85,8 +98,12 @@ pub(super) enum Ty<'a> {
     },
     /// A closed set of string values.
     Enum(Vec<&'a str>),
-    /// One of several definitions, named by reference.
-    Union(Vec<&'a str>),
+    /// One of several definitions, named by reference; chosen by the constant
+    /// value of the `discriminator` property when it has one.
+    Union {
+        members: Vec<&'a str>,
+        discriminator: Option<&'a str>,
+    },
     Ref(&'a str),
     Any,
     Record {
@@ -104,8 +121,12 @@ pub(super) struct Pattern<'a> {
 }
 
 pub(super) struct Object<'a> {
+    /// The object's own properties; those of `extends` come before them.
     pub(super) fields: Vec<Field<'a>>,
     pub(super) unknown: Unknown,
+    /// A named check of the whole object.
+    pub(super) check: Option<&'a str>,
+    pub(super) extends: Option<&'a str>,
 }
 
 pub(super) struct Field<'a> {
@@ -116,6 +137,12 @@ pub(super) struct Field<'a> {
     pub(super) description: &'a str,
     pub(super) ty: Ty<'a>,
     pub(super) optional: bool,
+    /// An absent value reads as an empty list, so the field is never absent.
+    pub(super) default_empty: bool,
+    /// A malformed value reads as absent.
+    pub(super) lenient: bool,
+    /// The text a model reads, published as the property's `.describe()`.
+    pub(super) published: Option<&'a str>,
 }
 
 /// A contract as the emitters read it: definitions in dependency order, every
@@ -134,6 +161,8 @@ pub(super) struct CheckedDef<'a> {
     pub(super) description: &'a str,
     /// Whether the Zod half registers it in Zod's global registry under `name`.
     pub(super) registered: bool,
+    /// The module whose hand-written Zod schema stands for it, if any.
+    pub(super) external: Option<&'a str>,
     pub(super) ty: Ty<'a>,
 }
 
@@ -142,8 +171,11 @@ impl<'a> Ty<'a> {
         match self {
             Ty::Ref(name) => out.push(name),
             Ty::Array { item, .. } => item.refs(out),
-            Ty::Union(members) => out.extend(members),
-            Ty::Object(object) => object.fields.iter().for_each(|f| f.ty.refs(out)),
+            Ty::Union { members, .. } => out.extend(members),
+            Ty::Object(object) => {
+                out.extend(object.extends);
+                object.fields.iter().for_each(|f| f.ty.refs(out));
+            }
             _ => {}
         }
     }
@@ -160,7 +192,11 @@ impl<'a> Ty<'a> {
                 rust.extend(check);
             }
             Ty::Array { item, .. } => item.names(zod, rust),
-            Ty::Object(object) => object.fields.iter().for_each(|f| f.ty.names(zod, rust)),
+            Ty::Object(object) => {
+                zod.extend(object.check);
+                rust.extend(object.check);
+                object.fields.iter().for_each(|f| f.ty.names(zod, rust));
+            }
             _ => {}
         }
     }
@@ -201,8 +237,12 @@ pub(super) fn check(contract: &Contract) -> Result<Checked<'_>, Vec<String>> {
     let known: BTreeSet<&str> = contract.defs.0.keys().map(String::as_str).collect();
     let defs = in_dependency_order(lowered, &known, &mut v);
     let (mut zod_checks, mut rust_names) = (Vec::new(), Vec::new());
+    check_extensions(&defs, &mut v);
+    check_unions(&defs, &mut v);
     for def in &defs {
-        def.ty.names(&mut zod_checks, &mut rust_names);
+        let mut imported = Vec::new();
+        let zod = if def.external.is_some() { &mut imported } else { &mut zod_checks };
+        def.ty.names(zod, &mut rust_names);
     }
     for name in zod_checks.iter().chain(&rust_names) {
         if !is_snake(name) {
@@ -269,18 +309,7 @@ fn check_def<'a>(
     let at = format!("$defs.{name}");
     let description = described(node, &at, v);
     let ty = lower(node, &at, true, v)?;
-    if contract.rust_serde && !serde_shape(&ty) {
-        v.push(format!(
-            "{at}: x-wb-rustSerde emits closed objects of required numbers only; \
-             set it to false for this construct"
-        ));
-    }
-    if contract.describe
-        && let Ty::Object(object) = &ty
-        && object.fields.iter().any(|f| f.optional)
-    {
-        v.push(format!("{at}: an optional field is not implemented with x-wb-describe"));
-    }
+    check_fit(contract, &ty, &at, v);
     let registered = node.registered.is_some();
     if node.registered == Some(false) {
         v.push(format!("{at}.x-wb-registered: is `true` or absent"));
@@ -288,13 +317,80 @@ fn check_def<'a>(
     if contract.describe && registered {
         v.push(format!("{at}: x-wb-registered is not implemented with x-wb-describe"));
     }
-    Some(CheckedDef { name, description: description?, registered, ty })
+    let external = node.external.as_deref();
+    if let Some(module) = external {
+        check_external(contract, module, registered, &at, v);
+    }
+    Some(CheckedDef { name, description: description?, registered, external, ty })
+}
+
+/// What the contract's own switches allow a definition to hold.
+fn check_fit(contract: &Contract, ty: &Ty<'_>, at: &str, v: &mut Vec<String>) {
+    if contract.rust_serde && !serde_shape(ty) {
+        v.push(format!(
+            "{at}: x-wb-rustSerde emits closed objects of required numbers only; \
+             set it to false for this construct"
+        ));
+    }
+    let Ty::Object(object) = ty else { return };
+    if !contract.describe {
+        return;
+    }
+    if object.fields.iter().any(|f| f.optional) {
+        v.push(format!("{at}: an optional field is not implemented with x-wb-describe"));
+    }
+    if object.check.is_some() || object.extends.is_some() {
+        v.push(format!("{at}: an object check or extension is not implemented with x-wb-describe"));
+    }
+    if object.fields.iter().any(|f| f.published.is_some()) {
+        v.push(format!(
+            "{at}: the contract already publishes every description; \
+             drop x-wb-describe from its properties"
+        ));
+    }
+}
+
+/// A definition whose Zod half is a module's hand-written schema: the module
+/// must be a sibling import, and nothing the Zod half would emit for it applies.
+fn check_external(
+    contract: &Contract,
+    module: &str,
+    registered: bool,
+    at: &str,
+    v: &mut Vec<String>,
+) {
+    if !import_path(module) {
+        v.push(format!("{at}.x-wb-external: {module} must be a relative `.js` import"));
+    }
+    if contract.describe {
+        v.push(format!("{at}: x-wb-external is not implemented with x-wb-describe"));
+    }
+    if registered {
+        v.push(format!("{at}: x-wb-registered is not implemented with x-wb-external"));
+    }
+}
+
+/// `./name.js` or `../name.js`: one directory step and a lowercase file name,
+/// so the import line is one biome sorts the way the emitter does.
+fn import_path(module: &str) -> bool {
+    let Some(file) = module.strip_prefix("../").or_else(|| module.strip_prefix("./")) else {
+        return false;
+    };
+    file.strip_suffix(".js").is_some_and(|stem| {
+        !stem.is_empty()
+            && stem
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || "-_.".contains(c))
+            && !stem.starts_with('.')
+    })
 }
 
 fn serde_shape(ty: &Ty<'_>) -> bool {
     matches!(
         ty,
         Ty::Object(object) if object.unknown == Unknown::Refuse
+            && object.check.is_none()
+            && object.extends.is_none()
             && object.fields.iter().all(|f| {
                 !f.optional && matches!(f.ty, Ty::Number { .. }) && f.rust == f.name
             })
@@ -331,8 +427,26 @@ const DEFS_PREFIX: &str = "#/$defs/";
 /// `top` is a definition: only there may an object be written out, so a
 /// nested one is named and referenced and its type has a name in both languages.
 fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
+    for (there, keyword) in
+        [(node.lenient.is_some(), "x-wb-lenient"), (node.published.is_some(), "x-wb-describe")]
+    {
+        if there {
+            v.push(format!("{at}: {keyword} belongs on a property"));
+        }
+    }
+    lower_form(node, at, top, v)
+}
+
+/// `lower` for a node that may carry a property's own decorations.
+fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
     if !top && node.registered.is_some() {
         v.push(format!("{at}: x-wb-registered belongs on a definition"));
+    }
+    if !top && node.external.is_some() {
+        v.push(format!("{at}: x-wb-external belongs on a definition"));
+    }
+    if top && node.default.is_some() {
+        v.push(format!("{at}: a default belongs on a property"));
     }
     if let Some(reference) = &node.reference {
         only(node, &["$ref"], "a reference", at, v);
@@ -344,6 +458,9 @@ fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option
             return None;
         };
         return Some(Ty::Ref(name));
+    }
+    if node.one_of.is_some() {
+        return lower_discriminated(node, at, top, v);
     }
     if node.any_of.is_some() {
         return lower_union(node, at, top, v);
@@ -367,6 +484,15 @@ fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option
             }
             Some(Ty::Number { min: node.minimum })
         }
+        Some(Kind::Boolean) => {
+            only(node, &[], "a boolean", at, v);
+            Some(Ty::Bool)
+        }
+        Some(Kind::Integer) => {
+            only(node, &[], "an integer", at, v);
+            Some(Ty::Integer)
+        }
+        Some(Kind::String) if node.constant.is_some() => lower_const(node, at, top, v),
         Some(Kind::String) if node.values.is_some() => lower_enum(node, at, top, v),
         Some(Kind::String) => Some(lower_string(node, at, v)),
         Some(Kind::Array) => lower_array(node, at, v),
@@ -422,111 +548,6 @@ fn lower_record<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Option<Ty<
             None
         }
     }
-}
-
-fn lower_object<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
-    only(
-        node,
-        &["properties", "required", "x-wb-order", "additionalProperties", "x-wb-unknownKeys"],
-        "an object",
-        at,
-        v,
-    );
-    if !top {
-        v.push(format!("{at}: name an object in $defs and `$ref` it"));
-        return None;
-    }
-    let properties = &node.properties.as_ref()?.0;
-    if properties.is_empty() {
-        v.push(format!("{at}: declares no property"));
-    }
-    let Some(unknown) = node.unknown_keys else {
-        v.push(format!("{at}: x-wb-unknownKeys is missing (refuse, strip or keep)"));
-        return None;
-    };
-    let wants = unknown == Unknown::Refuse;
-    if !matches!(node.additional, Some(Additional::Flag(flag)) if flag != wants) {
-        v.push(format!(
-            "{at}: additionalProperties must be {} for x-wb-unknownKeys {}",
-            !wants,
-            if wants { "refuse" } else { "strip or keep" }
-        ));
-    }
-    let declared: BTreeSet<&str> = properties.keys().map(String::as_str).collect();
-    let required = names_of(node.required.as_deref(), &declared, "required", at, v);
-    let order = node.order.as_deref().unwrap_or_default();
-    let ordered: BTreeSet<&str> = order.iter().map(String::as_str).collect();
-    if ordered.len() != order.len() || ordered != declared {
-        v.push(format!("{at}.x-wb-order: must list every property exactly once"));
-    }
-    let fields = lower_fields(node, properties, &required, at, v);
-    Some(Ty::Object(Object { fields, unknown }))
-}
-
-/// The fields of an object in `x-wb-order`, each checked as a name both
-/// languages take and lowered.
-fn lower_fields<'a>(
-    node: &'a Node,
-    properties: &'a BTreeMap<String, Node>,
-    required: &BTreeSet<&str>,
-    at: &str,
-    v: &mut Vec<String>,
-) -> Vec<Field<'a>> {
-    let unknown = node.unknown_keys;
-    let order = node.order.as_deref().unwrap_or_default();
-    let mut fields: Vec<Field<'a>> = Vec::new();
-    for key in order {
-        let Some((name, property)) = properties.get_key_value(key) else { continue };
-        let field_at = format!("{at}.{name}");
-        if !is_field(name) {
-            v.push(format!("{field_at}: not a lowercase identifier (snake_case or camelCase)"));
-        }
-        let rust = rust_field(name);
-        if rust.as_deref().is_none_or(|r| matches!(r, "r#crate" | "r#self" | "r#super")) {
-            v.push(format!("{field_at}: not a name both languages take"));
-        }
-        let rust = rust.unwrap_or_default();
-        if fields.iter().any(|f| f.rust == rust) {
-            v.push(format!(
-                "{field_at}: {name} and an earlier property both name `{rust}` in Rust"
-            ));
-        }
-        if unknown == Some(Unknown::Keep) && rust == "extra" {
-            v.push(format!("{field_at}: `extra` holds a keep object's unknown keys"));
-        }
-        let description = described(property, &field_at, v);
-        if let (Some(description), Some(ty)) = (description, lower(property, &field_at, false, v)) {
-            fields.push(Field {
-                name,
-                rust,
-                description,
-                ty,
-                optional: !required.contains(name.as_str()),
-            });
-        }
-    }
-    fields
-}
-
-/// `required` as a set of declared names; a name repeated or not declared is
-/// reported.
-fn names_of<'a>(
-    list: Option<&'a [String]>,
-    declared: &BTreeSet<&str>,
-    what: &str,
-    at: &str,
-    v: &mut Vec<String>,
-) -> BTreeSet<&'a str> {
-    let set: BTreeSet<&str> = list.unwrap_or_default().iter().map(String::as_str).collect();
-    if set.len() != list.map_or(0, <[String]>::len) {
-        v.push(format!("{at}.{what}: lists a property twice"));
-    }
-    for name in &set {
-        if !declared.contains(name) {
-            v.push(format!("{at}.{what}: `{name}` is not a property"));
-        }
-    }
-    set
 }
 
 /// Text that lands in a doc comment and a string literal in both languages.

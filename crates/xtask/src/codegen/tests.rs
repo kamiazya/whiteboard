@@ -1,6 +1,9 @@
 use super::*;
 
+mod choices;
+mod objects;
 mod plain;
+mod scalars;
 mod shapes;
 
 const RECT: &str = r#"{
@@ -62,7 +65,7 @@ fn a_construct_outside_the_dialect_is_refused_by_name() {
         (r#""minimum": 0,"#, r#""minimum": null,"#),
         (
             r#""type": "number", "description": "Left.""#,
-            r#""type": "boolean", "description": "Left.""#,
+            r#""type": "null", "description": "Left.""#,
         ),
         (r#""x-wb-unknownKeys": "refuse""#, r#""x-wb-unknownKeys": "ignore""#),
         (r#""minimum": 0,"#, r#""x-wb-nope": 1,"#),
@@ -94,7 +97,7 @@ fn dialect_rules_the_parse_cannot_see_are_checked() {
         ("packages/p/src/generated/t.zod.ts", "packages/p/src/t.zod.ts", "x-wb-emit.zod"),
         ("crates/core/c/src/generated/t.rs", "crates/xtask/src/generated/t.rs", "x-wb-emit.rust"),
         ("crates/core/c/src/generated/t.rs", "crates/core/c/src/generated/t.ts", "x-wb-emit.rust"),
-        ("\"Width.\"", &format!("\"{}\"", "Wide ".repeat(20)), "biome's 100 columns"),
+        ("\"A rect.\"", &format!("\"{}\"", "Wide ".repeat(20)), "biome's 100 columns"),
     ] {
         let errors = outputs(&mutated(from, to)).unwrap_err();
         assert!(errors.iter().any(|e| e.contains(expect)), "{expect}: {errors:?}");
