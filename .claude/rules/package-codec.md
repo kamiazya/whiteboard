@@ -319,7 +319,9 @@ rather than in a string, so joining its runs yields `tightenthis`.
 
 ## Tests
 
-- Vitest project: `codec-node`.
+- Vitest project: `codec-node`. `codec-rust` (`vitest.rust.config.ts`) runs the OKF suites and the
+  spatial suites listed in `src/test-utils/spatial-wasm/suites.ts` against the Rust core (ADR-0054's
+  layer 1): a decline fails the test, and `spatial-layer-one.rust.test.ts` keeps that list complete.
 - Round-trip properties: OKF (up to canonical key order), extended JSON Canvas (lossless), and
   markdown body (modulo `normalizeMdast`, over a syntax subset that excludes constructs with
   inherent CommonMark/GFM encoding ambiguities — adjacent same-delimiter inline spans, emphasis/
