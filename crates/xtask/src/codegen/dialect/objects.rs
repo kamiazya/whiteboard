@@ -41,14 +41,7 @@ pub(super) fn lower_object<'a>(
         v.push(format!("{at}: x-wb-unknownKeys is missing (refuse, strip or keep)"));
         return None;
     };
-    let wants = unknown == Unknown::Refuse;
-    if !matches!(node.additional, Some(Additional::Flag(flag)) if flag != wants) {
-        v.push(format!(
-            "{at}: additionalProperties must be {} for x-wb-unknownKeys {}",
-            !wants,
-            if wants { "refuse" } else { "strip or keep" }
-        ));
-    }
+    check_additional(node, unknown, at, v);
     let declared: BTreeSet<&str> = properties.keys().map(String::as_str).collect();
     let required = names_of(node.required.as_deref(), &declared, "required", at, v);
     let order = node.order.as_deref().unwrap_or_default();
@@ -59,6 +52,19 @@ pub(super) fn lower_object<'a>(
     let fields = lower_fields(node, properties, &required, at, v);
     let (check, extends) = (node.check.as_deref(), node.extends.as_deref());
     Some(Ty::Object(Object { fields, unknown, check, extends }))
+}
+
+/// `additionalProperties` says what `x-wb-unknownKeys` does: false to refuse,
+/// true to strip or keep.
+fn check_additional(node: &Node, unknown: Unknown, at: &str, v: &mut Vec<String>) {
+    let wants = unknown == Unknown::Refuse;
+    if !matches!(node.additional, Some(Additional::Flag(flag)) if flag != wants) {
+        v.push(format!(
+            "{at}: additionalProperties must be {} for x-wb-unknownKeys {}",
+            !wants,
+            if wants { "refuse" } else { "strip or keep" }
+        ));
+    }
 }
 
 /// The fields of an object in `x-wb-order`, each checked as a name both

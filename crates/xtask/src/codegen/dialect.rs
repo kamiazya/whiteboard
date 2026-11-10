@@ -437,8 +437,9 @@ fn lower<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option
     lower_form(node, at, top, v)
 }
 
-/// `lower` for a node that may carry a property's own decorations.
-fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
+/// The keywords that belong only where a definition, or only where a property,
+/// is written.
+fn check_placement(node: &Node, at: &str, top: bool, v: &mut Vec<String>) {
     if !top && node.registered.is_some() {
         v.push(format!("{at}: x-wb-registered belongs on a definition"));
     }
@@ -448,16 +449,30 @@ fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> O
     if top && node.default.is_some() {
         v.push(format!("{at}: a default belongs on a property"));
     }
+}
+
+fn lower_reference<'a>(
+    node: &Node,
+    reference: &'a str,
+    at: &str,
+    v: &mut Vec<String>,
+) -> Option<Ty<'a>> {
+    only(node, &["$ref"], "a reference", at, v);
+    if node.kind.is_some() {
+        v.push(format!("{at}: a `$ref` carries no `type`"));
+    }
+    let Some(name) = reference.strip_prefix(DEFS_PREFIX) else {
+        v.push(format!("{at}.$ref: {reference} is not a `{DEFS_PREFIX}<name>` reference"));
+        return None;
+    };
+    Some(Ty::Ref(name))
+}
+
+/// `lower` for a node that may carry a property's own decorations.
+fn lower_form<'a>(node: &'a Node, at: &str, top: bool, v: &mut Vec<String>) -> Option<Ty<'a>> {
+    check_placement(node, at, top, v);
     if let Some(reference) = &node.reference {
-        only(node, &["$ref"], "a reference", at, v);
-        if node.kind.is_some() {
-            v.push(format!("{at}: a `$ref` carries no `type`"));
-        }
-        let Some(name) = reference.strip_prefix(DEFS_PREFIX) else {
-            v.push(format!("{at}.$ref: {reference} is not a `{DEFS_PREFIX}<name>` reference"));
-            return None;
-        };
-        return Some(Ty::Ref(name));
+        return lower_reference(node, reference, at, v);
     }
     if node.one_of.is_some() {
         return lower_discriminated(node, at, top, v);

@@ -207,3 +207,31 @@ fn an_external_rule_the_dialect_states_is_refused_by_name() {
         "{errors:?}"
     );
 }
+
+#[test]
+fn an_import_line_wider_than_biomes_width_breaks_one_name_to_a_line() {
+    let external = |letter: char, letters: usize| {
+        let name = format!("{letter}{}", "a".repeat(letters - 1));
+        format!(
+            r#""{name}": {{ "description": "N.", "type": "string", "x-wb-external": "../x.js" }}"#
+        )
+    };
+    let imports = |second: usize| {
+        let defs = format!("{}, {}", external('A', 30), external('B', second));
+        let zod = outputs(&plain(&defs, IN_MODEL, false)).unwrap().remove(0).1;
+        zod.lines()
+            .skip_while(|l| !l.starts_with("import {"))
+            .skip(1)
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    let flat = imports(30);
+    assert!(flat.starts_with("import { aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaSchema, b"), "{flat}");
+    assert!(flat.lines().next().is_some_and(|l| l.chars().count() == 100), "{flat}");
+    let broken = imports(31);
+    let mut lines = broken.lines();
+    assert_eq!(lines.next(), Some("import {"), "{broken}");
+    assert_eq!(lines.next(), Some(format!("  a{}Schema,", "a".repeat(29)).as_str()), "{broken}");
+    assert_eq!(lines.next(), Some(format!("  b{}Schema,", "a".repeat(30)).as_str()), "{broken}");
+    assert_eq!(lines.next(), Some("} from '../x.js'"), "{broken}");
+}

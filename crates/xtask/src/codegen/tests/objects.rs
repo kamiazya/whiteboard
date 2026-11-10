@@ -263,3 +263,22 @@ fn a_line_of_exactly_biomes_width_is_kept_and_one_column_more_is_refused() {
     let errors = outputs(&plain(&number(94), IN_MODEL, false)).unwrap_err();
     assert!(errors.iter().any(|e| e.contains("a line past biome's 100 columns")), "{errors:?}");
 }
+
+#[test]
+fn a_lone_call_on_a_named_schema_breaks_its_argument_and_not_its_chain() {
+    let size = r##""Size": { "description": "S.", "type": "number" },
+      "Boxed": {
+      "description": "A boxed value.",
+      "type": "object",
+      "properties": {
+        "height": { "$ref": "#/$defs/Size", "x-wb-describe": "Box height. Omit it and a text box is made tall enough for its text; a named one too short is refused.", "description": "H." }
+      },
+      "required": ["height"],
+      "x-wb-order": ["height"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    }"##;
+    let (zod, _) = generated(size);
+    let want = "\n  height: sizeSchema.describe(\n    'Box height. Omit it and a text box is made tall enough for its text; a named one too short is refused.',\n  ),\n";
+    assert!(zod.contains(want), "{zod}");
+}

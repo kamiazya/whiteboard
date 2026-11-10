@@ -360,8 +360,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the published type of nodeIdSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
   'packages/model/src/markdown.ts#MarkdownDocument':
     'the published type of markdownDocumentSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
-  'packages/model/src/spatial.ts#NodeEmbed':
-    'the published type of nodeEmbedSchema on the package export-star surface; types.test.ts pins it equal to z.infer so a hand-written drift fails',
+  'packages/model/src/generated/spatial.zod.ts#NodeEmbed':
+    'the published type of nodeEmbedSchema on the package export-star surface, generated beside its schema so a hand-written drift cannot arise',
+  'packages/model/src/generated/spatial.zod.ts#canvasCommentSchema':
+    'the render-time view of a comment on the package export-star surface, generated from the contract; spatial.contract.test.ts pins its refusals',
   'packages/model/src/trust.ts#trustTier':
     'the OKF §5.3 tier rule, kept ahead of its first surface; ADR-0039 and package-model.md name it as a model contract its tests spec',
   'packages/search/src/full-text.ts#tokenizeForIndex':

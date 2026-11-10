@@ -124,7 +124,8 @@ impl Chain {
 
     /// One line when it fits `width`, else one call per line and a call whose
     /// line is still too long one argument per line, the way biome breaks a
-    /// member chain.
+    /// member chain; a chain of a single call keeps it on the head's line and
+    /// breaks only its arguments.
     fn render(&self, indent: usize, lead: &str, trail: &str) -> String {
         let pad = " ".repeat(indent);
         let flat = format!(
@@ -134,6 +135,14 @@ impl Chain {
         );
         if flat.chars().count() <= TS_LINE_WIDTH || self.calls.is_empty() {
             return flat;
+        }
+        if let [call] = self.calls.as_slice() {
+            let mut out = format!("{pad}{lead}{}.{}(", self.head, call.name);
+            for arg in &call.args {
+                let _ = write!(out, "\n{pad}  {arg},");
+            }
+            let _ = write!(out, "\n{pad}){trail}");
+            return out;
         }
         let mut out = format!("{pad}{lead}{}", self.head);
         for call in &self.calls {
@@ -163,18 +172,6 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
         None => chain,
     };
     match ty {
-        Ty::Bool => Chain::new("boolean", vec![]),
-        Ty::Integer => Chain::new("number", vec![])
-            .then("int", vec![])
-            .then("meta", vec!["{ minimum: undefined, maximum: undefined }".to_owned()]),
-        Ty::Literal(value) => Chain::new("literal", vec![js_string(value)]),
-        Ty::Number { min } => {
-            let chain = Chain::new("number", vec![]);
-            match min {
-                Some(m) => chain.then("min", vec![js_number(*m)]),
-                None => chain,
-            }
-        }
         Ty::Str { min_utf16, pattern, check } => {
             let mut chain = Chain::new("string", vec![]);
             if let Some(n) = min_utf16 {
@@ -195,6 +192,29 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
             }
             chain
         }
+        Ty::Record { check } => refine(
+            Chain::new("record", vec!["z.string()".to_owned(), "z.unknown()".to_owned()]),
+            *check,
+        ),
+        other => zod_plain_chain(other),
+    }
+}
+
+/// The forms with nothing to chain after them.
+fn zod_plain_chain(ty: &Ty<'_>) -> Chain {
+    match ty {
+        Ty::Bool => Chain::new("boolean", vec![]),
+        Ty::Integer => Chain::new("number", vec![])
+            .then("int", vec![])
+            .then("meta", vec!["{ minimum: undefined, maximum: undefined }".to_owned()]),
+        Ty::Literal(value) => Chain::new("literal", vec![js_string(value)]),
+        Ty::Number { min } => {
+            let chain = Chain::new("number", vec![]);
+            match min {
+                Some(m) => chain.then("min", vec![js_number(*m)]),
+                None => chain,
+            }
+        }
         Ty::Enum(values) => {
             let list: Vec<String> = values.iter().map(|v| js_string(v)).collect();
             Chain::new("enum", vec![format!("[{}]", list.join(", "))])
@@ -209,11 +229,9 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
         }
         Ty::Ref(name) => Chain::named(schema_name(name)),
         Ty::Any => Chain::new("unknown", vec![]),
-        Ty::Record { check } => refine(
-            Chain::new("record", vec!["z.string()".to_owned(), "z.unknown()".to_owned()]),
-            *check,
-        ),
-        Ty::Object(_) => Chain::named("z.object".to_owned()),
+        Ty::Object(_) | Ty::Str { .. } | Ty::Array { .. } | Ty::Record { .. } => {
+            Chain::named("z.object".to_owned())
+        }
     }
 }
 
@@ -304,7 +322,16 @@ fn zod_imports(checked: &Checked<'_>) -> String {
     let mut out = String::new();
     for ((_, module), names) in &modules {
         let list: Vec<&str> = names.iter().map(String::as_str).collect();
-        let _ = writeln!(out, "import {{ {} }} from '{module}'", list.join(", "));
+        let flat = format!("import {{ {} }} from '{module}'", list.join(", "));
+        if flat.chars().count() <= TS_LINE_WIDTH {
+            let _ = writeln!(out, "{flat}");
+            continue;
+        }
+        out.push_str("import {\n");
+        for name in list {
+            let _ = writeln!(out, "  {name},");
+        }
+        let _ = writeln!(out, "}} from '{module}'");
     }
     out
 }
