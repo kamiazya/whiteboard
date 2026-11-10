@@ -1,17 +1,24 @@
 import { describe, expect, it } from 'vitest'
-import { parseYamlKeepingWrittenIntegers } from './frontmatter-yaml.js'
-import { parseOkf } from './parse.js'
-import { serializeOkf } from './serialize.js'
+import { parseOkf, serializeOkf } from './okf-core.js'
 
-const refusedBy = (text: string): string => {
-  try {
-    parseYamlKeepingWrittenIntegers(text)
-  } catch (error) {
-    return (error as Error).message
-  }
-  return ''
+const yamlStage = (text: string): string => {
+  const result = parseOkf(`---\n${text}\n---\nbody\n`)
+  return !result.ok && result.error.stage === 'yaml' ? result.error.message : ''
 }
 
+/** What `type: note` plus `text` reads as, in the bucket unknown keys keep. */
+const readAs = (text: string): unknown => {
+  const result = parseOkf(`---\ntype: note\n${text}\n---\nbody\n`)
+  if (!result.ok) throw new Error(`${result.error.stage}: ${result.error.message}`)
+  return result.value.frontmatter.facetsRaw
+}
+
+// The core names the class of a YAML refusal, not the fault the `yaml` package
+// worded (owner decision q25), so each refusal is held to its class.
+const SUBSET = /^malformed YAML frontmatter: the YAML is outside the subset the reader accepts$/
+
+// What the reader gets is the text between the fences, so a closing marker
+// with text after it (`--- b`) is the fence and a body, never a refusal.
 describe('the frontmatter YAML subset: what the reader refuses', () => {
   it.each([
     ['a local tag', 'a: !foo x'],
@@ -21,27 +28,26 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     ['a set tag', 'a: !!set\n  ? x'],
     ['a binary tag', 'a: !!binary aGk='],
   ])('refuses %s', (_label, text) => {
-    expect(refusedBy(text)).toMatch(/tags are not allowed in OKF frontmatter/)
+    expect(yamlStage(text)).toMatch(SUBSET)
   })
 
   it.each([
     ['a document start marker', '---\na: 1'],
     ['a document end marker', 'a: 1\n...'],
-    ['a marker with trailing text', 'a: 1\n--- b'],
     ['a directive', '%YAML 1.2\n---\na: 1'],
     ['a directive with no marker', '%YAML 1.2\na: 1'],
   ])('refuses %s', (_label, text) => {
-    expect(refusedBy(text)).toMatch(/document markers and directives are not allowed/)
+    expect(yamlStage(text)).toMatch(SUBSET)
   })
 
   it('refuses a byte-order mark, at the start or inside a value', () => {
-    expect(refusedBy('\uFEFFa: 1')).toMatch(/byte-order mark/)
-    expect(refusedBy('a: "x\uFEFFy"')).toMatch(/byte-order mark/)
+    expect(yamlStage('\uFEFFa: 1')).toMatch(SUBSET)
+    expect(yamlStage('a: "x\uFEFFy"')).toMatch(SUBSET)
   })
 
   it('refuses a lone CR but reads CRLF line endings', () => {
-    expect(refusedBy('a: 1\rb: 2')).toMatch(/carriage return/)
-    expect(parseYamlKeepingWrittenIntegers('a: 1\r\nb: 2')).toEqual({ a: 1, b: 2 })
+    expect(yamlStage('a: 1\rb: 2')).toMatch(SUBSET)
+    expect(readAs('a: 1\r\nb: 2')).toEqual({ a: 1, b: 2 })
   })
 
   it.each([
@@ -49,8 +55,8 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     ['BEL', '\u0007'],
     ['ESC', '\u001b'],
   ])('refuses a raw %s, even inside double quotes', (_label, char) => {
-    expect(refusedBy(`a: "x${char}y"`)).toMatch(/control characters are not allowed/)
-    expect(refusedBy(`a: x${char}y`)).toMatch(/control characters are not allowed/)
+    expect(yamlStage(`a: "x${char}y"`)).toMatch(SUBSET)
+    expect(yamlStage(`a: x${char}y`)).toMatch(SUBSET)
   })
 
   it.each([
@@ -62,13 +68,13 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     '\u000e',
     '\u001f',
   ])('refuses the control character U+%s at both ends of each range', (char) => {
-    expect(refusedBy(`a: "x${char}y"`)).toMatch(/control characters are not allowed/)
+    expect(yamlStage(`a: "x${char}y"`)).toMatch(SUBSET)
   })
 
   it('reads a C1 control only inside double quotes', () => {
-    expect(parseYamlKeepingWrittenIntegers('a: "x\u0085y"')).toEqual({ a: 'x\u0085y' })
+    expect(readAs('a: "x\u0085y"')).toEqual({ a: 'x\u0085y' })
     for (const text of ['a: x\u0085y', "a: 'x\u0085y'", 'a: |\n  x\u0085y', 'a: x\u007fy']) {
-      expect(refusedBy(text)).toMatch(/outside double quotes/)
+      expect(yamlStage(text)).toMatch(SUBSET)
     }
   })
 
@@ -80,11 +86,11 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     ['a block scalar', 'a: |\n  x\n\ty'],
     ['spaces then a tab', 'a:\n  b: x\n  \ty'],
   ])('refuses a tab indenting %s', (_label, text) => {
-    expect(refusedBy(text)).toMatch(/tab/)
+    expect(yamlStage(text)).toMatch(SUBSET)
   })
 
   it('reads a tab inside a line', () => {
-    expect(parseYamlKeepingWrittenIntegers('a: x\ty\nb:\t1')).toEqual({ a: 'x\ty', b: 1 })
+    expect(readAs('a: x\ty\nb:\t1')).toEqual({ a: 'x\ty', b: 1 })
   })
 
   it.each([
@@ -94,25 +100,25 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     ['a flow mapping key', '{a: 1}: 1'],
     ['a block list key', '? - a\n: 1'],
   ])('refuses %s', (_label, text) => {
-    expect(refusedBy(text)).toMatch(/collection keys are not allowed/)
+    expect(yamlStage(text)).toMatch(SUBSET)
   })
 
   it('refuses a pair inside a flow list', () => {
-    expect(refusedBy('a: [b: 1]')).toMatch(/pair inside a flow list/)
+    expect(yamlStage('a: [b: 1]')).toMatch(SUBSET)
   })
 
   it('refuses ? inside a flow mapping', () => {
-    expect(refusedBy('a: {? b : 1}')).toMatch(/explicit keys are not allowed/)
+    expect(yamlStage('a: {? b : 1}')).toMatch(SUBSET)
   })
 
   it('refuses an empty implicit key', () => {
-    expect(refusedBy(': x')).toMatch(/empty keys are not allowed/)
-    expect(refusedBy('a:\n  : x')).toMatch(/empty keys are not allowed/)
+    expect(yamlStage(': x')).toMatch(SUBSET)
+    expect(yamlStage('a:\n  : x')).toMatch(SUBSET)
   })
 
   it('refuses an explicit key that stringify would not have written', () => {
-    expect(refusedBy('? a\n: 1')).toMatch(/explicit keys are not allowed/)
-    expect(refusedBy(`? ${'k'.repeat(1024)}\n: 1`)).toMatch(/explicit keys are not allowed/)
+    expect(yamlStage('? a\n: 1')).toMatch(SUBSET)
+    expect(yamlStage(`? ${'k'.repeat(1024)}\n: 1`)).toMatch(SUBSET)
   })
 
   it.each([
@@ -124,18 +130,18 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     ['an escaped lone surrogate in a key', '"k\\uD800": 1'],
     ['a lone surrogate in a block scalar', 'a: |\n  x\uD800'],
   ])('refuses %s', (_label, text) => {
-    expect(refusedBy(text)).toMatch(/lone UTF-16 surrogate/)
+    expect(yamlStage(text)).toMatch(SUBSET)
   })
 
   it('reads an escaped surrogate pair', () => {
-    expect(parseYamlKeepingWrittenIntegers('a: "\\uD83D\\uDE00"')).toEqual({ a: '\u{1F600}' })
+    expect(readAs('a: "\\uD83D\\uDE00"')).toEqual({ a: '\u{1F600}' })
   })
 
   it('still refuses anchors, aliases and depth', () => {
-    expect(refusedBy('a: &x 1')).toMatch(/anchors and aliases/)
-    expect(refusedBy('a: &x 1\nb: *x')).toMatch(/anchors and aliases/)
-    expect(refusedBy(`${'a: '.repeat(1)}${'['.repeat(40)}${']'.repeat(40)}`)).toMatch(
-      /nest at most/,
+    expect(yamlStage('a: &x 1')).toMatch(/YAML anchors and aliases are not allowed/)
+    expect(yamlStage('a: &x 1\nb: *x')).toMatch(/YAML anchors and aliases are not allowed/)
+    expect(yamlStage(`${'a: '.repeat(1)}${'['.repeat(40)}${']'.repeat(40)}`)).toMatch(
+      /at most 32 levels/,
     )
   })
 
@@ -144,7 +150,7 @@ describe('the frontmatter YAML subset: what the reader refuses', () => {
     expect(result.ok).toBe(false)
     if (result.ok) return
     expect(result.error.stage).toBe('yaml')
-    expect(result.error.message).toMatch(/tags are not allowed/)
+    expect(result.error.message).toMatch(/^malformed YAML frontmatter: /)
   })
 })
 
@@ -168,9 +174,8 @@ describe('the frontmatter YAML subset: what the reader still reads', () => {
     ],
     ['a comment', '# c\na: 1 # d\n# e', { a: 1 }],
     ['the explicit key stringify writes for a long key', `? ${long}\n: 1`, { [long]: 1 }],
-    ['an empty text', '', null],
   ])('reads %s', (_label, text, expected) => {
-    expect(parseYamlKeepingWrittenIntegers(text)).toEqual(expected)
+    expect(readAs(text)).toEqual(expected)
   })
 })
 

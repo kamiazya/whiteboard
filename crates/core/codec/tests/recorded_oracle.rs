@@ -1,9 +1,8 @@
 //! The frontmatter reader and writer against the recorded TypeScript answers.
 //!
-//! `packages/codec/src/okf/oracle/recorded-oracle.test.ts` writes
-//! `frontmatter.jsonl` from the TypeScript reader (`parseYamlKeepingWrittenIntegers`)
-//! and writer (`serializeOkf`) and fails when the file no longer equals what
-//! the TypeScript answers. This replays it natively, which is what lets
+//! `packages/codec/src/okf/oracle/frontmatter.jsonl` was written from the
+//! TypeScript reader and writer before they were deleted, and is frozen. This
+//! replays it natively, which is what lets
 //! cargo-mutants and the coverage floor judge the crate by the oracle the
 //! TypeScript is held to (QR-17). One JSON object per line: a reader case is
 //! `{"k":"r","y":text}` with `"ok":value` or `"err":class`, a writer case

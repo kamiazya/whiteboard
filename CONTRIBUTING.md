@@ -41,6 +41,8 @@ This project follows a **test → patch → manual verify → regression test** 
 | jsdom | `facet-ui-jsdom`, `plugin-visual-jsdom`, `canvas-viewer-jsdom`, `web-jsdom` |
 | real browser | `canvas-render-browser`, `canvas-viewer-browser`, `web-browser`, `web-browser-window-state` |
 
+**Most projects need the Rust core's wasm artifact before they run.** The OKF Markdown envelope (`parseOkf`, `serializeOkf`) has no TypeScript implementation left, so every test realm that can reach it installs the core in its setup file (`packages/codec/src/test-utils/okf-core-setup/`) and fails the whole project, naming the missing file, when the artifact is absent. That is `mcp-node`, `codec-node`, `server-core-node`, `daemon-client-node`, `reference-graph-node`, `extension-node`, `canvas-render-node`, `canvas-viewer-node`, `canvas-viewer-jsdom` and `web-jsdom`; the browser projects fetch it from the dev server. Run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` once (it needs the Rust toolchain; CI restores it from a cache keyed on the crates), and again after a change under `crates/`.
+
 `apps/web`'s two non-browser projects are `web-jsdom` and `web-node`; running only `--project web-jsdom` omits `web-node`'s build and deploy-config guards, so use `pnpm --filter @kamiazya/whiteboard-web test` when the question is "does this match CI".
 
 Short version:

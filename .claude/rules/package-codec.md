@@ -26,14 +26,16 @@ paths:
 - `CodecParseResult<T>`/`CodecParseError` — the total-parser error contract every parser here
   returns instead of throwing (`errors.ts`). An issue is `CodecIssue` (code, path, message), not
   Zod's issue type: the Rust core's OKF reader answers that much and no more.
-- The OKF envelope's `CoreImpl` switch ([ADR-0054](../../docs/contributing/adr/0054-rust-core.md)):
-  `okf/okf-core.ts`'s `okfCodec(core)` answers `parseOkf`/`serializeOkf` by the TypeScript, by
-  the Rust core (`OkfCore`, declared structurally so this package never imports `core-wasm`), or
-  by both with any difference reported. A core that throws has DECLINED and the TypeScript
-  answers, in every mode, so a caller keeps the TypeScript's error classes. A caller that writes
-  or reads OKF for a user takes the codec from its root (server-core's `ServerDeps.okfCore`)
-  rather than calling `parseOkf`/`serializeOkf` directly; the comparison it reports is held by
-  `okf-core.test.ts` and, against the real artifact, by `okf/wasm.rust.test.ts`.
+- The OKF envelope is answered ONLY by the Rust core ([ADR-0054](../../docs/contributing/adr/0054-rust-core.md)
+  stage 4; its TypeScript is deleted): `okf/okf-core.ts`'s `parseOkf`/`serializeOkf` dispatch to the
+  one `OkfCore` a realm installs with `installOkfCore` (declared structurally so this package never
+  imports `core-wasm`, which would carry the wasm glue to every consumer; the ledger's `realm` shape
+  holds it). With none installed they throw `OkfCoreNotInstalled`, never answer another way, so a
+  root installs its core BEFORE any OKF call: the daemon at boot, the web page by awaiting
+  `okfReady()`, every Node test realm in its setup file (`test-utils/okf-core-setup/`, which fails
+  the project when the artifact is missing). A call the core declines (`CoreInputRefused`) is a
+  `CodecParseResult` failure at stage `frontmatter-schema` for a read and an `OkfNotYamlSafeError`
+  for a write, with the core's reason. `okf-core.test.ts` pins the mapping.
 - The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
   the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
   `JSON_CANVAS_PROJECTION` ledger and the loss tables generated from it
@@ -91,21 +93,18 @@ rather than in a string, so joining its runs yields `tightenthis`.
   raw `ZodError`/`SyntaxError`, and never silently return a partial value. Every failure stage
   (`yaml` / `frontmatter-schema` / `json-syntax` / `json-canvas-schema`) has a pinned example test.
 - OKF facets-domain keys are emitted in canonical lexicographic order on serialize — authoring
-  order is not preserved. Facet values are validated against `yamlSafeValueSchema` before emission;
+  order is not preserved. Facet values are validated by the core's writer before emission (it names every place);
   a non-yaml-safe value (undefined/NaN/Infinity/bigint/function/symbol/cyclic) is a typed error,
   not a corrupt YAML file.
 - **OKF frontmatter is a restricted YAML subset, read and written** (ADR-0054's frontmatter
-  spike, owner questions q21/q22). `parseYamlKeepingWrittenIntegers` refuses tags, directives and
-  document markers, a BOM, a lone CR, raw C0, C1 outside double quotes, tab indentation, collection
-  keys, a pair inside a flow list, `?` in flow, an empty key, an explicit `? key` other than the
-  long-key form `yaml` writes past 1024 units, and lone surrogates. The Rust port must agree with
-  it in BOTH directions, so a construct is never quietly let back in. `serializeOkf` writes through
-  a `Document` with `doubleQuotedAsJSON: true` and forces double quotes on tab-led and space-only
-  lines: a bare `yaml.stringify` writes tab-indented block scalars, raw BOMs, and mis-folds
-  double-quoted text so it reads back different. `yamlSafeValueSchema` refuses a lone surrogate or
-  a BOM in a key or value. `frontmatter-subset.property.test.ts` is the guard that the writer stays
-  inside what the reader accepts. A regex over YAML text never uses `/m`: JavaScript's `^` also
-  breaks at U+2028 and U+2029.
+  spike, owner questions q21/q22), by the Rust core: it refuses tags, directives and document
+  markers, a BOM, a lone CR, raw C0, C1 outside double quotes, tab indentation, collection keys, a
+  pair inside a flow list, `?` in flow, an empty key, an explicit `? key` other than the long-key
+  form written past 1024 units, and lone surrogates; the writer forces double quotes on tab-led and
+  space-only lines. `frontmatter-subset.test.ts` and its property hold both through `parseOkf` and
+  `serializeOkf`, and the frozen recordings (`okf/oracle/*.jsonl`, taken from the TypeScript before
+  its deletion) are what the Rust crates replay. A regex over YAML text never uses `/m`:
+  JavaScript's `^` also breaks at U+2028 and U+2029.
 - Root frontmatter keys this codebase does not model are PRESERVED, not dropped (OKF §4.1). `parseOkf`
   routes every non-reserved root key into `facetsRaw` and `serializeOkf` spreads them back at the
   root, in the same canonical key order as `facets` — the bucket itself is never emitted as a
@@ -119,9 +118,9 @@ rather than in a string, so joining its runs yields `tightenthis`.
 - **Never put a `transform` under `okfMarkdownFrontmatterSchema`.** It is published as
   `wb_document_get`'s `outputSchema`, which the MCP SDK converts to JSON Schema for `tools/list` —
   a transform anywhere inside fails the WHOLE listing with "Transforms cannot be represented in
-  JSON Schema", and no unit test sees it. Normalise on the way in, in `parseOkf`, and let every
+  JSON Schema", and no unit test sees it. Normalise on the way in, in the core's reader (`parseOkf`), and let every
   published schema state the single shape it holds. OKF §5.2's bare-`verified`-mapping widening is
-  the standing example (`normalizeOkfVerified` in model).
+  the standing example (`schema.rs`'s `verified` handling, held by `parse.test.ts`).
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
   node. No per-kind special casing. Extended mode is lossless over what the extension key can
   hold; GEOMETRY is the one thing it is not, because the format specifies integer pixels and the
@@ -319,9 +318,9 @@ rather than in a string, so joining its runs yields `tightenthis`.
 
 ## Tests
 
-- Vitest project: `codec-node`. `codec-rust` (`vitest.rust.config.ts`) runs the OKF suites and the
-  spatial suites listed in `src/test-utils/spatial-wasm/suites.ts` against the Rust core (ADR-0054's
-  layer 1): a decline fails the test, and `spatial-layer-one.rust.test.ts` keeps that list complete.
+- Vitest project: `codec-node` runs every OKF suite on the Rust core its setup file installs (it
+  needs the artifact). `codec-rust` (`vitest.rust.config.ts`) runs the spatial suites listed in
+  `src/test-utils/spatial-wasm/suites.ts` against the Rust core (ADR-0054's layer 1): a decline fails the test, and `spatial-layer-one.rust.test.ts` keeps that list complete.
 - Round-trip properties: OKF (up to canonical key order), extended JSON Canvas (lossless), and
   markdown body (modulo `normalizeMdast`, over a syntax subset that excludes constructs with
   inherent CommonMark/GFM encoding ambiguities — adjacent same-delimiter inline spans, emphasis/

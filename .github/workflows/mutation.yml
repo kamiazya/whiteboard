@@ -131,6 +131,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # canvas-render's vitest project installs the Rust core OKF is answered
+      # through (codec's okf-core-setup), which Stryker's runner loads too.
+      - uses: ./.github/actions/core-wasm
+
       - name: Mutate this leg's changed files
         working-directory: packages/canvas-render
         env:
@@ -327,6 +331,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # canvas-render's vitest project installs the Rust core OKF is answered
+      # through (codec's okf-core-setup), which Stryker's runner loads too.
+      - uses: ./.github/actions/core-wasm
 
       - name: Mutation test canvas-render
         working-directory: packages/canvas-render

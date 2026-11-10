@@ -1,12 +1,10 @@
-import { type OkfCodecCore, parseOkf, serializeOkf } from '@kamiazya/whiteboard-codec'
-
-type OkfCore = OkfCodecCore['okf']
+import { installOkfCore, type OkfCore } from '@kamiazya/whiteboard-codec'
 
 import { readMarkdownBody, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -22,10 +20,19 @@ import { exportOkf } from './export-okf.js'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
 
-/** A core that answers as the TypeScript does, with one call replaced, switched to `rust`. */
-function rustCore(overrides: Partial<OkfCore>): () => Promise<OkfCodecCore> {
-  const okf: OkfCore = { parseOkf, serializeOkf, ...overrides }
-  return async () => ({ okf, impl: { parseOkf: 'rust', serializeOkf: 'rust' } })
+let real: OkfCore | undefined
+// The installation is process-global: the realm's core is put back after each test.
+afterEach(() => installOkfCore(real))
+
+/** The realm's core with one call replaced, installed for the test that asks. */
+function replaceInRealm(overrides: Partial<OkfCore>): void {
+  real = installOkfCore(undefined)
+  if (real === undefined) throw new Error('the test realm installs the core')
+  const core = real
+  installOkfCore({
+    parseOkf: overrides.parseOkf ?? ((text) => core.parseOkf(text)),
+    serializeOkf: overrides.serializeOkf ?? ((doc) => core.serializeOkf(doc)),
+  })
 }
 
 async function storedBody(store: FakeDocumentStore): Promise<string | undefined> {
@@ -38,18 +45,18 @@ async function storedBody(store: FakeDocumentStore): Promise<string | undefined>
   return readMarkdownBody(doc)
 }
 
-describe('ServerDeps.okfCore reaches every OKF reader and writer', () => {
+describe('the realm core reaches every OKF reader and writer', () => {
   it('document.set stores the document the core read', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const deps: ServerDeps = makeTestDeps({
       documentStore: store,
       documentIndex: store.documentIndex,
-      okfCore: rustCore({
-        parseOkf: () => ({
-          ok: true,
-          value: { frontmatter: { type: 'note' }, body: 'read by the core' },
-        }),
+    })
+    replaceInRealm({
+      parseOkf: () => ({
+        ok: true,
+        value: { frontmatter: { type: 'note' }, body: 'read by the core' },
       }),
     })
 
@@ -63,13 +70,11 @@ describe('ServerDeps.okfCore reaches every OKF reader and writer', () => {
   })
 
   it('document.create refuses a body the core refuses', async () => {
-    const deps = makeTestDeps({
-      documentStore: new InMemoryDocumentStore(),
-      okfCore: rustCore({
-        parseOkf: () => ({
-          ok: false,
-          error: { stage: 'frontmatter-schema', message: 'refused by the core', issues: [] },
-        }),
+    const deps = makeTestDeps({ documentStore: new InMemoryDocumentStore() })
+    replaceInRealm({
+      parseOkf: () => ({
+        ok: false,
+        error: { stage: 'frontmatter-schema', message: 'refused by the core', issues: [] },
       }),
     })
 
@@ -90,8 +95,8 @@ describe('ServerDeps.okfCore reaches every OKF reader and writer', () => {
     const deps = makeTestDeps({
       documentStore: store,
       documentIndex: store.documentIndex,
-      okfCore: rustCore({ serializeOkf: () => 'written by the core' }),
     })
+    replaceInRealm({ serializeOkf: () => 'written by the core' })
 
     const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 

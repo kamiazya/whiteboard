@@ -42,7 +42,7 @@ async function importOne(
   taken: string[],
   importDocument: (path: string, document: ImportedDocument) => Promise<void>,
 ): Promise<ImportOutcome> {
-  const read = readImportedFile(file.name, await textOf(file))
+  const read = await readImportedFile(file.name, await textOf(file))
   if (!read.ok) return { failure: read.reason }
   const path = importPathIn(folder, read.document.pathBase, taken)
   try {

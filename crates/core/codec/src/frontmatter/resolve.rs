@@ -1,6 +1,7 @@
 //! From the parse tree to a [`Value`]: the checks `yaml` makes once a
 //! document is composed (duplicate keys), the subset's refusals in the order
-//! the TypeScript visit raises them, and `toJS`'s reading of the rest.
+//! the (deleted) TypeScript visit raised them, and the way the `yaml` package
+//! turned the rest into JavaScript values.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -106,7 +107,8 @@ fn to_value(node: &Node) -> Value {
     }
 }
 
-/// `toJS`: a key is the string JavaScript makes of its value, and a later
+/// As the `yaml` package turned a mapping into a JavaScript object: a key is
+/// the string JavaScript makes of its value, and a later
 /// pair under the same string replaces the value but keeps the first's place.
 fn map_value(pairs: &[Pair]) -> Value {
     let mut entries: Vec<(String, Value)> = Vec::with_capacity(pairs.len());

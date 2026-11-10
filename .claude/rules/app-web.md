@@ -448,19 +448,18 @@ throws). Each realm installs its own host through `startLayoutCore()` (the
 page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
 reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
 it routes in TypeScript. `layout-core-source.ts` is the one module that names
-the artifact, and `vite-plugin-core-source.ts` stubs it in a build that opts out of both switches (page
-AND `worker.plugins`), because the bundler resolves every import before it
-prunes any — so only a `ts` build needs no wasm. A CI job that sets the
-variable restores the artifact with `.github/actions/core-wasm`.
+the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
+`worker.plugins`): every build carries the wasm, because OKF has no TypeScript left. A CI job
+that builds or tests the app restores the artifact with `.github/actions/core-wasm`.
 
-The same host answers the OKF envelope (`VITE_WHITEBOARD_CORE_OKF`, `rust` in a
-build, `ts` in a test run, `differential` in the dev server): one load serves
-both switches, `currentOkfCodec()` (`lib/okf-codec.ts`) is what an OKF reader
-or writer in this app calls (an import, a download, a note sent to a daemon),
-and a build stubs the source only when BOTH switches read `ts`. The codec is
-`okf-codec.ts`'s and never `layout-core.ts`'s, which imports codec's types
-alone: `layout-core.ts` is on the page's critical path, and one value import
-of `okfCodec` there carried codec's OKF reader into the boot bundle, 147.9 KB
+The same host loads the OKF core (no switch: its TypeScript is deleted). `okfReady()`
+(`lib/okf-codec.ts`) awaits it and installs it into codec, and every OKF reader or writer in this
+app (an import, a download, a note sent to a daemon) awaits it before calling codec's plain
+`parseOkf`/`serializeOkf`, which throw `OkfCoreNotInstalled` until then; a load that fails rejects,
+since nothing answers in its place. Routing and JSON Canvas load nothing while both read `ts`;
+OKF loads on its first ask. The install is `okf-codec.ts`'s and never `layout-core.ts`'s, which
+imports codec's types alone: `layout-core.ts` is on the page's critical path, and one value import
+of codec's readers there carried them into the boot bundle, 147.9 KB
 to 230.9 KB gzip against `smoke:bundle-size`'s 150 KB budget. `WebCore` lives in its own module
 (`spatial/web-core.ts`) so the loader and the host can name it without
 importing each other.

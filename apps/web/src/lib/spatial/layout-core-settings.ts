@@ -11,11 +11,10 @@ import { z } from 'zod'
  * jsdom page has no fetch to load the artifact with. `VITE_WHITEBOARD_CORE_MISMATCH=throw` fails the
  * layout that found a difference, which is what a test run wants.
  *
- * `VITE_WHITEBOARD_CORE_OKF` is the same switch for the OKF envelope (an
- * imported Markdown file, a downloaded note, a note sent to the daemon). It
- * defaults exactly as routing does: `rust` in a production build
- * (`VITE_WHITEBOARD_CORE_OKF=ts` is the rollback), `differential` in the dev
- * server, `ts` in a test run.
+ * The OKF envelope (an imported Markdown file, a downloaded note, a note sent
+ * to the daemon) has no switch: its TypeScript is deleted, so every build
+ * carries the wasm and the page awaits the core before reading or writing OKF
+ * (`lib/okf-codec.ts`).
  *
  * `VITE_WHITEBOARD_CORE_SPATIAL` is the same switch for the JSON Canvas codec
  * (an imported `.canvas` file, a downloaded or copied board, an editable PNG's source).
@@ -29,7 +28,6 @@ import { z } from 'zod'
  */
 const coreSettingsSchema = z.object({
   impl: z.enum(['ts', 'differential', 'rust']),
-  okf: z.enum(['ts', 'differential', 'rust']),
   spatial: z.enum(['ts', 'differential', 'rust']),
   mismatch: z.enum(['log', 'throw']),
 })
@@ -37,7 +35,6 @@ export type CoreSettings = z.infer<typeof coreSettingsSchema>
 
 interface CoreEnv {
   readonly VITE_WHITEBOARD_CORE?: string
-  readonly VITE_WHITEBOARD_CORE_OKF?: string
   readonly VITE_WHITEBOARD_CORE_SPATIAL?: string
   readonly VITE_WHITEBOARD_CORE_MISMATCH?: string
   readonly DEV?: boolean
@@ -48,7 +45,6 @@ export function coreSettingsFrom(env: CoreEnv): CoreSettings {
   const devDefault = env.MODE === 'test' ? 'ts' : env.DEV === true ? 'differential' : 'rust'
   return coreSettingsSchema.parse({
     impl: env.VITE_WHITEBOARD_CORE || devDefault,
-    okf: env.VITE_WHITEBOARD_CORE_OKF || devDefault,
     spatial: env.VITE_WHITEBOARD_CORE_SPATIAL || devDefault,
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',
   })

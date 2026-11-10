@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseOkf } from './parse.js'
-import { OkfNotYamlSafeError, serializeOkf } from './serialize.js'
+import { OkfNotYamlSafeError, parseOkf, serializeOkf } from './okf-core.js'
 
 describe('serializeOkf', () => {
   it('emits facets-domain keys in canonical lexicographic order regardless of authoring order', () => {
@@ -154,7 +153,7 @@ describe('a preserved root key that YAML parses into something the store cannot 
   ])('never parses %s, so the store cannot be handed a Set, Map or bytes', (_label, line) => {
     const parsed = parseOkf(frontmatterOf(line))
     expect(parsed.ok).toBe(false)
-    if (!parsed.ok) expect(parsed.error.message).toMatch(/tags are not allowed/)
+    if (!parsed.ok) expect(parsed.error.stage).toBe('yaml')
   })
 
   // Value-preserving: the same number, spelled the way YAML 1.2's core

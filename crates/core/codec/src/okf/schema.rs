@@ -61,7 +61,7 @@ fn route(entries: Map) -> (Map, Option<Map>) {
     (known, if raw.is_empty() { None } else { Some(raw) })
 }
 
-/// `normalizeOkfVerified`: OKF §5.2 makes a bare mapping a list of one.
+/// OKF §5.2 makes a bare `verified` mapping a list of one.
 fn widen(value: Value) -> Value {
     match value {
         mapping @ Value::Map(_) => Value::Seq(vec![mapping]),

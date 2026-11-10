@@ -1,8 +1,7 @@
 import { RESERVED_ROOT_KEYS } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { parseOkf } from './parse.js'
-import { serializeOkf } from './serialize.js'
+import { parseOkf, serializeOkf } from './okf-core.js'
 
 const LONG_KEY_UNITS = 1025
 

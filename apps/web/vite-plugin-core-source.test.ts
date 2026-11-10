@@ -1,113 +1,40 @@
 import { describe, expect, it } from 'vitest'
 import { coreSourcePlugin } from './vite-plugin-core-source.js'
 
-type Load = (id: string) => string | undefined
-type Env = Record<string, string | boolean>
 interface Shipping {
   readonly artifactStaged?: boolean
   readonly ship?: string
 }
 
-/** The plugin as vite builds it: told the resolved config's env, then asked to load. */
-function loadOf(env: Env, shipping: Shipping = {}, command = 'build'): Load {
+/** The plugin as vite builds it: told the resolved config's command. */
+function resolve(shipping: Shipping = {}, command = 'build'): void {
   const plugin = coreSourcePlugin({
     artifactStaged: () => shipping.artifactStaged ?? false,
     ship: shipping.ship,
   })
-  ;(plugin.configResolved as (config: { env: Env; command: string }) => void)({ env, command })
-  return plugin.load as Load
+  ;(plugin.configResolved as (config: { command: string }) => void)({ command })
 }
-const PRODUCTION = { DEV: false, MODE: 'production' }
-const TYPESCRIPT = {
-  ...PRODUCTION,
-  VITE_WHITEBOARD_CORE: 'ts',
-  VITE_WHITEBOARD_CORE_OKF: 'ts',
-  VITE_WHITEBOARD_CORE_SPATIAL: 'ts',
-}
-
-const SOURCE = '/repo/apps/web/src/lib/spatial/layout-core-source.ts'
 
 describe('coreSourcePlugin', () => {
-  it('replaces the module that names the wasm with a stub in a build that opted out to TypeScript', () => {
-    const stub = loadOf(TYPESCRIPT)(SOURCE)
-    expect(stub).toBeDefined()
-    expect(stub).not.toContain('core-wasm')
-    expect(stub).toContain('export')
+  it('lets a build through once the artifact is staged', () => {
+    expect(() => resolve({ artifactStaged: true })).not.toThrow()
   })
 
-  it('also catches the module when asked for by a query', () => {
-    expect(loadOf(TYPESCRIPT)(`${SOURCE}?worker_file`)).toBeDefined()
+  it('fails a build when no artifact is staged, naming the step that stages it', () => {
+    expect(() => resolve({ artifactStaged: false })).toThrow(/build:wasm/)
   })
 
-  it.each([
-    ['the default', PRODUCTION],
-    ['differential', { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'differential' }],
-    ['rust', { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'rust' }],
-  ])('leaves the module alone when the build routes with %s and the artifact is staged', (_, env) => {
-    expect(loadOf(env, { artifactStaged: true })(SOURCE)).toBeUndefined()
+  it('fails a release build that is to ship the wasm when none is staged', () => {
+    expect(() => resolve({ artifactStaged: false, ship: '1' })).toThrow(/build:wasm/)
   })
 
-  it.each([
-    ['the default', PRODUCTION],
-    ['differential', { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'differential' }],
-    ['rust', { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'rust' }],
-  ])('fails a build that routes with %s when no artifact is staged, instead of stubbing it', (_, env) => {
-    expect(() => loadOf(env, { artifactStaged: false })).toThrow(/VITE_WHITEBOARD_CORE=ts/)
-  })
-
-  it('fails a build told to leave the wasm out while it routes with the core', () => {
-    expect(() => loadOf(PRODUCTION, { artifactStaged: true, ship: '0' })).toThrow(
+  it('refuses a build told to leave the wasm out, whatever is staged', () => {
+    expect(() => resolve({ artifactStaged: true, ship: '0' })).toThrow(
       /WHITEBOARD_SHIP_CORE_WASM=0/,
     )
   })
 
-  it('does not require the artifact of the dev server, which falls back to TypeScript per call', () => {
-    expect(loadOf({ DEV: true, MODE: 'development' }, {}, 'serve')(SOURCE)).toBeUndefined()
-  })
-
-  it('keeps the real module in an opted-out build once the artifact is staged, so the wasm still ships', () => {
-    expect(loadOf(TYPESCRIPT, { artifactStaged: true })(SOURCE)).toBeUndefined()
-  })
-
-  it('still stubs an opted-out build told not to ship the wasm, whatever is staged', () => {
-    expect(loadOf(TYPESCRIPT, { artifactStaged: true, ship: '0' })(SOURCE)).toBeDefined()
-  })
-
-  it('refuses to build a release that is to ship the wasm when none is staged', () => {
-    expect(() => loadOf(TYPESCRIPT, { artifactStaged: false, ship: '1' })).toThrow(
-      /WHITEBOARD_SHIP_CORE_WASM/,
-    )
-  })
-
-  it('does not treat routing in TypeScript alone as an opt-out, since OKF defaults to the core', () => {
-    const routingOnly = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts' }
-    expect(() => loadOf(routingOnly, { artifactStaged: false })).toThrow(
-      /VITE_WHITEBOARD_CORE_OKF=ts/,
-    )
-  })
-
-  it('does not treat routing and OKF in TypeScript as an opt-out, since JSON Canvas defaults to the core', () => {
-    const twoOfThree = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts', VITE_WHITEBOARD_CORE_OKF: 'ts' }
-    expect(() => loadOf(twoOfThree, { artifactStaged: false })).toThrow(
-      /VITE_WHITEBOARD_CORE_SPATIAL=ts/,
-    )
-  })
-
-  it('treats a build that reads OKF with the core as one that uses it, whatever routing says', () => {
-    const okfOnly = { ...TYPESCRIPT, VITE_WHITEBOARD_CORE_OKF: 'differential' }
-    expect(() => loadOf(okfOnly, { artifactStaged: false })).toThrow(/VITE_WHITEBOARD_CORE_OKF=ts/)
-    expect(loadOf(okfOnly, { artifactStaged: true })(SOURCE)).toBeUndefined()
-  })
-
-  it('treats a build that reads JSON Canvas with the core as one that uses it', () => {
-    const spatialOnly = { ...TYPESCRIPT, VITE_WHITEBOARD_CORE_SPATIAL: 'differential' }
-    expect(() => loadOf(spatialOnly, { artifactStaged: false })).toThrow(
-      /VITE_WHITEBOARD_CORE_SPATIAL=ts/,
-    )
-    expect(loadOf(spatialOnly, { artifactStaged: true })(SOURCE)).toBeUndefined()
-  })
-
-  it('leaves every other module alone', () => {
-    expect(loadOf(TYPESCRIPT)('/repo/apps/web/src/lib/spatial/layout-core.ts')).toBeUndefined()
+  it('does not require the artifact of the dev server', () => {
+    expect(() => resolve({}, 'serve')).not.toThrow()
   })
 })

@@ -1,7 +1,8 @@
 import {
-  type OkfCodec,
   type OkfMarkdownDocument,
   OkfNotYamlSafeError,
+  parseOkf,
+  serializeOkf,
 } from '@kamiazya/whiteboard-codec'
 import {
   readDocumentKind,
@@ -31,7 +32,6 @@ import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
-import { okfCodecOf } from './okf-codec.js'
 import { refuseUnusableStencilLibrary } from './stencil-library.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
@@ -140,13 +140,13 @@ export class OkfParseError extends Error {
  * would otherwise be stored by a body while `wb_facet_set` and the editor
  * refuse it. Reading stays lenient — a stored tag is never re-judged.
  */
-export function parseWritableOkf(markdown: string, okf: OkfCodec): OkfMarkdownDocument {
-  const parsed = okf.parseOkf(markdown)
+export function parseWritableOkf(markdown: string): OkfMarkdownDocument {
+  const parsed = parseOkf(markdown)
   if (!parsed.ok) {
     throw new OkfParseError(parsed.error.stage, parsed.error.message, parsed.error.issues)
   }
   try {
-    okf.serializeOkf(parsed.value)
+    serializeOkf(parsed.value)
   } catch (error) {
     // Only the not-yaml-safe refusal is the caller's to fix; any other throw
     // is a defect in the serialiser and keeps its own name.
@@ -350,7 +350,7 @@ export function createDocumentSetOperation(deps: ServerDeps) {
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
 
-      const { frontmatter, body } = parseWritableOkf(input.markdown, await okfCodecOf(deps))
+      const { frontmatter, body } = parseWritableOkf(input.markdown)
 
       // What the workspace DECLARES about its tags reaches this writer too
       // (ADR-0040 decision 5) — taken before the document is opened, so a

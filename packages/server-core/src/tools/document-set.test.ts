@@ -1,4 +1,3 @@
-import { okfCodec } from '@kamiazya/whiteboard-codec'
 import {
   RetiredStoredShapeError,
   readDocumentKind,
@@ -26,8 +25,6 @@ import { createDocumentSetOperation, OkfParseError, parseWritableOkf } from './d
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
 import { TAG_LIBRARY_PATH } from './tag-library.js'
-
-const TS_OKF = okfCodec(undefined)
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = '01ZVM89A4A1V9FS03Z9J64KEK1'
@@ -534,8 +531,7 @@ describe('wb_document_set and the scoped-tag grammar (ADR-0040 decision 1)', () 
   // An author has the refusal's text alone to find the offending line: the
   // wire code and the tag are pinned elsewhere, but not WHERE it failed.
   test('the refusal names the tags stage and the index of the offending entry', () => {
-    const attempt = () =>
-      parseWritableOkf('---\ntype: note\ntags:\n  - fine\n  - a:b:c\n---\nbody', TS_OKF)
+    const attempt = () => parseWritableOkf('---\ntype: note\ntags:\n  - fine\n  - a:b:c\n---\nbody')
 
     expect(attempt).toThrow(OkfParseError)
     expect(attempt).toThrow(

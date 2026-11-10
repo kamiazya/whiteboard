@@ -45,6 +45,8 @@ const release = parseYaml(read('.github/workflows/release.yml')) as Workflow
 const previewPr = parseYaml(read('.github/workflows/preview-pr-build.yml')) as Workflow
 const previewLatest = parseYaml(read('.github/workflows/deploy-preview.yml')) as Workflow
 const nightly = parseYaml(read('.github/workflows/rust-fuzz-nightly.yml')) as Workflow
+const mutation = parseYaml(read('.github/workflows/mutation.yml')) as Workflow
+const sonarqube = parseYaml(read('.github/workflows/sonarqube.yml')) as Workflow
 
 const RUST_JOBS = ['rust', 'rust-fuzz-pr', 'rust-mutants']
 const stepsOf = (workflow: Workflow, id: string): Step[] => workflow.jobs[id]?.steps ?? []
@@ -246,15 +248,19 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(at).toBeLessThan(run)
   })
 
-  it('is what test-unit restores before mcp-node runs in differential', () => {
+  it('is what test-unit restores before any of its projects runs, and before mcp-node runs in differential', () => {
     const unit = stepsOf(ci, 'test-unit')
     const at = unit.findIndex((s) => s.uses === './.github/actions/core-wasm')
     const test = unit.findIndex((s) => s.run?.includes('--project=mcp-node'))
+    const viewer = unit.findIndex((s) => s.run?.includes('--project=canvas-viewer-node'))
     expect(at).toBeGreaterThanOrEqual(0)
     expect(at).toBeLessThan(test)
+    expect(at).toBeLessThan(viewer)
+    // Every project installs the core OKF is answered through, so the restore
+    // may not wait on the scope naming mcp-node alone.
+    expect(unit[at]?.if).toBe("steps.scope.outputs.run == 'true'")
     expect(unit[test]?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_OKF: 'differential',
       WHITEBOARD_CORE_SPATIAL: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
@@ -271,13 +277,12 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(browser[at]?.if).toBe("steps.scope.outputs.run == 'true'")
     expect(browser[test]?.env).toMatchObject({
       VITE_WHITEBOARD_CORE: 'differential',
-      VITE_WHITEBOARD_CORE_OKF: 'differential',
       VITE_WHITEBOARD_CORE_SPATIAL: 'differential',
       VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
 
-  it('is restored for every stress leg, with routing and JSON Canvas on for the browser leg alone and OKF on for both', () => {
+  it('is restored for every stress leg, with routing and JSON Canvas on for the browser leg alone', () => {
     const stress = stepsOf(ci, 'stress-changed-tests')
     const restore = stress.find((s) => s.uses === './.github/actions/core-wasm')
     expect(restore?.if).toBe("steps.changed.outputs.files != ''")
@@ -290,40 +295,57 @@ describe('the core-wasm action builds what the rust job builds', () => {
           /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
         )
       }
-      // The OKF envelope is compared in every Node-hosted realm the node leg runs.
-      expect(run.env).toMatchObject({
-        VITE_WHITEBOARD_CORE_OKF: 'differential',
-        VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
-        WHITEBOARD_CORE_OKF: 'differential',
-        WHITEBOARD_CORE_MISMATCH: 'throw',
-      })
+      expect(run.env).toMatchObject({ VITE_WHITEBOARD_CORE_MISMATCH: 'throw' })
+      // OKF has no switch left to set: the realms that run it install the core.
+      expect(Object.keys(run.env ?? {}).filter((name) => /CORE_OKF/.test(name))).toEqual([])
     }
   })
 
-  it('is what test-shared restores before its projects run OKF in differential', () => {
+  it('is what test-shared restores before its projects run, each answering OKF through the core', () => {
     const shared = stepsOf(ci, 'test-shared')
     const at = shared.findIndex((s) => s.uses === './.github/actions/core-wasm')
     const test = shared.findIndex((s) => s.run?.includes('run test-shared'))
     expect(at).toBeGreaterThanOrEqual(0)
     expect(at).toBeLessThan(test)
     expect(shared[at]?.if).toBe("steps.scope.outputs.run == 'true'")
-    expect(shared[test]?.env).toMatchObject({
-      WHITEBOARD_CORE_OKF: 'differential',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
   })
 
-  it('is what test-jsdom restores before the web pages run OKF in differential, loaded by the Node process that hosts them', () => {
+  it('is what test-jsdom restores before the web pages run, loaded by the Node process that hosts them', () => {
     const jsdom = stepsOf(ci, 'test-jsdom')
     const at = jsdom.findIndex((s) => s.uses === './.github/actions/core-wasm')
     const test = jsdom.findIndex((s) => s.run?.includes('whiteboard-web test'))
     expect(at).toBeGreaterThanOrEqual(0)
     expect(at).toBeLessThan(test)
     expect(jsdom[at]?.if).toBe("steps.scope.outputs.run == 'true'")
-    expect(jsdom[test]?.env).toEqual({
-      VITE_WHITEBOARD_CORE_OKF: 'differential',
-      VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
+  })
+
+  // Every Node-hosted vitest realm installs the core in its setup file, and the
+  // daemon installs it at boot and refuses to start without it, so a job that
+  // runs either without the artifact fails on a missing file rather than on a
+  // test. This is the list of the jobs that do, and the first step of each that
+  // needs it.
+  it.each([
+    { file: 'ci.yml', workflow: ci, id: 'sbom-npm', first: /--project=mcp-node/ },
+    { file: 'ci.yml', workflow: ci, id: 'verify', first: /--project=mcp-smoke/ },
+    { file: 'ci.yml', workflow: ci, id: 'verify', first: /pnpm smoke:e2e/ },
+    { file: 'ci.yml', workflow: ci, id: 'native-host-windows', first: /smoke:native-host/ },
+    { file: 'mutation.yml', workflow: mutation, id: 'pr', first: /stryker run/ },
+    { file: 'mutation.yml', workflow: mutation, id: 'weekly', first: /stryker run/ },
+    { file: 'sonarqube.yml', workflow: sonarqube, id: 'coverage', first: /pnpm coverage/ },
+  ])('$file job $id restores the core before $first', ({ workflow, id, first }) => {
+    const steps = stepsOf(workflow, id)
+    const at = steps.findIndex((s) => s.uses === './.github/actions/core-wasm')
+    const run = steps.findIndex((s) => first.test(s.run ?? ''))
+    expect(run, `no step of ${id} matches ${first}`).toBeGreaterThanOrEqual(0)
+    expect(at, `${id} never restores the core wasm`).toBeGreaterThanOrEqual(0)
+    expect(at).toBeLessThan(run)
+  })
+
+  it('has the coverage job build the core from cold, as its pnpm store is, so nothing it runs came from a shared cache', () => {
+    const restore = stepsOf(sonarqube, 'coverage').find(
+      (s) => s.uses === './.github/actions/core-wasm',
+    )
+    expect(restore?.with?.['use-cache']).toBe('false')
   })
 })
 

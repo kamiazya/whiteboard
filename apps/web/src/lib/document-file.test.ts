@@ -4,7 +4,7 @@ import { markdownDocumentFile, spatialDocumentFile } from './document-file.js'
 
 describe('markdownDocumentFile', () => {
   it('writes the OKF document with the workspace name as the frontmatter title', async () => {
-    const blob = markdownDocumentFile({
+    const blob = await markdownDocumentFile({
       body: '# Heading\n\nText\n',
       name: 'Trip plan',
       coreFacets: { type: 'note', tags: ['a'] },
@@ -19,7 +19,12 @@ describe('markdownDocumentFile', () => {
   })
 
   it('omits the title for an unnamed document and types a bare body', async () => {
-    const blob = markdownDocumentFile({ body: 'x', name: null, coreFacets: undefined, facets: {} })
+    const blob = await markdownDocumentFile({
+      body: 'x',
+      name: null,
+      coreFacets: undefined,
+      facets: {},
+    })
     const parsed = parseOkf(await blob.text())
     expect(parsed.ok && parsed.value.frontmatter.title).toBeFalsy()
     expect(parsed.ok && parsed.value.frontmatter.type).toBeTruthy()

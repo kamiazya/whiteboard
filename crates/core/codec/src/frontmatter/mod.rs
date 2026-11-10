@@ -2,9 +2,9 @@
 //!
 //! The subset is what `serializeOkf` writes plus what a person writes by hand
 //! that `yaml` reads the same way; everything else is refused by name rather
-//! than read by one implementation and misread by another. The TypeScript
-//! reader (`frontmatter-yaml.ts`) refuses the same constructs, and the
-//! recorded oracle holds the two to the same answers.
+//! than read by one implementation and misread by another. The deleted
+//! TypeScript reader refused the same constructs, and the recorded oracle
+//! holds this one to the answers it gave.
 
 mod block;
 mod block_string;

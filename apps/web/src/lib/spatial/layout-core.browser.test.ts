@@ -9,11 +9,18 @@
 // artifact to load.
 
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
-import { okfCodec, spatialCodec } from '@kamiazya/whiteboard-codec'
+import {
+  installOkfCore,
+  okfCoreInstalled,
+  parseOkf,
+  serializeOkf,
+  spatialCodec,
+} from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js'
+import { okfReady } from '../okf-codec.js'
 import { startLayoutCore } from '../page-layout-core.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
@@ -64,7 +71,7 @@ describe('the real Rust core in a browser', () => {
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'differential', okf: 'ts', spatial: 'ts', mismatch: 'throw' },
+        { impl: 'differential', spatial: 'ts', mismatch: 'throw' },
         async () => ({
           ...routing,
           routeLayout: (...args) => {
@@ -91,38 +98,35 @@ describe('the real Rust core in a browser', () => {
 })
 
 describe('the real Rust core reading and writing OKF in a browser', () => {
+  const text = '---\ntype: note\ntitle: Plan\ntags: [a, b]\nweight: -0.0\n---\n# 計画\n\nbody\n'
+
   it.skipIf('failure' in real)(
-    'reads and writes a note beside the TypeScript with no difference, thrown or otherwise',
+    'reads and writes a note through the plain exports once the page awaits the core',
     async () => {
-      if ('failure' in real) return
-      const { routing } = real
-      let calls = 0
-      const host = createLayoutCoreHost(
-        { impl: 'ts', okf: 'differential', spatial: 'ts', mismatch: 'throw' },
-        async () => ({
-          ...routing,
-          parseOkf: (text) => {
-            calls += 1
-            return routing.parseOkf(text)
-          },
-          serializeOkf: (doc) => {
-            calls += 1
-            return routing.serializeOkf(doc)
-          },
-        }),
-        silent(),
-      )
-      await host.ready()
-      const codec = okfCodec(host.currentOkf())
-      const text = '---\ntype: note\ntitle: Plan\ntags: [a, b]\nweight: -0.0\n---\n# 計画\n\nbody\n'
-      const parsed = codec.parseOkf(text)
-      if (!parsed.ok) throw new Error(parsed.error.message)
-      expect(codec.serializeOkf(parsed.value)).toContain('# 計画')
-      expect(codec.parseOkf('---\ntype: [\n---\n').ok).toBe(false)
-      // The core was consulted for every call, so "no difference" compared something.
-      expect(calls).toBe(3)
+      // The realm's own installation is put back, since it is process-global.
+      const previous = installOkfCore(undefined)
+      try {
+        expect(okfCoreInstalled()).toBe(false)
+        await okfReady()
+        expect(okfCoreInstalled()).toBe(true)
+        const parsed = parseOkf(text)
+        if (!parsed.ok) throw new Error(parsed.error.message)
+        expect(serializeOkf(parsed.value)).toContain('# 計画')
+        expect(parseOkf('---\ntype: [\n---\n').ok).toBe(false)
+      } finally {
+        installOkfCore(previous)
+      }
     },
   )
+
+  it('fails loudly, not silently, when no core is installed', () => {
+    const previous = installOkfCore(undefined)
+    try {
+      expect(() => parseOkf(text)).toThrow(/installOkfCore/)
+    } finally {
+      installOkfCore(previous)
+    }
+  })
 })
 
 describe('the real Rust core reading and writing JSON Canvas in a browser', () => {
@@ -133,7 +137,7 @@ describe('the real Rust core reading and writing JSON Canvas in a browser', () =
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'ts', okf: 'ts', spatial: 'differential', mismatch: 'throw' },
+        { impl: 'ts', spatial: 'differential', mismatch: 'throw' },
         async () => ({
           ...routing,
           parseSpatial: (text) => {

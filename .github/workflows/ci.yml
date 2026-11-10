@@ -119,12 +119,15 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # The daemon lays canvases out through the Rust core in differential
-      # (ADR-0054 stage 2: both run, the TypeScript answers), and a
-      # difference fails the test that drew it. The artifact comes from the
-      # cache keyed on its inputs, so a hit needs no Rust toolchain.
+      # Every project this job runs answers OKF through the Rust core, which
+      # has no TypeScript twin (ADR-0054 stage 4): the setup file installs it
+      # and fails the project when the artifact is missing. The daemon also
+      # lays canvases out through it in differential (stage 2: both run, the
+      # TypeScript answers), and a difference fails the test that drew it. The
+      # artifact comes from the cache keyed on its inputs, so a hit needs no
+      # Rust toolchain.
       - uses: ./.github/actions/core-wasm
-        if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
+        if: steps.scope.outputs.run == 'true'
 
       # Shard mcp-node (largest suite) across 2 parallel runners.
       # --shard splits the collected spec list so each runner handles a disjoint half.
@@ -132,7 +135,6 @@ jobs:
         if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
         env:
           WHITEBOARD_CORE: differential
-          WHITEBOARD_CORE_OKF: differential
           WHITEBOARD_CORE_SPATIAL: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
@@ -213,11 +215,11 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # Every Node-hosted realm runs OKF through the Rust core in
-      # differential (ADR-0054): codec's plain parseOkf/serializeOkf dispatch
-      # through a core the project's setup file installs, and a difference or
-      # decline fails the test that caused it. The artifact comes from the
-      # cache keyed on its inputs, so a hit needs no Rust toolchain.
+      # Every Node-hosted realm answers OKF through the Rust core (ADR-0054
+      # stage 4): codec's plain parseOkf/serializeOkf dispatch through a core
+      # the project's setup file installs, and a missing artifact fails the
+      # project. The artifact comes from the cache keyed on its inputs, so a
+      # hit needs no Rust toolchain.
       - uses: ./.github/actions/core-wasm
         if: steps.scope.outputs.run == 'true'
 
@@ -228,8 +230,6 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
-          WHITEBOARD_CORE_OKF: differential
-          WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-shared --shard=${{ matrix.shard }}/2
 
   test-jsdom:
@@ -287,16 +287,13 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
-      # The jsdom pages run OKF through the core too: the setup file loads the
-      # artifact in the Node process hosting the realm (no fetch involved).
+      # The jsdom pages answer OKF through the core too: the setup file loads
+      # the artifact in the Node process hosting the realm (no fetch involved).
       - uses: ./.github/actions/core-wasm
         if: steps.scope.outputs.run == 'true'
 
       - name: Test web (jsdom + node, shard ${{ matrix.shard }}/2)
         if: steps.scope.outputs.run == 'true'
-        env:
-          VITE_WHITEBOARD_CORE_OKF: differential
-          VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm --filter @kamiazya/whiteboard-web test -- --shard=${{ matrix.shard }}/2
 
   test-browser:
@@ -386,7 +383,6 @@ jobs:
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
           VITE_WHITEBOARD_CORE: differential
-          VITE_WHITEBOARD_CORE_OKF: differential
           VITE_WHITEBOARD_CORE_SPATIAL: differential
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-browser --shard=${{ matrix.shard }}/3
@@ -580,11 +576,6 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          # Both legs compare OKF: the browser leg in its page, the node leg in the
-          # Node process hosting each realm (codec's okf-core-setup).
-          VITE_WHITEBOARD_CORE_OKF: differential
-          WHITEBOARD_CORE_OKF: differential
-          WHITEBOARD_CORE_MISMATCH: throw
           VITE_WHITEBOARD_CORE_SPATIAL: ${{ matrix.leg == 'browser' && 'differential' || '' }}
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: |
@@ -605,11 +596,6 @@ jobs:
           # Only the browser leg loads the web app's core: a jsdom page has no
           # fetch to load it with, and an empty value reads as unset.
           VITE_WHITEBOARD_CORE: ${{ matrix.leg == 'browser' && 'differential' || '' }}
-          # Both legs compare OKF: the browser leg in its page, the node leg in the
-          # Node process hosting each realm (codec's okf-core-setup).
-          VITE_WHITEBOARD_CORE_OKF: differential
-          WHITEBOARD_CORE_OKF: differential
-          WHITEBOARD_CORE_MISMATCH: throw
           VITE_WHITEBOARD_CORE_SPATIAL: ${{ matrix.leg == 'browser' && 'differential' || '' }}
           VITE_WHITEBOARD_CORE_MISMATCH: throw
         run: |
@@ -646,6 +632,10 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # The vitest run below is mcp-node, whose setup installs the Rust core
+      # OKF is answered through.
+      - uses: ./.github/actions/core-wasm
 
       - name: Generate npm SBOM
         run: pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm
@@ -789,6 +779,13 @@ jobs:
           pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
           node packages/mcp-server/scripts/copy-widget-into-dist.mjs
 
+      # The daemon installs the Rust core at boot and refuses to start without
+      # it (OKF has no TypeScript to fall back to), so the smokes that spawn it
+      # need the artifact, restored or built as the test jobs do: the package
+      # build later copies it into dist, `npm pack` refuses a tarball without
+      # it, and the web build fails rather than omit it.
+      - uses: ./.github/actions/core-wasm
+
       # mcp-smoke spawns the MCP stdio server, which serves in-process.
       # WHITEBOARD_DEV=1 makes it resolve its own tree against source rather
       # than dist, which does not exist before build; the Stdio E2E smoke
@@ -802,11 +799,6 @@ jobs:
         env:
           WHITEBOARD_DEV: '1'
         run: pnpm smoke:e2e
-
-      # The artifact a release ships, restored or built as the test jobs do:
-      # the package build copies it into dist, `npm pack` refuses a tarball
-      # without it, and the web build fails rather than omit it.
-      - uses: ./.github/actions/core-wasm
 
       - name: Build
         env:
@@ -1096,6 +1088,12 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm install --frozen-lockfile
 
+      # The daemon this smoke starts installs the Rust core at boot and
+      # refuses to start without it. The cache key carries the runner OS, so
+      # the first run on Windows builds the artifact and later ones restore it.
+      - uses: ./.github/actions/core-wasm
+        if: steps.scope.outputs.run == 'true'
+
       - name: Native host smoke (named pipe + registry)
         if: steps.scope.outputs.run == 'true'
         run: pnpm --filter @kamiazya/whiteboard-extension smoke:native-host
@@ -1205,9 +1203,10 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=core-wasm-rust
 
-      # QR-21 layer 2 for the OKF envelope: parseOkf and serializeOkf against
-      # the artifact, after stage:wasm, which codec-rust reads it from.
-      - name: OKF envelope against the wasm (codec-rust)
+      # QR-21 layer 2 for the JSON Canvas codec: parseSpatial and
+      # serializeSpatial against the artifact, after stage:wasm, which
+      # codec-rust reads it from. The OKF envelope's went with its TypeScript.
+      - name: JSON Canvas codec against the wasm (codec-rust)
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=codec-rust
 

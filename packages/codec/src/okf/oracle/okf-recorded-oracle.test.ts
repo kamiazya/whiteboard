@@ -1,39 +1,25 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { readerCases, writerCases } from '../../test-utils/okf-oracle/corpus.js'
 import {
   answerAgain,
   decodeRecording,
-  encodeRecording,
   type ReaderCase,
   type WriterCase,
 } from '../../test-utils/okf-oracle/oracle.js'
 
 /**
- * The committed recording of the TypeScript's OKF envelope answers equals what
- * the TypeScript answers today. The Rust crate replays that recording natively
- * (`crates/core/codec/tests/okf_oracle.rs`), so `parseOkf`'s port is judged by
- * this one, and cargo-mutants and the coverage floor judge it by the same
- * oracle; a recording left behind a TypeScript change would judge it against an
- * answer nobody gives.
- *
- * The recording holds the inputs, not just the answers, so this test asks the
- * TypeScript the same questions again and needs no generator. Re-record after
- * a deliberate change to the parser or the serialiser with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project codec-node okf-recorded-oracle`.
+ * The committed recording of the OKF envelope's answers, which the Rust crate
+ * replays natively (`crates/core/codec/tests/okf_oracle.rs`), equals what the
+ * core answers through its wasm shim. The recording was taken from the
+ * TypeScript envelope before it was deleted and is frozen: it holds the inputs
+ * as well as the answers, so this test needs no generator, and a change that
+ * moves an answer must say so by editing the recording by hand.
  *
  * Message text is not recorded: the Rust port words its refusals in its own
  * types, so the two agree on the stage, the class and, for a schema refusal,
  * each Zod issue's path and code.
  */
 const FILE = new URL('./okf.jsonl', import.meta.url)
-
-const READER_CASES = 1200
-const WRITER_CASES = 500
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, encodeRecording([...readerCases(READER_CASES), ...writerCases(WRITER_CASES)]))
-}
 
 type Refusal = Extract<ReaderCase, { err: unknown }>['err']
 
@@ -80,8 +66,8 @@ describe('the recorded OKF envelope oracle', () => {
     expect(writers.filter((c) => 'err' in c).length, 'unwritable documents').toBeGreaterThan(20)
   })
 
-  it('equals what the TypeScript answers today', () => {
+  it('equals what the core answers through the shim', () => {
     const parted = recorded.findIndex((c) => JSON.stringify(answerAgain(c)) !== JSON.stringify(c))
-    expect(parted, 'the first recorded case the TypeScript no longer answers as recorded').toBe(-1)
+    expect(parted, 'the first recorded case the core no longer answers as recorded').toBe(-1)
   })
 })

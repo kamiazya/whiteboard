@@ -1,13 +1,9 @@
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 // Types only: this module is on the page's critical path, and a value import
-// of codec would carry its OKF reader (yaml, the schemas) into the boot bundle.
-// The codec itself is `okf-codec.ts`'s, which only the OKF call sites import.
-import type {
-  OkfCodecCore,
-  OkfMismatch,
-  SpatialCodecCore,
-  SpatialMismatch,
-} from '@kamiazya/whiteboard-codec'
+// of codec would carry its readers (the schemas) into the boot bundle.
+// Installing the OKF core into codec is `okf-codec.ts`'s, which only the OKF
+// call sites import.
+import type { OkfCore, SpatialCodecCore, SpatialMismatch } from '@kamiazya/whiteboard-codec'
 import { type CoreSettings, coreSettingsFrom } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
 
@@ -24,8 +20,12 @@ export interface LayoutCoreHost {
   ready(): Promise<LayoutCore | undefined>
   /** The loaded core, or `undefined` before it loads. Starts the load, and throws a failed one under `throw`. */
   current(): LayoutCore | undefined
-  /** The same for the OKF envelope: `undefined` under `ts` and before the load settles. */
-  currentOkf(): OkfCodecCore | undefined
+  /**
+   * Starts the load on first call and settles with the OKF core, whatever the
+   * routing and JSON Canvas switches read: OKF has no TypeScript to answer in
+   * its place, so a load that fails rejects (and the next call tries again).
+   */
+  okf(): Promise<OkfCore>
   /** The same for the JSON Canvas codec. */
   currentSpatial(): SpatialCodecCore | undefined
 }
@@ -61,29 +61,27 @@ function declineSummary(mismatch: { readonly fn: string; readonly err: unknown }
   }
 }
 
-/** A codec's difference or decline, reported, or thrown under `throw` (`okf-declined` / `spatial-declined`). */
-function codecReporter(
+/** The JSON Canvas codec's difference or decline, reported, or thrown under `throw` (`spatial-declined`). */
+function spatialReporter(
   settings: CoreSettings,
   log: CoreLog,
-  codec: 'okf' | 'spatial',
-): (mismatch: OkfMismatch | SpatialMismatch) => void {
-  const name = codec === 'okf' ? 'OKF' : 'JSON Canvas'
+): (mismatch: SpatialMismatch) => void {
   return (mismatch) => {
     if (mismatch.kind === 'declined') {
       const summary = declineSummary(mismatch)
       log.warn('the Rust core declined; answered in TypeScript', {
-        event: `${codec}-declined`,
+        event: 'spatial-declined',
         ...summary,
       })
       if (settings.mismatch === 'throw') {
-        throw new Error(`${name} core declined: ${JSON.stringify(summary)}`)
+        throw new Error(`JSON Canvas core declined: ${JSON.stringify(summary)}`)
       }
       return
     }
     const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }
     log.warn('the Rust core and the TypeScript disagree', summary)
     if (settings.mismatch === 'throw') {
-      throw new Error(`${name} core ${mismatch.kind}: ${JSON.stringify(summary)}`)
+      throw new Error(`JSON Canvas core ${mismatch.kind}: ${JSON.stringify(summary)}`)
     }
   }
 }
@@ -106,7 +104,6 @@ function coresFrom(
   log: CoreLog,
 ): {
   layout: LayoutCore | undefined
-  okf: OkfCodecCore | undefined
   spatial: SpatialCodecCore | undefined
 } {
   const layout: LayoutCore | undefined =
@@ -117,39 +114,34 @@ function coresFrom(
           impl: { routeLayout: settings.impl },
           onMismatch: layoutReporter(settings, log),
         }
-  const okf: OkfCodecCore | undefined =
-    settings.okf === 'ts'
-      ? undefined
-      : {
-          okf: core,
-          impl: { parseOkf: settings.okf, serializeOkf: settings.okf },
-          onMismatch: codecReporter(settings, log, 'okf'),
-        }
   const spatial: SpatialCodecCore | undefined =
     settings.spatial === 'ts'
       ? undefined
       : {
           spatial: core,
           impl: { parseSpatial: settings.spatial, serializeSpatial: settings.spatial },
-          onMismatch: codecReporter(settings, log, 'spatial'),
+          onMismatch: spatialReporter(settings, log),
         }
-  return { layout, okf, spatial }
+  return { layout, spatial }
 }
 
-/** The host of a realm whose every switch reads `ts`: nothing to load, nothing to answer. */
-const NO_CORE: LayoutCoreHost = {
-  ready: async () => undefined,
-  current: () => undefined,
-  currentOkf: () => undefined,
-  currentSpatial: () => undefined,
+/** `load`, shared by every ask; a failed load is forgotten, so the next ask tries again. */
+function loadAtMostOnce(load: () => Promise<WebCore>): () => Promise<WebCore> {
+  let loading: Promise<WebCore> | undefined
+  return () => {
+    loading ??= load().catch((err: unknown) => {
+      loading = undefined
+      throw err
+    })
+    return loading
+  }
 }
 
 /**
- * `load` is called only when routing, OKF or JSON Canvas reads anything but
- * `ts`, once for all. An artifact that
- * cannot load degrades to TypeScript with a warning, unless mismatches
- * throw: a test run that asked for the core and did not get it has compared
- * nothing.
+ * `load` is called once for all, on the first ask of whichever half asks. An
+ * artifact that cannot load degrades routing and JSON Canvas to TypeScript
+ * with a warning, unless mismatches throw: a test run that asked for the core and did not get it has
+ * compared nothing. OKF cannot degrade, so `okf()` rejects instead.
  */
 export function createLayoutCoreHost(
   settings: CoreSettings,
@@ -159,9 +151,13 @@ export function createLayoutCoreHost(
   let cores: ReturnType<typeof coresFrom> | undefined
   let failure: { readonly err: unknown } | undefined
   let started: Promise<LayoutCore | undefined> | undefined
+  const loadOnce = loadAtMostOnce(load)
+  // Routing and JSON Canvas load nothing while both read `ts`; OKF loads on its own ask.
+  const answersInRust = settings.impl !== 'ts' || settings.spatial !== 'ts'
 
   const start = (): Promise<LayoutCore | undefined> => {
-    started ??= load().then(
+    if (!answersInRust) return Promise.resolve(undefined)
+    started ??= loadOnce().then(
       (core) => {
         cores = coresFrom(core, settings, log)
         return cores.layout
@@ -179,20 +175,17 @@ export function createLayoutCoreHost(
   // A failed load under `throw` was already surfaced through `ready`; the
   // synchronous readers have no promise to reject, so they raise the same error.
   const startAndRaise = (): void => {
+    if (!answersInRust) return
     void start().catch(() => undefined)
     if (failure !== undefined && settings.mismatch === 'throw') throw failure.err
   }
 
-  if (settings.impl === 'ts' && settings.okf === 'ts' && settings.spatial === 'ts') return NO_CORE
   return {
     ready: start,
+    okf: loadOnce,
     current() {
       startAndRaise()
       return cores?.layout
-    },
-    currentOkf() {
-      startAndRaise()
-      return cores?.okf
     },
     currentSpatial() {
       startAndRaise()
@@ -217,8 +210,6 @@ export function installLayoutCore(log: CoreLog): LayoutCoreHost {
   const fetchAsset: typeof fetch = globalThis.fetch?.bind(globalThis)
   installed ??= createLayoutCoreHost(
     coreSettingsFrom(import.meta.env),
-    // A build that routes in TypeScript replaces `layout-core-source.ts` with
-    // a stub (vite-plugin-core-source.ts), so this import never reaches the wasm.
     async () => (await import('./layout-core-source.js')).loadWebCore(fetchAsset),
     log,
   )
@@ -231,9 +222,6 @@ export const layoutCoreReady = (): Promise<LayoutCore | undefined> =>
 
 /** The core this realm has loaded so far, or `undefined`. */
 export const currentLayoutCore = (): LayoutCore | undefined => installed?.current()
-
-/** The OKF core this realm has loaded so far, or `undefined` under `ts` or before the load. */
-export const currentOkfCore = (): OkfCodecCore | undefined => installed?.currentOkf()
 
 /** The JSON Canvas core this realm has loaded so far, or `undefined` under `ts` or before the load. */
 export const currentSpatialCore = (): SpatialCodecCore | undefined => installed?.currentSpatial()

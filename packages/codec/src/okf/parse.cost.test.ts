@@ -4,8 +4,7 @@
 // read and export of the document re-serialises it.
 
 import { describe, expect, it } from 'vitest'
-import { parseOkf } from './parse.js'
-import { serializeOkf } from './serialize.js'
+import { parseOkf, serializeOkf } from './okf-core.js'
 
 /** A document whose `x` holds `depth` nested single-key mappings. */
 const nested = (depth: number): string =>

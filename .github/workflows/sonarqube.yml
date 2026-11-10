@@ -100,6 +100,14 @@ jobs:
         if: steps.detect.outputs.analyze == 'true'
         run: pnpm install --frozen-lockfile
 
+      # Every project below installs the Rust core OKF is answered through
+      # (codec's okf-core-setup). Built from cold, like this job's pnpm store,
+      # so nothing here executes an artifact another job's cache holds.
+      - uses: ./.github/actions/core-wasm
+        if: steps.detect.outputs.analyze == 'true'
+        with:
+          use-cache: 'false'
+
       # Every non-browser vitest project in one run, so v8 writes a single
       # merged tmp/coverage/lcov.info. Report-only means report-only: a failing
       # test here must not hide the analysis, which is still worth having.

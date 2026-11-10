@@ -43,7 +43,6 @@ import {
   createDocumentSetOperation,
   parseWritableOkf,
 } from './document-set.js'
-import { okfCodecOf } from './okf-codec.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 const log = getLogger('document-crud')
@@ -302,7 +301,7 @@ export async function wbDocumentCreate(
 
   let title: string | undefined
   if (markdown !== undefined) {
-    const preflight = parseWritableOkf(markdown, await okfCodecOf(deps))
+    const preflight = parseWritableOkf(markdown)
     title = preflight.frontmatter.title
     // A tag the workspace's library forbids is refused here for exactly the
     // reason the parse above is: the delegated write below would otherwise

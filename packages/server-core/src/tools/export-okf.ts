@@ -1,4 +1,4 @@
-import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
+import { type OkfMarkdownFrontmatter, serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
   readDocumentContent,
@@ -23,7 +23,6 @@ import { DocumentKindMismatchError, DocumentSerializeError } from './errors.js'
  * future authorization-scoping hook, not passed to the store.
  */
 import type { ExportOkfInput, ExportOkfOutput } from './export-okf.schemas.js'
-import { okfCodecOf } from './okf-codec.js'
 
 export {
   type ExportOkfInput,
@@ -82,7 +81,7 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   // the caller can report it per document instead of failing the batch.
   let markdown: string
   try {
-    markdown = (await okfCodecOf(deps)).serializeOkf({ frontmatter, body })
+    markdown = serializeOkf({ frontmatter, body })
   } catch (error) {
     throw new DocumentSerializeError(input.documentId, 'OKF Markdown', error)
   }
