@@ -76,7 +76,7 @@
       ]
     },
     "GlyphShape": {
-      "description": "A glyph drawn as one of the engine silhouettes.",
+      "description": "A glyph drawn as one of the silhouettes of the engine.",
       "type": "object",
       "properties": {
         "kind": {
@@ -125,7 +125,7 @@
         },
         "id": {
           "$ref": "#/$defs/HostRef",
-          "description": "The registered icon id."
+          "description": "Id of the registered icon."
         }
       },
       "required": ["kind", "id"],
@@ -144,11 +144,11 @@
         },
         "id": {
           "$ref": "#/$defs/HostRef",
-          "description": "The theme id."
+          "description": "Id of the theme."
         },
         "icon": {
           "$ref": "#/$defs/HostRef",
-          "description": "The icon id."
+          "description": "Id of the icon."
         }
       },
       "required": ["kind", "id", "icon"],
@@ -393,7 +393,7 @@
         },
         "fields": {
           "$ref": "#/$defs/FieldSpecs",
-          "description": "A form over the schema own fields."
+          "description": "A form over the fields of the payload schema."
         }
       },
       "required": [],
@@ -445,15 +445,15 @@
       "properties": {
         "name": {
           "$ref": "#/$defs/Segment",
-          "description": "The facet machine name."
+          "description": "Machine name of the facet."
         },
         "displayName": {
           "$ref": "#/$defs/DisplayName",
-          "description": "The facet human-facing name."
+          "description": "Human-facing name of the facet."
         },
         "version": {
           "$ref": "#/$defs/FacetVersion",
-          "description": "The facet version."
+          "description": "Version of the facet."
         },
         "targets": {
           "type": "array",
@@ -465,7 +465,7 @@
         },
         "schema": {
           "$ref": "#/$defs/SchemaRef",
-          "description": "The facet payload schema."
+          "description": "Pointer at the payload schema of the facet."
         },
         "assetRefs": {
           "$ref": "#/$defs/AssetRefs",
@@ -507,7 +507,7 @@
       "properties": {
         "themes": {
           "$ref": "#/$defs/HostRef",
-          "description": "The theme table."
+          "description": "The table of themes."
         },
         "icons": {
           "$ref": "#/$defs/HostRef",
@@ -529,11 +529,11 @@
       "properties": {
         "id": {
           "$ref": "#/$defs/Segment",
-          "description": "The plugin id, which is also its facet-key namespace."
+          "description": "Id of the plugin, which is also its facet-key namespace."
         },
         "displayName": {
           "$ref": "#/$defs/DisplayName",
-          "description": "The plugin human-facing name."
+          "description": "Human-facing name of the plugin."
         },
         "facets": {
           "$ref": "#/$defs/FacetDecls",

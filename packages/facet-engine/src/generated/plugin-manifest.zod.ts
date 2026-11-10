@@ -97,7 +97,7 @@ export const glyphAssetSchema = z.strictObject({
 })
 export type GlyphAsset = z.infer<typeof glyphAssetSchema>
 
-/** A glyph drawn as one of the engine silhouettes. */
+/** A glyph drawn as one of the silhouettes of the engine. */
 export const glyphShapeSchema = z.strictObject({
   kind: z.literal('shape'),
   name: glyphShapeNameSchema,

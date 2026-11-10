@@ -256,7 +256,7 @@ pub type EntryPayload = Vec<(FieldName, Value)>;
 /// A glyph drawn from a registered icon.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GlyphAsset {
-    /// The registered icon id.
+    /// Id of the registered icon.
     pub id: HostRef,
 }
 
@@ -265,7 +265,7 @@ impl GlyphAsset {
     pub const KIND: &str = "asset";
 }
 
-/// A glyph drawn as one of the engine silhouettes.
+/// A glyph drawn as one of the silhouettes of the engine.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GlyphShape {
     /// Which silhouette.
@@ -280,9 +280,9 @@ impl GlyphShape {
 /// A registered icon drawn the way a registered theme draws.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct GlyphTheme {
-    /// The theme id.
+    /// Id of the theme.
     pub id: HostRef,
-    /// The icon id.
+    /// Id of the icon.
     pub icon: HostRef,
 }
 
@@ -294,7 +294,7 @@ impl GlyphTheme {
 /// The asset tables a plugin registers, by the name the host gives each.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ManifestAssets {
-    /// The theme table.
+    /// The table of themes.
     pub themes: Option<HostRef>,
     /// The icon table.
     pub icons: Option<HostRef>,
@@ -416,22 +416,22 @@ pub type FieldSpecs = Vec<(FieldName, FieldSpec)>;
 pub struct EditorSpec {
     /// One control writing whole payloads.
     pub picker: Option<Picker>,
-    /// A form over the schema own fields.
+    /// A form over the fields of the payload schema.
     pub fields: Option<FieldSpecs>,
 }
 
 /// One facet a plugin declares.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct FacetDecl {
-    /// The facet machine name.
+    /// Machine name of the facet.
     pub name: Segment,
-    /// The facet human-facing name.
+    /// Human-facing name of the facet.
     pub display_name: DisplayName,
-    /// The facet version.
+    /// Version of the facet.
     pub version: FacetVersion,
     /// What the facet may attach to, at least one.
     pub targets: Vec<FacetTarget>,
-    /// The facet payload schema.
+    /// Pointer at the payload schema of the facet.
     pub schema: SchemaRef,
     /// Fields whose value is the id of a registered asset.
     pub asset_refs: Option<AssetRefs>,
@@ -447,9 +447,9 @@ pub type FacetDecls = Vec<FacetDecl>;
 /// A plugin as data: its facets and how each is edited; code it needs is named.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct PluginManifest {
-    /// The plugin id, which is also its facet-key namespace.
+    /// Id of the plugin, which is also its facet-key namespace.
     pub id: Segment,
-    /// The plugin human-facing name.
+    /// Human-facing name of the plugin.
     pub display_name: DisplayName,
     /// The facets.
     pub facets: FacetDecls,
