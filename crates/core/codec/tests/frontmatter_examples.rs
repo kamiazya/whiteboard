@@ -4,7 +4,8 @@
 //! answers over a generated corpus, and these say what each one means.
 
 use whiteboard_codec::frontmatter::{
-    MAX_BYTES, MAX_DEPTH, MAX_PARSE_DEPTH, Refusal, Unwritable, Value, parse, stringify,
+    Fault, MAX_BYTES, MAX_DEPTH, MAX_PARSE_DEPTH, Refusal, Step, Unwritable, Value, parse,
+    stringify,
 };
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
@@ -539,27 +540,89 @@ fn writes_a_key_past_1024_units_as_an_explicit_key() {
     assert_eq!(write(&map(&[(&quoted, n(1.0))])), format!("? \"{quoted}\"\n: 1"));
 }
 
+fn key(name: &str) -> Step {
+    Step::Key(name.to_string())
+}
+
+fn fault(path: &[Step], why: Unwritable) -> Fault {
+    Fault { path: path.to_vec(), why }
+}
+
 #[test]
 fn refuses_to_write_what_has_no_spelling() {
-    assert_eq!(stringify(&map(&[("a", n(f64::NAN))])), Err(Unwritable::NonFiniteNumber));
+    let seq = |items: Vec<Value>| Value::Seq(items);
     assert_eq!(
-        stringify(&map(&[("a", Value::Seq(vec![n(f64::INFINITY)]))])),
-        Err(Unwritable::NonFiniteNumber)
+        stringify(&map(&[("a", n(f64::NAN))])),
+        Err(vec![fault(&[key("a")], Unwritable::Nan)])
+    );
+    assert_eq!(
+        stringify(&map(&[("a", seq(vec![n(1.0), n(f64::INFINITY)]))])),
+        Err(vec![fault(&[key("a"), Step::Index(1)], Unwritable::Infinity)])
+    );
+    assert_eq!(
+        stringify(&map(&[("a", n(f64::NEG_INFINITY))])),
+        Err(vec![fault(&[key("a")], Unwritable::NegativeInfinity)])
     );
     assert_eq!(
         stringify(&map(&[("a", Value::BigInt("9007199254740993".into()))])),
-        Err(Unwritable::BigInt)
+        Err(vec![fault(&[key("a")], Unwritable::BigInt)])
     );
-    assert_eq!(stringify(&map(&[("a", s("x\u{feff}y"))])), Err(Unwritable::ByteOrderMark));
-    assert_eq!(stringify(&map(&[("k\u{feff}", n(1.0))])), Err(Unwritable::ByteOrderMark));
-    assert_eq!(stringify(&map(&[("__proto__", n(1.0))])), Err(Unwritable::ReservedKey));
     assert_eq!(
-        stringify(&map(&[("a", map(&[("__proto__", n(1.0))]))])),
-        Err(Unwritable::ReservedKey)
+        stringify(&map(&[("a", s("x\u{feff}y"))])),
+        Err(vec![fault(&[key("a")], Unwritable::ByteOrderMark)])
     );
+    // A key is reported at the mapping that holds it, once for each such key,
+    // before the entries of that mapping.
+    assert_eq!(
+        stringify(&map(&[("k\u{feff}", n(f64::NAN)), ("j\u{feff}", n(1.0))])),
+        Err(vec![
+            fault(&[], Unwritable::ByteOrderMark),
+            fault(&[], Unwritable::ByteOrderMark),
+            fault(&[key("k\u{feff}")], Unwritable::Nan),
+        ])
+    );
+}
+
+#[test]
+fn a_reserved_key_is_reported_first_and_at_the_root_wherever_it_sits() {
+    assert_eq!(
+        stringify(&map(&[("__proto__", n(1.0))])),
+        Err(vec![fault(&[], Unwritable::ReservedKey)])
+    );
+    assert_eq!(
+        stringify(&map(&[
+            ("z", n(f64::NAN)),
+            ("a", Value::Seq(vec![map(&[("__proto__", n(1.0))])]))
+        ])),
+        Err(vec![fault(&[], Unwritable::ReservedKey), fault(&[key("z")], Unwritable::Nan),])
+    );
+}
+
+#[test]
+fn every_place_without_a_spelling_is_reported_in_walk_order() {
+    let value = map(&[
+        ("first", Value::Seq(vec![n(f64::NAN), s("\u{feff}")])),
+        ("second", map(&[("inner", Value::BigInt("9007199254740993".into()))])),
+    ]);
+    assert_eq!(
+        stringify(&value),
+        Err(vec![
+            fault(&[key("first"), Step::Index(0)], Unwritable::Nan),
+            fault(&[key("first"), Step::Index(1)], Unwritable::ByteOrderMark),
+            fault(&[key("second"), key("inner")], Unwritable::BigInt),
+        ])
+    );
+}
+
+#[test]
+fn a_value_nested_past_the_writer_is_reported_where_it_goes_too_deep() {
     let nest = |levels: usize| (0..levels).fold(Value::Null, |inner, _| Value::Seq(vec![inner]));
     assert!(stringify(&nest(MAX_PARSE_DEPTH)).is_ok());
-    assert_eq!(stringify(&nest(MAX_PARSE_DEPTH + 1)), Err(Unwritable::TooDeep));
+    let path = vec![Step::Index(0); MAX_PARSE_DEPTH];
+    assert_eq!(
+        stringify(&nest(MAX_PARSE_DEPTH + 1)),
+        Err(vec![Fault { path, why: Unwritable::TooDeep }])
+    );
 }
 
 #[test]

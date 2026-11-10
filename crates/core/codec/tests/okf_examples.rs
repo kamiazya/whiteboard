@@ -1,10 +1,10 @@
 //! The OKF envelope by example: the fence, the routing, the schema's refusals
 //! and the writer's order, each pinned to what the TypeScript does.
 
-use whiteboard_codec::frontmatter::{Refusal, Unwritable, Value};
+use whiteboard_codec::frontmatter::{Fault, Refusal, Unwritable, Value};
 use whiteboard_codec::okf::{
     Code, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step, has_frontmatter,
-    parse, serialize,
+    parse, parse_marked, serialize,
 };
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
@@ -385,17 +385,61 @@ fn a_frontmatter_with_no_spelling_is_refused_not_written_wrong() {
         fm.facets_raw = Some(vec![("k".to_string(), value)]);
         serialize(&Document { frontmatter: fm, body: String::new() })
     };
-    assert_eq!(with(Value::Number(f64::NAN)), Err(Unwritable::NonFiniteNumber));
-    assert_eq!(with(text("a\u{feff}")), Err(Unwritable::ByteOrderMark));
-    assert_eq!(with(Value::BigInt("9007199254740993".to_string())), Err(Unwritable::BigInt));
+    let at_k = |why| Err(vec![Fault { path: vec![Step::Key("k".to_string())], why }]);
+    assert_eq!(with(Value::Number(f64::NAN)), at_k(Unwritable::Nan));
+    assert_eq!(with(text("a\u{feff}")), at_k(Unwritable::ByteOrderMark));
+    assert_eq!(with(Value::BigInt("9007199254740993".to_string())), at_k(Unwritable::BigInt));
     assert_eq!(
         with(Value::Map(vec![("__proto__".to_string(), Value::Null)])),
-        Err(Unwritable::ReservedKey)
+        Err(vec![Fault { path: vec![], why: Unwritable::ReservedKey }])
     );
+    // Preserved keys are spread at the root and `facets` nests, as the paths show.
     let mut fm = plain("n");
-    fm.facets = Some(vec![("k\u{feff}".to_string(), Value::Null)]);
+    fm.facets = Some(vec![("k\u{feff}".to_string(), Value::Number(f64::INFINITY))]);
+    let path = vec![Step::Key("facets".to_string())];
     assert_eq!(
         serialize(&Document { frontmatter: fm, body: String::new() }),
-        Err(Unwritable::ByteOrderMark)
+        Err(vec![
+            Fault { path: path.clone(), why: Unwritable::ByteOrderMark },
+            Fault {
+                path: [path, vec![Step::Key("k\u{feff}".to_string())]].concat(),
+                why: Unwritable::Infinity
+            },
+        ])
     );
+}
+
+#[test]
+fn a_mark_in_a_string_or_a_key_is_the_refusal_of_a_lone_surrogate() {
+    let subset = Err(Failure::Yaml(Refusal::Subset("a lone UTF-16 surrogate")));
+    for text in [
+        "---\ntype: a\u{e000}b\n---\n",
+        "---\ntype: x\nk\u{e000}: 1\n---\n",
+        "---\ntype: x\nfacets: {a.b/v1: [\"\u{e000}\"]}\n---\n",
+        "---\ntype: x\nk: |\n  one\u{e000}\n---\n",
+        // The YAML is read before the schema and the reserved key are asked.
+        "---\ntype: 1\ntitle: \u{e000}\n---\n",
+        "---\ntype: x\n__proto__: \u{e000}\n---\n",
+    ] {
+        assert_eq!(parse_marked(text, Some('\u{e000}')).map(|_| ()), subset.clone(), "{text:?}");
+    }
+}
+
+#[test]
+fn a_mark_in_a_comment_or_the_body_is_nothing() {
+    for text in [
+        "---\ntype: x # a\u{e000}\n---\nbody",
+        "---\n# \u{e000}\ntype: x\n---\n",
+        "---\ntype: x\n---\nthe \u{e000} body",
+    ] {
+        assert!(parse_marked(text, Some('\u{e000}')).is_ok(), "{text:?}");
+    }
+    // Without a mark the same character is just text, as it is in the TypeScript.
+    assert!(parse_marked("---\ntype: a\u{e000}b\n---\n", None).is_ok());
+}
+
+#[test]
+fn another_yaml_fault_is_named_before_the_mark_is_looked_for() {
+    let read = parse_marked("---\na: [\u{e000}\n---\n", Some('\u{e000}'));
+    assert!(matches!(read, Err(Failure::Yaml(Refusal::Syntax(_)))), "{read:?}");
 }

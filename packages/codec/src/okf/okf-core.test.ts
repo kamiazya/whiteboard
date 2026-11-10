@@ -241,4 +241,58 @@ describe('okfCodec', () => {
     expect(() => codec.serializeOkf(unsafe)).toThrow(OkfNotYamlSafeError)
     expect(reports.map((r) => r.kind)).toEqual(['differs'])
   })
+
+  describe('a core that refuses a value with no YAML spelling', () => {
+    const unsafe: OkfMarkdownDocument = {
+      frontmatter: { type: 'note', facetsRaw: { n: Number.NaN } },
+      body: '',
+    }
+    const issues = [{ path: ['n'], message: 'NaN is not yaml-safe' }]
+    /** What `@kamiazya/whiteboard-core-wasm` throws; declared by name and shape, so codec need not import it. */
+    const unwritable =
+      (list: unknown = issues) =>
+      () => {
+        throw Object.assign(new Error('no YAML spelling'), {
+          name: 'CoreOkfUnwritable',
+          issues: list,
+        })
+      }
+
+    it('throws the typed error with the core issues, and is no decline', () => {
+      for (const impl of ['rust', 'differential'] as const) {
+        const { codec, reports } = switched(fakeCore({ serializeOkf: unwritable() }), impl)
+        let thrown: unknown
+        try {
+          codec.serializeOkf(unsafe)
+        } catch (err) {
+          thrown = err
+        }
+        expect(thrown, impl).toBeInstanceOf(OkfNotYamlSafeError)
+        expect(
+          (thrown as OkfNotYamlSafeError).issues.map(({ path, message }) => ({ path, message })),
+        ).toEqual(issues)
+        expect(reports, impl).toEqual([])
+      }
+    })
+
+    it('reports a core that names other issues than the TypeScript, and throws the TypeScript own', () => {
+      const other = [{ path: ['m'], message: 'NaN is not yaml-safe' }]
+      const { codec, reports } = switched(
+        fakeCore({ serializeOkf: unwritable(other) }),
+        'differential',
+      )
+      expect(() => codec.serializeOkf(unsafe)).toThrow(
+        expect.objectContaining({ issues: [expect.objectContaining({ path: ['n'] })] }),
+      )
+      expect(reports.map((r) => r.kind)).toEqual(['differs'])
+    })
+
+    it('declines, as before, an error that is not that shape', () => {
+      for (const bad of [null, 'x', [{ path: 'n', message: 'm' }], [{ path: [], message: 1 }]]) {
+        const { codec, reports } = switched(fakeCore({ serializeOkf: unwritable(bad) }), 'rust')
+        expect(() => codec.serializeOkf(unsafe)).toThrow(OkfNotYamlSafeError)
+        expect(reports.map((r) => r.kind)).toEqual(['declined'])
+      }
+    })
+  })
 })

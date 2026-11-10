@@ -31,11 +31,22 @@ pub const MAX_DEPTH: usize = 32;
 /// malformed further down is named malformed, as the TypeScript names it.
 pub const MAX_PARSE_DEPTH: usize = 64;
 
+/// A step of a path into a value: a key or a list index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Step {
+    Key(String),
+    Index(usize),
+}
+
 /// Why a value has no spelling in the frontmatter subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unwritable {
-    /// `NaN` or an infinity: YAML core schema has no tag this repository emits for them.
-    NonFiniteNumber,
+    /// `NaN`: YAML core schema has no tag this repository emits for it.
+    Nan,
+    /// `Infinity`.
+    Infinity,
+    /// `-Infinity`.
+    NegativeInfinity,
     /// A byte-order mark in a key or a string, which `parse` refuses wherever it sits.
     ByteOrderMark,
     /// A key named `__proto__`, which `parseOkf` refuses.
@@ -45,4 +56,13 @@ pub enum Unwritable {
     /// Collections nested past [`MAX_PARSE_DEPTH`]: the reader would refuse
     /// the text, and the stack would not hold the writer's recursion.
     TooDeep,
+}
+
+/// One place a value has no spelling: where, and why. A key that has none is
+/// reported at the mapping holding it, since the key may be the unprintable
+/// part, and a `__proto__` key at the root, once, wherever it sits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fault {
+    pub path: Vec<Step>,
+    pub why: Unwritable,
 }

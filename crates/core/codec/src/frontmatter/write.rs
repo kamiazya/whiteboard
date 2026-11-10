@@ -3,7 +3,7 @@
 
 use super::fold::Units;
 use super::quote::{Ctx, string, units};
-use super::value::{MAX_PARSE_DEPTH, Unwritable, Value};
+use super::value::{Fault, MAX_PARSE_DEPTH, Step, Unwritable, Value};
 
 const NEWLINE: u16 = b'\n' as u16;
 const SPACE: u16 = b' ' as u16;
@@ -13,8 +13,11 @@ const MAX_IMPLICIT_KEY_UNITS: usize = 1024;
 
 /// A value's spelling as a frontmatter document: block style throughout, a
 /// trailing newline, nothing written for the `---` fences.
-pub(super) fn document(value: &Value) -> Result<Units, Unwritable> {
-    check(value, 0)?;
+pub(super) fn document(value: &Value) -> Result<Units, Vec<Fault>> {
+    let faults = faults(value);
+    if !faults.is_empty() {
+        return Err(faults);
+    }
     let mut ctx =
         Ctx { indent: 0, implicit_key: false, indent_at_start: None, force_block_indent: false };
     let mut text = node(value, &mut ctx);
@@ -22,26 +25,63 @@ pub(super) fn document(value: &Value) -> Result<Units, Unwritable> {
     Ok(text)
 }
 
-/// The refusals of `yamlSafeValueSchema`, for what a `Value` can hold, with
-/// `above` collections around `value`.
-fn check(value: &Value, above: usize) -> Result<(), Unwritable> {
-    let below = above.saturating_add(1);
-    match value {
-        Value::Number(n) if !n.is_finite() => Err(Unwritable::NonFiniteNumber),
-        Value::BigInt(_) => Err(Unwritable::BigInt),
-        Value::String(text) if text.contains('\u{feff}') => Err(Unwritable::ByteOrderMark),
-        Value::Seq(_) | Value::Map(_) if below > MAX_PARSE_DEPTH => Err(Unwritable::TooDeep),
-        Value::Seq(items) => items.iter().try_for_each(|item| check(item, below)),
-        Value::Map(entries) => entries.iter().try_for_each(|(key, item)| {
-            if key.contains('\u{feff}') {
-                return Err(Unwritable::ByteOrderMark);
+/// The issues of `yamlSafeValueSchema`, for what a `Value` can hold, in the
+/// order it reports them: a `__proto__` key anywhere first, at the root, then
+/// a walk that names a mapping's unprintable keys before its entries.
+fn faults(value: &Value) -> Vec<Fault> {
+    let mut found = Walk { faults: Vec::new(), reserved: false };
+    found.visit(value, &mut Vec::new());
+    if found.reserved {
+        found.faults.insert(0, Fault { path: Vec::new(), why: Unwritable::ReservedKey });
+    }
+    found.faults
+}
+
+struct Walk {
+    faults: Vec<Fault>,
+    reserved: bool,
+}
+
+impl Walk {
+    fn fault(&mut self, path: &[Step], why: Unwritable) {
+        self.faults.push(Fault { path: path.to_vec(), why });
+    }
+
+    fn visit(&mut self, value: &Value, path: &mut Vec<Step>) {
+        match value {
+            Value::Number(n) if n.is_nan() => self.fault(path, Unwritable::Nan),
+            Value::Number(n) if n.is_infinite() => self.fault(
+                path,
+                if *n < 0.0 { Unwritable::NegativeInfinity } else { Unwritable::Infinity },
+            ),
+            Value::BigInt(_) => self.fault(path, Unwritable::BigInt),
+            Value::String(text) if text.contains('\u{feff}') => {
+                self.fault(path, Unwritable::ByteOrderMark);
             }
-            if key == "__proto__" {
-                return Err(Unwritable::ReservedKey);
+            // The path holds the collections around `value`.
+            Value::Seq(_) | Value::Map(_) if path.len() >= MAX_PARSE_DEPTH => {
+                self.fault(path, Unwritable::TooDeep);
             }
-            check(item, below)
-        }),
-        _ => Ok(()),
+            Value::Seq(items) => {
+                for (at, item) in items.iter().enumerate() {
+                    path.push(Step::Index(at));
+                    self.visit(item, path);
+                    path.pop();
+                }
+            }
+            Value::Map(entries) => {
+                for _ in entries.iter().filter(|(key, _)| key.contains('\u{feff}')) {
+                    self.fault(path, Unwritable::ByteOrderMark);
+                }
+                for (key, item) in entries {
+                    self.reserved |= key == "__proto__";
+                    path.push(Step::Key(key.clone()));
+                    self.visit(item, path);
+                    path.pop();
+                }
+            }
+            _ => {}
+        }
     }
 }
 

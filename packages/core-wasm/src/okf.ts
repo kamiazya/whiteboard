@@ -1,5 +1,6 @@
 import type { CoreFacets, ExtensionFacets, FacetsRaw } from '@kamiazya/whiteboard-model'
 import { OKF_PARSE_CAPS, OKF_SERIALIZE_CAPS, type RefusalCode } from './generated/input-caps.js'
+import { REASON_MESSAGE, type UnwritableIssue, unsafeIssues } from './okf-unsafe.js'
 
 // The OKF envelope over the wasm artifact (`crates/bindings/wasm/src/okf.rs`).
 //
@@ -54,12 +55,12 @@ export type OkfParseResult =
 /** The errors this module throws, made by the package entry that owns their classes. */
 export interface OkfErrors {
   refused(operation: string, code: RefusalCode): Error
-  unwritable(reason: string): Error
+  unwritable(issues: readonly UnwritableIssue[]): Error
 }
 
 /** The glue calls this module makes. */
 export interface OkfGlue {
-  okf_parse(text: string): string
+  okf_parse(text: string, mark: number): string
   okf_serialize(frontmatter: string): string
 }
 
@@ -160,18 +161,49 @@ function refusalOf(stage: unknown, cls: unknown, wire: unknown): OkfParseResult 
   return cls === 'schema' ? failure(stage, SCHEMA, issues) : undefined
 }
 
-/** `parseOkf` over the artifact, or a `CoreInputRefused` the root answers from the TypeScript. */
+// A document's head: the opening fence, the frontmatter and the closing fence
+// with the line break after it, which is `parseOkf`'s pattern up to the body.
+// The artifact reads nothing past it, so the body never crosses.
+const HEAD = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/
+
+const LONE_SURROGATES = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g
+
+/**
+ * A character to stand where the head holds a lone surrogate, which a Rust
+ * `&str` cannot hold: one the head spells nowhere, neither itself nor as an
+ * escape (`\uE000`, `\U0000E000`), so that finding it among the frontmatter's
+ * strings and keys can only mean a surrogate was there.
+ */
+function markFor(head: string): number | undefined {
+  const lower = head.toLowerCase()
+  for (let code = 0xe000; code < 0xe100; code++) {
+    if (!head.includes(String.fromCharCode(code)) && !lower.includes(code.toString(16))) {
+      return code
+    }
+  }
+  return undefined
+}
+
+/**
+ * `parseOkf` over the artifact, or a `CoreInputRefused` the root answers from
+ * the TypeScript. The artifact is sent the head alone: a lone surrogate in the
+ * body, or a body of any size, is not its business, and the body is sliced
+ * from the text here. A lone surrogate in the head is marked, and the artifact
+ * refuses the frontmatter whose strings or keys reach it, as the TypeScript
+ * does (one in a comment is nothing).
+ */
 export function parseOkf(glue: OkfGlue, errors: OkfErrors, text: string): OkfParseResult {
-  // A lone surrogate would cross as U+FFFD, and Rust would then accept a
-  // frontmatter the TypeScript refuses. Checked on the whole text, which
-  // also covers a body holding one, so that the TypeScript answers it.
-  if (!isWellFormed(text)) throw errors.refused('okf_parse', 'malformed')
+  // A text that opens no block has no head, and the artifact names it so.
+  const head = HEAD.exec(text)?.[0] ?? ''
   // A UTF-16 length is never over its UTF-8 one, so this refuses nothing the
   // artifact would take; the artifact refuses on the bytes.
-  if (text.length > OKF_PARSE_CAPS.maxBytes) {
+  if (head.length > OKF_PARSE_CAPS.maxBytes) {
     throw errors.refused('okf_parse', 'input-too-large')
   }
-  const answer: unknown = JSON.parse(glue.okf_parse(text))
+  const mark = isWellFormed(head) ? 0 : markFor(head)
+  if (mark === undefined) throw errors.refused('okf_parse', 'malformed')
+  const sent = mark === 0 ? head : head.replace(LONE_SURROGATES, String.fromCharCode(mark))
+  const answer: unknown = JSON.parse(glue.okf_parse(sent, mark))
   const [kind, a, b, c] = Array.isArray(answer) ? (answer as unknown[]) : []
   if (kind === 'refused' && (a === 'input-too-large' || a === 'malformed')) {
     throw errors.refused('okf_parse', a)
@@ -179,8 +211,11 @@ export function parseOkf(glue: OkfGlue, errors: OkfErrors, text: string): OkfPar
   const isRecord = (v: unknown): v is object =>
     typeof v === 'object' && v !== null && !Array.isArray(v)
   const frontmatter = kind === 'ok' ? decodeValue(b) : undefined
-  if (typeof a === 'number' && Number.isInteger(a) && a <= text.length && isRecord(frontmatter)) {
-    return { ok: true, value: { frontmatter: frontmatter as OkfFrontmatter, body: text.slice(a) } }
+  if (a === head.length && head.length > 0 && isRecord(frontmatter)) {
+    return {
+      ok: true,
+      value: { frontmatter: frontmatter as OkfFrontmatter, body: text.slice(head.length) },
+    }
   }
   const refusal = kind === 'err' ? refusalOf(a, b, c) : undefined
   if (refusal === undefined) throw errors.refused('okf_parse', 'malformed')
@@ -199,7 +234,8 @@ const hex = (n: number): string => {
  * The wire of a frontmatter value (see `okf_wire.rs`), or undefined when it
  * is not one a document holds: an `undefined`, a function, a symbol, a class
  * instance, a string with a lone surrogate, a cycle or a sparse list. The
- * TypeScript refuses each of those too, with its own error.
+ * TypeScript refuses each of those too, with `OkfNotYamlSafeError`, so
+ * `serializeOkf` names them the same way (`okf-unsafe.ts`).
  */
 function wireOf(value: unknown, depth: number): unknown {
   if (value === null || typeof value === 'boolean') return value
@@ -234,14 +270,23 @@ function wireOfRecord(record: object, depth: number): unknown[] | undefined {
 
 /**
  * `serializeOkf` over the artifact. The body never crosses: it is appended to
- * what the artifact wrote before it. Throws `CoreOkfUnwritable` for a value
- * with no YAML spelling and `CoreInputRefused` for a document the wire does not
- * carry, among them a frontmatter whose keys are not in the schema's order
- * (the artifact writes in the order `parseOkf` hands the keys over in).
+ * what the artifact wrote before it. Throws `CoreOkfUnwritable` for a value with
+ * no YAML spelling, naming each place as the TypeScript does, and
+ * `CoreInputRefused` for a document the wire does not carry and the
+ * TypeScript would write: a frontmatter that is not the schema's (a key it does
+ * not name, a field of another kind), or nested past the writer.
  */
 export function serializeOkf(glue: OkfGlue, errors: OkfErrors, doc: OkfDocument): string {
   const wire = wireOf(doc.frontmatter, 0)
-  if (wire === undefined) throw errors.refused('okf_serialize', 'malformed')
+  if (wire === undefined) {
+    // The artifact cannot see a value the wire does not carry; the places are
+    // told by walking the frontmatter. None found means the wire failed for
+    // another reason, a nesting past what the shim sends.
+    const issues = unsafeIssues(doc.frontmatter)
+    throw issues.length > 0
+      ? errors.unwritable(issues)
+      : errors.refused('okf_serialize', 'malformed')
+  }
   const text = JSON.stringify(wire)
   if (text.length > OKF_SERIALIZE_CAPS.maxBytes) {
     throw errors.refused('okf_serialize', 'input-too-large')
@@ -249,9 +294,30 @@ export function serializeOkf(glue: OkfGlue, errors: OkfErrors, doc: OkfDocument)
   const answer: unknown = JSON.parse(glue.okf_serialize(text))
   const [kind, a] = Array.isArray(answer) ? (answer as unknown[]) : []
   if (kind === 'ok' && typeof a === 'string') return a + doc.body
-  if (kind === 'unwritable' && typeof a === 'string') throw errors.unwritable(a)
-  if (kind === 'refused' && (a === 'input-too-large' || a === 'malformed')) {
-    throw errors.refused('okf_serialize', a)
+  if (kind === 'unwritable') throw unwritableOf(errors, a)
+  if (kind === 'refused' && a === 'input-too-large') throw errors.refused('okf_serialize', a)
+  // Not a frontmatter the schema holds (a field of another kind, a key it does
+  // not name). The artifact never reads past that, but the TypeScript still
+  // refuses it first when a value in it has no YAML spelling.
+  const issues = kind === 'refused' && a === 'malformed' ? unsafeIssues(doc.frontmatter) : []
+  throw issues.length > 0 ? errors.unwritable(issues) : errors.refused('okf_serialize', 'malformed')
+}
+
+/** The error for the faults an `unwritable` answer lists, `[path, reason]` each. */
+function unwritableOf(errors: OkfErrors, wire: unknown): Error {
+  const issues: UnwritableIssue[] = []
+  for (const fault of Array.isArray(wire) ? (wire as unknown[]) : []) {
+    const [path, reason] = Array.isArray(fault) ? (fault as unknown[]) : []
+    const steps = Array.isArray(path) ? (path as unknown[]) : undefined
+    if (reason === 'too-deep') return errors.refused('okf_serialize', 'input-too-large')
+    const message = typeof reason === 'string' ? REASON_MESSAGE[reason] : undefined
+    const walked = steps?.every((s) => typeof s === 'string' || typeof s === 'number')
+    if (steps === undefined || !walked || message === undefined) {
+      return errors.refused('okf_serialize', 'malformed')
+    }
+    issues.push({ path: steps as (string | number)[], message })
   }
-  throw errors.refused('okf_serialize', 'malformed')
+  return issues.length > 0
+    ? errors.unwritable(issues)
+    : errors.refused('okf_serialize', 'malformed')
 }
