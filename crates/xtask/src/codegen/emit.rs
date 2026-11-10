@@ -122,6 +122,33 @@ impl Chain {
         self
     }
 
+    /// A chain of one call: biome keeps a final array argument on the call's
+    /// line and breaks the array, one element to a line; any other argument
+    /// list breaks one argument to a line.
+    fn render_lone_call(&self, call: &Call, pad: &str, lead: &str, trail: &str) -> String {
+        let mut out = format!("{pad}{lead}{}.{}(", self.head, call.name);
+        let list = call.args.split_last().and_then(|(last, rest)| {
+            let inner = last.strip_prefix('[').and_then(|l| l.strip_suffix(']'))?;
+            Some((inner, rest))
+        });
+        if let Some((list, rest)) = list {
+            for arg in rest {
+                let _ = write!(out, "{arg}, ");
+            }
+            out.push('[');
+            for item in list.split(", ") {
+                let _ = write!(out, "\n{pad}  {item},");
+            }
+            let _ = write!(out, "\n{pad}]){trail}");
+            return out;
+        }
+        for arg in &call.args {
+            let _ = write!(out, "\n{pad}  {arg},");
+        }
+        let _ = write!(out, "\n{pad}){trail}");
+        out
+    }
+
     /// One line when it fits `width`, else one call per line and a call whose
     /// line is still too long one argument per line, the way biome breaks a
     /// member chain; a chain of a single call keeps it on the head's line and
@@ -137,12 +164,7 @@ impl Chain {
             return flat;
         }
         if let [call] = self.calls.as_slice() {
-            let mut out = format!("{pad}{lead}{}.{}(", self.head, call.name);
-            for arg in &call.args {
-                let _ = write!(out, "\n{pad}  {arg},");
-            }
-            let _ = write!(out, "\n{pad}){trail}");
-            return out;
+            return self.render_lone_call(call, &pad, lead, trail);
         }
         let mut out = format!("{pad}{lead}{}", self.head);
         for call in &self.calls {
@@ -182,13 +204,15 @@ fn zod_chain(ty: &Ty<'_>) -> Chain {
             }
             refine(chain, *check)
         }
-        Ty::Array { item, min, max } => {
+        Ty::Array { item, min, max, max_message } => {
             let mut chain = Chain::new("array", vec![zod_chain(item).render(0, "", "")]);
             if let Some(n) = min {
                 chain = chain.then("min", vec![n.to_string()]);
             }
             if let Some(n) = max {
-                chain = chain.then("max", vec![n.to_string()]);
+                let mut args = vec![n.to_string()];
+                args.extend(max_message.map(js_string));
+                chain = chain.then("max", args);
             }
             chain
         }
@@ -309,7 +333,8 @@ fn zod_imports(checked: &Checked<'_>) -> String {
     };
     if let Some(found) = checked.contract.checks.as_ref().filter(|_| !checked.zod_checks.is_empty())
     {
-        let stem = found.zod.rsplit('/').next().and_then(|f| f.strip_suffix(".ts")).unwrap_or("");
+        let zod = found.zod.as_deref().unwrap_or_default();
+        let stem = zod.rsplit('/').next().and_then(|f| f.strip_suffix(".ts")).unwrap_or("");
         for check in &checked.zod_checks {
             add(&format!("../{stem}.js"), camel(check));
         }

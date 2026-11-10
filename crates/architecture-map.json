@@ -113,7 +113,7 @@
     "whiteboard-plugin-visual": {
       "path": "crates/core/plugin-visual",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "the bundled visual plugin as an ordinary contribution implementer",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [

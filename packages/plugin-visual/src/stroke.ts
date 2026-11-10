@@ -1,4 +1,4 @@
-import { z } from 'zod'
+import { visualStrokeFacetSchema } from './generated/visual.zod.js'
 
 /**
  * The weights a stroke can be drawn at. `thin` is the weight every line has
@@ -25,8 +25,6 @@ export type StrokeWidth = (typeof STROKE_WIDTHS)[number]
  * Named weights rather than pixels: the renderer scales the THEME's line
  * weight by them, so a theme that draws heavier draws every weight heavier.
  */
-export const visualStrokeFacetSchema = z.object({
-  width: z.enum(['medium', 'thick']),
-})
+export { visualStrokeFacetSchema }
 
 export const VISUAL_STROKE_KEY = 'visual.stroke/v0'

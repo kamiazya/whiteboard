@@ -1,22 +1,12 @@
 import type { FacetRegistry, IconAsset } from '@kamiazya/whiteboard-facet-engine'
-import {
-  createFacetRegistry,
-  defineFacet,
-  definePlugin,
-  FACET_KEY_PATTERN,
-  namespacedIdSchema,
-} from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type {
   EdgeRoutingStyle,
   ExtensionFacets,
   LineJumps,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import {
-  type edgeRoutingSchema,
-  edgeRoutingStyleSchema,
-  lineJumpsSchema,
-} from '@kamiazya/whiteboard-model'
+import { type edgeRoutingSchema, edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import {
@@ -25,6 +15,16 @@ import {
   SYMBOL_CATALOG,
   SYMBOL_PICKER_OPTIONS,
 } from './editors.js'
+import type { VisualEdgesFacet, VisualShapeFacet, VisualTextFacet } from './generated/visual.zod.js'
+import {
+  visualAxesFacetSchema,
+  visualEdgesFacetSchema,
+  visualInkFacetSchema,
+  visualShapeFacetSchema,
+  visualStencilFacetSchema,
+  visualTextFacetSchema,
+  visualThemeFacetSchema,
+} from './generated/visual.zod.js'
 import { CATEGORY_GLYPHS } from './icons/category-glyphs.js'
 import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
@@ -35,19 +35,16 @@ import { type StrokeWidth, VISUAL_STROKE_KEY, visualStrokeFacetSchema } from './
 import { visualTagsFacetSchema } from './tag-library.js'
 import { VISUAL_THEMES } from './themes.js'
 
+// The payloads of the simple facets below are generated from
+// `contracts/facets/visual`; what each one MEANS stays documented here.
+export type { VisualEdgesFacet, VisualShapeFacet, VisualTextFacet }
+
 /**
  * `visual.edges/v0` — how this canvas's edges are drawn: the routing and
  * whether crossings jump. One facet with two fields, not two facets, since
  * both answer the same question. `v0`: unstable, payload may still change
  * shape.
  */
-const visualEdgesFacetSchema = z.object({
-  routing: edgeRoutingStyleSchema.optional(),
-  lineJumps: lineJumpsSchema.optional(),
-})
-
-export type VisualEdgesFacet = z.infer<typeof visualEdgesFacetSchema>
-
 export const VISUAL_EDGES_KEY = 'visual.edges/v0'
 
 /**
@@ -57,11 +54,7 @@ export const VISUAL_EDGES_KEY = 'visual.edges/v0'
  * IS choosing rect). canvas-render asserts the alignment in its own tests,
  * since this package cannot depend on it.
  */
-export const visualShapeFacetSchema = z.object({
-  kind: z.enum(['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder', 'octagon']),
-})
-
-export type VisualShapeFacet = z.infer<typeof visualShapeFacetSchema>
+export { visualShapeFacetSchema }
 
 export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
 
@@ -80,25 +73,7 @@ export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
  * none is one object by itself, which is what ink from an import or an
  * agent's write is.
  */
-const visualInkFacetSchema = z.object({
-  group: z.string().min(1),
-})
-
 export const VISUAL_INK_KEY = 'visual.ink/v0'
-
-/**
- * The most semantic axes one board may declare when it is written.
- *
- * A board declares a handful — the two-axis case above is the one the
- * design names, and colour and silhouette are the only two channels an axis
- * competes for — so 64 is an order of magnitude over any board a reader
- * could follow, and still small. What it bounds is a payload: every layout
- * scores the declaration for the legend, and an unbounded list let one
- * write of a few megabytes cost a render tens of seconds. A stored
- * declaration past it still reads, because the scorer reads the stored
- * payload itself and skips a key no box carries.
- */
-export const VISUAL_AXES_MAX = 64
 
 /**
  * `visual.axes/v0` — which of its own facets a canvas treats as SEMANTIC
@@ -121,13 +96,16 @@ export const VISUAL_AXES_MAX = 64
  * axis carried by a facet a later build registers, or one this deployment
  * disabled, and losing the whole declaration to that would cost more than
  * the stray key does. A key no box carries simply contributes no partition.
+ *
+ * A board declares a handful, and colour and silhouette are the only two
+ * channels an axis competes for, so the write bound of 64 axes (the
+ * contract's `maxItems`) is an order of magnitude over any board a reader
+ * could follow. What it bounds is a payload: every layout scores the
+ * declaration for the legend, and an unbounded list let one write of a few
+ * megabytes cost a render tens of seconds. A stored declaration past it still
+ * reads, because the scorer reads the stored payload itself and skips a key no
+ * box carries.
  */
-const visualAxesFacetSchema = z.object({
-  axes: z
-    .array(z.string().regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"'))
-    .max(VISUAL_AXES_MAX, `more axes than the ${VISUAL_AXES_MAX}-axis limit for one board`),
-})
-
 export const VISUAL_AXES_KEY = 'visual.axes/v0'
 
 /**
@@ -208,12 +186,6 @@ export const VISUAL_SYMBOL_KEY = 'visual.symbol/v0'
  * centres what fits, a rect starts at the top). The facet overrides that
  * default; it does not restate it, which is why there is no third value.
  */
-const visualTextFacetSchema = z.object({
-  align: z.enum(['start', 'center']),
-})
-
-export type VisualTextFacet = z.infer<typeof visualTextFacetSchema>
-
 export const VISUAL_TEXT_KEY = 'visual.text/v0'
 
 /**
@@ -224,32 +196,7 @@ export const VISUAL_TEXT_KEY = 'visual.text/v0'
  * registered at write time. ABSENT is the bundled look, which is why the
  * picker's first segment is `null` rather than a stored `'default'`.
  */
-const visualThemeFacetSchema = z.object({
-  theme: namespacedIdSchema,
-})
-
 export const VISUAL_THEME_KEY = 'visual.theme/v0'
-
-/**
- * `visual.stencil/v0` — which registered STENCIL this node wears
- * ([ADR-0034](../../../docs/contributing/adr/0034-stencil-and-recipe.md)
- * decision 5), by id. The payload carries NO appearance: applying a stencil
- * expands its colour and facets onto the node itself, and this records where
- * they came from.
- *
- * The record is what makes a dressed board legible rather than merely
- * decorated. ADR-0033 scores the distinctions a drawing SHOWS against the
- * ones its document DECLARES, and a stencil id is a declaration — so a board
- * dressed by kind reads as carrying its constructs. Without it the identical
- * drawing reads as `excess`, and the axis scores a real improvement as a
- * defect.
- *
- * `assetRefs` does the same job it does for a theme: a write naming a
- * stencil nobody registered is refused, with the registered ids listed.
- */
-const visualStencilFacetSchema = z.object({
-  stencil: namespacedIdSchema,
-})
 
 /**
  * The vendored geometry as registered assets, keyed by bare name — the
@@ -497,6 +444,22 @@ export const visualPlugin = definePlugin({
       name: 'stencil',
       displayName: 'Stencil',
       version: 'v0',
+      // `visual.stencil/v0` — which registered STENCIL this node wears
+      // ([ADR-0034](../../../docs/contributing/adr/0034-stencil-and-recipe.md)
+      // decision 5), by id. The payload carries NO appearance: applying a stencil
+      // expands its colour and facets onto the node itself, and this records where
+      // they came from.
+      //
+      // The record is what makes a dressed board legible rather than merely
+      // decorated. ADR-0033 scores the distinctions a drawing SHOWS against the
+      // ones its document DECLARES, and a stencil id is a declaration — so a board
+      // dressed by kind reads as carrying its constructs. Without it the identical
+      // drawing reads as `excess`, and the axis scores a real improvement as a
+      // defect.
+      //
+      // `assetRefs` does the same job it does for a theme: a write naming a
+      // stencil nobody registered is refused, with the registered ids listed.
+      //
       // A node only. A stencil dresses ONE box; a canvas-wide appearance is
       // what `visual.theme` already is, and the two answer different
       // questions — a theme says how the whole board is drawn, a stencil

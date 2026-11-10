@@ -146,7 +146,21 @@ fn is_word(value: &str) -> bool {
 
 /// An array of one element schema, optionally bounded in length.
 pub(super) fn lower_array<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> Option<Ty<'a>> {
-    only(node, &["items", "minItems", "maxItems", "default"], "an array", at, v);
+    only(
+        node,
+        &["items", "minItems", "maxItems", "x-wb-maxItemsMessage", "default"],
+        "an array",
+        at,
+        v,
+    );
+    if let Some(message) = &node.max_items_message {
+        if node.max_items.is_none() {
+            v.push(format!("{at}: x-wb-maxItemsMessage needs a maxItems to speak for"));
+        }
+        if let Err(e) = super::refusal(message) {
+            v.push(format!("{at}.x-wb-maxItemsMessage: {e}"));
+        }
+    }
     let Some(items) = &node.items else {
         v.push(format!("{at}: an array declares its `items`"));
         return None;
@@ -155,5 +169,10 @@ pub(super) fn lower_array<'a>(node: &'a Node, at: &str, v: &mut Vec<String>) -> 
         v.push(format!("{at}: minItems is above maxItems"));
     }
     let item = Box::new(lower(items, &format!("{at}.items"), false, v)?);
-    Some(Ty::Array { item, min: node.min_items, max: node.max_items })
+    Some(Ty::Array {
+        item,
+        min: node.min_items,
+        max: node.max_items,
+        max_message: node.max_items_message.as_deref(),
+    })
 }

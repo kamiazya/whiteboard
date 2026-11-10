@@ -37,6 +37,11 @@
       "regions": 100,
       "reason": "first measured 2026-11-09 at 100.00% lines and regions: the value tree and JavaScript's key enumeration order, moved out of whiteboard-codec, covered by their own tests and by codec's replay of the recorded TypeScript answers"
     },
+    "core/plugin-visual": {
+      "lines": 100,
+      "regions": 100,
+      "reason": "first measured 2026-11-10 at 100.00% lines and regions: the generated payload types and the two pattern matchers, covered by their own tests"
+    },
     "testing/proptest": {
       "lines": 98,
       "regions": 97,

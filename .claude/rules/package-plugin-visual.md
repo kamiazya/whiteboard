@@ -17,6 +17,22 @@ Nothing about being bundled is load-bearing. The engine does not import this
 package, and `bundledFacetRegistry` here is a convenience for the compositions
 that want the shipped set, not a privileged registry.
 
+## The simple facets' payloads are generated
+
+`shape`, `text`, `edges`, `ink`, `stroke`, `theme`, `stencil` and `axes` have
+their Zod in `src/generated/visual.zod.ts`, emitted by `cargo xtask codegen`
+from `contracts/facets/visual/visual.schema.json` beside the Rust types of
+`crates/core/plugin-visual`. Edit the contract, not the output. `data.ts`
+keeps what each facet MEANS (keys, targets, editors, resolvers).
+`visual.contract.test.ts` pins every observable of those schemas: accepted
+and stripped payloads, each refusal's code, message and path, the JSON Schema
+`wb_facet_list` serves, and the form `deriveFacetForm` derives.
+
+The edge vocabularies come from `model` through `src/model-vocabulary.ts`
+(an `x-wb-external` module must be a sibling of the output), and the facet-key
+patterns are the engine's spelled again, held equal by that test. `symbol`,
+`tags` and `stencils` stay hand-written until the dialect can state them.
+
 ## There is no second plugin, and there was one
 
 `bundledPlugins` is `[visualPlugin]`, pinned as the exact list. It was

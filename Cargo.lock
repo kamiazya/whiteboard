@@ -576,6 +576,14 @@ name = "whiteboard-native-fixture"
 version = "0.0.0"
 
 [[package]]
+name = "whiteboard-plugin-visual"
+version = "0.0.0"
+dependencies = [
+ "wasm-bindgen-test",
+ "whiteboard-model",
+]
+
+[[package]]
 name = "whiteboard-proptest"
 version = "0.0.0"
 dependencies = [

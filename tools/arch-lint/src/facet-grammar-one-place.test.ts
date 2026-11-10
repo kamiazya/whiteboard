@@ -24,6 +24,8 @@ const SEGMENT = '[a-z][a-z0-9-]*'
 const ALLOWLIST: Readonly<Record<string, string>> = {
   'packages/facet-engine/src/facet-grammar.ts':
     'the engine side: every registry, schema and plugin',
+  'packages/plugin-visual/src/generated/visual.zod.ts':
+    'generated from contracts/facets/visual, which cannot import the engine; visual.contract.test.ts holds its patterns equal to the engine ones',
   'packages/model/src/facet-keys.ts': 'the model side: the stored `facets` bucket key',
   'packages/model/src/tags.ts': 'a scoped tag half is the same segment grammar (ADR-0040)',
 }
@@ -59,6 +61,6 @@ describe('the facet key segment grammar is written in one place per side', () =>
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(3)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
   })
 })

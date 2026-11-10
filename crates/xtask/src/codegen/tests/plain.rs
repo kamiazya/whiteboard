@@ -155,3 +155,26 @@ fn a_pattern_whose_closing_anchor_is_escaped_is_refused() {
     assert!(!refused(r"^a\\\\$"));
     assert!(outputs(&stamp(r"^a\\\\$")).is_ok());
 }
+
+#[test]
+fn a_contract_whose_zod_half_needs_no_named_check_declares_only_the_rust_module() {
+    let stamp = r#""Stamp": {
+      "description": "A stamp.",
+      "type": "string",
+      "pattern": "^\\d{4}$",
+      "x-wb-matcher": "stamp",
+      "x-wb-message": "a stamp is a year"
+    }"#;
+    let rust_only = |defs: &str| {
+        plain(defs, IN_MODEL, true).replace(r#""zod": "packages/p/src/contract-checks.ts", "#, "")
+    };
+    let zod = outputs(&rust_only(stamp)).unwrap().remove(0).1;
+    assert!(zod.contains(".regex(/^\\d{4}$/, 'a stamp is a year')"), "{zod}");
+    assert!(!zod.contains("contract-checks"), "{zod}");
+    let refined = stamp.replace(r#""x-wb-matcher""#, r#""x-wb-check": "year", "x-wb-matcher""#);
+    let errors = outputs(&rust_only(&refined)).unwrap_err();
+    assert!(
+        errors.iter().any(|e| e.contains("x-wb-checks.zod: a named check needs")),
+        "{errors:?}"
+    );
+}

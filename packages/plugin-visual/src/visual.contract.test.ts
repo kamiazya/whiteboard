@@ -1,7 +1,11 @@
-import { deriveFacetForm } from '@kamiazya/whiteboard-facet-engine'
+import {
+  deriveFacetForm,
+  FACET_KEY_PATTERN,
+  FACET_NAMESPACED_ID_PATTERN,
+} from '@kamiazya/whiteboard-facet-engine'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { bundledFacetRegistry, VISUAL_AXES_MAX, visualPlugin } from './data.js'
+import { bundledFacetRegistry, visualPlugin } from './data.js'
 
 // The simple visual facets are generated from `contracts/facets/visual`. What
 // a generated schema must keep is what a reader can observe of the
@@ -194,7 +198,6 @@ describe('visual.axes', () => {
   })
 
   it('holds a board to the axis limit and says which limit', () => {
-    expect(VISUAL_AXES_MAX).toBe(64)
     expect(schema.safeParse({ axes: keys(64) }).success).toBe(true)
     expect(issuesOf(schema, { axes: keys(65) })).toEqual([
       {
@@ -237,6 +240,17 @@ const PUBLISHED: Record<string, string> = {
 }
 
 describe('what the facet list publishes', () => {
+  it("spells the engine's grammars, which the generated schemas cannot import", () => {
+    const patternAt = (name: string, ...path: string[]) => {
+      let node: unknown = z.toJSONSchema(schemaOf(name))
+      for (const key of ['properties', ...path]) node = (node as Record<string, unknown>)[key]
+      return (node as { pattern?: string }).pattern
+    }
+    expect(patternAt('theme', 'theme')).toBe(FACET_NAMESPACED_ID_PATTERN.source)
+    expect(patternAt('stencil', 'stencil')).toBe(FACET_NAMESPACED_ID_PATTERN.source)
+    expect(patternAt('axes', 'axes', 'items')).toBe(FACET_KEY_PATTERN.source)
+  })
+
   it.each(Object.keys(PUBLISHED))('keeps the JSON Schema of visual.%s byte for byte', (name) => {
     expect(JSON.stringify(z.toJSONSchema(schemaOf(name)))).toBe(PUBLISHED[name])
   })
