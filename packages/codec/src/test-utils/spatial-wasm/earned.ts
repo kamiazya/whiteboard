@@ -46,7 +46,7 @@ function* strings(value: unknown): Generator<string> {
   }
 }
 
-/** A `\\u` escape of a surrogate, paired or not. */
+/** A `\\u` escape of a surrogate, joined to its pair or not. */
 const SURROGATE_ESCAPE = /\\u[dD][89a-fA-F][0-9a-fA-F]{2}/
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>

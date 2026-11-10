@@ -6,7 +6,7 @@
  * differential and the native strict-mode examples hold it to that. A test
  * here is run, not skipped, with the shim delegating to the TypeScript.
  *
- * `typescript-only.rust.test.ts` fails on a title no spatial test carries any
+ * `spatial-layer-one.rust.test.ts` fails on a title no spatial test carries any
  * more, and on one whose test no longer replaces the module it names, so an
  * entry cannot outlive the test it names.
  */

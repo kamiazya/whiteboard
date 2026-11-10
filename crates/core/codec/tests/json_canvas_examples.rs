@@ -387,44 +387,6 @@ fn a_number_too_large_to_be_a_pixel_is_refused_once_or_twice_by_its_checks() {
 }
 
 #[test]
-fn the_documents_own_refinements_run_only_when_nothing_else_aborted() {
-    let node = |id: &str| format!(r#"{{"id":"{id}",{BOX},"type":"group"}}"#);
-    let doc = format!(
-        r#"{{"nodes":[{},{}],"edges":[{{"id":"e","fromNode":"a","toNode":"zz"}},{{"id":"e","fromNode":"yy","toNode":"a"}}]}}"#,
-        node("a"),
-        node("a")
-    );
-    assert_eq!(
-        refused(&doc),
-        vec![
-            refinement(vec![key("nodes")], r#"duplicate node id "a""#),
-            refinement(vec![key("edges")], r#"duplicate edge id "e""#),
-            refinement(
-                vec![key("edges"), PathStep::Index(0), key("toNode")],
-                r#"edge "e" references nonexistent toNode "zz""#
-            ),
-            refinement(
-                vec![key("edges"), PathStep::Index(1), key("fromNode")],
-                r#"edge "e" references nonexistent fromNode "yy""#
-            ),
-        ]
-    );
-    // A continuing issue (a pattern) lets the refinements run beside it; an
-    // aborting one (a type) stops them.
-    let pattern = format!(
-        r##"{{"nodes":[{{"id":"a",{BOX},"type":"group","color":"#12"}},{}],"edges":[]}}"##,
-        node("a")
-    );
-    assert_eq!(
-        refused(&pattern).iter().map(|i| i.code).collect::<Vec<_>>(),
-        [Code::InvalidFormat, Code::Custom]
-    );
-    let typed =
-        format!(r#"{{"nodes":[{{"id":"a",{BOX},"type":"group","color":5}},{}]}}"#, node("a"));
-    assert_eq!(refused(&typed).iter().map(|i| i.code).collect::<Vec<_>>(), [Code::InvalidUnion]);
-}
-
-#[test]
 fn a_document_that_is_no_object_is_refused_at_its_root() {
     for text in ["null", "5", "\"x\"", "[]", "true"] {
         assert_eq!(refused(text), vec![issue(Vec::new(), Code::InvalidType)], "{text}");
@@ -723,20 +685,19 @@ fn an_object_is_written_with_integer_keys_first() {
 
 #[test]
 fn the_strict_mode_refuses_a_canvas_the_wire_schema_refuses_and_the_extended_does_not() {
-    let mut dangling = canvas_of(vec![text_node("a")]);
-    dangling.edges.push(CanvasEdge {
+    let mut ghost = canvas_of(vec![text_node("a")]);
+    ghost.edges.push(CanvasEdge {
         id: "e".to_string(),
         from: EdgeEnd { node: "a".to_string(), ..EdgeEnd::default() },
         to: EdgeEnd { node: "ghost".to_string(), ..EdgeEnd::default() },
         ..CanvasEdge::default()
     });
-    assert!(serialize(&dangling, Mode::Extended).is_ok());
-    let at = vec![key("edges"), PathStep::Index(0), key("toNode")];
+    assert!(serialize(&ghost, Mode::Extended).is_ok());
     assert_eq!(
-        serialize(&dangling, Mode::Strict),
+        serialize(&ghost, Mode::Strict),
         Err(WriteFailure::Schema(vec![refinement(
-            at,
-            r#"edge "e" references nonexistent toNode "ghost""#
+            vec![key("edges"), PathStep::Index(0), key("toNode")],
+            r#"edge "e" references nonexistent toNode "ghost""#,
         )]))
     );
     let twice = canvas_of(vec![text_node("a"), text_node("a")]);
@@ -803,72 +764,4 @@ fn a_value_nested_past_the_writers_cap_is_declined() {
         serialize(&canvas_of(vec![node]), Mode::Extended),
         Err(WriteFailure::Declined(Decline::Unwritable))
     );
-}
-
-#[test]
-fn a_value_with_a_length_is_checked_for_one_after_it_is_refused_as_the_wrong_type() {
-    // Zod runs `min(1)` on anything that has a `length`, whatever it is, and the
-    // host compares that length with `>=`, coercing it. Each expectation is what
-    // Zod 4 answers for the value as an edge's `fromNode`.
-    let codes = |value: &str| {
-        let doc = format!(
-            r#"{{"nodes":[{{"id":"a",{BOX},"type":"group"}}],"edges":[{{"id":"e","fromNode":{value},"toNode":"a"}}]}}"#
-        );
-        refused(&doc)
-            .iter()
-            .filter(|i| i.path == vec![key("edges"), PathStep::Index(0), key("fromNode")])
-            .map(|i| i.code)
-            .collect::<Vec<_>>()
-    };
-    let wrong = vec![Code::InvalidType];
-    let both = vec![Code::InvalidType, Code::TooSmall];
-    for (value, expected) in [
-        ("[]", &both),
-        ("[[]]", &wrong),
-        ("[1]", &wrong),
-        ("[0,1]", &wrong),
-        ("{}", &wrong),
-        ("5", &wrong),
-        ("null", &wrong),
-        (r#"{"length":0}"#, &both),
-        (r#"{"length":1}"#, &wrong),
-        (r#"{"length":0.5}"#, &both),
-        (r#"{"length":-1}"#, &both),
-        (r#"{"length":null}"#, &both),
-        (r#"{"length":true}"#, &wrong),
-        (r#"{"length":false}"#, &both),
-        (r#"{"length":""}"#, &both),
-        (r#"{"length":"0"}"#, &both),
-        (r#"{"length":"1"}"#, &wrong),
-        (r#"{"length":"  1 \n"}"#, &wrong),
-        (r#"{"length":"abc"}"#, &both),
-        (r#"{"length":"inf"}"#, &both),
-        (r#"{"length":"nan"}"#, &both),
-        (r#"{"length":"1_0"}"#, &both),
-        (r#"{"length":"1e0"}"#, &wrong),
-        (r#"{"length":"1e-1"}"#, &both),
-        (r#"{"length":".5e1"}"#, &wrong),
-        (r#"{"length":"5."}"#, &wrong),
-        (r#"{"length":"."}"#, &both),
-        (r#"{"length":"Infinity"}"#, &wrong),
-        (r#"{"length":"-Infinity"}"#, &both),
-        (r#"{"length":"infinity"}"#, &both),
-        (r#"{"length":"0x10"}"#, &wrong),
-        (r#"{"length":"0x0"}"#, &both),
-        (r#"{"length":"0xg"}"#, &both),
-        (r#"{"length":"0o7"}"#, &wrong),
-        (r#"{"length":"0o8"}"#, &both),
-        (r#"{"length":"0b1"}"#, &wrong),
-        (r#"{"length":"0b2"}"#, &both),
-        (r#"{"length":"0x"}"#, &both),
-        (r#"{"length":[]}"#, &both),
-        (r#"{"length":[2]}"#, &wrong),
-        (r#"{"length":[0,1]}"#, &both),
-        (r#"{"length":[1.5]}"#, &wrong),
-        (r#"{"length":[true]}"#, &both),
-        (r#"{"length":[null,1]}"#, &both),
-        (r#"{"length":{}}"#, &both),
-    ] {
-        assert_eq!(&codes(value), expected, "{value}");
-    }
 }

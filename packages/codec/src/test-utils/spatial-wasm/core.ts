@@ -6,11 +6,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { ZodError, type ZodIssue } from 'zod'
 import type { CodecParseResult } from '../../errors.js'
 import { parseSpatial as parseSpatialTs } from '../../spatial/parse.js'
-import {
-  type SpatialSerializeMode,
-  serializeSpatial as serializeSpatialTs,
-} from '../../spatial/serialize.js'
+import { serializeSpatial as serializeSpatialTs } from '../../spatial/serialize.js'
 import { running } from './typescript-only.js'
+
+/** How `serializeSpatial` writes a canvas: the type is read off the function, as the oracle's is. */
+type SpatialSerializeMode = Parameters<typeof serializeSpatialTs>[1]
 
 /**
  * The JSON Canvas codec as a root will run it under `rust`, over the staged

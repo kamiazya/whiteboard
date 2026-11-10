@@ -8,19 +8,19 @@
       "reason": "a minimal binary that exists so the hardening and reproducibility gates have a subject; it has no tests and nothing to cover"
     },
     "bindings/wasm": {
-      "lines": 82,
-      "regions": 77,
-      "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI. Raised to 82 lines and 77 regions with the OKF exports, replayed natively from okf.jsonl (tests/okf_oracle.rs) beside the exports' own tests: 82.97% lines and 77.43% regions locally"
+      "lines": 89,
+      "regions": 84,
+      "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI. Raised to 82 lines and 77 regions with the OKF exports, replayed natively from okf.jsonl (tests/okf_oracle.rs) beside the exports' own tests: 82.97% lines and 77.43% regions locally. Raised to 89 lines and 84 regions with the JSON Canvas exports and their canvas wire, replayed from json-canvas.jsonl (tests/json_canvas_oracle.rs) beside the exports' and the wire's own tests: 89.57% lines and 84.13% regions"
     },
     "core/codec": {
-      "lines": 98,
-      "regions": 97,
-      "reason": "first measured 2026-11-09 at 98.70% lines and 97.82% regions, with the recorded TypeScript answers replayed natively (tests/recorded_oracle.rs), the examples and the properties; what is left is the refusals of constructs a recorded text cannot reach cheaply (a property before a flow indicator, a multi-line explicit key). Raised to 98 and 97 once the OKF envelope joined, replayed from okf.jsonl (tests/okf_oracle.rs) beside its examples and properties: 98.67% lines and 97.99% regions. The floor sits a point under"
+      "lines": 99,
+      "regions": 98,
+      "reason": "first measured 2026-11-09 at 98.70% lines and 97.82% regions, with the recorded TypeScript answers replayed natively (tests/recorded_oracle.rs), the examples and the properties; what is left is the refusals of constructs a recorded text cannot reach cheaply (a property before a flow indicator, a multi-line explicit key). Raised to 98 and 97 once the OKF envelope joined, replayed from okf.jsonl (tests/okf_oracle.rs) beside its examples and properties: 98.67% lines and 97.99% regions. The floor sits a point under. Raised to 99 and 98 with the length check and the refinement messages: 99.14% lines and 98.24% regions"
     },
     "core/det": {
-      "lines": 98,
-      "regions": 98,
-      "reason": "first measured 2026-11-08 at 98.81% lines and 98.68% regions"
+      "lines": 99,
+      "regions": 99,
+      "reason": "first measured 2026-11-08 at 98.81% lines and 98.68% regions. Raised to 99 and 99 with the number formatter's tie rule: 99.73% lines and 99.60% regions"
     },
     "core/edge-routing": {
       "lines": 98,
@@ -39,7 +39,7 @@
     },
     "testing/proptest": {
       "lines": 98,
-      "regions": 96,
+      "regions": 97,
       "reason": "first measured 2026-11-08 at 98.63% lines and 96.90% regions"
     },
     "xtask": {
