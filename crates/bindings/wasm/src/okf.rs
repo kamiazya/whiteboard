@@ -8,16 +8,18 @@
 //! body is verbatim by construction. The frontmatter crosses as the wire of
 //! [`crate::okf_wire`].
 //!
-//! A host must hold the text it passes to be well-formed UTF-16: a lone
-//! surrogate cannot survive the crossing into a Rust `&str`, so the shim
-//! refuses one before calling.
+//! A host passes a read the head of its document, the fences and the
+//! frontmatter between them, and keeps the body. A lone surrogate cannot
+//! survive the crossing into a Rust `&str`, so the host puts a `mark` of its
+//! choosing where it held one (a character the head holds nowhere else), and
+//! the read refuses a frontmatter whose string or key holds the mark.
 
 use crate::input_caps::{OKF_PARSE, OKF_SERIALIZE};
 use crate::okf_wire::{frontmatter_from, frontmatter_value, json_value, value_json};
 use serde_json::{Value as Json, json};
 use wasm_bindgen::prelude::wasm_bindgen;
-use whiteboard_codec::frontmatter::{Refusal, Unwritable};
-use whiteboard_codec::okf::{Code, Document, Failure, Step, parse, serialize};
+use whiteboard_codec::frontmatter::{Fault, Refusal, Unwritable};
+use whiteboard_codec::okf::{Code, Document, Failure, Step, parse_marked, serialize};
 
 fn refused(code: &str) -> Json {
     json!(["refused", code])
@@ -28,7 +30,8 @@ fn refused(code: &str) -> Json {
 const TOO_LARGE: &str = "input-too-large";
 const MALFORMED: &str = "malformed";
 
-/// `parseOkf` of a whole document.
+/// `parseOkf` of a document's head, with `mark` (a code point, or 0 for none)
+/// standing where the host held a lone surrogate.
 ///
 /// Out: `["ok", bodyOffset, frontmatter]` with the offset in UTF-16 units and
 /// the frontmatter as the object `parseOkf` hands over; `["err", stage, class,
@@ -36,15 +39,17 @@ const MALFORMED: &str = "malformed";
 /// `schema`); or `["refused", code]` for a text past `maxBytes`.
 #[wasm_bindgen]
 #[must_use]
-pub fn okf_parse(text: &str) -> String {
-    parsed(text).to_string()
+pub fn okf_parse(text: &str, mark: u32) -> String {
+    parsed(text, mark).to_string()
 }
 
-fn parsed(text: &str) -> Json {
+fn parsed(text: &str, mark: u32) -> Json {
     if text.len() > OKF_PARSE.max_bytes {
         return refused(TOO_LARGE);
     }
-    match parse(text) {
+    // A code point that is no character is no mark either.
+    let mark = char::from_u32(mark).filter(|mark| *mark != '\0');
+    match parse_marked(text, mark) {
         Ok(doc) => {
             let before = text.len().saturating_sub(doc.body.len());
             let offset = text.get(..before).map_or(0, whiteboard_det::utf16::len);
@@ -72,14 +77,7 @@ fn failure(why: &Failure) -> Json {
             let issues: Vec<Json> = issues
                 .iter()
                 .map(|issue| {
-                    let path: Vec<Json> = issue
-                        .path
-                        .iter()
-                        .map(|step| match step {
-                            Step::Key(name) => json!(name),
-                            Step::Index(at) => json!(at),
-                        })
-                        .collect();
+                    let path: Vec<Json> = issue.path.iter().map(step).collect();
                     json!([path, code(issue.code)])
                 })
                 .collect();
@@ -101,8 +99,10 @@ fn code(code: Code) -> &'static str {
 ///
 /// In: the frontmatter as the object `parseOkf` hands over, in the wire of
 /// [`crate::okf_wire`]. Out: `["ok", head]`, everything `serializeOkf` writes
-/// before the body; `["unwritable", reason]` when a value has no YAML
-/// spelling; or `["refused", code]` for a wire past `maxBytes` or one that is
+/// before the body; `["unwritable", faults]` when a value has no YAML
+/// spelling, each fault a `[path, reason]` in the order the TypeScript's
+/// `yamlSafeValueSchema` reports them (a path step is a key or a list index);
+/// or `["refused", code]` for a wire past `maxBytes` or one that is
 /// no frontmatter in the order the schema writes it.
 #[wasm_bindgen]
 #[must_use]
@@ -124,17 +124,35 @@ fn written(wire: &str) -> Json {
     };
     match serialize(&Document { frontmatter, body: String::new() }) {
         Ok(head) => json!(["ok", head]),
-        Err(why) => json!(["unwritable", unwritable(why)]),
+        Err(faults) if faults.iter().any(|fault| fault.why == Unwritable::Overflow) => {
+            refused(TOO_LARGE)
+        }
+        Err(faults) => json!(["unwritable", faults.iter().map(fault).collect::<Vec<_>>()]),
+    }
+}
+
+fn fault(fault: &Fault) -> Json {
+    let path: Vec<Json> = fault.path.iter().map(step).collect();
+    json!([path, unwritable(fault.why)])
+}
+
+fn step(step: &Step) -> Json {
+    match step {
+        Step::Key(name) => json!(name),
+        Step::Index(at) => json!(at),
     }
 }
 
 fn unwritable(why: Unwritable) -> &'static str {
     match why {
-        Unwritable::NonFiniteNumber => "non-finite-number",
+        Unwritable::Nan => "nan",
+        Unwritable::Infinity => "infinity",
+        Unwritable::NegativeInfinity => "negative-infinity",
         Unwritable::ByteOrderMark => "byte-order-mark",
         Unwritable::ReservedKey => "reserved-key",
         Unwritable::BigInt => "big-int",
         Unwritable::TooDeep => "too-deep",
+        Unwritable::Overflow => "overflow",
     }
 }
 
@@ -145,7 +163,11 @@ mod tests {
     use serde_json::{Value as Json, json};
 
     fn parsed(text: &str) -> Json {
-        serde_json::from_str(&okf_parse(text)).unwrap_or(Json::Null)
+        serde_json::from_str(&okf_parse(text, 0)).unwrap_or(Json::Null)
+    }
+
+    fn parsed_marked(text: &str, mark: u32) -> Json {
+        serde_json::from_str(&okf_parse(text, mark)).unwrap_or(Json::Null)
     }
 
     fn written(wire: &Json) -> Json {
@@ -218,21 +240,75 @@ mod tests {
     }
 
     #[test]
-    fn a_write_names_why_a_value_has_no_spelling() {
-        let with =
-            |value: Json| written(&json!(["m", "type", "x", "facets", ["m", "a.b/v1", value]]));
+    fn a_write_names_each_place_a_value_has_no_spelling() {
+        let at = |value: Json| {
+            written(&json!(["m", "type", "x", "facets", ["m", "a.b/v1", ["s", value]]]))
+        };
+        let place = json!(["facets", "a.b/v1", 0]);
+        for (wire, reason) in [
+            (json!(["f", "7ff8000000000000"]), "nan"),
+            (json!(["f", "7ff0000000000000"]), "infinity"),
+            (json!(["f", "fff0000000000000"]), "negative-infinity"),
+            (json!(["b", "9007199254740993"]), "big-int"),
+            (json!("\u{feff}"), "byte-order-mark"),
+        ] {
+            assert_eq!(at(wire), json!(["unwritable", [[place, reason]]]), "{reason}");
+        }
+        // A reserved key is reported at the root, first, and a key with a byte
+        // order mark at the mapping that holds it, preserved keys being spread at
+        // the root.
+        let faults = written(&json!([
+            "m",
+            "type",
+            "x",
+            "facetsRaw",
+            ["m", "k\u{feff}", ["f", "7ff8000000000000"], "__proto__", null]
+        ]));
         assert_eq!(
-            with(json!(["f", "7ff8000000000000"])),
-            json!(["unwritable", "non-finite-number"])
+            faults,
+            json!([
+                "unwritable",
+                [[[], "reserved-key"], [[], "byte-order-mark"], [["k\u{feff}"], "nan"]]
+            ])
         );
-        assert_eq!(with(json!(["b", "9007199254740993"])), json!(["unwritable", "big-int"]));
-        assert_eq!(with(json!("\u{feff}")), json!(["unwritable", "byte-order-mark"]));
-        assert_eq!(with(json!(["m", "__proto__", null])), json!(["unwritable", "reserved-key"]));
         let mut deep = json!(null);
         for _ in 0..70 {
             deep = json!(["s", deep]);
         }
-        assert_eq!(with(deep), json!(["unwritable", "too-deep"]));
+        assert_eq!(at(deep)[1][0][1], json!("too-deep"));
+    }
+
+    #[test]
+    fn faults_that_would_not_fit_the_budget_are_a_refusal_not_an_answer() {
+        // 60 mappings nested on 1000-byte keys, a list of NaN at the bottom: every
+        // fault repeats the whole path, and the answer would be megabytes.
+        let mut value = json!(["s"]);
+        for _ in 0..5000 {
+            value.as_array_mut().expect("a list").push(json!(["f", "7ff8000000000000"]));
+        }
+        for at in 0..60 {
+            value = json!(["m", format!("{at:0>1000}"), value]);
+        }
+        let wire = json!(["m", "type", "x", "facets", ["m", "a.b/v1", value]]);
+        // Within the wire's own cap, so the refusal is the fault budget's.
+        assert!(wire.to_string().len() < OKF_SERIALIZE.max_bytes);
+        assert_eq!(written(&wire), json!(["refused", "input-too-large"]));
+    }
+
+    #[test]
+    fn a_mark_that_reaches_the_frontmatter_is_a_yaml_refusal_and_one_that_does_not_is_nothing() {
+        let mark = 0xE000;
+        assert_eq!(
+            parsed_marked("---\ntype: a\u{e000}\n---\n", mark),
+            json!(["err", "yaml", "subset", []])
+        );
+        assert_eq!(
+            parsed_marked("---\ntype: a # \u{e000}\n---\n", mark),
+            json!(["ok", 20, ["m", "type", "a"]])
+        );
+        // No mark: the same character is text. A zero or a surrogate value names none.
+        assert_eq!(parsed("---\ntype: a\u{e000}\n---\n")[0], json!("ok"));
+        assert_eq!(parsed_marked("---\ntype: a\u{e000}\n---\n", 0xD800)[0], json!("ok"));
     }
 
     #[test]

@@ -23,7 +23,9 @@ mod value;
 mod write;
 
 use cursor::Parser;
-pub use value::{MAX_BYTES, MAX_DEPTH, MAX_PARSE_DEPTH, Refusal, Unwritable, Value};
+pub use value::{
+    Fault, MAX_BYTES, MAX_DEPTH, MAX_FAULT_BYTES, MAX_PARSE_DEPTH, Refusal, Step, Unwritable, Value,
+};
 
 /// Reads a frontmatter text (the YAML between the `---` fences) as `yaml`
 /// 2.9 reads it under the core schema, or says why it cannot.
@@ -45,7 +47,9 @@ pub fn parse(text: &str) -> Result<Value, Refusal> {
 /// Writes `value` as the frontmatter text `serializeOkf` puts between its
 /// fences: block style, no `---` lines, and without the one newline `yaml`
 /// ends a document with (a value that itself ends in newlines keeps them).
-pub fn stringify(value: &Value) -> Result<String, Unwritable> {
+/// A value with no spelling answers every place that has none, in the order
+/// `yamlSafeValueSchema` reports them.
+pub fn stringify(value: &Value) -> Result<String, Vec<Fault>> {
     let text = String::from_utf16_lossy(&write::document(value)?);
     Ok(text.strip_suffix('\n').map_or(text.clone(), str::to_string))
 }

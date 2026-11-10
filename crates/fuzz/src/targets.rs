@@ -254,11 +254,20 @@ pub fn okf_wasm_parse(data: &[u8]) {
     let Ok(text) = std::str::from_utf8(data) else {
         return;
     };
-    let answer = okf_parse(text);
+    let answer = okf_parse(text, 0);
     if text.len() > OKF_PARSE.max_bytes {
         assert_eq!(answer, "[\"refused\",\"input-too-large\"]");
         return;
     }
+    // A mark changes only the text that holds it: the export answers as the
+    // codec does for the same mark, whatever the text.
+    let marked = okf_parse(text, 0xE000);
+    let codec_marked = whiteboard_codec::okf::parse_marked(text, Some('\u{e000}'));
+    assert_eq!(
+        answer_tag(&marked) == "ok",
+        codec_marked.is_ok(),
+        "the export and the codec disagree about {text:?} marked"
+    );
     let read = whiteboard_codec::okf::parse(text);
     let tag = answer_tag(&answer);
     assert!(matches!(tag, "ok" | "err"), "{tag} is no answer to a text within the cap");
@@ -301,7 +310,9 @@ pub fn okf_wasm_serialize(data: &[u8]) {
         return;
     }
     let fenced = answer.starts_with("[\"ok\",\"---\\n") && answer.ends_with("\\n---\\n\"]");
-    let named = answer.starts_with("[\"unwritable\",\"") && answer.ends_with("\"]");
-    let refused = answer == "[\"refused\",\"malformed\"]";
+    let named = answer.starts_with("[\"unwritable\",[[") && answer.ends_with("]]");
+    // Too large also answers a wire within the cap whose faults would not fit the answer.
+    let refused =
+        answer == "[\"refused\",\"malformed\"]" || answer == "[\"refused\",\"input-too-large\"]";
     assert!(fenced || named || refused, "{answer:.120} is not an answer");
 }

@@ -26,9 +26,10 @@ import { OkfNotYamlSafeError, serializeOkf } from './serialize.js'
  * (the `yaml` package's message is not reproduced) and a schema issue by its
  * code; the other three refusals carry the TypeScript's own words.
  *
- * A call the shim declines (`CoreInputRefused`, or `CoreOkfUnwritable` for a
- * value with no YAML spelling) is what a root answers from the TypeScript;
- * each is allowed only where its reason holds, and counted.
+ * A call the shim declines (`CoreInputRefused`) is what a root answers from
+ * the TypeScript; each is allowed only where its reason holds, and counted. A
+ * value with no YAML spelling is no decline: `CoreOkfUnwritable` names the
+ * places, and they must be the TypeScript's, in its order and words.
  */
 
 // Built, not committed: `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm`.
@@ -74,18 +75,22 @@ const reach = {
   loneSurrogate: 0,
   written: 0,
   unwritable: 0,
-  unwritableByRust: 0,
   declined: 0,
 }
 
-type Answer<T> = { answered: T } | { refused: string } | { unwritable: string }
+type Answer<T> =
+  | { answered: T }
+  | { refused: string }
+  | { unwritable: { path: PropertyKey[]; message: string }[] }
+
+const placeOf = ({ path, message }: { path: PropertyKey[]; message: string }) => ({ path, message })
 
 function asked<T>(call: () => T): Answer<T> {
   try {
     return { answered: call() }
   } catch (error) {
     if (error instanceof CoreInputRefused) return { refused: error.code }
-    if (error instanceof CoreOkfUnwritable) return { unwritable: error.reason }
+    if (error instanceof CoreOkfUnwritable) return { unwritable: [...error.issues].map(placeOf) }
     throw error
   }
 }
@@ -113,12 +118,9 @@ function expectRefusalsAgree(
 /** The wasm answer for `text` equals the TypeScript's, or is a refusal the text earns. */
 function expectReadsAgree(text: string): void {
   const rust = asked(() => core.parseOkf(text))
-  if (!isWellFormed(text)) {
-    // A lone surrogate would cross as U+FFFD: the shim must not send it.
-    expect(rust).toEqual({ refused: 'malformed' })
-    reach.loneSurrogate++
-    return
-  }
+  // A lone surrogate in the head is judged as the TypeScript judges it; in the
+  // body it is kept.
+  if (!isWellFormed(text)) reach.loneSurrogate++
   expect(rust, text).toHaveProperty('answered')
   const answer = (rust as { answered: ParsedOkf }).answered
   const ts = parseOkf(text)
@@ -189,19 +191,20 @@ function carried(frontmatter: Record<string, unknown>): boolean {
 }
 
 function expectWritesAgree(doc: OkfMarkdownDocument): void {
-  let ts: string | 'unsafe'
+  let ts: string | OkfNotYamlSafeError
   try {
     ts = serializeOkf(doc)
   } catch (error) {
     if (!(error instanceof OkfNotYamlSafeError)) throw error
-    ts = 'unsafe'
+    ts = error
   }
   const rust = asked(() => core.serializeOkf(doc))
-  if (ts === 'unsafe') {
-    // The value has no YAML spelling: the artifact says so, or the wire never carried it.
-    expect('answered' in rust, 'a document the TypeScript refuses was written').toBe(false)
+  if (typeof ts !== 'string') {
+    // The value has no YAML spelling, and the core names each place the TypeScript does.
+    expect(rust, 'a document the TypeScript refuses').toEqual({
+      unwritable: ts.issues.map(placeOf),
+    })
     reach.unwritable++
-    if ('unwritable' in rust) reach.unwritableByRust++
   } else if ('refused' in rust) {
     // Declined only for a frontmatter the wire does not carry.
     expect(rust).toEqual({ refused: 'malformed' })
@@ -235,25 +238,63 @@ describe('the recorded corpus through the wasm', () => {
 })
 
 describe('the shim declines what the artifact cannot be sent', () => {
-  it('declines a text past the cap whether its units or its bytes pass it', () => {
-    const head = '---\ntype: x\n---\n'
+  const fence = '---\n'
+  const framed = (frontmatter: string) => `${fence}type: x\n${frontmatter}\n---\n`
+
+  it('declines a head past the cap whether its units or its bytes pass it', () => {
     // 3 bytes a unit: under the cap in units, over it in bytes.
-    expect(asked(() => core.parseOkf(head + '€'.repeat(100_000)))).toEqual({
-      refused: 'input-too-large',
-    })
-    expect(asked(() => core.parseOkf(head + 'a'.repeat(262_144)))).toEqual({
-      refused: 'input-too-large',
-    })
-    expect(asked(() => core.parseOkf(head + 'a'.repeat(262_144 - head.length)))).toHaveProperty(
-      'answered',
-    )
+    const euros = framed(`description: ${'€'.repeat(100_000)}`)
+    expect(euros.length).toBeLessThan(262_144)
+    expect(asked(() => core.parseOkf(euros))).toEqual({ refused: 'input-too-large' })
+    const plain = framed(`description: ${'a'.repeat(262_144)}`)
+    expect(asked(() => core.parseOkf(plain))).toEqual({ refused: 'input-too-large' })
+    const fits = framed(`description: ${'a'.repeat(262_144 - framed('description: ').length)}`)
+    expect(asked(() => core.parseOkf(fits))).toHaveProperty('answered')
   })
 
-  it('answers a body holding a lone surrogate from the TypeScript, which keeps it', () => {
-    expect(asked(() => core.parseOkf('---\ntype: x\n---\n\ud800'))).toEqual({
-      refused: 'malformed',
+  it('reads a body of any size, because the body never crosses', () => {
+    const head = framed('')
+    for (const body of ['a'.repeat(262_144), '€'.repeat(100_000), 'a'.repeat(5_000_000)]) {
+      const answer = asked(() => core.parseOkf(head + body))
+      expect(answer).toMatchObject({ answered: { ok: true, value: { body } } })
+    }
+  })
+
+  it('reads a body holding a lone surrogate as the TypeScript does, which keeps it', () => {
+    const text = '---\ntype: x\n---\n\ud800'
+    expect(asked(() => core.parseOkf(text))).toMatchObject({
+      answered: { ok: true, value: { body: '\ud800' } },
     })
-    expect(parseOkf('---\ntype: x\n---\n\ud800')).toMatchObject({ ok: true })
+    expect(parseOkf(text)).toMatchObject({ ok: true })
+  })
+
+  it('refuses a lone surrogate in the frontmatter at stage yaml, and ignores one in a comment', () => {
+    for (const lone of ['\ud800', '\udc00', 'a\ud800b']) {
+      const inValue = `${fence}type: x\nk: ${lone}\n---\n`
+      const inKey = `${fence}type: x\n${lone}: 1\n---\n`
+      const inQuotes = `${fence}type: x\nk: "${lone}"\n---\n`
+      const inBlock = `${fence}type: x\nk: |\n  ${lone}\n---\n`
+      for (const text of [inValue, inKey, inQuotes, inBlock]) {
+        const rust = asked(() => core.parseOkf(text))
+        expect(rust, JSON.stringify(text)).toMatchObject({
+          answered: { ok: false, error: { stage: 'yaml' } },
+        })
+        expect(parseOkf(text)).toMatchObject({ ok: false, error: { stage: 'yaml' } })
+      }
+      const inComment = `${fence}type: x # ${lone}\n---\nbody`
+      expect(asked(() => core.parseOkf(inComment))).toMatchObject({ answered: { ok: true } })
+      expect(parseOkf(inComment)).toMatchObject({ ok: true })
+    }
+  })
+
+  it('reads a frontmatter that holds the character it marks a lone surrogate with', () => {
+    const text = '---\ntype: "\\uE000 \ue000 \ud800"\n---\n'
+    expect(asked(() => core.parseOkf(text))).toMatchObject({
+      answered: { ok: false, error: { stage: 'yaml' } },
+    })
+    const kept = '---\ntype: "\\uE000 \ue000 \ue001"\nk: # \ud800\n---\n'
+    expect(asked(() => core.parseOkf(kept))).toMatchObject({ answered: { ok: true } })
+    expect(parseOkf(kept)).toMatchObject({ ok: true })
   })
 
   it('keeps a body verbatim whatever it holds, because it never crosses', () => {
@@ -313,7 +354,6 @@ describe('generated texts and documents through the wasm', () => {
     expect(reach.loneSurrogate).toBeGreaterThan(80)
     expect(reach.written).toBeGreaterThan(1200)
     expect(reach.unwritable).toBeGreaterThan(350)
-    expect(reach.unwritableByRust).toBeGreaterThan(150)
     expect(reach.declined).toBeGreaterThan(350)
   })
 })

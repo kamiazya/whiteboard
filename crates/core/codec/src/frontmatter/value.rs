@@ -31,11 +31,30 @@ pub const MAX_DEPTH: usize = 32;
 /// malformed further down is named malformed, as the TypeScript names it.
 pub const MAX_PARSE_DEPTH: usize = 64;
 
+/// The most bytes of faults [`stringify`](super::stringify) collects (each
+/// path's keys, a few bytes a step and the reason) before it stops and reports
+/// [`Unwritable::Overflow`]. Every fault repeats its path, so a value of nested
+/// long keys with many leaves that have no spelling would otherwise answer
+/// hundreds of megabytes for a wire of a few hundred kilobytes. The answer is
+/// then a little over a megabyte at most.
+pub const MAX_FAULT_BYTES: usize = 1_048_576;
+
+/// A step of a path into a value: a key or a list index.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Step {
+    Key(String),
+    Index(usize),
+}
+
 /// Why a value has no spelling in the frontmatter subset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Unwritable {
-    /// `NaN` or an infinity: YAML core schema has no tag this repository emits for them.
-    NonFiniteNumber,
+    /// `NaN`: YAML core schema has no tag this repository emits for it.
+    Nan,
+    /// `Infinity`.
+    Infinity,
+    /// `-Infinity`.
+    NegativeInfinity,
     /// A byte-order mark in a key or a string, which `parse` refuses wherever it sits.
     ByteOrderMark,
     /// A key named `__proto__`, which `parseOkf` refuses.
@@ -45,4 +64,15 @@ pub enum Unwritable {
     /// Collections nested past [`MAX_PARSE_DEPTH`]: the reader would refuse
     /// the text, and the stack would not hold the writer's recursion.
     TooDeep,
+    /// Not a place: more faults than [`MAX_FAULT_BYTES`] hold, so the list ends here.
+    Overflow,
+}
+
+/// One place a value has no spelling: where, and why. A key that has none is
+/// reported at the mapping holding it, since the key may be the unprintable
+/// part, and a `__proto__` key at the root, once, wherever it sits.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fault {
+    pub path: Vec<Step>,
+    pub why: Unwritable,
 }

@@ -59,7 +59,7 @@ fn every_recorded_text_is_read_as_the_typescript_read_it() {
     let (mut read, mut refused, mut problems) = (0usize, 0usize, Vec::new());
     for case in recording().iter().filter(|c| c["k"] == "r" && c.get("lone").is_none()) {
         let text = case["t"].as_str().unwrap_or_default();
-        let answer: Json = serde_json::from_str(&okf_parse(text)).unwrap_or(Json::Null);
+        let answer: Json = serde_json::from_str(&okf_parse(text, 0)).unwrap_or(Json::Null);
         if let Some(ok) = case.get("ok") {
             let body = field(ok, "body").as_str().unwrap_or_default();
             let offset = answer[1].as_u64().unwrap_or(u64::MAX);

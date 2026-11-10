@@ -4,7 +4,8 @@
 //! answers over a generated corpus, and these say what each one means.
 
 use whiteboard_codec::frontmatter::{
-    MAX_BYTES, MAX_DEPTH, MAX_PARSE_DEPTH, Refusal, Unwritable, Value, parse, stringify,
+    Fault, MAX_BYTES, MAX_DEPTH, MAX_FAULT_BYTES, MAX_PARSE_DEPTH, Refusal, Step, Unwritable,
+    Value, parse, stringify,
 };
 // On wasm32 the same tests run under Node (QR-21 layer 3).
 #[cfg(target_arch = "wasm32")]
@@ -539,27 +540,134 @@ fn writes_a_key_past_1024_units_as_an_explicit_key() {
     assert_eq!(write(&map(&[(&quoted, n(1.0))])), format!("? \"{quoted}\"\n: 1"));
 }
 
+fn key(name: &str) -> Step {
+    Step::Key(name.to_string())
+}
+
+fn fault(path: &[Step], why: Unwritable) -> Fault {
+    Fault { path: path.to_vec(), why }
+}
+
 #[test]
 fn refuses_to_write_what_has_no_spelling() {
-    assert_eq!(stringify(&map(&[("a", n(f64::NAN))])), Err(Unwritable::NonFiniteNumber));
+    let seq = Value::Seq;
     assert_eq!(
-        stringify(&map(&[("a", Value::Seq(vec![n(f64::INFINITY)]))])),
-        Err(Unwritable::NonFiniteNumber)
+        stringify(&map(&[("a", n(f64::NAN))])),
+        Err(vec![fault(&[key("a")], Unwritable::Nan)])
+    );
+    assert_eq!(
+        stringify(&map(&[("a", seq(vec![n(1.0), n(f64::INFINITY)]))])),
+        Err(vec![fault(&[key("a"), Step::Index(1)], Unwritable::Infinity)])
+    );
+    assert_eq!(
+        stringify(&map(&[("a", n(f64::NEG_INFINITY))])),
+        Err(vec![fault(&[key("a")], Unwritable::NegativeInfinity)])
     );
     assert_eq!(
         stringify(&map(&[("a", Value::BigInt("9007199254740993".into()))])),
-        Err(Unwritable::BigInt)
+        Err(vec![fault(&[key("a")], Unwritable::BigInt)])
     );
-    assert_eq!(stringify(&map(&[("a", s("x\u{feff}y"))])), Err(Unwritable::ByteOrderMark));
-    assert_eq!(stringify(&map(&[("k\u{feff}", n(1.0))])), Err(Unwritable::ByteOrderMark));
-    assert_eq!(stringify(&map(&[("__proto__", n(1.0))])), Err(Unwritable::ReservedKey));
     assert_eq!(
-        stringify(&map(&[("a", map(&[("__proto__", n(1.0))]))])),
-        Err(Unwritable::ReservedKey)
+        stringify(&map(&[("a", s("x\u{feff}y"))])),
+        Err(vec![fault(&[key("a")], Unwritable::ByteOrderMark)])
     );
+    // A key is reported at the mapping that holds it, once for each such key,
+    // before the entries of that mapping.
+    assert_eq!(
+        stringify(&map(&[("k\u{feff}", n(f64::NAN)), ("j\u{feff}", n(1.0))])),
+        Err(vec![
+            fault(&[], Unwritable::ByteOrderMark),
+            fault(&[], Unwritable::ByteOrderMark),
+            fault(&[key("k\u{feff}")], Unwritable::Nan),
+        ])
+    );
+}
+
+#[test]
+fn a_reserved_key_is_reported_first_and_at_the_root_wherever_it_sits() {
+    assert_eq!(
+        stringify(&map(&[("__proto__", n(1.0))])),
+        Err(vec![fault(&[], Unwritable::ReservedKey)])
+    );
+    assert_eq!(
+        stringify(&map(&[
+            ("z", n(f64::NAN)),
+            ("a", Value::Seq(vec![map(&[("__proto__", n(1.0))])]))
+        ])),
+        Err(vec![fault(&[], Unwritable::ReservedKey), fault(&[key("z")], Unwritable::Nan),])
+    );
+}
+
+#[test]
+fn every_place_without_a_spelling_is_reported_in_walk_order() {
+    let value = map(&[
+        ("first", Value::Seq(vec![n(f64::NAN), s("\u{feff}")])),
+        ("second", map(&[("inner", Value::BigInt("9007199254740993".into()))])),
+    ]);
+    assert_eq!(
+        stringify(&value),
+        Err(vec![
+            fault(&[key("first"), Step::Index(0)], Unwritable::Nan),
+            fault(&[key("first"), Step::Index(1)], Unwritable::ByteOrderMark),
+            fault(&[key("second"), key("inner")], Unwritable::BigInt),
+        ])
+    );
+}
+
+/// Nested long keys over many leaves with no spelling: each fault repeats its
+/// path, so the list is bounded by weight and ends in `Overflow`.
+fn heavy(keys: usize, key_bytes: usize, leaves: usize) -> Value {
+    let leaf = Value::Seq((0..leaves).map(|_| n(f64::NAN)).collect());
+    (0..keys).fold(leaf, |inner, at| Value::Map(vec![(format!("{at:0>key_bytes$}"), inner)]))
+}
+
+#[test]
+fn faults_past_the_budget_end_the_list_with_an_overflow() {
+    let faults = stringify(&heavy(60, 1000, 5000)).expect_err("every leaf is a NaN");
+    let last = faults.last().expect("a list that ends");
+    assert_eq!(last, &Fault { path: vec![], why: Unwritable::Overflow });
+    // Each fault weighs about 60 KB, so a score fit and none repeats the full path after.
+    assert!((10..30).contains(&faults.len()), "{} faults", faults.len());
+    let kept = faults.iter().take(faults.len() - 1);
+    assert!(kept.clone().all(|f| f.why == Unwritable::Nan && f.path.len() == 61));
+    let bytes: usize = kept
+        .map(|f| {
+            f.path.iter().map(|s| if let Step::Key(k) = s { k.len() } else { 0 }).sum::<usize>()
+        })
+        .sum();
+    assert!(bytes <= MAX_FAULT_BYTES, "{bytes} bytes of keys kept");
+}
+
+#[test]
+fn faults_within_the_budget_are_all_listed_with_no_overflow() {
+    let faults = stringify(&heavy(2, 10, 1000)).expect_err("every leaf is a NaN");
+    assert_eq!(faults.len(), 1000);
+    assert!(faults.iter().all(|f| f.why == Unwritable::Nan));
+    // The budget is spent by weight, not by count: one fault more than fits overflows.
+    let edge = MAX_FAULT_BYTES / 40 + 1;
+    let faults = stringify(&Value::Seq((0..edge).map(|_| n(f64::NAN)).collect())).unwrap_err();
+    assert_eq!(faults.last().map(|f| f.why), Some(Unwritable::Overflow));
+}
+
+#[test]
+fn a_fault_that_weighs_exactly_the_budget_fits() {
+    // A fault weighs 32 and 8 a step, and the key's own bytes.
+    let at = |key_bytes: usize| stringify(&map(&[(&"k".repeat(key_bytes), n(f64::NAN))]));
+    let fits = MAX_FAULT_BYTES - 40;
+    assert_eq!(at(fits).unwrap_err().len(), 1);
+    assert_eq!(at(fits).unwrap_err()[0].why, Unwritable::Nan);
+    assert_eq!(at(fits + 1).unwrap_err(), vec![Fault { path: vec![], why: Unwritable::Overflow }]);
+}
+
+#[test]
+fn a_value_nested_past_the_writer_is_reported_where_it_goes_too_deep() {
     let nest = |levels: usize| (0..levels).fold(Value::Null, |inner, _| Value::Seq(vec![inner]));
     assert!(stringify(&nest(MAX_PARSE_DEPTH)).is_ok());
-    assert_eq!(stringify(&nest(MAX_PARSE_DEPTH + 1)), Err(Unwritable::TooDeep));
+    let path = vec![Step::Index(0); MAX_PARSE_DEPTH];
+    assert_eq!(
+        stringify(&nest(MAX_PARSE_DEPTH + 1)),
+        Err(vec![Fault { path, why: Unwritable::TooDeep }])
+    );
 }
 
 #[test]
