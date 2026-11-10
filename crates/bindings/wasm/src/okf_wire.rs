@@ -136,8 +136,9 @@ pub(crate) fn frontmatter_from(value: Value) -> Option<OkfMarkdownFrontmatter> {
     let Value::Map(entries) = value else { return None };
     let mut fm = OkfMarkdownFrontmatter::default();
     let mut held = None::<String>;
+    let mut seen = BTreeSet::new();
     for (name, item) in entries {
-        if !ORDER.contains(&name.as_str()) {
+        if !ORDER.contains(&name.as_str()) || !seen.insert(name.clone()) {
             return None;
         }
         match name.as_str() {
@@ -182,8 +183,10 @@ fn event(value: Value) -> Option<OkfTrustEvent> {
     let mut extra = Map::new();
     for (name, item) in entries {
         match name.as_str() {
-            "by" => by = Some(string(item)?),
-            "at" => at = Some(string(item)?),
+            // A host object holds a key once, so a wire naming one twice is no object.
+            "by" if by.is_none() => by = Some(string(item)?),
+            "at" if at.is_none() => at = Some(string(item)?),
+            "by" | "at" => return None,
             _ => extra.push((name, item)),
         }
     }
@@ -344,6 +347,14 @@ mod tests {
             mapping(&[("type", text("x")), ("generated", Value::Null)]),
             mapping(&[("type", text("x")), ("generated", event(&[("at", text("t"))]))]),
             mapping(&[("type", text("x")), ("generated", event(&[("by", text("me"))]))]),
+            mapping(&[
+                ("type", text("x")),
+                ("generated", event(&[("by", text("me")), ("by", text("you")), ("at", text("t"))])),
+            ]),
+            mapping(&[
+                ("type", text("x")),
+                ("generated", event(&[("by", text("me")), ("at", text("t")), ("at", text("u"))])),
+            ]),
             mapping(&[
                 ("type", text("x")),
                 ("generated", event(&[("by", Value::Null), ("at", text("t"))])),
