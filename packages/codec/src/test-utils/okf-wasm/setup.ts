@@ -1,6 +1,7 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
-import { beforeEach, expect } from 'vitest'
-import { answered } from './core.js'
+import { afterEach, beforeEach, expect } from 'vitest'
+import { answered, declined } from './core.js'
+import { EXPECTED_DECLINES } from './declines.js'
 import { runsUnderRust } from './tolerated.js'
 
 /**
@@ -16,6 +17,22 @@ const LAYER_2 = /\.rust\.test\.ts$/
 // skipped rather than dropping them from its count.
 beforeEach((context) => {
   if (!runsUnderRust.test(context.task.name)) context.skip()
+  declined.length = 0
+})
+
+// A decline is the TypeScript answering in the core's place, which a suite
+// run against the core must not take for the core passing.
+afterEach((context) => {
+  if (context.task.result?.state === 'skip' || context.task.mode === 'skip') return
+  const expected = EXPECTED_DECLINES.get(context.task.name)
+  if (expected === undefined) {
+    expect(declined, `${context.task.name}: the core declined`).toEqual([])
+  } else {
+    expect(
+      declined.length,
+      `${context.task.name}: expected the ${expected} decline`,
+    ).toBeGreaterThan(0)
+  }
 })
 
 afterAllFloor([runsUnderRust], () => {
