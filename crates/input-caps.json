@@ -49,6 +49,14 @@
       "maxDepth": 64,
       "maxMillis": 250,
       "reason": "the OKF envelope reads a whole document from a file, an import or a sync, so any holder of one can call it. maxBytes is the frontmatter's own cap (frontmatter::MAX_BYTES), the refusal parse inherits: the text between the fences is read only up to it, and past it the answer is a YAML refusal. The body is not read at all: the closing-fence search scans it once and it is copied once, so it is not capped (the TypeScript has no cap either) and fuzzing at the frontmatter's cap covers the shapes that cost. maxDepth 64 is MAX_PARSE_DEPTH, the deepest the YAML reader recurses; the schema and the key reordering walk what it produced and add no nesting. maxMillis 250 is 5.6x the slowest draw measured natively in release: 44.4 ms for a frontmatter of 262101 bytes whose type is a mapping with a 131050-item length list (the schema renders it to a string to measure it). The other shapes tried at the cap took 7 to 28 ms (a flow list, 26k preserved keys, 26k integer keys that JavaScript enumerates first, 26k refused facet keys, 6k trust events with extra keys, 26k tags), and a 16 MiB body took 4.4 ms, 15.7 MiB of near-miss fences 19 ms and 21 MiB of CRLF near-misses 26 ms"
+    },
+    "whiteboard-codec::json_canvas::parse": {
+      "crate": "whiteboard-codec",
+      "fuzzTarget": "json_canvas_parse",
+      "maxBytes": 4194304,
+      "maxDepth": 64,
+      "maxMillis": 2000,
+      "reason": "the JSON Canvas reader takes a whole board from a file, an import, a paste or a sync, so any holder of one can call it. maxBytes is json_canvas::MAX_BYTES, the function's own refusal (a longer text answers Declined(TooLarge) before it is read, and the caller asks the TypeScript, which has no cap): a board of a few thousand nodes is a few hundred kilobytes, so 4 MiB is far above any board and bounds the fuzzer's cost. maxDepth 64 is json::MAX_DEPTH: the document nests six levels deep before a facet payload begins, and a text nested past 64 answers Declined(TooDeep) the moment the 65th level opens, whatever follows it. maxMillis 2000 is 2.6x the slowest draw measured natively in release: 773 ms for a 4 MiB text of 270k integer-like keys in one facet payload (the reader builds the tree, then puts JavaScript's enumeration order on every object). The other shapes tried at the cap took 10 to 717 ms (a payload of wide arrays nested 55 deep 717, 270k keys at the root 258, 270k facet keys 189, a node list 98 to 111, an edge list refused for its ends 142, a list of invalid nodes 494, a 4 MiB string 11), and a node list written back took 98 to 144 ms in the extended and strict modes"
     }
   }
 }
