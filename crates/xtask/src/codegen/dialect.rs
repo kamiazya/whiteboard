@@ -4,10 +4,11 @@
 //! Every keyword is a typed field under `deny_unknown_fields`, so a construct
 //! the emitters do not implement is refused by name rather than dropped from
 //! one language's output. What is accepted: numbers with an inclusive
-//! `minimum`, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
+//! `minimum` or an exclusive one, always finite (Zod 4's `z.number()` refuses NaN and Infinity,
 //! JSON cannot write them, and a Rust `f64` read from JSON cannot be one);
 //! booleans and integers; strings with a UTF-16 minimum, a pattern and a named
-//! check, a closed `enum` of values, or a `const`; arrays with an inclusive
+//! check, a closed `enum` of values, or a `const` (a definition too, which a
+//! union may name); arrays with an inclusive
 //! length bound (and the sentence Zod refuses an overlong one with), `$ref`s
 //! to a definition, any-values and records of them, or a record whose keys
 //! are a string definition's and whose entries are one schema, bounded in
@@ -17,7 +18,8 @@
 //! stripped or kept, with optional fields. A definition may be
 //! `x-wb-registered`, or `x-wb-external` when its Zod half is a hand-written
 //! module's. An object may carry a named `x-wb-check` and may `x-wb-extends`
-//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list or record,
+//! a plain one; a property may be `x-wb-lenient`, `default` to an empty list or record or,
+//! as a `$ref`, to an object whose properties are all optional,
 //! or carry the text a model reads as `x-wb-describe`, as may a union definition. It grows when a contract
 //! needs a construct, with that construct's emission in both languages in the
 //! same change.

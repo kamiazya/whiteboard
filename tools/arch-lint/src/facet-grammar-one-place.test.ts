@@ -26,6 +26,8 @@ const ALLOWLIST: Readonly<Record<string, string>> = {
     'the engine side: every registry, schema and plugin',
   'packages/plugin-visual/src/generated/visual.zod.ts':
     'generated from contracts/facets/visual, which cannot import the engine; visual.contract.test.ts holds its patterns equal to the engine ones',
+  'packages/facet-engine/src/generated/engine.zod.ts':
+    'generated from contracts/facets/engine, which cannot import facet-grammar.ts; engine.contract.test.ts holds its patterns equal to the engine ones',
   'packages/model/src/facet-keys.ts': 'the model side: the stored `facets` bucket key',
   'packages/model/src/tags.ts': 'a scoped tag half is the same segment grammar (ADR-0040)',
 }
@@ -61,6 +63,6 @@ describe('the facet key segment grammar is written in one place per side', () =>
   })
 
   it('holds the allowlist at its declared ceiling', () => {
-    expect(Object.keys(ALLOWLIST)).toHaveLength(4)
+    expect(Object.keys(ALLOWLIST)).toHaveLength(5)
   })
 })

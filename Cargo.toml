@@ -10,6 +10,7 @@ members = [
   "crates/core/edge-routing",
   "crates/core/codec",
   "crates/core/plugin-visual",
+  "crates/core/facet-engine",
   "crates/bindings/wasm",
   "crates/bindings/native-fixture",
   "crates/xtask",

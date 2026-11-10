@@ -1,0 +1,590 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Facet engine assets",
+  "description": "The shapes of the assets a plugin registers with the facet engine: a theme token bundle, an icon and a stencil, and the namespaced id that names them. The engine owns the contract and knows nothing about what an asset means.",
+  "x-wb-emit": {
+    "zod": "packages/facet-engine/src/generated/engine.zod.ts",
+    "rust": "crates/core/facet-engine/src/generated/engine.rs"
+  },
+  "x-wb-checks": {
+    "rust": "crates/core/facet-engine/src/checks.rs"
+  },
+  "x-wb-describe": false,
+  "x-wb-rustSerde": false,
+  "x-wb-readonlyTypes": false,
+  "$defs": {
+    "NamespacedId": {
+      "description": "The id of a registered theme, stencil or icon: a plugin id and a name.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*$",
+      "x-wb-matcher": "namespaced_id",
+      "x-wb-message": "must be a namespaced id like \"visual.diamond\""
+    },
+    "FacetKey": {
+      "description": "A facet key as ADR-0013 decision 2 grammars it: namespace, name and version.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\/v[0-9]+$",
+      "x-wb-matcher": "facet_key",
+      "x-wb-message": "must be a facet key like \"visual.shape/v0\""
+    },
+    "HexColor": {
+      "description": "A colour as six hex digits: the PNG export parses no oklch.",
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$",
+      "x-wb-matcher": "hex_color",
+      "x-wb-message": "must be a six-digit hex colour (resvg parses no oklch)"
+    },
+    "NoFill": {
+      "description": "The keyword for a node drawn as an outline alone.",
+      "type": "string",
+      "const": "none"
+    },
+    "Fill": {
+      "description": "A fill: a hex colour, or none for an outlined node on a dark surface.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/HexColor"
+        },
+        {
+          "$ref": "#/$defs/NoFill"
+        }
+      ]
+    },
+    "NodeStyleTokens": {
+      "description": "The fill and stroke a node kind is drawn with.",
+      "type": "object",
+      "properties": {
+        "fill": {
+          "$ref": "#/$defs/Fill",
+          "description": "The fill, which may be absent."
+        },
+        "stroke": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The outline."
+        }
+      },
+      "required": ["fill", "stroke"],
+      "x-wb-order": ["fill", "stroke"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PresetAccent": {
+      "description": "The stroke and fill of one numbered colour preset.",
+      "type": "object",
+      "properties": {
+        "stroke": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The stroke."
+        },
+        "fill": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The fill."
+        }
+      },
+      "required": ["stroke", "fill"],
+      "x-wb-order": ["stroke", "fill"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PalettePresets": {
+      "description": "The six numbered colour presets.",
+      "type": "object",
+      "properties": {
+        "1": {
+          "$ref": "#/$defs/PresetAccent",
+          "description": "Preset 1."
+        },
+        "2": {
+          "$ref": "#/$defs/PresetAccent",
+          "description": "Preset 2."
+        },
+        "3": {
+          "$ref": "#/$defs/PresetAccent",
+          "description": "Preset 3."
+        },
+        "4": {
+          "$ref": "#/$defs/PresetAccent",
+          "description": "Preset 4."
+        },
+        "5": {
+          "$ref": "#/$defs/PresetAccent",
+          "description": "Preset 5."
+        },
+        "6": {
+          "$ref": "#/$defs/PresetAccent",
+          "description": "Preset 6."
+        }
+      },
+      "required": ["1", "2", "3", "4", "5", "6"],
+      "x-wb-order": ["1", "2", "3", "4", "5", "6"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PaletteNode": {
+      "description": "How each kind of node is drawn.",
+      "type": "object",
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/NodeStyleTokens",
+          "description": "A text node."
+        },
+        "file": {
+          "$ref": "#/$defs/NodeStyleTokens",
+          "description": "A file node."
+        },
+        "link": {
+          "$ref": "#/$defs/NodeStyleTokens",
+          "description": "A link node."
+        },
+        "group": {
+          "$ref": "#/$defs/NodeStyleTokens",
+          "description": "A group frame."
+        }
+      },
+      "required": ["text", "file", "link", "group"],
+      "x-wb-order": ["text", "file", "link", "group"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PaletteSyntax": {
+      "description": "The colours a code fence is highlighted in.",
+      "type": "object",
+      "properties": {
+        "keyword": {
+          "$ref": "#/$defs/HexColor",
+          "description": "A keyword."
+        },
+        "string": {
+          "$ref": "#/$defs/HexColor",
+          "description": "A string."
+        },
+        "number": {
+          "$ref": "#/$defs/HexColor",
+          "description": "A number."
+        },
+        "comment": {
+          "$ref": "#/$defs/HexColor",
+          "description": "A comment."
+        }
+      },
+      "required": ["keyword", "string", "number", "comment"],
+      "x-wb-order": ["keyword", "string", "number", "comment"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PaletteComment": {
+      "description": "How the annotation layer is drawn.",
+      "type": "object",
+      "properties": {
+        "pin": {
+          "$ref": "#/$defs/NodeStyleTokens",
+          "description": "The pin."
+        },
+        "bubble": {
+          "$ref": "#/$defs/NodeStyleTokens",
+          "description": "The bubble."
+        }
+      },
+      "required": ["pin", "bubble"],
+      "x-wb-order": ["pin", "bubble"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PaletteProposal": {
+      "description": "How a proposed change is drawn.",
+      "type": "object",
+      "properties": {
+        "edge": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The edge."
+        },
+        "bubbleFill": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The bubble fill."
+        }
+      },
+      "required": ["edge", "bubbleFill"],
+      "x-wb-order": ["edge", "bubbleFill"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "PaletteTokens": {
+      "description": "One mode palette, saying everything the bundled palettes say.",
+      "type": "object",
+      "properties": {
+        "node": {
+          "$ref": "#/$defs/PaletteNode",
+          "description": "The node kinds."
+        },
+        "edgeStroke": {
+          "$ref": "#/$defs/HexColor",
+          "description": "An edge stroke."
+        },
+        "labelFill": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The fill behind a label."
+        },
+        "surface": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The canvas surface."
+        },
+        "cornerRadiusPx": {
+          "type": "number",
+          "minimum": 0,
+          "description": "The corner radius in pixels."
+        },
+        "presets": {
+          "$ref": "#/$defs/PalettePresets",
+          "description": "The numbered colour presets."
+        },
+        "syntax": {
+          "$ref": "#/$defs/PaletteSyntax",
+          "description": "Code highlighting."
+        },
+        "comment": {
+          "$ref": "#/$defs/PaletteComment",
+          "description": "The annotation layer."
+        },
+        "proposal": {
+          "$ref": "#/$defs/PaletteProposal",
+          "description": "Proposed changes."
+        },
+        "markdownChrome": {
+          "$ref": "#/$defs/HexColor",
+          "description": "The one neutral a markdown body furniture is drawn in; absent keeps the renderer neutral."
+        }
+      },
+      "required": [
+        "node",
+        "edgeStroke",
+        "labelFill",
+        "surface",
+        "cornerRadiusPx",
+        "presets",
+        "syntax",
+        "comment",
+        "proposal"
+      ],
+      "x-wb-order": [
+        "node",
+        "edgeStroke",
+        "labelFill",
+        "surface",
+        "cornerRadiusPx",
+        "presets",
+        "syntax",
+        "comment",
+        "proposal",
+        "markdownChrome"
+      ],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "GroupFrameTokens": {
+      "description": "How a group frame is drawn, the one token that is per node kind.",
+      "type": "object",
+      "properties": {
+        "strokeDasharray": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "The dash pattern."
+        },
+        "strokeWidth": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The frame weight in pixels."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["strokeDasharray", "strokeWidth"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "ThemeEdgeRouting": {
+      "description": "How an edge steps around an obstacle; the model vocabulary, spelled again.",
+      "type": "string",
+      "enum": ["straight", "orthogonal", "curved"]
+    },
+    "ThemeInk": {
+      "description": "How outlines and edges are inked: crisp geometry, or seeded jitter.",
+      "type": "string",
+      "enum": ["clean", "sketch"]
+    },
+    "ThemeGlow": {
+      "description": "A soft halo on node chrome, edges and symbols, in the element own colour.",
+      "type": "object",
+      "properties": {
+        "radiusPx": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The halo radius in pixels."
+        }
+      },
+      "required": ["radiusPx"],
+      "x-wb-order": ["radiusPx"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "ThemePalette": {
+      "description": "Both modes, always: the canvas surface follows the UI, never the theme.",
+      "type": "object",
+      "properties": {
+        "light": {
+          "$ref": "#/$defs/PaletteTokens",
+          "description": "The light mode."
+        },
+        "dark": {
+          "$ref": "#/$defs/PaletteTokens",
+          "description": "The dark mode."
+        }
+      },
+      "required": ["light", "dark"],
+      "x-wb-order": ["light", "dark"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "ThemeDefaults": {
+      "description": "Defaults for what is drawn; an explicit facet on the object always wins.",
+      "type": "object",
+      "properties": {
+        "nodeShape": {
+          "$ref": "#/$defs/NamespacedId",
+          "description": "A namespaced shape id, resolved at render time and degrading to a rect when unknown."
+        },
+        "edgeRouting": {
+          "$ref": "#/$defs/ThemeEdgeRouting",
+          "description": "The routing of an edge with none of its own."
+        },
+        "groupFrame": {
+          "$ref": "#/$defs/GroupFrameTokens",
+          "description": "How a group frame is drawn."
+        }
+      },
+      "required": [],
+      "x-wb-order": ["nodeShape", "edgeRouting", "groupFrame"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "ThemeTokens": {
+      "description": "The one shape a registered theme asset has, which a document names by id and never carries.",
+      "type": "object",
+      "properties": {
+        "ink": {
+          "$ref": "#/$defs/ThemeInk",
+          "description": "Crisp geometry or seeded jitter."
+        },
+        "strokeWidthPx": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "description": "The line weight of chrome and edges in pixels; absent is the renderer hairline."
+        },
+        "fontFamily": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "A font family name and nothing more; a missing face degrades to the bundled family."
+        },
+        "glow": {
+          "$ref": "#/$defs/ThemeGlow",
+          "description": "A halo on chrome."
+        },
+        "palette": {
+          "$ref": "#/$defs/ThemePalette",
+          "description": "Both modes."
+        },
+        "defaults": {
+          "$ref": "#/$defs/ThemeDefaults",
+          "default": {},
+          "description": "Defaults for what is drawn."
+        }
+      },
+      "required": ["ink", "palette"],
+      "x-wb-order": ["ink", "strokeWidthPx", "fontFamily", "glow", "palette", "defaults"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "IconPath": {
+      "description": "An icon path primitive.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string",
+          "const": "path",
+          "description": "Always path."
+        },
+        "d": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "The path data."
+        }
+      },
+      "required": ["tag", "d"],
+      "x-wb-order": ["tag", "d"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "IconRect": {
+      "description": "An icon rectangle primitive.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string",
+          "const": "rect",
+          "description": "Always rect."
+        },
+        "x": {
+          "type": "number",
+          "description": "Left."
+        },
+        "y": {
+          "type": "number",
+          "description": "Top."
+        },
+        "width": {
+          "type": "number",
+          "description": "Width."
+        },
+        "height": {
+          "type": "number",
+          "description": "Height."
+        },
+        "rx": {
+          "type": "number",
+          "description": "The corner radius."
+        }
+      },
+      "required": ["tag", "x", "y", "width", "height"],
+      "x-wb-order": ["tag", "x", "y", "width", "height", "rx"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "IconCircle": {
+      "description": "An icon circle primitive.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string",
+          "const": "circle",
+          "description": "Always circle."
+        },
+        "cx": {
+          "type": "number",
+          "description": "Centre x."
+        },
+        "cy": {
+          "type": "number",
+          "description": "Centre y."
+        },
+        "r": {
+          "type": "number",
+          "description": "Radius."
+        }
+      },
+      "required": ["tag", "cx", "cy", "r"],
+      "x-wb-order": ["tag", "cx", "cy", "r"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "IconEllipse": {
+      "description": "An icon ellipse primitive.",
+      "type": "object",
+      "properties": {
+        "tag": {
+          "type": "string",
+          "const": "ellipse",
+          "description": "Always ellipse."
+        },
+        "cx": {
+          "type": "number",
+          "description": "Centre x."
+        },
+        "cy": {
+          "type": "number",
+          "description": "Centre y."
+        },
+        "rx": {
+          "type": "number",
+          "description": "Radius x."
+        },
+        "ry": {
+          "type": "number",
+          "description": "Radius y."
+        }
+      },
+      "required": ["tag", "cx", "cy", "rx", "ry"],
+      "x-wb-order": ["tag", "cx", "cy", "rx", "ry"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "IconGeometry": {
+      "description": "One drawing primitive of an icon: a path, rectangle, circle or ellipse.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/IconPath"
+        },
+        {
+          "$ref": "#/$defs/IconRect"
+        },
+        {
+          "$ref": "#/$defs/IconCircle"
+        },
+        {
+          "$ref": "#/$defs/IconEllipse"
+        }
+      ]
+    },
+    "IconAsset": {
+      "description": "An icon an asset may register, in the four primitives the renderer draws.",
+      "type": "object",
+      "properties": {
+        "viewBox": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "The coordinate space the geometry is drawn in."
+        },
+        "geometry": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IconGeometry"
+          },
+          "minItems": 1,
+          "description": "The primitives, at least one."
+        }
+      },
+      "required": ["geometry"],
+      "x-wb-order": ["viewBox", "geometry"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "StencilAsset": {
+      "description": "A bundle of appearance for one node: facets and a colour, never a position or text.",
+      "type": "object",
+      "properties": {
+        "displayName": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "What a picker calls it."
+        },
+        "color": {
+          "type": "string",
+          "x-wb-minUtf16": 1,
+          "description": "The node colour, passed through uninterpreted; absent says nothing about colour."
+        },
+        "facets": {
+          "type": "object",
+          "propertyNames": {
+            "$ref": "#/$defs/FacetKey"
+          },
+          "additionalProperties": {
+            "x-wb-any": true
+          },
+          "default": {},
+          "description": "Facet payloads by key, each checked at registry build against the schema its own plugin registered."
+        }
+      },
+      "required": ["displayName"],
+      "x-wb-order": ["displayName", "color", "facets"],
+      "additionalProperties": false,
+      "x-wb-unknownKeys": "refuse"
+    }
+  }
+}

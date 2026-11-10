@@ -9,7 +9,12 @@
  * the CONTRACT and knows nothing about what the appearance means. A stencil
  * carries facet payloads keyed by the facet key that owns them, so the
  * engine validates each through the schema its plugin registered and never
- * learns what a silhouette or a badge is.
+ * learns what a silhouette or a badge is. Those payloads are validated at
+ * REGISTRY BUILD rather than at `definePlugin`, because a stencil may
+ * legitimately name another plugin's facet: not the cross-plugin coupling
+ * ADR-0013 decision 3 refuses for `views` (a view READS another plugin's
+ * data behind its back), but a WRITE of a facet the target object was always
+ * free to carry.
  *
  * `color` is the one exception and it is deliberate: a node's colour is a
  * JSON Canvas CORE field rather than a facet, so there is no schema to
@@ -20,50 +25,16 @@
  * What a stencil may NOT carry is the load-bearing half (ADR-0034 decision
  * 3): no position, and no text. Position would make a stencil a second
  * producer of geometry, and text is what the drawing is ABOUT — a stencil
- * supplies the vocabulary, never the sentence.
+ * supplies the vocabulary, never the sentence. The schema is STRICT so that
+ * is enforced rather than assumed: a non-strict object would strip an `x` or
+ * a `text` a library author wrote and register the stencil anyway, leaving
+ * the author believing it places the box.
+ *
+ * The schema is GENERATED from `contracts/facets/engine`.
  */
-import { z } from 'zod'
-import { FACET_KEY_PATTERN } from './facet-grammar.js'
+import type { z } from 'zod'
+import { stencilAssetSchema } from './generated/engine.zod.js'
 
-/**
- * A facet key exactly as ADR-0013 decision 2 grammars it. The expression is
- * the engine's; the message a stencil author sees when they typo a key is
- * this schema's, and worth as much as the check itself.
- */
-const facetKeySchema = z
-  .string()
-  .regex(FACET_KEY_PATTERN, 'must be a facet key like "visual.shape/v0"')
-
-export const stencilAssetSchema = z
-  .object({
-    /** What a picker calls it. The id stays machine-only, as everywhere else. */
-    displayName: z.string().min(1),
-    /**
-     * The node's colour, passed through uninterpreted (see the module doc).
-     * Absent means the stencil says nothing about colour, which is a
-     * legitimate vocabulary: a set distinguishing purely by silhouette is not
-     * a worse one, and ADR-0034's columns judge whether the distinctions land,
-     * never how many channels were spent.
-     */
-    color: z.string().min(1).optional(),
-    /**
-     * Facet payloads by key, each validated against the schema its own plugin
-     * registered — at REGISTRY BUILD rather than at `definePlugin`, because a
-     * stencil may legitimately name another plugin's facet. That is not the
-     * cross-plugin coupling ADR-0013 decision 3 refuses for `views`: a view
-     * READS another plugin's data behind its back, while a stencil WRITES a
-     * facet the target object was always free to carry.
-     */
-    facets: z.record(facetKeySchema, z.unknown()).default({}),
-  })
-  // STRICT, so decision 3's "no position, no text" is enforced rather than
-  // assumed. A non-strict object would STRIP an `x` or a `text` a library
-  // author wrote and register the stencil anyway — accepted, dropped,
-  // nothing said, and the author left believing their stencil places the
-  // box. The same shape cost `node.add` a silently discarded `stencil`
-  // (2026-09-11); it is the worst of the three outcomes because neither the
-  // author nor a test that reads what was stored can see it.
-  .strict()
-
-export type StencilAsset = z.infer<typeof stencilAssetSchema>
+export type { StencilAsset } from './generated/engine.zod.js'
+export { stencilAssetSchema }
 export type StencilAssetInput = z.input<typeof stencilAssetSchema>

@@ -73,7 +73,7 @@
     "whiteboard-facet-engine": {
       "path": "crates/core/facet-engine",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "facet registry, write validation, compat chain, derived forms, theme tokens",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model"],
