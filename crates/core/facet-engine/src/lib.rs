@@ -14,3 +14,5 @@
 pub mod checks;
 #[path = "generated/engine.rs"]
 pub mod engine;
+#[path = "generated/plugin_manifest.rs"]
+pub mod plugin_manifest;

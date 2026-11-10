@@ -1,0 +1,292 @@
+{
+  "id": "visual",
+  "displayName": "Visual style",
+  "facets": [
+    {
+      "name": "axes",
+      "displayName": "Semantic axes",
+      "version": "v0",
+      "targets": ["canvas"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualAxesFacet"
+    },
+    {
+      "name": "edges",
+      "displayName": "Edges",
+      "version": "v0",
+      "targets": ["canvas", "edge"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualEdgesFacet",
+      "editor": {
+        "fields": {
+          "routing": {
+            "widget": "segmented",
+            "label": "Edge routing",
+            "layout": "cards",
+            "options": [
+              {
+                "value": "straight",
+                "label": "Straight",
+                "glyph": {
+                  "kind": "asset",
+                  "id": "visual.edge-straight"
+                }
+              },
+              {
+                "value": "orthogonal",
+                "label": "Orthogonal",
+                "glyph": {
+                  "kind": "asset",
+                  "id": "visual.edge-orthogonal"
+                }
+              },
+              {
+                "value": "curved",
+                "label": "Curved",
+                "glyph": {
+                  "kind": "asset",
+                  "id": "visual.edge-curved"
+                }
+              }
+            ]
+          },
+          "lineJumps": {
+            "widget": "segmented",
+            "label": "Line jumps",
+            "layout": "cards",
+            "options": [
+              {
+                "value": "none",
+                "label": "Off",
+                "glyph": {
+                  "kind": "asset",
+                  "id": "visual.line-jumps-off"
+                }
+              },
+              {
+                "value": "arc",
+                "label": "On",
+                "glyph": {
+                  "kind": "asset",
+                  "id": "visual.line-jumps-on"
+                }
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "ink",
+      "displayName": "Ink",
+      "version": "v0",
+      "targets": ["edge"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualInkFacet"
+    },
+    {
+      "name": "stroke",
+      "displayName": "Stroke",
+      "version": "v0",
+      "targets": ["edge"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualStrokeFacet"
+    },
+    {
+      "name": "shape",
+      "displayName": "Shape",
+      "version": "v0",
+      "targets": ["node"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualShapeFacet",
+      "editor": {
+        "picker": {
+          "options": [
+            {
+              "payload": null,
+              "label": "Rectangle",
+              "glyph": {
+                "kind": "shape",
+                "name": "square"
+              }
+            },
+            {
+              "payload": {
+                "kind": "ellipse"
+              },
+              "label": "Ellipse",
+              "glyph": {
+                "kind": "shape",
+                "name": "circle"
+              }
+            },
+            {
+              "payload": {
+                "kind": "diamond"
+              },
+              "label": "Diamond",
+              "glyph": {
+                "kind": "shape",
+                "name": "diamond"
+              }
+            },
+            {
+              "payload": {
+                "kind": "hexagon"
+              },
+              "label": "Hexagon",
+              "glyph": {
+                "kind": "shape",
+                "name": "hexagon"
+              }
+            },
+            {
+              "payload": {
+                "kind": "octagon"
+              },
+              "label": "Octagon",
+              "glyph": {
+                "kind": "shape",
+                "name": "octagon"
+              }
+            },
+            {
+              "payload": {
+                "kind": "parallelogram"
+              },
+              "label": "Parallelogram",
+              "glyph": {
+                "kind": "shape",
+                "name": "parallelogram"
+              }
+            },
+            {
+              "payload": {
+                "kind": "cylinder"
+              },
+              "label": "Cylinder",
+              "glyph": {
+                "kind": "shape",
+                "name": "cylinder"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "text",
+      "displayName": "Text placement",
+      "version": "v0",
+      "targets": ["node"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualTextFacet",
+      "editor": {
+        "picker": {
+          "options": [
+            {
+              "payload": null,
+              "label": "Default placement",
+              "glyph": {
+                "kind": "shape",
+                "name": "none"
+              }
+            },
+            {
+              "payload": {
+                "align": "start"
+              },
+              "label": "Top"
+            },
+            {
+              "payload": {
+                "align": "center"
+              },
+              "label": "Middle"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "theme",
+      "displayName": "Theme",
+      "version": "v0",
+      "targets": ["canvas"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualThemeFacet",
+      "assetRefs": {
+        "theme": "themes"
+      },
+      "editor": {
+        "picker": {
+          "layout": "cards",
+          "specimenIcon": "visual.signature"
+        }
+      }
+    },
+    {
+      "name": "symbol",
+      "displayName": "Symbol",
+      "version": "v0",
+      "targets": ["node", "canvas", "document"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualSymbolFacet",
+      "editor": {
+        "picker": {
+          "options": [
+            {
+              "payload": null,
+              "label": "No symbol",
+              "glyph": {
+                "kind": "shape",
+                "name": "none"
+              }
+            }
+          ],
+          "catalog": {
+            "label": "Search symbols",
+            "source": "visual.symbols",
+            "entry": {
+              "label": "Any character or emoji",
+              "placeholder": "Search, or paste a symbol",
+              "payload": {
+                "kind": "emoji"
+              },
+              "field": "char"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "stencil",
+      "displayName": "Stencil",
+      "version": "v0",
+      "targets": ["node"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualStencilFacet",
+      "assetRefs": {
+        "stencil": "stencils"
+      },
+      "editor": {
+        "fields": {
+          "stencil": {
+            "widget": "segmented",
+            "label": "Stencil"
+          }
+        }
+      }
+    },
+    {
+      "name": "stencils",
+      "displayName": "Stencil library",
+      "version": "v0",
+      "targets": ["document"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualStencilsFacet"
+    },
+    {
+      "name": "tags",
+      "displayName": "Tag library",
+      "version": "v0",
+      "targets": ["document"],
+      "schema": "facets/visual/visual.schema.json#/$defs/VisualTagsFacet"
+    }
+  ],
+  "assets": {
+    "themes": "visual.themes",
+    "icons": "visual.icons",
+    "stencils": "visual.stencils"
+  }
+}

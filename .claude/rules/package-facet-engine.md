@@ -135,6 +135,23 @@ paths:
   restates the stencil as `LibraryStencil`, since a contract cannot yet name
   another's definition.
 
+## The manifest: a plugin as data
+
+`contracts/plugin/plugin-manifest.schema.json` (Zod in
+`src/generated/plugin-manifest.zod.ts`, Rust in `crates/core/facet-engine`)
+describes a plugin as data: id, facets, editor declarations, compat entries,
+and the NAMES of what only code can be (a payload schema, a catalog loader, an
+asset table, a migration). `src/manifest.ts`'s `pluginFromManifest(manifest,
+host)` parses the manifest, then calls `defineFacet` / `definePlugin`, so every
+definition-time check runs; a name the host does not supply throws at load.
+Every object refuses unknown keys. `SegmentedOption.value` is a string here
+though the engine type also admits `null`: no bundled plugin clears a facet from
+a segment, and a manifest does not declare one. The contract restates the
+segment, version and namespaced-id grammars and the glyph silhouettes;
+`manifest.test.ts` holds them equal to `facet-grammar.ts`, `defineFacet` and
+`FACET_GLYPH_SHAPES`, and the Rust matchers (`facet_segment`, `version_tag`,
+`schema_ref`) are in `checks.rs`.
+
 ## What does NOT belong here
 
 - The `facets` bucket schemas — those are model's (`extensionFacetsSchema`).

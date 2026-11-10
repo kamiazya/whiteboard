@@ -21,8 +21,9 @@ pub mod spatial;
 /// A mapping keeps its keys in written order; a JavaScript object enumerates
 /// integer-like keys first, which is a property of that host and is applied
 /// where a host needs it ([`enumeration_order`]), not here.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum Value {
+    #[default]
     Null,
     Bool(bool),
     /// A double. An integer written within +-2^53 lands here.

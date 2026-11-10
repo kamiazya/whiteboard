@@ -100,7 +100,8 @@
       "ignoreIssues": {
         // A generated module exports its whole contract, a schema and its
         // inferred type per definition, whether or not a consumer reads each.
-        "src/generated/engine.zod.ts": ["exports", "types"]
+        "src/generated/engine.zod.ts": ["exports", "types"],
+        "src/generated/plugin-manifest.zod.ts": ["exports", "types"]
       }
     },
     "packages/facet-ui": {

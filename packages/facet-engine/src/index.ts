@@ -1,6 +1,7 @@
 export * from './contributions.js'
 export * from './facet-grammar.js'
 export * from './form.js'
+export * from './manifest.js'
 export * from './registry.js'
 export * from './stencil.js'
 export * from './theme-tokens.js'

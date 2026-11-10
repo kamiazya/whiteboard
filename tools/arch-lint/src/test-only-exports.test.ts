@@ -281,8 +281,20 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     'the strict refusal-body contract ApiErrorBody derives from, re-exported through the barrel; the route fuzz holds every refusal to it',
   'packages/facet-engine/src/facet-grammar.ts#FACET_NAMESPACED_ID_PATTERN':
     'the engine spelling of the namespaced-id grammar, which the generated asset schemas and plugin-visual’s cannot import and which their contract tests hold equal',
-  'packages/facet-engine/src/registry.ts#FacetPlugin':
-    'the contract a plugin package implements (ADR-0013), the type a second bundled plugin would import; workspace-stencils.test.ts holds a hand-written one to it',
+  'packages/facet-engine/src/form.ts#FACET_GLYPH_SHAPES':
+    'the engine silhouette vocabulary, which the manifest contract restates as an enum; manifest.test.ts holds the two equal',
+  'packages/facet-engine/src/generated/plugin-manifest.zod.ts#segmentSchema':
+    'the manifest contract restatement of the segment grammar, held equal to FACET_SEGMENT_PATTERN by manifest.test.ts',
+  'packages/facet-engine/src/generated/plugin-manifest.zod.ts#hostRefSchema':
+    'the manifest contract restatement of the namespaced-id grammar, held equal to FACET_NAMESPACED_ID_PATTERN by manifest.test.ts',
+  'packages/facet-engine/src/generated/plugin-manifest.zod.ts#facetVersionSchema':
+    'the manifest contract restatement of the version grammar, held equal to what defineFacet admits by manifest.test.ts',
+  'packages/facet-engine/src/generated/plugin-manifest.zod.ts#schemaRefSchema':
+    'the manifest contract schema pointer grammar, which the Rust matcher schema_ref restates; manifest.test.ts holds the cases',
+  'packages/facet-engine/src/generated/plugin-manifest.zod.ts#glyphShapeNameSchema':
+    'the manifest contract silhouette enum, held equal to FACET_GLYPH_SHAPES by manifest.test.ts',
+  'packages/plugin-visual/src/data.ts#VISUAL_HOST':
+    'the names the visual manifest refers to, supplied to pluginFromManifest in the same file and read by manifest.test.ts to hold every pointer to a definition of the contract',
   'packages/mcp-server/src/server/server-mode-people.ts#createServerModePeople':
     'the one definition of server mode’s people, which openServerModePeople in the same file wraps for the root and the packaged smoke; _test-server-mode-harness.ts builds the same stores over an isolated database',
   'packages/mcp-server/src/server/backup-restore.ts#trustsLinkParent':
