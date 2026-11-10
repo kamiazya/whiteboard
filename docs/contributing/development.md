@@ -23,6 +23,12 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
   project's run and never fails it. (The published package's `engines` is deliberately wider —
   that is what a CONSUMER may run the daemon on, not what this checkout builds
   on.)
+- The Rust toolchain (`rust-toolchain.toml`, installed by `rustup`), once, to build the
+  core's wasm artifact: `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm`. The OKF
+  Markdown envelope has no TypeScript implementation, so the daemon refuses to start and
+  most test projects (`mcp-node`, `codec-node`, `server-core-node`, `web-jsdom` and the
+  rest that reach `parseOkf`) fail, naming the artifact, until it is staged. Typecheck,
+  lint and the pre-push hook need no Rust.
 - A Chromium that Playwright can drive (installed automatically below)
 - ImageMagick (`convert`, `identify`) — optional locally, needed by
   `.claude/scripts/compose-figure.test.mjs` (part of `pnpm test:scripts`, and so
@@ -333,9 +339,8 @@ Two layers close that gap:
 pnpm dev             # Vite + the dev daemon together (both on .dev-data, this worktree's socket); with this checkout's dev daemon already running, its daemon half reuses it and exits 0 while Vite keeps running — only a half that FAILS ends the other
 pnpm mcp             # the stdio MCP server only, from source (tsx), on .dev-data
 pnpm build           # dist/server (apps/web's `build` ends with `copy-into-mcp-dist.mjs`, which copies dist/web-app in)
-                     # the web build routes edges with the Rust core by default, so it fails until
-                     # `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` has staged the wasm;
-                     # `VITE_WHITEBOARD_CORE=ts pnpm build` builds without it (no Rust toolchain needed)
+                     # the web build reads and writes OKF Markdown through the Rust core, so it fails until
+                     # `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` has staged the wasm
 pnpm build:mcp       # the server alone: canvas-viewer's widget first, then `@kamiazya/whiteboard-mcp`'s build (a `pnpm --filter` build does not build its workspace dependencies, so the bare filter form fails on a clean checkout with "widget build output not found")
 pnpm test            # optional: every Vitest project at once; CI runs the matrix
 pnpm typecheck       # tsc --noEmit

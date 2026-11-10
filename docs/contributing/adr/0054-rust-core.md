@@ -829,6 +829,27 @@ question, and the owner took the core despite it (decision q39): the TypeScript
 is deleted on the default schedule, the release after the first that defaults
 to `rust`.
 
+**Status note (2026-11-10, the OKF TypeScript is deleted; q40 supersedes q26).**
+The owner decided (q40) that the TypeScript of a ported module is deleted as
+soon as its migration is complete, not in the release after the first that
+defaults to `rust`. That replaces the schedule q26 kept for the OKF envelope and
+the default in the transition table's stage 3 row, for every module: stage 4
+follows a met checklist, not a release. The OKF envelope is the first to take it.
+`parseOkf` and `serializeOkf` in `packages/codec` answer only through the core
+each realm installs (`installOkfCore`), and throw `OkfCoreNotInstalled` where none
+is; the `ts` and `differential` settings, `okfCodec`, `WHITEBOARD_CORE_OKF` and
+`VITE_WHITEBOARD_CORE_OKF` are gone, the daemon installs the core at boot and
+refuses to start without it, and every build of the web app carries the wasm.
+The two ledger entries are stage 4 in a second shape: codec is a shared package
+that must not import the shim, whose initialisation is asynchronous while these
+exports are synchronous, so the export is a dispatcher over the realm's installed
+instance and the ledger holds the deleted files gone, in place of a re-export
+(`tools/arch-lint/src/ported-functions.ts`). What the core still declines is
+refused with its reason where the TypeScript wrote (a read fails at the schema
+stage, a write throws `OkfNotYamlSafeError`); the decisions are in
+[the parity checklist](../parity/okf-codec.md). The checklist's rollback row is
+now none.
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 
@@ -1037,7 +1058,7 @@ returns the TypeScript answer. Each function's lifecycle:
 |---|---|---|---|
 | 1 | `ts` | TypeScript only | the Rust port compiles and its native tests pass |
 | 2 | `differential` | both, in CI and in dogfooding; TypeScript answers | the parity checklist (QR-33) is met |
-| 3 | `rust` | Rust answers; TypeScript is still present, so rollback is flipping the switch back | one release with no mismatch reported; by default the TypeScript is deleted in the next release, later only with a recorded reason |
+| 3 | `rust` | Rust answers; TypeScript is still present, so rollback is flipping the switch back | one release with no mismatch reported; by default the TypeScript is deleted in the next release (owner decision q40, 2026-11-10: as soon as the migration is complete), later only with a recorded reason |
 | 4 | — | TypeScript deleted; its tests kept and pointed at the shim | the whole package is absorbed |
 | 5 | — | tests move to Rust (proptest) | — |
 

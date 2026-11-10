@@ -6,13 +6,17 @@ module: `parseOkf` and `serializeOkf` in `packages/codec/src/okf` (Rust:
 reached through `@kamiazya/whiteboard-core-wasm`). It is filled in as the
 module stands, so a row says what is shown, not what is intended.
 
-The switch is `okfCodec` (`packages/codec/src/okf/okf-core.ts`), set by
-`WHITEBOARD_CORE_OKF` in the daemon and `VITE_WHITEBOARD_CORE_OKF` in the web
-app. It is `rust` by default now, as edge routing's is: a daemon with nothing
-set and a production build of the web app answer in Rust. It stays
-`differential` under development and CI, and `ts` in a test run of the web
-app. It **may not move to `rust` until every row below is `met` or `n/a`**, and
-in the PR that moved it every row is.
+**Stage 4 (2026-11-10): the TypeScript is deleted.** The switch (`okfCodec`,
+`WHITEBOARD_CORE_OKF`, `VITE_WHITEBOARD_CORE_OKF`) existed while the TypeScript
+did; it is gone with it, and `parseOkf` and `serializeOkf`
+(`packages/codec/src/okf/okf-core.ts`) answer only through the core each realm
+installs (`installOkfCore`), throwing `OkfCoreNotInstalled` where none is. Owner
+decision q40 deleted the TypeScript as soon as the migration was complete, not
+in the release after the first that defaults to `rust` (q26). The rows below
+record how the checklist was met while both implementations existed; where a row
+names the TypeScript, the switch or the differential, it describes what was
+shown before the deletion, and the Declines section and the exit criteria
+below say what each became.
 
 Ports, in order:
 - #2196: the spikes. A markdown stringify port was deferred; the frontmatter reader was found possible.
@@ -24,6 +28,8 @@ Ports, in order:
 - #2205: the switch, and the daemon on it.
 - #2206: the web app on it.
 - The default: both switches read `rust` when nothing is set.
+- #2227: every Node-hosted test realm installs the core, in `differential` with `throw`.
+- Stage 4: the TypeScript and the switch deleted (q40).
 
 ## QR-33a
 
@@ -44,20 +50,42 @@ Ports, in order:
 | 13 | Artifact size within its ledger, peak memory reported, Workers budgets measured | met for the measurement | Size: the OKF exports are inside the ledger's ceiling (`crates/wasm-size-ledger.json`, 907000 bytes against 906052 measured for the cargo artifact: 5164 more than the 900888 before, for the writer naming every place a value has no spelling with its path and the reader looking for the host's lone-surrogate mark; 901000 against 900888 since the codec reads whiteboard-model's generated types; 899000 against 895418 before). The shipped module grew from 278770 to 520132 bytes (about 200 KB gzip), accepted as q27, and is 526644 bytes with this change. Memory, measured 2026-11-09 by `scripts/okf-boundary.mjs`: linear memory is 1.13 MiB after init and peaks at 3.38 MiB on the 12k-tag frontmatter, the same on Node 24, Chromium 153 and workerd (1.50 MiB after the 191 KiB body while the body crossed; it is 1.13 MiB now, since it does not, and the 12k-tag peak is 3.44 MiB on Node, measured 2026-11-10); every class is read and written dozens to hundreds of times before its figure is taken, so repeated calls reuse what the first grew. Startup (`coreFrom`, module compiled) is 1.7 ms on Node, 2.2 ms on Chromium and 1.0 ms on workerd. Elapsed time on a local workerd (`performance.now()`), set against the free plan's 10 ms of CPU per request, Rust: one note is 0.011 ms to read and 0.009 ms to write; the 12k-tag frontmatter is 7.5 ms to read and 10.3 ms to write, so a write of a frontmatter that large is over the limit and the read under it (the TypeScript is 32.5 and 13.5 ms, over it both ways). These are wall-clock timings on the engine, from a local binary whose clock advances during synchronous work, as the edge-routing checklist's row 13 says, not the platform's CPU accounting: the Workers budget itself stays unverified until QR-22c's workerd job measures it in CI, which is not done here. |
 | 14 | Every untrusted-input entry has caps and a fuzz target, seeded and run, no open crash | met | `crates/input-caps.json` declares four entries, each with `maxBytes`, `maxDepth`, `maxMillis` and the measurement behind it:<br>• `whiteboard-codec::frontmatter::parse`<br>• `whiteboard-codec::okf::parse`<br>• `whiteboard-wasm::okf::okf_parse`<br>• `whiteboard-wasm::okf::okf_serialize`<br>Each names its fuzz target (`frontmatter_parse`, `okf_parse`, `okf_wasm_parse`, `okf_wasm_serialize`). `cargo xtask inputs` holds the registry and `crates/fuzz` equal. `rust-fuzz-pr` runs them on every PR and the nightly workflow longer. The caps are generated into both languages. The shim refuses a head past `maxBytes` before the call, and `okfCodec` answers that refusal from the TypeScript. A lone surrogate is not refused: one in the head is marked and the export refuses a frontmatter whose strings or keys hold the mark, which `okf_wasm_parse` fuzzes against the codec. |
 | 15 | Logging through the `log` facade; `thiserror` convention; poison-and-recover covers held state | n/a | The crate does not log. It answers refusals as values (`Failure`, `Refusal`, `Unwritable`), never as an error type a caller propagates; the shim words them. It holds no state across calls. |
-| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | met (stage 2) | `tools/arch-lint/src/ported-functions.ts` lists `parseOkf` and `serializeOkf` at stage 2: their TypeScript exports, their `OkfCodecCore['impl']` switch keys (set through `ServerDeps.okfCore`), the Rust exports and the shim members (#2205). Like routing's, the entries stay at stage 2 after a switch to `rust`, because stage 3 deletes the TypeScript the rollback runs; they move to stage 3 with that deletion, which owner decision q26 keeps on ADR-0054's default schedule. |
+| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | met (stage 4, in its realm shape) | `tools/arch-lint/src/ported-functions.ts` lists `parseOkf` and `serializeOkf` at stage 4 with a `realm`: the export in `packages/codec/src/okf/okf-core.ts` is a dispatcher over the core the realm installed through `installOkfCore`, and `parse.ts`, `serialize.ts`, `frontmatter-yaml.ts` and `yaml-safe.ts` must not exist. It is not a re-export of the shim because codec is a shared-layer package whose exports are synchronous and reached by import from the browser, a worker, the daemon and every test realm: importing the shim from it would carry the wasm glue to every consumer (the MCP widget's bundle included), and the shim initialises asynchronously, so the module-level instance each realm installs is what keeps calls synchronous with one instance per realm. The checker holds both sides: an entry without its deleted files, or a dispatcher that grew an implementation, fails. |
 | 17 | Any Unicode table comes from a pinned crate with a version-asserting test | met (accepted deviation: hand-written, engine-asserted) | `whiteboard_model::checks::is_js_space` (`crates/core/model/src/checks.rs`, imported by the codec's `okf/js.rs`) is a hand-written copy of ECMAScript's `WhiteSpace` and `LineTerminator`, the set `String.prototype.trim` strips (`Zs` plus a fixed list). No crate carries that set, so the version assertion is against the engine itself. `packages/codec/src/okf/oracle/js-whitespace.test.ts` enumerates every scalar value `trim` strips in the running engine and holds `js-whitespace.jsonl` (25 code points, one per line) equal to it. The Rust unit test in `crates/core/codec/src/okf/js.rs` holds every scalar value against the same file, natively and on wasm32. A Unicode version that moves `Zs` fails the TypeScript side first. Mutation-checked in both directions: dropping U+FEFF from the Rust set fails, and adding U+0085 (which `char::is_whitespace` counts and `trim` does not) fails. |
 | 18 | Exit criteria (QR-33b) recorded in the PR | met | Recorded [below](#qr-33b-exit-criteria), in the PR that moves the switch. |
-| 19 | Docs reflect the shipped state | met | `docs/reference/configuration.md` documents `WHITEBOARD_CORE_OKF` (#2205) and `VITE_WHITEBOARD_CORE_OKF` (#2206). The codec, core-wasm and app-web rules describe the switch. `quality-requirements.md`'s status paragraph names this checklist. ADR-0054 carries a dated status note for the OKF envelope, and its index row says the OKF envelope is the second module ported, `rust` by default, `differential` in development and CI. The decisions are untouched. |
+| 19 | Docs reflect the shipped state | met | `docs/reference/configuration.md` no longer lists `WHITEBOARD_CORE_OKF` or `VITE_WHITEBOARD_CORE_OKF`, and says the daemon and every build need the wasm. The codec, core-wasm and app-web rules describe the switch. `quality-requirements.md`'s status paragraph names this checklist. ADR-0054 carries a dated status note for the OKF envelope, and its index row says the OKF envelope is the second module ported, `rust` by default, `differential` in development and CI. The decisions are untouched. |
 
 ## Declines
 
-A call the core refuses (a throw from the shim) is answered by the TypeScript in
-every mode, so a decline is not a mismatch and no comparison reports it. Both
-reporters treat one as a failure under `MISMATCH=throw` (CI's `mcp-node`
-shards and browser jobs), and log it otherwise as a record with
-`event: 'okf-declined'`, the function and the core's reason, never the text or
-document. Codec's layer 1 (`codec-rust`) fails any test the core declined; it
-once excused ten by name, and the list is gone because none is provoked now.
+A call the core refuses (a `CoreInputRefused` from the shim) used to be answered
+by the TypeScript in every mode. With the TypeScript deleted, codec answers a
+decline itself (`parseOkf` and `serializeOkf` in `okf-core.ts`), and it is no
+longer reported as a counted `okf-declined` record: the caller sees the refusal.
+
+- **A read** that declines (a head past the 768 KiB cap, or an answer the shim
+  cannot account for) is a `CodecParseResult` failure at stage
+  `frontmatter-schema` whose message carries the core's reason. The model
+  bounds what a frontmatter may hold, so the schema stage is the one that
+  fits; the callers already report a failed parse with its message.
+- **A write** that declines throws `OkfNotYamlSafeError`, the typed error
+  `document.set`, `document.create` and the exports already turn into a
+  refusal while the author still holds the content, with one issue at the
+  document root carrying the core's reason. A value with no YAML spelling
+  (`CoreOkfUnwritable`) keeps its places, paths and words as before. Any other
+  throw from the core is a defect and stays loud.
+
+What still declines are the inputs outside `OkfMarkdownDocument`'s type (S1: a
+root key the schema does not name, a field of another kind), a value nested past
+the writer's 64 collections (S5), a frontmatter whose unwritable places outweigh
+the answer (S6) and a document past the model's limit (S2). Each was a tolerated
+difference under q37 while the TypeScript wrote what the core refused; deciding
+them for the deletion: S1 is refused as above, because no caller can build one
+without a cast and the typed refusal is the honest answer; S5 and S6 are refused
+as above, since a value nested past 32 collections is one the reader already
+refuses and a document whose every unwritable place would be refused anyway
+only gains the typed error; S2 is a read refusal at the schema stage.
+`okf-core.test.ts` pins each mapping, and `serialize.test.ts` still pins every
+case the core answers by name.
 
 Before the PR that closed the cases below, running CI's `mcp-node` command with
 `WHITEBOARD_CORE_OKF=differential WHITEBOARD_CORE_MISMATCH=throw` over the
@@ -90,9 +118,10 @@ without a cast.
 
 ## Boundary cost (QR-22b)
 
-Instrument: `packages/codec/src/test-utils/okf-wasm/boundary.ts`, driven by
+Instrument (deleted with the TypeScript it compared against, 2026-11-10; it is in
+the history before that commit): `packages/codec/src/test-utils/okf-wasm/boundary.ts`, driven by
 `scripts/okf-boundary.mjs`
-(`node packages/codec/scripts/okf-boundary.mjs --rounds=9 --batch-ms=50`;
+(`--rounds=9 --batch-ms=50`;
 `--runtime=node,chromium,workerd`, `--workerd=<binary>`, `--json=<path>`). It
 bundles the instrument once with no alias, so every runtime runs the same code
 and the TypeScript side is the real `parseOkf` and `serializeOkf`
@@ -185,6 +214,6 @@ What it says:
 | Criterion | Recorded |
 |---|---|
 | Port shape | Structure-preserving. `crates/core/codec/src/okf/{document,fence,schema,write}.rs` follow `parse.ts`, `schema.ts` and `serialize.ts`. `js.rs` exists to keep the JavaScript behaviours the TypeScript leans on: property enumeration order, `trim`'s whitespace, UTF-16 code unit order and Zod's length checks. |
-| TypeScript deletion deadline | ADR-0054's default, kept by owner decision q26: the TypeScript OKF envelope is deleted in the release after the first one that defaults to `rust`. `parseOkf` and `serializeOkf` are synchronous, so the deletion first needs the wasm initialised synchronously wherever they run, the jsdom test projects included; that mechanism is part of the deletion, not a reason to defer it. The mechanism now exists and runs: `installOkfCore` (`packages/codec/src/okf/okf-core.ts`) installs a core for a realm, and codec's plain `parseOkf` and `serializeOkf` dispatch through it synchronously, in TypeScript when none is installed. Each root installs its own (the daemon when it first builds the OKF core, the web app when `currentOkfCodec()` first finds its core loaded), and every Node-hosted vitest project that can reach codec's exports installs one in its setup file (`src/test-utils/okf-core-setup/`) from `WHITEBOARD_CORE_OKF` or, for web-jsdom, `VITE_WHITEBOARD_CORE_OKF`, awaiting the artifact at the top level. CI's `test-shared`, `test-jsdom` and both stress legs run them in `differential` with `throw`; a missing artifact fails the run. |
-| Rollback | Set `WHITEBOARD_CORE_OKF=ts` (daemon, read at start) or build the web app with `VITE_WHITEBOARD_CORE_OKF=ts` (read at build time). `differential` also answers with the TypeScript, and a call the core declines is answered by the TypeScript in every mode. |
-| Freeze lift | `packages/codec/src/okf` is frozen for feature work until the switch is `rust` and the TypeScript is deleted; after that, features go to Rust only (ADR-0054 decision 23). |
+| TypeScript deletion deadline | Done, under owner decision q40 (2026-11-10): the TypeScript of a ported module is deleted as soon as its migration is complete, not in the release after the first that defaults to `rust`, which supersedes q26's schedule. The mechanism the deletion needed (the wasm initialised before any synchronous `parseOkf` or `serializeOkf`) is `installOkfCore`: the daemon installs it at boot, before it touches the data dir, and refuses to start without the artifact; the web page awaits `okfReady()` (`apps/web/src/lib/okf-codec.ts`) before an import, a download or a send to the daemon; every Node-hosted vitest project installs it in its setup file (`packages/codec/src/test-utils/okf-core-setup/`) and fails the project, naming the build step, when the artifact is missing; browser projects fetch it as the page does. Deleted: `parse.ts`, `serialize.ts`, `frontmatter-yaml.ts`, `yaml-safe.ts`, the `ts`/`differential` switch (`OkfImpl`, `OkfMismatch`, `okfCodec`) and both environment variables, the layer-1 resolver (`okf-wasm/`), and the tests and generators that only compared the two (`wasm.rust.test.ts`, `serialize-unsafe.rust.test.ts`, `tolerated.rust.test.ts`, the frontmatter recording's generator and test). The recordings (`okf.jsonl`, `frontmatter.jsonl`, `js-whitespace.jsonl`) stay, frozen, as the goldens the Rust crates replay; `okf-recorded-oracle.test.ts` now holds the shim to `okf.jsonl`. |
+| Rollback | None. There is no TypeScript to fall back to; a defect in the core is fixed in `crates/` and the artifact rebuilt. The daemon and a web build refuse to start or build without the artifact rather than degrade. |
+| Freeze lift | Lifted 2026-11-10 with the TypeScript's deletion: `packages/codec/src/okf` holds only the dispatcher and the schemas, and features go to Rust only (ADR-0054 decision 23). |
