@@ -7,6 +7,9 @@
 //! value below is what Zod 4 answers for it, checked against the installed Zod.
 
 use whiteboard_codec::json_canvas::{Code, Failure, Issue, PathStep, parse};
+// On wasm32 the same tests run under Node (QR-21 layer 3).
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::wasm_bindgen_test as test;
 
 const BOX: &str = r#""x":0,"y":0,"width":10,"height":10"#;
 
