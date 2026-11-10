@@ -52,38 +52,30 @@ const EXACT_DIGITS: usize = 800;
 
 /// `digits` unless `x` lies exactly halfway between two spellings of that
 /// length, in which case ECMA-262 picks the one whose last digit is even where
-/// Rust's `{:e}` rounds half up.
+/// Rust's `{:e}` rounds half up. Rounding up already gives the even spelling
+/// when the lower one ends in an odd digit, so only an even lower one is
+/// looked for, and only when it reads back as `x`.
 ///
-/// A tie needs two spellings of the same length both within half a unit in
-/// the last place of `x`, which no 15-digit spelling is: a double carries 15.95
-/// digits. So only the 16- and 17-digit spellings are looked at, and of those
-/// only the tenth that end in a five once rendered one digit longer.
+/// Halfway means `x` rendered one digit longer ends in a five and is exact:
+/// the first test is the cheap one, and the tenth of numbers that pass it pay
+/// for the exact rendering.
 fn settle_tie(x: f64, digits: String, exponent: i64) -> String {
     let k = digits.len();
-    if k < 16 {
-        return digits;
-    }
     let (longer, _) = scientific(&format!("{x:.k$e}"));
-    if longer.len() != k.saturating_add(1) || !longer.ends_with('5') {
+    if !longer.ends_with('5') {
         return digits;
     }
     let (exact, _) = scientific(&format!("{x:.EXACT_DIGITS$e}"));
     let halfway = exact.get(..longer.len()) == Some(longer.as_str())
         && exact.get(longer.len()..).is_some_and(|rest| rest.bytes().all(|b| b == b'0'));
-    let Some(lower) = longer.get(..k) else { return digits };
-    let upper = lower.parse::<u64>().ok().map(|n| n.saturating_add(1).to_string());
-    let (true, Some(upper)) = (halfway, upper) else { return digits };
-    let reads_back = |candidate: &str| {
-        let power = exponent.saturating_add(1);
-        format!("0.{candidate}e{power}")
-            .parse::<f64>()
-            .is_ok_and(|read| read.to_bits() == x.to_bits())
-    };
-    let even = lower.ends_with(['0', '2', '4', '6', '8']);
-    match (even, upper.len() == k, reads_back(lower), reads_back(&upper)) {
-        (true, _, true, _) => lower.to_string(),
-        (false, true, _, true) => upper,
-        _ => digits,
+    let Some(lower) = longer.get(..k).filter(|_| halfway) else { return digits };
+    let power = exponent.saturating_add(1);
+    let reads_back =
+        format!("0.{lower}e{power}").parse::<f64>().is_ok_and(|read| read.to_bits() == x.to_bits());
+    if reads_back && lower.ends_with(['0', '2', '4', '6', '8']) {
+        lower.to_string()
+    } else {
+        digits
     }
 }
 
@@ -145,6 +137,22 @@ mod tests {
             (4_503_599_627_370_503.0 / 4.0, "1125899906842625.8"),
             (4_503_599_627_370_505.0 / 4.0, "1125899906842626.2"),
             (4_503_599_627_370_507.0 / 4.0, "1125899906842626.8"),
+        ];
+        for (x, text) in cases {
+            assert_eq!(js_number_to_string(x), text, "{x:e}");
+        }
+    }
+
+    #[test]
+    fn a_value_just_off_halfway_takes_the_nearer_spelling_though_the_lower_is_even() {
+        // Rendered one digit longer these end in a five, and the lower of their two
+        // 17-digit spellings is even and reads back, but they lie a little past the
+        // middle, so the upper one is nearer and is what JavaScript prints.
+        let cases: [(f64, &str); 4] = [
+            (21.653_126_585_297_287, "21.653126585297287"),
+            (5.970_440_539_065_748_5, "5.9704405390657485"),
+            (0.030_599_815_007_299_185, "0.030599815007299185"),
+            (0.060_839_576_176_367_705, "0.060839576176367705"),
         ];
         for (x, text) in cases {
             assert_eq!(js_number_to_string(x), text, "{x:e}");

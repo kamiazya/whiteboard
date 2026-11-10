@@ -58,10 +58,9 @@ fn number_of(text: &str) -> f64 {
     if let Some(digits) = radix_digits(text) {
         return digits;
     }
-    match text {
-        "Infinity" | "+Infinity" => return f64::INFINITY,
-        "-Infinity" => return f64::NEG_INFINITY,
-        _ => {}
+    // `-Infinity` and every other word read as `NaN` below, and neither reaches one.
+    if matches!(text, "Infinity" | "+Infinity") {
+        return f64::INFINITY;
     }
     // Rust's parser also reads `inf` and `nan`, which JavaScript does not.
     if text.bytes().all(|b| b.is_ascii_digit() || matches!(b, b'.' | b'e' | b'E' | b'+' | b'-')) {

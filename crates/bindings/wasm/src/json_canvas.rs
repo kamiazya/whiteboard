@@ -296,6 +296,23 @@ mod tests {
             "a".repeat(JSON_CANVAS_SERIALIZE.max_bytes)
         );
         assert_eq!(refused(&over), json!(["refused", "input-too-large", "too-large"]));
+        // One byte fewer than the cap is within it, and a wire of exactly the cap is
+        // too: it is past the cap only when it is over.
+        let wire = |pad: usize| {
+            format!(
+                "[\"m\",\"nodes\",[\"s\"],\"edges\",[\"s\"],\"tags\",[\"s\",\"{}\"]]",
+                "a".repeat(pad)
+            )
+        };
+        let frame = wire(0).len();
+        let cap = JSON_CANVAS_SERIALIZE.max_bytes;
+        for pad in [cap - frame - 1, cap - frame] {
+            assert!(json_canvas_serialize(&wire(pad), false).starts_with('{'), "{pad}");
+        }
+        assert_eq!(
+            refused(&wire(cap - frame + 1)),
+            json!(["refused", "input-too-large", "too-large"])
+        );
     }
 
     #[test]
