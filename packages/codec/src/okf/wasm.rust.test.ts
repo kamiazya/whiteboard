@@ -53,6 +53,7 @@ const reach = {
   written: 0,
   unwritable: 0,
   declined: 0,
+  reordered: 0,
 }
 
 type Answer<T> =
@@ -301,7 +302,7 @@ describe('generated texts and documents through the wasm', () => {
   )
 
   fcTest.prop([seeds], withDefaults({ numRuns: 600 }))(
-    'a document in any key order is written as the TypeScript writes it, or declined',
+    'a document in any key order is written as the TypeScript writes it',
     (seed) => {
       const d = new Dice(mulberry32(seed))
       const { frontmatter, body } = validDocument(d)
@@ -313,7 +314,10 @@ describe('generated texts and documents through the wasm', () => {
           entries[i] as [string, unknown],
         ]
       }
+      const written = reach.written
       expectWritesAgree({ frontmatter: Object.fromEntries(entries), body } as OkfMarkdownDocument)
+      const moved = entries.some(([name], at) => name !== Object.keys(frontmatter)[at])
+      if (moved && reach.written > written) reach.reordered++
     },
   )
 
@@ -331,6 +335,7 @@ describe('generated texts and documents through the wasm', () => {
     expect(reach.loneSurrogate).toBeGreaterThan(80)
     expect(reach.written).toBeGreaterThan(1200)
     expect(reach.unwritable).toBeGreaterThan(350)
-    expect(reach.declined).toBeGreaterThan(350)
+    // The caller's key order is written, not declined (owner decision q36).
+    expect(reach.reordered).toBeGreaterThan(350)
   })
 })

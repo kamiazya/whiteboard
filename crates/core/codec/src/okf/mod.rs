@@ -68,6 +68,14 @@ pub fn serialize(document: &Document) -> Result<String, Vec<Fault>> {
     write::document(document)
 }
 
+/// Writes a frontmatter given as the mapping its caller built, root keys in
+/// the caller's order, as `serializeOkf` writes an object in the order it was
+/// built. The mapping is not checked against the schema: a caller holds it to
+/// [`OkfMarkdownFrontmatter`] first.
+pub fn serialize_in_order(frontmatter: Map, body: &str) -> Result<String, Vec<Fault>> {
+    write::in_order(frontmatter, body)
+}
+
 /// Whether a string or a key of `value` holds `mark`.
 fn holds_mark(value: &Value, mark: char) -> bool {
     match value {

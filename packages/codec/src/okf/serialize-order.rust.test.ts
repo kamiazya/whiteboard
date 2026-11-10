@@ -9,10 +9,10 @@ import type { OkfMarkdownDocument } from './schema.js'
 import { serializeOkf as serializeOkfTs } from './serialize.js'
 
 /**
- * The Rust writer refuses a frontmatter whose root keys are not in schema
- * order, and a refusal is answered by the TypeScript. The codec puts the keys
- * in order before either implementation sees them, so a caller's spread order
- * costs nothing and the core is the one that writes.
+ * A frontmatter is written with its root keys in the order the caller built
+ * it, by either implementation: the Rust core writes the order the wire
+ * carries rather than declining one that is not the schema's, so a caller's
+ * spread order neither moves a byte nor hands the write to the TypeScript.
  */
 const artifact = fileURLToPath(import.meta.resolve('@kamiazya/whiteboard-core-wasm/wasm'))
 let core: Core
@@ -73,20 +73,27 @@ function overCore() {
 }
 
 describe('serializeOkf through the Rust core', () => {
-  it('does not decline for the order a caller spreads title in', () => {
+  it('keeps the order a caller spreads title in', () => {
     const { codec, reports } = overCore()
     const doc = build(['type', 'description', 'tags', 'title', 'facets'])
-    expect(codec.serializeOkf(doc)).toBe(
-      serializeOkfTs(build(['type', 'title', 'description', 'tags', 'facets'])),
-    )
+    const written = codec.serializeOkf(doc)
+    expect(written).toBe(serializeOkfTs(doc))
+    expect(written.indexOf('title:')).toBeGreaterThan(written.indexOf('tags:'))
     expect(reports).toEqual([])
   })
 
-  fcTest.prop([shuffledKeys])('does not decline for root keys in any order', (names) => {
+  fcTest.prop([shuffledKeys])('writes root keys in any order as the TypeScript does', (names) => {
     const { codec, reports } = overCore()
-    const expected = SCHEMA_ORDER.filter((name) => names.includes(name))
-    expect(codec.serializeOkf(build(names))).toBe(serializeOkfTs(build(expected)))
+    const doc = build(names)
+    expect(codec.serializeOkf(doc)).toBe(serializeOkfTs(doc))
     expect(reports).toEqual([])
+  })
+
+  it('writes the TypeScript the caller order too', () => {
+    const doc = build(['type', 'tags', 'title'])
+    const written = okfCodec(undefined).serializeOkf(doc)
+    expect(written).toBe(serializeOkfTs(doc))
+    expect(written.indexOf('title:')).toBeGreaterThan(written.indexOf('tags:'))
   })
 
   it('draws orders other than the schema one', () => {

@@ -86,7 +86,7 @@ describe('okfCodec', () => {
     'ts',
     'differential',
     'rust',
-  ] as const)('puts the root keys in schema order before the core and the TypeScript see them under %s', (impl) => {
+  ] as const)("hands the core and the TypeScript the root keys in the caller's order under %s", (impl) => {
     const unordered = {
       frontmatter: { type: 'note', tags: ['x'], title: 't', facets: {}, unknown: 1 },
       body: '',
@@ -100,14 +100,14 @@ describe('okfCodec', () => {
     })
     const { codec } = switched(core, impl)
     const written = codec.serializeOkf(unordered)
-    expect(written).toBe('---\ntype: note\ntitle: t\ntags:\n  - x\nunknown: 1\nfacets: {}\n---\n')
-    if (impl !== 'ts') expect(seen).toEqual([['type', 'title', 'tags', 'facets', 'unknown']])
+    expect(written).toBe('---\ntype: note\ntags:\n  - x\ntitle: t\nunknown: 1\nfacets: {}\n---\n')
+    if (impl !== 'ts') expect(seen).toEqual([['type', 'tags', 'title', 'facets', 'unknown']])
   })
 
-  it('writes in schema order with no core at all', () => {
+  it("writes in the caller's order with no core at all", () => {
     const doc = { frontmatter: { type: 'note', tags: ['x'], title: 't' }, body: '' }
     expect(okfCodec(undefined).serializeOkf(doc)).toBe(
-      '---\ntype: note\ntitle: t\ntags:\n  - x\n---\n',
+      '---\ntype: note\ntags:\n  - x\ntitle: t\n---\n',
     )
   })
 
