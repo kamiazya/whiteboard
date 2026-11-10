@@ -312,3 +312,10 @@ fn an_output_path_segment_is_lowercase_words_joined_by_dashes_or_underscores() {
         refused_with(&defs(), path, "is not crates/<dir>/<dir>/src/generated/<name>.rs");
     }
 }
+
+#[test]
+fn a_default_that_is_not_empty_is_refused_naming_what_it_may_be() {
+    let text = contract(&mutated_defs(r#""default": {},"#, r#""default": "x","#), CORE);
+    let error = dialect::parse(&text).unwrap_err();
+    assert!(error.contains("an empty list or an empty object"), "{error}");
+}

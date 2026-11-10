@@ -234,8 +234,11 @@ try {
     geckodriverExit = signal ?? code
   })
   let geckodriverReady = false
-  for (let i = 0; i < 120 && !geckodriverReady && geckodriverExit === null; i += 1) {
-    geckodriverReady = await fetch(`http://127.0.0.1:${GECKO_PORT}/status`).then(
+  const geckodriverDeadline = Date.now() + 30_000
+  while (!geckodriverReady && geckodriverExit === null && Date.now() < geckodriverDeadline) {
+    geckodriverReady = await fetch(`http://127.0.0.1:${GECKO_PORT}/status`, {
+      signal: AbortSignal.timeout(1_000),
+    }).then(
       () => true,
       () => false,
     )
