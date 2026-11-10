@@ -310,8 +310,9 @@ describe('generated texts and canvases through the wasm', () => {
     expect(reach.written).toBeGreaterThan(1200)
     expect(reach.invalid).toBeGreaterThan(270)
     expect(reach.readDeclined['lone-surrogate']).toBeGreaterThan(20)
-    expect(reach.readDeclined.url).toBeGreaterThan(30)
     expect(reach.readDeclined['too-deep']).toBeGreaterThan(0)
-    expect(reach.writeDeclined.url).toBeGreaterThan(18)
+    // A link is judged by the core, never declined.
+    expect(reach.readDeclined.url).toBeUndefined()
+    expect(reach.writeDeclined.url).toBeUndefined()
   })
 })

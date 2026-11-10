@@ -53,7 +53,7 @@ export class CoreInputRefused extends Error {
   constructor(
     readonly operation: string,
     readonly code: RefusalCode,
-    /** What kind of input earned the refusal, when the artifact says (`lone-surrogate`, `url`, `too-deep`, ...). */
+    /** What kind of input earned the refusal, when the artifact says (`lone-surrogate`, `too-deep`, ...). */
     readonly detail?: string,
   ) {
     super(`${operation} refused its input: ${code}${detail === undefined ? '' : ` (${detail})`}`)
