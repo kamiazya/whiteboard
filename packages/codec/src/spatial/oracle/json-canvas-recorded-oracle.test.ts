@@ -1,11 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { readDeclineEarned } from '../../test-utils/json-canvas-oracle/earned.js'
 import {
-  readDeclineEarned,
-  writeDeclineEarned,
-} from '../../test-utils/json-canvas-oracle/earned.js'
-import {
-  canvasOf,
   decodeRecording,
   type Issues,
   type ReaderCase,
@@ -27,9 +23,9 @@ import { parseSpatial, serializeSpatial } from '../spatial-core.js'
  *
  * Message text is not recorded: the Rust port words its refusals in its own
  * types, so the readers agree on the stage and, for a schema refusal, each Zod
- * issue's path and code. A call the core declines (a lone surrogate, nesting
- * past its reader, a link whose host needs tables it lacks) is held to the
- * inputs that earn it, judged without the core (`earned.ts`); the viewer reader
+ * issue's path and code. A read the core declines (a lone surrogate, nesting
+ * past its reader) is held to the inputs that earn it, judged without the core
+ * (`earned.ts`); a recorded write is never declined, and the viewer reader
  * declines nothing.
  */
 const FILE = new URL('./json-canvas.jsonl', import.meta.url)
@@ -100,24 +96,15 @@ describe('the recorded JSON Canvas oracle', () => {
     }
     // The decline is the exception: most texts are answered, and each class is met.
     expect(declined.length, 'declined texts').toBeLessThan(readers.length / 15)
-    for (const reason of ['lone-surrogate', 'url', 'too-deep']) {
+    for (const reason of ['lone-surrogate', 'too-deep']) {
       expect(declined, `a text declined as ${reason}`).toContain(reason)
     }
   })
 
-  it('writes every recorded canvas through the core as recorded, declining only a link', () => {
-    let declined = 0
+  it('writes every recorded canvas through the core as recorded, declining none', () => {
     for (const recording of writers) {
-      const answer = writerCase(serializeSpatial, recording.c, recording.m)
-      if ('declined' in answer) {
-        expect(writeDeclineEarned(answer.declined, canvasOf(recording.c))).toBe(true)
-        declined++
-      } else {
-        expect(answer).toEqual(recording)
-      }
+      expect(writerCase(serializeSpatial, recording.c, recording.m)).toEqual(recording)
     }
-    expect(declined, 'declined canvases').toBeGreaterThan(0)
-    expect(declined, 'declined canvases').toBeLessThan(writers.length / 15)
   })
 
   it('reads every recorded text through the viewer reader as recorded, declining nothing', () => {

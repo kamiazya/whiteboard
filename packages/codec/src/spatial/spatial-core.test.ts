@@ -168,14 +168,28 @@ describe('what the staged core cannot be sent, as a caller sees it', () => {
     })
   })
 
-  it('refuses a link whose host needs tables the core lacks, and writes a plain one', () => {
+  it('reads a link to an IPv6, percent-encoded, international or file host, and refuses a bad one', () => {
     const link = (url: string) =>
       `{"nodes":[{"id":"a","type":"link","x":0,"y":0,"width":1,"height":1,"url":"${url}"}]}`
-    expect(parseSpatial(link('https://example.com/'))).toMatchObject({ ok: true })
-    expect(parseSpatial(link('https://bücher.example/'))).toMatchObject({
-      ok: false,
-      error: { stage: 'json-canvas-schema', message: expect.stringContaining('(url)') },
-    })
+    for (const url of [
+      'https://example.com/',
+      'http://[::1]:8080/',
+      'http://ex%41mple.com/',
+      'https://bücher.example/',
+      'https://xn--r8jz45g.jp/',
+      'file:///C:/notes.md',
+    ]) {
+      expect(parseSpatial(link(url)), url).toMatchObject({ ok: true })
+    }
+    for (const url of ['http://[::1/', 'http://ex%20ample.com/']) {
+      expect(parseSpatial(link(url)), url).toMatchObject({
+        ok: false,
+        error: {
+          stage: 'json-canvas-schema',
+          issues: [expect.objectContaining({ path: ['nodes', 0, 'url'], code: 'invalid_format' })],
+        },
+      })
+    }
   })
 
   it('refuses to write a canvas the wire does not carry, and one JSON cannot spell', () => {

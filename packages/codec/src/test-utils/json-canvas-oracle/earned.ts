@@ -52,13 +52,6 @@ function* strings(value: unknown): Generator<string> {
 /** A `\\u` escape of a surrogate, joined to its pair or not. */
 const SURROGATE_ESCAPE = /\\u[dD][89a-fA-F][0-9a-fA-F]{2}/
 
-/** Whether a text has a link node the core would have to judge the URL of. */
-function hasLinkNode(text: string): boolean {
-  const root = parsed(text)
-  const nodes = isRecord(root) ? root.nodes : undefined
-  return Array.isArray(nodes) && nodes.some((n) => isRecord(n) && n.type === 'link')
-}
-
 /** What `parseSpatial` declines, by the class the core gives and the input that earns it. */
 export function readDeclineEarned(reason: string, text: string): boolean {
   switch (reason) {
@@ -72,18 +65,7 @@ export function readDeclineEarned(reason: string, text: string): boolean {
     }
     case 'too-deep':
       return nesting(text) > MAX_DEPTH
-    case 'url':
-      return hasLinkNode(text)
     default:
       return false
   }
-}
-
-/** What `serializeSpatial` declines for a recorded, model-shaped canvas: a link, and only that. */
-export function writeDeclineEarned(reason: string, canvas: unknown): boolean {
-  if (reason !== 'url') return false
-  const nodes = isRecord(canvas) && Array.isArray(canvas.nodes) ? canvas.nodes : []
-  return nodes.some(
-    (n) => isRecord(n) && isRecord(n.resource) && n.resource.mimeType === 'text/uri-list',
-  )
 }
