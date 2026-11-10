@@ -9,6 +9,7 @@
 //! checked for duplicate ids.
 
 use super::issue::{Code, Decline};
+use super::length;
 use super::url;
 use whiteboard_model::checks::canvas_color_hex;
 use whiteboard_model::spatial::{CanvasColor, CanvasColorPreset};
@@ -62,7 +63,8 @@ pub(super) fn string(value: &Value) -> Read<&str> {
 /// `z.string().min(1)`.
 pub(super) fn node_id(value: &Value) -> Read<&str> {
     let (text, mut flaws) = string(value);
-    if text.is_some_and(str::is_empty) {
+    // A value that is no string but has a length is checked as one is.
+    if text.is_some_and(str::is_empty) || (text.is_none() && length::below_one(value)) {
         flaws.push(continuing(Code::TooSmall));
     }
     (text, flaws)

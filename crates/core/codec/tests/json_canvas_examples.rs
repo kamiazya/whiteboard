@@ -25,7 +25,12 @@ fn key(name: &'static str) -> PathStep {
 }
 
 fn issue(path: Vec<PathStep>, code: Code) -> Issue {
-    Issue { path, code }
+    Issue { path, code, message: None }
+}
+
+/// A refinement the wire schema states in code, with the message it states.
+fn refinement(path: Vec<PathStep>, message: &str) -> Issue {
+    Issue { path, code: Code::Custom, message: Some(message.to_string()) }
 }
 
 fn refused(text: &str) -> Vec<Issue> {
@@ -392,10 +397,16 @@ fn the_documents_own_refinements_run_only_when_nothing_else_aborted() {
     assert_eq!(
         refused(&doc),
         vec![
-            issue(vec![key("nodes")], Code::Custom),
-            issue(vec![key("edges")], Code::Custom),
-            issue(vec![key("edges"), PathStep::Index(0), key("toNode")], Code::Custom),
-            issue(vec![key("edges"), PathStep::Index(1), key("fromNode")], Code::Custom),
+            refinement(vec![key("nodes")], r#"duplicate node id "a""#),
+            refinement(vec![key("edges")], r#"duplicate edge id "e""#),
+            refinement(
+                vec![key("edges"), PathStep::Index(0), key("toNode")],
+                r#"edge "e" references nonexistent toNode "zz""#
+            ),
+            refinement(
+                vec![key("edges"), PathStep::Index(1), key("fromNode")],
+                r#"edge "e" references nonexistent fromNode "yy""#
+            ),
         ]
     );
     // A continuing issue (a pattern) lets the refinements run beside it; an
@@ -723,12 +734,15 @@ fn the_strict_mode_refuses_a_canvas_the_wire_schema_refuses_and_the_extended_doe
     let at = vec![key("edges"), PathStep::Index(0), key("toNode")];
     assert_eq!(
         serialize(&dangling, Mode::Strict),
-        Err(WriteFailure::Schema(vec![issue(at, Code::Custom)]))
+        Err(WriteFailure::Schema(vec![refinement(
+            at,
+            r#"edge "e" references nonexistent toNode "ghost""#
+        )]))
     );
     let twice = canvas_of(vec![text_node("a"), text_node("a")]);
     assert_eq!(
         serialize(&twice, Mode::Strict),
-        Err(WriteFailure::Schema(vec![issue(vec![key("nodes")], Code::Custom)]))
+        Err(WriteFailure::Schema(vec![refinement(vec![key("nodes")], r#"duplicate node id "a""#)]))
     );
     let mut not_a_pixel = text_node("a");
     not_a_pixel.x = f64::NAN;
@@ -789,4 +803,72 @@ fn a_value_nested_past_the_writers_cap_is_declined() {
         serialize(&canvas_of(vec![node]), Mode::Extended),
         Err(WriteFailure::Declined(Decline::Unwritable))
     );
+}
+
+#[test]
+fn a_value_with_a_length_is_checked_for_one_after_it_is_refused_as_the_wrong_type() {
+    // Zod runs `min(1)` on anything that has a `length`, whatever it is, and the
+    // host compares that length with `>=`, coercing it. Each expectation is what
+    // Zod 4 answers for the value as an edge's `fromNode`.
+    let codes = |value: &str| {
+        let doc = format!(
+            r#"{{"nodes":[{{"id":"a",{BOX},"type":"group"}}],"edges":[{{"id":"e","fromNode":{value},"toNode":"a"}}]}}"#
+        );
+        refused(&doc)
+            .iter()
+            .filter(|i| i.path == vec![key("edges"), PathStep::Index(0), key("fromNode")])
+            .map(|i| i.code)
+            .collect::<Vec<_>>()
+    };
+    let wrong = vec![Code::InvalidType];
+    let both = vec![Code::InvalidType, Code::TooSmall];
+    for (value, expected) in [
+        ("[]", &both),
+        ("[[]]", &wrong),
+        ("[1]", &wrong),
+        ("[0,1]", &wrong),
+        ("{}", &wrong),
+        ("5", &wrong),
+        ("null", &wrong),
+        (r#"{"length":0}"#, &both),
+        (r#"{"length":1}"#, &wrong),
+        (r#"{"length":0.5}"#, &both),
+        (r#"{"length":-1}"#, &both),
+        (r#"{"length":null}"#, &both),
+        (r#"{"length":true}"#, &wrong),
+        (r#"{"length":false}"#, &both),
+        (r#"{"length":""}"#, &both),
+        (r#"{"length":"0"}"#, &both),
+        (r#"{"length":"1"}"#, &wrong),
+        (r#"{"length":"  1 \n"}"#, &wrong),
+        (r#"{"length":"abc"}"#, &both),
+        (r#"{"length":"inf"}"#, &both),
+        (r#"{"length":"nan"}"#, &both),
+        (r#"{"length":"1_0"}"#, &both),
+        (r#"{"length":"1e0"}"#, &wrong),
+        (r#"{"length":"1e-1"}"#, &both),
+        (r#"{"length":".5e1"}"#, &wrong),
+        (r#"{"length":"5."}"#, &wrong),
+        (r#"{"length":"."}"#, &both),
+        (r#"{"length":"Infinity"}"#, &wrong),
+        (r#"{"length":"-Infinity"}"#, &both),
+        (r#"{"length":"infinity"}"#, &both),
+        (r#"{"length":"0x10"}"#, &wrong),
+        (r#"{"length":"0x0"}"#, &both),
+        (r#"{"length":"0xg"}"#, &both),
+        (r#"{"length":"0o7"}"#, &wrong),
+        (r#"{"length":"0o8"}"#, &both),
+        (r#"{"length":"0b1"}"#, &wrong),
+        (r#"{"length":"0b2"}"#, &both),
+        (r#"{"length":"0x"}"#, &both),
+        (r#"{"length":[]}"#, &both),
+        (r#"{"length":[2]}"#, &wrong),
+        (r#"{"length":[0,1]}"#, &both),
+        (r#"{"length":[1.5]}"#, &wrong),
+        (r#"{"length":[true]}"#, &both),
+        (r#"{"length":[null,1]}"#, &both),
+        (r#"{"length":{}}"#, &both),
+    ] {
+        assert_eq!(&codes(value), expected, "{value}");
+    }
 }
