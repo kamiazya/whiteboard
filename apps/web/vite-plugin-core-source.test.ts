@@ -18,7 +18,7 @@ function loadOf(env: Env, shipping: Shipping = {}, command = 'build'): Load {
   return plugin.load as Load
 }
 const PRODUCTION = { DEV: false, MODE: 'production' }
-const TYPESCRIPT = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts' }
+const TYPESCRIPT = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts', VITE_WHITEBOARD_CORE_OKF: 'ts' }
 
 const SOURCE = '/repo/apps/web/src/lib/spatial/layout-core-source.ts'
 
@@ -71,6 +71,13 @@ describe('coreSourcePlugin', () => {
   it('refuses to build a release that is to ship the wasm when none is staged', () => {
     expect(() => loadOf(TYPESCRIPT, { artifactStaged: false, ship: '1' })).toThrow(
       /WHITEBOARD_SHIP_CORE_WASM/,
+    )
+  })
+
+  it('does not treat routing in TypeScript alone as an opt-out, since OKF defaults to the core', () => {
+    const routingOnly = { ...PRODUCTION, VITE_WHITEBOARD_CORE: 'ts' }
+    expect(() => loadOf(routingOnly, { artifactStaged: false })).toThrow(
+      /VITE_WHITEBOARD_CORE_OKF=ts/,
     )
   })
 

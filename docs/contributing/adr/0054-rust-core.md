@@ -61,10 +61,11 @@ is deleted, the release after the first one that defaults to `rust`.
 OKF envelope (`parseOkf`, `serializeOkf`) is ported to `whiteboard-codec`,
 reached through two wasm exports, `okf_parse` and `okf_serialize` (ABI 15),
 and switched by `okfCodec` in `packages/codec`. `WHITEBOARD_CORE_OKF` and
-`VITE_WHITEBOARD_CORE_OKF` run it `differential` in development and CI and
-leave it `ts` in a release; one wasm instance serves both modules in each
-realm. Its checklist is [parity/okf-codec.md](../parity/okf-codec.md), and the
-switch stays off `rust` until every row is met or not applicable. The one
+`VITE_WHITEBOARD_CORE_OKF` run it `differential` in development and CI; one
+wasm instance serves both modules in each realm. Its checklist is
+[parity/okf-codec.md](../parity/okf-codec.md); every row is met or not
+applicable, and the switch has since moved: both settings default to `rust`
+(a test run of the web app stays `ts`), with `=ts` as the rollback. The one
 difference tolerated is a `yaml`-stage refusal's wording (owner decision q25).
 The TypeScript's deletion waits for the ops step (step 10, owner decision
 q26), since the daemon's tool layer is its last caller. The decisions below

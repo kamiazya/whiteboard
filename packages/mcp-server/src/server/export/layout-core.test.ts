@@ -91,7 +91,7 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
-      WHITEBOARD_CORE_OKF: 'ts',
+      WHITEBOARD_CORE_OKF: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_OKF: 'fast' })).toThrow()
@@ -141,8 +141,11 @@ describe('the daemon layout core', () => {
     await expect(layoutCore(settings)()).rejects.toThrow()
   })
 
-  it('loads nothing for OKF under ts, its default', async () => {
-    const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
+  it('loads nothing for OKF under ts, the rollback', async () => {
+    const settings = layoutCoreSettingsFrom({
+      WHITEBOARD_CORE_OKF: 'ts',
+      WHITEBOARD_CORE_DIR: emptyDir(),
+    })
     expect(await coreLoaders(settings).okfCore()).toBeUndefined()
   })
 

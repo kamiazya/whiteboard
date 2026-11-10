@@ -22,13 +22,15 @@ const log = getLogger('layout-core')
  * log line and the drawing.
  *
  * `WHITEBOARD_CORE_OKF` is the same switch for the OKF envelope (every read
- * and write of an OKF Markdown document). It is `ts` unless something sets
- * it, because the OKF port has not passed its parity checklist yet; the dev
- * scripts and CI's test jobs set `differential`.
+ * and write of an OKF Markdown document). It is `rust` unless something sets
+ * it, like `WHITEBOARD_CORE`: the OKF port has passed its parity checklist
+ * (docs/contributing/parity/okf-codec.md). The dev scripts and CI's test jobs
+ * set `differential`; `ts` is the rollback while the TypeScript exists. A text
+ * the Rust core declines is answered by the TypeScript in every mode.
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_OKF: z.enum(['ts', 'differential', 'rust']).default('ts'),
+  WHITEBOARD_CORE_OKF: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
