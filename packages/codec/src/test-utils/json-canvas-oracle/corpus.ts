@@ -57,7 +57,7 @@ const MUTATIONS: Mutation[] = [
   (t) => `﻿${t}`,
 ]
 
-function generatedText(d: Dice): string {
+export function generatedText(d: Dice): string {
   FAULT.on = d.chance(0.45)
   const doc = wireDocument(d)
   let text = render(FAULT.on && d.chance(0.5) ? damage(d, doc) : doc, d)
