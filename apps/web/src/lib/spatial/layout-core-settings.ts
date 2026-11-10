@@ -13,8 +13,9 @@ import { z } from 'zod'
  *
  * `VITE_WHITEBOARD_CORE_OKF` is the same switch for the OKF envelope (an
  * imported Markdown file, a downloaded note, a note sent to the daemon). It
- * stays on `ts` in a build until the OKF port passes its parity checklist;
- * the dev server runs `differential`.
+ * defaults exactly as routing does: `rust` in a production build
+ * (`VITE_WHITEBOARD_CORE_OKF=ts` is the rollback), `differential` in the dev
+ * server, `ts` in a test run.
  *
  * An unknown value is refused rather than defaulted: a typo that fell back
  * to `ts` would compare nothing and read as a pass.
@@ -38,9 +39,7 @@ export function coreSettingsFrom(env: CoreEnv): CoreSettings {
   const devDefault = env.MODE === 'test' ? 'ts' : env.DEV === true ? 'differential' : 'rust'
   return coreSettingsSchema.parse({
     impl: env.VITE_WHITEBOARD_CORE || devDefault,
-    okf:
-      env.VITE_WHITEBOARD_CORE_OKF ||
-      (env.MODE !== 'test' && env.DEV === true ? 'differential' : 'ts'),
+    okf: env.VITE_WHITEBOARD_CORE_OKF || devDefault,
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',
   })
 }
