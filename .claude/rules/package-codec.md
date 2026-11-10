@@ -32,10 +32,22 @@ paths:
   imports `core-wasm`, which would carry the wasm glue to every consumer; the ledger's `realm` shape
   holds it). With none installed they throw `OkfCoreNotInstalled`, never answer another way, so a
   root installs its core BEFORE any OKF call: the daemon at boot, the web page by awaiting
-  `okfReady()`, every Node test realm in its setup file (`test-utils/okf-core-setup/`, which fails
+  `codecsReady()`, every Node test realm in its setup file (`test-utils/core-setup/`, which fails
   the project when the artifact is missing). A call the core declines (`CoreInputRefused`) is a
   `CodecParseResult` failure at stage `frontmatter-schema` for a read and an `OkfNotYamlSafeError`
   for a write, with the core's reason. `okf-core.test.ts` pins the mapping.
+- JSON Canvas TEXT is answered the same way in the daemon and the web app, by the Rust core only:
+  `spatial/spatial-core.ts`'s `parseSpatial`/`serializeSpatial` dispatch to the `SpatialCore` a realm
+  installs with `installSpatialCore` and throw `SpatialCoreNotInstalled` otherwise. A read the core
+  declines (past 4 MiB, a lone surrogate, nesting past 64, a link whose host it has no tables for)
+  is a failure at stage `json-canvas-schema` carrying the core's reason; a write it declines, or
+  that strict mode refuses, is a `ZodError` (one issue at the root for a decline, the core's places
+  for a strict refusal). What TypeScript JSON Canvas code remains, and why: the READER
+  `readJsonCanvasText` (`spatial/read-json-canvas-text.ts`), which only `canvas-viewer` may use
+  because the widget iframe has no core (`tools/arch-lint`'s `spatial-reader-isolation.test.ts`),
+  and the projection (`toJsonCanvas`/`fromJsonCanvas`, the wire schema, the ledgers, the OCIF
+  lift), which the registry's confluence properties judge. There is NO TypeScript writer of
+  JSON Canvas text: the registry's `write` and `writeForForeignReader` call the core.
 - The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
   the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
   `JSON_CANVAS_PROJECTION` ledger and the loss tables generated from it
@@ -150,7 +162,7 @@ rather than in a string, so joining its runs yields `tightenthis`.
 
   The ledger is held from three sides, and each side catches something the others do not:
   the four directions of `.claude/rules/coverage-ledger.md` against the census's own path list
-  (a missing entry, a stale one); a comparison against what `strictDegrade` REALLY drops, so a
+  (a missing entry, a stale one); a comparison against what the strict write (the core) REALLY drops, so a
   declaration is never merely a claim; and `toJsonCanvas` building its result field by field
   rather than by spread, so a field nobody projected fails the round-trip property instead of
   riding along.
@@ -318,9 +330,12 @@ rather than in a string, so joining its runs yields `tightenthis`.
 
 ## Tests
 
-- Vitest project: `codec-node` runs every OKF suite on the Rust core its setup file installs (it
-  needs the artifact). `codec-rust` (`vitest.rust.config.ts`) runs the spatial suites listed in
-  `src/test-utils/spatial-wasm/suites.ts` against the Rust core (ADR-0054's layer 1): a decline fails the test, and `spatial-layer-one.rust.test.ts` keeps that list complete.
+- Vitest project: `codec-node` runs every OKF and JSON Canvas suite on the Rust core its setup file
+  installs (it needs the artifact). `parse.test.ts` holds the core and the viewer's TypeScript
+  reader to the same assertions, and `oracle/json-canvas-recorded-oracle.test.ts` replays the
+  frozen recording (taken from the TypeScript codec before its writer was deleted) against the
+  core, whose declines are held to the inputs that earn them (`test-utils/json-canvas-oracle/earned.ts`),
+  and against the viewer reader, which declines nothing.
 - Round-trip properties: OKF (up to canonical key order), extended JSON Canvas (lossless), and
   markdown body (modulo `normalizeMdast`, over a syntax subset that excludes constructs with
   inherent CommonMark/GFM encoding ambiguities — adjacent same-delimiter inline spans, emphasis/

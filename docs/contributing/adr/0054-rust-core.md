@@ -850,6 +850,22 @@ stage, a write throws `OkfNotYamlSafeError`); the decisions are in
 [the parity checklist](../parity/okf-codec.md). The checklist's rollback row is
 now none.
 
+**Status note (2026-11-10, the JSON Canvas TypeScript is deleted; q40, with q49
+provisional).** The third module takes stage 4 the same way. `parseSpatial` and
+`serializeSpatial` in `packages/codec` answer only through the core each realm
+installs (`installSpatialCore`) and throw `SpatialCoreNotInstalled` where none is;
+the `ts` and `differential` settings, `spatialCodec`, `SpatialMismatch`,
+`WHITEBOARD_CORE_SPATIAL`, `VITE_WHITEBOARD_CORE_SPATIAL` and `ServerDeps.spatialCore`
+are gone, and the daemon installs the core with OKF's at boot. What stays in
+TypeScript is not a second implementation of the daemon's or the web app's answer:
+the widget iframe has no core, so `canvas-viewer` keeps a TypeScript READER
+(`readJsonCanvasText`, the wire schema and the projection) that no daemon, server-core
+or web source may import (`spatial-reader-isolation.test.ts`). That is the
+recommended option of open owner question q49 (`widget-ts-reader`), taken
+provisionally until the owner answers; the alternative is a core in the widget. The
+TypeScript writer is deleted outright. Declines are refusals where the TypeScript
+answered ([the parity checklist](../parity/json-canvas-codec.md)).
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

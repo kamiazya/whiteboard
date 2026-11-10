@@ -16,7 +16,7 @@ cd whiteboard      # Node: match .node-version (currently 24). fnm, mise, nodenv
                    # full prerequisites: docs/contributing/development.md
 pnpm install
 pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser / canvas-render-browser / web-browser-window-state)
-pnpm test         # optional: all 32 vitest projects; CI runs every one a pull request reaches, and all of them on main (listed under Workflow below)
+pnpm test         # optional: all 31 vitest projects; CI runs every one a pull request reaches, and all of them on main (listed under Workflow below)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -33,15 +33,15 @@ See [docs/contributing/development.md](docs/contributing/development.md#repo-loc
 
 This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer to choose for which kind of change.
 
-`pnpm test` runs 32 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
+`pnpm test` runs 31 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
 
 | runtime | projects |
 |---|---|
-| node | `mcp-node`, `mcp-smoke`, `daemon-client-node`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `codec-rust` (needs `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first), `arch-lint-node`, `loro-adapter-node`, `search-node`, `core-wasm-node`, `core-wasm-rust` (needs `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first), `reference-graph-node`, `server-core-node`, `workspace-index-node`, `history-node`, `scene-node`, `extension-node`, `canvas-render-node`, `canvas-render-rust` (needs `pnpm rust:build:wasm` first), `canvas-viewer-node`, `web-node` |
+| node | `mcp-node`, `mcp-smoke`, `daemon-client-node`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `arch-lint-node`, `loro-adapter-node`, `search-node`, `core-wasm-node`, `core-wasm-rust` (needs `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` first), `reference-graph-node`, `server-core-node`, `workspace-index-node`, `history-node`, `scene-node`, `extension-node`, `canvas-render-node`, `canvas-render-rust` (needs `pnpm rust:build:wasm` first), `canvas-viewer-node`, `web-node` |
 | jsdom | `facet-ui-jsdom`, `plugin-visual-jsdom`, `canvas-viewer-jsdom`, `web-jsdom` |
 | real browser | `canvas-render-browser`, `canvas-viewer-browser`, `web-browser`, `web-browser-window-state` |
 
-**Most projects need the Rust core's wasm artifact before they run.** The OKF Markdown envelope (`parseOkf`, `serializeOkf`) has no TypeScript implementation left, so every test realm that can reach it installs the core in its setup file (`packages/codec/src/test-utils/okf-core-setup/`) and fails the whole project, naming the missing file, when the artifact is absent. That is `mcp-node`, `codec-node`, `server-core-node`, `daemon-client-node`, `reference-graph-node`, `extension-node`, `canvas-render-node`, `canvas-viewer-node`, `canvas-viewer-jsdom` and `web-jsdom`; the browser projects fetch it from the dev server. Run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` once (it needs the Rust toolchain; CI restores it from a cache keyed on the crates), and again after a change under `crates/`.
+**Most projects need the Rust core's wasm artifact before they run.** The OKF Markdown envelope (`parseOkf`, `serializeOkf`) and the JSON Canvas codec (`parseSpatial`, `serializeSpatial`) have no TypeScript implementation left in the daemon or the web app, so every test realm that can reach it installs the core in its setup file (`packages/codec/src/test-utils/core-setup/`) and fails the whole project, naming the missing file, when the artifact is absent. That is `mcp-node`, `codec-node`, `server-core-node`, `daemon-client-node`, `reference-graph-node`, `extension-node`, `canvas-render-node`, `canvas-viewer-node`, `canvas-viewer-jsdom` and `web-jsdom`; the browser projects fetch it from the dev server. Run `pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm` once (it needs the Rust toolchain; CI restores it from a cache keyed on the crates), and again after a change under `crates/`.
 
 `apps/web`'s two non-browser projects are `web-jsdom` and `web-node`; running only `--project web-jsdom` omits `web-node`'s build and deploy-config guards, so use `pnpm --filter @kamiazya/whiteboard-web test` when the question is "does this match CI".
 
