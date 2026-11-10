@@ -442,19 +442,19 @@ render key must name the library before the worker is asked.
 ## The Rust routing core, per realm (ADR-0054 stage 2)
 
 `lib/spatial/layout-core-settings.ts` decides from `VITE_WHITEBOARD_CORE` /
-`VITE_WHITEBOARD_CORE_MISMATCH` (`differential` in the dev server, `ts` in a
-production build and in a vitest run unless the job sets it; an unknown value
+`VITE_WHITEBOARD_CORE_MISMATCH` (`differential` in the dev server, `rust` in a
+production build, `ts` in a vitest run unless the job sets it; an unknown value
 throws). Each realm installs its own host through `startLayoutCore()` (the
 page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
 reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
 it routes in TypeScript. `layout-core-source.ts` is the one module that names
-the artifact, and `vite-plugin-core-source.ts` stubs it in a `ts` build (page
+the artifact, and `vite-plugin-core-source.ts` stubs it in a build that opts out of both switches (page
 AND `worker.plugins`), because the bundler resolves every import before it
-prunes any — so a production build needs no wasm. A CI job that sets the
+prunes any — so only a `ts` build needs no wasm. A CI job that sets the
 variable restores the artifact with `.github/actions/core-wasm`.
 
-The same host answers the OKF envelope (`VITE_WHITEBOARD_CORE_OKF`, `ts` in a
-build and a test run, `differential` in the dev server): one load serves
+The same host answers the OKF envelope (`VITE_WHITEBOARD_CORE_OKF`, `rust` in a
+build, `ts` in a test run, `differential` in the dev server): one load serves
 both switches, `currentOkfCodec()` (`lib/okf-codec.ts`) is what an OKF reader
 or writer in this app calls (an import, a download, a note sent to a daemon),
 and a build stubs the source only when BOTH switches read `ts`. The codec is
