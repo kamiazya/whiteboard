@@ -192,10 +192,21 @@ export function fromJsonCanvas(wire: JsonCanvasDocument): SpatialCanvas {
   return {
     nodes: wire.nodes.map(liftNode),
     edges: wire.edges.map(liftEdge),
-    ...(extension?.lines !== undefined && { lines: extension.lines }),
+    ...(extension?.lines !== undefined && { lines: extension.lines.map(liftLine) }),
     ...(extension?.facets !== undefined && { facets: extension.facets }),
     ...(extension?.tags !== undefined && { tags: extension.tags }),
   }
+}
+
+/**
+ * A line as the wire schema parsed it, without a `facets` key the schema's
+ * `.catch(undefined)` left holding `undefined`: every other element is lifted
+ * with its absent fields absent, and a canvas that holds a key set to nothing
+ * differs from one that does not under a strict comparison.
+ */
+function liftLine(line: CanvasLine): CanvasLine {
+  const { facets, ...rest } = line
+  return facets === undefined ? rest : line
 }
 
 function liftNode(node: JsonCanvasNode): SpatialNode {

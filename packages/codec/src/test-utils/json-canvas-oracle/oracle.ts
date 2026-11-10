@@ -165,8 +165,11 @@ export function writerCase(canvas: SpatialCanvas, m: SpatialSerializeMode): Writ
   return answerWriter(c, m)
 }
 
+/** The canvas a recorded writer case holds. */
+export const canvasOf = (c: WriterCase['c']): SpatialCanvas => decode(c) as SpatialCanvas
+
 function answerWriter(c: Compact, m: SpatialSerializeMode): WriterCase {
-  const canvas = decode(c) as SpatialCanvas
+  const canvas = canvasOf(c)
   try {
     return { k: 'w', m, c, y: serializeSpatial(canvas, m) }
   } catch (error) {

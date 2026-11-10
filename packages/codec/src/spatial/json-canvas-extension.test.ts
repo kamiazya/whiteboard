@@ -209,3 +209,36 @@ describe("an edge's x-whiteboard", () => {
     })
   })
 })
+
+describe('a line whose facet bucket is malformed', () => {
+  const lineWith = (facets: unknown) =>
+    parseSpatial(
+      JSON.stringify({
+        nodes: [],
+        edges: [],
+        'x-whiteboard': {
+          lines: [
+            {
+              id: 'l1',
+              from: { kind: 'point', point: { x: 0, y: 0 } },
+              to: { kind: 'point', point: { x: 5, y: 5 } },
+              facets,
+            },
+          ],
+        },
+      }),
+    )
+
+  it('lifts without a facets key, as every other lifted element does', () => {
+    const parsed = lineWith({ 'not a key': {} })
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    const line = parsed.value.lines?.[0] as object
+    expect(Object.keys(line)).toEqual(['id', 'from', 'to'])
+  })
+
+  it('keeps a well-formed bucket', () => {
+    const parsed = lineWith({ 'a.b/v0': 1 })
+    expect(parsed.ok && parsed.value.lines?.[0]?.facets).toEqual({ 'a.b/v0': 1 })
+  })
+})

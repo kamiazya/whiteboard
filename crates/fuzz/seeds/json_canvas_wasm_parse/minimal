@@ -1,0 +1,1 @@
+{"nodes":[{"id":"a","x":0,"y":0,"width":160,"height":90,"type":"text","text":"hello"},{"id":"b","x":300,"y":40,"width":160,"height":90,"type":"link","url":"https://example.com/a?b=c#d"}],"edges":[{"id":"e","fromNode":"a","toNode":"b","fromSide":"right","toSide":"left","toEnd":"arrow","label":"to"}]}

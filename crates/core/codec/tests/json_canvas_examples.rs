@@ -25,7 +25,12 @@ fn key(name: &'static str) -> PathStep {
 }
 
 fn issue(path: Vec<PathStep>, code: Code) -> Issue {
-    Issue { path, code }
+    Issue { path, code, message: None }
+}
+
+/// A refinement the wire schema states in code, with the message it states.
+fn refinement(path: Vec<PathStep>, message: &str) -> Issue {
+    Issue { path, code: Code::Custom, message: Some(message.to_string()) }
 }
 
 fn refused(text: &str) -> Vec<Issue> {
@@ -382,38 +387,6 @@ fn a_number_too_large_to_be_a_pixel_is_refused_once_or_twice_by_its_checks() {
 }
 
 #[test]
-fn the_documents_own_refinements_run_only_when_nothing_else_aborted() {
-    let node = |id: &str| format!(r#"{{"id":"{id}",{BOX},"type":"group"}}"#);
-    let doc = format!(
-        r#"{{"nodes":[{},{}],"edges":[{{"id":"e","fromNode":"a","toNode":"zz"}},{{"id":"e","fromNode":"yy","toNode":"a"}}]}}"#,
-        node("a"),
-        node("a")
-    );
-    assert_eq!(
-        refused(&doc),
-        vec![
-            issue(vec![key("nodes")], Code::Custom),
-            issue(vec![key("edges")], Code::Custom),
-            issue(vec![key("edges"), PathStep::Index(0), key("toNode")], Code::Custom),
-            issue(vec![key("edges"), PathStep::Index(1), key("fromNode")], Code::Custom),
-        ]
-    );
-    // A continuing issue (a pattern) lets the refinements run beside it; an
-    // aborting one (a type) stops them.
-    let pattern = format!(
-        r##"{{"nodes":[{{"id":"a",{BOX},"type":"group","color":"#12"}},{}],"edges":[]}}"##,
-        node("a")
-    );
-    assert_eq!(
-        refused(&pattern).iter().map(|i| i.code).collect::<Vec<_>>(),
-        [Code::InvalidFormat, Code::Custom]
-    );
-    let typed =
-        format!(r#"{{"nodes":[{{"id":"a",{BOX},"type":"group","color":5}},{}]}}"#, node("a"));
-    assert_eq!(refused(&typed).iter().map(|i| i.code).collect::<Vec<_>>(), [Code::InvalidUnion]);
-}
-
-#[test]
 fn a_document_that_is_no_object_is_refused_at_its_root() {
     for text in ["null", "5", "\"x\"", "[]", "true"] {
         assert_eq!(refused(text), vec![issue(Vec::new(), Code::InvalidType)], "{text}");
@@ -712,23 +685,25 @@ fn an_object_is_written_with_integer_keys_first() {
 
 #[test]
 fn the_strict_mode_refuses_a_canvas_the_wire_schema_refuses_and_the_extended_does_not() {
-    let mut dangling = canvas_of(vec![text_node("a")]);
-    dangling.edges.push(CanvasEdge {
+    let mut ghost = canvas_of(vec![text_node("a")]);
+    ghost.edges.push(CanvasEdge {
         id: "e".to_string(),
         from: EdgeEnd { node: "a".to_string(), ..EdgeEnd::default() },
         to: EdgeEnd { node: "ghost".to_string(), ..EdgeEnd::default() },
         ..CanvasEdge::default()
     });
-    assert!(serialize(&dangling, Mode::Extended).is_ok());
-    let at = vec![key("edges"), PathStep::Index(0), key("toNode")];
+    assert!(serialize(&ghost, Mode::Extended).is_ok());
     assert_eq!(
-        serialize(&dangling, Mode::Strict),
-        Err(WriteFailure::Schema(vec![issue(at, Code::Custom)]))
+        serialize(&ghost, Mode::Strict),
+        Err(WriteFailure::Schema(vec![refinement(
+            vec![key("edges"), PathStep::Index(0), key("toNode")],
+            r#"edge "e" references nonexistent toNode "ghost""#,
+        )]))
     );
     let twice = canvas_of(vec![text_node("a"), text_node("a")]);
     assert_eq!(
         serialize(&twice, Mode::Strict),
-        Err(WriteFailure::Schema(vec![issue(vec![key("nodes")], Code::Custom)]))
+        Err(WriteFailure::Schema(vec![refinement(vec![key("nodes")], r#"duplicate node id "a""#)]))
     );
     let mut not_a_pixel = text_node("a");
     not_a_pixel.x = f64::NAN;

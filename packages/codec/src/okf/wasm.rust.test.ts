@@ -8,6 +8,7 @@ import { Dice, mulberry32 } from '../test-utils/frontmatter-oracle/corpus.js'
 import { decode, encode } from '../test-utils/frontmatter-oracle/oracle.js'
 import { generatedText, unsafeDocument, validDocument } from '../test-utils/okf-oracle/corpus.js'
 import { decodeRecording, textFrom } from '../test-utils/okf-oracle/oracle.js'
+import { shapeOf } from '../test-utils/shape-of.js'
 import { messageTolerated, OKF_TOLERATED_DIFFERENCES } from './okf-core.js'
 import { parseOkf } from './parse.js'
 import type { OkfMarkdownDocument } from './schema.js'
@@ -38,30 +39,6 @@ let core: Core
 beforeAll(async () => {
   core = await loadCore(readFileSync(artifact))
 })
-
-/**
- * Everything `toStrictEqual` would look at, spelled out: that matcher compares
- * a `constructor` property by identity, so it calls two equal documents
- * different when a facet is named `constructor`.
- */
-function shapeOf(value: unknown): unknown {
-  if (typeof value !== 'object' || value === null) return value
-  const proto = Object.getPrototypeOf(value)
-  return {
-    proto:
-      proto === null
-        ? 'null'
-        : proto === Object.prototype
-          ? 'Object'
-          : proto === Array.prototype
-            ? 'Array'
-            : 'other',
-    keys: Reflect.ownKeys(value),
-    values: Reflect.ownKeys(value).map((key) =>
-      shapeOf((value as Record<PropertyKey, unknown>)[key]),
-    ),
-  }
-}
 
 type ParsedOkf = ReturnType<Core['parseOkf']>
 

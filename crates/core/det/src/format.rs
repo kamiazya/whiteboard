@@ -36,10 +36,47 @@ pub fn js_number_to_string(x: f64) -> String {
 /// The shortest round-trip digits of a positive finite `x` and the power of
 /// ten of the first: `x = 0.d1d2... * 10^(exponent + 1)`.
 fn shortest_digits(x: f64) -> (String, i64) {
-    let scientific = format!("{x:e}");
-    let (mantissa, power) = scientific.split_once('e').unwrap_or((&scientific, "0"));
-    let digits = mantissa.chars().filter(char::is_ascii_digit).collect();
-    (digits, power.parse().unwrap_or(0))
+    let (digits, exponent) = scientific(&format!("{x:e}"));
+    (settle_tie(x, digits, exponent), exponent)
+}
+
+/// The digits of a `{:e}` rendering and its power of ten.
+fn scientific(text: &str) -> (String, i64) {
+    let (mantissa, power) = text.split_once('e').unwrap_or((text, "0"));
+    (mantissa.chars().filter(char::is_ascii_digit).collect(), power.parse().unwrap_or(0))
+}
+
+/// The most digits a double's exact decimal expansion has (a subnormal's), so
+/// that a rendering to this many is exact and not rounded.
+const EXACT_DIGITS: usize = 800;
+
+/// `digits` unless `x` lies exactly halfway between two spellings of that
+/// length, in which case ECMA-262 picks the one whose last digit is even where
+/// Rust's `{:e}` rounds half up. Rounding up already gives the even spelling
+/// when the lower one ends in an odd digit, so only an even lower one is
+/// looked for, and only when it reads back as `x`.
+///
+/// Halfway means `x` rendered one digit longer ends in a five and is exact:
+/// the first test is the cheap one, and the tenth of numbers that pass it pay
+/// for the exact rendering.
+fn settle_tie(x: f64, digits: String, exponent: i64) -> String {
+    let k = digits.len();
+    let (longer, _) = scientific(&format!("{x:.k$e}"));
+    if !longer.ends_with('5') {
+        return digits;
+    }
+    let (exact, _) = scientific(&format!("{x:.EXACT_DIGITS$e}"));
+    let halfway = exact.get(..longer.len()) == Some(longer.as_str())
+        && exact.get(longer.len()..).is_some_and(|rest| rest.bytes().all(|b| b == b'0'));
+    let Some(lower) = longer.get(..k).filter(|_| halfway) else { return digits };
+    let power = exponent.saturating_add(1);
+    let reads_back =
+        format!("0.{lower}e{power}").parse::<f64>().is_ok_and(|read| read.to_bits() == x.to_bits());
+    if reads_back && lower.ends_with(['0', '2', '4', '6', '8']) {
+        lower.to_string()
+    } else {
+        digits
+    }
 }
 
 /// ECMA-262 `Number::toString` steps 6 to 12 for `k` digits whose first sits at
@@ -83,6 +120,58 @@ mod tests {
         assert_eq!(without_negative_zero(-1.5).to_bits(), (-1.5f64).to_bits());
         assert_eq!(without_negative_zero(2.0).to_bits(), 2.0f64.to_bits());
         assert!(without_negative_zero(f64::NAN).is_nan());
+    }
+
+    #[test]
+    fn two_shortest_spellings_equally_near_settle_on_the_even_one() {
+        // Doubles between 2^50 and 2^51 sit on quarters, so `.25` and `.75` are
+        // exactly halfway between two 17-digit spellings; ECMA-262 picks the
+        // one whose last digit is even, where Rust's `{:e}` rounds half up.
+        // Written as quarters over four, which a literal cannot say exactly.
+        let cases: [(f64, &str); 8] = [
+            (5_463_662_520_317_985.0 / 4.0, "1365915630079496.2"),
+            (5_463_662_520_317_987.0 / 4.0, "1365915630079496.8"),
+            (-5_463_662_520_317_985.0 / 4.0, "-1365915630079496.2"),
+            (4_503_599_627_370_497.0 / 4.0, "1125899906842624.2"),
+            (4_503_599_627_370_501.0 / 4.0, "1125899906842625.2"),
+            (4_503_599_627_370_503.0 / 4.0, "1125899906842625.8"),
+            (4_503_599_627_370_505.0 / 4.0, "1125899906842626.2"),
+            (4_503_599_627_370_507.0 / 4.0, "1125899906842626.8"),
+        ];
+        for (x, text) in cases {
+            assert_eq!(js_number_to_string(x), text, "{x:e}");
+        }
+    }
+
+    #[test]
+    fn a_value_just_off_halfway_takes_the_nearer_spelling_though_the_lower_is_even() {
+        // Rendered one digit longer these end in a five, and the lower of their two
+        // 17-digit spellings is even and reads back, but they lie a little past the
+        // middle, so the upper one is nearer and is what JavaScript prints.
+        let cases: [(f64, &str); 4] = [
+            (21.653_126_585_297_287, "21.653126585297287"),
+            (5.970_440_539_065_748_5, "5.9704405390657485"),
+            (0.030_599_815_007_299_185, "0.030599815007299185"),
+            (0.060_839_576_176_367_705, "0.060839576176367705"),
+        ];
+        for (x, text) in cases {
+            assert_eq!(js_number_to_string(x), text, "{x:e}");
+        }
+    }
+
+    #[test]
+    fn a_spelling_that_is_nearer_than_its_neighbour_is_not_a_tie() {
+        // Not halfway: the nearer 16-digit spelling is the answer, odd or even.
+        let cases: [(f64, &str); 5] = [
+            (4_503_599_627_370_497.0 / 8.0, "562949953421312.1"),
+            (4_503_599_627_370_499.0 / 8.0, "562949953421312.4"),
+            (4_503_599_627_370_501.0 / 8.0, "562949953421312.6"),
+            (4_503_599_627_370_497.0 / 2.0, "2251799813685248.5"),
+            (0.1 + 0.2, "0.30000000000000004"),
+        ];
+        for (x, text) in cases {
+            assert_eq!(js_number_to_string(x), text, "{x:e}");
+        }
     }
 
     #[test]

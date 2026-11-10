@@ -226,6 +226,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the refusal a composition root catches when its wasm artifact and this shim come from different commits; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/index.ts#CoreOkfUnwritable':
     "the answer a composition root sees when a frontmatter value has no YAML spelling; codec's switch throws it as OkfNotYamlSafeError with the issues it carries, and codec-rust holds that those are the TypeScript's, in its order and words, wherever the TypeScript throws",
+  'packages/core-wasm/src/index.ts#CoreSpatialInvalid':
+    "the answer a composition root sees when the strict JSON Canvas writer's validation refuses what it wrote; codec's switch will throw it as the ZodError the TypeScript throws, from the issues it carries, and codec-rust holds that those are the TypeScript's, in path, code and refinement text",
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/mcp-server/src/server/export/layout-core.ts#packagedArtifacts':

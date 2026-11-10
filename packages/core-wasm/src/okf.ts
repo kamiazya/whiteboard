@@ -1,6 +1,7 @@
 import type { CoreFacets, ExtensionFacets, FacetsRaw } from '@kamiazya/whiteboard-model'
 import { OKF_PARSE_CAPS, OKF_SERIALIZE_CAPS, type RefusalCode } from './generated/input-caps.js'
 import { REASON_MESSAGE, type UnwritableIssue, unsafeIssues } from './okf-unsafe.js'
+import { decodeValue, isWellFormed, wireOf } from './value-wire.js'
 
 // The OKF envelope over the wasm artifact (`crates/bindings/wasm/src/okf.rs`).
 //
@@ -54,7 +55,7 @@ export type OkfParseResult =
 
 /** The errors this module throws, made by the package entry that owns their classes. */
 export interface OkfErrors {
-  refused(operation: string, code: RefusalCode): Error
+  refused(operation: string, code: RefusalCode, detail?: string): Error
   unwritable(issues: readonly UnwritableIssue[]): Error
 }
 
@@ -87,49 +88,8 @@ const ISSUE: Record<OkfIssue['code'], string> = {
   custom: 'Invalid input',
 }
 
-// ES2024's `String.prototype.isWellFormed`, typed here so a consumer that
-// compiles this source needs no newer `lib`; every runtime that loads the
-// artifact has it (Node 20, the evergreen browsers since 2023).
-const isWellFormed = (s: string): boolean =>
-  (s as string & { isWellFormed(): boolean }).isWellFormed()
-
-const bits = new DataView(new ArrayBuffer(8))
-
-function numberOf(hex: unknown): number | undefined {
-  if (typeof hex !== 'string' || !/^[0-9a-f]{16}$/.test(hex)) return undefined
-  bits.setBigUint64(0, BigInt(`0x${hex}`))
-  return bits.getFloat64(0)
-}
-
 const isCode = (code: unknown): code is OkfIssue['code'] =>
   typeof code === 'string' && Object.hasOwn(ISSUE, code)
-
-/** The value a wire stands for (see `okf_wire.rs`), or undefined when it is none. */
-function decodeValue(wire: unknown): unknown {
-  if (wire === null || typeof wire === 'boolean' || typeof wire === 'string') return wire
-  if (!Array.isArray(wire)) return undefined
-  const [tag, ...rest] = wire as unknown[]
-  if (tag === 'f') return numberOf(rest[0])
-  if (tag === 'b') return typeof rest[0] === 'string' ? BigInt(rest[0]) : undefined
-  if (tag === 's') return decodeItems(rest)
-  return tag === 'm' ? decodeMap(rest) : undefined
-}
-
-function decodeItems(wires: unknown[]): unknown[] | undefined {
-  const items = wires.map(decodeValue)
-  return items.includes(undefined) ? undefined : items
-}
-
-function decodeMap(wires: unknown[]): object | undefined {
-  if (wires.length % 2 !== 0) return undefined
-  const entries: [string, unknown][] = []
-  for (let i = 0; i < wires.length; i += 2) {
-    const [key, item] = [wires[i], decodeValue(wires[i + 1])]
-    if (typeof key !== 'string' || item === undefined) return undefined
-    entries.push([key, item])
-  }
-  return Object.fromEntries(entries)
-}
 
 function issuesOf(wire: unknown): OkfIssue[] | undefined {
   if (!Array.isArray(wire)) return undefined
@@ -220,52 +180,6 @@ export function parseOkf(glue: OkfGlue, errors: OkfErrors, text: string): OkfPar
   const refusal = kind === 'err' ? refusalOf(a, b, c) : undefined
   if (refusal === undefined) throw errors.refused('okf_parse', 'malformed')
   return refusal
-}
-
-/** Deeper than any document the writer takes (`maxDepth`), and short of a stack overflow. */
-const WIRE_DEPTH = 100
-
-const hex = (n: number): string => {
-  bits.setFloat64(0, n)
-  return bits.getBigUint64(0).toString(16).padStart(16, '0')
-}
-
-/**
- * The wire of a frontmatter value (see `okf_wire.rs`), or undefined when it
- * is not one a document holds: an `undefined`, a function, a symbol, a class
- * instance, a string with a lone surrogate, a cycle or a sparse list. The
- * TypeScript refuses each of those too, with `OkfNotYamlSafeError`, so
- * `serializeOkf` names them the same way (`okf-unsafe.ts`).
- */
-function wireOf(value: unknown, depth: number): unknown {
-  if (value === null || typeof value === 'boolean') return value
-  if (typeof value === 'string') return isWellFormed(value) ? value : undefined
-  if (typeof value === 'number') return ['f', hex(value)]
-  if (typeof value === 'bigint') return ['b', value.toString()]
-  if (typeof value !== 'object' || depth > WIRE_DEPTH) return undefined
-  return Array.isArray(value) ? wireOfList(value, depth) : wireOfRecord(value, depth)
-}
-
-function wireOfList(list: unknown[], depth: number): unknown[] | undefined {
-  const out: unknown[] = ['s']
-  for (let i = 0; i < list.length; i++) {
-    const item = i in list ? wireOf(list[i], depth + 1) : undefined
-    if (item === undefined) return undefined
-    out.push(item)
-  }
-  return out
-}
-
-function wireOfRecord(record: object, depth: number): unknown[] | undefined {
-  const proto = Object.getPrototypeOf(record)
-  if (proto !== Object.prototype && proto !== null) return undefined
-  const out: unknown[] = ['m']
-  for (const [key, item] of Object.entries(record)) {
-    const wire = isWellFormed(key) ? wireOf(item, depth + 1) : undefined
-    if (wire === undefined) return undefined
-    out.push(key, wire)
-  }
-  return out
 }
 
 /**

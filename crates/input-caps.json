@@ -57,6 +57,22 @@
       "maxDepth": 64,
       "maxMillis": 2000,
       "reason": "the JSON Canvas reader takes a whole board from a file, an import, a paste or a sync, so any holder of one can call it. maxBytes is json_canvas::MAX_BYTES, the function's own refusal (a longer text answers Declined(TooLarge) before it is read, and the caller asks the TypeScript, which has no cap): a board of a few thousand nodes is a few hundred kilobytes, so 4 MiB is far above any board and bounds the fuzzer's cost. maxDepth 64 is json::MAX_DEPTH: the document nests six levels deep before a facet payload begins, and a text nested past 64 answers Declined(TooDeep) the moment the 65th level opens, whatever follows it. maxMillis 2000 is 2.6x the slowest draw measured natively in release: 773 ms for a 4 MiB text of 270k integer-like keys in one facet payload (the reader builds the tree, then puts JavaScript's enumeration order on every object). The other shapes tried at the cap took 10 to 717 ms (a payload of wide arrays nested 55 deep 717, 270k keys at the root 258, 270k facet keys 189, a node list 98 to 111, an edge list refused for its ends 142, a list of invalid nodes 494, a 4 MiB string 11), and a node list written back took 98 to 144 ms in the extended and strict modes"
+    },
+    "whiteboard-wasm::json_canvas::json_canvas_parse": {
+      "crate": "whiteboard-wasm",
+      "fuzzTarget": "json_canvas_wasm_parse",
+      "maxBytes": 4194304,
+      "maxDepth": 64,
+      "maxMillis": 3000,
+      "reason": "the export reads a whole board's text, so any holder of the wasm glue can call it. maxBytes and maxDepth are whiteboard_codec::json_canvas's own (MAX_BYTES, MAX_DEPTH): the export refuses a text past the first before reading it and the shim then answers from the TypeScript, which has no cap, and a text nested past the second answers a decline the same way. maxMillis 3000 is 2.6x the slowest draw measured on Node wasm, 1146 ms for a 3.82 MiB list of nodes the schema refuses (the others at the cap took 24 to 738 ms: 738 for 270k integer-like keys in one facet payload, 598 for facet keys at the root, 569 for wide arrays nested 55 deep, 544 for 3.84 MiB of valid text nodes, 498 for edges refused for their ends, 24 for one 4 MiB string); the codec's own 2000 is native, this one carries the answer's wire on wasm."
+    },
+    "whiteboard-wasm::json_canvas::json_canvas_serialize": {
+      "crate": "whiteboard-wasm",
+      "fuzzTarget": "json_canvas_wasm_serialize",
+      "maxBytes": 4194304,
+      "maxDepth": 128,
+      "maxMillis": 1000,
+      "reason": "the export reads the wire of a canvas (JSON in the value wire of json_canvas_wire.rs), so any holder of the wasm glue can call it with bytes of its choosing, which is the decode the fuzz target drives. maxBytes is the parse entry's, so a canvas the reader would take is within it as text; the wire of a canvas is about 18% bigger than the text written from it, so a board whose text is over about 3.4 MiB is past the cap and is answered by the TypeScript, and a wire past it is refused before it is parsed. maxDepth 128 is serde_json's own recursion limit (deny.toml bans unbounded_depth), which one array per object or list spends one level of each; the writer's cap is the same, and the shim sends nothing past 100. maxMillis 1000 is 2.9x the slowest draw measured on Node wasm, 344 ms for a canvas holding 250k integer-like facet keys (the extended mode; the others took 80 to 309 ms: 309 for the 11,000-node board in the strict mode, 221 extended, 212 for 120k facet keys at the root, 197 for 150k nested lists, 107 for 300k tags)"
     }
   }
 }

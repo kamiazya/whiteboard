@@ -87,3 +87,20 @@ fn the_routing_seeds_are_wires_the_export_answers() {
     }
     assert!(answered >= 10, "only {answered} routing seeds");
 }
+
+#[test]
+fn the_canvas_seeds_are_wires_the_export_decodes() {
+    // A seed that is no canvas wire is refused before the writer runs, so it
+    // reaches nothing past the decode; only the one named so may be.
+    let mut decoded = 0usize;
+    for input in std::fs::read_dir(root().join("seeds").join("json_canvas_wasm_serialize")).unwrap()
+    {
+        let input = input.unwrap().path();
+        let wire = std::fs::read_to_string(&input).unwrap();
+        let answer = whiteboard_wasm::json_canvas::json_canvas_serialize(&wire, false);
+        let refused = answer.starts_with("[\"refused\",\"malformed\",\"wire\"]");
+        assert_eq!(refused, input.file_name().is_some_and(|f| f == "unnamed-key"), "{input:?}");
+        decoded += usize::from(!refused);
+    }
+    assert!(decoded >= 5, "only {decoded} canvas seeds decode");
+}

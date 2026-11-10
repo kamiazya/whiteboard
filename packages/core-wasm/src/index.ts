@@ -2,9 +2,18 @@
 // (canvas-render compiles this source through the workspace link) sees it
 // with no staged artifact.
 /// <reference path="./glue.d.ts" />
-import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
+import {
+  parseSpatial,
+  type SpatialErrors,
+  type SpatialGlue,
+  type SpatialIssue,
+  type SpatialMode,
+  type SpatialParseResult,
+  serializeSpatial,
+} from './json-canvas.js'
 import {
   type OkfDocument,
   type OkfErrors,
@@ -21,7 +30,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '16'
+export const EXPECTED_ABI = '17'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {
@@ -44,8 +53,10 @@ export class CoreInputRefused extends Error {
   constructor(
     readonly operation: string,
     readonly code: RefusalCode,
+    /** What kind of input earned the refusal, when the artifact says (`lone-surrogate`, `url`, `too-deep`, ...). */
+    readonly detail?: string,
   ) {
-    super(`${operation} refused its input: ${code}`)
+    super(`${operation} refused its input: ${code}${detail === undefined ? '' : ` (${detail})`}`)
     this.name = 'CoreInputRefused'
   }
 }
@@ -63,6 +74,22 @@ export class CoreOkfUnwritable extends Error {
         .join('; ')}`,
     )
     this.name = 'CoreOkfUnwritable'
+  }
+}
+
+/**
+ * The strict JSON Canvas writer's re-validation refused what it wrote. `issues`
+ * name each place, so a root throws what `serializeSpatial` throws (a
+ * `ZodError`) from the same list.
+ */
+export class CoreSpatialInvalid extends Error {
+  constructor(readonly issues: readonly SpatialIssue[]) {
+    super(
+      `serializeSpatial: the document failed JSON Canvas validation: ${issues
+        .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+        .join('; ')}`,
+    )
+    this.name = 'CoreSpatialInvalid'
   }
 }
 
@@ -104,6 +131,22 @@ export interface Core {
    * answers from the TypeScript.
    */
   serializeOkf(doc: OkfDocument): string
+
+  /**
+   * `parseSpatial` of a whole text. Throws `CoreInputRefused` for a text the
+   * artifact does not read (past its cap, a lone surrogate, nesting past its
+   * reader, a link whose host needs tables it does not carry), which a root
+   * answers from the TypeScript.
+   */
+  parseSpatial(text: string): SpatialParseResult
+
+  /**
+   * `serializeSpatial` of a canvas. Throws `CoreSpatialInvalid` where the
+   * strict mode's validation refuses what it wrote, and `CoreInputRefused` for
+   * a canvas the artifact does not write, which a root answers from the
+   * TypeScript.
+   */
+  serializeSpatial(canvas: SpatialCanvas, mode: SpatialMode): string
 }
 
 const ends = ['none', 'arrow'] as const
@@ -206,11 +249,15 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   const abi = glue.abi_version()
   if (abi !== EXPECTED_ABI) throw new CoreAbiMismatch(abi)
   const okf: OkfGlue = glue
-  const errors: OkfErrors = {
-    refused: (operation, code) => new CoreInputRefused(operation, code),
+  const spatial: SpatialGlue = glue
+  const errors: OkfErrors & SpatialErrors = {
+    refused: (operation, code, detail) => new CoreInputRefused(operation, code, detail),
     unwritable: (issues) => new CoreOkfUnwritable(issues),
+    invalid: (issues) => new CoreSpatialInvalid(issues),
   }
   return {
+    parseSpatial: (text) => parseSpatial(spatial, errors, text),
+    serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {

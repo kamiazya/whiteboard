@@ -33,7 +33,7 @@ struct Cx {
 impl Cx {
     fn flaws(&mut self, flaws: Flaws) {
         for flaw in flaws {
-            self.issues.push(Issue { path: self.path.clone(), code: flaw.code });
+            self.issues.push(Issue { path: self.path.clone(), code: flaw.code, message: None });
             if !flaw.continues {
                 self.aborts = self.aborts.saturating_add(1);
             }
@@ -289,28 +289,32 @@ fn edge(cx: &mut Cx, value: &Value) -> Option<CanvasEdge> {
 }
 
 /// The first id that repeats an earlier one (`findDuplicateId`).
-fn repeats<'a>(ids: impl Iterator<Item = &'a str>) -> bool {
+fn first_repeat<'a>(mut ids: impl Iterator<Item = &'a str>) -> Option<&'a str> {
     let mut seen = BTreeSet::new();
-    let mut ids = ids;
-    ids.any(|id| !seen.insert(id))
+    ids.find(|id| !seen.insert(*id))
 }
 
 /// The document's three refinements: node ids are unique, edge ids are unique,
-/// and every edge runs between nodes that exist.
+/// and every edge runs between nodes that exist, each with the message the
+/// schema words it in.
 fn refine(cx: &mut Cx, nodes: &[SpatialNode], edges: &[CanvasEdge]) {
-    let custom =
-        |cx: &mut Cx, path: Vec<PathStep>| cx.issues.push(Issue { path, code: Code::Custom });
-    if repeats(nodes.iter().map(|n| n.id.as_str())) {
-        custom(cx, vec![PathStep::Key("nodes")]);
+    let custom = |cx: &mut Cx, path: Vec<PathStep>, message: String| {
+        cx.issues.push(Issue { path, code: Code::Custom, message: Some(message) });
+    };
+    if let Some(id) = first_repeat(nodes.iter().map(|n| n.id.as_str())) {
+        custom(cx, vec![PathStep::Key("nodes")], format!("duplicate node id \"{id}\""));
     }
-    if repeats(edges.iter().map(|e| e.id.as_str())) {
-        custom(cx, vec![PathStep::Key("edges")]);
+    if let Some(id) = first_repeat(edges.iter().map(|e| e.id.as_str())) {
+        custom(cx, vec![PathStep::Key("edges")], format!("duplicate edge id \"{id}\""));
     }
     let known: BTreeSet<&str> = nodes.iter().map(|n| n.id.as_str()).collect();
     for (at, edge) in edges.iter().enumerate() {
         for (key, node) in [("fromNode", &edge.from.node), ("toNode", &edge.to.node)] {
             if !known.contains(node.as_str()) {
-                custom(cx, vec![PathStep::Key("edges"), PathStep::Index(at), PathStep::Key(key)]);
+                let path = vec![PathStep::Key("edges"), PathStep::Index(at), PathStep::Key(key)];
+                let message =
+                    format!("edge \"{}\" references nonexistent {key} \"{node}\"", edge.id);
+                custom(cx, path, message);
             }
         }
     }

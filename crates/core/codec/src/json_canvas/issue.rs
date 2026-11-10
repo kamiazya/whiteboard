@@ -21,12 +21,15 @@ pub enum Code {
     Custom,
 }
 
-/// One place the schema refused, as Zod reports it: where and why, without
-/// the message text.
+/// One place the schema refused, as Zod reports it: where and why.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Issue {
     pub path: Vec<PathStep>,
     pub code: Code,
+    /// The text of a refinement the schema states in code (a repeated id, an
+    /// edge that names no node), which names the id it is about. An issue Zod
+    /// words itself has none: its text is not reproduced.
+    pub message: Option<String>,
 }
 
 /// Why the core will not answer, so that the caller asks the TypeScript. Each

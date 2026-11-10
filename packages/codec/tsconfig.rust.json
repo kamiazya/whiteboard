@@ -4,6 +4,11 @@
   // config keeps that lib out.
   "extends": "./tsconfig.json",
   "compilerOptions": { "lib": ["ES2022", "ES2024.String", "DOM"] },
-  "include": ["src/**/*.rust.test.ts", "src/test-utils/okf-wasm", "vitest.rust.config.ts"],
+  "include": [
+    "src/**/*.rust.test.ts",
+    "src/test-utils/okf-wasm",
+    "src/test-utils/spatial-wasm",
+    "vitest.rust.config.ts"
+  ],
   "exclude": []
 }

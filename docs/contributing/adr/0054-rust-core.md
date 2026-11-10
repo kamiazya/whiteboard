@@ -797,8 +797,26 @@ UTF-16 surrogate written as an escape, nesting past 64 levels, a text over
 also found five places where the TypeScript and the contract disagree, none
 changed here (the first is that `parseSpatial` never runs the model's own
 checks): they are in [parity/json-canvas-codec.md](../parity/json-canvas-codec.md),
-which is the checklist. Still no wasm export or switch: nothing in TypeScript
-calls the Rust, and the `PORTED_FUNCTIONS` entries wait for the switch.
+which is the checklist. The exports followed (the note below); there is still
+no switch, and the `PORTED_FUNCTIONS` entries wait for it.
+
+**Status note (2026-11-10, the JSON Canvas exports).** The codec is reached
+through two wasm exports, `json_canvas_parse` and `json_canvas_serialize` (ABI
+17), and `@kamiazya/whiteboard-core-wasm`'s `parseSpatial` and
+`serializeSpatial`, which answer the TypeScript's own stages, issue identities
+and error classes and decline (a typed refusal the caller's TypeScript answers)
+what the core does not read. Codec's own spatial suites run against it with no
+decline in any, and a live differential over the recorded corpus and generated
+canvases and texts found four defects the recording could not (a number printed
+halfway between two spellings, a length check on a value that is not a string,
+a refinement's missing message, an edge's key order), each fixed, and one
+quirk of the TypeScript's own lift, also fixed. **Measured on Node and
+Chromium, the Rust path is slower than the TypeScript at every size: reads by
+5x to 8x and writes by 15x to 25x**, because `JSON.parse` and `JSON.stringify`
+are native in the host and the result crosses back as text; the checklist's
+boundary section has the numbers. That is what the switch's default is decided
+on, and it is not decided here: there is no switch. See
+[parity/json-canvas-codec.md](../parity/json-canvas-codec.md).
 
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:

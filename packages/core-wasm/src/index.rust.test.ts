@@ -1,7 +1,15 @@
 import { readFileSync } from 'node:fs'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { abi_version, edge_route_layout, initSync, okf_parse, okf_serialize } from '#glue'
+import {
+  abi_version,
+  edge_route_layout,
+  initSync,
+  json_canvas_parse,
+  json_canvas_serialize,
+  okf_parse,
+  okf_serialize,
+} from '#glue'
 import { loadCore } from './load.js'
 import type { RoutingBudget } from './types.js'
 
@@ -24,8 +32,16 @@ const budget = (): RoutingBudget => ({ grid: 1e6, pairs: 1e6, trials: 1e6, repai
 describe('the core-wasm shim over the built artifact', () => {
   it('declares only exports the artifact has', () => {
     expect(
-      [initSync, abi_version, edge_route_layout, okf_parse, okf_serialize].map((f) => typeof f),
-    ).toEqual(['function', 'function', 'function', 'function', 'function'])
+      [
+        initSync,
+        abi_version,
+        edge_route_layout,
+        okf_parse,
+        okf_serialize,
+        json_canvas_parse,
+        json_canvas_serialize,
+      ].map((f) => typeof f),
+    ).toEqual(Array(7).fill('function'))
   })
 
   it('routes a layout from the bytes, and again from a compiled module', async () => {
@@ -61,6 +77,18 @@ describe('the core-wasm shim over the built artifact', () => {
     })
     if (!read.ok) return
     expect(core.serializeOkf(read.value)).toBe(text)
+  })
+
+  it('reads and writes a JSON Canvas document through the artifact', async () => {
+    const core = await loadCore(bytes())
+    const text =
+      '{"nodes":[{"id":"a","x":0,"y":0,"width":10,"height":10,"type":"text","text":"hi"}],"edges":[]}'
+    const read = core.parseSpatial(text)
+    expect(read.ok).toBe(true)
+    if (!read.ok) return
+    expect(read.value.nodes[0]).toMatchObject({ id: 'a', x: 0, width: 10 })
+    expect(core.serializeSpatial(read.value, 'strict')).toBe(text)
+    expect(core.parseSpatial('{')).toMatchObject({ ok: false, error: { stage: 'json-syntax' } })
   })
 
   it('counts a lone surrogate it is sent as one unit, and refuses one the mark stands for', () => {

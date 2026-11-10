@@ -5,7 +5,7 @@
 // baseline into Rust). Needs the staged wasm artifact.
 //
 //   node packages/codec/scripts/okf-boundary.mjs [--rounds=9] [--batch-ms=50] [--runtime=node,chromium,workerd] [--workerd=<binary>] [--json=path]
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -82,7 +82,14 @@ if (runtimes.includes('chromium')) {
 }
 
 if (runtimes.includes('workerd')) {
-  all.push(await inWorkerd(args.workerd ?? process.env.WORKERD ?? 'workerd'))
+  const bin = args.workerd ?? process.env.WORKERD ?? 'workerd'
+  // The default run skips a workerd it cannot start, so the other tables still print;
+  // naming the runtime or the binary keeps an absent one an error.
+  const explicit =
+    args.runtime !== undefined || args.workerd !== undefined || process.env.WORKERD !== undefined
+  if (!explicit && spawnSync(bin, ['--version']).error)
+    console.warn(`workerd: skipped, no ${bin} binary to run`)
+  else all.push(await inWorkerd(bin))
 }
 
 for (const r of all) console.log(`${r.table}\n`)
