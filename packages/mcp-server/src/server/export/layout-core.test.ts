@@ -344,11 +344,14 @@ describe('the daemon facet write core', () => {
   })
 
   describe('boot', () => {
+    const plugins = (...ids: string[]) => ({ plugins: ids.map((id) => ({ id })) }) as never
     const settings = (facets: string) => layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: facets })
 
     it('serves the bundled deployment under every setting', () => {
       for (const facets of ['ts', 'differential', 'rust']) {
-        expect(() => refuseFacetCoreForDeployment(settings(facets), ['visual'])).not.toThrow()
+        expect(() =>
+          refuseFacetCoreForDeployment(settings(facets), plugins('visual')),
+        ).not.toThrow()
       }
     })
 
@@ -356,14 +359,14 @@ describe('the daemon facet write core', () => {
       'differential',
       'rust',
     ])('refuses under %s a deployment composing another plugin set, naming both', (facets) => {
-      expect(() => refuseFacetCoreForDeployment(settings(facets), ['visual', 'ticket'])).toThrow(
-        /\[visual\].*\[visual, ticket\].*WHITEBOARD_CORE_FACETS=ts/,
-      )
-      expect(() => refuseFacetCoreForDeployment(settings(facets), [])).toThrow()
+      expect(() =>
+        refuseFacetCoreForDeployment(settings(facets), plugins('visual', 'ticket')),
+      ).toThrow(/\[visual\].*\[visual, ticket\].*WHITEBOARD_CORE_FACETS=ts/)
+      expect(() => refuseFacetCoreForDeployment(settings(facets), plugins())).toThrow()
     })
 
     it('lets any deployment through under ts, which judges nothing in Rust', () => {
-      expect(() => refuseFacetCoreForDeployment(settings('ts'), ['ticket'])).not.toThrow()
+      expect(() => refuseFacetCoreForDeployment(settings('ts'), plugins('ticket'))).not.toThrow()
     })
   })
 })

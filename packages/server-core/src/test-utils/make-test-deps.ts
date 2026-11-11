@@ -54,12 +54,12 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     liveDocuments: unusedLiveDocuments(),
     workspaceDocuments: unusedWorkspaceDocuments(),
     // The bundled plugins, as a root composing no plugin set of its own gets.
-    facetRegistry: bundledFacetRegistry,
     // Absent unless the run's environment asks for the Rust core's facet
     // write, and then only for the bundled plugins it holds the registry of.
     ...(envFacetWriteCore && overrides.facetRegistry === undefined
       ? { facetWriteCore: envFacetWriteCore }
       : {}),
     ...overrides,
+    facetRegistry: overrides.facetRegistry ?? bundledFacetRegistry,
   }
 }

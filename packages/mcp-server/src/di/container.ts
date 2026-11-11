@@ -86,10 +86,7 @@ export function resolveServerDeps(
   // first call that asks for it.
   const coreSettings = layoutCoreSettingsFrom(process.env)
   const facetRegistry = createFacetRegistry(bundledPlugins)
-  refuseFacetCoreForDeployment(
-    coreSettings,
-    facetRegistry.plugins.map((plugin) => plugin.id),
-  )
+  refuseFacetCoreForDeployment(coreSettings, facetRegistry)
   const core = coreLoaders(coreSettings)
   return {
     documentStore,

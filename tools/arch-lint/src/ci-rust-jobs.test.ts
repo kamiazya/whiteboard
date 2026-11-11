@@ -425,6 +425,7 @@ describe('verify and packaged-smoke build over the same artifact a release ships
     const smoke = stepsOf(ci, id).find((s) => s.run?.trim() === command)
     expect(smoke?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
+      WHITEBOARD_CORE_FACETS: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })

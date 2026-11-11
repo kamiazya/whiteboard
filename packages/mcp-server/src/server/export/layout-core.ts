@@ -10,6 +10,7 @@ import {
   spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { FacetWriteCore, FacetWriteMismatch } from '@kamiazya/whiteboard-server-core'
 import { z } from 'zod'
 import { findPackageRoot } from '../../shared/package-root.js'
@@ -163,9 +164,10 @@ export const RUST_FACET_PLUGIN_IDS: readonly string[] = ['visual']
  */
 export function refuseFacetCoreForDeployment(
   settings: LayoutCoreSettings,
-  deploymentPluginIds: readonly string[],
+  deployment: Pick<FacetRegistry, 'plugins'>,
 ): void {
   if (settings.WHITEBOARD_CORE_FACETS === 'ts') return
+  const deploymentPluginIds = deployment.plugins.map((plugin) => plugin.id)
   const same =
     deploymentPluginIds.length === RUST_FACET_PLUGIN_IDS.length &&
     RUST_FACET_PLUGIN_IDS.every((id) => deploymentPluginIds.includes(id))

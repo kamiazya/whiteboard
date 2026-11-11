@@ -9,6 +9,7 @@ import {
   type ThemeTokensInput,
   themeTokensSchema,
 } from './theme-tokens.js'
+import type { FacetWriteRefusal } from './write-refusal.js'
 
 /**
  * The facet engine's definition + registry machinery (ADR-0013 decisions 3,
@@ -309,23 +310,11 @@ function assertAssetRefsFit(
   }
 }
 
-/**
- * Why a write was refused, as data: the stage the registry's own check stopped
- * at and what that stage knows. The message words the same facts for a person;
- * a caller that compares one implementation's refusal with another's reads
- * this instead of the sentence.
- */
-export type FacetWriteRefusal =
-  | { readonly stage: 'malformed-key' }
-  | { readonly stage: 'not-current'; readonly current: string }
-  | { readonly stage: 'invalid'; readonly issues: readonly z.core.$ZodIssue[] }
-  | {
-      readonly stage: 'unregistered-asset'
-      readonly field: string
-      readonly id: string
-      readonly kind: AssetKind
-      readonly registered: readonly string[]
-    }
+const refuse = (message: string, refusal: FacetWriteRefusal): FacetWriteResult => ({
+  ok: false,
+  message,
+  refusal,
+})
 
 export type FacetWriteResult =
   | { readonly ok: true; readonly value: unknown }
@@ -760,11 +749,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     validateFacetWrite(key, payload) {
       const parsed = parseKey(key)
       if (parsed === null) {
-        return {
-          ok: false,
-          message: `malformed facet key "${key}"`,
-          refusal: { stage: 'malformed-key' },
-        }
+        return refuse(`malformed facet key "${key}"`, { stage: 'malformed-key' })
       }
       const definition = definitionOf(parsed.namespace, parsed.name)
       if (definition === undefined) return { ok: true, value: payload }
@@ -772,28 +757,19 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
         // Writes always target the current version (ADR-0013 decision 7);
         // old versions exist only as read-side compat.
         const current = currentKey(parsed.namespace, definition)
-        return {
-          ok: false,
-          message: `"${key}" is not the current version — write "${current}"`,
-          refusal: { stage: 'not-current', current },
-        }
+        const message = `"${key}" is not the current version — write "${current}"`
+        return refuse(message, { stage: 'not-current', current })
       }
       const result = definition.schema.safeParse(payload)
       if (!result.success) {
-        return {
-          ok: false,
-          message: `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
-          refusal: { stage: 'invalid', issues: result.error.issues },
-        }
+        const message = `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`
+        return refuse(message, { stage: 'invalid', issues: result.error.issues })
       }
       const missing = unregisteredRef(definition, result.data)
       if (missing !== undefined) {
         const registered = [...tableOf(missing.kind).keys()]
-        return {
-          ok: false,
-          message: `"${key}" field ${missing.field} names ${missing.kind} asset "${missing.id}", which no plugin registered — registered: ${registered.length === 0 ? '(none)' : registered.join(', ')}`,
-          refusal: { stage: 'unregistered-asset', ...missing, registered },
-        }
+        const message = `"${key}" field ${missing.field} names ${missing.kind} asset "${missing.id}", which no plugin registered — registered: ${registered.length === 0 ? '(none)' : registered.join(', ')}`
+        return refuse(message, { stage: 'unregistered-asset', ...missing, registered })
       }
       return { ok: true, value: result.data }
     },

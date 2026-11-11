@@ -19,15 +19,15 @@ import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
 import { type ExtensionFacets, holdsReservedKey } from '@kamiazya/whiteboard-model'
 import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { z } from 'zod'
-import type { ServerDeps } from '../server-deps.js'
-import { FacetWriteRejectedError } from './errors.js'
 import {
   canonicalJudgement,
   type FacetWriteCore,
   type FacetWriteIssue,
   type FacetWriteJudgement,
   type FacetWriteRefusal,
-} from './facet-write-core.js'
+} from '../facet-write-core.js'
+import type { ServerDeps } from '../server-deps.js'
+import { FacetWriteRejectedError } from './errors.js'
 import {
   refuseUnusableStencilLibrary,
   unusableStencils,

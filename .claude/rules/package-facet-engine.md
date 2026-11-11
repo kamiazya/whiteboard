@@ -11,7 +11,9 @@ paths:
   `FacetPlugin` shapes (definition-time grammar checks throw — programmer
   error, not data).
 - `createFacetRegistry`: per-plugin-id collision check, `targetsOf`,
-  write-side validation (`validateFacetWrite`, ADR-0013 decision 6) and
+  write-side validation (`validateFacetWrite`, ADR-0013 decision 6; a refusal
+  carries its stage as data in `refusal` beside the message, which the daemon's
+  differential against the Rust core compares) and
   read-side compat resolution (`resolveFacetPayload`, decision 7 — stepwise
   chain, drop-not-fail, newer-than-registered preserved). `facetForm(key)`
   answers the derived editor form, and lives here rather than at each

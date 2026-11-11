@@ -4,16 +4,14 @@ import { type Core, CoreInputRefused } from '@kamiazya/whiteboard-core-wasm'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
 import { beforeAll, describe, expect, it } from 'vitest'
+import type {
+  FacetWriteCore,
+  FacetWriteJudgement,
+  FacetWriteMismatch,
+} from '../facet-write-core.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { FacetWriteRejectedError } from './errors.js'
 import { facetWriterFor } from './facet-write.js'
-import type {
-  FacetWriteCalls,
-  FacetWriteCore,
-  FacetWriteImpl,
-  FacetWriteJudgement,
-  FacetWriteMismatch,
-} from './facet-write-core.js'
 
 /**
  * The facet write's switch: what each impl answers, what `differential`
@@ -34,14 +32,14 @@ interface Harness {
 }
 
 async function harness(
-  impl: FacetWriteImpl,
+  impl: FacetWriteCore['impl']['partitionFacetWrites'],
   wrap: (answer: FacetWriteJudgement) => FacetWriteJudgement = (answer) => answer,
   decline = false,
   buckets: readonly Record<string, unknown>[] = [],
 ): Promise<Harness> {
   const mismatches: FacetWriteMismatch[] = []
   const calls: { library: unknown }[] = []
-  const facets: FacetWriteCalls = {
+  const facets: FacetWriteCore['facets'] = {
     facetBucketCheck(target, bucket, library) {
       calls.push({ library })
       if (decline) throw new CoreInputRefused('facet_bucket_check', 'input-too-large')

@@ -7,7 +7,7 @@ import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
  * answers with the TypeScript; `rust` answers with the core, the TypeScript
  * still present so rollback is flipping this back.
  */
-export type FacetWriteImpl = 'ts' | 'differential' | 'rust'
+type FacetWriteImpl = 'ts' | 'differential' | 'rust'
 
 /**
  * One place a payload was refused: where and why. A union carries why each of
@@ -66,7 +66,7 @@ export type FacetWriteJudgement =
  * caps, or a value the wire does not carry). A decline is answered by the
  * TypeScript, in every mode.
  */
-export interface FacetWriteCalls {
+interface FacetWriteCalls {
   facetBucketCheck(
     target: FacetTarget,
     bucket: ExtensionFacets | undefined,

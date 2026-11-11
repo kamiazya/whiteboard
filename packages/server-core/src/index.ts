@@ -8,6 +8,7 @@ export {
 } from './api-errors.js'
 export { answerUnhandled, createServer } from './create-server.js'
 export { DocumentEngineTrapError } from './document-io.js'
+export type { FacetWriteCore, FacetWriteMismatch } from './facet-write-core.js'
 export { setLogSink } from './log.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export { promoteWorkspace } from './operations/promote-workspace.js'
@@ -56,11 +57,6 @@ export {
 } from './tools/document-move.js'
 export { createDocumentSearchTool } from './tools/document-search.js'
 export { createDocumentSetOperation } from './tools/document-set.js'
-export type {
-  FacetWriteCore,
-  FacetWriteImpl,
-  FacetWriteMismatch,
-} from './tools/facet-write-core.js'
 export { drawsATag, TAG_LIBRARY_PATH } from './tools/tag-library.js'
 export type {
   Attestation,

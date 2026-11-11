@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
-import type { FacetWriteCore, FacetWriteImpl } from '../tools/facet-write-core.js'
+import type { FacetWriteCore } from '../facet-write-core.js'
 
 /**
  * The facet-write core a test realm's deps carry when its environment says so
@@ -26,7 +26,7 @@ export function facetWriteCoreFromEnv(
       const core = await loadCore(readFileSync(artifact))
       return {
         facets: core,
-        impl: { partitionFacetWrites: impl satisfies FacetWriteImpl },
+        impl: { partitionFacetWrites: impl },
         onMismatch: (mismatch) => {
           if (throws)
             throw new Error(`facet write core ${mismatch.kind}: ${JSON.stringify(mismatch)}`)

@@ -5,9 +5,9 @@ import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboa
 import type { HonoRequest } from 'hono'
 import type { Frontiers, LoroDoc } from 'loro-crdt'
 import type { AgentActivityTouched } from './agent-activity-touched.js'
+import type { FacetWriteCore } from './facet-write-core.js'
 import type { Embedder } from './search/embedder.js'
 import type { ThemeFontSource } from './theme-font.js'
-import type { FacetWriteCore } from './tools/facet-write-core.js'
 import type { OperatorInfo, PromotedVersion, VersionEntry } from './versions/version-entry.js'
 import type { ViewportRequest } from './viewport-request.js'
 
