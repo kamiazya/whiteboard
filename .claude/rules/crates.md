@@ -186,6 +186,15 @@ steps and cache paths to the scripts.
   `shapes` tables of `SvgDocumentOptions` are not ported (the bundled visual
   plugin's are the Rust tables), and a non-finite coordinate is `NonFinite`
   where the TypeScript throws `RangeError`.
+- **The BudouX phrase breaker is held to a recording and a generated model**:
+  `crates/core/canvas-render/src/budoux/model.rs` is written by
+  `packages/canvas-render/scripts/gen-budoux-model.mjs <out.rs>` from the
+  vendored `ja-model.ts` (`--check` is `tools/arch-lint`'s byte-equality test),
+  and `packages/canvas-render/src/oracle/budoux.jsonl` records what the vendored
+  parser cut (hand-written corpora, one string aimed at each of the 1,678
+  entries, per-prefix and seeded-stream digests); `crates/core/canvas-render/tests/budoux_oracle.rs`
+  replays it natively and on wasm32. The model does not know surrogate pairs and
+  may cut between their halves, as the TypeScript does.
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).

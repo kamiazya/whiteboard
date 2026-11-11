@@ -19,6 +19,7 @@
 // line of production code.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+pub mod budoux;
 pub mod edge_arrows;
 pub mod edge_flatten;
 pub mod fake_measure;
