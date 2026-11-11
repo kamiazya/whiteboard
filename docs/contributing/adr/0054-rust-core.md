@@ -1121,6 +1121,156 @@ step 7 rebuilds it as the recorded oracle; the Unicode version of the oracle's
 tables is bounded by probes (13-era), not read from a header, as the package
 carries none.
 
+#### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
+
+Step 7 moves layout behind the core, and layout never measures text itself:
+it calls an injected `measure(text, font)`. Seam 1 says text measurement lives
+inside the core (a font-table measurer) with a host callback kept as a port, in
+a fixed shape, and rejected a per-run callback as "the hottest boundary in the
+system". The spike measured that claim, and the other two ways a host could
+answer (a pre-measured advance table, a batch), on the real layout.
+
+**What layout asks.** 14 corpora x 3 widths in the text-wrapping scoreboard,
+and four canvases laid out through `layoutSpatialCanvas` with the fake
+measurer. The canvases are 60 nodes with 40 labelled edges, and 288 nodes
+with 60, with markdown bodies, plus two label-overflow benches. A
+distinct-prose variant (words drawn from a list of about fifty) has a lot less
+repetition than the first, whose six sentences recur.
+
+| Workload | Calls | Unique (text, font) | Mean length (UTF-16) |
+|---|---|---|---|
+| Scoreboard, 42 cases | 812 | 580 (71%) | 11.7 |
+| 60 nodes / 200 edges, repeated sentences | 3,980 | 295 (7%) | 16.8 |
+| 60 nodes, distinct prose, no edges | 4,684 | 2,402 (51%) | 21.3 |
+| 288 nodes / 345 edges, repeated sentences | 19,348 | 771 (4%) | 16.7 |
+| 288 nodes, distinct prose, no edges | 22,857 | 6,711 (29%) | 21.5 |
+| bench: 480 labels `n<i>` | 1,440 | 481 (33%) | 2.8 |
+| bench: 480 overflowing labels | 11,520 | 490 (4%) | 20.1 |
+
+In the 60-node case 640 calls are a single character (the space), the median
+is 13 units, the 90th percentile 31 and the longest 142, in five fonts. Layout
+asks for words, line prefixes and labels, never single glyphs. Roughly 24 calls
+per overflowing label are the `fitToWidth` bisection.
+
+**The demand is not knowable ahead of the answers.** Wrapping probes joined
+prefixes of segments with a search that starts from the previous line's count,
+and truncation bisects a prefix length, so each probe is chosen from the last
+answer. A pass with a 0.5-per-character stand-in measurer predicted 299 of the
+580 unique keys the scoreboard's measurer asked for (52%). Running layout
+repeatedly, answering what each pass missed, until a pass asks nothing new
+took 4 rounds on the repeated-sentence canvases and 7-8 on the distinct-prose
+ones (counting the final pass that asks nothing), and requested 4-10% (30
+keys on each) and 53-56% (3,755 against 2,402; 10,293 against 6,711) more keys
+than layout needs. A two-pass batch would
+re-run layout once per round.
+
+**A table cannot be exact in general.** `describeMeasureTextConformance`
+holds a measurer to additivity within 0.01 px, not bit for bit. Summing
+per-unit advances against the fake's `len * 0.6 * size` differs in the last
+bit on 2,600 of 3,980 strings (65%); the scoreboard measurer's
+`(sum of em) * size` against a sum of `em * size` differs on 240 (6%). A table
+reproduces a measurer only by repeating its arithmetic order, including the
+64-code-point segment sums `measureCarriedRun` makes for long runs, and it
+cannot reproduce Canvas `measureText` at all.
+
+**The boundary.** A release-built wasm crate (wasm-bindgen 0.2.130, LTO),
+Node 24.22.1, 3,980 calls replayed from the 60-node layout, median of seven
+timed runs, the host answering with the fake's arithmetic:
+
+| Shape | ns per call |
+|---|---|
+| JS calling a JS closure with the same arguments | 8 |
+| Rust calling an imported function, two integers | 8 |
+| imported function `(text: &str, font_id: u32) -> f64` | 145 |
+| imported function `(text: &str, font: &str) -> f64` | 260 |
+| `js_sys::Function::call2` with strings, number back | 375 |
+| `js_sys::Function` returning `{advanceWidth, ascent, descent, lineGap}`, read with `Reflect::get` | 736 |
+| one call: all 3,980 strings joined with `\n`, a `Float64Array` back | 73 per string |
+| Rust memo keyed `(font id, text)`, hit path (it clones its key) | 48 |
+| the same memo, one cold layout (93% hits) | 77 |
+
+The crossing itself is free (8 ns); the cost is the string, which wasm-bindgen
+decodes from linear memory on every call (mean 21.7 UTF-8 bytes), and a font
+passed as a css string adds as much as the text does. The object answer is the
+expensive shape. Ascent, descent and line gap are properties of the font in
+both real measurers, so they need cross once per font.
+
+**Against the layout.** On the same machine the TypeScript layout of the
+60-node canvas takes 471 ms with its 200 edges and 66 ms with none; the
+288-node canvas 1,414 ms and 292 ms. (The edge search is the ADR's 332-339 ms
+figure plus the text.) Callback overhead per layout:
+
+| Workload | Calls | `(text, font id)` | `Function` returning an object | Text-only TypeScript layout |
+|---|---|---|---|---|
+| 60 nodes | 3,980 | 0.6 ms | 2.9 ms | 66 ms |
+| 288 nodes | 19,348 | 2.8 ms | 14.2 ms | 292 ms |
+
+The cheap shape costs 1% of the text layout; the object-returning closure 4-5%.
+Neither moves a layout whose edge search is 80-86% of the time. That is a
+number about the call. The measurer behind it matters more: opentype.js
+`getAdvanceWidth` (vendored Roboto, kerning off) took 134 us per call on the
+3,180 Latin strings of the 60-node replay, 0.53 s for the 3,980 calls against
+0.04 s for the 295 distinct ones. Neither the TypeScript layout nor either real
+measurer memoises: `canvas-render` has no measure memo, and neither real measurer does; only `use-drag-layers.ts` keeps a per-gesture map, and a live drag
+measures one string per labelled edge (`layoutSpatialEdges` composes edge
+labels only). The per-node `contentCache` skips unchanged nodes entirely. So a
+memo inside the core would cut host work by the factor in the "Unique" column,
+which is a gain on the TypeScript layout too.
+
+**Verdict.** Seam 1 stands, and it is the table that carries it:
+- The production measurer is the in-core `FontTableMeasurer` of seam 1. This
+  spike did not build it, so its own cost is unmeasured here; its arithmetic
+  must follow the TypeScript measurer's order to be differential against
+  `mcp-server`'s. Against Canvas, 0.01 px of advance width (and the suite's
+  1 px for vertical metrics) is the target it must be checked against, not a
+  result this spike measured.
+- **The core measures through a `Measure` trait.** Three implementers:
+  the font table; a native fake whose arithmetic is the TypeScript fake's
+  (`len_utf16 as f64 * factor * size`, IEEE-identical, no callback); and
+  `HostMeasure`, a wasm-only callback for system fonts. All three goldens
+  target the deterministic fake, so byte identity is about the algorithm and
+  never needs a host. The daemon's native build uses the font table or the
+  fake and never sees a callback, so the trait is the seam and the callback is
+  one implementer.
+- **The callback keeps seam 1's fixed shape, with two corrections.** Fonts
+  cross as an interned id (the font table registered once per layout, the
+  per-font ascent, descent and line gap with it) and the call answers one
+  `f64` advance: 145 ns, against 260 for a css string and 736 for an object.
+  Answering vertical metrics per font is a compatibility decision, not a
+  free one: `MeasureText` lets ascent vary by text and layout takes each
+  run's baseline from it. The browser measurer already answers the font's
+  box (`fontBoundingBoxAscent`) and falls back to the text's own
+  (`actualBoundingBoxAscent`) only on an engine without it, and the fakes and
+  `mcp-server`'s measurer answer per font; so the per-font shape changes a
+  baseline only on that fallback, where the core's answer becomes the font's
+  box. A host that needs per-text vertical metrics takes the object-returning
+  shape, at its measured 736 ns.
+  `measure_batch` is dropped from the fixed shape: a layout cannot
+  enumerate its demand (52% predicted, 4-8 rounds), and 73 against 145 ns per
+  string saves under 0.3 ms a layout. It returns only if a host's per-call
+  cost is a thread hop rather than a V8 import.
+- **The memo is per layout and lives in the core**, keyed `(font id, size,
+  text)` as seam 1 says, over every implementer. It is sound only inside a
+  layout, since a face loading mid-session changes the answers, so
+  cross-layout caching stays the host's (the drag map, the content cache).
+  A cross-layout seed would need a font-identity key, which is not a step 7
+  need.
+- The per-call callback costs 0.6-2.8 ms a layout and the memo cuts the calls that
+  cross by 29% to 96%. The "hottest boundary in the system" claim does not survive as a
+  speed argument, so the reason to keep text measurement inside the core is
+  determinism (Context, point 4: the guarantees the project sells are determinism guarantees), the reason seam 1 also gave.
+
+**Not measured, and what it could change.** No browser ran here, so Canvas
+`measureText`, and wasm-to-JS import costs in Firefox and Safari, are open: a
+`measureText` of several microseconds would make the memo matter more, and a
+slower import would make the font-table path matter more, and neither
+reverses the verdict. The distinct-prose canvases are synthetic; real
+documents repeat words less than the first set and more than the second, so
+read the memo's saving as between 29% and 96% of calls. opentype.js was timed
+directly, without `mcp-server`'s glyph-index scan, on one machine and one run
+of seven. The wasm crate was throwaway and is deleted; the call-sequence
+replay and the counting harness are not kept in the repository.
+
 ## Target crate graph and layering
 
 A crate's directory is its layer. Packages are still cut by runtime
@@ -1195,9 +1345,10 @@ before the first port.
    already posts the theme's faces before measuring, so the bytes exist on
    every surface. The host callback remains a port for system fonts and
    tests only, in a fixed shape: fonts interned as `FontId`, the core
-   memoising by `(FontId, size, text)`, and an optional `measure_batch` so a
-   host answers once per paragraph. Browser and daemon then measure
-   identically by construction.
+   memoising by `(FontId, size, text)`, one `f64` advance per call (the
+   measure-seam spike, 2026-11-11, dropped the `measure_batch` this seam first
+   named: a layout cannot enumerate its demand). Browser and daemon then
+   measure identically by construction.
 2. **Plugins: traits that take data, and a closed set of contribution
    points.** The bundled plugin implements the traits; the declarative
    manifest (decision 12) is just another implementer. Facet schemas are
@@ -1395,7 +1546,7 @@ through a ledgered exception.
 | 5 | Highlighting has no Rust twin of highlight.js | Host seam through the transition |
 | 6 | Two loro engines: size, version pin, `_utf16` APIs | One-cohort migration; lock-step guard |
 | 7 | Workers: script size; CPU time for large layouts | Size ledgers per artifact; measured CPU per layout size |
-| 8 | Live-drag boundary cost | Measure first; typed-array fast path kept available |
+| 8 | Live-drag boundary cost | Measure first; typed-array fast path kept available (2026-11-11: a drag measures one string per labelled edge, and a wasm-to-JS callback is 145 ns with a font id; the measure seam is not the drag cost) |
 | 9 | A wasm panic poisons the instance, and state held inside it (a `LoroDoc`) goes with it | Recreate and rehydrate from persisted state, tested by a CI poison-and-recover scenario (decision 20, QR-26c) |
 | 10 | Dialect gaps between JSON Schema, Zod and serde | The round-trip property and ADR-0031's scoreboards |
 | 11 | CI and agent cost: coexistence doubles lanes; agents need cargo and the wasm target; worktrees need a warm `CARGO_TARGET_DIR` | Scope-aware CI first (decision 10) |
