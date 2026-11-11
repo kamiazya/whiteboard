@@ -13,7 +13,10 @@
 // baseline is skipped because the job runs `cargo test --workspace` green in
 // a step of its own first; a failing baseline would otherwise read as every
 // mutant caught. `--shard k/n` (RUST_MUTANTS_SHARD) splits the list with
-// identical arguments on every leg.
+// identical arguments on every leg, dealt round-robin: the list is sorted by
+// file, and a slice puts every mutant of a crate low in the graph (det,
+// plugin-visual, whose mutants rebuild most of the workspace) on one leg,
+// which then outlives the job's timeout while the others finish early.
 //
 // cargo-mutants' exit codes are decisions, not noise (QR-17): 0 every mutant
 // caught (or none in the diff), 2 one missed, 3 one timed out, 4 the baseline
@@ -85,7 +88,7 @@ const args = [
 ]
 const shard = cargoShard(process.env.RUST_MUTANTS_SHARD)
 if (shard instanceof Error) fail(shard.message)
-if (shard !== undefined) args.push('--shard', shard)
+if (shard !== undefined) args.push('--shard', shard, '--sharding', 'round-robin')
 
 if (mode === 'pr') {
   const base = process.env.RUST_MUTANTS_BASE ?? 'origin/main'
