@@ -31,8 +31,7 @@ import {
   facetSetInputSchema,
   facetSetOutputSchema,
 } from './facet-set.schemas.js'
-import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
-import { refuseUnusableStencilLibrary } from './stencil-library.js'
+import { facetWriterFor } from './facet-write.js'
 import { refuseAgainstLibrary, workspaceTagLibrary } from './tag-library.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
@@ -146,9 +145,8 @@ export function createFacetSetTool(deps: ServerDeps) {
 async function setFacets(deps: ServerDeps, given: FacetSetInput): Promise<FacetSetOutput> {
   refuseIncoherentRequest(given)
   const input: FacetSetRequest = { ...given, tags: given.tags && tagEditOf(given.tags) }
-  const registry = await registryForFacetWrites(deps, input.workspaceId, [input.facets])
-  const { sets, deletions } = partitionFacetWrites(registry, input.facets, requiredTargetOf(input))
-  refuseUnusableStencilLibrary(deps, sets)
+  const writer = await facetWriterFor(deps, input.workspaceId, [input.facets])
+  const { sets, deletions } = writer.write(input.facets, requiredTargetOf(input))
   await refuseBeforeAnyWrite(deps, input)
 
   const updated: FacetSetOutput['updated'] = []

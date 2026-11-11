@@ -309,9 +309,27 @@ function assertAssetRefsFit(
   }
 }
 
+/**
+ * Why a write was refused, as data: the stage the registry's own check stopped
+ * at and what that stage knows. The message words the same facts for a person;
+ * a caller that compares one implementation's refusal with another's reads
+ * this instead of the sentence.
+ */
+export type FacetWriteRefusal =
+  | { readonly stage: 'malformed-key' }
+  | { readonly stage: 'not-current'; readonly current: string }
+  | { readonly stage: 'invalid'; readonly issues: readonly z.core.$ZodIssue[] }
+  | {
+      readonly stage: 'unregistered-asset'
+      readonly field: string
+      readonly id: string
+      readonly kind: AssetKind
+      readonly registered: readonly string[]
+    }
+
 export type FacetWriteResult =
   | { readonly ok: true; readonly value: unknown }
-  | { readonly ok: false; readonly message: string }
+  | { readonly ok: false; readonly message: string; readonly refusal: FacetWriteRefusal }
 
 export type FacetResolution =
   /** Registered and valid (after any compat migration): safe to consume. */
@@ -741,15 +759,23 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
 
     validateFacetWrite(key, payload) {
       const parsed = parseKey(key)
-      if (parsed === null) return { ok: false, message: `malformed facet key "${key}"` }
+      if (parsed === null) {
+        return {
+          ok: false,
+          message: `malformed facet key "${key}"`,
+          refusal: { stage: 'malformed-key' },
+        }
+      }
       const definition = definitionOf(parsed.namespace, parsed.name)
       if (definition === undefined) return { ok: true, value: payload }
       if (parsed.version !== definition.version) {
         // Writes always target the current version (ADR-0013 decision 7);
         // old versions exist only as read-side compat.
+        const current = currentKey(parsed.namespace, definition)
         return {
           ok: false,
-          message: `"${key}" is not the current version — write "${currentKey(parsed.namespace, definition)}"`,
+          message: `"${key}" is not the current version — write "${current}"`,
+          refusal: { stage: 'not-current', current },
         }
       }
       const result = definition.schema.safeParse(payload)
@@ -757,6 +783,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
         return {
           ok: false,
           message: `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
+          refusal: { stage: 'invalid', issues: result.error.issues },
         }
       }
       const missing = unregisteredRef(definition, result.data)
@@ -765,6 +792,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
         return {
           ok: false,
           message: `"${key}" field ${missing.field} names ${missing.kind} asset "${missing.id}", which no plugin registered — registered: ${registered.length === 0 ? '(none)' : registered.join(', ')}`,
+          refusal: { stage: 'unregistered-asset', ...missing, registered },
         }
       }
       return { ok: true, value: result.data }

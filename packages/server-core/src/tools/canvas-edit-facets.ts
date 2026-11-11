@@ -2,12 +2,12 @@
  * What a `wb_canvas_edit` op does with a facets bucket it carries: the same
  * registry judgement `wb_facet_set` applies, refused by naming the op.
  */
-import type { FacetRegistry, FacetTarget } from '@kamiazya/whiteboard-facet-engine'
+import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
 import type { ExtensionFacets } from '@kamiazya/whiteboard-model'
 import { fail } from './canvas-edit-error.js'
 import { FacetWriteRejectedError } from './errors.js'
-import { checkedBucket } from './facet-write.js'
+import type { FacetWriter } from './facet-write.js'
 
 /**
  * A facets bucket an op carries, judged by the same registry rule
@@ -18,7 +18,7 @@ import { checkedBucket } from './facet-write.js'
  * EDGE slot of ADR-0013 decision 5: the registry has no fifth target.
  */
 function checkedFacets(
-  registry: FacetRegistry,
+  writer: FacetWriter,
   index: number,
   op: string,
   facets: ExtensionFacets | undefined,
@@ -26,7 +26,7 @@ function checkedFacets(
 ): ExtensionFacets | undefined {
   if (facets === undefined) return undefined
   try {
-    return checkedBucket(registry, facets, target)
+    return writer.checked(facets, target)
   } catch (error) {
     if (error instanceof FacetWriteRejectedError || error instanceof ReservedKeyWriteError)
       fail(index, op, error.message)
@@ -36,7 +36,7 @@ function checkedFacets(
 
 /** `value` with its `facets` replaced by the checked bucket, or absent when that is empty. */
 export function withCheckedFacets<T extends { facets?: ExtensionFacets }>(
-  registry: FacetRegistry,
+  writer: FacetWriter,
   index: number,
   op: string,
   value: T,
@@ -44,7 +44,7 @@ export function withCheckedFacets<T extends { facets?: ExtensionFacets }>(
 ): T {
   if (value.facets === undefined) return value
   const { facets, ...rest } = value
-  const checked = checkedFacets(registry, index, op, facets, target)
+  const checked = checkedFacets(writer, index, op, facets, target)
   return (checked === undefined ? rest : { ...rest, facets: checked }) as T
 }
 
@@ -53,12 +53,12 @@ export function withCheckedFacets<T extends { facets?: ExtensionFacets }>(
  * explicitly: dropping the key would keep what the element already had.
  */
 export function patchWithCheckedFacets<T extends { facets?: ExtensionFacets }>(
-  registry: FacetRegistry,
+  writer: FacetWriter,
   index: number,
   op: string,
   patch: T,
   target: FacetTarget,
 ): T {
   if (patch.facets === undefined) return patch
-  return { ...patch, facets: checkedFacets(registry, index, op, patch.facets, target) }
+  return { ...patch, facets: checkedFacets(writer, index, op, patch.facets, target) }
 }

@@ -1,5 +1,4 @@
 import { tidyBoxes, tidyNodes } from '@kamiazya/whiteboard-canvas-render'
-import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
   anchoredOnAny,
   canvasEdgeSchema,
@@ -24,6 +23,7 @@ import {
 } from './canvas-edit-session.js'
 import { dressWithStencil } from './canvas-edit-stencil.js'
 import { lockedDetail, lockedEdgeLossDetail } from './element-lock.js'
+import type { FacetWriter } from './facet-write.js'
 import { publishedKind } from './published-node-kind.js'
 
 /**
@@ -41,7 +41,7 @@ export interface CanvasEditContext {
    * the workspace library costs a listing plus a read, and the overwhelming
    * majority of batches move boxes and draw lines.
    */
-  readonly facetRegistry: FacetRegistry
+  readonly facetWriter: FacetWriter
 }
 
 type CanvasOp = CanvasEditInput['ops'][number]
@@ -413,7 +413,7 @@ const CANVAS_EDIT_HANDLERS: {
   [K in CanvasOp['op']]: (ctx: CanvasEditContext, op: OpNamed<K>, index: number) => void
 } = {
   'node.add': (ctx, op, index) => {
-    const draft = withCheckedFacets(ctx.facetRegistry, index, op.op, op.node, 'node')
+    const draft = withCheckedFacets(ctx.facetWriter, index, op.op, op.node, 'node')
     const id = draft.id ?? mintId(new Set(ctx.s.nodes.map((node) => node.id)), 'n')
     if (ctx.s.nodeAt(id) !== undefined) {
       fail(index, op.op, `node id "${id}" is already on the canvas; patch it or choose another id`)
@@ -441,7 +441,14 @@ const CANVAS_EDIT_HANDLERS: {
     }
     ctx.s.nodes = [
       ...ctx.s.nodes,
-      dressWithStencil(index, op.op, parsed.data, op.stencil, draft.color, ctx.facetRegistry),
+      dressWithStencil(
+        index,
+        op.op,
+        parsed.data,
+        op.stencil,
+        draft.color,
+        ctx.facetWriter.registry,
+      ),
     ]
     ctx.s.touchedNodes.add(id)
     if (!positioned) ctx.s.geometry.set(id, { id, ...at, width, height })
@@ -467,7 +474,7 @@ const CANVAS_EDIT_HANDLERS: {
       const selected = new Set(ids)
       ctx.s.nodes = ctx.s.nodes.map((node) =>
         selected.has(node.id)
-          ? dressWithStencil(index, op.op, node, stencil, op.patch.color, ctx.facetRegistry)
+          ? dressWithStencil(index, op.op, node, stencil, op.patch.color, ctx.facetWriter.registry)
           : node,
       )
     }
@@ -555,7 +562,7 @@ const CANVAS_EDIT_HANDLERS: {
     return
   },
   'edge.add': (ctx, op, index) => {
-    const draft = withCheckedFacets(ctx.facetRegistry, index, op.op, op.edge, 'edge')
+    const draft = withCheckedFacets(ctx.facetWriter, index, op.op, op.edge, 'edge')
     const id = draft.id ?? mintId(elementIds(ctx), 'e')
     if (ctx.s.edgeAt(id) !== undefined) {
       fail(index, op.op, `edge id "${id}" is already on the canvas; patch it or choose another id`)
@@ -585,7 +592,7 @@ const CANVAS_EDIT_HANDLERS: {
     }
     const merged = {
       ...edge,
-      ...patchWithCheckedFacets(ctx.facetRegistry, index, op.op, op.patch, 'edge'),
+      ...patchWithCheckedFacets(ctx.facetWriter, index, op.op, op.patch, 'edge'),
     }
     for (const endpoint of endNodes(merged)) {
       if (ctx.s.nodeAt(endpoint) === undefined) {
@@ -614,7 +621,7 @@ const CANVAS_EDIT_HANDLERS: {
     return
   },
   'line.add': (ctx, op, index) => {
-    const draft = withCheckedFacets(ctx.facetRegistry, index, op.op, op.line, 'edge')
+    const draft = withCheckedFacets(ctx.facetWriter, index, op.op, op.line, 'edge')
     const id = draft.id ?? mintId(elementIds(ctx), 'l')
     if (ctx.s.lineAt(id) !== undefined) {
       fail(index, op.op, `line id "${id}" is already on the canvas; patch it or choose another id`)
@@ -638,7 +645,7 @@ const CANVAS_EDIT_HANDLERS: {
     if (line === undefined) fail(index, op.op, `line "${op.id}" is not on the canvas`)
     const merged = {
       ...line,
-      ...patchWithCheckedFacets(ctx.facetRegistry, index, op.op, op.patch, 'edge'),
+      ...patchWithCheckedFacets(ctx.facetWriter, index, op.op, op.patch, 'edge'),
     }
     for (const endpoint of endNodes(merged)) {
       if (ctx.s.nodeAt(endpoint) === undefined) {

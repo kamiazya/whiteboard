@@ -251,7 +251,13 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
   async function setupWith(registryOverride = registry) {
     const documentStore = new FakeDocumentStore()
     await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createFacetSetTool({ ...makeDeps(documentStore), facetRegistry: registryOverride })
+    // The Rust core holds the bundled plugins' registry alone, so a deployment
+    // with a plugin of its own is judged by the TypeScript.
+    const tool = createFacetSetTool({
+      ...makeDeps(documentStore),
+      facetRegistry: registryOverride,
+      facetWriteCore: undefined,
+    })
     return tool
   }
 

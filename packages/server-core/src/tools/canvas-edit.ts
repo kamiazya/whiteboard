@@ -35,8 +35,7 @@ import { CanvasEditSession } from './canvas-edit-session.js'
 import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { DocumentKindMismatchError } from './errors.js'
-import { registryForFacetWrites } from './facet-write.js'
-import { workspaceFacetRegistry } from './stencil-library.js'
+import { facetWriterFor } from './facet-write.js'
 import { withWorkspaceWrite } from './write-lock.js'
 
 export { canvasEditInputSchema } from './canvas-edit-ops.js'
@@ -88,13 +87,11 @@ function facetBucketsOf(ops: CanvasEditInput['ops']): (ExtensionFacets | undefin
  * library adds stencil assets and nothing else, which is what makes resolving
  * it lazily safe rather than clever.
  */
-async function resolveEditRegistry(deps: ServerDeps, input: CanvasEditInput) {
+async function resolveEditWriter(deps: ServerDeps, input: CanvasEditInput) {
   const namesAStencil = input.ops.some(
     (op) => 'stencil' in op && (op as { stencil?: string }).stencil !== undefined,
   )
-  return namesAStencil
-    ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
-    : await registryForFacetWrites(deps, input.workspaceId, facetBucketsOf(input.ops))
+  return await facetWriterFor(deps, input.workspaceId, facetBucketsOf(input.ops), namesAStencil)
 }
 
 /**
@@ -405,7 +402,7 @@ function refuseCanvasGrowth(
 }
 
 async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<CanvasEditOutput> {
-  const facetRegistry = await resolveEditRegistry(deps, input)
+  const facetWriter = await resolveEditWriter(deps, input)
   const proposing = decideProposing(input)
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
   const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
@@ -422,7 +419,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   // A verb added to the schema and not to the table does not compile, where
   // an inline switch would simply fall through and report a batch applied
   // having ignored the op.
-  const ctx: CanvasEditContext = { s, facetRegistry }
+  const ctx: CanvasEditContext = { s, facetWriter }
   input.ops.forEach((op, index) => {
     applyCanvasOp(ctx, op, index)
     refuseCanvasGrowth(canvas, s, index, op.op)

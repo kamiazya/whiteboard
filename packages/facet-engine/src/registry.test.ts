@@ -111,6 +111,23 @@ describe('validateFacetWrite', () => {
     expect(result.ok).toBe(false)
     if (!result.ok) expect(result.message).toContain('example.sample/v0')
   })
+
+  it('answers the stage a refusal stopped at, as data beside its words', () => {
+    const stage = (key: string, payload: unknown) => {
+      const result = registry.validateFacetWrite(key, payload)
+      return result.ok ? 'ok' : result.refusal
+    }
+    expect(stage('Bad Key', {})).toEqual({ stage: 'malformed-key' })
+    expect(stage('example.sample/v4', { status: 'open' })).toEqual({
+      stage: 'not-current',
+      current: 'example.sample/v0',
+    })
+    const invalid = stage('example.sample/v0', { status: 1 })
+    expect(invalid).toMatchObject({ stage: 'invalid' })
+    expect(invalid !== 'ok' && invalid.stage === 'invalid' && invalid.issues[0]?.code).toBe(
+      'invalid_type',
+    )
+  })
 })
 
 describe('resolveFacetPayload', () => {

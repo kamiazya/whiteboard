@@ -8,7 +8,7 @@
  * number. A patch that re-walks the whole board once per patched node is
  * quadratic in the board, and one batch may hold many such ops.
  */
-import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
@@ -17,6 +17,7 @@ import { DOCUMENT_ID, WORKSPACE_ID } from './_test-canvas-edit.js'
 import { applyCanvasOp } from './canvas-edit-handlers.js'
 import { canvasEditInputSchema } from './canvas-edit-ops.js'
 import { CanvasEditSession } from './canvas-edit-session.js'
+import type { FacetWriter } from './facet-write.js'
 
 const BOARD = 2000
 /**
@@ -54,8 +55,8 @@ describe('node.patch cost', () => {
       documentId: DOCUMENT_ID,
       ops: [{ op: 'node.patch', all: true, patch: { x: 7 } }],
     })
-    // node.patch reads the registry only for a stencil, which this op names none of.
-    applyCanvasOp({ s: session, facetRegistry: {} as FacetRegistry }, ops[0] as never, 0)
+    // node.patch reads the writer only for a facets bucket or a stencil, which this op names none of.
+    applyCanvasOp({ s: session, facetWriter: {} as FacetWriter }, ops[0] as never, 0)
     expect(session.nodes.every((node) => node.x === 7)).toBe(true)
     expect(board.idReads()).toBeLessThanOrEqual(ID_READ_CEILING)
   })
