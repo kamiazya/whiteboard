@@ -42,7 +42,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | present | the visual facets' payload types, generated from `contracts/facets/visual`, the matchers of their patterns, the colour check and the one-grapheme check (`unicode-segmentation`); the bundled plugin loaded from its files into a registry (`host.rs`, over the asset JSON the TypeScript package also reads); the plugin's other contributions follow |
-| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; composer, typesetter, line breaking, theme, digest follow |
+| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; composer, typesetter, theme, digest follow |
 | `whiteboard-crdt` | core | planned | the loro bridge, workspace tree, file references, text limits |
 | `whiteboard-history` | core | planned | checkpoint scheduling, version retention, frontier encoding |
 | `whiteboard-workspace-index` | core | planned | the document index over a workspace tree |
@@ -186,6 +186,15 @@ steps and cache paths to the scripts.
   `shapes` tables of `SvgDocumentOptions` are not ported (the bundled visual
   plugin's are the Rust tables), and a non-finite coordinate is `NonFinite`
   where the TypeScript throws `RangeError`.
+- **Line breaking is held to a recording and a generated table**:
+  `crates/core/canvas-render/src/linebreak/table.rs` is written from
+  `css-line-break`'s trie by `packages/canvas-render/scripts/gen-linebreak-table.mjs <table.rs>`
+  (`tools/arch-lint`'s `linebreak-table-generated.test.ts` runs it with `--check`), and
+  `src/oracle/linebreak.jsonl` holds the TypeScript's `uaxSegments` breaks for the small
+  corpora and one digest per chunk of the large ones, which
+  `crates/core/canvas-render/tests/linebreak_oracle.rs` regenerates from its `meta`
+  record; `WHITEBOARD_RECORD_ORACLE=1` re-records it. The port's header lists the holes
+  of the oracle it preserves.
 - **The BudouX phrase breaker is held to a recording and a generated model**:
   `crates/core/canvas-render/src/budoux/model.rs` is written by
   `packages/canvas-render/scripts/gen-budoux-model.mjs <out.rs>` from the
