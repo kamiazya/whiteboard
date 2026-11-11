@@ -28,13 +28,7 @@ const libraryDocument = async () => {
     path: STENCIL_LIBRARY_PATH,
     kind: 'markdown',
   })
-  // These pin the TypeScript's wording; the Rust core names places and codes
-  // instead (a declared deviation), so the core is held out of this file.
-  return makeTestDeps({
-    documentStore: store,
-    documentIndex: store.documentIndex,
-    facetWriteCore: undefined,
-  })
+  return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
 }
 
 const writeLibrary = (deps: Awaited<ReturnType<typeof libraryDocument>>, stencils: unknown) =>
