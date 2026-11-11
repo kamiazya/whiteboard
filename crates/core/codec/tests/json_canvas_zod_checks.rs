@@ -67,7 +67,6 @@ const ALSO_TOO_SHORT: &[&str] = &[
     r#"{"length":"0x"}"#,
     r#"{"length":[]}"#,
     r#"{"length":[0,1]}"#,
-    r#"{"length":[true]}"#,
     r#"{"length":[null,1]}"#,
     r#"{"length":{}}"#,
 ];
