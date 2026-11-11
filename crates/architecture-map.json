@@ -157,7 +157,9 @@
         "whiteboard-plugin-visual",
         "whiteboard-edge-routing"
       ],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "unicode-segmentation": "UAX #29 grapheme clusters for the cut between graphemes in fit_to_width, pinned exactly (QR-20b); checked before adopting: MIT OR Apache-2.0, no dependencies, std or no_std, no I/O, `#![deny(unsafe_code)]`, tables only, so it builds unchanged on wasm32 and native; its tables are Unicode 17.0, the release Node 24's ICU carries (the plugin-visual entry's review)"
+      },
       "absorbs": ["packages/canvas-render"]
     },
     "whiteboard-crdt": {
