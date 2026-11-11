@@ -21,17 +21,23 @@ import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
  * A font record carries a `class`, judged by a plain per-glyph sum written
  * below that shares nothing with the measurer under test:
  *
- * - `exact`: the measurer answers that sum to the bit, so the Rust port owes
- *   the same bits;
- * - `segmented`: the same sum to a part in 1e9; the measurer cuts a long run
- *   into 64-code-point segments and adds their sums, which moves the last bits;
+ * - `exact`: the measurer answers that sum within a part in 1e9, so the Rust
+ *   port owes its bits exactly (the measurer's 64-code-point segment sums
+ *   included, which move the last bits and are ported);
  * - `substituted`: opentype.js replaced glyphs through the face's GSUB `ccmp`
- *   before summing (an `i` under a combining dot), which the port does not run.
+ *   before summing (an `i` under a combining dot), which the port does not
+ *   run. The replay holds these to a tenth of an em and fails one it
+ *   reproduces exactly, so the class cannot outlive the gap.
+ *
+ * `segment-joins.json` records which code points keep a segment from being cut
+ * before them (`\p{M}` and `\p{Cf}` under this Node's Unicode), the table
+ * the port carries.
  *
  * Re-record after a deliberate change with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project mcp-node measure-text.oracle`.
  */
 const FILE = new URL('./oracle/font-measure.jsonl', import.meta.url)
+const JOINS_FILE = new URL('./oracle/segment-joins.json', import.meta.url)
 
 interface FontWire {
   readonly family: string
@@ -42,7 +48,7 @@ interface FontWire {
 }
 
 type Measurer = 'font' | 'constant-ratio'
-type Class = 'exact' | 'segmented' | 'substituted'
+type Class = 'exact' | 'substituted'
 
 interface Input {
   readonly id: string
@@ -120,6 +126,17 @@ const TEXTS: readonly [string, string][] = [
   ['ascii-65', 'x'.repeat(65)],
   ['ascii-long', 'The quick brown fox. '.repeat(48)],
   ['mixed-long', 'abc日'.repeat(80)],
+  ['pangram-long', 'Pack my box with five dozen liquor jugs. '.repeat(40)],
+  ['mark-at-cut', `${'x'.repeat(63)}\u0301${'y'.repeat(70)}`],
+  ['marks-past-cut', `${'x'.repeat(64)}${'\u0301'.repeat(30)}${'y'.repeat(70)}`],
+  ['marks-forced-cut', `x${'\u0301'.repeat(400)}z`],
+  ['advancing-joins-forced-cut', `Wiq${'\u00ad'.repeat(400)}z`],
+  ['advancing-marks-forced-cut', `Wiq${'\u0358'.repeat(400)}z`],
+  ['advancing-joins-in-words', `${'Wiq\u00ad'.repeat(120)}`],
+  ['advancing-joins-alternating', `Wiq${'\u00ad\u0358'.repeat(500)}z`],
+  ['marks-long-run', `${'e\u0301'.repeat(150)}`],
+  ['astral-in-long', `${'a'.repeat(62)}😀${'b'.repeat(70)}`],
+  ['joiners-long', `${'a'.repeat(63)}\u200d${'b'.repeat(66)}\u200b${'c'.repeat(70)}`],
 ]
 
 const CORE_SIZES: readonly [string, number][] = [
@@ -135,6 +152,9 @@ const EDGE_SIZES: readonly [string, number][] = [
   ['neg-zero', -0],
   ['negative', -16],
   ['third', 1 / 3],
+  ['seven-tenths', 0.7],
+  ['odd', 7.3],
+  ['irrational', Math.PI],
   ['large', 1e21],
   ['tiny', 5e-324],
   ['max', Number.MAX_VALUE],
@@ -142,7 +162,15 @@ const EDGE_SIZES: readonly [string, number][] = [
   ['infinity', Number.POSITIVE_INFINITY],
 ]
 
-const EDGE_TEXTS = ['empty', 'ascii-sentence', 'cjk', 'missing-between-present', 'emoji-astral']
+const EDGE_TEXTS = [
+  'empty',
+  'ascii-sentence',
+  'cjk',
+  'missing-between-present',
+  'emoji-astral',
+  'advancing-joins-alternating',
+  'pangram-long',
+]
 
 const font = (sizePx: number, over: Partial<Omit<FontWire, 'sizePx'>> = {}): FontWire => ({
   family: 'Roboto',
@@ -268,8 +296,27 @@ async function loadFace(path: string): Promise<opentype.Font> {
 function classify(input: Input, advance: number, model: number): Class {
   if (Object.is(advance, model) || (Number.isNaN(advance) && Number.isNaN(model))) return 'exact'
   const clamped = Number.isFinite(model) && model >= 0 ? model : 0
-  if (Math.abs(advance - clamped) <= 1e-9 * Math.max(1, Math.abs(clamped))) return 'segmented'
+  if (Math.abs(advance - clamped) <= 1e-9 * Math.max(1, Math.abs(clamped))) return 'exact'
   return input.text.length > 0 ? 'substituted' : 'exact'
+}
+
+/** The code points the measurer never cuts a segment before, as inclusive ranges. */
+function joinRanges(): readonly (readonly [number, number])[] {
+  const joins = /[\p{M}\p{Cf}]/u
+  const ranges: [number, number][] = []
+  let low = -1
+  for (let code = 0; code <= 0x10ffff + 1; code++) {
+    const on =
+      code <= 0x10ffff &&
+      !(code >= 0xd800 && code <= 0xdfff) &&
+      joins.test(String.fromCodePoint(code))
+    if (on && low < 0) low = code
+    if (!on && low >= 0) {
+      ranges.push([low, code - 1])
+      low = -1
+    }
+  }
+  return ranges
 }
 
 async function answer(input: Input): Promise<Recorded> {
@@ -312,6 +359,7 @@ const encode = (records: readonly unknown[]): string =>
 
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
   writeFileSync(FILE, encode(await answers(inputs())))
+  writeFileSync(JOINS_FILE, `${JSON.stringify(joinRanges())}\n`)
 }
 
 describe('the recorded font measurer', () => {
@@ -334,9 +382,14 @@ describe('the recorded font measurer', () => {
   it('is exact for nearly all of it, so the gaps stay named', () => {
     const count = (c: Class) => recorded.filter((r) => r.class === c).length
     expect(count('substituted')).toBeGreaterThan(0)
-    expect(count('segmented')).toBeGreaterThan(0)
     expect(count('substituted')).toBeLessThan(recorded.length / 40)
     expect(count('exact')).toBeGreaterThan(recorded.length * 0.9)
+  })
+
+  it('records the joining table the measurer is held to', () => {
+    const ranges = JSON.parse(readFileSync(JOINS_FILE, 'utf8')) as number[][]
+    expect(ranges).toEqual(joinRanges())
+    expect(ranges.length).toBeGreaterThan(300)
   })
 
   it('measures a missing glyph by estimate and a carried one by the face', () => {

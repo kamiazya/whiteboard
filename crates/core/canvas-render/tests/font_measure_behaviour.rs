@@ -186,3 +186,15 @@ fn the_wide_ranges_stop_exactly_at_their_edges() {
         assert!(!is_full_width_code_point(code), "{code:x}");
     }
 }
+
+#[test]
+fn a_mark_or_format_code_point_joins_what_precedes_it() {
+    use whiteboard_canvas_render::segment_joins::{joins_preceding, ranges};
+    for ch in ['\u{300}', '\u{301}', '\u{36f}', '\u{ad}', '\u{200d}', '\u{e0100}'] {
+        assert!(joins_preceding(ch), "{ch:?}");
+    }
+    for ch in ['a', ' ', '\u{2ff}', '\u{370}', '日', '😀', '\u{10ffff}'] {
+        assert!(!joins_preceding(ch), "{ch:?}");
+    }
+    assert!(ranges().windows(2).all(|w| w[0].1 < w[1].0), "sorted and disjoint");
+}

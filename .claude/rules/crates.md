@@ -201,8 +201,11 @@ steps and cache paths to the scripts.
   composition root's and canvas-render may not import it) holds opentype.js over the
   vendored Roboto and `constantRatioMeasureText`; `crates/core/canvas-render/tests/font_measure_oracle.rs`
   replays it bit for bit, reading the faces itself. Each record's `class` says how far the
-  TypeScript is a per-glyph sum (`exact`, `segmented`, `substituted` by the face's GSUB
-  `ccmp`, which the port does not run). `ttf-parser` is unmaintained (RUSTSEC-2026-0192,
+  TypeScript is a per-glyph sum: `exact` (bit for bit, opentype's 64-code-point segment sums
+  included, with the joining table `segment-joins.json` held equal to the Rust one) and
+  `substituted` by the face's GSUB `ccmp`, which the port does not run. That class is a
+  tolerated gap held both ways: within 0.1 em, and a record the port reproduces exactly
+  fails, so the entry cannot go stale. `ttf-parser` is unmaintained (RUSTSEC-2026-0192,
   ignored in `deny.toml` with its reason).
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
