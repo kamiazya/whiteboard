@@ -98,6 +98,14 @@ const UNRESOLVED_IN_SHIPPED_SOURCE: Readonly<Record<string, string>> = {
     'the extension package version, imported as data so the manifest stamps the one declared version',
   'packages/plugin-visual/src/data.ts -> ./visual.manifest.json':
     'the bundled plugin manifest, imported as data with a JSON import attribute and named by the plugin definition',
+  'packages/plugin-visual/src/data.ts -> ./assets/icons-glyphs.json':
+    'a bundled asset table, imported as data with a JSON import attribute and read through asset-table.ts',
+  'packages/plugin-visual/src/icons/icons.ts -> ../assets/icons-lucide.json':
+    'a bundled asset table, imported as data with a JSON import attribute and read through asset-table.ts',
+  'packages/plugin-visual/src/stencils.ts -> ./assets/stencils.json':
+    'a bundled asset table, imported as data with a JSON import attribute and read through asset-table.ts',
+  'packages/plugin-visual/src/themes.ts -> ./assets/themes.json':
+    'a bundled asset table, imported as data with a JSON import attribute and read through asset-table.ts',
   'apps/web/src/main.tsx -> ./index.css': 'the global stylesheet, a side-effect import',
 }
 

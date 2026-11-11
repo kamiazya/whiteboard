@@ -1,5 +1,9 @@
 import type { FacetRegistry, IconAsset, PluginHost } from '@kamiazya/whiteboard-facet-engine'
-import { createFacetRegistry, pluginFromManifest } from '@kamiazya/whiteboard-facet-engine'
+import {
+  createFacetRegistry,
+  iconAssetSchema,
+  pluginFromManifest,
+} from '@kamiazya/whiteboard-facet-engine'
 import type {
   EdgeRoutingStyle,
   ExtensionFacets,
@@ -9,6 +13,8 @@ import type {
 import { type edgeRoutingSchema, edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { z } from 'zod'
+import { assetTable } from './asset-table.js'
+import glyphs from './assets/icons-glyphs.json' with { type: 'json' }
 import { symbolCatalogLoad } from './editors.js'
 import type {
   VisualEdgesFacet,
@@ -26,10 +32,7 @@ import {
   visualTextFacetSchema,
   visualThemeFacetSchema,
 } from './generated/visual.zod.js'
-import { CATEGORY_GLYPHS } from './icons/category-glyphs.js'
-import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
-import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
-import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
+import { LUCIDE_ASSETS } from './icons/icons.js'
 import { visualStencilsFacetSchema } from './stencil-library.js'
 import { VISUAL_STENCILS } from './stencils.js'
 import { type StrokeWidth, VISUAL_STROKE_KEY, visualStrokeFacetSchema } from './stroke.js'
@@ -156,37 +159,21 @@ export const VISUAL_TEXT_KEY = 'visual.text/v0'
 export const VISUAL_THEME_KEY = 'visual.theme/v0'
 
 /**
- * The vendored geometry as registered assets, keyed by bare name — the
- * registry composes `visual.<name>`, the way it does for themes.
+ * Every registered icon, keyed by bare name — the registry composes
+ * `visual.<name>`, the way it does for themes. The vendored lucide set comes
+ * first, then the glyphs (`assets/icons-glyphs.json`).
  *
- * `iconAssetSchema` parses these at `definePlugin` time, so a malformed
- * entry stops the plugin rather than reaching a picker. The spread is what
- * the schema's inferred (mutable) array wants; the source table stays
- * readonly.
- */
-const VISUAL_ICON_ASSETS: Readonly<Record<string, IconAsset>> = Object.fromEntries(
-  [
-    ...BUILT_IN_ICON_NAMES.map((name) => [name, LUCIDE_ICONS[name] ?? []] as const),
-    // Beside the vendored set, not inside it: `BUILT_IN_ICON_NAMES` is what
-    // a NODE may wear as a badge, and the symbol picker derives its options
-    // from that list. A picture of a routing style is not a badge, so it is
-    // registered geometry without being a symbol anyone can choose. Nor is
-    // a picture of an emoji CATEGORY — that one is chrome, drawn in the
-    // panel's own stroke language so the row that browses does not read as
-    // a spilled sample of what it browses.
-    ...Object.entries(EDGE_GLYPHS),
-    ...Object.entries(CATEGORY_GLYPHS),
-  ].map(([name, geometry]) => [name, { geometry: [...geometry] }]),
-)
-
-/**
- * Everything above shares the lucide 24-grid; the signature does not, so it
- * is registered separately with its own box rather than squeezed into one
- * the path was never drawn for.
+ * The glyphs sit beside the vendored set, not inside it: `BUILT_IN_ICON_NAMES`
+ * is what a NODE may wear as a badge, and the symbol picker derives its
+ * options from that list. A picture of a routing style or of an emoji
+ * category is registered geometry without being a symbol anyone can choose.
+ * The signature carries its own box, since it does not share the lucide
+ * 24-grid. `iconAssetSchema` judges every entry when the tables are read, so
+ * a malformed one stops the plugin rather than reaching a picker.
  */
 const VISUAL_ASSET_ICONS: Readonly<Record<string, IconAsset>> = {
-  ...VISUAL_ICON_ASSETS,
-  signature: { viewBox: SIGNATURE_VIEWBOX, geometry: [...SIGNATURE_GEOMETRY] },
+  ...LUCIDE_ASSETS,
+  ...assetTable('icon', glyphs, iconAssetSchema),
 }
 
 /**

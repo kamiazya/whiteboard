@@ -2,8 +2,8 @@
  * `define-your-own-stencils.md` copies the bundled stencils into a table, and
  * a hand copy drifts in silence: the page called `visual.service` "a
  * rectangle" after it became an octagon, and its silhouette list omitted the
- * octagon. The page is held against `stencils.ts`, read as text because
- * arch-lint imports no package's source.
+ * octagon. The page is held against `assets/stencils.json`, the file the
+ * bundled stencils are written in.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -14,13 +14,14 @@ const read = (file: string): string => readFileSync(join(REPO_ROOT, file), 'utf-
 
 /** Each bundled stencil's bare name and the silhouette its shape facet sets. */
 function bundledSilhouettes(): Map<string, string> {
-  const source = read('packages/plugin-visual/src/stencils.ts')
-  const block = source.slice(source.indexOf('export const VISUAL_STENCILS'))
+  const table = JSON.parse(read('packages/plugin-visual/src/assets/stencils.json')) as Record<
+    string,
+    { facets: Record<string, { kind?: string }> }
+  >
   const silhouettes = new Map<string, string>()
-  for (const chunk of block.split(/^ {2}(?=\w+: \{$)/m).slice(1)) {
-    const name = /^(\w+): \{/.exec(chunk)?.[1]
-    const kind = /\[SHAPE_KEY\]: \{ kind: '(\w+)' \}/.exec(chunk)?.[1]
-    if (name !== undefined && kind !== undefined) silhouettes.set(name, kind)
+  for (const [name, stencil] of Object.entries(table)) {
+    const kind = stencil.facets['visual.shape/v0']?.kind
+    if (kind !== undefined) silhouettes.set(name, kind)
   }
   return silhouettes
 }

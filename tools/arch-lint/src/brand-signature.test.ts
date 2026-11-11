@@ -94,8 +94,8 @@ const SURFACES: Readonly<Record<string, string>> = {
     'composes: the framed card with the spark. The board frame is a 84x62 rect at (2,2), so its bottom edge plus stroke reaches y~65.3 — a 56-tall box would clip it, which is why this one is 66.',
   'apps/web/scripts/generate-pwa-icons.mjs':
     'composes: a launcher icon at whatever size it is asked for, so its box is the size parameter rather than a constant.',
-  'packages/plugin-visual/src/icons/signature.ts':
-    'composes: the mark CROPPED to itself plus halo room, for a 16px picker glyph where the standard box spends half its width on margin. Its own comment carries the bounds.',
+  'packages/plugin-visual/src/assets/icons-glyphs.json':
+    'composes: the mark CROPPED to itself plus halo room, for a 16px picker glyph where the standard box spends half its width on margin. The assets README carries the bounds.',
   'apps/web/src/lib/favicon.ts':
     'composes: nothing — it QUOTES the path in a comment to say where the favicon geometry came from, and draws no SVG of its own.',
 }
