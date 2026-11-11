@@ -78,6 +78,7 @@ describe('the rust job runs every Rust gate', () => {
   it.each([
     'pnpm rust:check',
     'pnpm rust:build:wasm',
+    'pnpm rust:build:wasm:oracle',
     'pnpm exec vitest run --project=canvas-render-rust',
     'pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm',
     'pnpm --filter @kamiazya/whiteboard-core-wasm typecheck:abi',

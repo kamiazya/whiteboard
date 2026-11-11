@@ -79,8 +79,13 @@ list the steps. CI's `rust` job runs both plus `pnpm rust:build:wasm`, and
 `rust-fuzz-pr` runs `pnpm rust:fuzz:pr`; both are scoped by PATH
 (`PATH_JOBS` in `tools/checks/src/affected.mjs`), so a change to the Cargo
 root files, `.cargo/` or `crates/` runs them and not the vitest matrix, and
-any other change skips them as a declared skip. After the wasm build the `rust`
-job runs `canvas-render-rust` (QR-21 layer 2): canvas-render's
+any other change skips them as a declared skip. The per-module layer-2 exports
+(`det_*`, every `edge_*` but `edge_route_layout`) are TEST surface, exported only
+under the `oracle-surface` cargo feature: no shipped artifact has them, and
+`pnpm rust:build:wasm:oracle` (`cargo xtask dist wasm --oracle`, into
+`target/dist-oracle`, reporting ABI `<n>+oracle-surface`) builds the one the
+test lanes load. After both wasm builds the `rust`
+job runs `canvas-render-rust` (QR-21 layer 2, against the oracle build): canvas-render's
 `det-math.rust.test.ts` holds `det-math.ts` to `whiteboard-det` through the
 wasm artifact, exact on every double, and fails on CI if the artifact is absent; the
 `test-utils/wasm/*.rust.test.ts` beside it do the same for each edge module

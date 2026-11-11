@@ -32,7 +32,7 @@ tasks:
   harden-check [--require-stack-protector] <binary>...
                     a release binary carries PIE, full RELRO, NX, no RPATH,
                     stripped symbols and its embedded dependency list
-  dist native|wasm [--target-dir <dir>]
+  dist native|wasm [--oracle] [--target-dir <dir>]
                     the release build of a shipped artifact (remapped paths,
                     SOURCE_DATE_EPOCH, cargo-auditable for native)
   repro-check [native|wasm]...

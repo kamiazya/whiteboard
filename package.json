@@ -34,6 +34,7 @@
     "typecheck": "pnpm -r typecheck",
     "rust:check": "node tools/checks/src/rust-check.mjs",
     "rust:build:wasm": "node tools/checks/src/rust-build-wasm.mjs",
+    "rust:build:wasm:oracle": "node tools/checks/src/rust-build-wasm.mjs --oracle",
     "rust:fuzz:pr": "node tools/checks/src/rust-fuzz.mjs pr",
     "rust:fuzz:nightly": "node tools/checks/src/rust-fuzz.mjs nightly",
     "rust:mutants:pr": "node tools/checks/src/rust-mutants.mjs pr",

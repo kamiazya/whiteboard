@@ -4,11 +4,12 @@ import { fileURLToPath } from 'node:url'
 import { defineProject } from 'vitest/config'
 
 const here = dirname(fileURLToPath(import.meta.url))
-const wasmDir = resolve(here, '../../target/dist/wasm-bindgen/whiteboard-wasm')
+const wasmDir = resolve(here, '../../target/dist-oracle/wasm-bindgen/whiteboard-wasm')
 
 // The TypeScript-against-wasm differential (ADR-0054, QR-21). It needs the
-// artifact `pnpm rust:build:wasm` writes, so CI runs it in the `rust` job
-// after that build and nowhere else.
+// ORACLE artifact `pnpm rust:build:wasm:oracle` writes (`oracle-surface`: the
+// per-module test exports the shipped artifact leaves out), so CI runs it in
+// the `rust` job after that build and nowhere else.
 //
 // Two layers run here:
 // - layer 2, `*.rust.test.ts`: properties holding a TypeScript function to its

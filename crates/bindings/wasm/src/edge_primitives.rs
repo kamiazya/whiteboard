@@ -6,7 +6,6 @@
 //! boundary once per run (QR-22b). They are a test surface, not the shape of
 //! the port: a layout will call the edge layer once, not these.
 
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_geometry::{
     Side, bounding_box_of, center_of, contains_point, midpoint_extent, outward_normal,
     path_is_clear, path_length, segment_crosses_rect, side_point, side_point_at, strictly_inside,
@@ -21,7 +20,7 @@ use whiteboard_edge_routing::geometry::{Point, Rect};
 use whiteboard_edge_routing::segment_intersection::segment_intersection;
 
 /// `det::math::js_round` over an array, one answer per input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn det_round(xs: &[f64]) -> Vec<f64> {
     xs.iter().map(|&x| whiteboard_det::math::js_round(x)).collect()
@@ -61,7 +60,7 @@ const SIDES: [Side; 4] = [Side::Top, Side::Right, Side::Bottom, Side::Left];
 /// `sidePoint(rect, side)` as x, y, `sidePointAt(rect, side, c.x)` as x, y,
 /// `tangentCoordinate(side, a)`, and `outwardNormal(side)` as x, y. A
 /// trailing partial case is ignored.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_segment_tests(cases: &[f64]) -> Vec<f64> {
     cases
@@ -110,7 +109,7 @@ pub fn edge_segment_tests(cases: &[f64]) -> Vec<f64> {
 /// `midpointExtent` the path as span x, span y, origin x, origin y; then
 /// `withoutRepeats` and `flattenRoundedEdgePath`, each as its point count
 /// and that many x, y pairs. A malformed input answers an empty array.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_path_measures(input: &[f64]) -> Vec<f64> {
     let Some((path, rects)) = decode_path_and_rects(input) else { return Vec::new() };

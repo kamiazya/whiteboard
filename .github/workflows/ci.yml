@@ -1182,7 +1182,12 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         run: pnpm rust:build:wasm
 
-      # QR-21 layer 2: TypeScript against the wasm just built, exact equality.
+      # QR-21 layer 2: TypeScript against the oracle wasm (the shipped build
+      # plus the `oracle-surface` test exports), exact equality.
+      - name: Oracle wasm build (cargo xtask dist wasm --oracle)
+        if: steps.scope.outputs.run == 'true'
+        run: pnpm rust:build:wasm:oracle
+
       - name: TypeScript-against-wasm differential (canvas-render-rust)
         if: steps.scope.outputs.run == 'true'
         run: pnpm exec vitest run --project=canvas-render-rust

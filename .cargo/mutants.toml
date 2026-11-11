@@ -17,6 +17,12 @@ exclude_re = [
   # `check` and `required_version`: spawning cargo llvm-cov and writing the
   # ledger back. Judged by running it in `pnpm rust:check`.
   '^crates/xtask/src/coverage\.rs:\d+:\d+: (replace (measure|run) -> |.* in (measure|run)$)',
+  # `cargo xtask dist`'s process plumbing: `build` spawns cargo, `bindgen`
+  # wasm-bindgen, and `run_task` loads the metadata and calls them. Their
+  # decisions (the arguments, the oracle feature, the directory) are the
+  # tested `parse_args`, `default_dir_for` and `wasm_build_args`; the rest is
+  # judged by running `dist` in CI's rust job and `repro-check`.
+  '^crates/xtask/src/dist\.rs:\d+:\d+: replace (build|bindgen|run_task) -> ',
   # config_score: `j` is filtered to `j != i` before these comparisons, so
   # `i <= j` is `i < j` (both `<` in apply_pair_costs and the one in
   # contribution).

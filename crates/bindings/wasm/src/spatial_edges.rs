@@ -83,7 +83,7 @@ fn budget_is_finite(budget: &RoutingBudget) -> bool {
 /// repairs. Out: `[the four accounts left, entry count, then 14 numbers an
 /// entry as edge_compute_anchors answers]`; an empty array for a malformed
 /// input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_assign_anchors(input: &[f64]) -> Vec<f64> {
     let Some((nodes, edges, styles, overrides, labels, mut budget)) = decode(input) else {
