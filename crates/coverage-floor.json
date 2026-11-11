@@ -12,6 +12,11 @@
       "regions": 84,
       "reason": "first measured 2026-11-08 at 66.25% lines and 60.04% regions; the per-module test exports (edge_router, coincident_ends) are exercised by the wasm differentials, not natively. Raised to 74 lines and 68 regions when tests/survivors_budget_write_back.rs reached the budget write-back: 75.70% lines locally, 69.80% regions on CI. Raised to 82 lines and 77 regions with the OKF exports, replayed natively from okf.jsonl (tests/okf_oracle.rs) beside the exports' own tests: 82.97% lines and 77.43% regions locally. Raised to 87 lines and 82 regions with the JSON Canvas exports and their canvas wire, replayed from json-canvas.jsonl (tests/json_canvas_oracle.rs) beside the exports' and the wire's own tests: 87.99% lines and 82.47% regions, measured both locally and on CI (an earlier local reading of 89.57% and 84.13% was not reproduced, and set the floor above what the tests reach). Raised to 88 lines and 84 regions with the facet write export, replayed from facet-write.jsonl (tests/facet_write_oracle.rs) beside its own tests: 89.84% lines and 85.14% regions locally, measured over this crate's tests alone (the workspace run adds none to it)"
     },
+    "core/canvas-render": {
+      "lines": 99,
+      "regions": 98,
+      "reason": "first measured 2026-11-11 at 99.45% lines and 98.41% regions, over the SVG backend ported from the TypeScript: the recorded svg.jsonl and svg-edge-cases.jsonl replayed natively (tests/svg_oracle.rs, tests/svg_edge_cases.rs) beside the TypeScript-derived expectations for the ink, arrowheads, flattener and bounds and the unit tests of the serializer, hoist and filter budget; what is left is arms no scene reaches (a node kind a caller never builds, a refusal the oracle cannot write because JSON holds no non-finite number)"
+    },
     "core/codec": {
       "lines": 99,
       "regions": 98,
@@ -46,6 +51,11 @@
       "lines": 100,
       "regions": 100,
       "reason": "first measured 2026-11-10 at 100.00% lines and regions: the generated payload types and the two pattern matchers, covered by their own tests"
+    },
+    "core/scene": {
+      "lines": 100,
+      "regions": 96,
+      "reason": "first measured 2026-11-11 at 100.00% lines and 96.15% regions: the scene vocabulary is types, so what runs is the oracle-feature readers (tests/oracle_read.rs, and canvas-render's replay of the recordings), and the regions left are the derive's own error arms"
     },
     "testing/proptest": {
       "lines": 98,

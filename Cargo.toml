@@ -8,6 +8,7 @@ members = [
   "crates/core/log",
   "crates/core/model",
   "crates/core/scene",
+  "crates/core/canvas-render",
   "crates/core/edge-routing",
   "crates/core/codec",
   "crates/core/plugin-visual",

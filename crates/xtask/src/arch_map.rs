@@ -566,7 +566,7 @@ mod tests {
         assert_eq!(check_map(&m), Vec::<String>::new());
         // The subject is present: the whole target graph, not just today's crates.
         let planned = m.crates.values().filter(|c| c.status == Status::Planned).count();
-        assert!(planned >= 15, "only {planned} planned crates declared");
+        assert!(planned >= 14, "only {planned} planned crates declared");
         // The fuzz crate is present as a workspace of its own (nightly only),
         // which `run` checks through its own metadata.
         assert_eq!(m.crates.get("whiteboard-fuzz").map(|c| c.status), Some(Status::Present));

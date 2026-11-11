@@ -144,7 +144,7 @@
     "whiteboard-canvas-render": {
       "path": "crates/core/canvas-render",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "composer, typesetter, line breaking, theme, SVG backend, sceneDigest, references",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": [

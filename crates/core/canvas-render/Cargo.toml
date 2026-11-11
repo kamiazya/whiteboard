@@ -1,0 +1,28 @@
+[package]
+name = "whiteboard-canvas-render"
+description = "Canvas rendering: today the SVG backend over a laid-out scene."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+whiteboard-det = { path = "../det" }
+whiteboard-edge-routing = { path = "../edge-routing" }
+whiteboard-model = { path = "../model" }
+whiteboard-plugin-visual = { path = "../plugin-visual" }
+whiteboard-scene = { path = "../scene" }
+
+[dev-dependencies]
+serde.workspace = true
+serde_json.workspace = true
+whiteboard-scene = { path = "../scene", features = ["oracle"] }
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[lints]
+workspace = true

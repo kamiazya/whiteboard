@@ -20,6 +20,12 @@
       "reason": "the same count-from-f64 reads as cast_possible_truncation: checked non-negative first"
     },
     {
+      "crate": "crates/core/canvas-render",
+      "lint": "clippy::manual_midpoint",
+      "count": 1,
+      "reason": "`f64::midpoint` avoids the overflow `(a + b) / 2` has, which the TypeScript does not; the sketch ink's control point reads `2 * mid - (a + b) / 2` and is held to its bits"
+    },
+    {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::arithmetic_side_effects",
       "count": 4,
