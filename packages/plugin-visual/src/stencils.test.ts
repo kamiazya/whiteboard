@@ -105,9 +105,8 @@ describe('the bundled stencil set', () => {
   })
 
   it('writes the same facet keys data.ts exports, which the split made possible to get wrong', () => {
-    // `stencils.ts` spells these as literals because importing them back
-    // from `data.ts` — which imports the SET — would be a value cycle. That
-    // duplication is only safe while something reads both sides.
+    // `assets/stencils.json` spells these as literals; that duplication is
+    // only safe while something reads both sides.
     const keys = new Set(Object.values(VISUAL_STENCILS).flatMap((s) => Object.keys(s.facets ?? {})))
     expect([...keys].sort()).toEqual([VISUAL_SHAPE_KEY, VISUAL_SYMBOL_KEY].sort())
   })

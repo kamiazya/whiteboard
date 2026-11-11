@@ -236,3 +236,17 @@ calls it yet: the wasm export and the switch are S8.
   refused alone, length checks run on any value with a `length`, ...) are in
   `docs/contributing/parity/facet-engine.md`.
 
+### Loading a plugin from its files (S7)
+
+`plugin::build` is the Rust counterpart of `pluginFromManifest` plus
+`createFacetRegistry`, for ONE plugin, over JSON text: `manifest::read` judges
+the manifest by the `PluginManifest` definition and decodes it (editor and
+compat stay `None`), every asset entry is judged by `ThemeTokens`, `IconAsset`
+or `StencilAsset` under its registered id (`<plugin>.<name>`), and each bundled
+stencil's facet payloads are checked against the facet they name, as
+`assertStencilPayloadsValid` does. `ENGINE_HOST` and `engine_contracts()` are
+what the engine's own contracts need; the plugin's `Host` rides beside them. The
+JSON is read by `whiteboard_model::json` (`serde_json` sorts keys), so an asset's
+order is the file's. Not built yet: compat (`resolve_facet_payload`), the derived
+form, several plugins, a workspace's stencil library and the specimen-icon check.
+

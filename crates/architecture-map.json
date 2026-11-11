@@ -64,7 +64,7 @@
       "path": "crates/core/model",
       "layer": "core",
       "status": "present",
-      "description": "serde types generated from contracts/model plus the invariants a schema cannot express",
+      "description": "serde types generated from contracts/model plus the invariants a schema cannot express, and JSON text read as JSON.parse reads it (key order kept)",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det"],
       "allowedThirdParty": {},

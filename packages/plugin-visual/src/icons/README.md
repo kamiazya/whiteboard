@@ -14,5 +14,6 @@ svg/backend.ts).
 
 To add an icon: extract its `__iconNode` entry from the SAME lucide-react
 version (`node_modules/lucide-react/dist/cjs/lucide-react.js`), normalize
-attrs to numbers, drop `key`, and drop `ry` when it equals `rx`. Keep this
-table alphabetical.
+attrs to numbers, drop `key`, and drop `ry` when it equals `rx`. Keep
+`../assets/icons-lucide.json` sorted by name and shaped as the other entries are
+(`{ "geometry": [...] }`); the Rust core embeds the same file.

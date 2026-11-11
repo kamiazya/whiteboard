@@ -49,6 +49,18 @@ pub enum WriteRefusal {
     UnregisteredAsset { field: String, id: String, kind: AssetKind, registered: Vec<String> },
 }
 
+/// Why a payload is not one its facet's current schema accepts.
+#[derive(Debug, Clone, PartialEq)]
+pub enum PayloadRefusal {
+    /// No loaded plugin declares the facet the key names, or the key is
+    /// malformed.
+    Unregistered,
+    /// The key names an older version than the facet's current one.
+    NotCurrent { current: String },
+    /// The schema refuses the payload.
+    Invalid(Vec<Issue>),
+}
+
 struct FacetEntry {
     namespace: String,
     name: String,
@@ -153,8 +165,28 @@ impl Registry {
         self.entry(key).map(|(facet, _)| facet.asset_refs.as_slice())
     }
 
-    fn registered(&self, kind: AssetKind) -> &[String] {
+    /// The asset ids of `kind` the host registered, in registration order.
+    #[must_use]
+    pub fn registered(&self, kind: AssetKind) -> &[String] {
         self.assets.iter().find(|(known, _)| *known == kind).map_or(&[], |(_, ids)| ids.as_slice())
+    }
+
+    /// Whether `payload` is what the current schema of the facet `key` names
+    /// accepts. Only the schema judges it: a payload may name an asset the
+    /// registry holds nothing of yet, which is what a bundled stencil's
+    /// payloads are checked against while the registry is being loaded.
+    ///
+    /// # Errors
+    ///
+    /// Why the facet cannot take it: not registered, not the current version,
+    /// or refused by the schema.
+    pub fn check_payload(&self, key: &str, payload: &Value) -> Result<(), PayloadRefusal> {
+        let (facet, version) = self.entry(key).ok_or(PayloadRefusal::Unregistered)?;
+        if version != facet.version {
+            let current = format!("{}.{}/{}", facet.namespace, facet.name, facet.version);
+            return Err(PayloadRefusal::NotCurrent { current });
+        }
+        self.contracts.validate(facet.schema, payload).map(drop).map_err(PayloadRefusal::Invalid)
     }
 
     /// What a write of `payload` under `key` stores: the payload as its

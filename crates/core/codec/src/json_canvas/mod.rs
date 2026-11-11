@@ -23,7 +23,6 @@
 
 mod extension;
 mod issue;
-mod json;
 mod length;
 mod project;
 mod schema;
@@ -32,11 +31,12 @@ mod url;
 mod wire;
 
 pub use issue::{Code, Decline, Failure, Issue, Mode, PathStep, WriteFailure};
-pub use json::MAX_DEPTH;
 pub use stringify::MAX_DEPTH as MAX_WRITE_DEPTH;
+pub use whiteboard_model::json::MAX_DEPTH;
 pub use whiteboard_model::spatial::SpatialCanvas;
 
 use whiteboard_model::Value;
+use whiteboard_model::json;
 
 /// The longest text read. `JSON.parse` has no limit of its own; a core that
 /// copies the text into a tree needs one, and a board past it is answered by

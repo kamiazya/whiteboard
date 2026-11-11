@@ -1,0 +1,311 @@
+{
+  "sketch": {
+    "ink": "sketch",
+    "strokeWidthPx": 1.4,
+    "fontFamily": "Yomogi",
+    "palette": {
+      "light": {
+        "node": {
+          "text": {
+            "fill": "#ffffff",
+            "stroke": "#3d3d3d"
+          },
+          "file": {
+            "fill": "#f5f5f5",
+            "stroke": "#3d3d3d"
+          },
+          "link": {
+            "fill": "#eef4ff",
+            "stroke": "#3d3d3d"
+          },
+          "group": {
+            "fill": "none",
+            "stroke": "#3d3d3d"
+          }
+        },
+        "edgeStroke": "#3d3d3d",
+        "labelFill": "#2a2a2a",
+        "surface": "#fffdf7",
+        "cornerRadiusPx": 2,
+        "presets": {
+          "1": {
+            "stroke": "#dc2626",
+            "fill": "#fee2e2"
+          },
+          "2": {
+            "stroke": "#ea580c",
+            "fill": "#ffedd5"
+          },
+          "3": {
+            "stroke": "#d97706",
+            "fill": "#fef3c7"
+          },
+          "4": {
+            "stroke": "#059669",
+            "fill": "#d1fae5"
+          },
+          "5": {
+            "stroke": "#0891b2",
+            "fill": "#cffafe"
+          },
+          "6": {
+            "stroke": "#9333ea",
+            "fill": "#f3e8ff"
+          }
+        },
+        "syntax": {
+          "keyword": "#7e22ce",
+          "string": "#047857",
+          "number": "#c2410c",
+          "comment": "#5b6472"
+        },
+        "comment": {
+          "pin": {
+            "fill": "#d97706",
+            "stroke": "#ffffff"
+          },
+          "bubble": {
+            "fill": "#ffffff",
+            "stroke": "#d97706"
+          }
+        },
+        "proposal": {
+          "edge": "#4f46e5",
+          "bubbleFill": "#ffffff"
+        },
+        "markdownChrome": "#8a8378"
+      },
+      "dark": {
+        "node": {
+          "text": {
+            "fill": "#141414",
+            "stroke": "#d4d4d4"
+          },
+          "file": {
+            "fill": "#1f1f1f",
+            "stroke": "#d4d4d4"
+          },
+          "link": {
+            "fill": "#1f1f1f",
+            "stroke": "#d4d4d4"
+          },
+          "group": {
+            "fill": "none",
+            "stroke": "#d4d4d4"
+          }
+        },
+        "edgeStroke": "#d4d4d4",
+        "labelFill": "#ececec",
+        "surface": "#141414",
+        "cornerRadiusPx": 2,
+        "presets": {
+          "1": {
+            "stroke": "#f87171",
+            "fill": "#450a0a"
+          },
+          "2": {
+            "stroke": "#fb923c",
+            "fill": "#431407"
+          },
+          "3": {
+            "stroke": "#fbbf24",
+            "fill": "#451a03"
+          },
+          "4": {
+            "stroke": "#34d399",
+            "fill": "#022c22"
+          },
+          "5": {
+            "stroke": "#22d3ee",
+            "fill": "#083344"
+          },
+          "6": {
+            "stroke": "#c084fc",
+            "fill": "#3b0764"
+          }
+        },
+        "syntax": {
+          "keyword": "#c084fc",
+          "string": "#34d399",
+          "number": "#fb923c",
+          "comment": "#9ba3af"
+        },
+        "comment": {
+          "pin": {
+            "fill": "#fbbf24",
+            "stroke": "#141414"
+          },
+          "bubble": {
+            "fill": "#262626",
+            "stroke": "#fbbf24"
+          }
+        },
+        "proposal": {
+          "edge": "#818cf8",
+          "bubbleFill": "#262626"
+        },
+        "markdownChrome": "#8f8a80"
+      }
+    },
+    "defaults": {
+      "edgeRouting": "straight",
+      "groupFrame": {
+        "strokeDasharray": "7 5"
+      }
+    }
+  },
+  "neon": {
+    "ink": "clean",
+    "strokeWidthPx": 1.8,
+    "glow": {
+      "radiusPx": 6
+    },
+    "palette": {
+      "light": {
+        "node": {
+          "text": {
+            "fill": "#ffffff",
+            "stroke": "#0284c7"
+          },
+          "file": {
+            "fill": "#f5f3ff",
+            "stroke": "#7c3aed"
+          },
+          "link": {
+            "fill": "#ecfdf5",
+            "stroke": "#059669"
+          },
+          "group": {
+            "fill": "none",
+            "stroke": "#64748b"
+          }
+        },
+        "edgeStroke": "#0284c7",
+        "labelFill": "#0f172a",
+        "surface": "#f8fafc",
+        "cornerRadiusPx": 6,
+        "presets": {
+          "1": {
+            "stroke": "#e11d48",
+            "fill": "#ffe4e6"
+          },
+          "2": {
+            "stroke": "#ea580c",
+            "fill": "#ffedd5"
+          },
+          "3": {
+            "stroke": "#d97706",
+            "fill": "#fef3c7"
+          },
+          "4": {
+            "stroke": "#0d9488",
+            "fill": "#ccfbf1"
+          },
+          "5": {
+            "stroke": "#0891b2",
+            "fill": "#cffafe"
+          },
+          "6": {
+            "stroke": "#7c3aed",
+            "fill": "#ede9fe"
+          }
+        },
+        "syntax": {
+          "keyword": "#6d28d9",
+          "string": "#0f766e",
+          "number": "#c2410c",
+          "comment": "#64748b"
+        },
+        "comment": {
+          "pin": {
+            "fill": "#d97706",
+            "stroke": "#ffffff"
+          },
+          "bubble": {
+            "fill": "#ffffff",
+            "stroke": "#d97706"
+          }
+        },
+        "proposal": {
+          "edge": "#4f46e5",
+          "bubbleFill": "#ffffff"
+        },
+        "markdownChrome": "#94a3b8"
+      },
+      "dark": {
+        "node": {
+          "text": {
+            "fill": "#0b1220",
+            "stroke": "#7dd3fc"
+          },
+          "file": {
+            "fill": "#100d24",
+            "stroke": "#a78bfa"
+          },
+          "link": {
+            "fill": "#0a1a1c",
+            "stroke": "#6ee7b7"
+          },
+          "group": {
+            "fill": "none",
+            "stroke": "#64748b"
+          }
+        },
+        "edgeStroke": "#38bdf8",
+        "labelFill": "#f5fbff",
+        "surface": "#030711",
+        "cornerRadiusPx": 6,
+        "presets": {
+          "1": {
+            "stroke": "#fda4af",
+            "fill": "#3f0d17"
+          },
+          "2": {
+            "stroke": "#fdba74",
+            "fill": "#431407"
+          },
+          "3": {
+            "stroke": "#fcd34d",
+            "fill": "#2a2008"
+          },
+          "4": {
+            "stroke": "#5eead4",
+            "fill": "#042f2e"
+          },
+          "5": {
+            "stroke": "#67e8f9",
+            "fill": "#062a33"
+          },
+          "6": {
+            "stroke": "#c4b5fd",
+            "fill": "#2e1065"
+          }
+        },
+        "syntax": {
+          "keyword": "#c4b5fd",
+          "string": "#5eead4",
+          "number": "#fdba74",
+          "comment": "#94a3b8"
+        },
+        "comment": {
+          "pin": {
+            "fill": "#fbbf24",
+            "stroke": "#030711"
+          },
+          "bubble": {
+            "fill": "#0f172a",
+            "stroke": "#fbbf24"
+          }
+        },
+        "proposal": {
+          "edge": "#a5b4fc",
+          "bubbleFill": "#0f172a"
+        },
+        "markdownChrome": "#475569"
+      }
+    },
+    "defaults": {
+      "edgeRouting": "orthogonal"
+    }
+  }
+}

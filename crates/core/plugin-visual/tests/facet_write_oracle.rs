@@ -2,8 +2,10 @@
 //!
 //! `packages/plugin-visual/src/oracle/facet-write-recorded-oracle.test.ts`
 //! writes `facet-write.jsonl` from the bundled registry and fails when the
-//! file no longer equals what the TypeScript answers; this replays it. The
-//! first line is the registered asset ids, a `"t"` line is what the registry
+//! file no longer equals what the TypeScript answers; this replays it against
+//! the registry the crate loads from the same files (`visual_registry`). The
+//! first line is the registered asset ids, which the loaded registry must
+//! hold exactly, a `"t"` line is what the registry
 //! says of a key (where it attaches, which fields name assets), and a `"w"`
 //! line is a write: `"key"`, `"in"` as `common` encodes a value, and `"ok"`,
 //! the value stored, or `"err"` naming the `stage` that refused it: `key`,
@@ -17,124 +19,30 @@
 #[path = "common/compare.rs"]
 mod compare;
 
-#[path = "common/contract.rs"]
-mod contract;
 #[path = "common/value.rs"]
 mod value;
 
 use compare::{issues_json, same};
-use contract::from_json;
 use serde_json::Value as Json;
 use value::decode;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_facet_engine::plugin_manifest::{AssetKind, FacetDecl, FacetTarget, PluginManifest};
+use whiteboard_facet_engine::plugin_manifest::AssetKind;
 use whiteboard_facet_engine::registry::{Registry, WriteRefusal};
-use whiteboard_facet_engine::schema::{Code, Contracts, Detail, External, Host, Issue};
-use whiteboard_model::{Value, enumeration_order};
-use whiteboard_plugin_visual::checks;
+use whiteboard_model::enumeration_order;
+use whiteboard_plugin_visual::host::visual_registry;
 
 const RECORDING: &str =
     include_str!("../../../../packages/plugin-visual/src/oracle/facet-write.jsonl");
-const MANIFEST: &str = include_str!("../../../../packages/plugin-visual/src/visual.manifest.json");
-const CONTRACT: &str = include_str!("../../../../contracts/facets/visual/visual.schema.json");
-const CONTRACT_PATH: &str = "facets/visual/visual.schema.json";
-
-/// The model's `CanvasColor`, as its union answers: a preset or a six-digit
-/// hex string. A string that is neither is refused by the hex arm alone (the
-/// preset arm's refusal stops, the hex arm's does not, and a union whose one
-/// live arm is unambiguous speaks with that arm's issues); anything else is
-/// refused by both.
-fn canvas_color(value: &Value) -> Result<Value, Vec<Issue>> {
-    match value {
-        Value::String(text) if checks::canvas_color(text) => Ok(value.clone()),
-        Value::String(_) => Err(vec![Issue {
-            path: Vec::new(),
-            code: Code::InvalidFormat,
-            detail: Detail::None,
-            continues: true,
-        }]),
-        _ => {
-            let arm = |code| {
-                vec![Issue { path: Vec::new(), code, detail: Detail::None, continues: false }]
-            };
-            let arms = vec![arm(Code::InvalidValue), arm(Code::InvalidType)];
-            Err(vec![Issue {
-                path: Vec::new(),
-                code: Code::InvalidUnion,
-                detail: Detail::Arms(arms),
-                continues: false,
-            }])
-        }
-    }
-}
-
-fn host() -> Host<'static> {
-    Host {
-        matchers: &[
-            ("namespaced_id", checks::namespaced_id),
-            ("facet_key", checks::facet_key),
-            ("tag_identifier", checks::tag_identifier),
-            ("facet_segment", checks::facet_segment),
-        ],
-        checks: &[
-            ("single_grapheme", checks::single_grapheme),
-            ("canvas_color", checks::canvas_color),
-        ],
-        externals: &[
-            ("EdgeRoutingStyle", External::AsWritten),
-            ("LineJumps", External::AsWritten),
-            ("CanvasColor", External::Validator(canvas_color)),
-        ],
-    }
-}
 
 fn text(json: &Json) -> String {
     json.as_str().unwrap_or_default().to_owned()
-}
-
-/// The plugin manifest as the registry reads it: what a facet is called,
-/// where it attaches, which payload schema judges it and which fields name
-/// assets. The editor and the compat chain are the derived form's.
-fn manifest() -> PluginManifest {
-    let json: Json = serde_json::from_str(MANIFEST).unwrap_or_default();
-    let list = |value: &Json| value.as_array().map_or(Vec::new(), Clone::clone);
-    let facet = |decl: &Json| FacetDecl {
-        name: text(&decl["name"]),
-        display_name: text(&decl["displayName"]),
-        version: text(&decl["version"]),
-        targets: list(&decl["targets"])
-            .iter()
-            .filter_map(|t| FacetTarget::from_wire(t.as_str()?))
-            .collect(),
-        schema: text(&decl["schema"]),
-        asset_refs: decl["assetRefs"].as_object().map(|refs| {
-            refs.iter()
-                .filter_map(|(field, kind)| {
-                    Some((field.clone(), AssetKind::from_wire(kind.as_str()?)?))
-                })
-                .collect()
-        }),
-        ..FacetDecl::default()
-    };
-    PluginManifest {
-        id: text(&json["id"]),
-        display_name: text(&json["displayName"]),
-        facets: list(&json["facets"]).iter().map(facet).collect(),
-        assets: None,
-    }
 }
 
 fn ids(header: &Json, kind: AssetKind) -> Vec<String> {
     header["assets"][kind.as_str()]
         .as_array()
         .map_or(Vec::new(), |list| list.iter().map(text).collect())
-}
-
-fn registry(header: &Json) -> Option<Registry> {
-    let contract = from_json(CONTRACT)?;
-    let contracts = Contracts::load(&[(CONTRACT_PATH, &contract)], &host()).ok()?;
-    Registry::build(&[manifest()], contracts, |kind| ids(header, kind)).ok()
 }
 
 fn lines() -> Vec<Json> {
@@ -197,7 +105,10 @@ fn the_registry_answers_every_recorded_key_and_write_as_the_typescript_did() {
     assert_eq!(lines.len(), RECORDING.lines().count(), "one JSON value per line");
     let header = lines.first().expect("a header").clone();
     assert_eq!(header["k"], "h");
-    let registry = registry(&header).expect("the registry builds over the visual contract");
+    let registry = visual_registry().expect("the bundled plugin loads");
+    for kind in [AssetKind::Themes, AssetKind::Icons, AssetKind::Stencils] {
+        assert_eq!(registry.registered(kind), ids(&header, kind), "{}", kind.as_str());
+    }
     let (mut declarations, mut writes, mut refused) = (0_usize, 0_usize, 0_usize);
     for line in &lines {
         match line["k"].as_str() {

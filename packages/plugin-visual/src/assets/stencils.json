@@ -1,0 +1,74 @@
+{
+  "datastore": {
+    "displayName": "Datastore",
+    "facets": {
+      "visual.shape/v0": {
+        "kind": "cylinder"
+      },
+      "visual.symbol/v0": {
+        "kind": "icon",
+        "name": "database"
+      }
+    }
+  },
+  "service": {
+    "displayName": "Service",
+    "facets": {
+      "visual.shape/v0": {
+        "kind": "octagon"
+      },
+      "visual.symbol/v0": {
+        "kind": "icon",
+        "name": "server"
+      }
+    }
+  },
+  "gateway": {
+    "displayName": "Gateway",
+    "facets": {
+      "visual.shape/v0": {
+        "kind": "hexagon"
+      },
+      "visual.symbol/v0": {
+        "kind": "icon",
+        "name": "network"
+      }
+    }
+  },
+  "queue": {
+    "displayName": "Queue",
+    "facets": {
+      "visual.shape/v0": {
+        "kind": "parallelogram"
+      },
+      "visual.symbol/v0": {
+        "kind": "icon",
+        "name": "layers"
+      }
+    }
+  },
+  "actor": {
+    "displayName": "Actor",
+    "facets": {
+      "visual.shape/v0": {
+        "kind": "ellipse"
+      },
+      "visual.symbol/v0": {
+        "kind": "icon",
+        "name": "user"
+      }
+    }
+  },
+  "external": {
+    "displayName": "External",
+    "facets": {
+      "visual.shape/v0": {
+        "kind": "diamond"
+      },
+      "visual.symbol/v0": {
+        "kind": "icon",
+        "name": "link"
+      }
+    }
+  }
+}

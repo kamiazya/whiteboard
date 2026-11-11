@@ -19,6 +19,8 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/det-math.ts',
     'packages/canvas-render/src/det-math.rust.test.ts',
     'packages/canvas-render/vitest.rust.config.ts',
+    // The bundled plugin's manifest, which the Rust crate embeds and loads.
+    'packages/plugin-visual/src/visual.manifest.json',
   ],
   trees: [
     '.cargo',
@@ -38,5 +40,9 @@ export const RUST_SCOPE = {
     // The JSON Canvas codec's recording, replayed by the Rust crate and by codec-node.
     'packages/codec/src/spatial/oracle',
     'packages/codec/src/test-utils/json-canvas-oracle',
+    // The bundled plugin's asset tables, which the Rust crate embeds, and the
+    // facet-write recording it replays.
+    'packages/plugin-visual/src/assets',
+    'packages/plugin-visual/src/oracle',
   ],
 }

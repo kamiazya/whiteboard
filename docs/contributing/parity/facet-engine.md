@@ -37,6 +37,32 @@ differential through the wasm, and neither exists until S8 adds the export.
   test (`crates/core/plugin-visual/tests/contract_drift.rs`) that compiles every
   contract file the repository ships.
 
+## What S7 added: a plugin loaded from its files
+
+- The bundled plugin's asset tables are JSON files under
+  `packages/plugin-visual/src/assets/` (owner decision q45), read by the
+  TypeScript through `asset-table.ts` and embedded by the Rust core. They are
+  the single source; neither side holds a copy.
+- `whiteboard_model::json` (moved from `whiteboard-codec`, which re-imports it)
+  reads JSON text in written key order, which `serde_json` does not.
+- `whiteboard_facet_engine::{plugin, manifest}`: `engine_contracts()` and
+  `ENGINE_HOST`, `manifest::read`, and `plugin::build` over a `PluginSources`
+  (manifest, contracts and tables as text): the contracts compile, the manifest
+  is judged and decoded, every asset entry is judged by the engine's shape for
+  its kind under its `<plugin>.<name>` id, the registry is built, and every
+  facet payload a bundled stencil carries is checked against the facet it names
+  (what `assertStencilPayloadsValid` does). Each `LoadError` has a test.
+- `whiteboard_plugin_visual::host`: `VISUAL_HOST` (the matchers, checks and
+  externals the visual contract leaves to a host), `registry_from` and
+  `visual_registry()`. The oracle replay judges that registry and asserts its
+  registered asset ids equal the recorded header's, so the order of the files is
+  held by the TypeScript's own answers.
+- Not here yet: compat (`resolve_facet_payload`), the editor's derived form
+  (`manifest::read` leaves `editor` and `compat` as `None`), more than one
+  plugin, a workspace's own stencil library, the specimen-icon check, and the
+  wasm export, the switch, `PORTED_FUNCTIONS`, the input caps and the fuzz
+  target (S8). `visual_registry()` rebuilds on every call; S8 caches it.
+
 ## Declared deviation (owner decision q43)
 
 A refusal matches the generated Zod's issues **in path and code, in order**.
@@ -73,8 +99,8 @@ now has a unit test.
   skips one (`contract_drift.rs`).
 - Not ported: read-side compat resolution (`resolveFacetPayload`), the derived
   editor form (`facetForm`), the definition-time checks of `defineFacet` and
-  `definePlugin`, the asset tables themselves and the registry build's checks on
-  a stencil's facet payloads and a picker's specimen icon. `Registry::build`
+  `definePlugin` beyond the asset shapes, and the registry build's check on a
+  picker's specimen icon. `Registry::build`
   takes the ids a host holds per asset kind and checks a manifest's own
   consistency: a duplicate or reserved plugin id (`workspace`), a duplicate facet
   name, a schema pointer no contract holds, and an `assetRefs` field the payload
@@ -105,7 +131,7 @@ now has a unit test.
 | 10 | `differential` has run in CI and dogfooding | not yet | S8 |
 | 11 | `cargo mutants` clean or ledgered; coverage at the floor | met | `cargo mutants` over `schema/*.rs` and `registry.rs`, judged by this crate's and `whiteboard-plugin-visual`'s tests: 326 mutants, 137 caught, 188 unviable and one missed (a non-empty default read as an empty one), which a test now judges; nothing is ledgered. `pnpm rust:mutants:pr`, shard 1 of 8: 41 mutants, 35 caught, 6 unviable, none missed. Coverage of `core/facet-engine` is 100.00% of lines, regions and functions against a floor of 100 and 100 |
 | 12 | One call per user operation; boundary cost | not yet | S8 |
-| 13 | Artifact size | met | The wasm artifact does not change: nothing links the crate yet |
+| 13 | Artifact size | met | The wasm artifact does not change: nothing links the crate yet (`cargo xtask size` fits the same ledger) |
 | 14 | Untrusted-input caps and a fuzz target | not yet | The entry is the export (S8) |
 | 15 | Logging; poison-and-recover | n/a | Refusals are values; no state |
 | 16 | `PORTED_FUNCTIONS` | not yet | Needs the shim export (S8) |
