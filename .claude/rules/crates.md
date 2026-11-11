@@ -38,11 +38,11 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-edge-routing` | core | present | side choice, anchors, grid search, crossings, jumps, rounding |
 | `whiteboard-model` | core | present | the frontmatter value tree, and the OKF frontmatter types generated from `contracts/model` with their hand-written checks (`checks.rs`), which `whiteboard-codec` reads and writes, and the JSON reader (`json.rs`: `JSON.parse`'s reading, keys in written order, which `serde_json` is not) |
 | `whiteboard-facet-engine` | core | present | the theme, icon and stencil asset shapes, generated from `contracts/facets/engine`, the plugin manifest types from `contracts/plugin`, and the matchers of their patterns; the interpreter of the contract dialect (`schema`: a contract file's definitions judge a payload as the generated Zod does, in path and code) and the registry over plugin manifests (`registry`: targets, asset refs, `validate_facet_write`) with a plugin loaded from its manifest, contracts and asset tables (`plugin::build`, `manifest::read`), and a facets bucket judged for a write with a workspace's stencil library composed beside the registry (`partition`, behind the wasm export `facet_bucket_check`); the compat chain and derived form follow |
-| `whiteboard-scene` | core | planned | the scene vocabulary and the contribution traits |
+| `whiteboard-scene` | core | present | the scene vocabulary as types (every node kind, appearance, ink, legend, `NodeOutline`); the closure-taking contribution traits are deferred, and `Deserialize` exists only behind the `oracle` feature |
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | present | the visual facets' payload types, generated from `contracts/facets/visual`, the matchers of their patterns, the colour check and the one-grapheme check (`unicode-segmentation`); the bundled plugin loaded from its files into a registry (`host.rs`, over the asset JSON the TypeScript package also reads); the plugin's other contributions follow |
-| `whiteboard-canvas-render` | core | planned | composer, typesetter, line breaking, theme, SVG backend, digest |
+| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; composer, typesetter, line breaking, theme, digest follow |
 | `whiteboard-crdt` | core | planned | the loro bridge, workspace tree, file references, text limits |
 | `whiteboard-history` | core | planned | checkpoint scheduling, version retention, frontier encoding |
 | `whiteboard-workspace-index` | core | planned | the document index over a workspace tree |
@@ -174,6 +174,18 @@ steps and cache paths to the scripts.
   Rust) fails when the recording no longer equals today's TypeScript;
   re-record with `WHITEBOARD_RECORD_ORACLE=1` after a deliberate routing
   change.
+- **The SVG backend is held to two recordings**:
+  `packages/canvas-render/src/oracle/svg.jsonl` (the goldens and the laid-out
+  scenes, 179 records) and `svg-edge-cases.jsonl` (small scenes aimed at one
+  rule each: an unusable option, a link's address, the filter budget) are what
+  the TypeScript's `renderSceneToSvg` and `renderSceneToKeyedSvg` answered, and
+  `crates/core/canvas-render/tests/svg_oracle.rs` and `svg_edge_cases.rs` replay
+  both natively and on wasm32: every document, keyed root and keyed group byte
+  for byte. A deliberate change to the backend's output re-records them and
+  changes the Rust in the same increment. The caller-supplied `icons` and
+  `shapes` tables of `SvgDocumentOptions` are not ported (the bundled visual
+  plugin's are the Rust tables), and a non-finite coordinate is `NonFinite`
+  where the TypeScript throws `RangeError`.
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).

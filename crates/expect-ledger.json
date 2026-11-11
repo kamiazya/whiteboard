@@ -20,6 +20,12 @@
       "reason": "the same count-from-f64 reads as cast_possible_truncation: checked non-negative first"
     },
     {
+      "crate": "crates/core/canvas-render",
+      "lint": "clippy::manual_midpoint",
+      "count": 1,
+      "reason": "`f64::midpoint` avoids the overflow `(a + b) / 2` has, which the TypeScript does not; the sketch ink's control point reads `2 * mid - (a + b) / 2` and is held to its bits"
+    },
+    {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::arithmetic_side_effects",
       "count": 4,
@@ -54,6 +60,12 @@
       "lint": "clippy::manual_midpoint",
       "count": 4,
       "reason": "f64::midpoint avoids the overflow (a + b) / 2 has, and the TypeScript's expression overflows where midpoint would not; the port reproduces the TypeScript bit for bit"
+    },
+    {
+      "crate": "crates/core/scene",
+      "lint": "clippy::struct_excessive_bools",
+      "count": 1,
+      "reason": "a text run's presence-only flags (emphasis, strong, code, deleted, truncated, overflows) mirror the vocabulary's fields one for one; a flags struct would be a second spelling of the same six words"
     },
     {
       "crate": "crates/fuzz",
