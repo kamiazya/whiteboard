@@ -359,44 +359,9 @@ pub fn facet_wasm_bucket_check(data: &[u8]) {
         Some(Value::String(text)) => Some(text.as_str()),
         _ => None,
     };
-    // The wire's mapping is `["m", key, value, key, value, ...]`: the keys the
-    // bucket holds are every second element after the tag, and a null value
-    // marks a deletion. A bucket this reader refuses is one the export
-    // declined or refused, and has no keys to hold it to.
-    let held: Vec<(String, bool)> = match parse(bucket) {
-        Ok(Value::Seq(items)) => items
-            .get(1..)
-            .unwrap_or_default()
-            .chunks(2)
-            .filter_map(|pair| match pair {
-                [Value::String(key), value] => Some((key.clone(), *value == Value::Null)),
-                _ => None,
-            })
-            .collect(),
-        _ => Vec::new(),
-    };
+    let held = held_bucket_keys(bucket);
     match text_at(0) {
-        Some("ok") => {
-            let names = |at: usize, skip: usize, step: usize| -> Vec<&str> {
-                match parts.get(at) {
-                    Some(Value::Seq(items)) => items
-                        .iter()
-                        .skip(skip)
-                        .step_by(step)
-                        .filter_map(|item| match item {
-                            Value::String(text) => Some(text.as_str()),
-                            _ => None,
-                        })
-                        .collect(),
-                    _ => Vec::new(),
-                }
-            };
-            let want = |gone: bool| -> Vec<&str> {
-                held.iter().filter(|(_, null)| *null == gone).map(|(key, _)| key.as_str()).collect()
-            };
-            assert_eq!(names(1, 1, 2), want(false), "the stored keys are not the bucket's");
-            assert_eq!(names(2, 1, 1), want(true), "the deleted keys are not the bucket's");
-        }
+        Some("ok") => assert_stored_keys(&parts, &held),
         Some("refused") => {
             let key = text_at(1).unwrap_or_default();
             assert!(
@@ -410,6 +375,51 @@ pub fn facet_wasm_bucket_check(data: &[u8]) {
         }
         other => assert_eq!(other, Some("ok"), "{answer:.120} is not an answer"),
     }
+}
+
+/// The keys a bucket's wire holds, each with whether its value is null (a
+/// deletion). The wire's mapping is `["m", key, value, key, value, ...]`, so
+/// they are every second element after the tag. A bucket this reader refuses
+/// is one the export declined or refused, and has no keys to hold it to.
+fn held_bucket_keys(bucket: &str) -> Vec<(String, bool)> {
+    use whiteboard_model::Value;
+    match whiteboard_model::json::parse(bucket) {
+        Ok(Value::Seq(items)) => items
+            .get(1..)
+            .unwrap_or_default()
+            .chunks(2)
+            .filter_map(|pair| match pair {
+                [Value::String(key), value] => Some((key.clone(), *value == Value::Null)),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The sets an `["ok", sets, deletions]` answer names are the bucket's
+/// non-null keys, and its deletions the null ones, in the bucket's order.
+fn assert_stored_keys(parts: &[whiteboard_model::Value], held: &[(String, bool)]) {
+    use whiteboard_model::Value;
+    let names = |at: usize, skip: usize, step: usize| -> Vec<&str> {
+        match parts.get(at) {
+            Some(Value::Seq(items)) => items
+                .iter()
+                .skip(skip)
+                .step_by(step)
+                .filter_map(|item| match item {
+                    Value::String(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    };
+    let want = |gone: bool| -> Vec<&str> {
+        held.iter().filter(|(_, null)| *null == gone).map(|(key, _)| key.as_str()).collect()
+    };
+    assert_eq!(names(1, 1, 2), want(false), "the stored keys are not the bucket's");
+    assert_eq!(names(2, 1, 1), want(true), "the deleted keys are not the bucket's");
 }
 
 /// The JSON Canvas codec on any UTF-8 text: it must answer a canvas, a refusal

@@ -307,13 +307,3 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     },
   }
 }
-
-export type {
-  DroppedStencil,
-  FacetBucketResult,
-  FacetIssue,
-  FacetIssueCode,
-  FacetRefusal,
-  FacetWriteTarget,
-  StoredStencilLibrary,
-} from './facet-write.js'
