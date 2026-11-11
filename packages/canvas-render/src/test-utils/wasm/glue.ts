@@ -1,7 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { EXPECTED_ABI, ORACLE_ABI } from '@kamiazya/whiteboard-core-wasm'
+import { ORACLE_ABI } from '@kamiazya/whiteboard-core-wasm'
 
 /**
  * The ORACLE wasm artifact `pnpm rust:build:wasm:oracle` writes (the shipped
@@ -44,11 +44,12 @@ export interface WasmGlue {
 }
 
 /**
- * The surface these tests were written against: the shim's, since the shim
- * and the artifact come from one commit. A stale artifact fails on this, not
- * on its first mismatched call.
+ * The surface these tests were written against: the shim's oracle build, since
+ * the shim and the artifact come from one commit. A stale artifact, or the
+ * shipped build in place of the oracle one, fails on this, not on its first
+ * mismatched call.
  */
-export { EXPECTED_ABI, ORACLE_ABI }
+export { ORACLE_ABI }
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 
