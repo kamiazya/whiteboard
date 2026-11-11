@@ -7,6 +7,14 @@
  */
 export type RefusalCode = 'input-too-large' | 'malformed'
 
+/** The caps of `whiteboard-wasm::facet_write::facet_bucket_check`. */
+export const FACET_BUCKET_CHECK_CAPS = Object.freeze({
+  maxBytes: 8388608,
+  maxDepth: 64,
+  maxMillis: 3000,
+  maxNodes: 131072,
+} as const)
+
 /** The caps of `whiteboard-wasm::json_canvas::json_canvas_parse`. */
 export const JSON_CANVAS_PARSE_CAPS = Object.freeze({
   maxBytes: 4194304,

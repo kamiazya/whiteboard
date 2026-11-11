@@ -15,6 +15,7 @@ pub type Target = fn(&[u8]);
 pub const TARGETS: &[(&str, Target)] = &[
     ("det_utf16_len", targets::det_utf16_len),
     ("edge_route_layout", targets::edge_route_layout),
+    ("facet_wasm_bucket_check", targets::facet_wasm_bucket_check),
     ("frontmatter_parse", targets::frontmatter_parse),
     ("json_canvas_parse", targets::json_canvas_parse),
     ("json_canvas_wasm_parse", targets::json_canvas_wasm_parse),
