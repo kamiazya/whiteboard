@@ -10,7 +10,7 @@
 //! the registry is built, and every payload a bundled stencil carries is
 //! checked against the schema of the facet it names.
 //!
-//! Not here yet: the compat chain (`resolve_facet_payload`), the editor's
+//! Not here yet: the compat chain (reading an older version's payload), the editor's
 //! derived form, more than one plugin and a workspace's own stencil library.
 //! The asset VALUES are judged and then dropped; the registry holds their ids.
 
