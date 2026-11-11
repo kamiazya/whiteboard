@@ -9,6 +9,14 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
+import {
+  type FacetBucketResult,
+  type FacetErrors,
+  type FacetGlue,
+  type FacetWriteTarget,
+  facetBucketCheck,
+  type StoredStencilLibrary,
+} from './facet-write.js'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
 import {
   parseSpatial,
@@ -19,14 +27,6 @@ import {
   type SpatialParseResult,
   serializeSpatial,
 } from './json-canvas.js'
-import {
-  type FacetBucketResult,
-  type FacetErrors,
-  type FacetGlue,
-  type FacetWriteTarget,
-  facetBucketCheck,
-  type StoredStencilLibrary,
-} from './facet-write.js'
 import {
   type OkfDocument,
   type OkfErrors,

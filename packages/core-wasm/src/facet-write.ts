@@ -116,86 +116,91 @@ const KINDS = ['themes', 'icons', 'stencils'] as const
 const isText = (x: unknown): x is string => typeof x === 'string'
 const isTexts = (x: unknown): x is string[] => Array.isArray(x) && x.every(isText)
 const isList = (x: unknown): x is unknown[] => Array.isArray(x)
+const isStep = (x: unknown): x is string | number => isText(x) || typeof x === 'number'
 
 function issuesOf(wire: unknown): FacetIssue[] | undefined {
   if (!isList(wire)) return undefined
-  const issues: FacetIssue[] = []
-  for (const item of wire) {
-    const issue = issueOf(item)
-    if (issue === undefined) return undefined
-    issues.push(issue)
+  const issues = wire.map(issueOf)
+  return issues.includes(undefined) ? undefined : (issues as FacetIssue[])
+}
+
+/** What an issue carries after its code: `null`, `["keys", keys]`, `["arms", [issues...]]` or `["key", issues]`. */
+function detailOf(detail: unknown): Partial<FacetIssue> | undefined {
+  if (detail === null) return {}
+  const [tag, body] = isList(detail) && detail.length === 2 ? detail : []
+  if (tag === 'keys') return isTexts(body) ? { keys: body } : undefined
+  if (tag === 'key') {
+    const key = issuesOf(body)
+    return key === undefined ? undefined : { key }
   }
-  return issues
+  const arms = tag === 'arms' && isList(body) ? body.map(issuesOf) : undefined
+  return arms === undefined || arms.includes(undefined)
+    ? undefined
+    : { arms: arms as FacetIssue[][] }
 }
 
 function issueOf(wire: unknown): FacetIssue | undefined {
   const [path, code, detail, ...rest] = isList(wire) ? wire : []
-  const steps = isList(path) ? path : undefined
-  if (steps === undefined || !steps.every((s) => isText(s) || typeof s === 'number')) {
-    return undefined
+  const known = isText(code) && CODES.includes(code) && rest.length === 0
+  if (!isList(path) || !path.every(isStep) || !known) return undefined
+  const more = detailOf(detail)
+  return more === undefined ? undefined : { path, code: code as FacetIssueCode, ...more }
+}
+
+/** A stencil dropped for its facet: `[name, "facet", key, why, ...]`. */
+function droppedFacetOf(name: string, parts: unknown[]): DroppedStencil | undefined {
+  const [, , key, facet, extra] = parts
+  if (!isText(key)) return undefined
+  if (facet === 'unregistered' && parts.length === 4) return { name, why: 'facet', key, facet }
+  if (facet === 'not-current' && isText(extra) && parts.length === 5) {
+    return { name, why: 'facet', key, facet, current: extra }
   }
-  if (!isText(code) || !CODES.includes(code) || rest.length > 0) return undefined
-  const base = { path: steps as (string | number)[], code: code as FacetIssueCode }
-  if (detail === null) return base
-  const [tag, body] = isList(detail) && detail.length === 2 ? detail : []
-  if (tag === 'keys' && isTexts(body)) return { ...base, keys: body }
-  if (tag === 'key') {
-    const key = issuesOf(body)
-    return key === undefined ? undefined : { ...base, key }
-  }
-  if (tag !== 'arms' || !isList(body)) return undefined
-  const arms = body.map(issuesOf)
-  return arms.includes(undefined) ? undefined : { ...base, arms: arms as FacetIssue[][] }
+  const issues = facet === 'invalid' && parts.length === 5 ? issuesOf(extra) : undefined
+  return issues === undefined ? undefined : { name, why: 'facet', key, facet: 'invalid', issues }
 }
 
 function droppedOf(wire: unknown): DroppedStencil | undefined {
   const parts = isList(wire) ? wire : []
-  const [name, why, a, b, c] = parts
+  const [name, why] = parts
   if (!isText(name)) return undefined
   if (why === 'name' || why === 'no-shape') return parts.length === 2 ? { name, why } : undefined
-  if (why === 'shape') {
-    const issues = issuesOf(a)
-    return issues === undefined || parts.length !== 3 ? undefined : { name, why, issues }
-  }
-  if (why !== 'facet' || !isText(a)) return undefined
-  if (b === 'unregistered' && parts.length === 4) return { name, why, key: a, facet: b }
-  if (b === 'not-current' && isText(c) && parts.length === 5) {
-    return { name, why, key: a, facet: b, current: c }
-  }
-  const issues = b === 'invalid' && parts.length === 5 ? issuesOf(c) : undefined
-  return issues === undefined ? undefined : { name, why, key: a, facet: 'invalid', issues }
+  if (why === 'facet') return droppedFacetOf(name, parts)
+  const issues = why === 'shape' && parts.length === 3 ? issuesOf(parts[2]) : undefined
+  return issues === undefined ? undefined : { name, why: 'shape', issues }
 }
 
-function refusalOf(stage: unknown, detail: unknown[]): FacetRefusal | undefined {
-  const [a, b, c, d] = detail
-  switch (stage) {
-    case 'target':
-      return detail.length === 1 && isTexts(a) ? { stage, targets: a } : undefined
-    case 'malformed-key':
-      return detail.length === 0 ? { stage } : undefined
-    case 'not-current':
-      return detail.length === 1 && isText(a) ? { stage, current: a } : undefined
-    case 'invalid': {
-      const issues = detail.length === 1 ? issuesOf(a) : undefined
-      return issues === undefined ? undefined : { stage, issues }
-    }
-    case 'unregistered-asset': {
-      const kind = KINDS.find((k) => k === c)
-      const ok = detail.length === 4 && isText(a) && isText(b) && isTexts(d)
-      return ok && kind !== undefined ? { stage, field: a, id: b, kind, registered: d } : undefined
-    }
-    case 'unrecognized-key':
-      return detail.length === 2 && isTexts(a) && isText(b) ? { stage, path: a, key: b } : undefined
-    case 'library': {
-      const dropped = detail.length === 1 && isList(a) ? a.map(droppedOf) : []
-      return dropped.length === 0 || dropped.includes(undefined)
-        ? undefined
-        : { stage, dropped: dropped as DroppedStencil[] }
-    }
-    default:
-      return undefined
-  }
+/** What follows a stage on the wire, decoded: one reader per stage. */
+const STAGES: Record<string, (detail: unknown[]) => FacetRefusal | undefined> = {
+  target: ([targets, ...rest]) =>
+    rest.length === 0 && isTexts(targets) ? { stage: 'target', targets } : undefined,
+  'malformed-key': (detail) => (detail.length === 0 ? { stage: 'malformed-key' } : undefined),
+  'not-current': ([current, ...rest]) =>
+    rest.length === 0 && isText(current) ? { stage: 'not-current', current } : undefined,
+  invalid: ([wire, ...rest]) => {
+    const issues = rest.length === 0 ? issuesOf(wire) : undefined
+    return issues === undefined ? undefined : { stage: 'invalid', issues }
+  },
+  'unregistered-asset': ([field, id, kind, registered, ...rest]) => {
+    const found = KINDS.find((k) => k === kind)
+    const ok = rest.length === 0 && isText(field) && isText(id) && isTexts(registered)
+    return ok && found !== undefined
+      ? { stage: 'unregistered-asset', field, id, kind: found, registered }
+      : undefined
+  },
+  'unrecognized-key': ([path, key, ...rest]) =>
+    rest.length === 0 && isTexts(path) && isText(key)
+      ? { stage: 'unrecognized-key', path, key }
+      : undefined,
+  library: ([wire, ...rest]) => {
+    const dropped = rest.length === 0 && isList(wire) ? wire.map(droppedOf) : []
+    return dropped.length === 0 || dropped.includes(undefined)
+      ? undefined
+      : { stage: 'library', dropped: dropped as DroppedStencil[] }
+  },
 }
+
+const refusalOf = (stage: string, detail: unknown[]): FacetRefusal | undefined =>
+  Object.hasOwn(STAGES, stage) ? STAGES[stage]?.(detail) : undefined
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v)
@@ -234,22 +239,43 @@ export function facetBucketCheck(
   const reservedAt = entries.findIndex(
     ([, payload]) => payload !== null && holdsReservedKey(payload),
   )
-  const judged = reservedAt === -1 ? entries : entries.slice(0, reservedAt)
   const reserved = reservedAt === -1 ? undefined : (entries[reservedAt]?.[0] as string)
-  const stopped: FacetBucketResult | undefined =
-    reserved === undefined ? undefined : refused(reserved, { stage: 'reserved-key' })
+  const stopped = reserved === undefined ? undefined : refused(reserved, { stage: 'reserved-key' })
+  const judged = reservedAt === -1 ? entries : entries.slice(0, reservedAt)
   if (judged.length === 0) return stopped ?? { ok: true, sets: {}, deletions: [] }
+  const [bucketText, libraryText] = encode(errors, judged, library)
+  const answer: unknown = JSON.parse(glue.facet_bucket_check(target, bucketText, libraryText))
+  return read(errors, answer, stopped)
+}
+
+/** The two texts of the wire, or the refusal the root answers from the TypeScript. */
+function encode(
+  errors: FacetErrors,
+  judged: readonly (readonly [string, unknown])[],
+  library: StoredStencilLibrary | undefined,
+): [string, string] {
   if (judged.some(([key]) => !isWellFormed(key))) throw errors.refused(OPERATION, 'malformed')
   const bucketWire = wireOf(Object.fromEntries(judged), 0)
   const libraryWire = wireOf({ ...library }, 0)
   if (bucketWire === undefined || libraryWire === undefined) {
     throw errors.refused(OPERATION, 'malformed', 'unwritable')
   }
-  const [bucketText, libraryText] = [JSON.stringify(bucketWire), JSON.stringify(libraryWire)]
-  if (bucketText.length + libraryText.length > FACET_BUCKET_CHECK_CAPS.maxBytes) {
+  const texts: [string, string] = [JSON.stringify(bucketWire), JSON.stringify(libraryWire)]
+  if (texts[0].length + texts[1].length > FACET_BUCKET_CHECK_CAPS.maxBytes) {
     throw errors.refused(OPERATION, 'input-too-large')
   }
-  const answer: unknown = JSON.parse(glue.facet_bucket_check(target, bucketText, libraryText))
+  return texts
+}
+
+/**
+ * The result an answer stands for. `stopped` is the refusal of a bucket cut at
+ * a reserved key, which stands unless a key before it was refused.
+ */
+function read(
+  errors: FacetErrors,
+  answer: unknown,
+  stopped: FacetBucketResult | undefined,
+): FacetBucketResult {
   const [kind, a, b, ...rest] = isList(answer) ? answer : []
   if (kind === 'declined') throw declinedOf(errors, answer as unknown[])
   if (kind === 'ok' && rest.length === 0) return storedOf(errors, a, b, stopped)
