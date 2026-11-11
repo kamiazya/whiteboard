@@ -203,10 +203,10 @@ impl Measure for FontTableMeasurer<'_> {
         let Some(loaded) = self.resolve(font) else {
             return estimate_advance(text, font.size_px);
         };
+        // The TypeScript returns 0 early for an empty text or a size of 0; both
+        // sum to +0 here (an empty run is 0, and `0 + -0` is `+0`), so the early
+        // return is not ported.
         let size = clamp_advance(font.size_px);
-        if size == 0.0 || text.is_empty() {
-            return 0.0;
-        }
         clamp_advance(loaded.advance(text, size, font.size_px))
     }
 
