@@ -290,4 +290,14 @@ exclude_re = [
   # canvas-render halo_underlay: the pill's pad is the constant 2, and
   # `2 * pad` and `2 + pad` are both 4.
   'runs\.rs:\d+:\d+: replace \* with \+ in halo_underlay$',
+  # canvas-render scene_digest overlap_area: boxes that only touch share an extent
+  # of zero on one axis, whose area is zero, and the caller asks only whether the
+  # area exceeds zero, so counting that zero (`>=`) changes nothing. Column-pinned.
+  'pairs\.rs:\d+:(10|21): replace > with >= in overlap_area$',
+  # canvas-render scene_digest component: without the visited test every seed
+  # walks the whole board again and an entry is pushed once per neighbour, so the
+  # 2000-entry boards take cubic time (measured past 120s) where the result is
+  # still the right clusters; the loop is bounded by the entry count, so it
+  # grows no vector without end.
+  'pairs\.rs:\d+:\d+: delete ! in component$',
 ]
