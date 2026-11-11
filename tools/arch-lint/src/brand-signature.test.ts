@@ -48,8 +48,13 @@ const PATH_CHARS = /[MmLlHhVvCcSsQqTtAaZz0-9 ,.-]*/.source
 
 const SIGNATURE_RE = new RegExp(`${SIGNATURE_PREFIX}${PATH_CHARS}`, 'g')
 
-/** Directories with nothing hand-authored in them. */
+/**
+ * Directories with nothing hand-authored in them. `artifacts` is the wasm
+ * build's staged output: it embeds the visual plugin's asset tables, so the
+ * binary holds the mark, and is absent from a checkout that has not built it.
+ */
 const SKIP_DIRS = new Set([
+  'artifacts',
   'node_modules',
   '.git',
   'dist',
