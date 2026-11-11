@@ -63,7 +63,7 @@ mode `strictDegrade` and a re-validation against the same wire schema, then
 
 | TypeScript | Rust (`crates/core/codec/src/json_canvas/`) |
 |---|---|
-| `JSON.parse` | `json.rs`: a reader of the grammar, with the host's own rules (a repeated key keeps its first place and takes its last value; `__proto__` is an ordinary key; integer-like keys enumerate first) |
+| `JSON.parse` | `whiteboard-model`'s `json.rs`: a reader of the grammar, with the host's own rules (a repeated key keeps its first place and takes its last value; `__proto__` is an ordinary key; integer-like keys enumerate first) |
 | `JSON.stringify` | `stringify.rs`, with `whiteboard-det`'s `js_number_to_string` for numbers |
 | `jsonCanvasDocumentSchema`, the node and edge schemas, `z.int()`, `z.union` | `wire.rs`, `schema.rs`: each leaf answers its value and its issues, and an issue says whether Zod goes on checking the same value |
 | `x-whiteboard` at its three sites, `canvasLineSchema` | `extension.rs`: `.optional().catch(undefined)` at every bucket, so a malformed one costs the bucket |
@@ -298,7 +298,7 @@ projecting and writing the text, 1.1.
 
 | Criterion | Recorded |
 |---|---|
-| Port shape | Structure-preserving. `json_canvas/{wire,extension,schema,project}.rs` follow `json-canvas.ts`, `projection.ts` and `parse.ts`/`serialize.ts`; `json.rs`, `stringify.rs` and `url.rs` exist to keep the host behaviours the TypeScript leans on. |
+| Port shape | Structure-preserving. `json_canvas/{wire,extension,schema,project}.rs` follow `json-canvas.ts`, `projection.ts` and `parse.ts`/`serialize.ts`; `stringify.rs` and `url.rs` (and `whiteboard-model`'s `json.rs`, which the facet engine reads its contracts with too) exist to keep the host behaviours the TypeScript leans on. |
 | TypeScript deletion deadline | Done, under owner decision q40 (2026-11-10): the TypeScript of a ported module is deleted as soon as its migration is complete, which supersedes the release-after-default schedule. What remains is the widget's reader, provisionally (q49). |
 | Rollback | None. There is no TypeScript to fall back to in the daemon or the web app; a defect in the core is fixed in `crates/` and the artifact rebuilt. The daemon and a web build refuse to start or build without the artifact. |
 | Freeze lift | Lifted for the writer and the daemon and web read path: features go to Rust only (ADR-0054 decision 23). The projection, the wire schema and the widget's reader remain TypeScript and are not frozen. |

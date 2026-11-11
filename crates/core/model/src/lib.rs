@@ -1,5 +1,6 @@
 //! The document model's types (ADR-0054). Today it holds the value tree a
-//! frontmatter is read into and written from; the types generated from
+//! frontmatter is read into and written from, and the JSON reader that
+//! produces the same tree; the types generated from
 //! `contracts/model` join it as the model track ports them.
 
 // Core is total: an out-of-bounds index or an overflowing integer is a
@@ -10,6 +11,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod checks;
+pub mod json;
 #[path = "generated/okf.rs"]
 pub mod okf;
 #[path = "generated/spatial.rs"]
