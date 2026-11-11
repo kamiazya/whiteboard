@@ -40,6 +40,7 @@ import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types
 import { encodeLayout, sideAt } from './wire.js'
 
 /** The glue surface the shim calls: the `#glue` module's own type. */
+export type { FacetBucketResult } from './facet-write.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */

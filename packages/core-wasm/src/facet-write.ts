@@ -15,7 +15,7 @@ import { decodeValue, isWellFormed, wireOf } from './value-wire.js'
 export type FacetWriteTarget = 'document' | 'canvas' | 'node' | 'edge'
 
 /** The Zod issue codes a facet's contract can raise. */
-export type FacetIssueCode =
+type FacetIssueCode =
   | 'invalid_type'
   | 'too_small'
   | 'too_big'
@@ -30,7 +30,7 @@ export type FacetIssueCode =
  * One place a payload was refused: where and why. A union carries why each of
  * its arms refused, and a record's refused key carries the issues of the key.
  */
-export interface FacetIssue {
+interface FacetIssue {
   readonly path: readonly (string | number)[]
   readonly code: FacetIssueCode
   readonly keys?: readonly string[]
@@ -39,7 +39,7 @@ export interface FacetIssue {
 }
 
 /** A stored-library stencil the registry would drop, and why. */
-export type DroppedStencil = { readonly name: string } & (
+type DroppedStencil = { readonly name: string } & (
   | { readonly why: 'name' | 'no-shape' }
   | { readonly why: 'shape'; readonly issues: readonly FacetIssue[] }
   | {
@@ -52,7 +52,7 @@ export type DroppedStencil = { readonly name: string } & (
 )
 
 /** The stage a key of a bucket was refused at, with what the stage says. */
-export type FacetRefusal =
+type FacetRefusal =
   | { readonly stage: 'reserved-key' }
   | { readonly stage: 'target'; readonly targets: readonly string[] }
   | { readonly stage: 'malformed-key' }
