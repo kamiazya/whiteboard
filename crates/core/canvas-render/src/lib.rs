@@ -25,6 +25,7 @@ pub mod finite_box;
 pub mod glow;
 pub mod ink;
 pub mod legend_geometry;
+pub mod linebreak;
 pub mod node_outline;
 pub mod scene_bounds;
 pub mod scene_entries;

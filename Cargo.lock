@@ -544,6 +544,7 @@ dependencies = [
  "whiteboard-edge-routing",
  "whiteboard-model",
  "whiteboard-plugin-visual",
+ "whiteboard-proptest",
  "whiteboard-scene",
 ]
 
