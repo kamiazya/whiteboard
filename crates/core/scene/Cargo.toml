@@ -1,0 +1,33 @@
+[package]
+name = "whiteboard-scene"
+description = "The scene vocabulary: what a laid-out spatial document is."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+# Reading a scene from the JSON a recorded oracle holds. Tests only: the scene
+# never crosses a process boundary, so no shipped build enables it.
+oracle = ["dep:serde"]
+
+[dependencies]
+serde = { workspace = true, optional = true }
+whiteboard-model = { path = "../model" }
+
+# QR-21 layer 3: the same tests run natively and on wasm32 under Node.
+[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+wasm-bindgen-test.workspace = true
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true
+
+# The test reads a scene as JSON, which is what the feature exists for.
+[[test]]
+name = "oracle_read"
+required-features = ["oracle"]

@@ -33,6 +33,60 @@ pub fn js_number_to_string(x: f64) -> String {
     format!("{sign}{}", layout(&digits, exponent))
 }
 
+/// ECMAScript `Number.prototype.toFixed(digits)`: the decimal expansion of the
+/// double rounded to `digits` places, a tie going to the LARGER magnitude, and
+/// the sign of any negative input kept (`(-0.0001).toFixed(3)` is `-0.000`).
+/// Rust's `{:.n}` rounds an exact tie to even, so a tie is settled here: `x`
+/// is a tie exactly when `|x| * 2^(digits + 1)` is an odd integer, since such a
+/// value has `digits + 1` decimal places ending in a five.
+#[must_use]
+pub fn js_to_fixed(x: f64, digits: usize) -> String {
+    if x.is_nan() {
+        return "NaN".to_string();
+    }
+    if x.abs() >= 1e21 {
+        return js_number_to_string(x);
+    }
+    let sign = if x < 0.0 { "-" } else { "" };
+    let magnitude = x.abs();
+    format!("{sign}{}", fixed_magnitude(magnitude, digits))
+}
+
+/// `toFixed` of a non-negative finite `x` below 1e21.
+fn fixed_magnitude(x: f64, digits: usize) -> String {
+    let longer = digits.saturating_add(1);
+    let scaled = (0..longer).fold(x, |value, _| value * 2.0);
+    let odd_integer = scaled.fract().to_bits() == 0 && (scaled % 2.0).to_bits() == 1.0f64.to_bits();
+    if !odd_integer {
+        return format!("{x:.digits$}");
+    }
+    round_up_last_five(&format!("{x:.longer$}"))
+}
+
+/// A decimal string ending in a five, rounded up at the digit before it.
+fn round_up_last_five(text: &str) -> String {
+    let kept = text.strip_suffix('5').unwrap_or(text);
+    let kept = kept.strip_suffix('.').unwrap_or(kept);
+    let mut digits: Vec<u8> = kept.bytes().collect();
+    let mut carry = true;
+    for digit in digits.iter_mut().rev() {
+        if !carry || *digit == b'.' {
+            continue;
+        }
+        if *digit == b'9' {
+            *digit = b'0';
+        } else {
+            *digit = digit.saturating_add(1);
+            carry = false;
+        }
+    }
+    let mut out = String::from_utf8(digits).unwrap_or_default();
+    if carry {
+        out.insert(0, '1');
+    }
+    out
+}
+
 /// The shortest round-trip digits of a positive finite `x` and the power of
 /// ten of the first: `x = 0.d1d2... * 10^(exponent + 1)`.
 fn shortest_digits(x: f64) -> (String, i64) {
@@ -105,7 +159,7 @@ fn layout(digits: &str, exponent: i64) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{js_number_to_string, without_negative_zero};
+    use super::{js_number_to_string, js_to_fixed, without_negative_zero};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -203,5 +257,54 @@ mod tests {
         for (x, text) in cases {
             assert_eq!(js_number_to_string(x), text, "{x:e}");
         }
+    }
+
+    #[test]
+    fn to_fixed_rounds_a_tie_to_the_larger_magnitude_and_keeps_the_sign() {
+        let cases: [(f64, usize, &str); 16] = [
+            (0.0625, 3, "0.063"),
+            (-0.0625, 3, "-0.063"),
+            (2.5, 0, "3"),
+            (-2.5, 0, "-3"),
+            (0.5, 0, "1"),
+            (1.5, 0, "2"),
+            (1234.5625, 3, "1234.563"),
+            (8.0625, 3, "8.063"),
+            (0.1875, 3, "0.188"),
+            (1.005, 2, "1.00"),
+            (0.0001, 3, "0.000"),
+            (-0.0001, 3, "-0.000"),
+            (123.456, 3, "123.456"),
+            (7.0, 3, "7.000"),
+            (999.9995, 3, "1000.000"),
+            (9.5, 0, "10"),
+        ];
+        for (x, digits, text) in cases {
+            assert_eq!(js_to_fixed(x, digits), text, "{x} to {digits}");
+        }
+    }
+
+    #[test]
+    fn to_fixed_hands_a_huge_or_unreadable_number_to_the_plain_string() {
+        assert_eq!(js_to_fixed(1e21, 3), "1e+21");
+        assert_eq!(js_to_fixed(-1e21, 3), "-1e+21");
+        assert_eq!(js_to_fixed(f64::NAN, 3), "NaN");
+        assert_eq!(js_to_fixed(1e20, 1), "100000000000000000000.0");
+        assert_eq!(js_to_fixed(f64::INFINITY, 3), "Infinity");
+    }
+
+    #[test]
+    fn to_fixed_prints_a_zero_of_either_sign_without_one() {
+        assert_eq!(js_to_fixed(0.0, 2), "0.00");
+        assert_eq!(js_to_fixed(-0.0, 2), "0.00");
+        assert_eq!(js_to_fixed(0.0, 0), "0");
+    }
+
+    #[test]
+    fn to_fixed_carries_through_a_run_of_nines() {
+        assert_eq!(js_to_fixed(99.9375, 3), "99.938");
+        assert_eq!(js_to_fixed(0.999_999_9, 3), "1.000");
+        assert_eq!(js_to_fixed(9.9995, 3), "9.999");
+        assert_eq!(js_to_fixed(99.5, 0), "100");
     }
 }

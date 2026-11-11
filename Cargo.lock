@@ -534,6 +534,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-canvas-render"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-det",
+ "whiteboard-edge-routing",
+ "whiteboard-model",
+ "whiteboard-plugin-visual",
+ "whiteboard-scene",
+]
+
+[[package]]
 name = "whiteboard-codec"
 version = "0.0.0"
 dependencies = [
@@ -600,6 +614,7 @@ dependencies = [
  "wasm-bindgen-test",
  "whiteboard-facet-engine",
  "whiteboard-model",
+ "whiteboard-scene",
 ]
 
 [[package]]
@@ -608,6 +623,16 @@ version = "0.0.0"
 dependencies = [
  "getrandom",
  "proptest",
+]
+
+[[package]]
+name = "whiteboard-scene"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-model",
 ]
 
 [[package]]

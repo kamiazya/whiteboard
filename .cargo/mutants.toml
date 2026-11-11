@@ -250,4 +250,44 @@ exclude_re = [
   # over the text with nothing to end it, so the parse of any text hangs and
   # the timeout is the only detection.
   'json\.rs:\d+:\d+: replace Reader<.+>::bump with \(\)$',
+  # canvas-render line_width: the weight an edge's heads scale by. A width of
+  # exactly 0 read as usable (`>=`) answers 0 where 1 was answered, and the head
+  # scale is `max(1, width * 3.2 / 8)`, which is 1 for both, and every inset
+  # reads the scale first.
+  'edge_arrows\.rs:\d+:\d+: replace > with >= in line_width$',
+  # canvas-render clip_to_convex: `sign` is plus or minus one, so the inward
+  # normal's `* sign` and `/ sign` are the same number.
+  'sketch_shape\.rs:\d+:\d+: replace \* with / in clip_to_convex$',
+  # canvas-render clip_to_convex: the branch for a hatch line parallel to an
+  # edge (`denominator == 0`). The line's direction is the cosine and sine of a
+  # seeded angle and is never exactly parallel to an outline's edge, so no seed
+  # reaches the branch, so its comparison cannot be told from its neighbours.
+  # Column-pinned.
+  'sketch_shape\.rs:\d+:26: replace < with (==|>|<=) in clip_to_convex$',
+  # canvas-render clip_to_convex: the strict `>` that picks entry or exit after
+  # the parallel branch; with that branch unreachable the denominator is never
+  # zero, so `>` and `>=` pick the same side. Column-pinned.
+  'sketch_shape\.rs:\d+:24: replace > with >= in clip_to_convex$',
+  # canvas-render clip_to_convex: an entry past the exit ends the walk, and an
+  # entry equal to the exit leaves a chord of no length, which the final length
+  # check refuses the same way, so `>=` and `==` end the same hatch line.
+  'sketch_shape\.rs:\d+:20: replace > with (==|>=) in clip_to_convex$',
+  # canvas-render clip_to_convex: exactly one of entry and exit left infinite
+  # can only come from an outline with no bounding edge, which no outline the
+  # sweeps draw is (a polygon of fewer than three points leaves both infinite).
+  # Column-pinned.
+  'sketch_shape\.rs:\d+:29: replace \|\| with && in clip_to_convex$',
+  # canvas-render clip_to_convex: a chord of length exactly 1 is a chance in a
+  # float that no seed reaches, and `<=` refuses only that one. Column-pinned.
+  'sketch_shape\.rs:\d+:72: replace < with <= in clip_to_convex$',
+  # canvas-render clipped_area: a region touching the drawn box along an edge
+  # has an overlap of zero on that axis, and `0 * other` is 0 whether the zero
+  # is counted (`>=`) or not.
+  'filter_budget\.rs:\d+:\d+: replace > with >= in clipped_area$',
+  # canvas-render pulled_back: an end with an inset of exactly 0 is moved by
+  # `0 * direction`, which is the point where it was.
+  'render_edge\.rs:\d+:\d+: replace > with >= in pulled_back$',
+  # canvas-render halo_underlay: the pill's pad is the constant 2, and
+  # `2 * pad` and `2 + pad` are both 4.
+  'runs\.rs:\d+:\d+: replace \* with \+ in halo_underlay$',
 ]
