@@ -18,6 +18,7 @@ whiteboard-scene = { path = "../scene" }
 [dev-dependencies]
 serde.workspace = true
 serde_json.workspace = true
+whiteboard-proptest = { path = "../../testing/proptest" }
 whiteboard-scene = { path = "../scene", features = ["oracle"] }
 
 # QR-21 layer 3: the same tests run natively and on wasm32 under Node.

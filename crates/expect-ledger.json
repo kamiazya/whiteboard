@@ -21,6 +21,12 @@
     },
     {
       "crate": "crates/core/canvas-render",
+      "lint": "clippy::cast_precision_loss",
+      "count": 1,
+      "reason": "the fake measurer's `text.length` is a UTF-16 unit count converted to the double the TypeScript multiplies; a count under 2^53 is exact, which no string a process can hold exceeds"
+    },
+    {
+      "crate": "crates/core/canvas-render",
       "lint": "clippy::manual_midpoint",
       "count": 1,
       "reason": "`f64::midpoint` avoids the overflow `(a + b) / 2` has, which the TypeScript does not; the sketch ink's control point reads `2 * mid - (a + b) / 2` and is held to its bits"
