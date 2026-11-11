@@ -38,6 +38,20 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   TypeScript's `issues` (path and reason, in its order), which codec rethrows
   as `OkfNotYamlSafeError`. A value only the host can hold is walked by
   `okf-unsafe.ts`, a port of the TypeScript's own walk.
+  `facetBucketCheck(target, bucket, library?)` is `partitionFacetWrites` plus the
+  stencil library's refusal in one call (`facet-write.ts`, `facet_bucket_check`):
+  the bucket crosses in `Object.entries` order and is answered as the sets (bit
+  for bit, with their key order) and the deletions, or the first key refused with
+  its stage and what the stage says (`FacetRefusal`: the issues carry path and code
+  in order, and no sentence, which the root words, q43). The shim stops the bucket at
+  the first payload holding `__proto__` and answers `reserved-key` there unless a key
+  before it is refused, because the server's walk throws at that point; it declines
+  a value the wire cannot carry, among them an `undefined` the TypeScript reads as an
+  absent key and would have accepted, and the root answers those from the
+  TypeScript. `library` is the workspace's stored stencils by bare name, passed only
+  for a bucket that writes a stencil. Held to the TypeScript by server-core's
+  `facet-write.core.test.ts` (the oracle's functions live there, and core-wasm
+  cannot import them).
 - Refusing, as `CoreInputRefused` with a `code` from the generated
   `RefusalCode` (`src/generated/input-caps.ts`, `cargo xtask codegen` from
   `crates/input-caps.json`, so both languages refuse by one cap, QR-28b):

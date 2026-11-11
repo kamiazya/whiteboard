@@ -188,7 +188,7 @@ fn whatever_the_input_the_answer_is_a_value_or_issues_that_lead_into_it() {
 #[test]
 fn a_value_the_interpreter_accepts_is_a_fixed_point_of_it() {
     let reached = Floor::new("an accepted input that the schema changed");
-    check(draw(), None, |(name, input)| {
+    check(prop_oneof![1 => draw(), 1 => stripped_inputs()], None, |(name, input)| {
         let Some(Ok(parsed)) = judge(name, &input) else { return Ok(()) };
         reached.draw(parsed != input);
         prop_assert_eq!(judge(name, &parsed), Some(Ok(parsed.clone())));
@@ -204,6 +204,21 @@ fn accepted_inputs() -> impl Strategy<Value = (&'static str, Value)> {
         .map(|case| (case.name, case.input.clone()))
         .collect();
     prop::sample::select(ok)
+}
+
+/// An accepted input of a stripping object with a key it does not declare: the
+/// schema answers it changed, so a fixed-point property always meets the case
+/// it is about rather than waiting for a free draw to land on a default.
+fn stripped_inputs() -> impl Strategy<Value = (&'static str, Value)> {
+    accepted_inputs()
+        .prop_filter("a stripping object", |(name, input)| {
+            matches!(*name, "ThemeTokens" | "IconAsset") && matches!(input, Value::Map(_))
+        })
+        .prop_map(|(name, input)| {
+            let Value::Map(mut entries) = input else { return (name, input) };
+            entries.push((UNKNOWN.to_owned(), Value::Bool(true)));
+            (name, Value::Map(entries))
+        })
 }
 
 #[test]

@@ -436,7 +436,7 @@ mod tests {
     fn a_number_past_the_range_of_a_double_reads_as_infinity() {
         // A literal past f64's range reads as infinity, as `JSON.parse` does.
         assert_eq!(parse("1e999"), Ok(Value::Number(f64::INFINITY)));
-        assert_eq!(parse("-0"), Ok(Value::Number(-0.0)));
+        assert!(matches!(parse("-0"), Ok(Value::Number(n)) if n == 0.0 && n.is_sign_negative()));
     }
 
     #[test]

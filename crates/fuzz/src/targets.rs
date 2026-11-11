@@ -317,6 +317,111 @@ pub fn okf_wasm_serialize(data: &[u8]) {
     assert!(fenced || named || refused, "{answer:.120} is not an answer");
 }
 
+/// `facet_bucket_check`, the export a host calls, on any UTF-8 text read as a
+/// facets bucket: the first byte picks what the write targets, the text up to
+/// the first line feed is the bucket's wire and the rest the stored library's.
+/// It must answer one of its three documented shapes and never panic or run
+/// past its budget, decline exactly the input past its cap, and, when it
+/// stores, hold the bucket's keys: the sets and the deletions together are the
+/// bucket's keys, in its order, found by reading the bucket as plain JSON,
+/// which shares nothing with the wire decode. A refusal names a key the bucket
+/// holds.
+///
+/// # Panics
+///
+/// When the export panics, answers off its shape or loses a key.
+pub fn facet_wasm_bucket_check(data: &[u8]) {
+    use whiteboard_model::Value;
+    use whiteboard_model::json::parse;
+    use whiteboard_wasm::facet_write::facet_bucket_check;
+    use whiteboard_wasm::input_caps::FACET_BUCKET_CHECK;
+
+    const TARGETS: [&str; 4] = ["document", "canvas", "node", "edge"];
+    let Some((first, rest)) = data.split_first() else {
+        return;
+    };
+    let Ok(text) = std::str::from_utf8(rest) else {
+        return;
+    };
+    let (bucket, library) = text.split_once('\n').unwrap_or((text, "[\"m\"]"));
+    let target = TARGETS.get(usize::from(*first) % TARGETS.len()).copied().unwrap_or("node");
+    let answer = facet_bucket_check(target, bucket, library);
+    if bucket.len() + library.len() > FACET_BUCKET_CHECK.max_bytes {
+        assert_eq!(answer, "[\"declined\",\"input-too-large\",\"too-large\"]");
+        return;
+    }
+    let read = parse(&answer);
+    assert!(matches!(read, Ok(Value::Seq(_))), "{answer:.120} is not an answer");
+    let Ok(Value::Seq(parts)) = read else {
+        return;
+    };
+    let text_at = |at: usize| match parts.get(at) {
+        Some(Value::String(text)) => Some(text.as_str()),
+        _ => None,
+    };
+    let held = held_bucket_keys(bucket);
+    match text_at(0) {
+        Some("ok") => assert_stored_keys(&parts, &held),
+        Some("refused") => {
+            let key = text_at(1).unwrap_or_default();
+            assert!(
+                held.iter().any(|(name, _)| name == key),
+                "{answer:.120} names no key of the bucket"
+            );
+            assert!(text_at(2).is_some(), "{answer:.120} names no stage");
+        }
+        Some("declined") => {
+            assert!(parts.len() == 3 && (0..3).all(|at| text_at(at).is_some()), "{answer:.120}");
+        }
+        other => assert_eq!(other, Some("ok"), "{answer:.120} is not an answer"),
+    }
+}
+
+/// The keys a bucket's wire holds, each with whether its value is null (a
+/// deletion). The wire's mapping is `["m", key, value, key, value, ...]`, so
+/// they are every second element after the tag. A bucket this reader refuses
+/// is one the export declined or refused, and has no keys to hold it to.
+fn held_bucket_keys(bucket: &str) -> Vec<(String, bool)> {
+    use whiteboard_model::Value;
+    match whiteboard_model::json::parse(bucket) {
+        Ok(Value::Seq(items)) => items
+            .get(1..)
+            .unwrap_or_default()
+            .chunks(2)
+            .filter_map(|pair| match pair {
+                [Value::String(key), value] => Some((key.clone(), *value == Value::Null)),
+                _ => None,
+            })
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+/// The sets an `["ok", sets, deletions]` answer names are the bucket's
+/// non-null keys, and its deletions the null ones, in the bucket's order.
+fn assert_stored_keys(parts: &[whiteboard_model::Value], held: &[(String, bool)]) {
+    use whiteboard_model::Value;
+    let names = |at: usize, skip: usize, step: usize| -> Vec<&str> {
+        match parts.get(at) {
+            Some(Value::Seq(items)) => items
+                .iter()
+                .skip(skip)
+                .step_by(step)
+                .filter_map(|item| match item {
+                    Value::String(text) => Some(text.as_str()),
+                    _ => None,
+                })
+                .collect(),
+            _ => Vec::new(),
+        }
+    };
+    let want = |gone: bool| -> Vec<&str> {
+        held.iter().filter(|(_, null)| *null == gone).map(|(key, _)| key.as_str()).collect()
+    };
+    assert_eq!(names(1, 1, 2), want(false), "the stored keys are not the bucket's");
+    assert_eq!(names(2, 1, 1), want(true), "the deleted keys are not the bucket's");
+}
+
 /// The JSON Canvas codec on any UTF-8 text: it must answer a canvas, a refusal
 /// or a decline, never panic or run past its budget; a canvas it reads must be
 /// written in both modes without a panic; and the extended text must read

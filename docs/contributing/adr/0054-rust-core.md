@@ -905,6 +905,23 @@ recorded write oracle now replays against it and asserts its registered ids.
 Compat, the derived form, several plugins and a workspace stencil library, and
 the wasm export and switch, are S8 ([the parity checklist](../parity/facet-engine.md)).
 
+**Shipped (step 6, S8, the export).** The facet write crosses the wasm boundary as
+one call: `facet_bucket_check` is `partitionFacetWrites` and the stencil
+library's refusal over the bundled plugin's registry, which the artifact builds
+once. `whiteboard_facet_engine::partition` walks a bucket in its order (the
+facet's targets, the registry's write check, the key the schema strips, with the
+TypeScript's reading of `key in parsed`) and composes a workspace's stored
+stencil library beside the registry, a stencil at a time; the export answers the
+sets, bit for bit, or the first key refused with its stage and the path and code
+of each issue, and declines past its caps. `@kamiazya/whiteboard-core-wasm`'s
+`facetBucketCheck` shims it (ABI 19), and server-core's `facet-write.core.test.ts`
+holds it to `partitionFacetWrites` over generated buckets and a payload per
+registered facet. The artifact's size is the cost of carrying the interpreter
+and the plugin's files: 835,344 bytes shipped, 202,741 more, which is the price
+of the daemon's only write validator being data-driven (owner decision q41). The
+switch a root dispatches through, and the `PORTED_FUNCTIONS` entry, are the next
+increments ([the parity checklist](../parity/facet-engine.md)).
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

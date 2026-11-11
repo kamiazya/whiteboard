@@ -13,6 +13,7 @@ pub mod edge_primitives;
 pub mod edge_router;
 pub mod edge_router_leaves;
 pub mod edge_rules;
+pub mod facet_write;
 #[path = "generated/input_caps.rs"]
 pub mod input_caps;
 pub mod json_canvas;
@@ -25,7 +26,7 @@ pub mod spatial_edges;
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
 /// on its first mismatched call.
-pub const ABI_VERSION: &str = "18";
+pub const ABI_VERSION: &str = "19";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]

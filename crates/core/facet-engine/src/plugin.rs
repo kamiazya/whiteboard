@@ -114,8 +114,12 @@ fn parse(source: &str, text: &str) -> Result<Value, LoadError> {
 const KINDS: [(AssetKind, &str); 3] = [
     (AssetKind::Themes, "facets/engine/engine.schema.json#/$defs/ThemeTokens"),
     (AssetKind::Icons, "facets/engine/engine.schema.json#/$defs/IconAsset"),
-    (AssetKind::Stencils, "facets/engine/engine.schema.json#/$defs/StencilAsset"),
+    (AssetKind::Stencils, STENCIL_ASSET),
 ];
+
+/// The engine's shape of a stencil, which a workspace's own library is judged
+/// by as a bundled stencil is.
+pub(crate) const STENCIL_ASSET: &str = "facets/engine/engine.schema.json#/$defs/StencilAsset";
 
 fn table_name(assets: Option<&ManifestAssets>, kind: AssetKind) -> Option<&str> {
     let tables = assets?;

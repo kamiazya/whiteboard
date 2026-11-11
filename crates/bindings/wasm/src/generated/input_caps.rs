@@ -16,6 +16,10 @@ pub struct InputCaps {
     pub max_nodes: Option<usize>,
 }
 
+/// The caps of `whiteboard-wasm::facet_write::facet_bucket_check`.
+pub const FACET_BUCKET_CHECK: InputCaps =
+    InputCaps { max_bytes: 8_388_608, max_depth: 64, max_millis: 3000, max_nodes: Some(131_072) };
+
 /// The caps of `whiteboard-wasm::json_canvas::json_canvas_parse`.
 pub const JSON_CANVAS_PARSE: InputCaps =
     InputCaps { max_bytes: 4_194_304, max_depth: 64, max_millis: 3000, max_nodes: None };

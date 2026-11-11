@@ -7,8 +7,10 @@
 use whiteboard_model::Value;
 
 use crate::checks;
+use crate::plugin::STENCIL_ASSET;
 use crate::plugin_manifest::{AssetKind, FacetTarget, PluginManifest};
 use crate::schema::{Contracts, DefId, Issue};
+use crate::value::{entries, field};
 
 /// The plugin id the engine keeps for a workspace's own stencil library.
 pub const WORKSPACE_PLUGIN_ID: &str = "workspace";
@@ -59,6 +61,20 @@ pub enum PayloadRefusal {
     NotCurrent { current: String },
     /// The schema refuses the payload.
     Invalid(Vec<Issue>),
+}
+
+/// Why a stencil of a workspace's own library cannot be registered.
+#[derive(Debug, Clone, PartialEq)]
+pub enum StencilRefusal {
+    /// The bare name is not a facet segment.
+    Name,
+    /// The registry was built over contracts that do not hold the engine's
+    /// stencil shape, so no stencil can be judged.
+    NoShape,
+    /// The stencil is not the engine's shape for one.
+    Shape(Vec<Issue>),
+    /// A facet payload the stencil carries is not one its facet accepts.
+    Facet { key: String, why: PayloadRefusal },
 }
 
 struct FacetEntry {
@@ -189,6 +205,33 @@ impl Registry {
         self.contracts.validate(facet.schema, payload).map(drop).map_err(PayloadRefusal::Invalid)
     }
 
+    /// Whether `stencil` may join the registry as `workspace.<name>`: the
+    /// name is a facet segment, the value is the engine's shape for a stencil,
+    /// and every facet payload it carries is one the facet's current schema
+    /// accepts. Judged alone, without building a registry, so one refused
+    /// stencil costs one judgement however many a library holds.
+    ///
+    /// # Errors
+    ///
+    /// The first thing that refuses it, in the order the TypeScript checks:
+    /// the name, the shape, then each facet in the order the stencil holds them.
+    pub fn judge_workspace_stencil(
+        &self,
+        name: &str,
+        stencil: &Value,
+    ) -> Result<(), StencilRefusal> {
+        if !checks::facet_segment(name) {
+            return Err(StencilRefusal::Name);
+        }
+        let shape = self.contracts.resolve(STENCIL_ASSET).ok_or(StencilRefusal::NoShape)?;
+        let valid = self.contracts.validate(shape, stencil).map_err(StencilRefusal::Shape)?;
+        let facets = field(&valid, "facets").map_or(&[][..], entries);
+        facets.iter().try_for_each(|(key, payload)| {
+            self.check_payload(key, payload)
+                .map_err(|why| StencilRefusal::Facet { key: key.clone(), why })
+        })
+    }
+
     /// What a write of `payload` under `key` stores: the payload as its
     /// schema parses it (unknown keys stripped, defaults filled, keys in the
     /// schema's order), or the stage that refused it. A key no plugin
@@ -200,6 +243,24 @@ impl Registry {
     /// them: the key's grammar, its version, the payload's schema, and last
     /// that every asset id it names is registered.
     pub fn validate_facet_write(&self, key: &str, payload: &Value) -> Result<Value, WriteRefusal> {
+        self.validate_facet_write_with(key, payload, &[])
+    }
+
+    /// [`Self::validate_facet_write`] with asset ids the host holds for this
+    /// one call and not in the registry: a workspace's own stencils, which
+    /// belong to its content and so are never part of what the registry was
+    /// built over. They are registered after the registry's own, as a plugin
+    /// composed last would be.
+    ///
+    /// # Errors
+    ///
+    /// As [`Self::validate_facet_write`].
+    pub fn validate_facet_write_with(
+        &self,
+        key: &str,
+        payload: &Value,
+        extra: &[(AssetKind, &[String])],
+    ) -> Result<Value, WriteRefusal> {
         if !checks::facet_key(key) {
             return Err(WriteRefusal::MalformedKey);
         }
@@ -210,22 +271,30 @@ impl Registry {
         }
         let value =
             self.contracts.validate(facet.schema, payload).map_err(WriteRefusal::Invalid)?;
-        self.unregistered_ref(facet, &value).map_or(Ok(value), Err)
+        self.unregistered_ref(facet, &value, extra).map_or(Ok(value), Err)
     }
 
     /// The first asset-naming field, in declaration order, holding an id no
     /// plugin registered. A field that is absent or not a string names nothing.
-    fn unregistered_ref(&self, facet: &FacetEntry, value: &Value) -> Option<WriteRefusal> {
+    fn unregistered_ref(
+        &self,
+        facet: &FacetEntry,
+        value: &Value,
+        extra: &[(AssetKind, &[String])],
+    ) -> Option<WriteRefusal> {
         let Value::Map(entries) = value else { return None };
         facet.asset_refs.iter().find_map(|(field, kind)| {
             let found = entries.iter().find(|(name, _)| name == field);
             let Some((_, Value::String(id))) = found else { return None };
+            let more = || extra.iter().filter(|(held, _)| held == kind).flat_map(|(_, ids)| *ids);
             let registered = self.registered(*kind);
-            (!registered.contains(id)).then(|| WriteRefusal::UnregisteredAsset {
-                field: field.clone(),
-                id: id.clone(),
-                kind: *kind,
-                registered: registered.to_vec(),
+            (!registered.contains(id) && !more().any(|held| held == id)).then(|| {
+                WriteRefusal::UnregisteredAsset {
+                    field: field.clone(),
+                    id: id.clone(),
+                    kind: *kind,
+                    registered: registered.iter().chain(more()).cloned().collect(),
+                }
             })
         })
     }

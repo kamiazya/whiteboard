@@ -619,7 +619,9 @@ dependencies = [
  "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-edge-routing",
+ "whiteboard-facet-engine",
  "whiteboard-model",
+ "whiteboard-plugin-visual",
 ]
 
 [[package]]

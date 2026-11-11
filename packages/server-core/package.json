@@ -81,6 +81,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@kamiazya/whiteboard-core-wasm": "workspace:*",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

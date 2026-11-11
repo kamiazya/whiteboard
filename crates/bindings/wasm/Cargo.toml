@@ -16,8 +16,10 @@ serde_json.workspace = true
 wasm-bindgen.workspace = true
 whiteboard-codec = { path = "../../core/codec" }
 whiteboard-det = { path = "../../core/det" }
+whiteboard-facet-engine = { path = "../../core/facet-engine" }
 whiteboard-model = { path = "../../core/model" }
 whiteboard-edge-routing = { path = "../../core/edge-routing" }
+whiteboard-plugin-visual = { path = "../../core/plugin-visual" }
 
 [lints]
 workspace = true

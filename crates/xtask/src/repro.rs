@@ -19,9 +19,20 @@ use std::process::Command;
 use crate::dist::{self, Artifact};
 use crate::metadata;
 
-/// What cargo reads from a checkout to build the workspace.
-const RUST_SOURCES: &[&str] =
-    &["Cargo.toml", "Cargo.lock", "rust-toolchain.toml", ".cargo/", "crates/"];
+/// What cargo reads from a checkout to build the workspace: the Rust half,
+/// and the data files production code embeds with `include_str!` (the
+/// contracts the interpreter compiles, the visual plugin's manifest and asset
+/// tables). A test below holds every such embed to this list.
+const RUST_SOURCES: &[&str] = &[
+    "Cargo.toml",
+    "Cargo.lock",
+    "rust-toolchain.toml",
+    ".cargo/",
+    "crates/",
+    "contracts/",
+    "packages/plugin-visual/src/assets/",
+    "packages/plugin-visual/src/visual.manifest.json",
+];
 
 /// The first byte offset at which two artifacts differ, or `None`.
 pub(crate) fn first_difference(a: &[u8], b: &[u8]) -> Option<usize> {
@@ -148,5 +159,66 @@ mod tests {
         assert_eq!(first_difference(b"abc", b"abd"), Some(2));
         assert_eq!(first_difference(b"abc", b"abcd"), Some(3));
         assert_eq!(first_difference(b"", b""), None);
+    }
+
+    /// The paths production code (anything before a file's `#[cfg(test)]`)
+    /// embeds, resolved against the repository root.
+    fn production_embeds(root: &Path) -> Vec<String> {
+        let mut found = Vec::new();
+        let mut dirs = vec![root.join("crates")];
+        while let Some(dir) = dirs.pop() {
+            let Ok(entries) = std::fs::read_dir(&dir) else { continue };
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    if !path.ends_with("target") && !path.ends_with("tests") {
+                        dirs.push(path);
+                    }
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                let Ok(text) = std::fs::read_to_string(&path) else { continue };
+                let production = text.split("#[cfg(test)]").next().unwrap_or("");
+                for piece in production.split("include_str!(\"").skip(1) {
+                    let Some(rel) = piece.split('"').next() else { continue };
+                    let Some(parent) = path.parent() else { continue };
+                    let joined = parent.join(rel);
+                    let mut parts: Vec<std::ffi::OsString> = Vec::new();
+                    for c in joined.components() {
+                        match c {
+                            std::path::Component::ParentDir => {
+                                parts.pop();
+                            }
+                            std::path::Component::CurDir => {}
+                            other => parts.push(other.as_os_str().to_owned()),
+                        }
+                    }
+                    let resolved: PathBuf = parts.iter().collect();
+                    if let Ok(inside) = resolved.strip_prefix(root) {
+                        found.push(inside.to_string_lossy().replace('\\', "/"));
+                    }
+                }
+            }
+        }
+        found
+    }
+
+    #[test]
+    fn every_file_production_code_embeds_is_copied_for_the_second_build() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let root = root.canonicalize().unwrap_or(root);
+        let embeds = production_embeds(&root);
+        assert!(embeds.len() >= 8, "the scan found {} embeds; it stopped matching", embeds.len());
+        let missing: Vec<&String> = embeds
+            .iter()
+            .filter(|rel| {
+                !RUST_SOURCES
+                    .iter()
+                    .any(|source| rel.as_str() == *source || rel.starts_with(source))
+            })
+            .collect();
+        assert!(missing.is_empty(), "embedded but not copied for repro-check: {missing:?}");
     }
 }
