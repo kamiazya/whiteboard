@@ -503,4 +503,21 @@ mod tests {
         assert_eq!(answer("node", r#"["m"]"#, &stored(max - 2)), many);
         assert_eq!(answer("node", &bucket(max / 2), &stored(max / 2)), many, "counted together");
     }
+
+    #[test]
+    fn a_mapping_counts_for_depth_and_for_values_as_a_list_does() {
+        let max = FACET_BUCKET_CHECK.max_depth;
+        let maps =
+            |levels: usize| format!("{}true{}", r#"["m","k","#.repeat(levels), "]".repeat(levels));
+        let bucket = |levels: usize| format!(r#"["m","other.x/v0",{}]"#, maps(levels));
+        assert_eq!(node(&bucket(max - 1))[0], "ok");
+        assert_eq!(node(&bucket(max)), json!(["declined", "malformed", "too-deep"]));
+        let nodes = FACET_BUCKET_CHECK.max_nodes.unwrap_or(0);
+        let keyed = |items: usize| {
+            let pairs: Vec<String> = (0..items).map(|at| format!(r#""k{at}",true"#)).collect();
+            format!(r#"["m","other.x/v0",["m",{}]]"#, pairs.join(","))
+        };
+        assert_eq!(node(&keyed(nodes - 3))[0], "ok");
+        assert_eq!(node(&keyed(nodes - 2)), json!(["declined", "input-too-large", "too-many"]));
+    }
 }
