@@ -149,6 +149,17 @@ paths:
   `create-server.ts`, or its route answers 500 — `tools/arch-lint`'s
   `v1-refusals-cover-errors.test.ts` fails on an error class in ports, model
   or server-core with neither a row nor a reasoned `EXEMPT` entry.
+- **The facet write has a per-function switch** (ADR-0054 step 6, S8):
+  `facetWriterFor(deps, workspaceId, buckets)` in `packages/server-core/src/tools/facet-write.ts` is what
+  every writer calls (`wb_facet_set`, `wb_canvas_edit`, frontmatter), over
+  `ServerDeps.facetWriteCore` and the types in `packages/server-core/src/facet-write-core.ts`
+  (`ts` | `differential` | `rust`; the daemon defaults to `ts`). `differential`
+  compares the TypeScript's `judgeFacetWrites` structure with the core's: stage,
+  key, issue path and code in order, sets bit for bit with key order, never the
+  words. A decline is answered by the TypeScript. The core serves only the
+  bundled plugins, so `makeTestDeps` attaches it only when the registry is not
+  overridden; `WHITEBOARD_CORE_FACETS=differential WHITEBOARD_CORE_MISMATCH=throw`
+  runs this whole package against it.
 - A theme id in a clean render is asserted by the glow's filter id
   (`wb-glow`), never by the word `filter`: a drop shadow is a filter too,
   and the e2e smoke failed on exactly that substring once.

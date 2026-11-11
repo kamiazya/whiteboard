@@ -12,6 +12,7 @@
  */
 import {
   composeWorkspaceStencils,
+  type DroppedWorkspaceStencil,
   type FacetRegistry,
   type WorkspaceStencils,
 } from '@kamiazya/whiteboard-facet-engine'
@@ -64,20 +65,28 @@ export async function workspaceFacetRegistry(
  * write storing it and every later read dropping it unseen.
  */
 export function refuseUnusableStencilLibrary(
-  deps: ServerDeps,
+  deps: Pick<ServerDeps, 'facetRegistry'>,
   sets: Record<string, unknown>,
 ): void {
-  const candidate = sets[VISUAL_STENCILS_KEY]
-  if (candidate === undefined) return
-  const { dropped } = composeWorkspaceStencils(
-    deps.facetRegistry,
-    readStencilLibrary({ [VISUAL_STENCILS_KEY]: candidate }),
-  )
+  const dropped = unusableStencils(deps.facetRegistry, sets)
   if (dropped.length === 0) return
   throw new FacetWriteRejectedError(
     VISUAL_STENCILS_KEY,
     dropped.map(({ name, message }) => `stencil "${name}": ${message}`).join('; '),
   )
+}
+
+/** The stencils of the library `sets` carries that the deployment's registry would not accept. */
+export function unusableStencils(
+  deployment: FacetRegistry,
+  sets: Record<string, unknown>,
+): readonly DroppedWorkspaceStencil[] {
+  const candidate = sets[VISUAL_STENCILS_KEY]
+  if (candidate === undefined) return []
+  return composeWorkspaceStencils(
+    deployment,
+    readStencilLibrary({ [VISUAL_STENCILS_KEY]: candidate }),
+  ).dropped
 }
 
 /**

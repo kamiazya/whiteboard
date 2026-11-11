@@ -15,6 +15,7 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import {
@@ -24,6 +25,8 @@ import {
   type LayoutCoreSettings,
   layoutCoreSettingsFrom,
   packagedArtifacts,
+  RUST_FACET_PLUGIN_IDS,
+  refuseFacetCoreForDeployment,
   stagedArtifacts,
 } from './layout-core.js'
 
@@ -101,6 +104,7 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
+      WHITEBOARD_CORE_FACETS: 'ts',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
@@ -274,5 +278,95 @@ describe('the daemon codec cores, installed at boot', () => {
     expect(bootOkf).toBeDefined()
     expect(bootSpatial).toBe(bootOkf)
     expect(layout?.routing).toBe(bootOkf)
+  })
+})
+
+describe('the daemon facet write core', () => {
+  const facetCore = (env: Record<string, string>) =>
+    coreLoaders(layoutCoreSettingsFrom(env)).facetWriteCore
+
+  it('reads WHITEBOARD_CORE_FACETS as ts unless something sets it, and refuses an unknown value', () => {
+    expect(layoutCoreSettingsFrom({}).WHITEBOARD_CORE_FACETS).toBe('ts')
+    expect(layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'rust' }).WHITEBOARD_CORE_FACETS).toBe(
+      'rust',
+    )
+    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'fast' })).toThrow()
+  })
+
+  it('loads nothing under ts', async () => {
+    expect(await facetCore({ WHITEBOARD_CORE_DIR: emptyDir() })()).toBeUndefined()
+  })
+
+  it.runIf(built)('serves the staged core under differential, once', async () => {
+    const load = facetCore({ WHITEBOARD_CORE_FACETS: 'differential' })
+    const core = await load()
+    expect(core?.impl.partitionFacetWrites).toBe('differential')
+    expect(await load()).toBe(core)
+  })
+
+  it.runIf(built)(
+    'throws a reported difference when the settings say so, and only logs it otherwise',
+    async () => {
+      const difference = {
+        fn: 'partitionFacetWrites' as const,
+        kind: 'differs' as const,
+        ts: 'a',
+        rust: 'b',
+        target: 'node' as const,
+        bucket: undefined,
+      }
+      const strict = await facetCore({
+        WHITEBOARD_CORE_FACETS: 'differential',
+        WHITEBOARD_CORE_MISMATCH: 'throw',
+      })()
+      expect(() => strict?.onMismatch?.(difference)).toThrow(/facet write core differs/)
+      const capture = captureLogsForTests('warning')
+      try {
+        const lenient = await facetCore({ WHITEBOARD_CORE_FACETS: 'differential' })()
+        lenient?.onMismatch?.(difference)
+        lenient?.onMismatch?.({
+          fn: 'partitionFacetWrites',
+          kind: 'declined',
+          err: new Error('too large'),
+        })
+        expect(capture.records.map((r) => r.data?.event ?? r.msg)).toEqual([
+          'the Rust core and the TypeScript disagree',
+          'facets-declined',
+        ])
+      } finally {
+        capture.restore()
+      }
+    },
+  )
+
+  it('holds the plugin ids of the registry the core is built from', () => {
+    expect([...RUST_FACET_PLUGIN_IDS]).toEqual(bundledFacetRegistry.plugins.map((p) => p.id))
+  })
+
+  describe('boot', () => {
+    const plugins = (...ids: string[]) => ({ plugins: ids.map((id) => ({ id })) }) as never
+    const settings = (facets: string) => layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: facets })
+
+    it('serves the bundled deployment under every setting', () => {
+      for (const facets of ['ts', 'differential', 'rust']) {
+        expect(() =>
+          refuseFacetCoreForDeployment(settings(facets), plugins('visual')),
+        ).not.toThrow()
+      }
+    })
+
+    it.each([
+      'differential',
+      'rust',
+    ])('refuses under %s a deployment composing another plugin set, naming both', (facets) => {
+      expect(() =>
+        refuseFacetCoreForDeployment(settings(facets), plugins('visual', 'ticket')),
+      ).toThrow(/\[visual\].*\[visual, ticket\].*WHITEBOARD_CORE_FACETS=ts/)
+      expect(() => refuseFacetCoreForDeployment(settings(facets), plugins())).toThrow()
+    })
+
+    it('lets any deployment through under ts, which judges nothing in Rust', () => {
+      expect(() => refuseFacetCoreForDeployment(settings('ts'), plugins('ticket'))).not.toThrow()
+    })
   })
 })

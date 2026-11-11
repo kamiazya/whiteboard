@@ -70,6 +70,7 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'log.ts': 'shared',
   'log-levels.ts': 'shared',
   'document-io.ts': 'shared',
+  'facet-write-core.ts': 'shared',
   'api-errors.ts': 'shared',
   'theme-font.ts': 'shared',
   'viewport-request.ts': 'shared',

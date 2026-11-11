@@ -39,11 +39,11 @@ import { TAG_LIBRARY_PATH, TagLibraryError } from './tag-library.js'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
-  return makeTestDeps({
-    documentStore: documentStore,
-    documentIndex: documentStore.documentIndex,
-  })
+function makeDeps(
+  documentStore: FakeDocumentStore,
+  facetRegistry?: ServerDeps['facetRegistry'],
+): ServerDeps {
+  return makeTestDeps({ documentStore, documentIndex: documentStore.documentIndex, facetRegistry })
 }
 
 /** The document as the store holds it now, for reading back what a write stored. */
@@ -251,8 +251,7 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
   async function setupWith(registryOverride = registry) {
     const documentStore = new FakeDocumentStore()
     await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
-    const tool = createFacetSetTool({ ...makeDeps(documentStore), facetRegistry: registryOverride })
-    return tool
+    return createFacetSetTool(makeDeps(documentStore, registryOverride))
   }
 
   test('accepts a registered facet with a valid payload', async () => {

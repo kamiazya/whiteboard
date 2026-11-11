@@ -9,6 +9,7 @@ import {
   type ThemeTokensInput,
   themeTokensSchema,
 } from './theme-tokens.js'
+import type { FacetWriteRefusal } from './write-refusal.js'
 
 /**
  * The facet engine's definition + registry machinery (ADR-0013 decisions 3,
@@ -309,9 +310,15 @@ function assertAssetRefsFit(
   }
 }
 
+const refuse = (message: string, refusal: FacetWriteRefusal): FacetWriteResult => ({
+  ok: false,
+  message,
+  refusal,
+})
+
 export type FacetWriteResult =
   | { readonly ok: true; readonly value: unknown }
-  | { readonly ok: false; readonly message: string }
+  | { readonly ok: false; readonly message: string; readonly refusal: FacetWriteRefusal }
 
 export type FacetResolution =
   /** Registered and valid (after any compat migration): safe to consume. */
@@ -741,31 +748,28 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
 
     validateFacetWrite(key, payload) {
       const parsed = parseKey(key)
-      if (parsed === null) return { ok: false, message: `malformed facet key "${key}"` }
+      if (parsed === null) {
+        return refuse(`malformed facet key "${key}"`, { stage: 'malformed-key' })
+      }
       const definition = definitionOf(parsed.namespace, parsed.name)
       if (definition === undefined) return { ok: true, value: payload }
       if (parsed.version !== definition.version) {
         // Writes always target the current version (ADR-0013 decision 7);
         // old versions exist only as read-side compat.
-        return {
-          ok: false,
-          message: `"${key}" is not the current version — write "${currentKey(parsed.namespace, definition)}"`,
-        }
+        const current = currentKey(parsed.namespace, definition)
+        const message = `"${key}" is not the current version — write "${current}"`
+        return refuse(message, { stage: 'not-current', current })
       }
       const result = definition.schema.safeParse(payload)
       if (!result.success) {
-        return {
-          ok: false,
-          message: `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
-        }
+        const message = `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`
+        return refuse(message, { stage: 'invalid', issues: result.error.issues })
       }
       const missing = unregisteredRef(definition, result.data)
       if (missing !== undefined) {
         const registered = [...tableOf(missing.kind).keys()]
-        return {
-          ok: false,
-          message: `"${key}" field ${missing.field} names ${missing.kind} asset "${missing.id}", which no plugin registered — registered: ${registered.length === 0 ? '(none)' : registered.join(', ')}`,
-        }
+        const message = `"${key}" field ${missing.field} names ${missing.kind} asset "${missing.id}", which no plugin registered — registered: ${registered.length === 0 ? '(none)' : registered.join(', ')}`
+        return refuse(message, { stage: 'unregistered-asset', ...missing, registered })
       }
       return { ok: true, value: result.data }
     },

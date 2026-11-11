@@ -131,6 +131,25 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     },
     realm: { install: 'installSpatialCore', deleted: SPATIAL_TYPESCRIPT },
   },
+  {
+    name: 'partitionFacetWrites',
+    // The judgement of a facets bucket and the stencil library's refusal are
+    // one call over the wire, so one entry answers both.
+    stage: 2,
+    ts: { file: 'packages/server-core/src/tools/facet-write.ts', export: 'partitionFacetWrites' },
+    switch: {
+      file: 'packages/server-core/src/facet-write-core.ts',
+      interface: 'FacetWriteCore',
+      key: 'partitionFacetWrites',
+      option: 'ServerDeps.facetWriteCore',
+    },
+    rust: { file: 'crates/bindings/wasm/src/facet_write.rs', fn: 'facet_bucket_check' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'facetBucketCheck',
+    },
+  },
 ]
 
 /** The text of a file, or `undefined` when it does not exist. */

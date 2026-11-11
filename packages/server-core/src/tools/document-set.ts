@@ -31,8 +31,7 @@ import { loadOrCreateDocument, saveDocumentSnapshot } from '../document-io.js'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
-import { partitionFacetWrites, registryForFacetWrites } from './facet-write.js'
-import { refuseUnusableStencilLibrary } from './stencil-library.js'
+import { facetWriterFor } from './facet-write.js'
 import { refuseFrontmatterTags } from './tag-library.js'
 
 export const documentSetInputSchema = z
@@ -216,15 +215,14 @@ export async function checkFrontmatterFacets(
   facets: ExtensionFacets | undefined,
 ): Promise<ExtensionFacets | undefined> {
   if (facets === undefined) return undefined
-  const registry = await registryForFacetWrites(deps, workspaceId, [facets])
+  const writer = await facetWriterFor(deps, workspaceId, [facets])
   // The sent bucket with each registered payload replaced by its parsed
   // value: a body is a whole-document import, so what the caller wrote and the
   // schema has no opinion on (an unregistered facet) round-trips as it came.
-  const { sets } = partitionFacetWrites(registry, facets, 'document')
   // A stencil library is a facet whose payload only means something once it is
-  // composed with the deployment's registry, and `wb_facet_set` refuses an
-  // unusable one for the same reason this body must.
-  refuseUnusableStencilLibrary(deps, sets)
+  // composed with the deployment's registry, and the write judges one for the
+  // same reason `wb_facet_set` must: an unusable one is refused here too.
+  const { sets } = writer.write(facets, 'document')
   return { ...facets, ...sets }
 }
 

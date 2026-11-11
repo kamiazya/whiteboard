@@ -135,6 +135,7 @@ jobs:
         if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
         env:
           WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_FACETS: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 
@@ -229,6 +230,10 @@ jobs:
         if: steps.scope.outputs.run == 'true'
         env:
           AFFECTED_PROJECTS: ${{ steps.scope.outputs.projects }}
+          # server-core-node's test deps carry the Rust core's facet write
+          # when this says so (test-utils/facet-write-core.ts).
+          WHITEBOARD_CORE_FACETS: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: node tools/checks/src/affected-cli.mjs run test-shared --shard=${{ matrix.shard }}/2
 
   test-jsdom:
@@ -679,6 +684,7 @@ jobs:
       - name: Packaged distribution smoke
         env:
           WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_FACETS: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm smoke:distribution:packaged:node
 
@@ -789,11 +795,15 @@ jobs:
       - name: Test mcp-smoke
         env:
           WHITEBOARD_DEV: '1'
+          WHITEBOARD_CORE_FACETS: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-smoke
 
       - name: Stdio E2E smoke
         env:
           WHITEBOARD_DEV: '1'
+          WHITEBOARD_CORE_FACETS: differential
+          WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm smoke:e2e
 
       - name: Build
@@ -864,6 +874,7 @@ jobs:
       - name: Packaged stdio smoke
         env:
           WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_FACETS: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm smoke:packaged
 

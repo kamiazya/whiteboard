@@ -42,6 +42,7 @@ describe('PORTED_FUNCTIONS against the tree', () => {
       'serializeOkf',
       'parseSpatial',
       'serializeSpatial',
+      'partitionFacetWrites',
     ])
     expect(checkPortedFunctions(PORTED_FUNCTIONS, readReal)).toEqual([])
   })
