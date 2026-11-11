@@ -34,11 +34,17 @@ const WRONG_TYPE_ONLY: &[&str] = &[
     r#"{"length":"0b1"}"#,
     r#"{"length":[2]}"#,
     r#"{"length":[1.5]}"#,
+    r#"{"length":[[2]]}"#,
+    r#"{"length":["3"]}"#,
 ];
 
 /// Refused twice, as the wrong type and as too short.
 const ALSO_TOO_SHORT: &[&str] = &[
     "[]",
+    r#"{"length":[true]}"#,
+    r#"{"length":[null]}"#,
+    r#"{"length":[{}]}"#,
+    r#"{"length":[0,5]}"#,
     r#"{"length":0}"#,
     r#"{"length":0.5}"#,
     r#"{"length":-1}"#,
