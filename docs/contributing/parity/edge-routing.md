@@ -59,7 +59,7 @@ driven by `scripts/route-layout-boundary.mjs`
 `--runtime=node,chromium,workerd`, `--workerd=<binary>`), with a thinner
 `vitest bench --project "canvas-render-node (bench)" route-layout-boundary`
 over the same boards for Node alone. It needs the staged artifact
-(`pnpm rust:build:wasm`, then `pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm`).
+(`pnpm rust:build:wasm:oracle`, the build that carries the `oracle-surface` test exports; the shipped one has none; then `pnpm --filter @kamiazya/whiteboard-core-wasm stage:wasm`).
 
 How each side is known to be what it claims:
 

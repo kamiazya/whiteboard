@@ -6,7 +6,6 @@ use crate::edge_anchors::{entry_values, pin, sides};
 use crate::edge_primitives::{count, points_len_of};
 use crate::edge_router::{rects, style_of};
 use crate::routing_wire::Wire;
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::coincident_ends::{
     CoincidentRequest, anchors_without_coincident_ends,
 };
@@ -59,7 +58,7 @@ fn decode(input: &[f64]) -> Option<Decoded> {
 /// grid, pairs, trials and repairs. Out: `[the four accounts left, entry
 /// count, then 14 numbers an entry as edge_compute_anchors answers]`; an
 /// empty array for a malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_repair_coincident(input: &[f64]) -> Vec<f64> {
     let decoded = decode(input);

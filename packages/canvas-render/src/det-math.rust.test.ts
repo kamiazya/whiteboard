@@ -2,7 +2,7 @@ import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { cos, hypot, sin } from './det-math.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { built, EXPECTED_ABI, gluePath, wasm } from './test-utils/wasm/glue.js'
+import { built, gluePath, ORACLE_ABI, wasm } from './test-utils/wasm/glue.js'
 
 /**
  * det-math.ts against the Rust `whiteboard-det` it is the oracle for, run
@@ -91,11 +91,11 @@ describe('the wasm artifact this differential runs against', () => {
   // artifact before running this project, so its absence there is a broken
   // job, not a reason to pass.
   it.runIf(process.env.CI)('is built on CI', () => {
-    expect(built, `no wasm artifact at ${gluePath}; run \`pnpm rust:build:wasm\``).toBe(true)
+    expect(built, `no wasm artifact at ${gluePath}; run \`pnpm rust:build:wasm:oracle\``).toBe(true)
   })
 
   it.runIf(built)('speaks the ABI this test was written against', () => {
-    expect(wasm?.abi_version()).toBe(EXPECTED_ABI)
+    expect(wasm?.abi_version()).toBe(ORACLE_ABI)
   })
 })
 

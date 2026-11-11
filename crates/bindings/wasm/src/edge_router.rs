@@ -6,7 +6,6 @@
 
 use crate::edge_primitives::{count, points_len_of};
 use crate::routing_wire::{Malformed, Wire, side_index, side_of};
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_router::{RouteRequest, RoutingStyle, route_edge};
 use whiteboard_edge_routing::edge_sides::EdgeAnchorPair;
 use whiteboard_edge_routing::geometry::Rect;
@@ -58,7 +57,7 @@ pub(crate) fn style_of(n: f64) -> Option<RoutingStyle> {
 /// spent, rounded 0/1, from side, to side, from end, to end (0 none, 1
 /// arrow), point count, then x, y per point]`; an empty array for a
 /// malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_route_edge(input: &[f64]) -> Vec<f64> {
     let decoded = (|| {
