@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
-import type { Core, FacetBucketResult } from '@kamiazya/whiteboard-core-wasm'
+import type { Core } from '@kamiazya/whiteboard-core-wasm'
 import { CoreInputRefused } from '@kamiazya/whiteboard-core-wasm'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import {
@@ -29,6 +29,8 @@ import type { ServerDeps } from '../server-deps.js'
 import { FacetWriteRejectedError } from './errors.js'
 import { partitionFacetWrites } from './facet-write.js'
 import { refuseUnusableStencilLibrary } from './stencil-library.js'
+
+type FacetBucketResult = ReturnType<Core['facetBucketCheck']>
 
 /**
  * The Rust core's facet write (`facet_bucket_check`, through core-wasm's shim)
