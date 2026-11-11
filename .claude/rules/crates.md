@@ -195,6 +195,15 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/tests/linebreak_oracle.rs` regenerates from its `meta`
   record; `WHITEBOARD_RECORD_ORACLE=1` re-records it. The port's header lists the holes
   of the oracle it preserves.
+- **The font measurer is held to the Node measurer's recording**:
+  `packages/mcp-server/src/server/export/oracle/font-measure.jsonl` (recorded by
+  `measure-text.oracle.test.ts`, which sits in mcp-server because the measurer is a
+  composition root's and canvas-render may not import it) holds opentype.js over the
+  vendored Roboto and `constantRatioMeasureText`; `crates/core/canvas-render/tests/font_measure_oracle.rs`
+  replays it bit for bit, reading the faces itself. Each record's `class` says how far the
+  TypeScript is a per-glyph sum (`exact`, `segmented`, `substituted` by the face's GSUB
+  `ccmp`, which the port does not run). `ttf-parser` is unmaintained (RUSTSEC-2026-0192,
+  ignored in `deny.toml` with its reason).
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).

@@ -157,7 +157,9 @@
         "whiteboard-plugin-visual",
         "whiteboard-edge-routing"
       ],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "ttf-parser": "reads glyph indices, hmtx advances and hhea metrics from font bytes the root supplies: pure, no I/O, `forbid(unsafe_code)`, MIT OR Apache-2.0, built with the `std` feature alone (float methods) and so unchanged on wasm32 and native; pinned exactly because the measurer is held bit for bit to opentype.js"
+      },
       "absorbs": ["packages/canvas-render"]
     },
     "whiteboard-crdt": {

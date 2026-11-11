@@ -11,7 +11,17 @@ all-features = true
 # accepted one goes in `ignore` with the reason it does not reach us.
 version = 2
 yanked = "deny"
-ignore = []
+ignore = [
+  # whiteboard-canvas-render's font measurer. The advisory is an author's
+  # statement that no fixes will follow, not a vulnerability: the crate is
+  # `forbid(unsafe_code)`, allocates nothing and is handed font bytes the root
+  # chose (the vendored Roboto, or a face the user installed), so it reaches no
+  # memory-safety or injection path. The replacement the advisory names, skrifa,
+  # brings read-fonts, font-types and bytemuck's unsafe, and answers advances in
+  # f32 where the measurer is held to opentype.js's f64 bit for bit. Revisit
+  # when the measurer reads a table ttf-parser parses wrongly.
+  { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained, not vulnerable; see the comment above" },
+]
 
 [licenses]
 version = 2

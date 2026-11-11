@@ -72,6 +72,10 @@ libm = "=0.2.11"
 # Pinned exactly: the grapheme tables are a determinism input (QR-20b), and a
 # bump moves which strings are one symbol.
 unicode-segmentation = "=1.13.3"
+# Pinned exactly: the font measurer's advances are held to opentype.js bit for bit
+# (font-measure.jsonl), and a parser change could move which glyph a code point
+# maps to. `forbid(unsafe_code)`; `std` only because the parser needs `f32::sin` (the face-slant code).
+ttf-parser = { version = "=0.25.1", default-features = false, features = ["std"] }
 wasm-bindgen = "=0.2.130"
 # The test harness released with that wasm-bindgen; its runner ships in
 # wasm-bindgen-cli at the same version.
