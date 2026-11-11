@@ -21,10 +21,13 @@
 
 pub mod edge_arrows;
 pub mod edge_flatten;
+pub mod fake_measure;
 pub mod finite_box;
 pub mod glow;
 pub mod ink;
 pub mod legend_geometry;
+pub mod measure;
+pub mod measure_memo;
 pub mod node_outline;
 pub mod scene_bounds;
 pub mod scene_entries;
