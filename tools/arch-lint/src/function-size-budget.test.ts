@@ -745,10 +745,6 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // Builds every core crate for wasm32 and judges each artifact's imports in
   // one loop; the per-artifact judgement is the half to lift out.
   'crates/xtask/src/wasm_imports.rs#run': 76,
-  // The release environment, then one arm per artifact (native through
-  // cargo-auditable, wasm through wasm-bindgen); each arm is the function to
-  // lift out.
-  'crates/xtask/src/dist.rs#build': 70,
   // One ELF reading per mitigation (PIE, RELRO, NX, RPATH, strip, audit
   // data), in sequence; a function per mitigation is the next shrink.
   'crates/xtask/src/harden.rs#inspect_elf64': 51,
