@@ -12,18 +12,12 @@
  */
 import {
   composeWorkspaceStencils,
-  type DroppedWorkspaceStencil,
   type FacetRegistry,
   type WorkspaceStencils,
 } from '@kamiazya/whiteboard-facet-engine'
-import {
-  readStencilLibrary,
-  STENCIL_LIBRARY_PATH,
-  VISUAL_STENCILS_KEY,
-} from '@kamiazya/whiteboard-plugin-visual'
+import { readStencilLibrary, STENCIL_LIBRARY_PATH } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '../server-deps.js'
-import { FacetWriteRejectedError } from './errors.js'
 import { readWorkspaceLibraryFacets, type UnknownWorkspace } from './workspace-library-document.js'
 
 /**
@@ -38,7 +32,7 @@ import { readWorkspaceLibraryFacets, type UnknownWorkspace } from './workspace-l
  * readable when a document elsewhere in the workspace is wrong. It degrades
  * PER STENCIL — one the registry refuses is left out and the rest, the
  * deployment's included, stay usable — and the write path is where a bad
- * library is refused with its author present (`refuseUnusableStencilLibrary`).
+ * library is refused with its author present (the facet write's library stage).
  */
 export async function workspaceFacetRegistry(
   deps: ServerDeps,
@@ -52,41 +46,6 @@ export async function workspaceFacetRegistry(
     deps.facetRegistry,
     await workspaceStencilLibrary(deps, workspaceId, unknownWorkspace, listed),
   ).registry
-}
-
-/**
- * Refuses a write of the stencil library whose stencils the registry would
- * not accept, naming the stencil and the facet key.
- *
- * The facet's own schema checks a library's SHAPE; whether a stencil's facet
- * payloads satisfy the plugins that own them is known only once the library
- * is composed with the deployment's registry. Composing the candidate here
- * is what makes "a bad library is refused at the write" true, instead of the
- * write storing it and every later read dropping it unseen.
- */
-export function refuseUnusableStencilLibrary(
-  deps: Pick<ServerDeps, 'facetRegistry'>,
-  sets: Record<string, unknown>,
-): void {
-  const dropped = unusableStencils(deps.facetRegistry, sets)
-  if (dropped.length === 0) return
-  throw new FacetWriteRejectedError(
-    VISUAL_STENCILS_KEY,
-    dropped.map(({ name, message }) => `stencil "${name}": ${message}`).join('; '),
-  )
-}
-
-/** The stencils of the library `sets` carries that the deployment's registry would not accept. */
-export function unusableStencils(
-  deployment: FacetRegistry,
-  sets: Record<string, unknown>,
-): readonly DroppedWorkspaceStencil[] {
-  const candidate = sets[VISUAL_STENCILS_KEY]
-  if (candidate === undefined) return []
-  return composeWorkspaceStencils(
-    deployment,
-    readStencilLibrary({ [VISUAL_STENCILS_KEY]: candidate }),
-  ).dropped
 }
 
 /**

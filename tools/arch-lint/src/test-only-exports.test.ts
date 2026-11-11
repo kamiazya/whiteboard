@@ -217,6 +217,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/facet-engine/src/unrecognized-keys.ts#firstUnrecognizedKey':
+    "the TypeScript statement of the stripped-key rule that the Rust core's `first_unrecognized_key` mirrors, which the daemon answers with since its own copy was deleted; facet-engine's TypeScript stays for the browser (owner decision q47), unrecognized-keys.test.ts holds it, and facet-write-isolation.test.ts keeps the daemon from calling it",
   'packages/core-wasm/src/index.ts#CoreAbiMismatch':
     "the refusal a composition root catches when its wasm artifact and this shim come from different commits; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/index.ts#CoreOkfUnwritable':

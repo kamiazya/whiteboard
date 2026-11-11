@@ -61,8 +61,13 @@ export default mergeConfig(
       hookTimeout: 10_000,
       env: { WHITEBOARD_DATA_DIR: MCP_NODE_DATA_DIR },
       globalSetup: ['./vitest.data-dir-setup.ts'],
-      // The second installs the Rust OKF core (codec's core-setup); a missing artifact fails the project.
-      setupFiles: ['./vitest.log-setup.ts', '../codec/src/test-utils/core-setup/node.setup.ts'],
+      // The second installs the Rust OKF and JSON Canvas cores (codec's core-setup), the third the facet
+      // write's; a missing artifact fails the project.
+      setupFiles: [
+        './vitest.log-setup.ts',
+        '../codec/src/test-utils/core-setup/node.setup.ts',
+        '../server-core/src/test-utils/core-setup.node.setup.ts',
+      ],
     },
   }),
 )

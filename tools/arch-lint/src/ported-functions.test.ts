@@ -54,7 +54,7 @@ describe('PORTED_FUNCTIONS against the tree', () => {
   })
 })
 
-describe('the codecs at stage 4', () => {
+describe('the realm-dispatched functions at stage 4', () => {
   const codecs = PORTED_FUNCTIONS.filter((f) => f.realm !== undefined)
 
   it('are realm dispatchers with their TypeScript gone and no switch left', () => {
@@ -63,6 +63,7 @@ describe('the codecs at stage 4', () => {
       ['serializeOkf', 4, undefined, 'installOkfCore'],
       ['parseSpatial', 4, undefined, 'installSpatialCore'],
       ['serializeSpatial', 4, undefined, 'installSpatialCore'],
+      ['partitionFacetWrites', 4, undefined, 'installFacetWriteCore'],
     ])
     for (const f of codecs) {
       // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.

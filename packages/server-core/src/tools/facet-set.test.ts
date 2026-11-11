@@ -1,4 +1,3 @@
-import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import {
   readCoreFacets,
   readDocumentKind,
@@ -11,11 +10,9 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { SCOPED_TAG_RULE } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
-import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -39,11 +36,8 @@ import { TAG_LIBRARY_PATH, TagLibraryError } from './tag-library.js'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(
-  documentStore: FakeDocumentStore,
-  facetRegistry?: ServerDeps['facetRegistry'],
-): ServerDeps {
-  return makeTestDeps({ documentStore, documentIndex: documentStore.documentIndex, facetRegistry })
+function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+  return makeTestDeps({ documentStore, documentIndex: documentStore.documentIndex })
 }
 
 /** The document as the store holds it now, for reading back what a write stored. */
@@ -233,36 +227,11 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
 })
 
 describe('registered-facet validation (ADR-0013 decision 6)', () => {
-  const documentTicket = definePlugin({
-    id: 'ticket',
-    displayName: 'Ticket',
-    facets: [
-      defineFacet({
-        name: 'sample',
-        displayName: 'Sample',
-        version: 'v0',
-        targets: ['document'],
-        schema: z.object({ status: z.enum(['open', 'done']) }),
-      }),
-    ],
-  })
-  const registry = createFacetRegistry([...bundledPlugins, documentTicket])
-
-  async function setupWith(registryOverride = registry) {
+  async function setupWith() {
     const documentStore = new FakeDocumentStore()
     await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
-    return createFacetSetTool(makeDeps(documentStore, registryOverride))
+    return createFacetSetTool(makeDeps(documentStore))
   }
-
-  test('accepts a registered facet with a valid payload', async () => {
-    const tool = await setupWith()
-    const result = await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentIds: [DOCUMENT_ID],
-      facets: { 'ticket.sample/v0': { status: 'open' } },
-    })
-    expect(result.updated[0]?.facets).toEqual({ 'ticket.sample/v0': { status: 'open' } })
-  })
 
   test('rejects a registered facet with an invalid payload, storing nothing', async () => {
     const tool = await setupWith()
@@ -270,7 +239,7 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentIds: [DOCUMENT_ID],
-        facets: { 'ticket.sample/v0': { status: 'nope' } },
+        facets: { 'visual.symbol/v0': { kind: 'nope' } },
       }),
     ).rejects.toThrow(FacetWriteRejectedError)
   })
@@ -281,9 +250,9 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentIds: [DOCUMENT_ID],
-        facets: { 'ticket.sample/v3': { status: 'open' } },
+        facets: { 'visual.symbol/v3': { kind: 'emoji', char: '📌' } },
       }),
-    ).rejects.toThrow(/ticket\.sample\/v0/)
+    ).rejects.toThrow(/visual\.symbol\/v0/)
   })
 
   test('accepts visual.symbol on a markdown document, now that it targets one', async () => {

@@ -8,7 +8,7 @@ export {
 } from './api-errors.js'
 export { answerUnhandled, createServer } from './create-server.js'
 export { DocumentEngineTrapError } from './document-io.js'
-export type { FacetWriteCore, FacetWriteMismatch } from './facet-write-core.js'
+export { facetWriteCoreInstalled, installFacetWriteCore } from './facet-write-core.js'
 export { setLogSink } from './log.js'
 export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export { promoteWorkspace } from './operations/promote-workspace.js'
