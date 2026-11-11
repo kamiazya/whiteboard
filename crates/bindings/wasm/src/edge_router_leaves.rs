@@ -7,7 +7,6 @@
 
 use crate::edge_primitives::{count, point, points_len_of, rect};
 use crate::routing_wire::{Wire, side_index, side_of};
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::bend_route::{BendRouteEnds, bend_route};
 use whiteboard_edge_routing::edge_contact::{contact_for, marks_contact};
 use whiteboard_edge_routing::edge_geometry::{Side, segment_crosses_rect};
@@ -57,7 +56,7 @@ fn facing_ends(c: &[f64]) -> FacingEnds {
 /// as found 0/1 then x, y (NaN NaN for none); `slidForApproach` as x, y;
 /// `deepenedCorridor`; `approachesSideways(start, end, fromSide)` as 0/1;
 /// `strictInterior(fromRect)` as 4.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_side_slides(cases: &[f64]) -> Vec<f64> {
     cases
@@ -105,7 +104,7 @@ fn rects_then(values: &[f64]) -> Option<Vec<Rect>> {
 /// In: `[the first 14 numbers of an edge_side_slides case, m, then x, y, w, h
 /// per inflated obstacle]`. Out: the route as a count and x, y pairs, `-1`
 /// for none, and an empty array for a malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_zero_bend_slide(input: &[f64]) -> Vec<f64> {
     let (Some(head), Some(obstacles)) = (input.get(..14), input.get(14..).and_then(rects_then))
@@ -120,7 +119,7 @@ pub fn edge_zero_bend_slide(input: &[f64]) -> Vec<f64> {
 /// In: `[start, end, clearance, n, then block x, y, w, h, body x, y, w, h and
 /// escapable 0/1 per obstacle]`. Out: the route as a count and x, y pairs,
 /// `-1` for none, and an empty array for a malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_corner_detour(input: &[f64]) -> Vec<f64> {
     let decoded = (|| {
@@ -152,7 +151,7 @@ pub fn edge_corner_detour(input: &[f64]) -> Vec<f64> {
 /// In: `[n, then x, y per point, exit, entry, from side, to side, m, then x,
 /// y, w, h per rect]`. Out: the squared path as a count and x, y pairs, and
 /// an empty array for a malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_square_ends(input: &[f64]) -> Vec<f64> {
     let decoded = (|| {
@@ -179,7 +178,7 @@ pub fn edge_square_ends(input: &[f64]) -> Vec<f64> {
 /// In: the routing wire's nodes then edges (`crate::routing_wire`). Out: the
 /// choice count, then per entry in the map's iteration order its edge id and
 /// its from and to side index. A malformed input answers an empty array.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_initial_sides(input: &[f64]) -> Vec<f64> {
     let mut wire = Wire::new(input);
@@ -201,7 +200,7 @@ pub fn edge_initial_sides(input: &[f64]) -> Vec<f64> {
 /// `[marksContact 0/1, a contact 0/1, its tail x, y and tip x, y, its from
 /// and to side index]`, NaN and `-1` where there is no contact (both ends'
 /// rects read as `rectAtEnd` does).
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_contacts(input: &[f64]) -> Vec<f64> {
     let mut wire = Wire::new(input);
@@ -236,7 +235,7 @@ pub fn edge_contacts(input: &[f64]) -> Vec<f64> {
 /// from side index or -1, to side index or -1]`. Out per edge: `-2` when an
 /// end's rect is missing, else the route as a count and x, y pairs, `-1` for
 /// none.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_bend_routes(input: &[f64]) -> Vec<f64> {
     let mut wire = Wire::new(input);
@@ -267,7 +266,7 @@ pub fn edge_bend_routes(input: &[f64]) -> Vec<f64> {
 
 /// `selfEdgeLoopControlPoints` per case: in `[x, y, side index]`, out the
 /// two points' x, y.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_self_loop_points(cases: &[f64]) -> Vec<f64> {
     cases

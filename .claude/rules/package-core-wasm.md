@@ -23,7 +23,11 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   (apps/web's `layout-core-source.ts`).
 - The ABI check at init (`EXPECTED_ABI` against `abi_version()`): the shim
   and the artifact come from one commit, and a pair that does not is refused
-  as `CoreAbiMismatch` rather than failing on its first mismatched call.
+  as `CoreAbiMismatch` rather than failing on its first mismatched call. The
+  test lanes' oracle build (`oracle-surface`, `pnpm rust:build:wasm:oracle`)
+  reports `ORACLE_ABI`, which the shim also accepts (its production exports
+  are the shipped ones); canvas-render's layer-2 glue accepts only that one,
+  since the per-module exports it calls exist in no shipped artifact.
 - One typed call per user operation (QR-22b): `routeLayout` encodes a whole
   layout's routing onto the typed-array wire (`wire.ts`, the layout
   `crates/bindings/wasm` decodes), makes ONE call, decodes the routes and
@@ -102,5 +106,8 @@ check, `typecheck:abi` (`abi-conformance.ts` beside `src`, compiled in the
   the budget writeback, both refusals. Runs anywhere.
 - `core-wasm-rust`: the shim over the staged artifact. CI runs it in the
   `rust` job after the wasm build.
+- canvas-render's `canvas-render-rust` loads the oracle build from
+  `target/dist-oracle`, not `artifacts/`; the shipped artifact is never
+  asked for an export only a test calls.
 - What the shim ROUTES is held to the TypeScript composer by canvas-render's
   `route-layout.rust.test.ts`, which goes through `coreFrom`.

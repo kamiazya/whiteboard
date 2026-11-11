@@ -4,7 +4,6 @@
 
 use crate::edge_primitives::{count, points_len_of};
 use crate::routing_wire::Wire;
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_crossing_sweep::{build_pairwise_scores, shared_corners};
 use whiteboard_edge_routing::geometry::Point;
 use whiteboard_edge_routing::routing_budget::RoutingBudget;
@@ -26,7 +25,7 @@ fn paths(wire: &mut Wire<'_>) -> Option<Vec<Vec<Point>>> {
 /// unset), built 0/1, entry count, then key, overlap, illegible, crossings
 /// per entry in Map order, then sharedCorners(a, b) for every a, b in
 /// order]`; an empty array for a malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_pairwise_scores(input: &[f64]) -> Vec<f64> {
     let decoded = (|| {

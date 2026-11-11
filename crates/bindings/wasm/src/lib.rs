@@ -3,6 +3,13 @@
 //! Its export surface is coarse and JSON-shaped; the TypeScript shim built
 //! from the same commit checks [`abi_version`] at init and refuses an
 //! artifact whose surface it was not written against.
+//!
+//! The per-module exports the layer-2 differentials call (`det_*`, `edge_*`
+//! other than `edge_route_layout`) are TEST surface: they are exported only
+//! under the `oracle-surface` feature, which `cargo xtask dist wasm --oracle`
+//! builds for the test lanes and no shipped artifact enables. A function the
+//! feature leaves unexported is dead code to the linker, so the shipped
+//! module carries none of it unless the one-call-per-layout export reaches it.
 
 use wasm_bindgen::prelude::wasm_bindgen;
 
@@ -26,7 +33,15 @@ pub mod spatial_edges;
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
 /// on its first mismatched call.
-pub const ABI_VERSION: &str = "19";
+///
+/// The oracle build's surface is a superset the shipped one is not, so it
+/// reports a different value: a test lane handed the shipped artifact, or a
+/// shim handed the oracle one, is refused at init.
+#[cfg(not(feature = "oracle-surface"))]
+pub const ABI_VERSION: &str = "20";
+/// See the default build's constant.
+#[cfg(feature = "oracle-surface")]
+pub const ABI_VERSION: &str = "20+oracle-surface";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]
@@ -41,21 +56,21 @@ pub fn abi_version() -> String {
 /// property differential that holds them to canvas-render's `det-math.ts`
 /// crosses the boundary once per run. An index past the shorter array has
 /// no answer, so the caller passes arrays of one length.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen)]
 #[must_use]
 pub fn det_hypot(dx: &[f64], dy: &[f64]) -> Vec<f64> {
     dx.iter().zip(dy).map(|(&x, &y)| whiteboard_det::math::hypot(x, y)).collect()
 }
 
 /// `det::math::sin` over an array; see [`det_hypot`].
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen)]
 #[must_use]
 pub fn det_sin(xs: &[f64]) -> Vec<f64> {
     xs.iter().map(|&x| whiteboard_det::math::sin(x)).collect()
 }
 
 /// `det::math::cos` over an array; see [`det_hypot`].
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen)]
 #[must_use]
 pub fn det_cos(xs: &[f64]) -> Vec<f64> {
     xs.iter().map(|&x| whiteboard_det::math::cos(x)).collect()
@@ -71,7 +86,7 @@ pub fn det_cos(xs: &[f64]) -> Vec<f64> {
 /// per edge, which puts it in ADR-0054's declared fast-path class, and the
 /// spike measures what that boundary costs. A malformed input answers no
 /// route and spends nothing.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen)]
 #[must_use]
 pub fn edge_route_on_grid(input: &[f64]) -> Vec<f64> {
     use whiteboard_edge_routing::geometry::{Point, Rect};

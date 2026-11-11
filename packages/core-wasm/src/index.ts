@@ -43,7 +43,15 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '19'
+export const EXPECTED_ABI = '20'
+
+/**
+ * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
+ * per-module test exports) reports. Its production exports are the shipped
+ * ones, so the shim accepts it; the reverse is the test lanes' to refuse,
+ * since their exports are absent from a shipped artifact.
+ */
+export const ORACLE_ABI = `${EXPECTED_ABI}+oracle-surface`
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {
@@ -275,7 +283,7 @@ function routeAt(out: Float64Array, at: number, id: string): ResolvedEdgeNode | 
 export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Module): Core {
   glue.initSync({ module: source })
   const abi = glue.abi_version()
-  if (abi !== EXPECTED_ABI) throw new CoreAbiMismatch(abi)
+  if (abi !== EXPECTED_ABI && abi !== ORACLE_ABI) throw new CoreAbiMismatch(abi)
   const okf: OkfGlue = glue
   const spatial: SpatialGlue = glue
   const facets: FacetGlue = glue

@@ -21,7 +21,9 @@
 //!   `wasm-bindgen` at the version Cargo.toml pins, with the name and
 //!   producers sections removed. `pnpm rust:build:wasm` is this build, and
 //!   `cargo xtask size` measures what it writes, so the ledgered bytes are
-//!   the shipped ones.
+//!   the shipped ones. `dist wasm --oracle` is the same build with the
+//!   `oracle-surface` feature, into `target/dist-oracle`, for the layer-2 test
+//!   lanes: it carries the per-module test exports no shipped artifact has.
 //!
 //! `RUSTFLAGS` from the caller's environment is ignored: these flags are the
 //! whole set, passed as `CARGO_ENCODED_RUSTFLAGS`.
@@ -39,6 +41,10 @@ const AUDITABLE_INSTALL: &str = "cargo install --locked cargo-auditable --versio
 pub(crate) enum Artifact {
     Native,
     Wasm,
+    /// The wasm the layer-2 test lanes load: the shipped build plus the
+    /// `oracle-surface` feature's test exports. Never shipped, never measured
+    /// by `size` or `repro-check`, and built apart from the shipped one.
+    WasmOracle,
 }
 
 impl Artifact {
@@ -73,6 +79,12 @@ pub(crate) fn rustflags(
 /// builds, whose rustflags differ.
 pub(crate) fn default_target_dir(target_directory: &Path) -> PathBuf {
     target_directory.join("dist")
+}
+
+/// Where `dist wasm --oracle` builds by default: beside the shipped build, so
+/// neither overwrites the other.
+fn oracle_target_dir(target_directory: &Path) -> PathBuf {
+    target_directory.join("dist-oracle")
 }
 
 fn cargo_home() -> PathBuf {
@@ -146,7 +158,7 @@ pub(crate) fn build(
             run(cargo.arg("--target-dir").arg(target_dir))?;
             Ok(vec![target_dir.join("dist-native").join(NATIVE_PACKAGE)])
         }
-        Artifact::Wasm => {
+        Artifact::Wasm | Artifact::WasmOracle => {
             check_bindgen_version(root)?;
             cargo.args([
                 "build",
@@ -157,28 +169,37 @@ pub(crate) fn build(
                 WASM_TARGET,
                 "--release",
             ]);
+            if artifact == Artifact::WasmOracle {
+                cargo.args(["--features", "oracle-surface"]);
+            }
             run(cargo.arg("--target-dir").arg(target_dir))?;
-            let wasm = target_dir.join(WASM_TARGET).join("release").join("whiteboard_wasm.wasm");
-            let out = target_dir.join("wasm-bindgen").join(WASM_PACKAGE);
-            run(Command::new("wasm-bindgen")
-                .args([
-                    "--target",
-                    "web",
-                    "--remove-name-section",
-                    "--remove-producers-section",
-                    "--out-dir",
-                ])
-                .arg(&out)
-                .arg(&wasm))?;
-            let mut emitted: Vec<PathBuf> = std::fs::read_dir(&out)
-                .map_err(|e| vec![format!("cannot list {}: {e}", out.display())])?
-                .flatten()
-                .map(|e| e.path())
-                .collect();
-            emitted.sort();
-            Ok(std::iter::once(wasm).chain(emitted).collect())
+            bindgen(target_dir)
         }
     }
+}
+
+/// Runs wasm-bindgen over the release cargo artifact in `target_dir` and
+/// returns every file that ships: the cargo artifact, then what it emitted.
+fn bindgen(target_dir: &Path) -> Result<Vec<PathBuf>, Vec<String>> {
+    let wasm = target_dir.join(WASM_TARGET).join("release").join("whiteboard_wasm.wasm");
+    let out = target_dir.join("wasm-bindgen").join(WASM_PACKAGE);
+    run(Command::new("wasm-bindgen")
+        .args([
+            "--target",
+            "web",
+            "--remove-name-section",
+            "--remove-producers-section",
+            "--out-dir",
+        ])
+        .arg(&out)
+        .arg(&wasm))?;
+    let mut emitted: Vec<PathBuf> = std::fs::read_dir(&out)
+        .map_err(|e| vec![format!("cannot list {}: {e}", out.display())])?
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    emitted.sort();
+    Ok(std::iter::once(wasm).chain(emitted).collect())
 }
 
 fn check_bindgen_version(root: &Path) -> Result<(), Vec<String>> {
@@ -202,13 +223,22 @@ fn check_bindgen_version(root: &Path) -> Result<(), Vec<String>> {
 }
 
 pub(crate) fn run_task(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
-    let usage = || vec!["usage: cargo xtask dist native|wasm [--target-dir <dir>]".to_owned()];
-    let (artifact, rest) = match args {
+    let usage =
+        || vec!["usage: cargo xtask dist native|wasm [--oracle] [--target-dir <dir>]".to_owned()];
+    let (mut artifact, mut rest) = match args {
         [a, rest @ ..] => (Artifact::parse(a).ok_or_else(usage)?, rest),
         [] => return Err(usage()),
     };
+    if let ["--oracle", after @ ..] = rest {
+        if artifact != Artifact::Wasm {
+            return Err(usage());
+        }
+        artifact = Artifact::WasmOracle;
+        rest = after;
+    }
     let meta = metadata::load()?;
     let target_dir = match rest {
+        [] if artifact == Artifact::WasmOracle => oracle_target_dir(&meta.target_directory),
         [] => default_target_dir(&meta.target_directory),
         ["--target-dir", dir] => PathBuf::from(dir),
         _ => return Err(usage()),

@@ -8,7 +8,6 @@
 //! right, bottom, left).
 
 use crate::edge_primitives::{count, point, rect};
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_geometry::Side;
 use whiteboard_edge_routing::edge_rules::{
     Cost, End, LaneAxis, PreferenceContext, SIDES, TIERS, add_cost, compose_side_pairs,
@@ -31,7 +30,7 @@ fn side_index(side: Side) -> f64 {
 /// the crowd at the from end's top, right, bottom, left sides and at the to
 /// end's]`. Out per case: the pair count, then each pair's from and to side
 /// index. A trailing partial case is ignored.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_side_pairs(cases: &[f64]) -> Vec<f64> {
     let mut out = Vec::new();
@@ -61,7 +60,7 @@ pub fn edge_side_pairs(cases: &[f64]) -> Vec<f64> {
 ///
 /// In: 8 numbers a case, `[from rect, to rect]`. Out: 4 a case, the `h`
 /// window's lo and hi then the `v` window's, NaN NaN for none.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_lane_windows(cases: &[f64]) -> Vec<f64> {
     cases
@@ -86,7 +85,7 @@ fn rects_at(values: &[f64]) -> Option<(Vec<Rect>, &[f64])> {
 /// In: `[n, then x, y per point, then the foreign bodies, the node borders
 /// and the endpoint rects, each as a count and x, y, w, h per rect]`. Out:
 /// the seven-tier cost. A malformed input answers an empty array.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_self_penalty(input: &[f64]) -> Vec<f64> {
     let decoded = (|| {
@@ -113,9 +112,9 @@ fn cost(values: &[f64]) -> Cost {
 /// The cost operations per case.
 ///
 /// In: 15 numbers a case, `[a's seven tiers, b's seven, sign]`. Out: 10 a
-/// case, `[lessCost(a, b), lessCost(b, a), hasRepairableProblem(a)` as 0/1,
-/// then `addCost(a, b, sign)`'s seven]`.
-#[wasm_bindgen]
+/// case, `[lessCost(a, b), lessCost(b, a), hasRepairableProblem(a) as 0/1,
+/// then addCost(a, b, sign)'s seven]`.
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_cost_ops(cases: &[f64]) -> Vec<f64> {
     let flag = |b: bool| if b { 1.0 } else { 0.0 };

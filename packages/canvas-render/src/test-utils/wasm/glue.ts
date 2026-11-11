@@ -1,13 +1,15 @@
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import { EXPECTED_ABI } from '@kamiazya/whiteboard-core-wasm'
+import { EXPECTED_ABI, ORACLE_ABI } from '@kamiazya/whiteboard-core-wasm'
 
 /**
- * The wasm artifact `pnpm rust:build:wasm` writes, loaded once for the
- * canvas-render-rust project (ADR-0054, QR-21). Its directory arrives through
- * `WHITEBOARD_WASM_DIR`, set by vitest.rust.config.ts, so nothing here counts
- * its way up to the repository root.
+ * The ORACLE wasm artifact `pnpm rust:build:wasm:oracle` writes (the shipped
+ * build plus the `oracle-surface` feature's per-module test exports, which no
+ * shipped artifact carries), loaded once for the canvas-render-rust project
+ * (ADR-0054, QR-21). Its directory arrives through `WHITEBOARD_WASM_DIR`, set
+ * by vitest.rust.config.ts, so nothing here counts its way up to the
+ * repository root.
  */
 
 /** What the tests read of the wasm-bindgen glue, declared rather than imported: the glue is a build output. */
@@ -46,7 +48,7 @@ export interface WasmGlue {
  * and the artifact come from one commit. A stale artifact fails on this, not
  * on its first mismatched call.
  */
-export { EXPECTED_ABI }
+export { EXPECTED_ABI, ORACLE_ABI }
 
 const dir = process.env.WHITEBOARD_WASM_DIR ?? ''
 
@@ -76,12 +78,12 @@ let abiChecked = false
 /** The glue, failing loudly for a caller that only runs when it is built. */
 export function requireWasm(): WasmGlue {
   if (wasm === undefined)
-    throw new Error(`no wasm artifact at ${gluePath}; run \`pnpm rust:build:wasm\``)
+    throw new Error(`no wasm artifact at ${gluePath}; run \`pnpm rust:build:wasm:oracle\``)
   if (!abiChecked) {
     const abi = wasm.abi_version()
-    if (abi !== EXPECTED_ABI)
+    if (abi !== ORACLE_ABI)
       throw new Error(
-        `the wasm artifact speaks ABI ${abi}, these tests ${EXPECTED_ABI}; rebuild it`,
+        `the wasm artifact speaks ABI ${abi}, these tests ${ORACLE_ABI}; rebuild it with \`pnpm rust:build:wasm:oracle\``,
       )
     abiChecked = true
   }

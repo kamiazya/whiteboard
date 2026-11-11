@@ -5,7 +5,6 @@
 
 use crate::edge_primitives::{count, points_len_of};
 use crate::routing_wire::{Malformed, Wire, side_index, side_of};
-use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_edge_routing::edge_anchors::{
     anchor_context, build_anchor_groups, compute_anchors_for, patch_anchor_groups, patch_work,
 };
@@ -79,7 +78,7 @@ pub(crate) fn entry_values(id: EdgeId, e: &EdgeAnchorPair) -> impl Iterator<Item
 /// an entry: edge id, from (flag, x, y), to, from lane depth (flag, value),
 /// to lane depth, from side, to side (-1 for none), around]`; an empty
 /// array for a malformed input.
-#[wasm_bindgen]
+#[cfg_attr(feature = "oracle-surface", wasm_bindgen::prelude::wasm_bindgen)]
 #[must_use]
 pub fn edge_compute_anchors(input: &[f64]) -> Vec<f64> {
     let decoded = (|| {

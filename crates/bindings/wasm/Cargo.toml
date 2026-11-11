@@ -21,5 +21,10 @@ whiteboard-model = { path = "../../core/model" }
 whiteboard-edge-routing = { path = "../../core/edge-routing" }
 whiteboard-plugin-visual = { path = "../../core/plugin-visual" }
 
+[features]
+# The per-module exports the layer-2 differentials call. Off in every shipped
+# artifact; `cargo xtask dist wasm --oracle` builds the test lanes' artifact.
+oracle-surface = []
+
 [lints]
 workspace = true

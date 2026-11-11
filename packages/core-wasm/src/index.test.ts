@@ -8,6 +8,7 @@ import {
   CoreInputRefused,
   coreFrom,
   EXPECTED_ABI,
+  ORACLE_ABI,
 } from './index.js'
 import type { LabelRect, RoutingBudget } from './types.js'
 
@@ -44,6 +45,11 @@ describe('the core-wasm shim', () => {
   it('refuses an artifact that speaks another ABI', () => {
     const { glue } = fakeGlue('0', [])
     expect(() => coreFrom(glue, new Uint8Array())).toThrow(CoreAbiMismatch)
+  })
+
+  it('accepts the oracle build, whose production exports are the shipped ones', () => {
+    const { glue } = fakeGlue(ORACLE_ABI, [])
+    expect(() => coreFrom(glue, new Uint8Array())).not.toThrow()
   })
 
   it('reports an artifact refusing its input as malformed', () => {
