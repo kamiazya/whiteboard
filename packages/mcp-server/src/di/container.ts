@@ -13,7 +13,11 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
-import { coreLoaders, layoutCoreSettingsFrom } from '../server/export/layout-core.js'
+import {
+  coreLoaders,
+  layoutCoreSettingsFrom,
+  refuseFacetCoreForDeployment,
+} from '../server/export/layout-core.js'
 import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { mcpCallerNamespace, toolErrorText } from '../server/security/mcp-caller.js'
@@ -80,7 +84,13 @@ export function resolveServerDeps(
   const scope = storeScopeOf(container)
   // One wasm instance for every function the core answers, loaded on the
   // first call that asks for it.
-  const core = coreLoaders(layoutCoreSettingsFrom(process.env))
+  const coreSettings = layoutCoreSettingsFrom(process.env)
+  const facetRegistry = createFacetRegistry(bundledPlugins)
+  refuseFacetCoreForDeployment(
+    coreSettings,
+    facetRegistry.plugins.map((plugin) => plugin.id),
+  )
+  const core = coreLoaders(coreSettings)
   return {
     documentStore,
     blobStore,
@@ -89,7 +99,7 @@ export function resolveServerDeps(
     // export and the web editor also read. The registry is immutable data,
     // and a fresh one per tool call would rebuild every compat chain and
     // asset table on every write.
-    facetRegistry: createFacetRegistry(bundledPlugins),
+    facetRegistry,
     // The real font metrics, so every tool that lays a scene out measures
     // text the same way an export does. Without this they fall back to a
     // constant-ratio estimate while the PNG exporter — same process, same
@@ -104,6 +114,8 @@ export function resolveServerDeps(
     // (ADR-0054's CoreImpl). The OKF envelope and the JSON Canvas codec are
     // installed at boot, with no switch.
     layoutCore: core.layoutCore,
+    // The Rust core's facet write, as WHITEBOARD_CORE_FACETS says (default ts).
+    facetWriteCore: core.facetWriteCore,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

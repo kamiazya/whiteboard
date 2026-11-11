@@ -3,7 +3,7 @@ import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import { Container, ContainerModule } from 'inversify'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
 import {
   _autoCompactTimerCountForTests,
@@ -43,6 +43,22 @@ describe('resolveServerDeps', () => {
     expect(deps.documentStore).toBeInstanceOf(InMemoryDocumentStore)
     expect(deps.blobStore).toBeInstanceOf(InMemoryBlobStore)
     expect(deps.documentStore).toBe(container.get(TOKENS.DocumentStore))
+  })
+
+  describe('the facet write core', () => {
+    afterEach(() => vi.unstubAllEnvs())
+
+    it('is not served unless WHITEBOARD_CORE_FACETS asks for it', async () => {
+      vi.stubEnv('WHITEBOARD_CORE_FACETS', '')
+      const deps = resolveServerDeps(createContainer(storeMemoryModule))
+      expect(await deps.facetWriteCore?.()).toBeUndefined()
+    })
+
+    it('is the core under differential, which the bundled deployment boots with', async () => {
+      vi.stubEnv('WHITEBOARD_CORE_FACETS', 'differential')
+      const deps = resolveServerDeps(createContainer(storeMemoryModule))
+      expect((await deps.facetWriteCore?.())?.impl.partitionFacetWrites).toBe('differential')
+    })
   })
 
   it('supplies the real opentype measurer, not the constant-ratio fallback', async () => {

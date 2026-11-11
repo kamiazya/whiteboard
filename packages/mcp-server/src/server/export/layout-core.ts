@@ -10,6 +10,7 @@ import {
   spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import type { FacetWriteCore, FacetWriteMismatch } from '@kamiazya/whiteboard-server-core'
 import { z } from 'zod'
 import { findPackageRoot } from '../../shared/package-root.js'
 import { getLogger } from '../log.js'
@@ -26,6 +27,14 @@ const log = getLogger('layout-core')
  * failure, which is what a test run wants; a person dogfooding wants the
  * log line and the drawing.
  *
+ * `WHITEBOARD_CORE_FACETS` is the same switch for the facet write (every
+ * write of a facets bucket: `wb_facet_set`, `wb_canvas_edit`, a document's
+ * frontmatter). It is `ts` while its parity checklist is open
+ * (docs/contributing/parity/facet-engine.md); the dev scripts and CI's test
+ * jobs set `differential`. The core holds the bundled plugin's registry
+ * alone, so a deployment composing another plugin set refuses to boot under
+ * `differential` or `rust` (`refuseFacetCoreForDeployment`).
+ *
  * The OKF envelope and the JSON Canvas codec have no switch: their TypeScript
  * is deleted (docs/contributing/parity/okf-codec.md,
  * docs/contributing/parity/json-canvas-codec.md), so the daemon installs the
@@ -33,6 +42,7 @@ const log = getLogger('layout-core')
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
+  WHITEBOARD_CORE_FACETS: z.enum(['ts', 'differential', 'rust']).default('ts'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
@@ -41,6 +51,7 @@ export type LayoutCoreSettings = z.infer<typeof layoutCoreSettingsSchema>
 export function layoutCoreSettingsFrom(env: Readonly<Record<string, string | undefined>>) {
   return layoutCoreSettingsSchema.parse({
     WHITEBOARD_CORE: env.WHITEBOARD_CORE || undefined,
+    WHITEBOARD_CORE_FACETS: env.WHITEBOARD_CORE_FACETS || undefined,
     WHITEBOARD_CORE_MISMATCH: env.WHITEBOARD_CORE_MISMATCH || undefined,
     WHITEBOARD_CORE_DIR: env.WHITEBOARD_CORE_DIR || undefined,
   })
@@ -102,13 +113,77 @@ function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => voi
   }
 }
 
-/** The `ServerDeps` factory the core serves, over one load. */
-export interface CoreLoaders {
-  readonly layoutCore: () => Promise<LayoutCore | undefined>
+/**
+ * A facet-write difference or decline, reported, or thrown under `throw`. A
+ * decline is answered by the TypeScript, so only a run that asked to fail on
+ * one sees it as a failure; otherwise it is a counted record
+ * (`event: 'facets-declined'`).
+ */
+function facetReporter(settings: LayoutCoreSettings): (mismatch: FacetWriteMismatch) => void {
+  return (mismatch) => {
+    if (mismatch.kind === 'declined') {
+      const summary = declineSummary(mismatch)
+      log.warning(
+        { event: 'facets-declined', ...summary },
+        'the Rust core declined; answered in TypeScript',
+      )
+      if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
+        throw new Error(`facet write core declined: ${JSON.stringify(summary)}`)
+      }
+      return
+    }
+    const summary = { fn: mismatch.fn, kind: mismatch.kind, ts: mismatch.ts, rust: mismatch.rust }
+    log.warning(summary, 'the Rust core and the TypeScript disagree')
+    log.debug({ target: mismatch.target, bucket: mismatch.bucket }, 'what reproduces it')
+    if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
+      throw new Error(`facet write core ${mismatch.kind}: ${JSON.stringify(summary)}`)
+    }
+  }
+}
+
+/** A decline as it is reported: the function and the core's reason, never the payload. */
+function declineSummary(mismatch: { readonly fn: string; readonly err: unknown }) {
+  const { err } = mismatch
+  return { fn: mismatch.fn, err: err instanceof Error ? err.message : String(err) }
 }
 
 /**
- * The `ServerDeps.layoutCore` factory: nothing loaded while the switch reads
+ * The plugin ids the Rust core's facet registry holds: the bundled `visual`
+ * plugin it is built from (plugin-visual's JSON asset tables). A deployment
+ * whose registry holds any other set cannot be judged by it.
+ */
+export const RUST_FACET_PLUGIN_IDS: readonly string[] = ['visual']
+
+/**
+ * Refuses a deployment the core cannot judge: under `differential` or `rust`
+ * the facet write is compared with, or answered by, a registry of
+ * `RUST_FACET_PLUGIN_IDS` alone, so a deployment composing a different plugin
+ * set would see every write of its own facets called a difference, or
+ * accepted unvalidated.
+ */
+export function refuseFacetCoreForDeployment(
+  settings: LayoutCoreSettings,
+  deploymentPluginIds: readonly string[],
+): void {
+  if (settings.WHITEBOARD_CORE_FACETS === 'ts') return
+  const same =
+    deploymentPluginIds.length === RUST_FACET_PLUGIN_IDS.length &&
+    RUST_FACET_PLUGIN_IDS.every((id) => deploymentPluginIds.includes(id))
+  if (same) return
+  throw new Error(
+    `WHITEBOARD_CORE_FACETS=${settings.WHITEBOARD_CORE_FACETS} needs a deployment whose plugins are [${RUST_FACET_PLUGIN_IDS.join(', ')}], the registry the Rust core holds, and this one composes [${deploymentPluginIds.join(', ')}]; set WHITEBOARD_CORE_FACETS=ts`,
+  )
+}
+
+/** The `ServerDeps` factories the core serves, over one load. */
+export interface CoreLoaders {
+  readonly layoutCore: () => Promise<LayoutCore | undefined>
+  readonly facetWriteCore: () => Promise<FacetWriteCore | undefined>
+}
+
+/**
+ * The `ServerDeps.layoutCore` and `ServerDeps.facetWriteCore` factories:
+ * nothing loaded while every switch reads
  * `ts`, else the staged glue and wasm read once, on the first call that asks
  * (or at boot, which shares the one load). The glue is
  * imported by PATH at run time, never bundled, so a build of this package
@@ -119,12 +194,18 @@ export interface CoreLoaders {
  */
 export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
   const routing = settings.WHITEBOARD_CORE
+  const facets = settings.WHITEBOARD_CORE_FACETS
   const loadCore = coreLoader(settings)
   return {
     layoutCore: memoized(routing, loadCore, (core) => ({
       routing: core,
       impl: { routeLayout: routing },
       onMismatch: reporter(settings),
+    })),
+    facetWriteCore: memoized(facets, loadCore, (core) => ({
+      facets: core,
+      impl: { partitionFacetWrites: facets },
+      onMismatch: facetReporter(settings),
     })),
   }
 }
