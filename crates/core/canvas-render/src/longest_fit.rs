@@ -1,6 +1,11 @@
 //! The longest prefix that fits, found by galloping search, ported from
 //! `longest-fit.ts`.
 
+/// More rounds than any of the three loops can take on a `usize` range: a
+/// doubling step or a halving gap is exhausted within `usize::BITS` rounds,
+/// and this is twice that on a 64-bit target.
+const ROUNDS: u32 = 128;
+
 /// The largest `n` in `[0, limit]` for which `fits(n)` holds, where `fits(0)`
 /// is taken as true and `fits` is PREFIX-CLOSED: once a prefix of `n` pieces
 /// does not fit, no longer prefix does. A rendered width is monotone in prefix
@@ -35,7 +40,13 @@ pub fn longest_fitting_count(
     } else {
         gallop_down(&mut fits, first)
     };
-    while hi.saturating_sub(lo) > 1 {
+    // Each round halves `hi - lo`, so the bisection ends within `ROUNDS`; the
+    // bound only makes that termination a property of the loop rather than of
+    // its arithmetic.
+    for _ in 0..ROUNDS {
+        if hi.saturating_sub(lo) <= 1 {
+            break;
+        }
         let mid = lo.saturating_add(hi.saturating_sub(lo) / 2);
         if fits(mid) {
             lo = mid;
@@ -50,7 +61,12 @@ pub fn longest_fitting_count(
 fn gallop_up(fits: &mut impl FnMut(usize) -> bool, from: usize, limit: usize) -> (usize, usize) {
     let mut lo = from;
     let mut step = 1_usize;
-    while lo < limit {
+    // `step` doubles each round and saturates, so `lo` reaches `limit` within
+    // `ROUNDS`.
+    for _ in 0..ROUNDS {
+        if lo >= limit {
+            break;
+        }
         let probe = limit.min(lo.saturating_add(step));
         if !fits(probe) {
             return (lo, probe);
@@ -68,7 +84,10 @@ fn gallop_up(fits: &mut impl FnMut(usize) -> bool, from: usize, limit: usize) ->
 fn gallop_down(fits: &mut impl FnMut(usize) -> bool, from: usize) -> (usize, usize) {
     let mut hi = from;
     let mut step = 1_usize;
-    while hi > step {
+    for _ in 0..ROUNDS {
+        if hi <= step {
+            break;
+        }
         let probe = hi.saturating_sub(step);
         if fits(probe) {
             return (probe, hi);
