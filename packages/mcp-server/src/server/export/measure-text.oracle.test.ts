@@ -359,7 +359,12 @@ const encode = (records: readonly unknown[]): string =>
 
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
   writeFileSync(FILE, encode(await answers(inputs())))
-  writeFileSync(JOINS_FILE, `${JSON.stringify(joinRanges())}\n`)
+  writeFileSync(
+    JOINS_FILE,
+    `[\n${joinRanges()
+      .map(([low, high]) => `  [${low}, ${high}]`)
+      .join(',\n')}\n]\n`,
+  )
 }
 
 describe('the recorded font measurer', () => {

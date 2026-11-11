@@ -12,7 +12,7 @@
 //!
 //! The vertical metrics are the `hhea` table's, which is the table opentype.js
 //! reads; `ttf-parser`'s own `ascender()` would prefer OS/2 for a face that
-//! sets `USE_TYPO_METRICS`, so the table is read directly.
+//! sets the use-typographic-metrics bit, so the table is read directly.
 //!
 //! Two things the TypeScript does that this does not, and a third it does that
 //! this repeats:
