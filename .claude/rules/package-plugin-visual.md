@@ -96,6 +96,21 @@ pointer names an existing definition. `editors.ts` is only the catalog loader
 (the icon band, then the emoji sections by dynamic import), so the lazy chunk
 is unchanged.
 
+## The asset tables are JSON files, and the Rust core embeds them
+
+`src/assets/{themes,stencils,icons-lucide,icons-glyphs}.json` are the ONLY place
+the bundled assets' values are written (owner decision q45); the design
+reasoning that sat in the old TypeScript is `src/assets/README.md`. `themes.ts`,
+`stencils.ts` and `icons/icons.ts` import them through `asset-table.ts`, which
+judges each entry by the engine's schema and returns the ORIGINAL objects (key
+order and every number as the file wrote them), and `crates/core/plugin-visual`'s
+`host.rs` `include_str!`s the same bytes into `visual_registry()`. Edit the JSON,
+never a copy. Registration order is the files' order, vendored lucide icons
+(sorted, held by `assets/assets.test.ts`) and then the glyphs (edge, category,
+signature); the oracle replay asserts the Rust registry's asset ids equal the
+recorded ones. Do not let a formatter sort the files. The emoji and shortcode
+tables are not here yet.
+
 ## There is no second plugin, and there was one
 
 `bundledPlugins` is `[visualPlugin]`, pinned as the exact list. It was

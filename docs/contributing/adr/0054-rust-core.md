@@ -892,6 +892,19 @@ length checks run on any value with a `length`, among them); they are in
 [the parity checklist](../parity/facet-engine.md). There is no wasm export and
 no switch yet: the export, the shim and the `PORTED_FUNCTIONS` entries are S8.
 
+**Shipped (step 6, S7).** The visual plugin's data half is Rust: the bundled
+asset tables (themes, stencils, the lucide icons, the edge and category glyphs
+and the signature) are JSON files in `packages/plugin-visual/src/assets/`, the
+single source the TypeScript imports and the Rust core embeds (owner decision
+q45; the emoji and shortcode tables stay for steps 7 and 8). `whiteboard_model::json`
+is the JSON reader, moved from the codec because the facet engine reads its
+contracts with it and `serde_json` sorts keys. `whiteboard_facet_engine::plugin::build`
+loads a plugin from its manifest, contracts and tables, and
+`whiteboard_plugin_visual::host::visual_registry()` is the bundled one; the
+recorded write oracle now replays against it and asserts its registered ids.
+Compat, the derived form, several plugins and a workspace stencil library, and
+the wasm export and switch, are S8 ([the parity checklist](../parity/facet-engine.md)).
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 

@@ -226,9 +226,11 @@ impl Reader<'_> {
         let mut out = String::new();
         loop {
             let start = self.at;
-            while !matches!(self.peek(), None | Some(b'"' | b'\\' | 0..=0x1f)) {
-                self.bump();
-            }
+            // Counted rather than walked: a mutated condition then reads the
+            // wrong text instead of never ending.
+            let rest = self.text.as_bytes().get(self.at..).unwrap_or_default();
+            let run = rest.iter().take_while(|b| !matches!(b, b'"' | b'\\' | 0..=0x1f)).count();
+            self.at = self.at.saturating_add(run);
             // The run stops only at ASCII bytes, so both ends are char boundaries.
             out.push_str(self.text.get(start..self.at).unwrap_or_default());
             match self.peek() {

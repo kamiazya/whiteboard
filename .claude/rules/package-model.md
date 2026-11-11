@@ -330,3 +330,8 @@ paths:
 
 - Adding a hand-written interface next to a schema instead of `z.infer` — this is the exact drift class the package exists to prevent.
 - Validating extension-facet keys leniently (silent drop). The contract is reject-not-drop.
+
+- **The Rust twin reads JSON itself.** `crates/core/model/src/json.rs` is `JSON.parse`'s reading of
+  a text into the model's `Value`, keys in written order (`serde_json` sorts them), and is what the
+  JSON Canvas codec and the facet engine's plugin loader both read with. It lives here because
+  both depend on this crate and neither on the other.
