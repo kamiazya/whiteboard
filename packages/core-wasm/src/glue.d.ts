@@ -15,4 +15,5 @@ declare module '#glue' {
   export function okf_serialize(frontmatter: string): string
   export function json_canvas_parse(text: string): string
   export function json_canvas_serialize(canvas: string, strict: boolean): string
+  export function facet_bucket_check(target: string, bucket: string, library: string): string
 }

@@ -2,7 +2,12 @@
 // (canvas-render compiles this source through the workspace link) sees it
 // with no staged artifact.
 /// <reference path="./glue.d.ts" />
-import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  EdgeRoutingStyle,
+  ExtensionFacets,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
 import {
@@ -14,6 +19,14 @@ import {
   type SpatialParseResult,
   serializeSpatial,
 } from './json-canvas.js'
+import {
+  type FacetBucketResult,
+  type FacetErrors,
+  type FacetGlue,
+  type FacetWriteTarget,
+  facetBucketCheck,
+  type StoredStencilLibrary,
+} from './facet-write.js'
 import {
   type OkfDocument,
   type OkfErrors,
@@ -30,7 +43,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '18'
+export const EXPECTED_ABI = '19'
 
 /** The artifact speaks another ABI than this shim: the two came from different commits. */
 export class CoreAbiMismatch extends Error {
@@ -147,6 +160,21 @@ export interface Core {
    * TypeScript.
    */
   serializeSpatial(canvas: SpatialCanvas, mode: SpatialMode): string
+
+  /**
+   * `partitionFacetWrites` and the stencil library's refusal, for a write that
+   * targets `target`: the sets and deletions of `bucket`, or the first key
+   * refused with the stage and what it says. `library` is the workspace's
+   * stored stencils, passed for a bucket that writes a stencil. Throws
+   * `CoreInputRefused` for a call the artifact does not answer (past its caps,
+   * a value the wire does not carry), which a root answers from the
+   * TypeScript.
+   */
+  facetBucketCheck(
+    target: FacetWriteTarget,
+    bucket: ExtensionFacets | undefined,
+    library?: StoredStencilLibrary,
+  ): FacetBucketResult
 }
 
 const ends = ['none', 'arrow'] as const
@@ -250,7 +278,8 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   if (abi !== EXPECTED_ABI) throw new CoreAbiMismatch(abi)
   const okf: OkfGlue = glue
   const spatial: SpatialGlue = glue
-  const errors: OkfErrors & SpatialErrors = {
+  const facets: FacetGlue = glue
+  const errors: OkfErrors & SpatialErrors & FacetErrors = {
     refused: (operation, code, detail) => new CoreInputRefused(operation, code, detail),
     unwritable: (issues) => new CoreOkfUnwritable(issues),
     invalid: (issues) => new CoreSpatialInvalid(issues),
@@ -258,6 +287,8 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   return {
     parseSpatial: (text) => parseSpatial(spatial, errors, text),
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
+    facetBucketCheck: (target, bucket, library) =>
+      facetBucketCheck(facets, errors, target, bucket, library),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
@@ -276,3 +307,13 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     },
   }
 }
+
+export type {
+  DroppedStencil,
+  FacetBucketResult,
+  FacetIssue,
+  FacetIssueCode,
+  FacetRefusal,
+  FacetWriteTarget,
+  StoredStencilLibrary,
+} from './facet-write.js'

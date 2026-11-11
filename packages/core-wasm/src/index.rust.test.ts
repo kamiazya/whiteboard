@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   abi_version,
   edge_route_layout,
+  facet_bucket_check,
   initSync,
   json_canvas_parse,
   json_canvas_serialize,
@@ -40,8 +41,9 @@ describe('the core-wasm shim over the built artifact', () => {
         okf_serialize,
         json_canvas_parse,
         json_canvas_serialize,
+        facet_bucket_check,
       ].map((f) => typeof f),
-    ).toEqual(Array(7).fill('function'))
+    ).toEqual(Array(8).fill('function'))
   })
 
   it('routes a layout from the bytes, and again from a compiled module', async () => {
