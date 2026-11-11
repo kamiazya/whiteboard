@@ -923,7 +923,7 @@ switch a root dispatches through, and the `PORTED_FUNCTIONS` entry, are the next
 increments ([the parity checklist](../parity/facet-engine.md)).
 
 **Shipped (step 6, S8, the switch).** The daemon's facet write is a per-function
-switch, `WHITEBOARD_CORE_FACETS` (`ts` by default; `differential` in the dev
+switch, `WHITEBOARD_CORE_FACETS` (`rust` by default, with `ts` the rollback; `differential` in the dev
 scripts and CI with mismatches throwing). server-core's `facetWriterFor` is the
 dispatcher over `ServerDeps.facetWriteCore`: `rust` answers with the core and
 throws the classes the TypeScript throws, and `differential` compares stage,

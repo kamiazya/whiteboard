@@ -45,7 +45,13 @@ describe('whole-document writers refuse a stencil library the registry would not
   test('wb_document_set refuses it, naming the stencil and facet, and writes nothing', async () => {
     const store = new FakeDocumentStore()
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-    const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+    // The TypeScript's wording is what is pinned; the Rust core names places and
+    // codes instead (a declared deviation).
+    const deps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      facetWriteCore: undefined,
+    })
 
     const refusal = await settle(
       createDocumentSetOperation(deps).execute({

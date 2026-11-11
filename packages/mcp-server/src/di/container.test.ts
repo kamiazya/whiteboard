@@ -48,8 +48,14 @@ describe('resolveServerDeps', () => {
   describe('the facet write core', () => {
     afterEach(() => vi.unstubAllEnvs())
 
-    it('is not served unless WHITEBOARD_CORE_FACETS asks for it', async () => {
+    it('is the Rust core unless WHITEBOARD_CORE_FACETS says otherwise', async () => {
       vi.stubEnv('WHITEBOARD_CORE_FACETS', '')
+      const deps = resolveServerDeps(createContainer(storeMemoryModule))
+      expect((await deps.facetWriteCore?.())?.impl.partitionFacetWrites).toBe('rust')
+    })
+
+    it('serves none under ts, the rollback setting', async () => {
+      vi.stubEnv('WHITEBOARD_CORE_FACETS', 'ts')
       const deps = resolveServerDeps(createContainer(storeMemoryModule))
       expect(await deps.facetWriteCore?.()).toBeUndefined()
     })

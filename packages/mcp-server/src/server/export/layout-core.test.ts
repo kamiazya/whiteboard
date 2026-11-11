@@ -104,7 +104,7 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
-      WHITEBOARD_CORE_FACETS: 'ts',
+      WHITEBOARD_CORE_FACETS: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
@@ -285,16 +285,18 @@ describe('the daemon facet write core', () => {
   const facetCore = (env: Record<string, string>) =>
     coreLoaders(layoutCoreSettingsFrom(env)).facetWriteCore
 
-  it('reads WHITEBOARD_CORE_FACETS as ts unless something sets it, and refuses an unknown value', () => {
-    expect(layoutCoreSettingsFrom({}).WHITEBOARD_CORE_FACETS).toBe('ts')
-    expect(layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'rust' }).WHITEBOARD_CORE_FACETS).toBe(
-      'rust',
+  it('reads WHITEBOARD_CORE_FACETS as rust unless something sets it, and refuses an unknown value', () => {
+    expect(layoutCoreSettingsFrom({}).WHITEBOARD_CORE_FACETS).toBe('rust')
+    expect(layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'ts' }).WHITEBOARD_CORE_FACETS).toBe(
+      'ts',
     )
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'fast' })).toThrow()
   })
 
-  it('loads nothing under ts', async () => {
-    expect(await facetCore({ WHITEBOARD_CORE_DIR: emptyDir() })()).toBeUndefined()
+  it('loads nothing under ts, the rollback setting', async () => {
+    expect(
+      await facetCore({ WHITEBOARD_CORE_FACETS: 'ts', WHITEBOARD_CORE_DIR: emptyDir() })(),
+    ).toBeUndefined()
   })
 
   it.runIf(built)('serves the staged core under differential, once', async () => {

@@ -8,8 +8,9 @@ is `validateFacetWrite`, `targetsOf` and `assetRefsOf` in
 `packages/facet-engine/src/registry.ts`, with each facet's generated Zod schema
 as the oracle. **S8 adds the wasm export (`facet_bucket_check`, below), its
 shim, and the switch the daemon dispatches through (stage 2, `differential`;
-the default is still `ts`).** `PORTED_FUNCTIONS` lists `partitionFacetWrites`
-at stage 2.
+the default is `rust`, with the TypeScript kept as the `ts` rollback until its
+deletion).** `PORTED_FUNCTIONS` lists `partitionFacetWrites` at stage 2, which
+stays until the TypeScript is deleted.
 
 ## What shipped
 
@@ -121,7 +122,7 @@ the caps and a `visual_registry()` built once behind a `OnceLock`.
 
 ## What S8 added: the switch
 
-`WHITEBOARD_CORE_FACETS` (`ts`, `differential`, `rust`; default `ts`) reaches
+`WHITEBOARD_CORE_FACETS` (`ts`, `differential`, `rust`; default `rust`) reaches
 every write of a facets bucket: `wb_facet_set`, `wb_canvas_edit`'s `facets`, a
 document's frontmatter facets and the stencil library a write carries. The
 dispatcher is `facetWriterFor(...).write` in server-core
@@ -147,8 +148,9 @@ daemon fills from the one wasm instance the other switches share.
   the TypeScript in every mode and reported as `facets-declined`.
 - **The library** is sent only with a write whose bucket holds a facet that takes
   a stencil; every other write still lists the workspace zero times.
-- **Boot.** Under `differential` or `rust` the daemon refuses to start unless its
-  plugins are `['visual']`, the registry the core holds.
+- **Boot.** Under `differential` or `rust` (the default) the daemon refuses to
+  start unless its plugins are `['visual']`, the registry the core holds; a
+  deployment composing another set sets `ts`.
 - **CI.** The mcp-node and test-shared (server-core-node) steps, the e2e and
   mcp-smoke steps and both packaged smokes run `differential` with mismatches
   throwing; the dev scripts default to `differential`. The whole server-core and
@@ -219,7 +221,7 @@ now has a unit test.
 | 7 | Layer 2: property differential | met | `facet-write.core.test.ts`: generated buckets and a payload per registered facet, valid, broken and stripped, through the shim against `partitionFacetWrites`, every stage reached; the recorded oracles hold the registry below it |
 | 8 | Layer 3: byte-identical on wasm | met | Both replays and every test run on wasm32 with the same count: 94 tests for `whiteboard-facet-engine` and 25 for `whiteboard-plugin-visual` on both targets (`cargo xtask cross-target`) |
 | 9 | Tolerated differences are ledger entries | met | The message (q43), above |
-| 10 | `differential` has run in CI and dogfooding | partly | CI runs it with mismatches throwing (above); the dev scripts default to it, and a dogfooding pass over a real workspace has not been recorded |
+| 10 | `differential` has run in CI and dogfooding | met (CI and a smoke run) | CI runs it with mismatches throwing (above) and the dev scripts default to it. `WHITEBOARD_CORE_FACETS=differential WHITEBOARD_CORE_MISMATCH=throw pnpm smoke:e2e` also ran green ("ALL OK") against a real daemon through the MCP surface: `wb_facet_set` on markdown documents, nodes, edges and the canvas (set, merge, null tombstone, refusals), `wb_canvas_edit` facet payloads, a workspace-defined stencil and tag library, and a document round trip, with zero mismatches and zero declines reported (a difference throws and fails the run). Per owner decision q18 only development data exists, so no run over a real user workspace is claimed |
 | 11 | `cargo mutants` clean or ledgered; coverage at the floor | met | `cargo mutants` over `schema/*.rs` and `registry.rs`, judged by this crate's and `whiteboard-plugin-visual`'s tests: 326 mutants, 137 caught, 188 unviable and one missed (a non-empty default read as an empty one), which a test now judges; nothing is ledgered. `pnpm rust:mutants:pr`, shard 1 of 8: 41 mutants, 35 caught, 6 unviable, none missed. Coverage of `core/facet-engine` is 100.00% of lines, regions and functions against a floor of 100 and 100. The facet write (S8): `cargo mutants --in-diff` over `partition.rs` and `registry.rs` (23 mutants: 18 caught, 5 unviable) and over `facet_write.rs` (35: 32 caught, 3 unviable; the first run missed one, a mapping not counted toward the depth and values caps, which a test now judges), none missed and none ledgered. Coverage of `core/facet-engine` stays 100.00% of lines, regions and functions; `bindings/wasm` is 89.84% lines and 85.14% regions against floors raised to 88 and 84 |
 | 12 | One call per user operation; boundary cost | met | A bucket and its library cross once (`facet_bucket_check`); the cost at the caps is in the entry's reason: 421 ms for the slowest draw, 88 ms for one 8 MiB string |
 | 13 | Artifact size | met | The export links the interpreter, the loader, the registry and the plugin's files: 1,096,529 to 1,363,305 bytes unstripped, 632,603 to 835,344 shipped; the ceiling is raised by hand with that reason |
@@ -227,5 +229,5 @@ now has a unit test.
 | 15 | Logging; poison-and-recover | n/a | Refusals are values; no state |
 | 16 | `PORTED_FUNCTIONS` | met | `partitionFacetWrites`, stage 2: the switch in `packages/server-core/src/facet-write-core.ts`, `facet_bucket_check`, the shim's `facetBucketCheck` |
 | 17 | Unicode tables | n/a | None: a string is measured in code points, with no table |
-| 18 | Exit criteria | not yet | S8 |
+| 18 | Exit criteria | partly | The switch defaults to `rust`; `ts` and `differential` remain as the rollback and the comparison. The TypeScript's deletion, and with it stage 4, is the next PR |
 | 19 | Docs reflect the shipped state | met | This file, the crate row, `package-facet-engine.md`, ADR-0054's note |

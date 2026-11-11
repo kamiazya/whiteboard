@@ -134,7 +134,8 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'partitionFacetWrites',
     // The judgement of a facets bucket and the stencil library's refusal are
-    // one call over the wire, so one entry answers both.
+    // one call over the wire, so one entry answers both. Stays 2 although the
+    // switch defaults to `rust`, for the reason `routeLayout`'s does.
     stage: 2,
     ts: { file: 'packages/server-core/src/tools/facet-write.ts', export: 'partitionFacetWrites' },
     switch: {

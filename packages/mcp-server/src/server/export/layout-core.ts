@@ -30,11 +30,11 @@ const log = getLogger('layout-core')
  *
  * `WHITEBOARD_CORE_FACETS` is the same switch for the facet write (every
  * write of a facets bucket: `wb_facet_set`, `wb_canvas_edit`, a document's
- * frontmatter). It is `ts` while its parity checklist is open
- * (docs/contributing/parity/facet-engine.md); the dev scripts and CI's test
- * jobs set `differential`. The core holds the bundled plugin's registry
- * alone, so a deployment composing another plugin set refuses to boot under
- * `differential` or `rust` (`refuseFacetCoreForDeployment`).
+ * frontmatter). It is `rust` unless something sets it, with the same
+ * rollback and the same `differential` in the dev scripts and CI's test jobs
+ * (docs/contributing/parity/facet-engine.md). The core holds the bundled
+ * plugin's registry alone, so a deployment composing another plugin set
+ * refuses to boot unless it sets `ts` (`refuseFacetCoreForDeployment`).
  *
  * The OKF envelope and the JSON Canvas codec have no switch: their TypeScript
  * is deleted (docs/contributing/parity/okf-codec.md,
@@ -43,7 +43,7 @@ const log = getLogger('layout-core')
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_FACETS: z.enum(['ts', 'differential', 'rust']).default('ts'),
+  WHITEBOARD_CORE_FACETS: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
