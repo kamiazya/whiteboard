@@ -1096,7 +1096,7 @@ which is a gain on the TypeScript layout too.
 - The per-call callback costs 0.6-2.8 ms a layout and the memo cuts the calls that
   cross by 29% to 96%. The "hottest boundary in the system" claim does not survive as a
   speed argument, so the reason to keep text measurement inside the core is
-  determinism (the context's fourth point), the reason seam 1 also gave.
+  determinism (Context, point 4: the guarantees the project sells are determinism guarantees), the reason seam 1 also gave.
 
 **Not measured, and what it could change.** No browser ran here, so Canvas
 `measureText`, and wasm-to-JS import costs in Firefox and Safari, are open: a
