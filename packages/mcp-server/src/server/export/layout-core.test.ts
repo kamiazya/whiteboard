@@ -16,12 +16,13 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import { facetWriteCoreInstalled, installFacetWriteCore } from '@kamiazya/whiteboard-server-core'
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import {
   artifactDirectory,
   coreLoaders,
-  installCodecCoresAtBoot,
+  installRustCoresAtBoot,
   type LayoutCoreSettings,
   layoutCoreSettingsFrom,
   packagedArtifacts,
@@ -104,7 +105,6 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
-      WHITEBOARD_CORE_FACETS: 'rust',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
@@ -210,37 +210,44 @@ describe('the daemon layout core', () => {
   })
 })
 
-describe('the daemon codec cores, installed at boot', () => {
+describe('the daemon cores, installed at boot', () => {
   // The installation is process-global; the test realm's cores are put back.
   let okfRealm: ReturnType<typeof installOkfCore>
   let spatialRealm: ReturnType<typeof installSpatialCore>
+  let facetRealm: ReturnType<typeof installFacetWriteCore>
   const removeRealmCores = () => {
     okfRealm = installOkfCore(undefined)
     spatialRealm = installSpatialCore(undefined)
+    facetRealm = installFacetWriteCore(undefined)
   }
   afterEach(() => {
     installOkfCore(okfRealm)
     installSpatialCore(spatialRealm)
+    installFacetWriteCore(facetRealm)
   })
 
   it('keeps cores the realm already installed, loading nothing', async () => {
-    await installCodecCoresAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() }))
+    await installRustCoresAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() }))
     expect(okfCoreInstalled()).toBe(true)
     expect(spatialCoreInstalled()).toBe(true)
+    expect(facetWriteCoreInstalled()).toBe(true)
     okfRealm = installOkfCore(undefined)
     installOkfCore(okfRealm)
     spatialRealm = installSpatialCore(undefined)
     installSpatialCore(spatialRealm)
+    facetRealm = installFacetWriteCore(undefined)
+    installFacetWriteCore(facetRealm)
   })
 
   it('refuses to start without the core, naming where it looked and how to build it', async () => {
     removeRealmCores()
     const dir = emptyDir()
-    const boot = installCodecCoresAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: dir }))
+    const boot = installRustCoresAtBoot(layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: dir }))
     await expect(boot).rejects.toThrow(dir)
     await expect(boot).rejects.toThrow(/build:wasm/)
     expect(okfCoreInstalled()).toBe(false)
     expect(spatialCoreInstalled()).toBe(false)
+    expect(facetWriteCoreInstalled()).toBe(false)
     // No fallback answers in the core's place: a call stays a loud failure.
     expect(() => parseOkf('---\ntype: note\n---\nb')).toThrow(/before this realm installed/)
     expect(() => parseSpatial('{}')).toThrow(/before this realm installed/)
@@ -253,9 +260,10 @@ describe('the daemon codec cores, installed at boot', () => {
     'installs the staged core, which reads and writes through the plain exports',
     async () => {
       removeRealmCores()
-      await installCodecCoresAtBoot(layoutCoreSettingsFrom({}))
+      await installRustCoresAtBoot(layoutCoreSettingsFrom({}))
       expect(okfCoreInstalled()).toBe(true)
       expect(spatialCoreInstalled()).toBe(true)
+      expect(facetWriteCoreInstalled()).toBe(true)
       const parsed = parseOkf('---\ntype: note\ntags: [a, b]\n---\nbody\n')
       if (!parsed.ok) throw new Error(parsed.error.message)
       expect(serializeOkf(parsed.value)).toContain('tags:')
@@ -270,105 +278,36 @@ describe('the daemon codec cores, installed at boot', () => {
   it.runIf(built)('shares one wasm instance with the layout core', async () => {
     removeRealmCores()
     const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'rust' })
-    await installCodecCoresAtBoot(settings)
+    await installRustCoresAtBoot(settings)
     const bootOkf = installOkfCore(undefined)
     const bootSpatial = installSpatialCore(undefined)
+    const bootFacets = installFacetWriteCore(undefined)
     // One load per directory: the routing core is the instance boot installed for both codecs.
     const layout = await coreLoaders(settings).layoutCore()
     expect(bootOkf).toBeDefined()
     expect(bootSpatial).toBe(bootOkf)
+    expect(bootFacets).toBe(bootOkf)
     expect(layout?.routing).toBe(bootOkf)
   })
 })
 
 describe('the daemon facet write core', () => {
-  const facetCore = (env: Record<string, string>) =>
-    coreLoaders(layoutCoreSettingsFrom(env)).facetWriteCore
-
-  it('reads WHITEBOARD_CORE_FACETS as rust unless something sets it, and refuses an unknown value', () => {
-    expect(layoutCoreSettingsFrom({}).WHITEBOARD_CORE_FACETS).toBe('rust')
-    expect(layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'ts' }).WHITEBOARD_CORE_FACETS).toBe(
-      'ts',
-    )
-    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: 'fast' })).toThrow()
-  })
-
-  it('loads nothing under ts, the rollback setting', async () => {
-    expect(
-      await facetCore({ WHITEBOARD_CORE_FACETS: 'ts', WHITEBOARD_CORE_DIR: emptyDir() })(),
-    ).toBeUndefined()
-  })
-
-  it.runIf(built)('serves the staged core under differential, once', async () => {
-    const load = facetCore({ WHITEBOARD_CORE_FACETS: 'differential' })
-    const core = await load()
-    expect(core?.impl.partitionFacetWrites).toBe('differential')
-    expect(await load()).toBe(core)
-  })
-
-  it.runIf(built)(
-    'throws a reported difference when the settings say so, and only logs it otherwise',
-    async () => {
-      const difference = {
-        fn: 'partitionFacetWrites' as const,
-        kind: 'differs' as const,
-        ts: 'a',
-        rust: 'b',
-        target: 'node' as const,
-        bucket: undefined,
-      }
-      const strict = await facetCore({
-        WHITEBOARD_CORE_FACETS: 'differential',
-        WHITEBOARD_CORE_MISMATCH: 'throw',
-      })()
-      expect(() => strict?.onMismatch?.(difference)).toThrow(/facet write core differs/)
-      const capture = captureLogsForTests('warning')
-      try {
-        const lenient = await facetCore({ WHITEBOARD_CORE_FACETS: 'differential' })()
-        lenient?.onMismatch?.(difference)
-        lenient?.onMismatch?.({
-          fn: 'partitionFacetWrites',
-          kind: 'declined',
-          err: new Error('too large'),
-        })
-        expect(capture.records.map((r) => r.data?.event ?? r.msg)).toEqual([
-          'the Rust core and the TypeScript disagree',
-          'facets-declined',
-        ])
-      } finally {
-        capture.restore()
-      }
-    },
-  )
-
   it('holds the plugin ids of the registry the core is built from', () => {
     expect([...RUST_FACET_PLUGIN_IDS]).toEqual(bundledFacetRegistry.plugins.map((p) => p.id))
   })
 
   describe('boot', () => {
     const plugins = (...ids: string[]) => ({ plugins: ids.map((id) => ({ id })) }) as never
-    const settings = (facets: string) => layoutCoreSettingsFrom({ WHITEBOARD_CORE_FACETS: facets })
 
-    it('serves the bundled deployment under every setting', () => {
-      for (const facets of ['ts', 'differential', 'rust']) {
-        expect(() =>
-          refuseFacetCoreForDeployment(settings(facets), plugins('visual')),
-        ).not.toThrow()
-      }
+    it('serves the bundled deployment', () => {
+      expect(() => refuseFacetCoreForDeployment(plugins('visual'))).not.toThrow()
     })
 
-    it.each([
-      'differential',
-      'rust',
-    ])('refuses under %s a deployment composing another plugin set, naming both', (facets) => {
-      expect(() =>
-        refuseFacetCoreForDeployment(settings(facets), plugins('visual', 'ticket')),
-      ).toThrow(/\[visual\].*\[visual, ticket\].*WHITEBOARD_CORE_FACETS=ts/)
-      expect(() => refuseFacetCoreForDeployment(settings(facets), plugins())).toThrow()
-    })
-
-    it('lets any deployment through under ts, which judges nothing in Rust', () => {
-      expect(() => refuseFacetCoreForDeployment(settings('ts'), plugins('ticket'))).not.toThrow()
+    it('refuses a deployment composing another plugin set, naming both', () => {
+      expect(() => refuseFacetCoreForDeployment(plugins('visual', 'ticket'))).toThrow(
+        /\[visual\].*\[visual, ticket\]/,
+      )
+      expect(() => refuseFacetCoreForDeployment(plugins())).toThrow()
     })
   })
 })

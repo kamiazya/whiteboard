@@ -17,7 +17,7 @@ import { parseSource } from './ast-helpers.js'
  * to every consumer, and the shim initialises asynchronously) declares a
  * `realm` instead: the export is a dispatcher over the one core each realm
  * installs, never an implementation, and the files that held the
- * TypeScript must be gone. The OKF envelope and the JSON Canvas codec are the second shape.
+ * TypeScript must be gone. The OKF envelope, the JSON Canvas codec and the facet write are the second shape.
  */
 export interface PortedFunction {
   /** The name the function goes by in the TypeScript and in the switch. */
@@ -59,6 +59,18 @@ const OKF_TYPESCRIPT = [
 const SPATIAL_TYPESCRIPT = [
   'packages/codec/src/spatial/parse.ts',
   'packages/codec/src/spatial/serialize.ts',
+] as const
+
+/**
+ * The files that held the daemon's facet-write judgement outside the one module
+ * a writer still asks, which stage 4 requires gone: the switch's test-realm
+ * loader and the differential test against the TypeScript. The judgement itself
+ * lived in `tools/facet-write.ts`, which stays as the dispatcher that resolves
+ * what the core is given.
+ */
+const FACET_WRITE_TYPESCRIPT = [
+  'packages/server-core/src/test-utils/facet-write-core.ts',
+  'packages/server-core/src/tools/facet-write.core.test.ts',
 ] as const
 
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
@@ -132,24 +144,21 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     realm: { install: 'installSpatialCore', deleted: SPATIAL_TYPESCRIPT },
   },
   {
-    name: 'partitionFacetWrites',
     // The judgement of a facets bucket and the stencil library's refusal are
-    // one call over the wire, so one entry answers both. Stays 2 although the
-    // switch defaults to `rust`, for the reason `routeLayout`'s does.
-    stage: 2,
-    ts: { file: 'packages/server-core/src/tools/facet-write.ts', export: 'partitionFacetWrites' },
-    switch: {
-      file: 'packages/server-core/src/facet-write-core.ts',
-      interface: 'FacetWriteCore',
-      key: 'partitionFacetWrites',
-      option: 'ServerDeps.facetWriteCore',
-    },
+    // one call over the wire, so one entry answers both. The name is the
+    // function the TypeScript judged with, which the Rust export and the parity
+    // doc still call it; the dispatcher a writer asks for the core is
+    // `facetWriteCore`.
+    name: 'partitionFacetWrites',
+    stage: 4,
+    ts: { file: 'packages/server-core/src/facet-write-core.ts', export: 'facetWriteCore' },
     rust: { file: 'crates/bindings/wasm/src/facet_write.rs', fn: 'facet_bucket_check' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'facetBucketCheck',
     },
+    realm: { install: 'installFacetWriteCore', deleted: FACET_WRITE_TYPESCRIPT },
   },
 ]
 

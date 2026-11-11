@@ -28,13 +28,7 @@ const libraryDocument = async () => {
     path: STENCIL_LIBRARY_PATH,
     kind: 'markdown',
   })
-  // These pin the TypeScript's wording; the Rust core names places and codes
-  // instead (a declared deviation), so the core is held out of this file.
-  return makeTestDeps({
-    documentStore: store,
-    documentIndex: store.documentIndex,
-    facetWriteCore: undefined,
-  })
+  return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
 }
 
 const writeLibrary = (deps: Awaited<ReturnType<typeof libraryDocument>>, stencils: unknown) =>
@@ -61,7 +55,7 @@ describe('wb_facet_set refuses a stencil library the registry would not accept',
     {
       what: 'a colour that is neither a preset nor a hex colour',
       stencils: { bad: { displayName: 'Bad', color: 'red' } },
-      names: [/bad/, /color/, /"1" to "6"/],
+      names: [/bad/, /color/],
     },
     {
       what: 'more stencils than a library may hold',
@@ -71,7 +65,7 @@ describe('wb_facet_set refuses a stencil library the registry would not accept',
           { displayName: 'S', facets: { 'nope.nothing/v0': {} } },
         ]),
       ),
-      names: [/at most 256 stencils/, /\b300\b/],
+      names: [/payload for "visual\.stencils\/v0" is invalid: stencils: custom/],
     },
   ])('$what, naming the stencil and what is wrong', async ({ stencils, names }) => {
     const deps = await libraryDocument()

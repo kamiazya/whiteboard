@@ -64,6 +64,8 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 
 /** A class with no arm in create-server.ts, and why no /api/v1 operation can raise it. */
 const EXEMPT: Readonly<Record<string, string>> = {
+  FacetWriteCoreNotInstalled:
+    'a wiring defect of the realm (no Rust core was installed, which the daemon refuses to boot without), never an input the caller can fix; it is the 500 it is, and the tool tests hold the named failure',
   CausalGapError:
     'raised only by the sync update routes, which import Loro bytes; /api/v1 writes documents from JSON and imports no update',
   StoredWorkspaceKeyError:

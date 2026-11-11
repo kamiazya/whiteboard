@@ -1,15 +1,11 @@
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import type { ServerDeps } from '../server-deps.js'
-import { facetWriteCoreFromEnv } from './facet-write-core.js'
 import { ignoredDocumentWrites } from './ignored-document-writes.js'
 import { unusedDocumentTeardown } from './unused-document-teardown.js'
 import { unusedLiveDocuments } from './unused-live-documents.js'
 import { unusedVersionHistory } from './unused-version-history.js'
 import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
-
-// One load for the whole file's deps.
-const envFacetWriteCore = facetWriteCoreFromEnv()
 
 /**
  * The `ServerDeps` a server-core test builds when its subject is something
@@ -54,11 +50,6 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     liveDocuments: unusedLiveDocuments(),
     workspaceDocuments: unusedWorkspaceDocuments(),
     // The bundled plugins, as a root composing no plugin set of its own gets.
-    // Absent unless the run's environment asks for the Rust core's facet
-    // write, and then only for the bundled plugins it holds the registry of.
-    ...(envFacetWriteCore && overrides.facetRegistry === undefined
-      ? { facetWriteCore: envFacetWriteCore }
-      : {}),
     ...overrides,
     facetRegistry: overrides.facetRegistry ?? bundledFacetRegistry,
   }

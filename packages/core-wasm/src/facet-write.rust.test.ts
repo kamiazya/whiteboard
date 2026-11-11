@@ -4,8 +4,8 @@ import { FACET_BUCKET_CHECK_CAPS } from './generated/input-caps.js'
 import { CoreInputRefused } from './index.js'
 import { loadCore } from './load.js'
 
-// The shim over the real artifact; the facet write is held to the server's
-// `partitionFacetWrites` by server-core's `facet-write.core.test.ts`.
+// The shim over the real artifact; what a writer does with its answer is held by
+// server-core's `facet-write.dispatch.test.ts`.
 const bytes = () => readFileSync(new URL('../artifacts/whiteboard_wasm_bg.wasm', import.meta.url))
 const core = await loadCore(bytes())
 

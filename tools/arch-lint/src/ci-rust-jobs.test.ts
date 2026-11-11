@@ -260,7 +260,6 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(unit[at]?.if).toBe("steps.scope.outputs.run == 'true'")
     expect(unit[test]?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_FACETS: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
@@ -306,9 +305,7 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(at).toBeGreaterThanOrEqual(0)
     expect(at).toBeLessThan(test)
     expect(shared[at]?.if).toBe("steps.scope.outputs.run == 'true'")
-    // server-core-node's deps carry the core's facet write when the run says so.
     expect(shared[test]?.env).toMatchObject({
-      WHITEBOARD_CORE_FACETS: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })
@@ -425,7 +422,6 @@ describe('verify and packaged-smoke build over the same artifact a release ships
     const smoke = stepsOf(ci, id).find((s) => s.run?.trim() === command)
     expect(smoke?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_FACETS: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })

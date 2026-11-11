@@ -4,20 +4,17 @@ import { type Core, CoreInputRefused } from '@kamiazya/whiteboard-core-wasm'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
 import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
-import { beforeAll, describe, expect, it } from 'vitest'
-import type {
-  FacetWriteCore,
-  FacetWriteJudgement,
-  FacetWriteMismatch,
-} from '../facet-write-core.js'
+import { afterEach, beforeAll, describe, expect, it } from 'vitest'
+import { facetWriteCoreInstalled, installFacetWriteCore } from '../facet-write-core.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { FacetWriteRejectedError } from './errors.js'
 import { facetWriterFor } from './facet-write.js'
 
 /**
- * The facet write's switch: what each impl answers, what `differential`
- * holds the two equal on, and what a declined call does. The core is the real
- * artifact, wrapped where a test needs it to answer something else.
+ * The facet write over the realm's Rust core: what a writer answers, what it
+ * sends the core, what it does with a call the core declines, and what a realm
+ * with no core does. The core is the real artifact, wrapped where a test needs
+ * to see what it was asked.
  */
 
 let core: Core
@@ -26,37 +23,32 @@ beforeAll(async () => {
   core = await loadCore(readFileSync(artifact))
 })
 
+// The realm's core is process-global; a test that swaps it puts it back.
+const realm = installFacetWriteCore(undefined)
+installFacetWriteCore(realm)
+afterEach(() => installFacetWriteCore(realm))
+
+type FacetWriteCore = NonNullable<Parameters<typeof installFacetWriteCore>[0]>
+
 interface Harness {
-  readonly mismatches: FacetWriteMismatch[]
   readonly calls: { library: unknown }[]
   readonly write: (bucket: Record<string, unknown>, target?: 'node' | 'document') => unknown
 }
 
 async function harness(
-  impl: FacetWriteCore['impl']['partitionFacetWrites'],
-  wrap: (answer: FacetWriteJudgement) => FacetWriteJudgement = (answer) => answer,
   decline = false,
   buckets: readonly Record<string, unknown>[] = [],
 ): Promise<Harness> {
-  const mismatches: FacetWriteMismatch[] = []
   const calls: { library: unknown }[] = []
-  const facets: FacetWriteCore['facets'] = {
+  const wrapped: FacetWriteCore = {
     facetBucketCheck(target, bucket, library) {
       calls.push({ library })
       if (decline) throw new CoreInputRefused('facet_bucket_check', 'input-too-large')
-      return wrap(core.facetBucketCheck(target, bucket, library))
+      return core.facetBucketCheck(target, bucket, library)
     },
   }
-  const facetWriteCore: FacetWriteCore = {
-    facets,
-    impl: { partitionFacetWrites: impl },
-    onMismatch: (mismatch) => mismatches.push(mismatch),
-  }
-  const writer = await facetWriterFor(
-    makeTestDeps({ facetWriteCore: async () => facetWriteCore }),
-    'ws',
-    buckets as never,
-  )
+  installFacetWriteCore(wrapped)
+  const writer = await facetWriterFor(makeTestDeps(), 'ws', buckets as never)
   const write = (bucket: Record<string, unknown>, target: 'node' | 'document' = 'node') => {
     try {
       return writer.write(bucket as never, target)
@@ -64,7 +56,7 @@ async function harness(
       return error
     }
   }
-  return { mismatches, calls, write }
+  return { calls, write }
 }
 
 const GOOD: Record<string, unknown> = {
@@ -74,46 +66,41 @@ const GOOD: Record<string, unknown> = {
 const BAD_TARGET: Record<string, unknown> = { 'visual.theme/v0': { theme: 'visual.sketch' } }
 const BAD_PAYLOAD: Record<string, unknown> = { 'visual.shape/v0': { kind: 'nope' } }
 
-describe('the facet write switch', () => {
-  it('never asks the core under ts', async () => {
-    const h = await harness('ts')
+describe('the facet write over the realm core', () => {
+  it('answers the sets and deletions the core judges', async () => {
+    const h = await harness()
     expect(h.write(GOOD)).toEqual({
       sets: { 'visual.shape/v0': { kind: 'ellipse' } },
       deletions: ['visual.text/v0'],
     })
-    expect(h.calls).toEqual([])
+    expect(h.calls).toHaveLength(1)
   })
 
-  it('answers with the core under rust, and refuses in the classes the TypeScript refuses in', async () => {
-    const h = await harness('rust')
-    expect(h.write(GOOD)).toEqual({
-      sets: { 'visual.shape/v0': { kind: 'ellipse' } },
-      deletions: ['visual.text/v0'],
-    })
+  it('refuses in the classes a writer answers a refusal in', async () => {
+    const h = await harness()
     expect(h.write(BAD_TARGET)).toBeInstanceOf(FacetWriteRejectedError)
     expect(h.write(BAD_PAYLOAD)).toBeInstanceOf(FacetWriteRejectedError)
     const reserved = h.write({ 'x.y/v0': JSON.parse('{"__proto__": {"a": 1}}') })
     expect(reserved).toBeInstanceOf(ReservedKeyWriteError)
-    expect(h.mismatches).toEqual([])
   })
 
-  it('reports nothing under differential when the two agree, and answers from the TypeScript', async () => {
-    const h = await harness('differential')
-    for (const bucket of [GOOD, BAD_TARGET, BAD_PAYLOAD]) h.write(bucket)
-    expect(h.calls).toHaveLength(3)
-    expect(h.mismatches).toEqual([])
+  it('names the facet, the field path and the issue code of a payload the core refuses', async () => {
+    const h = await harness()
+    expect((h.write(BAD_PAYLOAD) as Error).message).toMatch(
+      /facet "visual\.shape\/v0" rejected: payload for "visual\.shape\/v0" is invalid: kind: \w+/,
+    )
   })
 
   it('sends the stored library only with a write that names a stencil', async () => {
     const stencil = { 'visual.stencil/v0': { stencil: 'visual.datastore' } }
-    const h = await harness('rust', undefined, false, [stencil])
+    const h = await harness(false, [stencil])
     h.write(GOOD)
     h.write(stencil)
     expect(h.calls.map((call) => call.library === undefined)).toEqual([true, false])
   })
 
   it('names the stencil, the facet it carries and why the core would drop it', async () => {
-    const h = await harness('rust')
+    const h = await harness()
     const library = (facets: Record<string, unknown>) => ({
       [VISUAL_STENCILS_KEY]: { stencils: { worse: { displayName: 'W', facets } } },
     })
@@ -127,118 +114,43 @@ describe('the facet write switch', () => {
     )
   })
 
-  describe('a difference is reported when', () => {
-    const differs = async (
-      wrap: (answer: FacetWriteJudgement) => FacetWriteJudgement,
-      bucket = GOOD,
-    ) => {
-      const h = await harness('differential', wrap)
-      const answered = h.write(bucket)
-      return { answered, mismatches: h.mismatches }
-    }
-
-    it('a stored value differs by a bit', async () => {
-      const { mismatches, answered } = await differs((answer) =>
-        answer.ok ? { ...answer, sets: { 'visual.shape/v0': { kind: 'rect' } } } : answer,
-      )
-      expect(mismatches.map((m) => m.kind)).toEqual(['differs'])
-      expect(answered).toEqual({
-        sets: { 'visual.shape/v0': { kind: 'ellipse' } },
-        deletions: ['visual.text/v0'],
-      })
-    })
-
-    it('the sets hold the same keys in another order', async () => {
-      const bucket = {
-        'visual.shape/v0': { kind: 'ellipse' },
-        'visual.text/v0': { align: 'center' },
-      }
-      const { mismatches } = await differs(
-        (answer) =>
-          answer.ok
-            ? { ...answer, sets: Object.fromEntries(Object.entries(answer.sets).reverse()) }
-            : answer,
-        bucket,
-      )
-      expect(mismatches).toHaveLength(1)
-    })
-
-    it('a refusal names another stage', async () => {
-      const { mismatches } = await differs(
-        (answer) => (answer.ok ? answer : { ...answer, refusal: { stage: 'malformed-key' } }),
-        BAD_TARGET,
-      )
-      expect(mismatches).toHaveLength(1)
-    })
-
-    it('a refusal names another key', async () => {
-      const { mismatches } = await differs(
-        (answer) => (answer.ok ? answer : { ...answer, key: 'visual.other/v0' }),
-        BAD_TARGET,
-      )
-      expect(mismatches).toHaveLength(1)
-    })
-
-    it('an issue carries another code', async () => {
-      const { mismatches } = await differs(
-        (answer) =>
-          !answer.ok && answer.refusal.stage === 'invalid'
-            ? {
-                ...answer,
-                refusal: {
-                  stage: 'invalid',
-                  issues: answer.refusal.issues.map((issue) => ({ ...issue, code: 'custom' })),
-                },
-              }
-            : answer,
-        BAD_PAYLOAD,
-      )
-      expect(mismatches).toHaveLength(1)
-    })
-
-    it('an issue is at another path', async () => {
-      const { mismatches } = await differs(
-        (answer) =>
-          !answer.ok && answer.refusal.stage === 'invalid'
-            ? {
-                ...answer,
-                refusal: {
-                  stage: 'invalid',
-                  issues: answer.refusal.issues.map((issue) => ({ ...issue, path: ['elsewhere'] })),
-                },
-              }
-            : answer,
-        BAD_PAYLOAD,
-      )
-      expect(mismatches).toHaveLength(1)
-    })
-
-    it('the core accepts what the TypeScript refuses', async () => {
-      const { mismatches, answered } = await differs(
-        () => ({ ok: true, sets: {}, deletions: [] }),
-        BAD_PAYLOAD,
-      )
-      expect(mismatches).toHaveLength(1)
-      expect(answered).toBeInstanceOf(FacetWriteRejectedError)
-    })
+  it('refuses a write the core declines, naming the facet and the core as the reason', async () => {
+    const h = await harness(true)
+    const refused = h.write(BAD_PAYLOAD)
+    expect(refused).toBeInstanceOf(FacetWriteRejectedError)
+    expect((refused as FacetWriteRejectedError).facetKey).toBe('visual.shape/v0')
+    expect((refused as Error).message).toMatch(/the Rust core declined this write.*input-too-large/)
+    // A good bucket is refused too: no second implementation answers in the core's place.
+    expect(h.write(GOOD)).toBeInstanceOf(FacetWriteRejectedError)
   })
 
-  it('is not a difference when only the words of a refusal differ', async () => {
-    const h = await harness('differential', (answer) => ({ ...answer }))
-    h.write(BAD_PAYLOAD)
-    expect(h.mismatches).toEqual([])
+  it('refuses a payload the core wire cannot carry, rather than storing what it cannot judge', async () => {
+    const h = await harness()
+    const refused = h.write({ 'visual.shape/v0': { kind: 'ellipse', extra: undefined } })
+    expect(refused).toBeInstanceOf(FacetWriteRejectedError)
+    expect((refused as Error).message).toMatch(/the Rust core declined/)
   })
 
-  it.each([
-    'differential',
-    'rust',
-  ] as const)('answers from the TypeScript and reports a decline under %s', async (impl) => {
-    const h = await harness(impl, undefined, true)
-    expect(h.write(BAD_PAYLOAD)).toBeInstanceOf(FacetWriteRejectedError)
-    expect(h.write(GOOD)).toEqual({
-      sets: { 'visual.shape/v0': { kind: 'ellipse' } },
-      deletions: ['visual.text/v0'],
+  it('lets any other failure of the core through, never as a refusal', async () => {
+    installFacetWriteCore({
+      facetBucketCheck() {
+        throw new TypeError('wasm trapped')
+      },
     })
-    expect(h.mismatches.map((m) => m.kind)).toEqual(['declined', 'declined'])
+    const writer = await facetWriterFor(makeTestDeps(), 'ws', [])
+    expect(() => writer.write(GOOD as never, 'node')).toThrow(TypeError)
+  })
+})
+
+describe('a realm that installed no core', () => {
+  it('fails by name, naming the install function, instead of judging in another way', async () => {
+    installFacetWriteCore(undefined)
+    expect(facetWriteCoreInstalled()).toBe(false)
+    await expect(facetWriterFor(makeTestDeps(), 'ws', [])).rejects.toMatchObject({
+      name: 'FacetWriteCoreNotInstalled',
+    })
+    await expect(facetWriterFor(makeTestDeps(), 'ws', [])).rejects.toThrow(
+      /before this realm installed the Rust core.*installFacetWriteCore/,
+    )
   })
 })

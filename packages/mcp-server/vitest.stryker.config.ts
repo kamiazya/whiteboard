@@ -1,3 +1,6 @@
+import { realpathSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { dirname, join } from 'node:path'
 import { defineProject, mergeConfig } from 'vitest/config'
 import { coveringTests } from './scripts/mutation/covering-tests.mjs'
 import sharedConfig from './vitest.shared.js'
@@ -13,6 +16,18 @@ import sharedConfig from './vitest.shared.js'
 // derived from the import graph (`scripts/mutation/covering-tests.mjs`, which
 // says how near) so a test that starts importing a mutated module joins the
 // lane by itself.
+// The Rust cores every realm installs (the OKF and JSON Canvas codecs, the facet
+// write), as vitest.node.config.ts installs them. Found through node_modules
+// rather than `../codec`: Stryker's sandbox is a copy of this package alone, so
+// a sibling path does not exist there, while its linked node_modules still
+// reach the workspace packages.
+const require = createRequire(import.meta.url)
+const packageDir = (name: string) => dirname(realpathSync(require.resolve(`${name}/package.json`)))
+const coreSetups = [
+  join(packageDir('@kamiazya/whiteboard-codec'), 'src/test-utils/core-setup/node.setup.ts'),
+  join(packageDir('@kamiazya/whiteboard-server-core'), 'src/test-utils/core-setup.node.setup.ts'),
+]
+
 export default mergeConfig(
   sharedConfig,
   defineProject({
@@ -42,7 +57,7 @@ export default mergeConfig(
       environment: 'node',
       // Pins the property seed: Stryker re-selects tests by title, and the
       // seed is in it. See `vitest.stryker-setup.ts`.
-      setupFiles: ['./vitest.stryker-setup.ts'],
+      setupFiles: ['./vitest.stryker-setup.ts', ...coreSetups],
       testTimeout: 10_000,
       hookTimeout: 10_000,
     },

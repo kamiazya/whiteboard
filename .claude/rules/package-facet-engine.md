@@ -12,8 +12,8 @@ paths:
   error, not data).
 - `createFacetRegistry`: per-plugin-id collision check, `targetsOf`,
   write-side validation (`validateFacetWrite`, ADR-0013 decision 6; a refusal
-  carries its stage as data in `refusal` beside the message, which the daemon's
-  differential against the Rust core compares) and
+  carries its stage as data in `refusal` beside the message; the daemon no longer
+  judges through it, the Rust core does, and the browser keeps this one, q47) and
   read-side compat resolution (`resolveFacetPayload`, decision 7 — stepwise
   chain, drop-not-fail, newer-than-registered preserved). `facetForm(key)`
   answers the derived editor form, and lives here rather than at each
@@ -220,7 +220,7 @@ segment, version and namespaced-id grammars and the glyph silhouettes;
 contract files the generated Zod comes from: a plugin's payload schemas are
 data (owner decision q41), judged by an interpreter of the contract dialect, in
 the issues' path and code and order and not in their message (q43). The export is
-`facet_bucket_check` (S8, below); the switch is not built yet.
+`facet_bucket_check` (S8, below), which server-core's `facetWriterFor` asks through the core a realm installs (`installFacetWriteCore`); no switch is left (stage 4).
 
 - **The oracle is Zod's own behaviour, not the contract's text.** Two recordings
   hold it, both regenerated with `WHITEBOARD_RECORD_ORACLE=1` and both asked again

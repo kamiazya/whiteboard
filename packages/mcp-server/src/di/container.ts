@@ -86,7 +86,7 @@ export function resolveServerDeps(
   // first call that asks for it.
   const coreSettings = layoutCoreSettingsFrom(process.env)
   const facetRegistry = createFacetRegistry(bundledPlugins)
-  refuseFacetCoreForDeployment(coreSettings, facetRegistry)
+  refuseFacetCoreForDeployment(facetRegistry)
   const core = coreLoaders(coreSettings)
   return {
     documentStore,
@@ -108,11 +108,9 @@ export function resolveServerDeps(
     // faces this daemon can measure, never from a second list.
     textMeasurer: () => createExportTextMeasurer({ fontsDir: scope.layout.fontsDir }),
     // The Rust core a layout routes through, as its environment switch says
-    // (ADR-0054's CoreImpl). The OKF envelope and the JSON Canvas codec are
-    // installed at boot, with no switch.
+    // (ADR-0054's CoreImpl). The OKF envelope, the JSON Canvas codec and the
+    // facet write are installed at boot, with no switch.
     layoutCore: core.layoutCore,
-    // The Rust core's facet write, as WHITEBOARD_CORE_FACETS says (default ts).
-    facetWriteCore: core.facetWriteCore,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so
