@@ -21,6 +21,22 @@ export interface FacetWriteIssue {
   readonly key?: readonly FacetWriteIssue[]
 }
 
+/**
+ * A stencil of a workspace's stored library the registry would drop. The
+ * core says why: a name that is no facet segment, a registry holding no
+ * stencil shape, a stencil that is not one (its issues), or a facet payload it
+ * carries (the key, and whether the facet is unregistered, not current or
+ * refuses the payload). The TypeScript names the stencil alone.
+ */
+export interface DroppedStencil {
+  readonly name: string
+  readonly why?: 'name' | 'no-shape' | 'shape' | 'facet'
+  readonly key?: string
+  readonly facet?: 'unregistered' | 'not-current' | 'invalid'
+  readonly current?: string
+  readonly issues?: readonly FacetWriteIssue[]
+}
+
 /** The stage a key of a bucket was refused at, with what the stage says. */
 export type FacetWriteRefusal =
   | { readonly stage: 'reserved-key' }
@@ -41,11 +57,8 @@ export type FacetWriteRefusal =
       readonly key: string
     }
   // Only the names are held equal: the TypeScript names a dropped stencil and
-  // words why, the core says why in a type of its own (`why`).
-  | {
-      readonly stage: 'library'
-      readonly dropped: readonly { readonly name: string; readonly why?: string }[]
-    }
+  // words why, the core says why in fields of its own.
+  | { readonly stage: 'library'; readonly dropped: readonly DroppedStencil[] }
 
 /** A bucket judged: the writes it stands for, or the first key refused. */
 export type FacetWriteJudgement =

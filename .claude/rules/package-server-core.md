@@ -153,7 +153,7 @@ paths:
   `facetWriterFor(deps, workspaceId, buckets)` in `packages/server-core/src/tools/facet-write.ts` is what
   every writer calls (`wb_facet_set`, `wb_canvas_edit`, frontmatter), over
   `ServerDeps.facetWriteCore` and the types in `packages/server-core/src/facet-write-core.ts`
-  (`ts` | `differential` | `rust`; the daemon defaults to `ts`). `differential`
+  (`ts` | `differential` | `rust`; the daemon defaults to `rust`, `ts` the rollback). `differential`
   compares the TypeScript's `judgeFacetWrites` structure with the core's: stage,
   key, issue path and code in order, sets bit for bit with key order, never the
   words. A decline is answered by the TypeScript. The core serves only the

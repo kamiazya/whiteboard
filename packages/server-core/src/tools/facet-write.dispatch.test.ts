@@ -3,6 +3,7 @@ import { fileURLToPath } from 'node:url'
 import { type Core, CoreInputRefused } from '@kamiazya/whiteboard-core-wasm'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import { ReservedKeyWriteError } from '@kamiazya/whiteboard-loro-adapter'
+import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type {
   FacetWriteCore,
@@ -109,6 +110,21 @@ describe('the facet write switch', () => {
     h.write(GOOD)
     h.write(stencil)
     expect(h.calls.map((call) => call.library === undefined)).toEqual([true, false])
+  })
+
+  it('names the stencil, the facet it carries and why the core would drop it', async () => {
+    const h = await harness('rust')
+    const library = (facets: Record<string, unknown>) => ({
+      [VISUAL_STENCILS_KEY]: { stencils: { worse: { displayName: 'W', facets } } },
+    })
+    const message = (facets: Record<string, unknown>) =>
+      (h.write(library(facets), 'document') as Error).message
+    expect(message({ 'visual.shape/v0': { kind: 'blob' } })).toMatch(
+      /stencil "worse": its "visual\.shape\/v0" payload is invalid: kind: \w+/,
+    )
+    expect(message({ 'nope.nothing/v0': {} })).toMatch(
+      /stencil "worse": it carries "nope\.nothing\/v0", which no plugin registered/,
+    )
   })
 
   describe('a difference is reported when', () => {

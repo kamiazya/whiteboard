@@ -459,7 +459,7 @@ async function runOnce(task, trial) {
             WHITEBOARD_NO_WATCH: '1',
             // Forwarded so a reading can compare the facet write's answers
             // (their refusal wording is what the model reads) per switch.
-            WHITEBOARD_CORE_FACETS: process.env.WHITEBOARD_CORE_FACETS ?? 'ts',
+            WHITEBOARD_CORE_FACETS: process.env.WHITEBOARD_CORE_FACETS ?? 'rust',
           },
         },
       },

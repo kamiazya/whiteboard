@@ -21,6 +21,7 @@ import { VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import type { z } from 'zod'
 import {
   canonicalJudgement,
+  type DroppedStencil,
   type FacetWriteCore,
   type FacetWriteIssue,
   type FacetWriteJudgement,
@@ -192,6 +193,29 @@ function judgeWithLibrary(
  * TypeScript's own sentence rebuilt from what the stage carries; a schema
  * issue is named by its place and code, not in Zod's words.
  */
+const issueList = (issues: readonly FacetWriteIssue[] | undefined): string =>
+  (issues ?? []).map((issue) => `${issue.path.join('.') || '(payload)'}: ${issue.code}`).join('; ')
+
+/** Why the core would drop a stored stencil, in the words a writer can act on. */
+function droppedSentence(dropped: DroppedStencil): string {
+  switch (dropped.why) {
+    case 'name':
+      return 'its name is not a facet segment'
+    case 'no-shape':
+      return 'the registry holds no stencil shape to judge it by'
+    case 'shape':
+      return `it is not a stencil: ${issueList(dropped.issues)}`
+    case 'facet':
+      if (dropped.facet === 'unregistered')
+        return `it carries "${dropped.key}", which no plugin registered`
+      if (dropped.facet === 'not-current')
+        return `it carries "${dropped.key}", which is not the current version — write "${dropped.current}"`
+      return `its "${dropped.key}" payload is invalid: ${issueList(dropped.issues)}`
+    default:
+      return 'the registry refused it'
+  }
+}
+
 function sentenceOf(key: string, refusal: FacetWriteRefusal, target: FacetTarget): string {
   switch (refusal.stage) {
     case 'reserved-key':
@@ -212,9 +236,7 @@ function sentenceOf(key: string, refusal: FacetWriteRefusal, target: FacetTarget
       return `payload for "${key}" is invalid: ${describeUnrecognizedKey(refusal)}`
     case 'library':
       return refusal.dropped
-        .map(
-          ({ name, why }) => `stencil "${name}": the registry refused it${why ? ` (${why})` : ''}`,
-        )
+        .map((dropped) => `stencil "${dropped.name}": ${droppedSentence(dropped)}`)
         .join('; ')
   }
 }
