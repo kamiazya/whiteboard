@@ -6,11 +6,46 @@ runtime interpreter of the contract dialect** (`crates/core/facet-engine`, step 
 of [ADR-0054](../adr/0054-rust-core.md), slice S6). The TypeScript it is held to
 is `validateFacetWrite`, `targetsOf` and `assetRefsOf` in
 `packages/facet-engine/src/registry.ts`, with each facet's generated Zod schema
-as the oracle. **S8 adds the wasm export (`facet_bucket_check`, below), its
-shim, and the switch the daemon dispatches through (stage 2, `differential`;
-the default is `rust`, with the TypeScript kept as the `ts` rollback until its
-deletion).** `PORTED_FUNCTIONS` lists `partitionFacetWrites` at stage 2, which
-stays until the TypeScript is deleted.
+as the oracle. **S8 added the wasm export (`facet_bucket_check`, below), its
+shim, and the switch the daemon dispatched through; stage 4 (2026-11-11) deleted
+the daemon's TypeScript and the switch.** `PORTED_FUNCTIONS` lists
+`partitionFacetWrites` at stage 4, in its realm shape.
+
+**Stage 4 (2026-11-11): the daemon's TypeScript is deleted.** The switch
+(`WHITEBOARD_CORE_FACETS`, `FacetWriteImpl`, `FacetWriteMismatch`,
+`ServerDeps.facetWriteCore`) existed while the TypeScript did; it is gone with
+it. A facet write (`wb_facet_set`, `wb_canvas_edit`'s `facets`, a document's
+frontmatter facets and the stencil library a write carries) is answered only by
+the core each realm installs (`installFacetWriteCore`, in
+`packages/server-core/src/facet-write-core.ts`), throwing
+`FacetWriteCoreNotInstalled` where none is: the daemon installs it at boot beside
+OKF's and JSON Canvas's (`installRustCoresAtBoot`) and refuses to start without
+it, and every Node test realm installs it in a setup file
+(`packages/server-core/src/test-utils/core-setup.node.setup.ts`). Owner decision
+q40 deleted the TypeScript as soon as the migration was complete. What was
+deleted: `judgeFacetWrites`, `judgePayload`, `partitionFacetWrites` and the
+`ts` and `differential` arms of `writeWith` in `tools/facet-write.ts`;
+`refuseUnusableStencilLibrary` and `unusableStencils` in
+`tools/stencil-library.ts`; `facet-write-core.ts`'s `canonicalJudgement`, impl
+type and mismatch report; the test-realm loader `test-utils/facet-write-core.ts`;
+the differential `tools/facet-write.core.test.ts`; and the daemon's
+`WHITEBOARD_CORE_FACETS` handling, `facetReporter` and facet loader in
+`export/layout-core.ts`. The rows below record how the checklist was met while
+both implementations existed; where a row names the TypeScript, the switch or
+the differential, it describes what was shown before the deletion.
+
+**What TypeScript facet-write code remains, and why.** The browser keeps
+facet-engine's TypeScript (owner decision q47): the editor's derived form and the
+facet picker judge a payload through `validateFacetWrite`
+(`packages/facet-ui`), and `packages/facet-engine` stays the registry both
+halves of the web app read. `plugin-visual`'s `facet-write-oracle` recorder
+(`test-utils/`) keeps running the TypeScript to record what the core is judged
+by. No `server-core` or `mcp-server` source may use `validateFacetWrite` or
+`firstUnrecognizedKey` (`tools/arch-lint/src/facet-write-isolation.test.ts`), so
+a realm that fails to install the core fails loudly instead of answering from a
+second implementation. Reading the registry (`composeWorkspaceStencils`,
+`assetRefsOf`, `targetsOf`) stays in `server-core`: dressing a box with a stencil
+is a read.
 
 ## What shipped
 
@@ -120,7 +155,7 @@ the caps and a `visual_registry()` built once behind a `OnceLock`.
   the registry, the visual plugin's checks, and 73 KB of the plugin's own files
   embedded. The ledger's ceiling is raised by hand with that reason.
 
-## What S8 added: the switch
+## What S8 added: the switch (removed at stage 4)
 
 `WHITEBOARD_CORE_FACETS` (`ts`, `differential`, `rust`; default `rust`) reaches
 every write of a facets bucket: `wb_facet_set`, `wb_canvas_edit`'s `facets`, a
@@ -156,6 +191,17 @@ daemon fills from the one wasm instance the other switches share.
   throwing; the dev scripts default to `differential`. The whole server-core and
   daemon suites, the tool-input fuzz included, ran with no difference reported.
 
+## Declines
+
+A call the core declines (an error named `CoreInputRefused`: past its input caps,
+or a value its wire does not carry, such as an `undefined` where the TypeScript
+read an absent key) used to be answered by the TypeScript. It is now a refusal of
+the write: `FacetWriteRejectedError` (HTTP 400 `facet_write_rejected`, the class
+`wb_canvas_edit` already reports as a refused op) naming the first key of the
+bucket and the core's reason ("the Rust core declined this write: ..."). It is
+detected by the error's name, so server-core never imports the shim's class. Any
+other throw of the core is a defect and passes through unchanged.
+
 ## Declared deviation (owner decision q43)
 
 A refusal matches the generated Zod's issues **in path and code, in order**.
@@ -164,6 +210,10 @@ the contract wrote a sentence (a pattern's `x-wb-message`, a list's
 `x-wb-maxItemsMessage`, a record's `x-wb-maxPropertiesMessage`), which an issue
 holds as `Detail::Message`. A union's issues also match one level down: each
 arm's issues, and the issues a record's key was refused with.
+
+With the TypeScript deleted the words a writer reads are the core's: a refusal
+names the facet, the field path and the issue code (`payload for "visual.stencils/v0" is invalid:
+stencils: custom`), not Zod's wording (`"1" to "6"`, `at most 256 stencils`).
 
 ## What the oracle found that the plan did not say
 
@@ -217,17 +267,17 @@ now has a unit test.
 | 3 | Clippy, fmt, no new `#[expect]` | met | None added |
 | 4 | Properties through the prelude, floors, mutation-checked | met | `tests/schema_properties.rs`: totality and paths into the input, a fixed point on accept, an unknown key stripped or named; each has a reachability floor |
 | 5 | Port conformance suites | n/a | A pure function of a payload |
-| 6 | Layer 1: TypeScript tests against Rust | met | `facet-write.core.test.ts` runs the TypeScript write path beside the export, and the server-core and mcp-node suites run every facet write in `differential` with mismatches throwing (CI), reporting none |
-| 7 | Layer 2: property differential | met | `facet-write.core.test.ts`: generated buckets and a payload per registered facet, valid, broken and stripped, through the shim against `partitionFacetWrites`, every stage reached; the recorded oracles hold the registry below it |
+| 6 | Layer 1: TypeScript tests against Rust | met, then superseded by stage 4 | `facet-write.core.test.ts` ran the TypeScript write path beside the export, and the server-core and mcp-node suites ran every facet write in `differential` with mismatches throwing (CI), reporting none. With the TypeScript deleted that comparison is gone; the server-core and mcp-node suites now run every facet write through the installed core, and `facet-write.dispatch.test.ts` holds what a writer does with its answer, a decline and a realm with no core |
+| 7 | Layer 2: property differential | met, then superseded by stage 4 | `facet-write.core.test.ts` held generated buckets and a payload per registered facet, valid, broken and stripped, through the shim against `partitionFacetWrites`, every stage reached. It needed the TypeScript to stand opposite and went with it; the core is still judged by the recorded oracles beneath it (`plugin-visual`'s `facet-write.jsonl`) and the crate's own properties |
 | 8 | Layer 3: byte-identical on wasm | met | Both replays and every test run on wasm32 with the same count: 94 tests for `whiteboard-facet-engine` and 25 for `whiteboard-plugin-visual` on both targets (`cargo xtask cross-target`) |
 | 9 | Tolerated differences are ledger entries | met | The message (q43), above |
-| 10 | `differential` has run in CI and dogfooding | met (CI and a smoke run) | CI runs it with mismatches throwing (above) and the dev scripts default to it. `WHITEBOARD_CORE_FACETS=differential WHITEBOARD_CORE_MISMATCH=throw pnpm smoke:e2e` also ran green ("ALL OK") against a real daemon through the MCP surface: `wb_facet_set` on markdown documents, nodes, edges and the canvas (set, merge, null tombstone, refusals), `wb_canvas_edit` facet payloads, a workspace-defined stencil and tag library, and a document round trip, with zero mismatches and zero declines reported (a difference throws and fails the run). Per owner decision q18 only development data exists, so no run over a real user workspace is claimed |
+| 10 | `differential` has run in CI and dogfooding | met, then superseded by stage 4 (CI and a smoke run) | CI ran it with mismatches throwing and the dev scripts defaulted to it, until the switch went. `WHITEBOARD_CORE_FACETS=differential WHITEBOARD_CORE_MISMATCH=throw pnpm smoke:e2e` also ran green ("ALL OK") against a real daemon through the MCP surface: `wb_facet_set` on markdown documents, nodes, edges and the canvas (set, merge, null tombstone, refusals), `wb_canvas_edit` facet payloads, a workspace-defined stencil and tag library, and a document round trip, with zero mismatches and zero declines reported (a difference throws and fails the run). Per owner decision q18 only development data exists, so no run over a real user workspace is claimed |
 | 11 | `cargo mutants` clean or ledgered; coverage at the floor | met | `cargo mutants` over `schema/*.rs` and `registry.rs`, judged by this crate's and `whiteboard-plugin-visual`'s tests: 326 mutants, 137 caught, 188 unviable and one missed (a non-empty default read as an empty one), which a test now judges; nothing is ledgered. `pnpm rust:mutants:pr`, shard 1 of 8: 41 mutants, 35 caught, 6 unviable, none missed. Coverage of `core/facet-engine` is 100.00% of lines, regions and functions against a floor of 100 and 100. The facet write (S8): `cargo mutants --in-diff` over `partition.rs` and `registry.rs` (23 mutants: 18 caught, 5 unviable) and over `facet_write.rs` (35: 32 caught, 3 unviable; the first run missed one, a mapping not counted toward the depth and values caps, which a test now judges), none missed and none ledgered. Coverage of `core/facet-engine` stays 100.00% of lines, regions and functions; `bindings/wasm` is 89.84% lines and 85.14% regions against floors raised to 88 and 84 |
 | 12 | One call per user operation; boundary cost | met | A bucket and its library cross once (`facet_bucket_check`); the cost at the caps is in the entry's reason: 421 ms for the slowest draw, 88 ms for one 8 MiB string |
 | 13 | Artifact size | met | The export links the interpreter, the loader, the registry and the plugin's files: 1,096,529 to 1,363,305 bytes unstripped, 632,603 to 835,344 shipped; the ceiling is raised by hand with that reason |
 | 14 | Untrusted-input caps and a fuzz target | met | `whiteboard-wasm::facet_write::facet_bucket_check` in `crates/input-caps.json`, enforced by the export and by the shim before the call; fuzz target `facet_wasm_bucket_check` |
 | 15 | Logging; poison-and-recover | n/a | Refusals are values; no state |
-| 16 | `PORTED_FUNCTIONS` | met | `partitionFacetWrites`, stage 2: the switch in `packages/server-core/src/facet-write-core.ts`, `facet_bucket_check`, the shim's `facetBucketCheck` |
+| 16 | `PORTED_FUNCTIONS` | met (stage 4, in its realm shape) | `partitionFacetWrites` at stage 4 with a `realm`: `facetWriteCore` in `packages/server-core/src/facet-write-core.ts` dispatches to the core `installFacetWriteCore` installs, no switch is left, and the test-realm loader and the differential test must not exist; `facet_bucket_check`, the shim's `facetBucketCheck` |
 | 17 | Unicode tables | n/a | None: a string is measured in code points, with no table |
-| 18 | Exit criteria | partly | The switch defaults to `rust`; `ts` and `differential` remain as the rollback and the comparison. The TypeScript's deletion, and with it stage 4, is the next PR |
+| 18 | Exit criteria | met | Deletion: done under owner decision q40 (2026-11-11), the files and symbols listed under "Stage 4" above. Rollback: none; the daemon refuses to start without the artifact, and a defect in the core is fixed in `crates/`. What remains in TypeScript is the browser's (q47) and the oracle recorder |
 | 19 | Docs reflect the shipped state | met | This file, the crate row, `package-facet-engine.md`, ADR-0054's note |

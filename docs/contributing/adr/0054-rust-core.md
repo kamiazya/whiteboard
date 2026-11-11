@@ -935,6 +935,14 @@ write check now answers its stage as data beside its message so the TypeScript
 is compared on structure. The default flip and the TypeScript's deletion are the
 next increment.
 
+**Shipped (step 6, S8, stage 4).** The daemon's TypeScript facet write and its
+switch are deleted (owner decision q40). `WHITEBOARD_CORE_FACETS` and
+`ServerDeps.facetWriteCore` are gone; server-core's `facetWriterFor` answers
+only through the core a realm installs (`installFacetWriteCore`), a call the core
+declines is a refused write rather than a fallback, and the daemon installs the
+core at boot and refuses to start without it. The browser keeps facet-engine's
+TypeScript (q47). The record is [the parity checklist](../parity/facet-engine.md).
+
 The integrator adopted these from the gap research the same day; like the
 rows above, a later ADR may revise one:
 
