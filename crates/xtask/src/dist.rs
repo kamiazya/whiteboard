@@ -160,18 +160,7 @@ pub(crate) fn build(
         }
         Artifact::Wasm | Artifact::WasmOracle => {
             check_bindgen_version(root)?;
-            cargo.args([
-                "build",
-                "--locked",
-                "--package",
-                WASM_PACKAGE,
-                "--target",
-                WASM_TARGET,
-                "--release",
-            ]);
-            if artifact == Artifact::WasmOracle {
-                cargo.args(["--features", "oracle-surface"]);
-            }
+            cargo.args(wasm_build_args(artifact));
             run(cargo.arg("--target-dir").arg(target_dir))?;
             bindgen(target_dir)
         }
@@ -222,27 +211,53 @@ fn check_bindgen_version(root: &Path) -> Result<(), Vec<String>> {
     }
 }
 
-pub(crate) fn run_task(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
-    let usage =
-        || vec!["usage: cargo xtask dist native|wasm [--oracle] [--target-dir <dir>]".to_owned()];
+/// The cargo arguments of a wasm build: the shipped one, or the oracle one
+/// with the `oracle-surface` feature's test exports.
+fn wasm_build_args(artifact: Artifact) -> Vec<&'static str> {
+    let mut args =
+        vec!["build", "--locked", "--package", WASM_PACKAGE, "--target", WASM_TARGET, "--release"];
+    if artifact == Artifact::WasmOracle {
+        args.extend(["--features", "oracle-surface"]);
+    }
+    args
+}
+
+/// `dist`'s arguments: the artifact, and the target directory when one was
+/// named (`None` takes the artifact's default, `default_dir_for`).
+fn parse_args(args: &[&str]) -> Option<(Artifact, Option<PathBuf>)> {
     let (mut artifact, mut rest) = match args {
-        [a, rest @ ..] => (Artifact::parse(a).ok_or_else(usage)?, rest),
-        [] => return Err(usage()),
+        [a, rest @ ..] => (Artifact::parse(a)?, rest),
+        [] => return None,
     };
     if let ["--oracle", after @ ..] = rest {
         if artifact != Artifact::Wasm {
-            return Err(usage());
+            return None;
         }
         artifact = Artifact::WasmOracle;
         rest = after;
     }
+    match rest {
+        [] => Some((artifact, None)),
+        ["--target-dir", dir] => Some((artifact, Some(PathBuf::from(dir)))),
+        _ => None,
+    }
+}
+
+/// Where `artifact` builds when no `--target-dir` is named.
+fn default_dir_for(artifact: Artifact, target_directory: &Path) -> PathBuf {
+    if artifact == Artifact::WasmOracle {
+        oracle_target_dir(target_directory)
+    } else {
+        default_target_dir(target_directory)
+    }
+}
+
+pub(crate) fn run_task(args: &[&str]) -> Result<Vec<String>, Vec<String>> {
+    let usage =
+        || vec!["usage: cargo xtask dist native|wasm [--oracle] [--target-dir <dir>]".to_owned()];
+    let (artifact, named) = parse_args(args).ok_or_else(usage)?;
     let meta = metadata::load()?;
-    let target_dir = match rest {
-        [] if artifact == Artifact::WasmOracle => oracle_target_dir(&meta.target_directory),
-        [] => default_target_dir(&meta.target_directory),
-        ["--target-dir", dir] => PathBuf::from(dir),
-        _ => return Err(usage()),
-    };
+    let target_dir = named.unwrap_or_else(|| default_dir_for(artifact, &meta.target_directory));
     let epoch = source_date_epoch(&meta.workspace_root)?;
     let files = build(&meta.workspace_root, &target_dir, artifact, &epoch)?;
     Ok(files.iter().map(|f| format!("dist: {}", f.display())).collect())
@@ -272,5 +287,32 @@ mod tests {
         );
         let w = rustflags(Path::new("/src/wb"), Path::new("/c"), Path::new("/t"), Artifact::Wasm);
         assert_eq!(w.len(), 3, "{w:?}");
+    }
+
+    #[test]
+    fn the_oracle_flag_is_wasm_only_and_selects_its_own_directory() {
+        assert_eq!(parse_args(&["wasm"]), Some((Artifact::Wasm, None)));
+        assert_eq!(parse_args(&["wasm", "--oracle"]), Some((Artifact::WasmOracle, None)));
+        assert_eq!(
+            parse_args(&["wasm", "--oracle", "--target-dir", "/t"]),
+            Some((Artifact::WasmOracle, Some(PathBuf::from("/t"))))
+        );
+        assert_eq!(parse_args(&["native"]), Some((Artifact::Native, None)));
+        assert_eq!(parse_args(&["native", "--oracle"]), None);
+        assert_eq!(parse_args(&["wasm", "--target-dir"]), None);
+        assert_eq!(parse_args(&[]), None);
+        let target = Path::new("/target");
+        assert_eq!(default_dir_for(Artifact::WasmOracle, target), target.join("dist-oracle"));
+        assert_eq!(default_dir_for(Artifact::Wasm, target), target.join("dist"));
+        assert_eq!(default_dir_for(Artifact::Native, target), target.join("dist"));
+    }
+
+    #[test]
+    fn only_the_oracle_build_turns_the_test_exports_on() {
+        let feature =
+            |a| wasm_build_args(a).windows(2).any(|w| w == ["--features", "oracle-surface"]);
+        assert!(feature(Artifact::WasmOracle));
+        assert!(!feature(Artifact::Wasm));
+        assert!(wasm_build_args(Artifact::Wasm).contains(&"--release"));
     }
 }
