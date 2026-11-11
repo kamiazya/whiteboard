@@ -83,11 +83,13 @@
     "whiteboard-scene": {
       "path": "crates/core/scene",
       "layer": "core",
-      "status": "planned",
+      "status": "present",
       "description": "the scene vocabulary and the contribution traits",
       "targets": ["wasm32-unknown-unknown", "native"],
       "allowedInternalDeps": ["whiteboard-det", "whiteboard-model", "whiteboard-facet-engine"],
-      "allowedThirdParty": {},
+      "allowedThirdParty": {
+        "serde": "the Deserialize derive behind the `oracle` feature, so a test can replay the scenes the TypeScript recorded; no shipped build enables it, and it is no I/O and builds unchanged on wasm32 and native"
+      },
       "absorbs": ["packages/scene"]
     },
     "whiteboard-codec": {

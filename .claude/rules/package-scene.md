@@ -99,3 +99,13 @@ a hand guard kept honest.*
 The guard did not retire with the cycle; it got stronger. `plugin-visual/src/
 renderer-independence.test.ts` now pins that there is no import of the
 renderer AT ALL, type-only or otherwise.
+
+## The Rust twin
+
+`crates/core/scene` (`whiteboard-scene`) holds this vocabulary as Rust types:
+every `SceneNode` kind, `Appearance`, `SceneInk`, the legend, and `NodeOutline`.
+A type added to `scene-graph.ts` is added there too; the recorded
+`canvas-render` oracles (`render.jsonl`, `svg.jsonl`) fail the Rust replay on a
+field the Rust does not know (its `oracle` feature denies unknown fields). The
+closure-taking half of `contribution.ts` (`ShapeContribution`, `NodeDecoration`,
+`RenderContribution`) has no Rust form yet.

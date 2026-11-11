@@ -611,6 +611,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-scene"
+version = "0.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "wasm-bindgen-test",
+ "whiteboard-model",
+]
+
+[[package]]
 name = "whiteboard-wasm"
 version = "0.0.0"
 dependencies = [
