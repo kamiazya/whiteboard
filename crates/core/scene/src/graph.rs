@@ -133,7 +133,12 @@ pub struct Annotates {
 #[cfg_attr(
     feature = "oracle",
     derive(serde::Deserialize),
-    serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")
+    serde(
+        deny_unknown_fields,
+        tag = "kind",
+        rename_all = "camelCase",
+        rename_all_fields = "camelCase"
+    )
 )]
 pub enum LinkProvenance {
     Link { href: String, title: Option<String> },
