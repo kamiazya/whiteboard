@@ -26,6 +26,7 @@ pub mod finite_box;
 pub mod glow;
 pub mod ink;
 pub mod legend_geometry;
+pub mod linebreak;
 pub mod measure;
 pub mod measure_memo;
 pub mod node_outline;

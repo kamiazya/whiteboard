@@ -1121,6 +1121,14 @@ step 7 rebuilds it as the recorded oracle; the Unicode version of the oracle's
 tables is bounded by probes (13-era), not read from a header, as the package
 carries none.
 
+Step 7 slice S5 landed the port as `crates/core/canvas-render/src/linebreak`
+over a table generated from the trie (3,638 runs, 54 raw values), with the
+harness rebuilt as the recorded `linebreak.jsonl`: small corpora string by
+string, and digests of the three large ones (every ordered triple of class
+representatives, 200,000 seeded mixed strings, a census of U+0020-1FFFF
+between two kanji and two Latin letters, and the raw class of every code
+point) that the Rust test regenerates from the recording's `meta` record.
+
 #### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
 
 Step 7 moves layout behind the core, and layout never measures text itself:
