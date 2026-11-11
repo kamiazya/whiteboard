@@ -4,7 +4,7 @@
 //! It answers a deterministic estimate when no font is reachable, and it is the
 //! per-code-point fallback of [`FontTableMeasurer`](crate::font_measure::FontTableMeasurer)
 //! for a glyph its face lacks. Its output matches no real font; what matters is
-//! that every caller degrades in ONE way. `tests/constant_ratio_oracle.rs` holds
+//! that every caller degrades in ONE way. `tests/font_measure_oracle.rs` holds
 //! it to the TypeScript's recorded answers bit for bit.
 
 use crate::measure::{FontDescriptor, Measure, VerticalMetrics, clamp_advance};
