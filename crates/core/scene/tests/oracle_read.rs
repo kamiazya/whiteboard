@@ -99,6 +99,16 @@ fn a_field_the_vocabulary_lacks_is_refused() {
 }
 
 #[test]
+fn a_link_field_the_vocabulary_lacks_is_refused() {
+    let run = |link: &str| {
+        format!(r#"{{"nodes":[{{"kind":"textRun","bbox":{BOX},"text":"t","link":{link}}}]}}"#)
+    };
+    assert!(scene(&run(r#"{"kind":"link","href":"h"}"#)).is_ok());
+    assert!(scene(&run(r#"{"kind":"link","href":"h","rel":"nofollow"}"#)).is_err());
+    assert!(scene(&run(r#"{"kind":"embed","documentId":"d","alias":"a"}"#)).is_err());
+}
+
+#[test]
 fn an_edge_side_the_model_does_not_name_is_refused() {
     let json = r#"{"nodes":[{"kind":"edge","id":"e","path":[],"fromSide":"Top","toSide":"top",
         "fromEnd":"none","toEnd":"none"}]}"#;
