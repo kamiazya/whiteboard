@@ -969,6 +969,158 @@ Considered and not adopted: cargo-semver-checks (no crate is published; the
 (only `broken_intra_doc_links` is denied), a feature-powerset CI lane
 (features are kept near zero), and per-crate CODEOWNERS.
 
+#### The line-breaking spike (2026-11-11): no crate matches; the port does, byte for byte
+
+Risk 4 asked whether a UAX #14 crate with no `line-break: strict` level could
+stand in for `css-line-break`, the only line-break call in `canvas-render`
+(`uax-segments.ts`: `lineBreak: 'strict'`, `wordBreak: 'normal'`, then a
+code-point to UTF-16 walk). The answer is no, and the reason is not strictness.
+
+**What `css-line-break` 2.1.0 is.** A hand-written pair-rule walk over a class
+trie, not a table-driven UAX #14 and not conformant to the current one:
+- its classes are Unicode 13-era (it knows U+0C77 and U+11FB0, and has no class
+  for anything added in 14.0 or later, such as U+061D); `strict` is only CJ
+  resolved to NS and the `normal`/`loose` hyphen exceptions left off;
+- there is no rule that forbids a break before a combining mark or ZWJ
+  (LB9's "x CM" half): a CM is given its base's class and then breaks wherever
+  that class may, so `ア` + U+0301 breaks between them and so does any `PO`,
+  `PR`, `EB` or `H3` base;
+- LB25 is the old subset: no `CL x PR`, `CL x PO`, `CP x PR`, `CP x PO`,
+  `PR x OP`, `PO x OP`, `IS x NU` or `SY x NU`;
+- LB30 keeps the pre-Unicode-13 shape: only U+2329 and U+FF08 are exempt from
+  "letter or digit x OP".
+
+**The candidates**, built as `wasm32-unknown-unknown` cdylibs with the repo's
+release profile for size (`opt-level = "z"`, LTO, one codegen unit,
+`panic = "abort"`, stripped, no `wasm-opt`), one export over a UTF-16 slice:
+
+| | `unicode-linebreak` 0.1.5 | `icu_segmenter` 2.4.0 | the port (below) |
+|---|---|---|---|
+| License | Apache-2.0 | Unicode-3.0 | the repo's |
+| Both on `deny.toml`'s allowlist | yes | yes | n/a |
+| `no_std`, `unsafe` | `no_std`, none, no dependencies | `no_std`; `unsafe` only in the LSTM matrix, which the non-complex constructor does not link; 43 crates in the wasm tree | `no_std`-compatible, none |
+| Unicode | 15.0 (knows U+11B00, not U+2FFC) | 18.0, CLDR 49 | 13-era, as the oracle |
+| Strictness | none: one behaviour | `Strict` / `Normal` / `Loose` / `Anywhere`, `LineBreakWordOption`, `ja`/`zh` locale | the oracle's |
+| Wasm size | 37,134 B (11,662 gz) | 56,470 B (19,388 gz), `new_for_non_complex_scripts`, default features off | 33,561 B (17,054 gz) |
+
+An empty export is 71 B. The port is smaller than either crate because its
+table is 3,638 class runs over U+0000-10FFFF packed one per `u32` (14.5 KB);
+as `(u32, u8)` tuples the same table makes the module 48,105 B.
+
+**The differential.** One Node process computed `css-line-break`'s internal
+break offsets as the TypeScript does (UTF-16 offsets of every segment end but
+the last), and a Rust binary computed each candidate's over the same
+corpus, compared as exact offset lists per string. Three corpora:
+- *main*, 41,401 strings: the 32 pieces of `uax-segments.test.ts`, 3,000
+  seeded random joins of them, the 20 text values of the text-wrapping
+  scoreboard's 14 cases, and 40,000 seeded strings over a 212-entry
+  mixed alphabet (Latin, digits, ASCII and fullwidth punctuation, small kana,
+  prolonged sound and iteration marks, kanji, Hangul, Thai, emoji with ZWJ,
+  skin tones and regional indicators, currency, percent, combining marks,
+  NBSP, ZWSP). 2,193 of them hold a lone surrogate, which a Rust `str` cannot
+  carry, so the crates are compared on the other 39,208 and the port, which
+  reads UTF-16, on all of them;
+- *pairs*, 41,616: every ordered pair of that alphabet's 204 distinct code points,
+  the context-free class-pair view;
+- *census*, 520,640: every code point U+0020-3FFFF (and U+E0000-E01FF) between
+  two kanji and between two Latin letters, the table view.
+
+| Agreement (strings) | main (39,208) | pairs | census | scoreboard text (20) |
+|---|---|---|---|---|
+| `unicode-linebreak` | 77.96% | 98.81% | 99.95% | 20 |
+| `icu_segmenter` Strict | 71.28% | 97.81% | 99.84% | 20 |
+| `icu_segmenter` Strict + `ja` | 71.28% | 97.81% | 99.84% | 20 |
+| `icu_segmenter` Normal | 35.10% | 90.28% | 99.82% | 19 |
+| `icu_segmenter` Loose | 26.12% | 86.75% | 99.82% | 19 |
+| the port | 100.00% (41,401) | 100.00% | 100.00% | 20 |
+
+The `ja` locale changes nothing at `Strict`. On the scoreboard's own text the
+two strict candidates agree with the oracle on all 20 strings, so a stand-in
+would not have moved that scoreboard; what it would move is everything the
+scoreboard does not contain.
+
+**The disagreement is the oracle's rules, not the strictness level and not
+mostly the Unicode version.** Of `unicode-linebreak`'s 10,250 differing
+offsets over 8,642 strings, all but 71 are a break the oracle makes and
+the crate does not:
+- 4,366 are before a combining mark or ZWJ (`ID|ZWJ` 2,339, `ID|CM` 712,
+  `PO|CM` 304, `PR|CM` 281, `EB|CM` 156, `H3|CM` 105, and the same for `RI`,
+  `CB`, `CM`, `H2`);
+- 5,250 are LB25 pairs, among them (`CL|PR` 1,497, `CL|PO` 912, `PR|OP` 908, `PO|OP` 876,
+  `IS|NU` 587, `CP|PR` 222, `SY|NU` 120, `CP|PO` 128);
+- 504 are LB30 around U+FF08 and U+2329, and 130 are context effects of the
+  rows above (the 71 the crate alone makes among them).
+`icu_segmenter` Strict repeats all of it (8,335 of the 8,642 strings fail on
+both crates) and adds 2,926 strings of its own, almost all LB30's exclusion of
+East Asian wide and fullwidth openers (`a` then `「`: 2,719 offsets
+`AL|OP`, 1,282 `NU|OP`) and Thai, Lao, Khmer and Myanmar, which the oracle
+never breaks (it reads class SA as AL) and which ICU breaks even without a
+dictionary (111 offsets `SA|SA`). The table's version is the small part: the
+census differs on 236 strings for `unicode-linebreak` and 832 for
+`icu_segmenter`, 0.05% and 0.16% of 520,640, nearly all code points added after
+Unicode 13 (U+061D and the 14.0 to 18.0 blocks).
+
+**Verdict.**
+- (a) A crate as is: no. The best, `unicode-linebreak`, is wrong on 22% of
+  generated strings, and no option of `icu_segmenter` reaches the oracle.
+- (b) A crate plus a tailoring layer: not built, and not recommended. The
+  tailoring is the five families above, and each is context-dependent: the
+  combining-mark rows need the oracle's class folding (a mark takes its base's
+  class, `indices` stays at the base for the rule that stops a break at the
+  start of text), and the numeric rows need its backward scans. A layer that
+  reproduces those is the oracle's algorithm over the crate's table.
+- (c) The port: built and measured. `csslb.rs` is 132 lines, one `allowed`
+  function holding LB4 to LB30b in the oracle's order and a class pass, over a
+  table generated from the oracle's own trie by walking U+0000-10FFFF (3,638
+  runs, 54 raw values, the letter-number flag kept so LB8a's raw ZWJ read
+  stays exact).
+  It agrees on 41,401 of 41,401 (the lone surrogates included), 41,616 of
+  41,616 and 520,640 of 520,640. The harness was mutation-checked:
+  dropping U+FF08 from LB30's exemption leaves 98.88% on *main*, inverting the
+  regional-indicator parity 90.65%, removing the LB9 fold 99.14%, removing
+  LB8a's ZWJ check 89.83%, and dropping LB25's closing-punctuation look-behind
+  99.53%. One mutant survived, the upper bound of the unassigned-plane
+  default to ID, as an equivalent mutant: the trie already says ID there.
+- (d) A pinned diff: only for the later move below.
+
+**Recommendation: (c).** Step 7's gate is identity ("SVG golden byte-identical
+on TypeScript, native and wasm"), the port reaches it with no TypeScript
+change and no golden moved, and it is smaller than either crate. Three
+consequences:
+- The table is generated, never typed, from `css-line-break`'s trie by a
+  script that runs while the TypeScript still exists, and the gate is a
+  recorded oracle (decision 4) of the three corpora's answers, as the
+  frontmatter's is; the census is regenerated from the table rather than
+  recorded.
+- After the TypeScript is deleted the port is the specification, holes
+  included. Its header says so, and the holes are a ledger entry: the missing
+  `x CM` rule, the LB25 pairs above, LB30's East Asian exemptions and a table
+  that stops at Unicode 13.
+- Moving off those holes is one conscious later decision, taken on both sides
+  at once, because the gate is identity: `icu_segmenter` (97.81% of generated
+  strings, 18.0) or a corrected fork of the oracle, vendored the way BudouX is,
+  with the goldens moved once under a ledger (decision 4). It is not on step
+  7's path. Its price is the 22% to 29% of random mixed strings that differ at
+  some offset, mostly marks and numbers, and the Thai behaviour above.
+
+**BudouX** (`vendor/budoux`, 82 lines plus a 1,678-entry integer model) is a
+model-table walk and ports as generated data. For each UTF-16 index it sums
+13 weights looked up by a one-, two- or three-unit substring of its
+neighbourhood and cuts when the sum exceeds half the total of all weights;
+every weight is an integer, so the comparison is exact in doubled integer
+arithmetic. The Rust side is the same walk over `u16` slices with the model as
+a sorted static array per feature group (substrings that split a surrogate pair
+stay representable), generated from `ja-model.ts` by the same script that
+dumps the trie. Not measured here: the effort is estimated at half a day, gated
+by the same differential over the kana strings of these corpora.
+
+**What stays open.** The wrapping scoreboard and `inline-junction` were not
+re-run with the port behind them (their one reader is `uaxSegments`, which the
+differential covers offset for offset); the spike's harness is throwaway and
+step 7 rebuilds it as the recorded oracle; the Unicode version of the oracle's
+tables is bounded by probes (13-era), not read from a header, as the package
+carries none.
+
 #### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
 
 Step 7 moves layout behind the core, and layout never measures text itself:
@@ -1379,7 +1531,7 @@ through a ledgered exception.
 | 1 | Byte-identical SVG against the oracle fails on `toFixed` ties, transcendentals or map order | The det precursor (decision 11), before any port |
 | 2 | UTF-16 semantics — comparison, lengths, loro indices, `maxLength` | `det`'s UTF-16 operations; every contract offset declares its unit |
 | 3 | Markdown/YAML parity: markdown-rs parses, but there is no remark-stringify twin; the YAML crates are archived or unsound | The restricted frontmatter parser, differentially fuzzed against npm `yaml` (decision 25); stringify spiked before step 6 (2026-11-09: the closest twin matches 89.6% without references and needs a fork, and the writer has no production caller yet) |
-| 4 | Line breaking: `css-line-break` strict (CSS kinsoku) against a UAX #14 crate with no strictness levels | Spike before step 7 |
+| 4 | Line breaking: `css-line-break` strict (CSS kinsoku) against a UAX #14 crate with no strictness levels | Spiked 2026-11-11: no crate matches (`unicode-linebreak` 78%, `icu_segmenter` Strict 71% of generated strings; the gap is the oracle's own rules, not strictness); a 132-line port over a generated table matches 100% on 603,657 strings, so step 7 ports it and a move to a conformant breaker is one later ledgered decision |
 | 5 | Highlighting has no Rust twin of highlight.js | Host seam through the transition |
 | 6 | Two loro engines: size, version pin, `_utf16` APIs | One-cohort migration; lock-step guard |
 | 7 | Workers: script size; CPU time for large layouts | Size ledgers per artifact; measured CPU per layout size |
