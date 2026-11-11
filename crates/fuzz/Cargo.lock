@@ -291,6 +291,14 @@ dependencies = [
  "unicode-segmentation",
  "whiteboard-facet-engine",
  "whiteboard-model",
+ "whiteboard-scene",
+]
+
+[[package]]
+name = "whiteboard-scene"
+version = "0.0.0"
+dependencies = [
+ "whiteboard-model",
 ]
 
 [[package]]

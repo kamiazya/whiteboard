@@ -62,6 +62,11 @@ describe('the recorded SVG backend edge cases', () => {
     expect(filters('budget/neon-board-1x'), 'a board under the budget keeps all').toBe(25)
   })
 
+  it('records the scenes the case list builds today', () => {
+    const inputs = recorded.map(({ id, scene, options }) => ({ id, scene, options }))
+    expect(inputs).toEqual(svgEdgeCaseInputs())
+  })
+
   it('equals what the TypeScript answers today', () => {
     const lines = text.trimEnd().split('\n')
     const parted = recorded.findIndex(

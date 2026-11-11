@@ -294,6 +294,13 @@ mod tests {
     }
 
     #[test]
+    fn to_fixed_prints_a_zero_of_either_sign_without_one() {
+        assert_eq!(js_to_fixed(0.0, 2), "0.00");
+        assert_eq!(js_to_fixed(-0.0, 2), "0.00");
+        assert_eq!(js_to_fixed(0.0, 0), "0");
+    }
+
+    #[test]
     fn to_fixed_carries_through_a_run_of_nines() {
         assert_eq!(js_to_fixed(99.9375, 3), "99.938");
         assert_eq!(js_to_fixed(0.999_999_9, 3), "1.000");
