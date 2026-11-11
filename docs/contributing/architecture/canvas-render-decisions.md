@@ -864,3 +864,25 @@ undressed; the reading that found it is the eval lane's.
 
 Measured before the band: the panel sat over the first box of every tagged
 board.
+
+## The recorded render oracle
+
+`render.jsonl` (what `layoutSpatialCanvas` answers: the scene, the SVG, the
+keyed groups, the scene digest) and `svg.jsonl` (the SVG backend alone, over
+envelope options) hold the TypeScript's answers for the Rust composer and SVG
+slices to replay byte for byte (ADR-0054 decision 11). Each line carries its
+inputs, so the freshness tests (`packages/canvas-render/src/oracle/render-recorded-oracle.test.ts`,
+`svg-recorded-oracle.test.ts`) draw nothing and read no corpus: they recompute
+every line and fail naming the first that moved. Re-record after a deliberate
+rendering change:
+`WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node recorded-oracle`
+(the `src/oracle/` directory is the whole recording).
+
+The scene is written by `packages/canvas-render/src/test-utils/render-oracle/scene-dump.ts`: keys sorted,
+every number as the hex of its 64 IEEE bits (so `-0` and a last-bit difference
+show), a new scene node kind fails to compile until placed. It is test-only
+and not exported from the package entry (the scene is not a published
+contract, q53). `every-kind-scene.ts` beside it is keyed by kind for the same reason.
+The generated canvases were drawn once from a fixed seed and are committed as
+data; that seed is provenance, not a pinned property seed. The measurer is
+`createFakeMeasure()`; body parsing and highlighting are the package defaults.
