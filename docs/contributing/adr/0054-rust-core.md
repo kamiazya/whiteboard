@@ -1221,8 +1221,9 @@ which is a gain on the TypeScript layout too.
 - The production measurer is the in-core `FontTableMeasurer` of seam 1. This
   spike did not build it, so its own cost is unmeasured here; its arithmetic
   must follow the TypeScript measurer's order to be differential against
-  `mcp-server`'s, and against Canvas it is within the conformance suite's
-  0.01 px by design.
+  `mcp-server`'s. Against Canvas, 0.01 px of advance width (and the suite's
+  1 px for vertical metrics) is the target it must be checked against, not a
+  result this spike measured.
 - **The core measures through a `Measure` trait.** Three implementers:
   the font table; a native fake whose arithmetic is the TypeScript fake's
   (`len_utf16 as f64 * factor * size`, IEEE-identical, no callback); and
@@ -1235,6 +1236,15 @@ which is a gain on the TypeScript layout too.
   cross as an interned id (the font table registered once per layout, the
   per-font ascent, descent and line gap with it) and the call answers one
   `f64` advance: 145 ns, against 260 for a css string and 736 for an object.
+  Answering vertical metrics per font is a compatibility decision, not a
+  free one: `MeasureText` lets ascent vary by text and layout takes each
+  run's baseline from it. The browser measurer already answers the font's
+  box (`fontBoundingBoxAscent`) and falls back to the text's own
+  (`actualBoundingBoxAscent`) only on an engine without it, and the fakes and
+  `mcp-server`'s measurer answer per font; so the per-font shape changes a
+  baseline only on that fallback, where the core's answer becomes the font's
+  box. A host that needs per-text vertical metrics takes the object-returning
+  shape, at its measured 736 ns.
   `measure_batch` is dropped from the fixed shape: a layout cannot
   enumerate its demand (52% predicted, 4-8 rounds), and 73 against 145 ns per
   string saves under 0.3 ms a layout. It returns only if a host's per-call
@@ -1335,9 +1345,10 @@ before the first port.
    already posts the theme's faces before measuring, so the bytes exist on
    every surface. The host callback remains a port for system fonts and
    tests only, in a fixed shape: fonts interned as `FontId`, the core
-   memoising by `(FontId, size, text)`, and an optional `measure_batch` so a
-   host answers once per paragraph. Browser and daemon then measure
-   identically by construction.
+   memoising by `(FontId, size, text)`, one `f64` advance per call (the
+   measure-seam spike, 2026-11-11, dropped the `measure_batch` this seam first
+   named: a layout cannot enumerate its demand). Browser and daemon then
+   measure identically by construction.
 2. **Plugins: traits that take data, and a closed set of contribution
    points.** The bundled plugin implements the traits; the declarative
    manifest (decision 12) is just another implementer. Facet schemas are
