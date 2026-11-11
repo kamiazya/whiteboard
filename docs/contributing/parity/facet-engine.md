@@ -6,10 +6,11 @@ runtime interpreter of the contract dialect** (`crates/core/facet-engine`, step 
 of [ADR-0054](../adr/0054-rust-core.md), slice S6). The TypeScript it is held to
 is `validateFacetWrite`, `targetsOf` and `assetRefsOf` in
 `packages/facet-engine/src/registry.ts`, with each facet's generated Zod schema
-as the oracle. **There is no wasm export, no switch and no `PORTED_FUNCTIONS`
-entry yet; those are S8.** A `PortedFunction` names the shim export that
-re-exports or dispatches to it (`shim: { module, file, member }`) and a stage 2
-differential through the wasm, and neither exists until S8 adds the export.
+as the oracle. **S8 adds the wasm export (`facet_bucket_check`, below) and its
+shim; the switch and the `PORTED_FUNCTIONS` entry are not built yet.** A
+`PortedFunction` names the shim export that re-exports or dispatches to it
+(`shim: { module, file, member }`) and a stage 2 differential through the wasm;
+the export and the differential exist, the dispatch a root takes does not.
 
 ## What shipped
 
@@ -61,7 +62,63 @@ differential through the wasm, and neither exists until S8 adds the export.
   (`manifest::read` leaves `editor` and `compat` as `None`), more than one
   plugin, a workspace's own stencil library, the specimen-icon check, and the
   wasm export, the switch, `PORTED_FUNCTIONS`, the input caps and the fuzz
-  target (S8). `visual_registry()` rebuilds on every call; S8 caches it.
+  target (S8; the library, the export, the caps, the fuzz target and the cache
+  of `visual_registry()` are below, the switch and `PORTED_FUNCTIONS` follow).
+
+## What S8 added: the facet write behind one export
+
+`facet_bucket_check(target, bucket, library) -> String` in
+`crates/bindings/wasm/src/facet_write.rs` is the server's `partitionFacetWrites`
+and `refuseUnusableStencilLibrary` in one call. The logic is
+`whiteboard_facet_engine::partition` (the bucket key by key in its order: the
+facet's targets, `validate_facet_write_with`, then `first_unrecognized_key`;
+the first refusal wins) and `Registry::judge_workspace_stencil` /
+`compose_library` (each library stencil judged alone: name, the engine's
+shape, each facet payload; the refused ones dropped); the export is the wire,
+the caps and a `visual_registry()` built once behind a `OnceLock`.
+
+- **Inputs.** The target, the bucket and the workspace's stored library as the
+  value wire of `okf_wire.rs` (every number as its 64 bits, one array per
+  collection, a mapping in the order the host enumerates it). The library is
+  registered for the call as `workspace.<name>` ids after the registry's own.
+- **Answer.** `["ok", sets, deletions]`; `["refused", key, stage, ...]` with the
+  stage `target`, `malformed-key`, `not-current`, `invalid` (issues as
+  `[path, code, detail]`, a union's arms and a record key's issues nested),
+  `unregistered-asset`, `unrecognized-key` or `library` (each stencil the
+  registry would drop, with why); or `["declined", code, class]` past a cap,
+  which a root answers from the TypeScript. The sentence is the root's to word
+  (q43, above).
+- **Held to the TypeScript** by `packages/server-core/src/tools/facet-write.core.test.ts`,
+  which runs `partitionFacetWrites` and `refuseUnusableStencilLibrary` beside
+  the shim over hand-written payloads at every target and over seven stored
+  libraries, a valid, a broken and a stripped payload for every registered facet
+  and generated buckets: the key, the stage, the path and code of every issue in
+  order, the dropped stencils, and the sets bit for bit in their key order; and by
+  `crates/bindings/wasm/tests/facet_write_oracle.rs`, which replays the 2,768
+  recorded writes through the export. Both reach every stage.
+- **What the TypeScript does that the Rust must copy.** A key spelt like an
+  `Object.prototype` member is never reported as stripped, because the walk asks
+  `key in parsed`; the walk finds the first stray key in the sender's order, a list
+  index at a time; the library the bucket writes is judged only after every key has
+  passed; and a payload holding `__proto__` stops the walk at its key, which the
+  shim does (the core never sees one). A null payload is a deletion and is judged by
+  nothing.
+- **Declines, not deviations.** A value the wire cannot carry is declined, and the
+  root answers it from the TypeScript: an `undefined` where the TypeScript reads an
+  absent key (it would accept `{ kind: 'ellipse', extra: undefined }`), a lone
+  surrogate, a value past the caps. The shim's tests pin the first against what
+  `firstUnrecognizedKey` answers for it.
+- **Caps** (`crates/input-caps.json`): 8 MiB of the two texts together, 131,072
+  values, 64 levels, 3,000 ms; the reasons carry the measurements. The values cap
+  exists because the cost of a refusal is superlinear in the values refused, which a
+  byte cap does not bound: 4.2 MB of invalid tag keys took 4.7 s, 8 MB took 15.7 s.
+  The fuzz target `facet_wasm_bucket_check` holds the stored and deleted keys to the
+  bucket's own and a refusal to a key the bucket holds, with 81 seeds taken from the
+  recording.
+- **Size.** The unstripped artifact grew from 1,096,529 to 1,363,305 bytes and the
+  shipped, stripped module from 632,603 to 835,344: the interpreter, the loader and
+  the registry, the visual plugin's checks, and 73 KB of the plugin's own files
+  embedded. The ledger's ceiling is raised by hand with that reason.
 
 ## Declared deviation (owner decision q43)
 
@@ -124,17 +181,17 @@ now has a unit test.
 | 3 | Clippy, fmt, no new `#[expect]` | met | None added |
 | 4 | Properties through the prelude, floors, mutation-checked | met | `tests/schema_properties.rs`: totality and paths into the input, a fixed point on accept, an unknown key stripped or named; each has a reachability floor |
 | 5 | Port conformance suites | n/a | A pure function of a payload |
-| 6 | Layer 1: TypeScript tests against Rust | not yet | There is no export to run them against (S8) |
-| 7 | Layer 2: property differential | partly | The recorded oracles replace the live differential until the export exists |
-| 8 | Layer 3: byte-identical on wasm | met | Both replays and every test run on wasm32 with the same count: 61 tests for `whiteboard-facet-engine` and 21 for `whiteboard-plugin-visual` on both targets (`cargo xtask cross-target`) |
+| 6 | Layer 1: TypeScript tests against Rust | partly | `facet-write.core.test.ts` runs the TypeScript write path beside the export; the existing server-core write suites run against the TypeScript until the switch exists |
+| 7 | Layer 2: property differential | met | `facet-write.core.test.ts`: generated buckets and a payload per registered facet, valid, broken and stripped, through the shim against `partitionFacetWrites`, every stage reached; the recorded oracles hold the registry below it |
+| 8 | Layer 3: byte-identical on wasm | met | Both replays and every test run on wasm32 with the same count: 94 tests for `whiteboard-facet-engine` and 25 for `whiteboard-plugin-visual` on both targets (`cargo xtask cross-target`) |
 | 9 | Tolerated differences are ledger entries | met | The message (q43), above |
 | 10 | `differential` has run in CI and dogfooding | not yet | S8 |
-| 11 | `cargo mutants` clean or ledgered; coverage at the floor | met | `cargo mutants` over `schema/*.rs` and `registry.rs`, judged by this crate's and `whiteboard-plugin-visual`'s tests: 326 mutants, 137 caught, 188 unviable and one missed (a non-empty default read as an empty one), which a test now judges; nothing is ledgered. `pnpm rust:mutants:pr`, shard 1 of 8: 41 mutants, 35 caught, 6 unviable, none missed. Coverage of `core/facet-engine` is 100.00% of lines, regions and functions against a floor of 100 and 100 |
-| 12 | One call per user operation; boundary cost | not yet | S8 |
-| 13 | Artifact size | met | The wasm artifact does not change: nothing links the crate yet (`cargo xtask size` fits the same ledger) |
-| 14 | Untrusted-input caps and a fuzz target | not yet | The entry is the export (S8) |
+| 11 | `cargo mutants` clean or ledgered; coverage at the floor | met | `cargo mutants` over `schema/*.rs` and `registry.rs`, judged by this crate's and `whiteboard-plugin-visual`'s tests: 326 mutants, 137 caught, 188 unviable and one missed (a non-empty default read as an empty one), which a test now judges; nothing is ledgered. `pnpm rust:mutants:pr`, shard 1 of 8: 41 mutants, 35 caught, 6 unviable, none missed. Coverage of `core/facet-engine` is 100.00% of lines, regions and functions against a floor of 100 and 100. The facet write (S8): `cargo mutants --in-diff` over `partition.rs` and `registry.rs` (23 mutants: 18 caught, 5 unviable) and over `facet_write.rs` (35: 32 caught, 3 unviable; the first run missed one, a mapping not counted toward the depth and values caps, which a test now judges), none missed and none ledgered. Coverage of `core/facet-engine` stays 100.00% of lines, regions and functions; `bindings/wasm` is 89.84% lines and 85.14% regions against floors raised to 88 and 84 |
+| 12 | One call per user operation; boundary cost | met | A bucket and its library cross once (`facet_bucket_check`); the cost at the caps is in the entry's reason: 421 ms for the slowest draw, 88 ms for one 8 MiB string |
+| 13 | Artifact size | met | The export links the interpreter, the loader, the registry and the plugin's files: 1,096,529 to 1,363,305 bytes unstripped, 632,603 to 835,344 shipped; the ceiling is raised by hand with that reason |
+| 14 | Untrusted-input caps and a fuzz target | met | `whiteboard-wasm::facet_write::facet_bucket_check` in `crates/input-caps.json`, enforced by the export and by the shim before the call; fuzz target `facet_wasm_bucket_check` |
 | 15 | Logging; poison-and-recover | n/a | Refusals are values; no state |
-| 16 | `PORTED_FUNCTIONS` | not yet | Needs the shim export (S8) |
+| 16 | `PORTED_FUNCTIONS` | not yet | The export and its shim exist; the entry arrives with the switch a root dispatches through |
 | 17 | Unicode tables | n/a | None: a string is measured in code points, with no table |
 | 18 | Exit criteria | not yet | S8 |
 | 19 | Docs reflect the shipped state | met | This file, the crate row, `package-facet-engine.md`, ADR-0054's note |

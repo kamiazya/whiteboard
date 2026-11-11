@@ -217,8 +217,8 @@ segment, version and namespaced-id grammars and the glyph silhouettes;
 `validateFacetWrite`, `targetsOf` and `assetRefsOf` answer, and read the same
 contract files the generated Zod comes from: a plugin's payload schemas are
 data (owner decision q41), judged by an interpreter of the contract dialect, in
-the issues' path and code and order and not in their message (q43). Nothing here
-calls it yet: the wasm export and the switch are S8.
+the issues' path and code and order and not in their message (q43). The export is
+`facet_bucket_check` (S8, below); the switch is not built yet.
 
 - **The oracle is Zod's own behaviour, not the contract's text.** Two recordings
   hold it, both regenerated with `WHITEBOARD_RECORD_ORACLE=1` and both asked again
@@ -248,5 +248,21 @@ stencil's facet payloads are checked against the facet they name, as
 what the engine's own contracts need; the plugin's `Host` rides beside them. The
 JSON is read by `whiteboard_model::json` (`serde_json` sorts keys), so an asset's
 order is the file's. Not built yet: compat (`resolve_facet_payload`), the derived
-form, several plugins, a workspace's stencil library and the specimen-icon check.
+form, several plugins and the specimen-icon check.
 
+### The bucket, and a workspace's library (S8)
+
+`partition::partition` is `partitionFacetWrites` in Rust: the bucket key by key in
+the order it is given, the facet's targets (`targets_of`, for any version of a
+registered key), the registry's own write check, then `first_unrecognized_key`;
+the first refusal wins, a null payload deletes and is judged by nothing. The walk
+for a stripped key keeps the TypeScript's `key in parsed`, so a key spelt like an
+`Object.prototype` member (`constructor`, `toString`, ...) is never reported, which
+`OBJECT_PROTOTYPE` records and `crates/core/facet-engine/tests/partition.rs` holds; `__proto__` is refused
+before a payload is judged, in the shim. `Registry::validate_facet_write_with`
+registers asset ids for one call after the registry's own, which is how a
+workspace's stencils (`workspace.<name>`) are known without the registry being
+rebuilt, and `judge_workspace_stencil` / `compose_library` judge a library a
+stencil at a time (name, the engine's shape, each facet payload), the refused ones
+dropped, as `composeWorkspaceStencils` does. Which facet carries the library
+(`visual.stencils/v0`) is a plugin's declaration and is named by the wasm export,
