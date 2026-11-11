@@ -10,13 +10,13 @@ publish.workspace = true
 
 [dependencies]
 unicode-segmentation.workspace = true
+whiteboard-facet-engine = { path = "../facet-engine" }
 whiteboard-model = { path = "../model" }
 
 # The manifest test reads the instance and its contract as JSON; no shipped
 # code does.
 [dev-dependencies]
 serde_json.workspace = true
-whiteboard-facet-engine = { path = "../facet-engine" }
 
 # QR-21 layer 3: the same tests run natively and on wasm32 under Node.
 [target.'cfg(target_arch = "wasm32")'.dev-dependencies]

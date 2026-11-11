@@ -9,18 +9,13 @@
 //! named refusal here, instead of a payload that is judged by a schema with a
 //! rule quietly missing.
 
-#[path = "common/contract.rs"]
-mod contract;
-
-use contract::from_json;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
-use whiteboard_facet_engine::checks as engine;
-use whiteboard_facet_engine::schema::{
-    Code, Contracts, Detail, External, Host, Issue, Predicate, Refusal,
-};
+use whiteboard_facet_engine::plugin::ENGINE_HOST;
+use whiteboard_facet_engine::schema::{Contracts, External, Host, Predicate, Refusal};
 use whiteboard_model::Value;
-use whiteboard_plugin_visual::checks as visual;
+use whiteboard_model::json;
+use whiteboard_plugin_visual::host::VISUAL_HOST;
 
 const CONTRACTS: [(&str, &str); 6] = [
     (
@@ -42,18 +37,6 @@ const CONTRACTS: [(&str, &str); 6] = [
     ("model/okf.schema.json", include_str!("../../../../contracts/model/okf.schema.json")),
     ("model/spatial.schema.json", include_str!("../../../../contracts/model/spatial.schema.json")),
 ];
-
-fn canvas_color(value: &Value) -> Result<Value, Vec<Issue>> {
-    match value {
-        Value::String(text) if visual::canvas_color(text) => Ok(value.clone()),
-        _ => Err(vec![Issue {
-            path: Vec::new(),
-            code: Code::Custom,
-            detail: Detail::None,
-            continues: true,
-        }]),
-    }
-}
 
 /// Every string under `key`, at any depth, in the order the contract reads.
 fn named(node: &Value, key: &str, out: &mut Vec<String>) {
@@ -84,30 +67,13 @@ fn externals(contract: &Value) -> Vec<String> {
 
 #[test]
 fn the_facet_and_plugin_contracts_compile_with_what_their_hosts_supply() {
-    let host = Host {
-        matchers: &[
-            ("namespaced_id", engine::namespaced_id),
-            ("facet_key", engine::facet_key),
-            ("hex_color", engine::hex_color),
-            ("facet_segment", engine::facet_segment),
-            ("version_tag", engine::version_tag),
-            ("schema_ref", engine::schema_ref),
-            ("tag_identifier", visual::tag_identifier),
-        ],
-        checks: &[
-            ("single_grapheme", visual::single_grapheme),
-            ("canvas_color", visual::canvas_color),
-        ],
-        externals: &[
-            ("EdgeRoutingStyle", External::AsWritten),
-            ("LineJumps", External::AsWritten),
-            ("CanvasColor", External::Validator(canvas_color)),
-        ],
-    };
+    let matchers = [ENGINE_HOST.matchers, VISUAL_HOST.matchers].concat();
+    let host =
+        Host { matchers: &matchers, checks: VISUAL_HOST.checks, externals: VISUAL_HOST.externals };
     let owned: Vec<(&str, Value)> = CONTRACTS
         .iter()
         .take(4)
-        .map(|(path, text)| (*path, from_json(text).expect("a contract is JSON")))
+        .map(|(path, text)| (*path, json::parse(text).expect("a contract is JSON")))
         .collect();
     let loaded: Vec<(&str, &Value)> = owned.iter().map(|(path, value)| (*path, value)).collect();
     let set = Contracts::load(&loaded, &host);
@@ -126,7 +92,7 @@ fn the_facet_and_plugin_contracts_compile_with_what_their_hosts_supply() {
 #[test]
 fn each_model_contract_is_refused_by_the_construct_only_the_model_port_has() {
     for (path, text) in &CONTRACTS[4..] {
-        let contract = from_json(text).expect("a contract is JSON");
+        let contract = json::parse(text).expect("a contract is JSON");
         let (mut matchers, mut checks) = (Vec::new(), Vec::new());
         named(&contract, "x-wb-matcher", &mut matchers);
         named(&contract, "x-wb-check", &mut checks);
