@@ -15,7 +15,10 @@
 pub mod checks;
 #[path = "generated/engine.rs"]
 pub mod engine;
+pub mod manifest;
+pub mod plugin;
 #[path = "generated/plugin_manifest.rs"]
 pub mod plugin_manifest;
 pub mod registry;
 pub mod schema;
+mod value;
