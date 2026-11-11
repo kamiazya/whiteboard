@@ -233,7 +233,7 @@ describe.runIf(built)('the edge primitives and their Rust port answer the same n
     expect(reach.strictInk).toBeGreaterThan(17)
     expect(reach.tunnelled).toBeGreaterThan(20)
     expect(reach.retraced).toBeGreaterThan(28)
-    expect(reach.diagonal).toBeGreaterThan(10)
+    expect(reach.diagonal).toBeGreaterThan(22)
     expect(reach.blocked).toBeGreaterThan(45)
     expect(reach.crosses).toBeGreaterThan(24)
     expect(reach.hits).toBeGreaterThan(34)

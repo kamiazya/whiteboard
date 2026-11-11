@@ -80,5 +80,35 @@ export function rectsAgainst(p: readonly Point[]): fc.Arbitrary<Rect[]> {
   return fc.array(fc.oneof(rect, anchored, anchored), { maxLength: 5 })
 }
 
-/** A path and rects drawn against it; see {@link rectsAgainst}. */
-export const pathAndRects = path.chain((p) => fc.tuple(fc.constant(p), rectsAgainst(p)))
+/**
+ * A rect centred on the midpoint of one of the path's non-axis-aligned
+ * segments, sized so the chord through it is strictly inside. `rectsAgainst`
+ * reaches that arrangement only when its random segment index lands on a
+ * diagonal one, and a diagonal step is one in six, so the diagonal ink term
+ * would otherwise be compared on zeros in a large share of draws.
+ */
+function rectsOnDiagonals(p: readonly Point[]): fc.Arbitrary<Rect[]> {
+  const diagonals = p.slice(1).flatMap((b, i) => {
+    const a = p[i] as Point
+    return b.x - a.x !== 0 && b.y - a.y !== 0 && Number.isFinite(a.x + a.y + b.x + b.y)
+      ? [{ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }]
+      : []
+  })
+  if (diagonals.length === 0) return fc.constant([])
+  const span = fc.integer({ min: 1, max: 24 }).map((k) => k * 2.5)
+  return fc
+    .array(fc.tuple(fc.nat(diagonals.length - 1), span, span), { minLength: 1, maxLength: 2 })
+    .map((drawn) =>
+      drawn.map(([i, w, h]) => {
+        const m = diagonals[i] as Point
+        return { x: m.x - w / 2, y: m.y - h / 2, w, h }
+      }),
+    )
+}
+
+/** A path and rects drawn against it; see {@link rectsAgainst} and {@link rectsOnDiagonals}. */
+export const pathAndRects = path.chain((p) =>
+  fc
+    .tuple(rectsAgainst(p), rectsOnDiagonals(p))
+    .map(([against, onDiagonals]): [Point[], Rect[]] => [p, [...against, ...onDiagonals]]),
+)
