@@ -47,11 +47,12 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
   the first payload holding `__proto__` and answers `reserved-key` there unless a key
   before it is refused, because the server's walk throws at that point; it declines
   a value the wire cannot carry, among them an `undefined` the TypeScript reads as an
-  absent key and would have accepted, and the root answers those from the
-  TypeScript. `library` is the workspace's stored stencils by bare name, passed only
-  for a bucket that writes a stencil. Held to the TypeScript by server-core's
-  `facet-write.core.test.ts` (the oracle's functions live there, and core-wasm
-  cannot import them).
+  absent key and would have accepted; the daemon refuses those as a rejected facet
+  write, since there is no TypeScript judgement left to answer them (S8 stage 4).
+  `library` is the workspace's stored stencils by bare name, passed only for a
+  bucket that writes a stencil. Held to the recorded oracle by
+  `facet-write.rust.test.ts`, and through the daemon's writer by server-core's
+  `facet-write.dispatch.test.ts`.
 - Refusing, as `CoreInputRefused` with a `code` from the generated
   `RefusalCode` (`src/generated/input-caps.ts`, `cargo xtask codegen` from
   `crates/input-caps.json`, so both languages refuse by one cap, QR-28b):
