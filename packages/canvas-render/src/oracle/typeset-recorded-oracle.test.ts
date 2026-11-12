@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
@@ -26,11 +27,38 @@ const FILE = new URL('./typeset.jsonl', import.meta.url)
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
   const records = typesetInputs(true).map(typesetAnswer)
   const meta: RecordMeta = { kind: 'meta', seed: GENERATED_SEED, generated: GENERATED_COUNT }
-  writeFileSync(FILE, `${[meta, ...records].map((r) => JSON.stringify(r)).join('\n')}\n`)
+  // The host's answers repeat across records (every tree that embeds a document carries that
+  // document's tables), so each distinct set is written once and a record names it by key.
+  const tables = new Map<string, unknown>()
+  const keyed = records.map((record) => {
+    const key = keyOf(record.seams)
+    tables.set(key, record.seams)
+    return { ...record, seams: key }
+  })
+  const sections = [...tables].map(([key, seams]) => ({ kind: 'seams', key, seams }))
+  writeFileSync(FILE, `${[meta, ...sections, ...keyed].map((r) => JSON.stringify(r)).join('\n')}\n`)
+}
+
+function keyOf(seams: unknown): string {
+  return createHash('sha256').update(JSON.stringify(seams)).digest('hex').slice(0, 24)
 }
 
 const lines = readFileSync(FILE, 'utf8').trimEnd().split('\n')
-const records = lines.slice(1).map((line) => JSON.parse(line) as TypesetRecord)
+const parsed = lines.slice(1).map((line) => JSON.parse(line) as { kind?: string; key?: string })
+const tables = new Map(
+  parsed.flatMap((line) =>
+    line.kind === 'seams'
+      ? [[line.key, (line as unknown as { seams: unknown }).seams] as const]
+      : [],
+  ),
+)
+/** A record as it was answered, its seams read back from the table it names. */
+const records = parsed
+  .filter((line) => line.kind !== 'seams')
+  .map((line) => {
+    const named = line as unknown as { seams: string }
+    return { ...named, seams: tables.get(named.seams) } as unknown as TypesetRecord
+  })
 
 const asInput = ({
   id,
