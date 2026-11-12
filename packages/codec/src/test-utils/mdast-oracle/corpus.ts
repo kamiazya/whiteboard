@@ -12,7 +12,7 @@ export const PAST_BOUND_PREFIX = 'b'
 export const SEED = 0x9e3779b9
 export const RANDOM_COUNT = 3000
 
-export const TOKENS: readonly string[] = [
+const TOKENS: readonly string[] = [
   '*',
   '**',
   '***',

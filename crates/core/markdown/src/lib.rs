@@ -56,6 +56,9 @@ pub fn parse_counting(text: &str) -> (Result<mdast::Node, Refusal>, usize) {
     let text = prepared.as_ref();
     let options = vendored::ParseOptions::default();
     let (events, parse_state) = vendored::parse(text, &options, fuel);
+    // The two passes over the finished events, the depth walk and the tree
+    // builder, each visit an event once.
+    parse_state.budget.spend(events.len().saturating_mul(2));
     let spent = parse_state.budget.spent();
     if let Some(refusal) = parse_state.budget.refusal() {
         return (Err(refusal), spent);

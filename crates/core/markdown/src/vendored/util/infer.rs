@@ -130,8 +130,10 @@ pub(crate) fn list_item_loose(events: &[Event], mut index: usize) -> bool {
                     at_prefix = true;
                 }
 
-                if !at_prefix && !ends_item(events, index + 1) {
-                    return true;
+                // Past a blank line the item ends on there are only blank lines:
+                // answered here, not once a line (that walked the tail per line).
+                if !at_prefix {
+                    return !ends_item(events, index + 1);
                 }
             }
 

@@ -234,6 +234,9 @@ fn underline_paragraph(
 ) {
     let mut paragraph_enter =
         skip::to_back(&tokenizer.events, paragraph_exit.saturating_sub(1), &[Name::Paragraph]);
+    if !tokenizer.parse_state.budget.spend(merged.len()) {
+        return;
+    }
     if let Some((_, live)) = merged.iter().find(|(old, _)| *old == paragraph_enter) {
         paragraph_enter = *live;
     }

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -11,13 +11,22 @@ interface Entry {
 }
 // Loaded by URL like affected.test.ts loads affected.mjs: tools/checks is a
 // workspace of its own, and a relative import across it is an escape.
-const { cargoShard, ledgerEntries, ledgerProblems, mutantNames } = (await import(
+const {
+  cargoShard,
+  ledgerEntries,
+  ledgerProblems,
+  mutantNames,
+  prExcludeGlobs,
+  prExcludeProblems,
+} = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-mutants-ledger.mjs')).href
 )) as {
   ledgerEntries: (toml: string) => Entry[]
   ledgerProblems: (entries: Entry[], names: string[], expected?: number) => string[]
   mutantNames: (stdout: string) => string[]
   cargoShard: (leg: string | undefined) => string | undefined | Error
+  prExcludeGlobs: (text: string) => string[]
+  prExcludeProblems: (globs: string[], exists: (path: string) => boolean) => string[]
 }
 
 // .cargo/mutants.toml is the ledger of mutants the Rust mutation gate does
@@ -68,5 +77,36 @@ describe('the Rust mutants ledger', () => {
     expect(cargoShard(undefined)).toBeUndefined()
     expect(cargoShard('0/4')).toBeInstanceOf(Error)
     expect(cargoShard('5/4')).toBeInstanceOf(Error)
+  })
+})
+
+// cargo-mutants applies `exclude_globs` from the config to EVERY run, so a
+// file excused only in-diff cannot live there: the full run would skip it too.
+describe('the in-diff-only exclusions', () => {
+  const list = prExcludeGlobs(
+    readFileSync(join(REPO_ROOT, '.cargo/mutants-pr-exclude.txt'), 'utf8'),
+  )
+
+  it('are not in the config, which every run reads', () => {
+    expect(toml).not.toMatch(/^\s*exclude_globs\s*=/m)
+  })
+
+  it('name only files that exist, once each, and the vendored parser is among them', () => {
+    expect(list.length).toBeGreaterThan(50)
+    expect(list).toContain('crates/core/markdown/src/vendored/tokenizer.rs')
+    expect(prExcludeProblems(list, (p) => existsSync(join(REPO_ROOT, p)))).toEqual([])
+  })
+
+  it('fails a wildcard, a missing file and a repeat', () => {
+    const problems = prExcludeProblems(
+      ['crates/a/*.rs', 'crates/b.rs', 'crates/c.rs', 'crates/c.rs'],
+      (p) => p !== 'crates/b.rs',
+    )
+    expect(problems).toEqual([
+      'crates/a/*.rs: not a path to one Rust source file',
+      'crates/b.rs: names no file, so it is stale',
+      'crates/c.rs: listed twice',
+    ])
+    expect(prExcludeGlobs('# why\n\n  crates/x.rs  \n')).toEqual(['crates/x.rs'])
   })
 })

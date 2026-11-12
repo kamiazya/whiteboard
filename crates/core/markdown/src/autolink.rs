@@ -368,7 +368,8 @@ fn emails_in(value: &str, budget: &Budget) -> Option<Vec<Node>> {
                     .is_some_and(|&b| !(b == b'-' || b == b'_' || b.is_ascii_digit()))
             {
                 pieces.push(at, end, vec![link(&format!("mailto:{shown}"), shown)]);
-                at = end;
+                // A match always ends past its start; this keeps the scan moving if one did not.
+                at = end.max(at.saturating_add(1));
                 continue;
             }
         }

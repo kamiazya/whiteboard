@@ -63,7 +63,12 @@ pub(crate) enum Name {
 
 /// Call the corresponding resolver.
 pub(crate) fn call(tokenizer: &mut Tokenizer, name: Name) -> Option<Subresult> {
-    if tokenizer.parse_state.budget.refusal().is_some() {
+    // Every resolver walks the events it is given from end to end, a constant
+    // number of times, so the walk is charged here, before any event is
+    // touched: a parse that cannot pay for it stops with the events as they
+    // were. What a resolver spends beyond that walk (a nested scan, a pass over
+    // the bytes of a text) it charges itself.
+    if !tokenizer.parse_state.budget.spend(tokenizer.events.len()) {
         return None;
     }
 

@@ -44,8 +44,8 @@
     },
     "core/markdown": {
       "lines": 96,
-      "regions": 95,
-      "reason": "measured 2026-11-12 at 96.38% lines and 95.76% regions over the vendored markdown-rs and its bounds, with the recorded mdast oracle (5,661 documents replayed, every difference but the ledgered ones failing), the alignment regressions, the dialect examples, the OKF corpus, the limits, the cost shapes and the totality property. What is left is the vendored code no test text reaches: the tree builder's arms for an event stream the tokenizer does not produce, the constructs' refusals of syntax no corpus writes, and upstream state-machine arms for an HTML or footnote shape the examples do not spell"
+      "regions": 96,
+      "reason": "measured 2026-11-12 by `cargo xtask coverage` (one `cargo llvm-cov --workspace` run, counted per crate): 96.77% lines and 96.12% regions, then 96.78% and 96.13%, with the recorded mdast oracle replayed (every difference but the ledgered ones failing), the alignment regressions, the second autolink pass's tests, the dialect examples, the OKF corpus, the fixed token corpus, the limits, the cost shapes and the totality property. The hundredth of a point between runs is under the floor's rounding. Before the oracle replay the crate stood at 92.56% lines and 92.27% regions. What is left is the vendored code no test text reaches: the tree builder's arms for an event stream the tokenizer does not produce (a node pushed under a non-parent, a stray exit), the constructs' refusals of syntax no corpus writes, and the arms of the upstream state machine for an HTML or footnote shape the examples do not spell"
     },
     "core/model": {
       "lines": 100,
