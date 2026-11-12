@@ -5,6 +5,7 @@ import type {
 } from '@kamiazya/whiteboard-model/mdast'
 import { expandEmojiShortcodes } from '@kamiazya/whiteboard-plugin-visual/emoji/shortcode'
 import { iconShortcodeRanges } from '@kamiazya/whiteboard-plugin-visual/icons/shortcode'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { highlightCode } from '../../highlight/lowlight.js'
 import { createTokenizerBudget } from '../../highlight/tokenizer-budget.js'
 import { typesetMdastBlocks } from '../../layout/nodes/mdast-blocks.js'
@@ -110,7 +111,7 @@ const THEMES: Record<ThemeName, MarkdownTheme> = {
 }
 
 const view = new DataView(new ArrayBuffer(8))
-function fromHex(hex: string): number {
+export function fromHex(hex: string): number {
   view.setUint32(0, Number.parseInt(hex.slice(0, 8), 16))
   view.setUint32(4, Number.parseInt(hex.slice(8), 16))
   return view.getFloat64(0)
@@ -373,7 +374,8 @@ function miniatureFor(_canvas: unknown, box: EmbeddedCanvasBox) {
   }
 }
 
-export function typesetAnswer(input: TypesetInput): TypesetRecord {
+/** The scene an input lays out as, with the seam tables it was drawn from and the measurer's calls. */
+export function layoutOf(input: TypesetInput) {
   const seams = seamsFor(input.root, input.embeds)
   const base = createFakeMeasure()
   let calls = 0
@@ -395,15 +397,30 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord {
     ...(input.syntax === null ? {} : { syntax: input.syntax }),
   }
   const scene = typesetMdastBlocks(input.root, options)
+  return { scene, seams, calls: () => calls }
+}
+
+/** The canonical text of a scene. */
+export function canonicalDump(scene: Scene): string {
+  // The sign of a NaN is the engine's to choose (x86 arithmetic makes a negative one), so a NaN
+  // is held as the canonical positive quiet NaN on both sides — at the number, never in a string.
+  return dumpScene(scene, canonicalNanHex)
+}
+
+/** A text's length and FNV digest, as a large answer is held. */
+export function digestOf(text: string): { n: number; h: number } {
+  const fnv = new Fnv()
+  fnv.text(text)
+  return { n: text.length, h: fnv.state }
+}
+
+export function typesetAnswer(input: TypesetInput): TypesetRecord {
+  const { scene, seams, calls } = layoutOf(input)
   // A `&str` cannot hold half a surrogate pair, so a scene that has one is not an answer the Rust
   // typesetter can give; the corpus must not reach it.
   if (holdsHalfAPair(scene)) throw new Error(`typeset-oracle: ${input.id} lays out half a pair`)
-  // The sign of a NaN is the engine's to choose (x86 arithmetic makes a negative one), so a NaN
-  // is held as the canonical positive quiet NaN on both sides — at the number, never in a string.
-  const text = dumpScene(scene, canonicalNanHex)
-  const answer = { ...input, seams, calls }
+  const text = canonicalDump(scene)
+  const answer = { ...input, seams, calls: calls() }
   if (!input.digest) return { ...answer, scene: text }
-  const fnv = new Fnv()
-  fnv.text(text)
-  return { ...answer, n: text.length, h: fnv.state }
+  return { ...answer, ...digestOf(text) }
 }

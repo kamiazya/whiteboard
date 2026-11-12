@@ -10,6 +10,7 @@
 mod blocks;
 mod code;
 mod embed;
+mod fit;
 mod furniture;
 mod list;
 mod options;
@@ -23,6 +24,7 @@ mod text;
 mod wrap;
 
 pub use blocks::typeset_mdast_blocks;
+pub use fit::{FittedBlocks, first_line_of_blocks, fit_blocks_to_height};
 pub use options::TypesetOptions;
 pub use seams::{
     CanvasMiniature, CanvasSummary, CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer,
