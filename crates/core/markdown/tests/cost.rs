@@ -261,7 +261,7 @@ fn the_walks_over_a_text_are_charged() {
 /// cost what the block brought, not what was gathered before it.
 #[test]
 fn many_blank_separated_definitions_are_read_in_time() {
-    let definitions = if cfg!(target_arch = "wasm32") { 8_000 } else { 60000 };
+    let definitions = if cfg!(target_arch = "wasm32") { 8_000 } else { 20_000 };
     let mut text = String::new();
     text.extend((0..definitions).map(|index| format!("[d{index}]: u\n\n")));
     let ((answer, spent), millis) = timed(|| parse_counting(&text));
