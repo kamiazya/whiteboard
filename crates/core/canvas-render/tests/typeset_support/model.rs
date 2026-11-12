@@ -78,6 +78,20 @@ fn flow(v: &Value) -> Read<Flow> {
             let depth = v.get("depth").and_then(Value::as_u64).and_then(|d| u8::try_from(d).ok());
             Flow::Heading { depth: depth.ok_or("a heading depth")?, children: kids(v)? }
         }
+        "code" => Flow::Code {
+            value: required(v, "value")?,
+            lang: text(v, "lang"),
+            meta: text(v, "meta"),
+        },
+        "math" => Flow::Math { value: required(v, "value")?, meta: text(v, "meta") },
+        "html" => Flow::Html { value: required(v, "value")? },
+        "thematicBreak" => Flow::ThematicBreak,
+        "definition" => Flow::Definition {
+            identifier: required(v, "identifier")?,
+            label: text(v, "label"),
+            url: required(v, "url")?,
+            title: text(v, "title"),
+        },
         other => return Err(format!("flow {other}")),
     })
 }

@@ -7,7 +7,10 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
-use whiteboard_canvas_render::typeset::{IconRange, ImageRef, InlineSeams};
+use whiteboard_canvas_render::typeset::{
+    CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer, IconRange, ImageRef, InlineSeams,
+    MathRenderer, Rendered, SyntaxFills, TokenRole,
+};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -25,6 +28,36 @@ pub(crate) struct Image {
     height: Option<f64>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Token {
+    text: String,
+    role: Option<String>,
+}
+
+/// A renderer's answer as recorded: `s` is the markup form, the other the object form.
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum Wire {
+    Markup { s: String },
+    Fragment { svg: String, width: Option<f64>, height: Option<f64> },
+}
+
+impl Wire {
+    fn rendered(&self) -> Rendered {
+        match self {
+            Self::Markup { s } => Rendered::Markup(s.clone()),
+            Self::Fragment { svg, width, height } => {
+                Rendered::Fragment { svg: svg.clone(), width: *width, height: *height }
+            }
+        }
+    }
+}
+
+fn key(lang: &str, value: &str) -> String {
+    format!("{lang}\u{0}{value}")
+}
+
 /// The host's answers for every question this input can ask. A question the
 /// table does not hold is a hole in the recording, and a panic.
 #[derive(Deserialize)]
@@ -36,6 +69,9 @@ pub(crate) struct Seams {
     embeds: BTreeMap<String, Option<String>>,
     pending: BTreeSet<String>,
     images: BTreeMap<String, Option<Image>>,
+    highlight: BTreeMap<String, Option<Vec<Vec<Token>>>>,
+    math: BTreeMap<String, Option<Wire>>,
+    diagram: BTreeMap<String, Option<Wire>>,
     /// Questions the tables could not answer: a hole in the recording, which
     /// the replay reports rather than reading as an answer.
     #[serde(skip)]
@@ -93,6 +129,55 @@ impl InlineSeams for Seams {
     }
 }
 
+impl CodeTokenizer for Seams {
+    fn tokenize(&self, lang: &str, value: &str) -> Option<CodeTokenLines> {
+        let found = self.held(&self.highlight, "highlight", &key(lang, value));
+        let lines = found.and_then(Option::as_ref)?;
+        let role = |name: &Option<String>| {
+            name.as_deref().map(|n| match n {
+                "keyword" => TokenRole::Keyword,
+                "string" => TokenRole::String,
+                "number" => TokenRole::Number,
+                _ => TokenRole::Comment,
+            })
+        };
+        Some(
+            lines
+                .iter()
+                .map(|line| {
+                    line.iter()
+                        .map(|t| CodeToken { text: t.text.clone(), role: role(&t.role) })
+                        .collect()
+                })
+                .collect(),
+        )
+    }
+}
+
+impl MathRenderer for Seams {
+    fn render_math(&self, value: &str) -> Option<Rendered> {
+        self.held(&self.math, "math", value).and_then(Option::as_ref).map(Wire::rendered)
+    }
+}
+
+impl DiagramRenderer for Seams {
+    fn render_diagram(&self, lang: &str, value: &str) -> Option<Rendered> {
+        let found = self.held(&self.diagram, "diagram", &key(lang, value));
+        found.and_then(Option::as_ref).map(Wire::rendered)
+    }
+}
+
+/// The recorded palette, as the typesetter reads it.
+pub(crate) fn syntax_of(palette: &BTreeMap<String, String>) -> SyntaxFills {
+    let get = |role: &str| palette.get(role).cloned();
+    SyntaxFills {
+        keyword: get("keyword"),
+        string: get("string"),
+        number: get("number"),
+        comment: get("comment"),
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Record {
@@ -101,6 +186,7 @@ pub(crate) struct Record {
     pub(crate) width: String,
     pub(crate) theme: String,
     pub(crate) fill: Option<String>,
+    pub(crate) syntax: Option<BTreeMap<String, String>>,
     pub(crate) digest: bool,
     pub(crate) seams: Seams,
     pub(crate) calls: usize,

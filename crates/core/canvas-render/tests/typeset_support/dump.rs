@@ -117,6 +117,23 @@ fn node(n: &SceneNode) -> Result<String, String> {
             ("level", num(f64::from(h.level))),
             ("runs", list(h.runs.iter().map(run))),
         ]),
+        SceneNode::CodeBlock(c) => code_block(c),
+        SceneNode::ThematicBreak(t) => {
+            let mut f = vec![("kind", string("thematicBreak")), ("bbox", bbox(&t.bbox))];
+            f.extend(t.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+            object(f)
+        }
+        SceneNode::RawHtml(h) => object(vec![
+            ("kind", string("rawHtml")),
+            ("bbox", bbox(&h.bbox)),
+            ("value", string(&h.value)),
+        ]),
+        SceneNode::UnresolvedReference(u) => object(vec![
+            ("kind", string("unresolvedReference")),
+            ("bbox", bbox(&u.bbox)),
+            ("identifier", string(&u.identifier)),
+        ]),
+        SceneNode::SvgFragment(g) => fragment(g),
         other => return Err(format!("an unplaced scene node {other:?}")),
     })
 }
@@ -124,4 +141,21 @@ fn node(n: &SceneNode) -> Result<String, String> {
 pub(crate) fn dump_scene(scene: &Scene) -> Result<String, String> {
     let nodes = scene.nodes.iter().map(node).collect::<Result<Vec<_>, _>>()?;
     Ok(object(vec![("nodes", list(nodes))]))
+}
+
+fn code_block(c: &whiteboard_scene::CodeBlockNode) -> String {
+    let mut f =
+        vec![("kind", string("codeBlock")), ("bbox", bbox(&c.bbox)), ("value", string(&c.value))];
+    f.extend(c.lang.as_deref().map(|l| ("lang", string(l))));
+    f.extend(c.runs.as_ref().map(|r| ("runs", list(r.iter().map(run)))));
+    f.extend(c.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+    f.extend(c.radius.map(|r| ("radius", num(r))));
+    object(f)
+}
+
+fn fragment(g: &whiteboard_scene::SvgFragmentNode) -> String {
+    let mut f =
+        vec![("kind", string("svgFragment")), ("bbox", bbox(&g.bbox)), ("svg", string(&g.svg))];
+    f.extend(g.role.map(|_| ("role", string("presentation"))));
+    object(f)
 }

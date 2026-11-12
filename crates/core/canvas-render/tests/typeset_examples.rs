@@ -8,10 +8,12 @@ use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
 use whiteboard_canvas_render::typeset::{
-    IconRange, ImageRef, InlineSeams, TypesetOptions, Unsupported, typeset_mdast_blocks,
+    CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer, IconRange, ImageRef, InlineSeams,
+    MathRenderer, Rendered, SyntaxFills, TokenRole, TypesetOptions, Unsupported,
+    typeset_mdast_blocks,
 };
 use whiteboard_model::mdast::{Flow, ListItem, Phrasing, Root, TableCell, TableRow};
-use whiteboard_scene::{LinkProvenance, RunPaint, Scene, SceneNode, TextRunNode};
+use whiteboard_scene::{LinkProvenance, RunPaint, Scene, SceneNode, SvgFragmentNode, TextRunNode};
 
 /// A host with whatever answers a test gives it; by default it knows nothing.
 #[derive(Default)]
@@ -71,14 +73,8 @@ fn laid_with(
     width: f64,
     blocks: Vec<Flow>,
 ) -> Result<Scene, Unsupported> {
-    let options = TypesetOptions {
-        measure: &FakeMeasure::default(),
-        max_width: width,
-        font_family: "sans-serif",
-        theme,
-        text_fill: None,
-        seams: host,
-    };
+    let measure = FakeMeasure::default();
+    let options = TypesetOptions::new(&measure, width, "sans-serif", theme, host);
     typeset_mdast_blocks(&Root { children: blocks }, &options)
 }
 
@@ -104,18 +100,6 @@ fn a_block_kind_not_yet_carried_is_named() {
     let cases: Vec<(Flow, &str)> = vec![
         (Flow::Blockquote { children: Vec::new() }, "blockquote"),
         (Flow::List { ordered: None, start: None, spread: false, children: vec![item] }, "list"),
-        (Flow::Code { value: String::new(), lang: None, meta: None }, "code"),
-        (Flow::Html { value: String::new() }, "html"),
-        (Flow::ThematicBreak, "thematicBreak"),
-        (
-            Flow::Definition {
-                identifier: String::new(),
-                label: None,
-                url: String::new(),
-                title: None,
-            },
-            "definition",
-        ),
         (
             Flow::Table {
                 align: Vec::new(),
@@ -123,7 +107,6 @@ fn a_block_kind_not_yet_carried_is_named() {
             },
             "table",
         ),
-        (Flow::Math { value: String::new(), meta: None }, "math"),
         (paragraph(vec![Phrasing::Embed { document_id: "x".to_owned(), fragment: None }]), "embed"),
     ];
     for (block, name) in cases {
@@ -468,14 +451,8 @@ impl Measure for ZeroWidthFace {
 #[test]
 fn a_zero_width_stretch_is_not_moved_down_with_what_it_is_joined_to() {
     let theme = MarkdownTheme::node();
-    let options = TypesetOptions {
-        measure: &ZeroWidthFace,
-        max_width: 5.0,
-        font_family: "sans-serif",
-        theme: &theme,
-        text_fill: None,
-        seams: &Host::default(),
-    };
+    let host = Host::default();
+    let options = TypesetOptions::new(&ZeroWidthFace, 5.0, "sans-serif", &theme, &host);
     let children = vec![text("z"), text("あ"), text("。")];
     let root = Root { children: vec![paragraph(children)] };
     let scene = typeset_mdast_blocks(&root, &options).unwrap_or_default();
@@ -486,4 +463,227 @@ fn a_zero_width_stretch_is_not_moved_down_with_what_it_is_joined_to() {
         panic!("scene node is not the expected variant")
     };
     same(block.bbox.h, LINE);
+}
+
+fn first(scene: &Scene) -> &SceneNode {
+    &scene.nodes[0]
+}
+
+#[test]
+fn a_rule_raw_html_and_a_definition_are_laid_out_in_flow() {
+    let blocks = vec![
+        Flow::ThematicBreak,
+        Flow::Html { value: "<br>".to_owned() },
+        Flow::Definition {
+            identifier: "ref".to_owned(),
+            label: None,
+            url: "u".to_owned(),
+            title: None,
+        },
+        paragraph(vec![text("x")]),
+    ];
+    let scene = laid(100.0, blocks).unwrap_or_default();
+    let SceneNode::ThematicBreak(rule) = first(&scene) else { return };
+    same(rule.bbox.h, 1.0);
+    assert_eq!(rule.appearance.as_ref().and_then(|a| a.fill_opacity), Some(0.35));
+    let SceneNode::RawHtml(html) = &scene.nodes[1] else { return };
+    same(html.bbox.y, 1.0 + 12.0);
+    same(html.bbox.h, LINE);
+    let SceneNode::UnresolvedReference(marker) = &scene.nodes[2] else { return };
+    same(marker.bbox.y, 13.0 + LINE + 12.0);
+    same(marker.bbox.h, 0.0);
+    let SceneNode::Paragraph(next) = &scene.nodes[3] else { return };
+    same(next.bbox.y, marker.bbox.y);
+}
+
+struct Maths(Option<Rendered>);
+
+impl MathRenderer for Maths {
+    fn render_math(&self, _: &str) -> Option<Rendered> {
+        self.0.clone()
+    }
+}
+
+fn math_with(renderer: Option<&Maths>, value: &str, width: f64) -> SvgFragmentNode {
+    let theme = MarkdownTheme::node();
+    let measure = FakeMeasure::default();
+    let host = Host::default();
+    let options = TypesetOptions {
+        math: renderer.map(|m| m as &dyn MathRenderer),
+        ..TypesetOptions::new(&measure, width, "sans-serif", &theme, &host)
+    };
+    let math = Flow::Math { value: value.to_owned(), meta: None };
+    let scene = typeset_mdast_blocks(&Root { children: vec![math] }, &options).unwrap_or_default();
+    let SceneNode::SvgFragment(fragment) = scene.nodes[0].clone() else { return empty_fragment() };
+    fragment
+}
+
+fn empty_fragment() -> SvgFragmentNode {
+    SvgFragmentNode {
+        bbox: whiteboard_scene::BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
+        svg: String::new(),
+        role: None,
+    }
+}
+
+#[test]
+fn display_math_without_a_renderer_is_its_escaped_source_a_code_line_tall_per_line() {
+    let fragment = math_with(None, "a < b\nc", 100.0);
+    assert_eq!(fragment.svg, "<text y=\"0.8em\">a &lt; b\nc</text>");
+    same(fragment.bbox.w, 100.0);
+    same(fragment.bbox.h, 2.0 * (16.0 * 0.85 * 1.45));
+}
+
+#[test]
+fn a_renderer_with_no_answer_leaves_the_source() {
+    let fragment = math_with(Some(&Maths(None)), "x", 100.0);
+    assert!(fragment.svg.starts_with("<text"));
+}
+
+#[test]
+fn a_renderers_markup_is_sized_by_lines_and_its_fragment_by_its_own_size() {
+    let markup = Maths(Some(Rendered::Markup("<g/>".to_owned())));
+    let fragment = math_with(Some(&markup), "x\ny\nz", 100.0);
+    assert_eq!(fragment.svg, "<g/>");
+    same(fragment.bbox.h, 3.0 * (16.0 * 0.85 * 1.45));
+    let sized =
+        |width, height| Maths(Some(Rendered::Fragment { svg: "<g/>".to_owned(), width, height }));
+    let fit = math_with(Some(&sized(Some(40.0), Some(20.0))), "x", 100.0);
+    same(fit.bbox.w, 40.0);
+    same(fit.bbox.h, 20.0);
+    let wide = math_with(Some(&sized(Some(500.0), Some(0.0))), "x", 100.0);
+    same(wide.bbox.w, 100.0);
+    same(wide.bbox.h, 16.0 * 0.85 * 1.45);
+    let unsized_ = math_with(Some(&sized(None, None)), "x", 100.0);
+    same(unsized_.bbox.w, 100.0);
+}
+
+#[test]
+fn a_fragment_in_a_column_that_is_not_a_number_is_as_wide_as_that_column() {
+    let sized = Maths(Some(Rendered::Fragment {
+        svg: "<g/>".to_owned(),
+        width: Some(40.0),
+        height: Some(20.0),
+    }));
+    assert!(math_with(Some(&sized), "x", f64::NAN).bbox.w.is_nan());
+}
+
+fn fence(value: &str, lang: Option<&str>, width: f64) -> whiteboard_scene::CodeBlockNode {
+    let flow = Flow::Code { value: value.to_owned(), lang: lang.map(str::to_owned), meta: None };
+    let scene = laid(width, vec![flow]).unwrap_or_default();
+    let SceneNode::CodeBlock(block) = first(&scene).clone() else {
+        return whiteboard_scene::CodeBlockNode {
+            bbox: whiteboard_scene::BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
+            value: String::new(),
+            lang: None,
+            runs: None,
+            appearance: None,
+            radius: None,
+        };
+    };
+    block
+}
+
+#[test]
+fn a_fence_is_a_panel_with_one_run_per_non_empty_source_line() {
+    let block = fence("ab\n\ncd", Some("js"), 400.0);
+    let runs = block.runs.unwrap_or_default();
+    assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["ab", "cd"]);
+    assert!(runs.iter().all(|r| r.code));
+    let line = 16.0 * 0.85 * 1.45;
+    same(block.bbox.h, 3.0 * line + 32.0);
+    same(runs[0].bbox.x, 16.0);
+    same(runs[0].bbox.y, 16.0);
+    same(runs[1].bbox.y, 16.0 + 2.0 * line);
+    assert_eq!(block.lang.as_deref(), Some("js"));
+    assert_eq!(block.radius, Some(6.0));
+}
+
+#[test]
+fn a_fence_line_is_cut_to_the_panel_and_never_wrapped() {
+    let block = fence(&"w".repeat(100), None, 100.0);
+    let runs = block.runs.unwrap_or_default();
+    assert_eq!(runs.len(), 1);
+    assert!(runs[0].truncated);
+    assert!(runs[0].bbox.x + runs[0].bbox.w <= 100.0 - 16.0);
+    assert!(block.lang.is_none());
+}
+
+struct Lines(Option<CodeTokenLines>);
+
+impl CodeTokenizer for Lines {
+    fn tokenize(&self, _: &str, _: &str) -> Option<CodeTokenLines> {
+        self.0.clone()
+    }
+}
+
+fn token(text: &str, role: Option<TokenRole>) -> CodeToken {
+    CodeToken { text: text.to_owned(), role }
+}
+
+fn fence_with(tokenizer: &Lines, value: &str) -> Vec<TextRunNode> {
+    let theme = MarkdownTheme::node();
+    let measure = FakeMeasure::default();
+    let host = Host::default();
+    let syntax = SyntaxFills { keyword: Some("#f00".to_owned()), ..SyntaxFills::default() };
+    let options = TypesetOptions {
+        highlight: Some(tokenizer),
+        syntax: Some(&syntax),
+        text_fill: Some("#111"),
+        ..TypesetOptions::new(&measure, 400.0, "sans-serif", &theme, &host)
+    };
+    let flow = Flow::Code { value: value.to_owned(), lang: Some("js".to_owned()), meta: None };
+    let scene = typeset_mdast_blocks(&Root { children: vec![flow] }, &options).unwrap_or_default();
+    let SceneNode::CodeBlock(block) = first(&scene).clone() else { return Vec::new() };
+    block.runs.unwrap_or_default()
+}
+
+#[test]
+fn tokens_are_placed_left_to_right_and_filled_by_role() {
+    let lines = vec![vec![token("if", Some(TokenRole::Keyword)), token(" x", None)]];
+    let runs = fence_with(&Lines(Some(lines)), "if x");
+    assert_eq!(runs.len(), 2);
+    assert_eq!(runs[0].appearance.as_ref().and_then(|a| a.fill.as_deref()), Some("#f00"));
+    assert_eq!(runs[1].appearance.as_ref().and_then(|a| a.fill.as_deref()), Some("#111"));
+    same(runs[1].bbox.x, 16.0 + runs[0].bbox.w);
+}
+
+#[test]
+fn an_unusable_highlight_is_plain_source() {
+    let wrong_count = vec![vec![token("a", None)], vec![token("b", None)]];
+    for answer in [None, Some(wrong_count)] {
+        let runs = fence_with(&Lines(answer), "ab");
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].text, "ab");
+    }
+}
+
+struct Diagrams;
+
+impl DiagramRenderer for Diagrams {
+    fn render_diagram(&self, lang: &str, _: &str) -> Option<Rendered> {
+        (lang == "dot").then(|| Rendered::Markup("<g/>".to_owned()))
+    }
+}
+
+#[test]
+fn a_diagram_renderer_that_answers_takes_over_the_fence() {
+    let theme = MarkdownTheme::node();
+    let measure = FakeMeasure::default();
+    let host = Host::default();
+    let options = TypesetOptions {
+        diagram: Some(&Diagrams),
+        ..TypesetOptions::new(&measure, 100.0, "sans-serif", &theme, &host)
+    };
+    let fence = |lang: Option<&str>| Flow::Code {
+        value: "a".to_owned(),
+        lang: lang.map(str::to_owned),
+        meta: None,
+    };
+    let blocks = vec![fence(Some("dot")), fence(Some("js")), fence(Some("")), fence(None)];
+    let scene = typeset_mdast_blocks(&Root { children: blocks }, &options).unwrap_or_default();
+    assert!(matches!(scene.nodes[0], SceneNode::SvgFragment(_)));
+    for node in &scene.nodes[1..] {
+        assert!(matches!(node, SceneNode::CodeBlock(_)));
+    }
 }
