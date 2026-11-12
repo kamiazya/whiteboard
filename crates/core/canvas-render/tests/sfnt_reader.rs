@@ -394,7 +394,9 @@ fn only_the_platform_and_encoding_pairs_opentype_reads_are_read() {
 fn mutated() -> impl Strategy<Value = Vec<u8>> {
     let seed = font(&valid());
     let flips = prop::collection::vec((0..seed.len(), any::<u8>()), 0..6);
-    (flips, prop::option::of(0..seed.len())).prop_map(move |(flips, cut)| {
+    // A cut ends nearly every font, so most draws keep the whole file and the
+    // parsed population stays dense enough for the lookups to be exercised.
+    (flips, prop::option::weighted(0.25, 0..seed.len())).prop_map(move |(flips, cut)| {
         let mut bytes = seed.clone();
         for (at, value) in flips {
             bytes[at] = value;
