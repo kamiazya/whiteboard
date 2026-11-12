@@ -31,7 +31,7 @@ import { dumpScene, f64Hex } from '../render-oracle/scene-dump.js'
 export type ThemeName = 'node' | 'document' | 'compact'
 
 /** What the host answered for the questions this input can ask. */
-export interface SeamTables {
+interface SeamTables {
   /** An icon range is in UTF-16 units, as the host's answer is. */
   readonly icons: Readonly<Record<string, readonly { from: number; to: number; name: string }[]>>
   readonly emoji: Readonly<Record<string, string>>
@@ -72,11 +72,12 @@ const THEMES: Record<ThemeName, MarkdownTheme> = {
 }
 
 const view = new DataView(new ArrayBuffer(8))
-export function fromHex(hex: string): number {
+function fromHex(hex: string): number {
   view.setUint32(0, Number.parseInt(hex.slice(0, 8), 16))
   view.setUint32(4, Number.parseInt(hex.slice(8), 16))
   return view.getFloat64(0)
 }
+
 export { f64Hex }
 
 const hashOf = (text: string): number => {
@@ -117,7 +118,7 @@ const inlinesOf = (root: MdastRoot): readonly Inline[] =>
   )
 
 /** Every question the layout can put to its host about this tree, answered. */
-export function seamsFor(root: MdastRoot): SeamTables {
+function seamsFor(root: MdastRoot): SeamTables {
   const icons: Record<string, { from: number; to: number; name: string }[]> = {}
   const emoji: Record<string, string> = {}
   const titles: Record<string, string | null> = {}
