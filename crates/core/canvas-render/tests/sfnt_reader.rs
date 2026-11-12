@@ -324,6 +324,7 @@ fn unsorted_overlapping_or_inverted_ranges_are_refused() {
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x44, 0x44, 0, 0), end]), Ok(()));
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x43, 0x50, 0, 0), end]), Err(SfntError::BadCmap));
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x60, 0x50, 0, 0), end]), Ok(()));
+    assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x60, 0x43, 0, 0), end]), Err(SfntError::BadCmap));
 }
 
 #[test]

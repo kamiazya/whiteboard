@@ -31,6 +31,9 @@ pub(super) enum Cmap<'a> {
 const FORMAT_4_HEADER: usize = 16;
 const FORMAT_12_HEADER: usize = 16;
 const GROUP_BYTES: usize = 12;
+/// A binary search over at most `usize::MAX` entries halves at most this many
+/// times; the bound is on the loop itself, so no input keeps it running.
+const SEARCH_STEPS: u32 = usize::BITS;
 
 /// Whether opentype.js reads a subtable of this platform and encoding.
 fn accepted(platform: u16, encoding: u16) -> bool {
@@ -136,7 +139,10 @@ impl<'a> Cmap<'a> {
 
     fn format_12_glyph(&self, code: u32, count: usize) -> u32 {
         let (mut low, mut high) = (0_usize, count);
-        while low < high {
+        for _ in 0..SEARCH_STEPS {
+            if low >= high {
+                break;
+            }
             let mid = low.saturating_add(high.saturating_sub(low) / 2);
             let Some((start, end, glyph)) = self.group(mid) else { return 0 };
             if code < start {
@@ -153,7 +159,10 @@ impl<'a> Cmap<'a> {
     fn format_4_glyph(&self, code: u16) -> u32 {
         let Self::Format4 { data, segments, total } = *self else { return 0 };
         let (mut low, mut high) = (0_usize, segments);
-        while low < high {
+        for _ in 0..SEARCH_STEPS {
+            if low >= high {
+                break;
+            }
             let mid = low.saturating_add(high.saturating_sub(low) / 2);
             let Some((start, end)) = self.segment(mid) else { return 0 };
             if code > end {
