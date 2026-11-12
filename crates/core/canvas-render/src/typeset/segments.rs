@@ -14,8 +14,8 @@ fn has_kana(text: &str) -> bool {
 /// Korean stay on UAX #14: the bundled model is Japanese alone.
 ///
 /// A phrase boundary that would fall between the two halves of a surrogate
-/// pair is not taken: the model reads UTF-16 units and may name one, which a
-/// JavaScript string can hold as half a pair and a `&str` cannot.
+/// pair is not taken: the model reads UTF-16 units and may name one, and a
+/// break there would leave half a character in a run.
 pub(super) fn break_segments(text: &str) -> Vec<String> {
     if !has_kana(text) {
         return uax_segments(text).into_iter().map(str::to_owned).collect();
