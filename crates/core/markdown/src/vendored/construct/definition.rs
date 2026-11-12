@@ -301,10 +301,10 @@ pub(crate) fn after_whitespace(tokenizer: &mut Tokenizer) -> State {
         None | Some(b'\n') => {
             tokenizer.exit(Name::Definition);
 
-            // Note: we don’t care about uniqueness.
-            // It’s likely that that doesn’t happen very frequently.
-            // It is more likely that it wastes precious time.
-            tokenizer.tokenize_state.definitions.push(
+            // A set, not a list: a label is looked up once per reference, and
+            // a body can hold tens of thousands of each. BTree, not hash: the
+            // std hasher is randomly seeded, which a core crate does not take.
+            tokenizer.tokenize_state.definitions.insert(
                 // Note: we don’t care about virtual spaces, so `as_str` is fine.
                 normalize_identifier(
                     Slice::from_position(

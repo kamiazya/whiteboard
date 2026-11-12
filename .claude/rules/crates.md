@@ -161,7 +161,10 @@ steps and cache paths to the scripts.
   delimiter-run or fuel bound is refused whole and a root answers from the
   TypeScript, so no tree differs from the TypeScript's because a bound fell
   where it did. Every loop whose length follows the text charges the parse's
-  fuel (64 units a byte, over the 46 the dearest ordinary shape spends), so a
+  fuel (96 units a byte, over the 68.5 the dearest ordinary shape spends): every
+  resolver's walk over its events is charged where `resolve::call` dispatches it,
+  and a nested scan or a pass over a text's bytes charges itself, each held by
+  an exact figure in `tests/fuel.rs`. So a
   quadratic text is bounded by construction, and the cost test reads the clock
   besides, because a loop that does not charge is invisible to the count (an
   edit map that scanned its entries per edit took 108 s over a 64 KB text of

@@ -613,6 +613,11 @@ pub(crate) fn resolve(tokenizer: &mut Tokenizer) {
                     &Position::from_exit_event(&tokenizer.events, index),
                 );
                 let bytes = slice.bytes;
+                // The scan below reads each byte of the text a constant number
+                // of times: forward over a domain, back over an atext.
+                if !tokenizer.parse_state.budget.spend(bytes.len()) {
+                    return;
+                }
                 let mut byte_index = 0;
                 let mut replace = Vec::new();
                 let mut point = tokenizer.events[index - 1].point.clone();

@@ -115,6 +115,10 @@ fn trim_data(
         }
 
         let diff = slice.bytes.len() - index;
+        // The scan above read the trailing whitespace once.
+        if !tokenizer.parse_state.budget.spend(diff) {
+            return;
+        }
         let name = if hard_break
             && spaces_only
             && diff >= HARD_BREAK_PREFIX_SIZE_MIN
@@ -166,6 +170,11 @@ fn trim_data(
                 b' ' | b'\t' => index += 1,
                 _ => break,
             }
+        }
+
+        // The scan above read the leading whitespace once.
+        if !tokenizer.parse_state.budget.spend(index) {
+            return;
         }
 
         // The whole data is whitespace.

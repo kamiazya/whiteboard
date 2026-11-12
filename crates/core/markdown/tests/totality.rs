@@ -154,7 +154,6 @@ fn depths(node: &Node, containers: usize) -> (usize, usize) {
 #[test]
 fn any_text_is_answered_within_its_bounds() {
     let parsed = Floor::new("parsed into a tree with something in it");
-    let refused = Floor::new("refused");
     check(any_document(), None, |text| {
         let (answer, spent) = parse_counting(&text);
         prop_assert!(spent <= fuel_for(text.len()), "spent {spent} on {} bytes", text.len());
@@ -163,14 +162,14 @@ fn any_text_is_answered_within_its_bounds() {
                 let (nodes, containers) = depths(&root, 0);
                 prop_assert!(nodes <= MAX_DEPTH + 1 && containers <= MAX_CONTAINER_DEPTH);
                 parsed.draw(root.children().is_some_and(|children| !children.is_empty()));
-                refused.draw(false);
             }
             Err(Refusal::TooLarge) => prop_assert!(text.len() > MAX_BYTES),
-            Err(_) => refused.draw(true),
+            Err(_) => {}
         }
         Ok(())
     });
-    // Most draws are read, and the ones that nest or run long are refused, so
-    // neither arm is vacuous.
+    // Most draws are read. How many are refused is the draws' to decide: a text
+    // that nests or runs long is refused, and `tests/limits.rs` and the cost
+    // tests hold those arms, so no floor is put on it here.
     parsed.assert(100);
 }

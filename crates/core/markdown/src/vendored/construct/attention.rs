@@ -153,14 +153,7 @@ pub(crate) fn inside(tokenizer: &mut Tokenizer) -> State {
 /// Resolve sequences.
 pub(crate) fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
     // Find all sequences, gather info about them.
-    let mut sequences = get_sequences(tokenizer);
-
-    // Matching walks back over the runs before each closer, and marks the
-    // ones between a pair, so its cost is the square of how many there are.
-    if sequences.len() > MAX_RUNS_PER_INLINE {
-        tokenizer.parse_state.budget.refuse(Refusal::TooCostly);
-        return None;
-    }
+    let mut sequences = get_sequences(tokenizer)?;
 
     // Now walk through them and match them.
     let mut close = 0;
@@ -236,8 +229,14 @@ pub(crate) fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
     None
 }
 
-/// Get sequences.
-fn get_sequences(tokenizer: &mut Tokenizer) -> Vec<Sequence> {
+/// Get sequences, or `None` when the text is refused first.
+///
+/// Matching walks back over the runs before each closer, and marks the ones
+/// between a pair, so its cost is the square of how many there are: the run
+/// that would pass [`MAX_RUNS_PER_INLINE`] refuses the text before a stack is
+/// copied for it. Each run keeps a copy of the open events around it, which is
+/// charged by its length.
+fn get_sequences(tokenizer: &mut Tokenizer) -> Option<Vec<Sequence>> {
     let mut index = 0;
     let mut stack = vec![];
     let mut sequences = vec![];
@@ -249,6 +248,14 @@ fn get_sequences(tokenizer: &mut Tokenizer) -> Vec<Sequence> {
             if enter.kind == Kind::Enter {
                 let end = index + 1;
                 let exit = &tokenizer.events[end];
+
+                if sequences.len() == MAX_RUNS_PER_INLINE {
+                    tokenizer.parse_state.budget.refuse(Refusal::TooCostly);
+                    return None;
+                }
+                if !tokenizer.parse_state.budget.spend(stack.len()) {
+                    return None;
+                }
 
                 let marker = tokenizer.parse_state.bytes[enter.point.index];
                 let before_char = char_before_index(tokenizer.parse_state.bytes, enter.point.index);
@@ -296,7 +303,7 @@ fn get_sequences(tokenizer: &mut Tokenizer) -> Vec<Sequence> {
         index += 1;
     }
 
-    sequences
+    Some(sequences)
 }
 
 /// Match two sequences.

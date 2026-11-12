@@ -145,3 +145,82 @@ fn the_shapes_reach_what_the_bounds_are_for() {
     assert!(ORDINARY.len() > 30);
     assert!(HOSTILE.len() >= 6);
 }
+
+/// Every reference is looked up among the definitions, and one that names none
+/// looks at all of them: a list scanned per reference made this 3.2 s in release
+/// at the byte cap and quadratic in the count.
+#[test]
+fn many_definitions_and_references_to_none_are_read_in_time() {
+    let (definitions, references) =
+        if cfg!(target_arch = "wasm32") { (4_000, 8_000) } else { (20_000, 40_000) };
+    let mut text = String::new();
+    for index in 0..definitions {
+        text.push_str(&format!("[d{index}]: u\n"));
+    }
+    text.push('\n');
+    for _ in 0..references {
+        text.push_str("[zz] ");
+    }
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert!(answer.is_ok(), "{:?}", answer.err());
+    assert!(spent * 4 <= fuel_for(text.len()) * 3, "{spent} units of {}", fuel_for(text.len()));
+    assert!(millis < CEILING_MS / 2, "{millis} ms");
+}
+
+/// Units a shape spends a hundredth of a byte, at least: the walks over the
+/// events and over the bytes of a text that the parser charges. Each floor sits
+/// between what the shape spent before that walk was charged and what it spends
+/// now, so a walk that stops charging falls under it. They hold at
+/// `LENGTH`; a shorter text has more of its cost in the fixed fuel.
+const CHARGED_FLOOR: &[(&str, usize)] = &[
+    ("plain paragraphs", 1354),
+    ("blank lines", 3100),
+    ("one-letter lines", 4975),
+    ("one-letter items", 5375),
+    ("empty items", 4525),
+    ("ordered items", 4620),
+    ("task items", 3844),
+    ("nested items", 4450),
+    ("quoted lines", 3387),
+    ("headings", 2700),
+    ("setext headings", 3891),
+    ("breaks", 1450),
+    ("fenced code", 1220),
+    ("html blocks", 1071),
+    ("a long table", 3033),
+    ("definitions and references", 3668),
+    ("footnotes", 3425),
+    ("images", 3238),
+    ("reference links", 1607),
+    ("balanced brackets", 1816),
+    ("unmatched label ends", 1050),
+    ("unmatched openers", 1450),
+    ("code spans", 1541),
+    ("math spans", 1937),
+    ("entities", 1433),
+    ("autolinks", 903),
+    ("literal autolinks", 1030),
+    ("emails", 833),
+    ("hard breaks", 3012),
+    ("lazy block quote lines", 3916),
+    ("escapes", 1700),
+    ("a long dotted word", 550),
+];
+
+#[test]
+fn the_walks_over_a_text_are_charged() {
+    for (name, floor) in CHARGED_FLOOR {
+        let Some(shape) = ORDINARY.iter().find(|shape| shape.name == *name) else {
+            panic!("no shape named {name}");
+        };
+        let text = text_of(shape);
+        let (answer, spent) = parse_counting(&text);
+        assert!(answer.is_ok(), "{name}");
+        assert!(
+            spent * 100 >= floor * text.len(),
+            "{name}: {} hundredths a byte",
+            spent * 100 / text.len()
+        );
+    }
+    assert!(CHARGED_FLOOR.len() > 30);
+}

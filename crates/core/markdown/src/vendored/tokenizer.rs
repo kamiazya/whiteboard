@@ -15,7 +15,7 @@ use crate::vendored::state::{State, call};
 use crate::vendored::subtokenize::Subresult;
 
 use crate::vendored::util::{constant::TAB_SIZE, edit_map::EditMap};
-use alloc::{boxed::Box, string::String, vec, vec::Vec};
+use alloc::{boxed::Box, collections::BTreeSet, string::String, vec, vec::Vec};
 
 /// Containers.
 ///
@@ -222,10 +222,10 @@ pub(crate) struct TokenizeState<'a> {
     /// Used when tokenizing [text content][crate::vendored::construct::text].
     pub(crate) labels: Vec<Label>,
 
-    /// List of defined definition identifiers.
-    pub(crate) definitions: Vec<String>,
-    /// List of defined GFM footnote definition identifiers.
-    pub(crate) gfm_footnote_definitions: Vec<String>,
+    /// Defined definition identifiers.
+    pub(crate) definitions: BTreeSet<String>,
+    /// Defined GFM footnote definition identifiers.
+    pub(crate) gfm_footnote_definitions: BTreeSet<String>,
 
     /// Whether to connect events.
     pub(crate) connect: bool,
@@ -340,8 +340,8 @@ impl<'a> Tokenizer<'a> {
                 document_child_state: None,
                 document_child: None,
                 document_at_first_paragraph_of_list_item: false,
-                definitions: vec![],
-                gfm_footnote_definitions: vec![],
+                definitions: BTreeSet::new(),
+                gfm_footnote_definitions: BTreeSet::new(),
                 end: 0,
                 label_starts: vec![],
                 label_starts_loose: vec![],
@@ -568,8 +568,10 @@ impl<'a> Tokenizer<'a> {
 
         let mut value = Subresult {
             done: false,
-            gfm_footnote_definitions: self.tokenize_state.gfm_footnote_definitions.split_off(0),
-            definitions: self.tokenize_state.definitions.split_off(0),
+            gfm_footnote_definitions: core::mem::take(
+                &mut self.tokenize_state.gfm_footnote_definitions,
+            ),
+            definitions: core::mem::take(&mut self.tokenize_state.definitions),
         };
 
         if resolve && self.parse_state.budget.refusal().is_none() {
