@@ -483,16 +483,24 @@ fn a_rule_raw_html_and_a_definition_are_laid_out_in_flow() {
         paragraph(vec![text("x")]),
     ];
     let scene = laid(100.0, blocks).unwrap_or_default();
-    let SceneNode::ThematicBreak(rule) = first(&scene) else { return };
+    let SceneNode::ThematicBreak(rule) = first(&scene) else {
+        panic!("scene node is not the expected variant")
+    };
     same(rule.bbox.h, 1.0);
     assert_eq!(rule.appearance.as_ref().and_then(|a| a.fill_opacity), Some(0.35));
-    let SceneNode::RawHtml(html) = &scene.nodes[1] else { return };
+    let SceneNode::RawHtml(html) = &scene.nodes[1] else {
+        panic!("scene node is not the expected variant")
+    };
     same(html.bbox.y, 1.0 + 12.0);
     same(html.bbox.h, LINE);
-    let SceneNode::UnresolvedReference(marker) = &scene.nodes[2] else { return };
+    let SceneNode::UnresolvedReference(marker) = &scene.nodes[2] else {
+        panic!("scene node is not the expected variant")
+    };
     same(marker.bbox.y, 13.0 + LINE + 12.0);
     same(marker.bbox.h, 0.0);
-    let SceneNode::Paragraph(next) = &scene.nodes[3] else { return };
+    let SceneNode::Paragraph(next) = &scene.nodes[3] else {
+        panic!("scene node is not the expected variant")
+    };
     same(next.bbox.y, marker.bbox.y);
 }
 
@@ -514,16 +522,10 @@ fn math_with(renderer: Option<&Maths>, value: &str, width: f64) -> SvgFragmentNo
     };
     let math = Flow::Math { value: value.to_owned(), meta: None };
     let scene = typeset_mdast_blocks(&Root { children: vec![math] }, &options).unwrap_or_default();
-    let SceneNode::SvgFragment(fragment) = scene.nodes[0].clone() else { return empty_fragment() };
+    let SceneNode::SvgFragment(fragment) = scene.nodes[0].clone() else {
+        unreachable!("the scene node is not the variant this helper reads")
+    };
     fragment
-}
-
-fn empty_fragment() -> SvgFragmentNode {
-    SvgFragmentNode {
-        bbox: whiteboard_scene::BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
-        svg: String::new(),
-        role: None,
-    }
 }
 
 #[test]
@@ -572,14 +574,7 @@ fn fence(value: &str, lang: Option<&str>, width: f64) -> whiteboard_scene::CodeB
     let flow = Flow::Code { value: value.to_owned(), lang: lang.map(str::to_owned), meta: None };
     let scene = laid(width, vec![flow]).unwrap_or_default();
     let SceneNode::CodeBlock(block) = first(&scene).clone() else {
-        return whiteboard_scene::CodeBlockNode {
-            bbox: whiteboard_scene::BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
-            value: String::new(),
-            lang: None,
-            runs: None,
-            appearance: None,
-            radius: None,
-        };
+        unreachable!("the scene node is not the variant this helper reads")
     };
     block
 }
@@ -634,7 +629,9 @@ fn fence_with(tokenizer: &Lines, value: &str) -> Vec<TextRunNode> {
     };
     let flow = Flow::Code { value: value.to_owned(), lang: Some("js".to_owned()), meta: None };
     let scene = typeset_mdast_blocks(&Root { children: vec![flow] }, &options).unwrap_or_default();
-    let SceneNode::CodeBlock(block) = first(&scene).clone() else { return Vec::new() };
+    let SceneNode::CodeBlock(block) = first(&scene).clone() else {
+        unreachable!("the scene node is not the variant this helper reads")
+    };
     block.runs.unwrap_or_default()
 }
 
