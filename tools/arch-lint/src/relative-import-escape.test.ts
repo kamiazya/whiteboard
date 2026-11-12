@@ -62,6 +62,8 @@ const ESCAPES: Readonly<Record<string, string>> = {
     'a contract test that reads the daemon-client contracts directory as source, because the enums it checks producers against are declared there',
   'packages/mcp-server/src/server/contract-enum-producers.test.ts -> packages/server-core/src':
     'a contract test that reads the server-core source tree, which holds the producers of the enums it checks against the contracts',
+  'packages/canvas-render/src/test-utils/typeset-oracle/corpus.ts -> packages/codec/src/markdown/oracle/mdast.jsonl':
+    "records paragraphs and headings taken from the markdown parser's own recorded inputs, so the typesetter is held to the documents the parser is; read at record time only, and the freshness check reads the typeset recording alone",
   'apps/web/src/vitest-project-name.test.ts -> package.json':
     'asserts the root manifest and the web vitest project agree on a project name, so it has to read the root `package.json`',
   'apps/web/src/test-utils/coverage-ledger.ts -> {apps,packages,tools}/**/*.test.{ts,tsx}':

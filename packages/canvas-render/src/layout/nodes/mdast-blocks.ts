@@ -67,6 +67,7 @@ import {
 } from './mdast-layout-options.js'
 import { selectMarkdownSection } from './mdast-section.js'
 import { layoutTableRow, tableColumnWidths } from './mdast-table.js'
+import { withoutPairCuts } from './phrase-pairs.js'
 import { checkboxMarker } from './task-checkbox.js'
 import { fitToWidth } from './truncate.js'
 import { uaxSegments } from './uax-segments.js'
@@ -160,7 +161,7 @@ let japaneseParser: Parser | undefined
 
 function parseJapanesePhrases(text: string): readonly string[] {
   japaneseParser ??= new Parser(jaModel)
-  return japaneseParser.parse(text)
+  return withoutPairCuts(japaneseParser.parse(text))
 }
 
 /** Hiragana and katakana — the scripts the bundled BudouX model is trained on. */

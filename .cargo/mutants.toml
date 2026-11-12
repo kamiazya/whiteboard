@@ -320,4 +320,7 @@ exclude_re = [
   # exactly 2^53 - 1 cells the buffer is 32 PiB, which no engine allocates, so the
   # TypeScript throws there too and `>=` answers the same.
   'free_regions\.rs:\d+:\d+: replace > with >= in plan$',
+  # canvas-render typeset block_width: with an ink width exactly equal to the wrap
+  # width `>=` takes the widening branch and answers the same number.
+  'blocks\.rs:\d+:\d+: replace > with >= in block_width$',
 ]

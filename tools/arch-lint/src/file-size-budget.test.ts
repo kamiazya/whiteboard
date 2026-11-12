@@ -233,7 +233,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // typesetter back. The next shrink is the inline writer out of
   // `layoutPhrasing`, benched before and after. Raised by 9 for the nested-
   // layout budget, which has to be spent where an embed is resolved.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1394, // +44: a stand-alone picture laid out at its natural size (layoutFigure)
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1395, // +44: a stand-alone picture laid out at its natural size (layoutFigure)
   // The side-choice SEARCH: the cost model's application to a whole canvas,
   // the trial machinery of `createConfigScore`, the repair pass and the
   // regions. The side vocabulary (`edge-sides.ts`), the anchor pass

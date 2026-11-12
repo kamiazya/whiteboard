@@ -1317,7 +1317,7 @@ jobs:
       # a failed one, so "Re-run failed jobs" never revives it.
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     env:
       CARGO_TERM_COLOR: always
       CARGO_INCREMENTAL: '0'
@@ -1377,11 +1377,11 @@ jobs:
       # A push to main judges the merged change the same way, against HEAD^1:
       # the whole workspace still holds survivors nobody has classified, so a
       # full run here would fail every merge on mutants it did not add.
-      - name: Mutants in this change (shard ${{ matrix.shard }}/4)
+      - name: Mutants in this change (shard ${{ matrix.shard }}/8)
         if: steps.scope.outputs.run == 'true'
         env:
           RUST_MUTANTS_BASE: HEAD^1
-          RUST_MUTANTS_SHARD: ${{ matrix.shard }}/4
+          RUST_MUTANTS_SHARD: ${{ matrix.shard }}/8
         run: pnpm rust:mutants:pr
 
       - name: Upload the mutants report

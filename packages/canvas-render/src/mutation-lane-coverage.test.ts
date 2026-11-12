@@ -428,9 +428,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // the layout's routing. Outside the lane: it is a three-way dispatch and
     // a comparison, every branch driven by `layout/core-switch.test.ts` and
     // mutation-checked by hand, and it goes when the TypeScript routing does.
+    // 128 with `layout/nodes/phrase-pairs.ts`: the join of a BudouX phrase that
+    // ends inside a surrogate pair, outside the lane because it is one loop
+    // whose every branch `mdast-blocks-surrogate-pair.test.ts` drives.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 127,
+      production: 128,
     })
   })
 

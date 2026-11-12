@@ -47,5 +47,6 @@ pub mod sfnt;
 pub mod svg;
 pub mod theme;
 pub mod truncate;
+pub mod typeset;
 pub mod uax_segments;
 pub mod xml_escape;

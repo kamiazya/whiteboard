@@ -5,7 +5,7 @@
 // checks the file's shape on every change.
 
 /** How many `exclude_re` entries .cargo/mutants.toml holds: a change is a decision made in the diff. */
-const EXCLUSIONS = 83
+const EXCLUSIONS = 84
 
 /**
  * The ledger's entries, each with the comment lines directly above it. A
