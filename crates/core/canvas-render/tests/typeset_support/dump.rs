@@ -134,6 +134,12 @@ fn node(n: &SceneNode) -> Result<String, String> {
             ("identifier", string(&u.identifier)),
         ]),
         SceneNode::SvgFragment(g) => fragment(g),
+        SceneNode::TextRun(r) => run(r),
+        SceneNode::Blockquote(q) => quote(q)?,
+        SceneNode::List(l) => list_block(l)?,
+        SceneNode::Table(t) => table(t),
+        SceneNode::Shape(shape) => self::shape(shape),
+        SceneNode::Edge(e) => edge(e),
         other => return Err(format!("an unplaced scene node {other:?}")),
     })
 }
@@ -157,5 +163,101 @@ fn fragment(g: &whiteboard_scene::SvgFragmentNode) -> String {
     let mut f =
         vec![("kind", string("svgFragment")), ("bbox", bbox(&g.bbox)), ("svg", string(&g.svg))];
     f.extend(g.role.map(|_| ("role", string("presentation"))));
+    object(f)
+}
+
+fn nodes(children: &[SceneNode]) -> Result<String, String> {
+    Ok(list_of(children.iter().map(node).collect::<Result<Vec<_>, _>>()?))
+}
+
+fn list_of(items: Vec<String>) -> String {
+    list(items)
+}
+
+fn quote(q: &whiteboard_scene::BlockquoteNode) -> Result<String, String> {
+    let mut f = vec![
+        ("kind", string("blockquote")),
+        ("bbox", bbox(&q.bbox)),
+        ("children", nodes(&q.children)?),
+    ];
+    f.extend(q.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+    Ok(object(f))
+}
+
+fn item(i: &whiteboard_scene::ListItemNode) -> Result<String, String> {
+    let mut f = vec![
+        ("kind", string("listItem")),
+        ("bbox", bbox(&i.bbox)),
+        ("children", nodes(&i.children)?),
+    ];
+    f.extend(i.ordinal.map(|o| ("ordinal", num(o))));
+    f.extend(i.checked.map(|c| ("checked", c.to_string())));
+    Ok(object(f))
+}
+
+fn list_block(l: &whiteboard_scene::ListBlockNode) -> Result<String, String> {
+    let items = l.items.iter().map(item).collect::<Result<Vec<_>, _>>()?;
+    Ok(object(vec![
+        ("kind", string("list")),
+        ("bbox", bbox(&l.bbox)),
+        ("ordered", l.ordered.to_string()),
+        ("depth", num(l.depth)),
+        ("items", list_of(items)),
+    ]))
+}
+
+fn table(t: &whiteboard_scene::TableBlockNode) -> String {
+    let rows = t.rows.iter().map(|r| {
+        let cells = r.cells.iter().map(|c| {
+            let mut f = vec![
+                ("kind", string("tableCell")),
+                ("bbox", bbox(&c.bbox)),
+                ("runs", list_of(c.runs.iter().map(run).collect())),
+            ];
+            f.extend(c.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+            object(f)
+        });
+        let mut f = vec![
+            ("kind", string("tableRow")),
+            ("bbox", bbox(&r.bbox)),
+            ("cells", list_of(cells.collect())),
+        ];
+        f.extend(r.header.map(|h| ("header", h.to_string())));
+        f.extend(r.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+        object(f)
+    });
+    object(vec![
+        ("kind", string("table")),
+        ("bbox", bbox(&t.bbox)),
+        ("rows", list_of(rows.collect())),
+    ])
+}
+
+fn shape(s: &whiteboard_scene::ShapeSceneNode) -> String {
+    let mut f = vec![("kind", string("shape")), ("bbox", bbox(&s.bbox))];
+    f.extend(s.radius.map(|r| ("radius", num(r))));
+    f.extend(s.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+    f.extend(s.task_box.map(|t| ("taskBox", object(vec![("checked", t.checked.to_string())]))));
+    object(f)
+}
+
+fn edge(e: &whiteboard_scene::ResolvedEdgeNode) -> String {
+    let end = |e: whiteboard_scene::EdgeEnd| {
+        string(match e {
+            whiteboard_scene::EdgeEnd::None => "none",
+            whiteboard_scene::EdgeEnd::Arrow => "arrow",
+        })
+    };
+    let path = e.path.iter().map(|p| object(vec![("x", num(p.x)), ("y", num(p.y))])).collect();
+    let mut f = vec![
+        ("kind", string("edge")),
+        ("id", string(&e.id)),
+        ("path", list_of(path)),
+        ("fromSide", string(e.from_side.as_str())),
+        ("toSide", string(e.to_side.as_str())),
+        ("fromEnd", end(e.from_end)),
+        ("toEnd", end(e.to_end)),
+    ];
+    f.extend(e.appearance.as_ref().map(|a| ("appearance", appearance(a))));
     object(f)
 }

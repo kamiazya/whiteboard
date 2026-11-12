@@ -9,8 +9,10 @@ use whiteboard_scene::{
 
 use super::code::layout_code;
 use super::furniture::{layout_definition, layout_html, layout_math, layout_rule};
-use super::options::{Cursor, TypesetOptions, body_line_height_px, finite_positive};
+use super::list::{layout_list, layout_quote};
+use super::options::{Cursor, Style, TypesetOptions, body_line_height_px, finite_positive};
 use super::phrasing::{count_f64, layout_phrasing};
+use super::table::layout_table;
 
 /// A block kind the typesetter does not carry yet. The set shrinks with each
 /// slice of the port, and the error goes with the last of it: a partial
@@ -29,21 +31,6 @@ fn block_width(max_width: f64, ink_width: f64) -> f64 {
     if max_width.is_finite() && ink_width > max_width { ink_width } else { max_width }
 }
 
-fn kind_of(flow: &Flow) -> &'static str {
-    match flow {
-        Flow::Paragraph { .. } => "paragraph",
-        Flow::Heading { .. } => "heading",
-        Flow::Blockquote { .. } => "blockquote",
-        Flow::List { .. } => "list",
-        Flow::Code { .. } => "code",
-        Flow::Html { .. } => "html",
-        Flow::ThematicBreak => "thematicBreak",
-        Flow::Definition { .. } => "definition",
-        Flow::Table { .. } => "table",
-        Flow::Math { .. } => "math",
-    }
-}
-
 /// The single mdast to scene path, as far as it is ported.
 ///
 /// # Errors
@@ -53,15 +40,16 @@ pub fn typeset_mdast_blocks(root: &Root, opts: &TypesetOptions<'_>) -> Result<Sc
     let mut cursor = Cursor { x: 0.0, y: 0.0 };
     let mut nodes = Vec::with_capacity(root.children.len());
     for block in &root.children {
-        nodes.push(layout_block(block, &mut cursor, opts)?);
+        nodes.push(layout_block(block, &mut cursor, opts, 0)?);
     }
     Ok(Scene { nodes, legend: None })
 }
 
-fn layout_block(
+pub(super) fn layout_block(
     block: &Flow,
     cursor: &mut Cursor,
     opts: &TypesetOptions<'_>,
+    depth: usize,
 ) -> Result<SceneNode, Unsupported> {
     match block {
         Flow::Heading { depth, children } => Ok(layout_heading(*depth, children, cursor, opts)),
@@ -77,7 +65,16 @@ fn layout_block(
         Flow::ThematicBreak => Ok(layout_rule(cursor, opts)),
         Flow::Definition { identifier, .. } => Ok(layout_definition(identifier, cursor)),
         Flow::Math { value, .. } => Ok(layout_math(value, cursor, opts)),
-        other => Err(Unsupported(kind_of(other))),
+        Flow::Blockquote { children } => layout_quote(children, cursor, opts, depth),
+        Flow::List { ordered, start, children, .. } => layout_list(
+            ordered.unwrap_or(false),
+            start.unwrap_or(1.0),
+            children,
+            cursor,
+            opts,
+            depth,
+        ),
+        Flow::Table { children, .. } => Ok(layout_table(children, cursor, opts)),
     }
 }
 
@@ -102,7 +99,7 @@ fn layout_heading(
         .copied()
         .unwrap_or(theme.body_font_size_px);
     let line_height = font_size * theme.heading_line_height;
-    let laid = layout_phrasing(children, *cursor, opts, font_size, line_height);
+    let laid = layout_phrasing(children, *cursor, opts, font_size, line_height, Style::default());
     let height = count_f64(laid.line_count) * line_height;
     let heading = HeadingBlockNode {
         bbox: BoundingBox {
@@ -128,7 +125,14 @@ fn layout_paragraph(
     }
     let theme = opts.theme;
     let line_height = body_line_height_px(theme);
-    let laid = layout_phrasing(children, *cursor, opts, theme.body_font_size_px, line_height);
+    let laid = layout_phrasing(
+        children,
+        *cursor,
+        opts,
+        theme.body_font_size_px,
+        line_height,
+        Style::default(),
+    );
     let height = count_f64(laid.line_count) * line_height;
     let paragraph = ParagraphBlockNode {
         bbox: BoundingBox {

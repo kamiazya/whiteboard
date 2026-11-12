@@ -399,6 +399,7 @@ pub(super) fn layout_phrasing(
     opts: &TypesetOptions<'_>,
     font_size: f64,
     line_height: f64,
+    style: Style,
 ) -> PhrasingLayout {
     let mut layout = InlineLayout {
         opts,
@@ -410,7 +411,7 @@ pub(super) fn layout_phrasing(
         junction: create_inline_junction(line_height),
         can_wrap: opts.max_width.is_finite() && opts.max_width > 0.0,
     };
-    layout.walk(children, Style::default());
+    layout.walk(children, style);
     let ink_width =
         layout.runs.iter().fold(0.0, |widest: f64, run| widest.max(run.bbox.x + run.bbox.w));
     PhrasingLayout { runs: layout.runs, line_count: layout.line.index.saturating_add(1), ink_width }

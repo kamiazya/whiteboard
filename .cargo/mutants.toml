@@ -399,4 +399,13 @@ exclude_re = [
   # earlier run of the same line, so `>=` reaches the move only where two
   # successive non-empty runs both measure 0 wide (a face of zero-width glyphs).
   'wrap\.rs:\d+:\d+: replace > with >= in Wrap<.*>::cluster_came_down$',
+  # canvas-render typeset js_max: it answers NaN for a NaN either side, as
+  # `Math.max` does, and `&&` answers the other side for one NaN. Every operand
+  # is a height or a width the theme and the measurer keep finite, so no layout
+  # reaches a NaN on one side only.
+  'options\.rs:\d+:\d+: replace \|\| with && in js_max$',
+  # canvas-render typeset scale_into_width: a column that scales to exactly the
+  # minimum is frozen at it instead of staying flexible, and the others' scale
+  # (max - k*min - min) / (flexible - natural) is the one they already had.
+  'table\.rs:\d+:\d+: replace < with <= in scale_into_width$',
 ]
