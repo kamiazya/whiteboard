@@ -9,8 +9,9 @@
 
 mod typeset_support;
 
+use std::collections::BTreeMap;
 use typeset_support::dump::dump_scene;
-use typeset_support::record::{Counting, Record};
+use typeset_support::record::{Counting, Record, SeamLine, Seams};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
@@ -24,7 +25,7 @@ fn fnv(text: &str) -> u32 {
 }
 
 /// The record laid out by the port: the scene as text and the measurer's calls.
-fn lay_out(record: &Record) -> Result<(String, usize), String> {
+fn lay_out(record: &Record, seams: &Seams) -> Result<(String, usize), String> {
     let bits = u64::from_str_radix(&record.width, 16).map_err(|e| format!("a width: {e}"))?;
     let theme = match record.theme.as_str() {
         "node" => MarkdownTheme::node(),
@@ -35,17 +36,17 @@ fn lay_out(record: &Record) -> Result<(String, usize), String> {
     let syntax = record.syntax.as_ref().map(typeset_support::record::syntax_of);
     let options = TypesetOptions {
         text_fill: record.fill.as_deref(),
-        highlight: Some(&record.seams),
+        highlight: Some(seams),
         syntax: syntax.as_ref(),
-        math: Some(&record.seams),
-        diagram: Some(&record.seams),
-        embeds: (record.embeds != "none").then_some(&record.seams as &dyn EmbedResolver),
-        canvas_layout: (record.embeds == "full").then_some(&record.seams as &dyn CanvasMiniature),
-        ..TypesetOptions::new(&measure, f64::from_bits(bits), "sans-serif", &theme, &record.seams)
+        math: Some(seams),
+        diagram: Some(seams),
+        embeds: (record.embeds != "none").then_some(seams as &dyn EmbedResolver),
+        canvas_layout: (record.embeds == "full").then_some(seams as &dyn CanvasMiniature),
+        ..TypesetOptions::new(&measure, f64::from_bits(bits), "sans-serif", &theme, seams)
     };
     let root = typeset_support::model::root(&record.root)?;
     let scene = typeset_mdast_blocks(&root, &options);
-    if let Some(miss) = record.seams.misses().first() {
+    if let Some(miss) = seams.misses().first() {
         return Err(format!("the recording holds no {miss}"));
     }
     Ok((dump_scene(&scene)?, measure.calls()))
@@ -73,26 +74,37 @@ fn compare_text(record: &Record, text: &str) -> Result<(), String> {
 }
 
 /// What differs for one record, or nothing.
-fn replay(record: &Record) -> Option<String> {
-    let compared = lay_out(record).and_then(|(text, calls)| {
-        if calls != record.calls {
-            return Err(format!("measured {calls} times, recorded {}", record.calls));
-        }
-        compare_text(record, &text)
-    });
+fn replay(record: &Record, seams: &BTreeMap<String, Seams>) -> Option<String> {
+    let compared = seams
+        .get(&record.seams)
+        .ok_or_else(|| format!("no seams named {}", record.seams))
+        .and_then(|table| lay_out(record, table))
+        .and_then(|(text, calls)| {
+            if calls != record.calls {
+                return Err(format!("measured {calls} times, recorded {}", record.calls));
+            }
+            compare_text(record, &text)
+        });
     compared.err().map(|error| format!("{}: {error}", record.id))
 }
 
 #[test]
 fn every_recorded_input_is_laid_out_as_the_typescript_laid_it_out() {
     let text = include_str!("../../../../packages/canvas-render/src/oracle/typeset.jsonl");
-    let records: Vec<Record> = text
-        .lines()
-        .skip(1)
-        .map(|line| serde_json::from_str(line).unwrap_or_else(|e| panic!("a record: {e}")))
-        .collect();
+    let mut seams: BTreeMap<String, Seams> = BTreeMap::new();
+    let mut records: Vec<Record> = Vec::new();
+    for line in text.lines().skip(1) {
+        if line.starts_with("{\"kind\":\"seams\"") {
+            let table: SeamLine =
+                serde_json::from_str(line).unwrap_or_else(|e| panic!("seams: {e}"));
+            assert_eq!(table.kind, "seams");
+            seams.insert(table.key, table.seams);
+        } else {
+            records.push(serde_json::from_str(line).unwrap_or_else(|e| panic!("a record: {e}")));
+        }
+    }
     assert!(records.len() > 2800, "the recording holds {} records", records.len());
-    let failures: Vec<String> = records.iter().filter_map(replay).collect();
+    let failures: Vec<String> = records.iter().filter_map(|r| replay(r, &seams)).collect();
     assert!(
         failures.is_empty(),
         "{} of {} records differ; first:\n{}",

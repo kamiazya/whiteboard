@@ -258,6 +258,15 @@ pub(crate) fn syntax_of(palette: &BTreeMap<String, String>) -> SyntaxFills {
     }
 }
 
+/// A set of host answers, written once and named by `key`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct SeamLine {
+    pub(crate) kind: String,
+    pub(crate) key: String,
+    pub(crate) seams: Seams,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Record {
@@ -269,7 +278,8 @@ pub(crate) struct Record {
     pub(crate) embeds: String,
     pub(crate) syntax: Option<BTreeMap<String, String>>,
     pub(crate) digest: bool,
-    pub(crate) seams: Seams,
+    /// The key of the host's answers, which the recording holds once for every record that shares them.
+    pub(crate) seams: String,
     pub(crate) calls: usize,
     pub(crate) scene: Option<String>,
     pub(crate) n: Option<usize>,
