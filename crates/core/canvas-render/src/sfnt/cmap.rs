@@ -81,7 +81,7 @@ impl<'a> Cmap<'a> {
         let mut previous_end: Option<u16> = None;
         for i in 0..segments {
             let (start, end) = table.segment(i).ok_or(SfntError::BadCmap)?;
-            let ordered = previous_end.is_none_or(|p| end > p && (start > end || start > p));
+            let ordered = previous_end.is_none_or(|p| end > p && start > p);
             if !ordered {
                 return Err(SfntError::BadCmap);
             }

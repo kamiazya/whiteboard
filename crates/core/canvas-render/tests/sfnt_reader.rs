@@ -320,12 +320,45 @@ fn unsorted_overlapping_or_inverted_ranges_are_refused() {
     assert_eq!(narrow(&[(0x50, 0x60, 0, 0), (0x41, 0x43, 0, 0), end]), Err(SfntError::BadCmap));
     assert_eq!(narrow(&[(0x41, 0x50, 0, 0), (0x50, 0x60, 0, 0), end]), Err(SfntError::BadCmap));
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x50, 0x60, 0, 0), end]), Ok(()));
+    assert_eq!(narrow(&[(0x41, 0x50, 0, 0), (0x45, 0x50, 0, 0), end]), Err(SfntError::BadCmap));
+    assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x44, 0x44, 0, 0), end]), Ok(()));
+    assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x43, 0x50, 0, 0), end]), Err(SfntError::BadCmap));
+    assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x60, 0x50, 0, 0), end]), Ok(()));
 }
 
 #[test]
 fn a_font_over_the_size_cap_is_refused_before_it_is_read() {
-    let big = vec![0_u8; MAX_BYTES + 1];
-    assert_eq!(Sfnt::parse(&big).err(), Some(SfntError::TooLarge));
+    let mut at_cap = font(&valid());
+    at_cap.resize(MAX_BYTES, 0);
+    assert!(Sfnt::parse(&at_cap).is_ok(), "a font of exactly the cap is read");
+    at_cap.push(0);
+    assert_eq!(Sfnt::parse(&at_cap).err(), Some(SfntError::TooLarge));
+}
+
+#[test]
+fn the_cap_is_the_one_the_input_registry_declares() {
+    let registry: serde_json::Value =
+        serde_json::from_str(include_str!("../../../input-caps.json"))
+            .unwrap_or(serde_json::Value::Null);
+    let declared =
+        registry["entries"]["whiteboard-canvas-render::sfnt::Sfnt::parse"]["maxBytes"].as_u64();
+    assert_eq!(declared, u64::try_from(MAX_BYTES).ok());
+}
+
+#[test]
+fn only_the_platform_and_encoding_pairs_opentype_reads_are_read() {
+    let wide = format_12(&[(0x41, 0x41, 1)]);
+    let reads = |platform, encoding| {
+        parse(&with(&valid(), cmap(&[(platform, encoding, wide.clone())]))).is_ok()
+    };
+    for (platform, encoding) in
+        [(3, 0), (3, 1), (3, 10), (0, 0), (0, 1), (0, 2), (0, 3), (0, 4), (0, 6), (1, 0)]
+    {
+        assert!(reads(platform, encoding), "({platform}, {encoding}) is read");
+    }
+    for (platform, encoding) in [(3, 2), (3, 3), (3, 11), (0, 5), (0, 7), (1, 1), (2, 0), (4, 0)] {
+        assert!(!reads(platform, encoding), "({platform}, {encoding}) is not read");
+    }
 }
 
 fn mutated() -> impl Strategy<Value = Vec<u8>> {
