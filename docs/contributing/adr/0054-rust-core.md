@@ -1147,10 +1147,9 @@ source) is asked through `InlineSeams`, answered in the recording from tables th
 filled. S9a is the inline layer (wrapping by UAX #14 and BudouX, kinsoku across inline junctions,
 atomic runs cut to the width, links with provenance, hard breaks) with the paragraph and heading
 blocks; a block kind not yet carried is `Unsupported`, and the error goes with the last slice.
-One deviation: BudouX reads UTF-16 units and can name a phrase boundary inside a surrogate pair,
-which a `&str` cannot hold; Rust does not take such a boundary, and the recorder leaves out the
-inputs that reach one (1 of 600 generated trees), so a text with kana and an astral character may
-wrap differently from the TypeScript, which can leave half an emoji in a run.
+BudouX reads UTF-16 units and can name a phrase boundary inside a surrogate pair; the
+TypeScript used to break there and leave half an emoji in a run, which was a defect. Both sides
+now join such a phrase to the next, so there is no deviation to ledger.
 
 #### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
 

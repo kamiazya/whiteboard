@@ -283,10 +283,10 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/tests/typeset_oracle.rs` replays it exactly, writing a Rust scene with
   a test-only dumper (`crates/core/canvas-render/tests/typeset_support`); `WHITEBOARD_RECORD_ORACLE=1` re-records. The
   corpora are read at record time only (the markdown oracle's parsed bodies, the wrapping
-  corpus, hand-written cases, a seeded generator whose seed rides the `meta` record). One
-  recorded deviation: BudouX can name a phrase boundary inside a surrogate pair, which a `&str`
-  cannot hold, so Rust does not take it and the recorder leaves out the (rare) inputs that reach one,
-  counting them in `meta.pairBoundary`.
+  corpus, hand-written cases, a seeded generator whose seed rides the `meta` record).
+  BudouX reads UTF-16 units and can name a boundary inside a surrogate pair; neither side
+  takes one (the TypeScript's `withoutPairCuts`, Rust's `splits_pair`), so no run holds half
+  a character.
 - **The markdown parser is held to `parseMarkdownBody`'s model tree**:
   `packages/codec/src/markdown/oracle/mdast.jsonl` records the digest of each
   document's canonical tree (the trees too for the spec and dialect sets), over

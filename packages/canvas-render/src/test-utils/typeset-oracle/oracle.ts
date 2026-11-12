@@ -15,7 +15,6 @@ import {
   MARKDOWN_THEME_NODE,
   type MarkdownTheme,
 } from '../../theme/markdown-theme.js'
-import { Parser } from '../../vendor/budoux/parser.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { dumpScene, f64Hex } from '../render-oracle/scene-dump.js'
 
@@ -64,8 +63,6 @@ export interface RecordMeta {
   readonly kind: 'meta'
   readonly seed: number
   readonly generated: number
-  /** Inputs left out because BudouX cut between the halves of a surrogate pair. */
-  readonly pairBoundary: number
 }
 
 const THEMES: Record<ThemeName, MarkdownTheme> = {
@@ -190,21 +187,7 @@ class Fnv {
   }
 }
 
-/**
- * BudouX reads UTF-16 units and can name a phrase boundary inside a surrogate pair, which the
- * wrapper may then break at, leaving half an emoji in a run. The Rust typesetter cannot hold half a
- * pair in a `&str` and does not take such a boundary, so an input that reaches one is not one the
- * two can be held to: it is left out of the recording, and counted.
- */
-let cutAPair = false
-const parsePhrases = Parser.prototype.parse
-Parser.prototype.parse = function parse(this: Parser, text: string) {
-  const phrases = parsePhrases.call(this, text)
-  if (phrases.some((phrase) => /[\ud800-\udbff]$/.test(phrase))) cutAPair = true
-  return phrases
-}
-
-export function typesetAnswer(input: TypesetInput): TypesetRecord | null {
+export function typesetAnswer(input: TypesetInput): TypesetRecord {
   const seams = seamsFor(input.root)
   if (input.root.children.some(isBlockEmbed)) {
     throw new Error(`typeset-oracle: ${input.id} holds a block embed`)
@@ -223,9 +206,7 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord | null {
     ...(input.fill === null ? {} : { textFill: input.fill }),
     references: referencesFor(seams),
   }
-  cutAPair = false
   const scene = typesetMdastBlocks(input.root, options)
-  if (cutAPair) return null
   const text = dumpScene(scene)
   // A `&str` cannot hold half a surrogate pair, so a scene that has one is not an answer the Rust
   // typesetter can give; the corpus must not reach it.

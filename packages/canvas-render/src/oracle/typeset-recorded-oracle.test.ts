@@ -24,14 +24,8 @@ import {
 const FILE = new URL('./typeset.jsonl', import.meta.url)
 
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  const answers = typesetInputs(true).map(typesetAnswer)
-  const records = answers.filter((r): r is TypesetRecord => r !== null)
-  const meta: RecordMeta = {
-    kind: 'meta',
-    seed: GENERATED_SEED,
-    generated: records.filter((r) => r.id.startsWith('gen/')).length,
-    pairBoundary: answers.length - records.length,
-  }
+  const records = typesetInputs(true).map(typesetAnswer)
+  const meta: RecordMeta = { kind: 'meta', seed: GENERATED_SEED, generated: GENERATED_COUNT }
   writeFileSync(FILE, `${[meta, ...records].map((r) => JSON.stringify(r)).join('\n')}\n`)
 }
 
@@ -54,7 +48,6 @@ describe('the recorded typeset oracle', () => {
     expect(meta.generated, 'generated trees, less those that cut a pair').toBeGreaterThan(
       GENERATED_COUNT - 40,
     )
-    expect(meta.pairBoundary, 'inputs left out for cutting a pair').toBeLessThan(40)
     const under = (prefix: string) => records.filter((r) => r.id.startsWith(prefix)).length
     expect(under('hand/'), 'hand-written cases').toBeGreaterThan(300)
     expect(under('wrap/'), 'wrapping corpus cases').toBeGreaterThan(30)
