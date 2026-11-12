@@ -243,8 +243,10 @@ dependencies = [
 name = "whiteboard-canvas-render"
 version = "0.0.0"
 dependencies = [
+ "unicode-segmentation",
  "whiteboard-det",
  "whiteboard-edge-routing",
+ "whiteboard-facet-engine",
  "whiteboard-model",
  "whiteboard-plugin-visual",
  "whiteboard-scene",
