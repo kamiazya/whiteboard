@@ -276,9 +276,14 @@ dependencies = [
  "libfuzzer-sys",
  "whiteboard-codec",
  "whiteboard-det",
+ "whiteboard-markdown",
  "whiteboard-model",
  "whiteboard-wasm",
 ]
+
+[[package]]
+name = "whiteboard-markdown"
+version = "0.0.0"
 
 [[package]]
 name = "whiteboard-model"

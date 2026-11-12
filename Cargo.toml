@@ -11,6 +11,7 @@ members = [
   "crates/core/canvas-render",
   "crates/core/edge-routing",
   "crates/core/codec",
+  "crates/core/markdown",
   "crates/core/plugin-visual",
   "crates/core/facet-engine",
   "crates/bindings/wasm",

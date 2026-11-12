@@ -603,10 +603,38 @@ describe('file-size budget: scripts, same 800-line budget, same shrink-only cont
  * ledger that read only `.ts` would let a ported module land at any size
  * while this file reported a clean tree. Tests share the ledger: a Rust test
  * module sits in the file it tests (`#[cfg(test)] mod tests`), so file and
- * test are one subject here. Empty when it landed — the largest crate file
- * was 515 lines.
+ * test are one subject here. The crates this repository wrote itself fit; what
+ * is listed is the vendored markdown-rs, whose modules are upstream's and are
+ * kept whole so a later upstream fix compares against them. Its next shrink is
+ * the documentation that dominates the largest of them (the event names' docs,
+ * the construct constants) leaving as it is read less.
  */
-const RUST_FILE_SIZE_GRANDFATHER: Record<string, number> = {}
+const RUST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
+  // The GFM literal autolink tokenizer and its resolver: the protocol, www and
+  // email forms are three state machines in one module, as upstream.
+  'crates/core/markdown/src/vendored/construct/gfm_autolink_literal.rs': 826,
+  // The GFM table: head row, delimiter row and body rows as one set of states
+  // and one resolver that has to see all three.
+  'crates/core/markdown/src/vendored/construct/gfm_table.rs': 1022,
+  // The HTML flow tokenizer: seven kinds of block, one set of states each.
+  'crates/core/markdown/src/vendored/construct/html_flow.rs': 873,
+  // The label end: resource, full, collapsed and shortcut references and the
+  // injection of what was found into the events.
+  'crates/core/markdown/src/vendored/construct/label_end.rs': 828,
+  // Every event name with the example it is documented by; the names are 58
+  // and the documentation is most of the file.
+  'crates/core/markdown/src/vendored/event.rs': 2786,
+  // The mdast node types, one documented struct each.
+  'crates/core/markdown/src/vendored/mdast.rs': 899,
+  // The tree builder: one handler per event name.
+  'crates/core/markdown/src/vendored/to_mdast.rs': 1147,
+  // The named character references (a table of 2,125 entries) and the other
+  // constants the constructs share.
+  'crates/core/markdown/src/vendored/util/constant.rs': 2711,
+  // The Unicode punctuation table, generated upstream from the Unicode data:
+  // one character a line, 9,369 of them.
+  'crates/core/markdown/src/vendored/util/unicode.rs': 9388,
+}
 
 /** The over-budget Rust files a ledger does not name, under `repoRoot`'s `crates/`. */
 function unlistedRustFiles(repoRoot: string, ledger: Readonly<Record<string, number>>): string[] {

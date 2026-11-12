@@ -758,6 +758,38 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // nested comments, strings, raw and byte strings, chars against
   // lifetimes). A function per literal form is the next shrink.
   'crates/xtask/src/unsafe_ledger.rs#count_unsafe': 80,
+  // The vendored markdown-rs (crates/core/markdown/src/vendored): the upstream
+  // tokenizer's states, resolvers and tree builder, each one long because it
+  // walks a stream of events by position in one pass, and `state::call` one
+  // match arm per state. They are kept as upstream wrote them so a later
+  // upstream fix compares against them; the next shrink for each is the loop
+  // body lifted out as a function. The functions this crate wrote itself
+  // (`lib.rs`, `limits.rs`, `vendored/budget.rs`) are under the budget.
+  'crates/core/markdown/src/vendored/construct/attention.rs#resolve': 84,
+  'crates/core/markdown/src/vendored/construct/attention.rs#get_sequences': 61,
+  'crates/core/markdown/src/vendored/construct/attention.rs#match_sequences': 129,
+  'crates/core/markdown/src/vendored/construct/content.rs#resolve': 70,
+  'crates/core/markdown/src/vendored/construct/document.rs#flow_end': 103,
+  'crates/core/markdown/src/vendored/construct/document.rs#resolve': 82,
+  'crates/core/markdown/src/vendored/construct/gfm_autolink_literal.rs#resolve': 124,
+  'crates/core/markdown/src/vendored/construct/gfm_table.rs#head_row_break': 55,
+  'crates/core/markdown/src/vendored/construct/gfm_table.rs#resolve': 118,
+  'crates/core/markdown/src/vendored/construct/gfm_table.rs#flush_cell': 115,
+  'crates/core/markdown/src/vendored/construct/heading_atx.rs#resolve': 60,
+  'crates/core/markdown/src/vendored/construct/html_flow.rs#tag_name': 60,
+  'crates/core/markdown/src/vendored/construct/label_end.rs#after': 55,
+  'crates/core/markdown/src/vendored/construct/label_end.rs#inject_labels': 119,
+  'crates/core/markdown/src/vendored/construct/list_item.rs#resolve': 101,
+  'crates/core/markdown/src/vendored/construct/partial_whitespace.rs#trim_data': 117,
+  'crates/core/markdown/src/vendored/construct/text.rs#before': 83,
+  'crates/core/markdown/src/vendored/state.rs#call': 411,
+  'crates/core/markdown/src/vendored/subtokenize.rs#subtokenize': 92,
+  'crates/core/markdown/src/vendored/subtokenize.rs#divide_events': 85,
+  'crates/core/markdown/src/vendored/to_mdast.rs#enter': 59,
+  'crates/core/markdown/src/vendored/to_mdast.rs#exit': 77,
+  'crates/core/markdown/src/vendored/tokenizer.rs#Tokenizer.new': 62,
+  'crates/core/markdown/src/vendored/tokenizer.rs#push_impl': 69,
+  'crates/core/markdown/src/vendored/util/infer.rs#list_loose': 73,
 }
 
 const RUST_MEASURED = rustSourceFiles().flatMap((path) =>
