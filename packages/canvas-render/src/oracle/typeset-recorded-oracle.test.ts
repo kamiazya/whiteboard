@@ -32,12 +32,21 @@ if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
 const lines = readFileSync(FILE, 'utf8').trimEnd().split('\n')
 const records = lines.slice(1).map((line) => JSON.parse(line) as TypesetRecord)
 
-const asInput = ({ id, root, width, theme, fill, digest }: TypesetRecord): TypesetInput => ({
+const asInput = ({
   id,
   root,
   width,
   theme,
   fill,
+  syntax,
+  digest,
+}: TypesetRecord): TypesetInput => ({
+  id,
+  root,
+  width,
+  theme,
+  fill,
+  syntax,
   digest,
 })
 
@@ -51,6 +60,7 @@ describe('the recorded typeset oracle', () => {
     const under = (prefix: string) => records.filter((r) => r.id.startsWith(prefix)).length
     expect(under('hand/'), 'hand-written cases').toBeGreaterThan(300)
     expect(under('wrap/'), 'wrapping corpus cases').toBeGreaterThan(30)
+    expect(under('blocks/'), 'childless blocks').toBeGreaterThan(300)
     expect(under('gen/'), 'generated trees').toBe(meta.generated)
     expect(under('md/'), 'parsed corpus blocks').toBeGreaterThan(1000)
     expect(new Set(records.map((r) => r.theme)).size, 'themes').toBe(3)
@@ -58,7 +68,16 @@ describe('the recorded typeset oracle', () => {
       .filter((r) => 'scene' in r)
       .map((r) => (r as { scene: string }).scene)
       .join('\n')
-    for (const kind of ['paragraph', 'heading', 'textRun'])
+    for (const kind of [
+      'paragraph',
+      'heading',
+      'textRun',
+      'codeBlock',
+      'thematicBreak',
+      'rawHtml',
+      'unresolvedReference',
+      'svgFragment',
+    ])
       expect(held.includes(`"kind":"${kind}"`), `a scene holding a ${kind}`).toBe(true)
     for (const key of ['truncated', 'overflows', 'backdropPadXPx', 'paints', 'link'])
       expect(held.includes(`"${key}":`), `a run carrying ${key}`).toBe(true)

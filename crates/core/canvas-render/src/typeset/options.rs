@@ -6,7 +6,7 @@ use whiteboard_scene::{Appearance, TextRunNode};
 use crate::measure::{FontDescriptor, FontStyle, Measure, clamp_advance};
 use crate::theme::markdown::MarkdownTheme;
 
-use super::seams::InlineSeams;
+use super::seams::{CodeTokenizer, DiagramRenderer, InlineSeams, MathRenderer, SyntaxFills};
 
 pub struct TypesetOptions<'a> {
     pub measure: &'a dyn Measure,
@@ -19,6 +19,47 @@ pub struct TypesetOptions<'a> {
     /// The fill every run is painted with; absent, runs inherit one.
     pub text_fill: Option<&'a str>,
     pub seams: &'a dyn InlineSeams,
+    /// Absent, a fence is drawn as plain source.
+    pub highlight: Option<&'a dyn CodeTokenizer>,
+    pub syntax: Option<&'a SyntaxFills>,
+    /// Absent, display math is drawn as its escaped source.
+    pub math: Option<&'a dyn MathRenderer>,
+    pub diagram: Option<&'a dyn DiagramRenderer>,
+}
+
+impl<'a> TypesetOptions<'a> {
+    /// The required fields, every optional seam absent.
+    #[must_use]
+    pub fn new(
+        measure: &'a dyn Measure,
+        max_width: f64,
+        font_family: &'a str,
+        theme: &'a MarkdownTheme,
+        seams: &'a dyn InlineSeams,
+    ) -> Self {
+        Self {
+            measure,
+            max_width,
+            font_family,
+            theme,
+            text_fill: None,
+            seams,
+            highlight: None,
+            syntax: None,
+            math: None,
+            diagram: None,
+        }
+    }
+}
+
+/// `Math.min`: a NaN on either side is the answer, where `f64::min` would
+/// answer the other.
+pub(super) fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
+}
+
+pub(super) fn code_line_height_px(theme: &MarkdownTheme) -> f64 {
+    code_font_size_px(theme) * theme.code_line_height
 }
 
 /// A run's weight and slant, and whether it is struck through.

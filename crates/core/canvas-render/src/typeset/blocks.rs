@@ -7,6 +7,8 @@ use whiteboard_scene::{
     TextRunNode,
 };
 
+use super::code::layout_code;
+use super::furniture::{layout_definition, layout_html, layout_math, layout_rule};
 use super::options::{Cursor, TypesetOptions, body_line_height_px, finite_positive};
 use super::phrasing::{count_f64, layout_phrasing};
 
@@ -70,6 +72,11 @@ fn layout_block(
             }
             Ok(layout_paragraph(children, cursor, opts))
         }
+        Flow::Code { value, lang, .. } => Ok(layout_code(value, lang.as_deref(), cursor, opts)),
+        Flow::Html { value } => Ok(layout_html(value, cursor, opts)),
+        Flow::ThematicBreak => Ok(layout_rule(cursor, opts)),
+        Flow::Definition { identifier, .. } => Ok(layout_definition(identifier, cursor)),
+        Flow::Math { value, .. } => Ok(layout_math(value, cursor, opts)),
         other => Err(Unsupported(kind_of(other))),
     }
 }
@@ -176,7 +183,7 @@ fn layout_figure(
     Some(ParagraphBlockNode { bbox, runs: vec![run] })
 }
 
-fn empty_run() -> TextRunNode {
+pub(super) fn empty_run() -> TextRunNode {
     TextRunNode {
         bbox: BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
         text: String::new(),

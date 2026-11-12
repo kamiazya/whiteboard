@@ -30,13 +30,14 @@ fn lay_out(record: &Record) -> Result<(String, usize), String> {
         _ => MarkdownTheme::compact(),
     };
     let measure = Counting::default();
+    let syntax = record.syntax.as_ref().map(typeset_support::record::syntax_of);
     let options = TypesetOptions {
-        measure: &measure,
-        max_width: f64::from_bits(bits),
-        font_family: "sans-serif",
-        theme: &theme,
         text_fill: record.fill.as_deref(),
-        seams: &record.seams,
+        highlight: Some(&record.seams),
+        syntax: syntax.as_ref(),
+        math: Some(&record.seams),
+        diagram: Some(&record.seams),
+        ..TypesetOptions::new(&measure, f64::from_bits(bits), "sans-serif", &theme, &record.seams)
     };
     let root = typeset_support::model::root(&record.root)?;
     let scene = typeset_mdast_blocks(&root, &options).map_err(|e| format!("unsupported {e:?}"))?;
