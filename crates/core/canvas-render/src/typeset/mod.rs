@@ -10,10 +10,14 @@
 mod blocks;
 mod code;
 mod furniture;
+mod list;
 mod options;
 mod phrasing;
 mod seams;
+mod section;
 mod segments;
+mod table;
+mod task_checkbox;
 mod text;
 mod wrap;
 
@@ -23,3 +27,4 @@ pub use seams::{
     CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer, IconRange, ImageRef, InlineSeams,
     MathRenderer, Rendered, SyntaxFills, TokenRole,
 };
+pub use section::select_markdown_section;

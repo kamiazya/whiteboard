@@ -3,7 +3,9 @@
 //! it has not is an error naming it.
 
 use serde_json::Value;
-use whiteboard_model::mdast::{Flow, Phrasing, ReferenceType, Root};
+use whiteboard_model::mdast::{
+    Align, Flow, ListItem, Phrasing, ReferenceType, Root, TableCell, TableRow,
+};
 
 type Read<T> = Result<T, String>;
 
@@ -92,6 +94,20 @@ fn flow(v: &Value) -> Read<Flow> {
             url: required(v, "url")?,
             title: text(v, "title"),
         },
+        "blockquote" => Flow::Blockquote { children: flows(v)? },
+        "list" => Flow::List {
+            ordered: v.get("ordered").and_then(Value::as_bool),
+            start: v.get("start").and_then(Value::as_f64),
+            spread: v.get("spread").and_then(Value::as_bool).unwrap_or(false),
+            children: members(v, "children")?.iter().map(item).collect::<Read<_>>()?,
+        },
+        "table" => Flow::Table {
+            align: v
+                .get("align")
+                .and_then(Value::as_array)
+                .map_or_else(Vec::new, |a| a.iter().map(align).collect()),
+            children: members(v, "children")?.iter().map(table_row).collect::<Read<_>>()?,
+        },
         other => return Err(format!("flow {other}")),
     })
 }
@@ -100,4 +116,34 @@ pub(crate) fn root(v: &Value) -> Read<Root> {
     let children = v.get("children").and_then(Value::as_array);
     let children = children.map_or_else(|| Ok(Vec::new()), |c| c.iter().map(flow).collect())?;
     Ok(Root { children })
+}
+
+fn members<'a>(v: &'a Value, key: &str) -> Read<&'a Vec<Value>> {
+    v.get(key).and_then(Value::as_array).ok_or_else(|| format!("no {key} in {v}"))
+}
+
+fn flows(v: &Value) -> Read<Vec<Flow>> {
+    members(v, "children")?.iter().map(flow).collect()
+}
+
+fn item(v: &Value) -> Read<ListItem> {
+    Ok(ListItem {
+        checked: v.get("checked").and_then(Value::as_bool),
+        spread: v.get("spread").and_then(Value::as_bool).unwrap_or(false),
+        children: flows(v)?,
+    })
+}
+
+fn align(v: &Value) -> Option<Align> {
+    match v.as_str() {
+        Some("left") => Some(Align::Left),
+        Some("right") => Some(Align::Right),
+        Some("center") => Some(Align::Center),
+        _ => None,
+    }
+}
+
+fn table_row(v: &Value) -> Read<TableRow> {
+    let cells = members(v, "children")?.iter().map(|c| Ok(TableCell { children: kids(c)? }));
+    Ok(TableRow { children: cells.collect::<Read<_>>()? })
 }
