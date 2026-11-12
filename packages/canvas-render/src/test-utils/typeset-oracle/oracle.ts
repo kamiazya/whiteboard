@@ -178,6 +178,14 @@ function referencesFor(seams: SeamTables): ReferenceSeams {
 
 const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
 
+/** `JSON.stringify` escapes a lone surrogate to plain ASCII, so the strings must be read before the dump. */
+function holdsHalfAPair(value: unknown): boolean {
+  if (typeof value === 'string') return LONE_SURROGATE.test(value)
+  if (Array.isArray(value)) return value.some(holdsHalfAPair)
+  if (value !== null && typeof value === 'object') return Object.values(value).some(holdsHalfAPair)
+  return false
+}
+
 class Fnv {
   state = 0x811c_9dc5
   text(text: string): void {
@@ -207,10 +215,10 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord {
     references: referencesFor(seams),
   }
   const scene = typesetMdastBlocks(input.root, options)
-  const text = dumpScene(scene)
   // A `&str` cannot hold half a surrogate pair, so a scene that has one is not an answer the Rust
   // typesetter can give; the corpus must not reach it.
-  if (LONE_SURROGATE.test(text)) throw new Error(`typeset-oracle: ${input.id} lays out half a pair`)
+  if (holdsHalfAPair(scene)) throw new Error(`typeset-oracle: ${input.id} lays out half a pair`)
+  const text = dumpScene(scene)
   const answer = { ...input, seams, calls }
   if (!input.digest) return { ...answer, scene: text }
   const fnv = new Fnv()

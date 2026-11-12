@@ -147,7 +147,9 @@ fn text_that_does_not_fit_wraps_at_a_space_one_run_a_line() {
     assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["aaaa", "bbbb"]);
     assert_eq!((runs[0].bbox.y, runs[1].bbox.y), (0.0, LINE));
     same(runs[1].bbox.x, 0.0);
-    let SceneNode::Paragraph(block) = &scene.nodes[0] else { return };
+    let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+        panic!("scene node is not the expected variant")
+    };
     same(block.bbox.h, 2.0 * LINE);
 }
 
@@ -189,7 +191,9 @@ fn inline_math_overflows_instead_of_being_cut() {
     let scene = laid(100.0, vec![paragraph(vec![math])]).unwrap_or_default();
     let run = runs_of(&scene)[0];
     assert!(!run.truncated && run.bbox.w > 100.0);
-    let SceneNode::Paragraph(block) = &scene.nodes[0] else { return };
+    let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+        panic!("scene node is not the expected variant")
+    };
     same(block.bbox.w, run.bbox.x + run.bbox.w);
 }
 
@@ -248,7 +252,7 @@ fn a_heading_takes_space_above_unless_it_leads() {
     let (SceneNode::Heading(first), SceneNode::Heading(second)) =
         (&scene.nodes[0], &scene.nodes[1])
     else {
-        return;
+        panic!("scene node is not the expected variant");
     };
     same(first.bbox.y, 0.0);
     assert_eq!(first.level, 1);
@@ -262,7 +266,9 @@ fn a_non_finite_width_turns_wrapping_off() {
     let long = "word ".repeat(40);
     let scene = laid(f64::INFINITY, vec![paragraph(vec![text(&long)])]).unwrap_or_default();
     assert_eq!(runs_of(&scene).len(), 1);
-    let SceneNode::Paragraph(block) = &scene.nodes[0] else { return };
+    let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+        panic!("scene node is not the expected variant")
+    };
     same(block.bbox.w, f64::INFINITY);
 }
 
@@ -286,14 +292,20 @@ fn an_icon_shortcode_is_a_run_of_its_own_between_the_text_around_it() {
 fn a_range_the_text_cannot_hold_names_no_icon() {
     let reversed = icon(5, 3);
     let past = icon(0, 999);
-    let inside_a_pair = icon(1, 4);
-    for range in [reversed, past, inside_a_pair] {
+    let empty = icon(2, 2);
+    let starts_inside_a_pair = icon(1, 4);
+    for range in [reversed, past, empty, starts_inside_a_pair] {
         let host = Host { icons: vec![range], ..Host::default() };
         let scene =
             laid_by(&host, 1000.0, vec![paragraph(vec![text("😀:i:")])]).unwrap_or_default();
         let texts: Vec<&str> = runs_of(&scene).iter().map(|r| r.text.as_str()).collect();
         assert_eq!(texts, ["😀:i:"]);
     }
+    let ends_inside_a_pair = Host { icons: vec![icon(0, 4)], ..Host::default() };
+    let scene = laid_by(&ends_inside_a_pair, 1000.0, vec![paragraph(vec![text(":i:😀")])])
+        .unwrap_or_default();
+    let texts: Vec<&str> = runs_of(&scene).iter().map(|r| r.text.as_str()).collect();
+    assert_eq!(texts, [":i:😀"]);
 }
 
 #[test]
@@ -352,7 +364,7 @@ fn a_lone_picture_of_known_size_is_a_figure_scaled_to_the_column() {
     let (SceneNode::Paragraph(first), SceneNode::Paragraph(second)) =
         (&scene.nodes[0], &scene.nodes[1])
     else {
-        return;
+        panic!("scene node is not the expected variant");
     };
     assert_eq!((first.bbox.w, first.bbox.h), (100.0, 50.0));
     assert_eq!(first.runs[0].baseline, Some(50.0));
@@ -360,7 +372,9 @@ fn a_lone_picture_of_known_size_is_a_figure_scaled_to_the_column() {
     same(second.bbox.y, 50.0 + 12.0);
     assert_eq!(second.runs[0].text, "\u{2002}");
     let wide = laid_by(&host, 1000.0, vec![paragraph(vec![picture(None)])]).unwrap_or_default();
-    let SceneNode::Paragraph(only) = &wide.nodes[0] else { return };
+    let SceneNode::Paragraph(only) = &wide.nodes[0] else {
+        panic!("scene node is not the expected variant")
+    };
     assert_eq!((only.bbox.w, only.bbox.h), (400.0, 200.0));
 }
 
@@ -374,7 +388,9 @@ fn a_picture_among_text_or_of_unknown_size_is_set_as_prose() {
     {
         let host = Host { image: Some(image), ..Host::default() };
         let scene = laid_by(&host, 100.0, vec![paragraph(children)]).unwrap_or_default();
-        let SceneNode::Paragraph(block) = &scene.nodes[0] else { return };
+        let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+            panic!("scene node is not the expected variant")
+        };
         same(block.bbox.h, LINE);
     }
 }
@@ -395,7 +411,9 @@ fn a_picture_sized_zero_negative_or_infinite_is_set_as_prose() {
         let host = Host { image: Some(image), ..Host::default() };
         let scene =
             laid_by(&host, 100.0, vec![paragraph(vec![picture.clone()])]).unwrap_or_default();
-        let SceneNode::Paragraph(block) = &scene.nodes[0] else { return };
+        let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+            panic!("scene node is not the expected variant")
+        };
         same(block.bbox.h, LINE);
     }
 }
@@ -408,7 +426,9 @@ fn a_figure_is_drawn_at_its_own_size_where_the_column_is_unusable() {
     for column in [0.0, -1.0, f64::INFINITY, f64::NAN] {
         let scene =
             laid_by(&host, column, vec![paragraph(vec![picture.clone()])]).unwrap_or_default();
-        let SceneNode::Paragraph(block) = &scene.nodes[0] else { return };
+        let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+            panic!("scene node is not the expected variant")
+        };
         same(block.bbox.w, 400.0);
         same(block.bbox.h, 200.0);
     }

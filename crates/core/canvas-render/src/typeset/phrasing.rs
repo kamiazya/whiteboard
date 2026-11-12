@@ -226,12 +226,14 @@ impl InlineLayout<'_> {
         let units: Vec<u16> = value.encode_utf16().collect();
         let mut at = 0_usize;
         for range in self.opts.seams.icon_ranges(value) {
-            if range.from < at || range.to <= range.from || range.to > units.len() {
+            let whole = range.from >= at
+                && range.to > range.from
+                && slice_utf16(&units, range.from, range.to).is_some();
+            if !whole {
                 continue;
             }
             if range.from > at {
-                let Some(before) = slice_utf16(&units, at, range.from) else { continue };
-                self.emit_expanded(&before, style);
+                self.emit_expanded(&slice_utf16(&units, at, range.from).unwrap_or_default(), style);
             }
             let paints = RunPaint::Icon { name: range.name };
             let extra = Extra { paints: Some(paints), ..Extra::default() };
@@ -240,10 +242,8 @@ impl InlineLayout<'_> {
         }
         if at == 0 {
             self.emit_expanded(value, style);
-        } else if at < units.len()
-            && let Some(rest) = slice_utf16(&units, at, units.len())
-        {
-            self.emit_expanded(&rest, style);
+        } else if at < units.len() {
+            self.emit_expanded(&slice_utf16(&units, at, units.len()).unwrap_or_default(), style);
         }
     }
 
