@@ -11,9 +11,11 @@ publish.workspace = true
 [dependencies]
 whiteboard-det = { path = "../det" }
 whiteboard-edge-routing = { path = "../edge-routing" }
+whiteboard-facet-engine = { path = "../facet-engine" }
 whiteboard-model = { path = "../model" }
 whiteboard-plugin-visual = { path = "../plugin-visual" }
 whiteboard-scene = { path = "../scene" }
+unicode-segmentation.workspace = true
 
 [dev-dependencies]
 serde.workspace = true
