@@ -1129,6 +1129,16 @@ representatives, 200,000 seeded mixed strings, a census of U+0020-1FFFF
 between two kanji and two Latin letters, and the raw class of every code
 point) that the Rust test regenerates from the recording's `meta` record.
 
+Step 7 slice S7 ported the text primitives (`uax_segments`, `longest_fitting_count`,
+`fit_to_width`, the inline junction) over the `Measure` trait, held to the
+recorded `text-primitives.jsonl`. The grapheme cut uses `unicode-segmentation`
+1.13.3 (Unicode 17) against Node 24's `Intl.Segmenter`: the two agreed on every
+string of the census (every code point between two letters and after a Devanagari
+conjunct, every ordered triple of 60 grapheme-break representatives, and the
+corpus), so no deviation is ledgered. A `&str` holds no lone surrogate, so the
+`fitToWidth` and junction answers for one are not reproduced; `uax_segment_ranges`
+takes UTF-16 units and is held on them.
+
 #### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
 
 Step 7 moves layout behind the core, and layout never measures text itself:
