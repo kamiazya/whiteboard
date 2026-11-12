@@ -1139,6 +1139,19 @@ corpus), so no deviation is ledgered. A `&str` holds no lone surrogate, so the
 `fitToWidth` and junction answers for one are not reproduced; `uax_segment_ranges`
 takes UTF-16 units and is held on them.
 
+Step 7 slice S9 ports the markdown typesetter (`mdast-blocks.ts`) in sub-slices, each held to a
+recording of `typesetMdastBlocks`'s scene (every double as its bits) and of how many times it
+asked the measurer. The input is a model mdast tree, a plain type in `whiteboard-model`
+(`mdast`); what the host knows (emoji and icon shortcodes, titles, embed names, a picture's
+source) is asked through `InlineSeams`, answered in the recording from tables the TypeScript
+filled. S9a is the inline layer (wrapping by UAX #14 and BudouX, kinsoku across inline junctions,
+atomic runs cut to the width, links with provenance, hard breaks) with the paragraph and heading
+blocks; a block kind not yet carried is `Unsupported`, and the error goes with the last slice.
+One deviation: BudouX reads UTF-16 units and can name a phrase boundary inside a surrogate pair,
+which a `&str` cannot hold; Rust does not take such a boundary, and the recorder leaves out the
+inputs that reach one (1 of 600 generated trees), so a text with kana and an astral character may
+wrap differently from the TypeScript, which can leave half an emoji in a run.
+
 #### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
 
 Step 7 moves layout behind the core, and layout never measures text itself:

@@ -320,4 +320,12 @@ exclude_re = [
   # exactly 2^53 - 1 cells the buffer is 32 PiB, which no engine allocates, so the
   # TypeScript throws there too and `>=` answers the same.
   'free_regions\.rs:\d+:\d+: replace > with >= in plan$',
+  # canvas-render typeset block_width: with an ink width exactly equal to the wrap
+  # width `>=` takes the widening branch and answers the same number.
+  'blocks\.rs:\d+:\d+: replace > with >= in block_width$',
+  # canvas-render typeset cluster_came_down: a line's cursor is 0 only before
+  # anything is placed on it, and the cluster to move down has to follow an
+  # earlier run of the same line, so `>=` reaches the move only where two
+  # successive non-empty runs both measure 0 wide (a face of zero-width glyphs).
+  'wrap\.rs:\d+:\d+: replace > with >= in Wrap<.*>::cluster_came_down$',
 ]

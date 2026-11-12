@@ -12,6 +12,7 @@
 
 pub mod checks;
 pub mod json;
+pub mod mdast;
 #[path = "generated/okf.rs"]
 pub mod okf;
 #[path = "generated/spatial.rs"]

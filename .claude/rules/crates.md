@@ -36,14 +36,14 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-det` | core | present | JS-compatible number formatting, pinned math, UTF-16 helpers |
 | `whiteboard-log` | core | present | RFC 5424 levels, records, sinks, fields-first logging |
 | `whiteboard-edge-routing` | core | present | side choice, anchors, grid search, crossings, jumps, rounding |
-| `whiteboard-model` | core | present | the frontmatter value tree, and the OKF frontmatter types generated from `contracts/model` with their hand-written checks (`checks.rs`), which `whiteboard-codec` reads and writes, and the JSON reader (`json.rs`: `JSON.parse`'s reading, keys in written order, which `serde_json` is not) |
+| `whiteboard-model` | core | present | the mdast subset a layout reads (`mdast`: plain flow and phrasing types), the frontmatter value tree, and the OKF frontmatter types generated from `contracts/model` with their hand-written checks (`checks.rs`), which `whiteboard-codec` reads and writes, and the JSON reader (`json.rs`: `JSON.parse`'s reading, keys in written order, which `serde_json` is not) |
 | `whiteboard-facet-engine` | core | present | the theme, icon and stencil asset shapes, generated from `contracts/facets/engine`, the plugin manifest types from `contracts/plugin`, and the matchers of their patterns; the interpreter of the contract dialect (`schema`: a contract file's definitions judge a payload as the generated Zod does, in path and code) and the registry over plugin manifests (`registry`: targets, asset refs, `validate_facet_write`) with a plugin loaded from its manifest, contracts and asset tables (`plugin::build`, `manifest::read`), and a facets bucket judged for a write with a workspace's stencil library composed beside the registry (`partition`, behind the wasm export `facet_bucket_check`); the compat chain and derived form follow |
 | `whiteboard-scene` | core | present | the scene vocabulary as types (every node kind, appearance, ink, legend, `NodeOutline`); the closure-taking contribution traits are deferred, and `Deserialize` exists only behind the `oracle` feature |
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-markdown` | core | present | CommonMark, GFM and math parsed to an mdast tree (`parse`, `parse_counting`), a vendored, trimmed copy of markdown-rs 1.0.0 (MIT, `LICENSE-markdown-rs`) with the HTML compiler, MDX, front matter, serde and logging dropped, its two panics fixed and its cost, depth and size bounded (`limits`: a refusal answers where a bound is passed); no shipped artifact links it yet |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | present | the visual facets' payload types, generated from `contracts/facets/visual`, the matchers of their patterns, the colour check and the one-grapheme check (`unicode-segmentation`); the bundled plugin loaded from its files into a registry (`host.rs`, over the asset JSON the TypeScript package also reads); the plugin's other contributions follow |
-| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the text primitives (`uax_segments`, `longest_fit`, `truncate`'s `fit_to_width`, `inline_junction`), held to `text-primitives.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; the AI-facing spatial digest (`scene_digest`: `scene_digest`, `SceneDigest::to_json`), held to the recorded `scene-digest.jsonl`; the font measurer (`font_measure`, over the in-house `sfnt` reader), held to `font-measure.jsonl`; composer, typesetter follow |
+| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the text primitives (`uax_segments`, `longest_fit`, `truncate`'s `fit_to_width`, `inline_junction`), held to `text-primitives.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; the AI-facing spatial digest (`scene_digest`: `scene_digest`, `SceneDigest::to_json`), held to the recorded `scene-digest.jsonl`; the font measurer (`font_measure`, over the in-house `sfnt` reader), held to `font-measure.jsonl`; the markdown typesetter (`typeset`: the inline layer and the paragraph and heading blocks so far, a block kind not yet carried is `Unsupported`), held to the recorded `typeset.jsonl`; composer follows |
 | `whiteboard-crdt` | core | planned | the loro bridge, workspace tree, file references, text limits |
 | `whiteboard-history` | core | planned | checkpoint scheduling, version retention, frontier encoding |
 | `whiteboard-workspace-index` | core | planned | the document index over a workspace tree |
@@ -273,6 +273,20 @@ steps and cache paths to the scripts.
   `unicode-segmentation`; `crates/core/canvas-render/tests/text_primitives_oracle.rs` replays it and
   `WHITEBOARD_RECORD_ORACLE=1` re-records it. A `&str` holds no lone surrogate, so
   those answers are recorded for `uaxSegments` only.
+- **The markdown typesetter is held to a recording and asks its host through a trait**:
+  `packages/canvas-render/src/oracle/typeset.jsonl` holds, per input, the model tree, the width and
+  theme, the answers of every host seam the input can reach (`InlineSeams`: emoji and icon
+  shortcodes, document titles, embed names, a picture's source; their TypeScript is the plugin's and
+  the keeper's, neither in Rust) and what `typesetMdastBlocks` laid out: the scene as `dumpScene`
+  text (every double as 16 hex digits) or, for the large sets, its length and FNV digest, and how
+  many times it asked the measurer, which pins the width search's probe sequence.
+  `crates/core/canvas-render/tests/typeset_oracle.rs` replays it exactly, writing a Rust scene with
+  a test-only dumper (`crates/core/canvas-render/tests/typeset_support`); `WHITEBOARD_RECORD_ORACLE=1` re-records. The
+  corpora are read at record time only (the markdown oracle's parsed bodies, the wrapping
+  corpus, hand-written cases, a seeded generator whose seed rides the `meta` record). One
+  recorded deviation: BudouX can name a phrase boundary inside a surrogate pair, which a `&str`
+  cannot hold, so Rust does not take it and the recorder leaves out the (rare) inputs that reach one,
+  counting them in `meta.pairBoundary`.
 - **The markdown parser is held to `parseMarkdownBody`'s model tree**:
   `packages/codec/src/markdown/oracle/mdast.jsonl` records the digest of each
   document's canonical tree (the trees too for the spec and dialect sets), over
