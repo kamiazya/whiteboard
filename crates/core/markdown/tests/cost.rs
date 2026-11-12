@@ -154,9 +154,7 @@ fn many_definitions_and_references_to_none_are_read_in_time() {
     let (definitions, references) =
         if cfg!(target_arch = "wasm32") { (4_000, 8_000) } else { (14_000, 28_000) };
     let mut text = String::new();
-    for index in 0..definitions {
-        text.push_str(&format!("[d{index}]: u\n"));
-    }
+    text.extend((0..definitions).map(|index| format!("[d{index}]: u\n")));
     text.push('\n');
     for _ in 0..references {
         text.push_str("[zz] ");

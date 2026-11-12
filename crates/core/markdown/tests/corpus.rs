@@ -39,7 +39,7 @@ const DOCUMENTS: usize = if cfg!(target_arch = "wasm32") { 3_000 } else { 20_000
 
 #[test]
 fn every_document_of_the_fixed_corpus_is_answered_inside_its_fuel() {
-    let mut stream = Stream(0x5EED_0F_C0DE);
+    let mut stream = Stream(0x005E_ED0F_C0DE);
     let (mut read, mut refused) = (0_usize, 0_usize);
     for _ in 0..DOCUMENTS {
         let longest = if stream.below(8) == 0 { 200 } else { 40 };
