@@ -143,3 +143,52 @@ pub(crate) fn value_test(marker: u8) -> fn(&u8) -> bool {
         _ => |_| false,
     }
 }
+
+/// Decode the escapes and character references of a string the way a label's
+/// text is read: `\*` is `*`, `&amp;` is `&`, and what is neither stays as
+/// written.
+pub(crate) fn decode_string(value: &str) -> String {
+    let bytes = value.as_bytes();
+    let mut result = String::with_capacity(value.len());
+    let mut start = 0;
+    let mut index = 0;
+    while index < bytes.len() {
+        let byte = bytes[index];
+        let mut decoded: Option<(usize, String)> = None;
+        if byte == b'\\' && bytes.get(index + 1).is_some_and(u8::is_ascii_punctuation) {
+            decoded = Some((index + 2, value[index + 1..index + 2].to_string()));
+        } else if byte == b'&' {
+            decoded = reference_at(value, index);
+        }
+        if let Some((end, text)) = decoded {
+            result.push_str(&value[start..index]);
+            result.push_str(&text);
+            index = end;
+            start = end;
+        } else {
+            index += 1;
+        }
+    }
+    result.push_str(&value[start..]);
+    result
+}
+
+/// The character reference starting at `at` (an `&`): where it ends and what it decodes to.
+fn reference_at(value: &str, at: usize) -> Option<(usize, String)> {
+    let bytes = value.as_bytes();
+    let (marker, from, max) = match (bytes.get(at + 1), bytes.get(at + 2)) {
+        (Some(b'#'), Some(b'x' | b'X')) => (b'x', at + 3, 6),
+        (Some(b'#'), _) => (b'#', at + 2, 7),
+        _ => (b'&', at + 1, 31),
+    };
+    let test = value_test(marker);
+    let mut end = from;
+    while end < bytes.len() && test(&bytes[end]) {
+        end += 1;
+    }
+    let length = end - from;
+    if length == 0 || length > max || bytes.get(end) != Some(&b';') {
+        return None;
+    }
+    decode(&value[from..end], marker, true).map(|text| (end + 1, text))
+}

@@ -28,6 +28,7 @@ mod state;
 mod subtokenize;
 mod to_mdast;
 mod tokenizer;
+mod tree_text;
 pub mod unist;
 mod util;
 

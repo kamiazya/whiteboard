@@ -84,6 +84,15 @@ impl<'a> Slice<'a> {
         self.bytes.len() + self.before + self.after
     }
 
+    /// The text of the slice, with the part of a tab a container's prefix left
+    /// behind written as the spaces it stands for, as micromark serialises it.
+    pub(crate) fn to_text(&self) -> alloc::string::String {
+        let mut text = alloc::string::String::with_capacity(self.len());
+        text.extend(core::iter::repeat_n(' ', self.before));
+        text.push_str(self.as_str());
+        text
+    }
+
     /// Turn the slice into a `&str`.
     ///
     /// > 👉 **Note**: cannot represent virtual spaces.

@@ -49,8 +49,12 @@ pub fn parse_counting(text: &str) -> (Result<mdast::Node, Refusal>, usize) {
     if let Err(refusal) = limits::prescan(text) {
         return (Err(refusal), 0);
     }
+    // The fuel is for the text as given, not for the line ending added to it.
+    let fuel = fuel_for(text.len());
+    let prepared = prepare(text);
+    let text = prepared.as_ref();
     let options = vendored::ParseOptions::default();
-    let (events, parse_state) = vendored::parse(text, &options, fuel_for(text.len()));
+    let (events, parse_state) = vendored::parse(text, &options, fuel);
     let spent = parse_state.budget.spent();
     if let Some(refusal) = parse_state.budget.refusal() {
         return (Err(refusal), spent);
@@ -60,6 +64,23 @@ pub fn parse_counting(text: &str) -> (Result<mdast::Node, Refusal>, usize) {
         return (Err(Refusal::TooDeep), spent);
     }
     (Ok(vendored::compile(&events, parse_state.bytes)), spent)
+}
+
+/// The text as the tokenizer is fed it: a NUL read as U+FFFD (`CommonMark` 2.3, as the
+/// `TypeScript` tokenizer does), and a last line ended. The second is not a change of
+/// meaning, but a last line that starts something a line ending would settle (`~`,
+/// `**`, `$`) is otherwise taken for a line that cannot continue a paragraph, which
+/// closes the list or quote it lazily continues.
+fn prepare(text: &str) -> alloc::borrow::Cow<'_, str> {
+    let ended = text.is_empty() || text.ends_with(['\n', '\r']);
+    if ended && !text.contains('\0') {
+        return alloc::borrow::Cow::Borrowed(text);
+    }
+    let mut owned = text.replace('\0', "\u{FFFD}");
+    if !ended {
+        owned.push('\n');
+    }
+    alloc::borrow::Cow::Owned(owned)
 }
 
 #[cfg(test)]

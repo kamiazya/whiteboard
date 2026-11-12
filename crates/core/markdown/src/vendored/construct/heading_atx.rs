@@ -158,7 +158,9 @@ pub(crate) fn at_break(tokenizer: &mut Tokenizer) -> State {
             tokenizer.attempt(State::Next(StateName::HeadingAtxAtBreak), State::Nok);
             State::Retry(space_or_tab(tokenizer))
         }
-        Some(b'#') => {
+        // A run of `#` is the closing sequence only when nothing but whitespace
+        // follows it; anywhere else it is text, as CommonMark says.
+        Some(b'#') if closes_heading(tokenizer) => {
             tokenizer.enter(Name::HeadingAtxSequence);
             State::Retry(StateName::HeadingAtxSequenceFurther)
         }
@@ -170,6 +172,18 @@ pub(crate) fn at_break(tokenizer: &mut Tokenizer) -> State {
             State::Retry(StateName::HeadingAtxData)
         }
     }
+}
+
+/// Whether the run of `#` at the current byte ends the line, with only
+/// whitespace after it.
+fn closes_heading(tokenizer: &Tokenizer) -> bool {
+    let rest = tokenizer.parse_state.bytes.get(tokenizer.point.index..).unwrap_or_default();
+    let after = rest.iter().position(|&b| b != b'#').unwrap_or(rest.len());
+    rest.get(after..)
+        .unwrap_or_default()
+        .iter()
+        .find(|&&b| !matches!(b, b' ' | b'\t'))
+        .is_none_or(|&b| matches!(b, b'\n' | b'\r'))
 }
 
 /// In further sequence (after whitespace).
