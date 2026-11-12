@@ -689,8 +689,8 @@ importers:
   packages/mcp-server:
     dependencies:
       '@hono/node-server':
-        specifier: ^2.0.12
-        version: 2.0.12(hono@4.13.13)
+        specifier: ^2.1.6
+        version: 2.1.6(hono@4.13.13)
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0(@types/node@24.13.1)
@@ -2078,8 +2078,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@hono/node-server@2.0.12':
-    resolution: {integrity: sha512-eWpQYr67tqJLeaSUl0Q+TquuYfUdTibpOJlUMV2FfUP7+KqCC5TufnwnlXL6mobZBJbGAYRd7ZvEBDCbLInjhg==}
+  '@hono/node-server@2.1.6':
+    resolution: {integrity: sha512-p/KH9MnfNcsm3sR6x4lNgm5j+QN4Et8srKredl9DZfXiyZ1UQ3aQ2YVpFLbqktYN5JI+DB+VZFKM2PqE5hLKjQ==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4.13.7
@@ -9412,7 +9412,7 @@ snapshots:
       protobufjs: 8.7.1
       yargs: 17.7.3
 
-  '@hono/node-server@2.0.12(hono@4.13.13)':
+  '@hono/node-server@2.1.6(hono@4.13.13)':
     dependencies:
       hono: 4.13.13
 
@@ -9870,7 +9870,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.32.0(zod@4.6.7)':
     dependencies:
-      '@hono/node-server': 2.0.12(hono@4.13.13)
+      '@hono/node-server': 2.1.6(hono@4.13.13)
       ajv: 8.20.0
       ajv-formats: 3.0.1(ajv@8.20.0)
       content-type: 1.0.5
