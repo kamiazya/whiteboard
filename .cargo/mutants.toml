@@ -408,4 +408,7 @@ exclude_re = [
   # minimum is frozen at it instead of staying flexible, and the others' scale
   # (max - k*min - min) / (flexible - natural) is the one they already had.
   'table\.rs:\d+:\d+: replace < with <= in scale_into_width$',
+  # canvas-render fit bottom_of: the largest bottom, and a tie between two equal
+  # bottoms answers the same number whichever is kept.
+  'fit\.rs:\d+:\d+: replace > with >= in bottom_of$',
 ]

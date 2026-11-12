@@ -137,6 +137,15 @@ fn node(n: &SceneNode) -> Result<String, String> {
         SceneNode::TextRun(r) => run(r),
         SceneNode::EmbedResolved(e) => embed_resolved(e)?,
         SceneNode::EmbedPlaceholder(e) => embed_placeholder(e),
+        SceneNode::Group(g) => {
+            let mut f = vec![
+                ("kind", string("group")),
+                ("bbox", bbox(&g.bbox)),
+                ("children", nodes(&g.children)?),
+            ];
+            f.extend(g.label.as_deref().map(|l| ("label", string(l))));
+            object(f)
+        }
         SceneNode::Blockquote(q) => quote(q)?,
         SceneNode::List(l) => list_block(l)?,
         SceneNode::Table(t) => table(t),
