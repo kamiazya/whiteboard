@@ -37,6 +37,7 @@ pub mod scene_bounds;
 pub mod scene_entries;
 pub mod scene_walk;
 pub mod svg;
+pub mod theme;
 pub mod truncate;
 pub mod uax_segments;
 pub mod xml_escape;
