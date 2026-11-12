@@ -410,3 +410,31 @@ fn any_bytes_parse_to_an_answer_or_an_error_and_every_lookup_on_one_is_total() {
     parsed.assert(30);
     refused.assert(30);
 }
+
+#[test]
+fn every_refusal_says_what_it_refused() {
+    let said: Vec<String> = [
+        SfntError::TooLarge,
+        SfntError::BadMagic,
+        SfntError::MissingTable(*b"cmap"),
+        SfntError::Truncated(*b"hmtx"),
+        SfntError::ZeroCount,
+        SfntError::BadCmap,
+        SfntError::UnsupportedCmapFormat(6),
+    ]
+    .iter()
+    .map(ToString::to_string)
+    .collect();
+    assert_eq!(
+        said,
+        [
+            "the font is over the size cap",
+            "the bytes are not a TrueType or OpenType font",
+            "no cmap table",
+            "the hmtx table is truncated",
+            "a units-per-em, glyph or metric count is zero",
+            "the cmap has no readable subtable",
+            "cmap format 6 is not read",
+        ]
+    );
+}
