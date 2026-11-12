@@ -520,3 +520,47 @@ pub fn json_canvas_wasm_serialize(data: &[u8]) {
         assert!(strict || !named, "the extended mode validates nothing: {answer:.120}");
     }
 }
+
+/// The sfnt reader on any bytes, the way the daemon reads a font a user
+/// installed: a file over the cap is refused by name, anything else is an
+/// answer or an error and never a panic, and a face that parses must make the
+/// measurer answer finite, non-negative advances for any text and size,
+/// nothing for an empty one, and a glyph index that repeats.
+///
+/// # Panics
+///
+/// When the reader panics, accepts what the cap refuses, or a parsed face
+/// measures off its contract.
+pub fn sfnt_parse(data: &[u8]) {
+    use whiteboard_canvas_render::font_measure::FontTableMeasurer;
+    use whiteboard_canvas_render::measure::{FontDescriptor, FontStyle, Measure};
+    use whiteboard_canvas_render::sfnt::{MAX_BYTES, Sfnt, SfntError};
+
+    let parsed = Sfnt::parse(data);
+    if data.len() > MAX_BYTES {
+        assert_eq!(parsed.err(), Some(SfntError::TooLarge));
+        return;
+    }
+    let measurer = FontTableMeasurer::new().with_face("F", false, FontStyle::Normal, data);
+    assert_eq!(parsed.is_ok(), measurer.is_ok(), "the reader and the measurer disagree");
+    let (Ok(face), Ok(measurer)) = (parsed, measurer) else {
+        return;
+    };
+    for ch in ['\0', 'A', 'z', '\u{ffff}', '\u{10000}', '\u{10ffff}'] {
+        assert_eq!(face.glyph_index(ch), face.glyph_index(ch), "{ch:?}");
+    }
+    let font = |size_px| FontDescriptor {
+        family: "F".to_owned(),
+        fallback_chain: Vec::new(),
+        weight: 400.0,
+        style: FontStyle::Normal,
+        size_px,
+    };
+    for size in [0.0, 12.0, 1e9] {
+        let advance = measurer.advance_width("Hamburgefonstiv \u{ffff}", &font(size));
+        assert!(advance.is_finite() && advance >= 0.0, "{advance} at {size}");
+        assert!(measurer.advance_width("", &font(size)).abs() < f64::EPSILON);
+        let v = measurer.vertical_metrics(&font(size));
+        assert!(v.ascent.is_finite() && v.descent.is_finite() && v.line_gap.is_finite());
+    }
+}

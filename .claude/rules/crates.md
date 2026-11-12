@@ -42,7 +42,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | present | the visual facets' payload types, generated from `contracts/facets/visual`, the matchers of their patterns, the colour check and the one-grapheme check (`unicode-segmentation`); the bundled plugin loaded from its files into a registry (`host.rs`, over the asset JSON the TypeScript package also reads); the plugin's other contributions follow |
-| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the text primitives (`uax_segments`, `longest_fit`, `truncate`'s `fit_to_width`, `inline_junction`), held to `text-primitives.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; the AI-facing spatial digest (`scene_digest`: `scene_digest`, `SceneDigest::to_json`), held to the recorded `scene-digest.jsonl`; composer, typesetter follow |
+| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the text primitives (`uax_segments`, `longest_fit`, `truncate`'s `fit_to_width`, `inline_junction`), held to `text-primitives.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; the AI-facing spatial digest (`scene_digest`: `scene_digest`, `SceneDigest::to_json`), held to the recorded `scene-digest.jsonl`; the font measurer (`font_measure`, over the in-house `sfnt` reader), held to `font-measure.jsonl`; composer, typesetter follow |
 | `whiteboard-crdt` | core | planned | the loro bridge, workspace tree, file references, text limits |
 | `whiteboard-history` | core | planned | checkpoint scheduling, version retention, frontier encoding |
 | `whiteboard-workspace-index` | core | planned | the document index over a workspace tree |
@@ -195,6 +195,22 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/tests/linebreak_oracle.rs` regenerates from its `meta`
   record; `WHITEBOARD_RECORD_ORACLE=1` re-records it. The port's header lists the holes
   of the oracle it preserves.
+- **The font measurer is held to the Node measurer's recording**:
+  `packages/mcp-server/src/server/export/oracle/font-measure.jsonl` (recorded by
+  `measure-text.oracle.test.ts`, which sits in mcp-server because the measurer is a
+  composition root's and canvas-render may not import it) holds opentype.js over the
+  vendored Roboto and `constantRatioMeasureText`; `crates/core/canvas-render/tests/font_measure_oracle.rs`
+  replays it bit for bit, reading the faces itself. Each record's `class` says how far the
+  TypeScript is a per-glyph sum: `exact` (bit for bit, opentype's 64-code-point segment sums
+  included, with the joining table `segment-joins.json` held equal to the Rust one) and
+  `substituted` by the face's GSUB `ccmp`, which the port does not run. That class is a
+  tolerated gap held both ways: within 0.1 em, and a record the port reproduces exactly
+  fails, so the entry cannot go stale. The faces are read by an in-house sfnt reader
+  (`crates/core/canvas-render/src/sfnt/`: directory, head, hhea, maxp, hmtx and a cmap in
+  formats 4 and 12, chosen as opentype.js chooses; no dependency, because the maintained
+  crates carry unsafe or f32 and `ttf-parser` is unmaintained). It reads fonts users install, so it
+  is an `input-caps.json` entry (`sfnt_parse`, seeds in `crates/fuzz/seeds/sfnt_parse`) and
+  refuses a cmap whose segments or groups are not sorted and disjoint.
 - **The spatial digest is held to a recording and written by hand**:
   `packages/canvas-render/src/oracle/scene-digest.jsonl` holds `sceneDigest`'s
   `JSON.stringify` text for the scenes of `svg.jsonl` (by id), for scenes written

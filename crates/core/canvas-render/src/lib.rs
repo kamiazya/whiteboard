@@ -23,10 +23,12 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod budoux;
+pub mod constant_ratio;
 pub mod edge_arrows;
 pub mod edge_flatten;
 pub mod fake_measure;
 pub mod finite_box;
+pub mod font_measure;
 pub mod glow;
 pub mod ink;
 pub mod inline_junction;
@@ -40,6 +42,8 @@ pub mod scene_bounds;
 pub mod scene_digest;
 pub mod scene_entries;
 pub mod scene_walk;
+pub mod segment_joins;
+pub mod sfnt;
 pub mod svg;
 pub mod theme;
 pub mod truncate;
