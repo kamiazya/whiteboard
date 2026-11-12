@@ -19,7 +19,7 @@ pub(crate) fn canonical(root: &Node) -> String {
 }
 
 /// Written here rather than left to `serde_json`, whose map keeps insertion
-/// order the moment any crate in the build asks for `preserve_order`.
+/// order the moment any crate in the build asks for preserve-order.
 fn write_canonical(value: &Value, out: &mut String) {
     match value {
         Value::Array(items) => {

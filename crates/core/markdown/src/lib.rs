@@ -17,6 +17,7 @@
 
 extern crate alloc;
 
+mod autolink;
 pub mod limits;
 
 mod vendored;
@@ -63,7 +64,12 @@ pub fn parse_counting(text: &str) -> (Result<mdast::Node, Refusal>, usize) {
     if nesting.events > limits::MAX_DEPTH || nesting.containers > limits::MAX_CONTAINER_DEPTH {
         return (Err(Refusal::TooDeep), spent);
     }
-    (Ok(vendored::compile(&events, parse_state.bytes)), spent)
+    let mut root = vendored::compile(&events, parse_state.bytes);
+    autolink::link_literals(&mut root, &parse_state.budget);
+    if let Some(refusal) = parse_state.budget.refusal() {
+        return (Err(refusal), parse_state.budget.spent());
+    }
+    (Ok(root), parse_state.budget.spent())
 }
 
 /// The text as the tokenizer is fed it: a NUL read as U+FFFD (`CommonMark` 2.3, as the

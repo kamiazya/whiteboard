@@ -33,7 +33,7 @@ const LEDGER: &str = include_str!("mdast_tolerated.json");
 
 /// How many recorded cases the ledger tolerates. Pinned by equality, so a
 /// shrunk ledger lowers it and a grown one cannot pass by itself.
-const TOLERATED: usize = 220;
+const TOLERATED: usize = 87;
 
 /// FNV-1a 64 over the UTF-8 of `text`, as 16 hex digits.
 fn fnv64(text: &str) -> String {

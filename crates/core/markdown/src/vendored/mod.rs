@@ -32,6 +32,7 @@ mod tree_text;
 pub mod unist;
 mod util;
 
+pub(crate) use budget::Budget;
 pub(crate) use configuration::ParseOptions;
 pub(crate) use parser::parse;
 pub(crate) use to_mdast::compile;
@@ -69,4 +70,9 @@ pub(crate) struct Nesting {
     pub(crate) events: usize,
     /// The deepest nesting of block quotes, list items and footnote definitions.
     pub(crate) containers: usize,
+}
+
+/// Whether `char` is Unicode punctuation or a symbol, as the flanking rules read it.
+pub(crate) fn is_punctuation(char: char) -> bool {
+    char.is_ascii_punctuation() || util::unicode::PUNCTUATION.binary_search(&char).is_ok()
 }

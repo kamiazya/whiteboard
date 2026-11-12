@@ -45,7 +45,7 @@
     "core/markdown": {
       "lines": 96,
       "regions": 95,
-      "reason": "measured 2026-11-12 at 96.24% lines and 95.45% regions over the vendored markdown-rs and its bounds, with the recorded mdast oracle (5,662 documents replayed, every difference but the ledgered ones failing), the alignment regressions, the dialect examples, the OKF corpus, the limits, the cost shapes and the totality property. What is left is the vendored code no test text reaches: the tree builder's arms for an event stream the tokenizer does not produce, the constructs' refusals of syntax no corpus writes, and upstream state-machine arms for an HTML or footnote shape the examples do not spell"
+      "reason": "measured 2026-11-12 at 96.38% lines and 95.76% regions over the vendored markdown-rs and its bounds, with the recorded mdast oracle (5,661 documents replayed, every difference but the ledgered ones failing), the alignment regressions, the dialect examples, the OKF corpus, the limits, the cost shapes and the totality property. What is left is the vendored code no test text reaches: the tree builder's arms for an event stream the tokenizer does not produce, the constructs' refusals of syntax no corpus writes, and upstream state-machine arms for an HTML or footnote shape the examples do not spell"
     },
     "core/model": {
       "lines": 100,

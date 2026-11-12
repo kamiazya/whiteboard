@@ -55,6 +55,10 @@ const ORDINARY: &[Shape] = &[
     shape("autolinks", "", "<http://a.b> "),
     shape("literal autolinks", "", "awww."),
     shape("emails", "", "a@b.c "),
+    shape("literal URLs after an entity", "", "&amp;http://a.b/c "),
+    shape("literal www after an entity", "", "&amp;www.a.b. "),
+    shape("emails after an entity", "", "&amp;a@b.co "),
+    shape("emails refused one by one", "", "&amp;a@b- "),
     shape("hard breaks", "", "a  \n"),
     shape("lazy block quote lines", "", "> a\nb\n"),
     shape("escapes", "a]", "\\*"),
@@ -137,6 +141,21 @@ fn a_text_built_to_be_quadratic_is_refused_inside_the_time() {
         assert!(spent <= fuel_for(text.len()), "{}: {spent}", shape.name);
         assert!(millis < CEILING_MS, "{}: {millis} ms", shape.name);
     }
+}
+
+/// The dearest text the second autolink pass can be given and still read: every `www.`
+/// start in one long unbroken run is a failed attempt that reads 2,304 characters. The
+/// pass charges the work, so the text is read inside its fuel (about 50 units a byte
+/// in all, against 64 allowed), and a text a little denser is refused.
+#[test]
+fn a_run_of_failing_literal_urls_is_read_inside_the_fuel_it_charges() {
+    let text = "&amp;www.a\\_".repeat(if cfg!(target_arch = "wasm32") { 2_000 } else { 5_000 });
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert!(answer.is_ok(), "{:?}", answer.err());
+    assert!(spent <= fuel_for(text.len()), "{spent}");
+    // The pass, not the tokenizer, is most of it.
+    assert!(spent > fuel_for(text.len()) / 2, "{spent}");
+    assert!(millis < CEILING_MS, "{millis} ms");
 }
 
 #[test]
