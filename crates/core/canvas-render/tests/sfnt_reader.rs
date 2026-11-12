@@ -76,6 +76,8 @@ fn format_12(groups: &[(u32, u32, u32)]) -> Vec<u8> {
     for (s, e, g) in groups {
         b.extend([be32(*s), be32(*e), be32(*g)].concat());
     }
+    let length = be32(u32::try_from(b.len()).unwrap_or(0));
+    b.splice(4..8, length);
     b
 }
 
@@ -105,6 +107,8 @@ fn format_4(segments: &[(u16, u16, u16, u16)], glyph_ids: &[u16]) -> Vec<u8> {
     for g in glyph_ids {
         b.extend(be16(*g));
     }
+    let length = be16(u16::try_from(b.len()).unwrap_or(0));
+    b.splice(2..4, length);
     b
 }
 
@@ -219,6 +223,31 @@ fn a_format_4_subtable_maps_by_delta_and_by_range_offset() {
 }
 
 #[test]
+fn a_subtable_reads_nothing_past_its_declared_length() {
+    // Segment 0 reaches its glyph id through the array, and the array's only
+    // entry lies past the length the subtable declares: what follows is
+    // another subtable's bytes, so the code has no glyph.
+    let segments = [(0x41, 0x41, 0, 4), (0xffff, 0xffff, 1, 0)];
+    let mut sub = format_4(&segments, &[]);
+    sub.extend(be16(9));
+    let bytes = font(&with(&valid(), cmap(&[(3, 1, sub)])));
+    let Ok(f) = Sfnt::parse(&bytes) else { panic!("parses") };
+    assert_eq!(f.glyph_index('A'), 0);
+    // A group the count claims but the length does not hold is refused.
+    let mut wide = format_12(&[(0x41, 0x41, 3)]);
+    wide.splice(12..16, be32(2));
+    wide.extend([be32(0x50), be32(0x50), be32(4)].concat());
+    assert_eq!(parse(&with(&valid(), cmap(&[(3, 10, wide)]))), Err(SfntError::BadCmap));
+    // A length past the table is refused, for either format.
+    let mut long = format_12(&[(0x41, 0x41, 3)]);
+    long.splice(4..8, be32(0xffff));
+    assert_eq!(parse(&with(&valid(), cmap(&[(3, 10, long)]))), Err(SfntError::BadCmap));
+    let mut long = format_4(&segments, &[]);
+    long.splice(2..4, be16(0xfff0));
+    assert_eq!(parse(&with(&valid(), cmap(&[(3, 1, long)]))), Err(SfntError::BadCmap));
+}
+
+#[test]
 fn bytes_that_are_not_an_outline_font_are_refused() {
     assert_eq!(Sfnt::parse(&[]).err(), Some(SfntError::BadMagic));
     assert_eq!(Sfnt::parse(b"ttcf\0\x01\0\0").err(), Some(SfntError::BadMagic));
@@ -323,7 +352,7 @@ fn unsorted_overlapping_or_inverted_ranges_are_refused() {
     assert_eq!(narrow(&[(0x41, 0x50, 0, 0), (0x45, 0x50, 0, 0), end]), Err(SfntError::BadCmap));
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x44, 0x44, 0, 0), end]), Ok(()));
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x43, 0x50, 0, 0), end]), Err(SfntError::BadCmap));
-    assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x60, 0x50, 0, 0), end]), Ok(()));
+    assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x60, 0x50, 0, 0), end]), Err(SfntError::BadCmap));
     assert_eq!(narrow(&[(0x41, 0x43, 0, 0), (0x60, 0x43, 0, 0), end]), Err(SfntError::BadCmap));
 }
 

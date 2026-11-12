@@ -65,9 +65,15 @@ impl<'a> Cmap<'a> {
         }
         let start = index(chosen.ok_or(SfntError::BadCmap)?);
         let sub = table.get(start..).ok_or(SfntError::BadCmap)?;
+        // Each format declares its own length, and nothing past it is the
+        // subtable's: a range offset or a group count reaching beyond it would
+        // read the next subtable as glyph ids.
+        let own = |length: Option<u32>| {
+            length.and_then(|n| sub.get(..index(n))).ok_or(SfntError::BadCmap)
+        };
         match u16_at(sub, 0) {
-            Some(4) => Self::format_4(sub),
-            Some(12) => Self::format_12(sub),
+            Some(4) => Self::format_4(own(u16_at(sub, 2).map(u32::from))?),
+            Some(12) => Self::format_12(own(u32_at(sub, 4))?),
             Some(other) => Err(SfntError::UnsupportedCmapFormat(other)),
             None => Err(SfntError::BadCmap),
         }
@@ -84,7 +90,7 @@ impl<'a> Cmap<'a> {
         let mut previous_end: Option<u16> = None;
         for i in 0..segments {
             let (start, end) = table.segment(i).ok_or(SfntError::BadCmap)?;
-            let ordered = previous_end.is_none_or(|p| end > p && start > p);
+            let ordered = start <= end && previous_end.is_none_or(|p| start > p);
             if !ordered {
                 return Err(SfntError::BadCmap);
             }
