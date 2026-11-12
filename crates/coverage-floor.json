@@ -44,8 +44,8 @@
     },
     "core/markdown": {
       "lines": 88,
-      "regions": 88,
-      "reason": "first measured 2026-11-12 at 88.24% lines and 88.15% regions over the vendored markdown-rs and its bounds: the integration tests (the dialect examples, the OKF corpus's 539 bodies, the regressions, the limits, the cost shapes and the totality property), the unit tests of the budget and the edit map, and the link-shifting property. What is left is the vendored code no test text reaches: the tree builder's arms for an event stream the tokenizer does not produce (a node pushed under a non-parent, a stray exit), the constructs' refusals of syntax the corpus never writes, and the arms of the upstream state machine for an HTML or footnote shape the examples do not spell"
+      "regions": 87,
+      "reason": "first measured 2026-11-12 by the workspace run at 87.97% regions (88.15% when the crate runs alone; the floor follows the run that gates) and 88.24% lines, over the vendored markdown-rs and its bounds: the integration tests (the dialect examples, the OKF corpus's 539 bodies, the regressions, the limits, the cost shapes and the totality property), the unit tests of the budget and the edit map, and the link-shifting property. What is left is the vendored code no test text reaches: the tree builder's arms for an event stream the tokenizer does not produce (a node pushed under a non-parent, a stray exit), the constructs' refusals of syntax the corpus never writes, and the arms of the upstream state machine for an HTML or footnote shape the examples do not spell"
     },
     "core/model": {
       "lines": 100,
