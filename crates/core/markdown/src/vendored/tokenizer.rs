@@ -13,6 +13,7 @@ use crate::vendored::parser::ParseState;
 use crate::vendored::resolve::{Name as ResolveName, call as call_resolve};
 use crate::vendored::state::{State, call};
 use crate::vendored::subtokenize::Subresult;
+use core::mem::take;
 
 use crate::vendored::util::{constant::TAB_SIZE, edit_map::EditMap};
 use alloc::{boxed::Box, collections::BTreeSet, string::String, vec, vec::Vec};
@@ -568,10 +569,8 @@ impl<'a> Tokenizer<'a> {
 
         let mut value = Subresult {
             done: false,
-            gfm_footnote_definitions: core::mem::take(
-                &mut self.tokenize_state.gfm_footnote_definitions,
-            ),
-            definitions: core::mem::take(&mut self.tokenize_state.definitions),
+            gfm_footnote_definitions: take(&mut self.tokenize_state.gfm_footnote_definitions),
+            definitions: take(&mut self.tokenize_state.definitions),
         };
 
         if resolve && self.parse_state.budget.refusal().is_none() {
@@ -581,8 +580,8 @@ impl<'a> Tokenizer<'a> {
             let fn_defs = &mut value.gfm_footnote_definitions;
             while index < resolvers.len() {
                 if let Some(mut result) = call_resolve(self, resolvers[index]) {
-                    fn_defs.extend(core::mem::take(&mut result.gfm_footnote_definitions));
-                    defs.extend(core::mem::take(&mut result.definitions));
+                    fn_defs.extend(take(&mut result.gfm_footnote_definitions));
+                    defs.extend(take(&mut result.definitions));
                 }
                 index += 1;
             }

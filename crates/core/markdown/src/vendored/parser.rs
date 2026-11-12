@@ -8,6 +8,7 @@ use crate::vendored::state::{Name as StateName, State};
 use crate::vendored::subtokenize::subtokenize;
 use crate::vendored::tokenizer::Tokenizer;
 use alloc::{collections::BTreeSet, string::String, vec::Vec};
+use core::mem::take;
 
 /// Info needed, in all content types, when parsing markdown.
 ///
@@ -63,8 +64,8 @@ pub(crate) fn parse<'a>(
     for _ in 0..MAX_ROUNDS {
         let fn_defs = &mut parse_state.gfm_footnote_definitions;
         let defs = &mut parse_state.definitions;
-        fn_defs.extend(core::mem::take(&mut result.gfm_footnote_definitions));
-        defs.extend(core::mem::take(&mut result.definitions));
+        fn_defs.extend(take(&mut result.gfm_footnote_definitions));
+        defs.extend(take(&mut result.definitions));
 
         if result.done || parse_state.budget.refusal().is_some() {
             return (events, parse_state);

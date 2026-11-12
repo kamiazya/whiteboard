@@ -23,6 +23,7 @@ use crate::vendored::state::{Name as StateName, State};
 use crate::vendored::tokenizer::Tokenizer;
 use crate::vendored::util::{edit_map::EditMap, skip};
 use alloc::{collections::BTreeSet, string::String, vec, vec::Vec};
+use core::mem::take;
 
 #[derive(Debug)]
 pub(crate) struct Subresult {
@@ -139,10 +140,8 @@ pub(crate) fn subtokenize(
                 }
 
                 let mut result = tokenizer.flush(state, true);
-                value
-                    .gfm_footnote_definitions
-                    .extend(core::mem::take(&mut result.gfm_footnote_definitions));
-                value.definitions.extend(core::mem::take(&mut result.definitions));
+                value.gfm_footnote_definitions.extend(take(&mut result.gfm_footnote_definitions));
+                value.definitions.extend(take(&mut result.definitions));
                 value.done = false;
 
                 // `divide_events` visits each event of the child once.

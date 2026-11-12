@@ -15,6 +15,7 @@ use crate::vendored::subtokenize::divide_events;
 use crate::vendored::tokenizer::{Container, ContainerState, Tokenizer};
 use crate::vendored::util::skip;
 use alloc::{boxed::Box, vec::Vec};
+use core::mem::take;
 
 /// Phases where we can exit containers.
 #[derive(Debug, PartialEq)]
@@ -567,8 +568,5 @@ fn resolve(tokenizer: &mut Tokenizer) {
     // Add the resolvers from child.
     tokenizer.resolvers.append(&mut child.resolvers.split_off(0));
 
-    tokenizer
-        .tokenize_state
-        .definitions
-        .extend(core::mem::take(&mut child.tokenize_state.definitions));
+    tokenizer.tokenize_state.definitions.extend(take(&mut child.tokenize_state.definitions));
 }
