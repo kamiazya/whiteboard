@@ -300,6 +300,21 @@ exclude_re = [
   # a text of CRs alone holds no cluster, so it is the same eager-only change
   # as above.
   'truncate\.rs:\d+:\d+: replace == with != in may_cluster$',
+  # markdown edit_map shift_links: the loops advance a cursor by `+= 1` (the
+  # jump cursor and the event index), and a mutant that stops one advancing
+  # (`*=`, `-=`) spins forever over a fixed vector; each ends as a timeout at
+  # 120 s. Nothing grows while it spins, so it cannot take a runner's memory.
+  # The loop is vendored markdown-rs, and the link property in its tests kills
+  # every mutant of it that does not hang.
+  'edit_map\.rs:(29|46|56):\d+: replace \+= with (\*=|-=) in shift_links$',
+  # markdown edit_map shift_links: `rm > rm_curr` made `==` or `>=` takes the
+  # skip branch by zero events, which never advances the index: the same hang.
+  'edit_map\.rs:33:15: replace > with (==|>=) in shift_links$',
+  # markdown edit_map shift_links: `rm > rm_curr` made `<` is never true (the
+  # removed count only grows), so the skip branch is not taken and a removed
+  # event is read as a kept one. A removed event carries no link in any event
+  # stream the tokenizer builds, so reading it as kept changes nothing.
+  'edit_map\.rs:33:15: replace > with < in shift_links$',
   # canvas-render scene_digest plan: with a NaN height the TypeScript allocates
   # `new Int32Array(cols)` and throws past 2^53 - 1, the bound `>` names. At
   # exactly 2^53 - 1 cells the buffer is 32 PiB, which no engine allocates, so the

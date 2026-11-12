@@ -40,6 +40,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-facet-engine` | core | present | the theme, icon and stencil asset shapes, generated from `contracts/facets/engine`, the plugin manifest types from `contracts/plugin`, and the matchers of their patterns; the interpreter of the contract dialect (`schema`: a contract file's definitions judge a payload as the generated Zod does, in path and code) and the registry over plugin manifests (`registry`: targets, asset refs, `validate_facet_write`) with a plugin loaded from its manifest, contracts and asset tables (`plugin::build`, `manifest::read`), and a facets bucket judged for a write with a workspace's stencil library composed beside the registry (`partition`, behind the wasm export `facet_bucket_check`); the compat chain and derived form follow |
 | `whiteboard-scene` | core | present | the scene vocabulary as types (every node kind, appearance, ink, legend, `NodeOutline`); the closure-taking contribution traits are deferred, and `Deserialize` exists only behind the `oracle` feature |
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
+| `whiteboard-markdown` | core | present | CommonMark, GFM and math parsed to an mdast tree (`parse`, `parse_counting`), a vendored, trimmed copy of markdown-rs 1.0.0 (MIT, `LICENSE-markdown-rs`) with the HTML compiler, MDX, front matter, serde and logging dropped, its two panics fixed and its cost, depth and size bounded (`limits`: a refusal answers where a bound is passed); no shipped artifact links it yet |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | present | the visual facets' payload types, generated from `contracts/facets/visual`, the matchers of their patterns, the colour check and the one-grapheme check (`unicode-segmentation`); the bundled plugin loaded from its files into a registry (`host.rs`, over the asset JSON the TypeScript package also reads); the plugin's other contributions follow |
 | `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the text primitives (`uax_segments`, `longest_fit`, `truncate`'s `fit_to_width`, `inline_junction`), held to `text-primitives.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; the AI-facing spatial digest (`scene_digest`: `scene_digest`, `SceneDigest::to_json`), held to the recorded `scene-digest.jsonl`; the font measurer (`font_measure`, over the in-house `sfnt` reader), held to `font-measure.jsonl`; composer, typesetter follow |
@@ -147,6 +148,32 @@ steps and cache paths to the scripts.
   count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). A push to
   main judges the merged change in-diff the same way; `rust:mutants:full`
   (the whole workspace) is run by hand until its survivors are classified.
+  The vendored markdown parser's files are left out of the in-diff run alone,
+  by `.cargo/mutants-pr-exclude.txt` passed as `--exclude`: a config
+  `exclude_globs` applies to every run, so the full run would skip them too.
+- **`whiteboard-markdown` is vendored code held to the workspace lints by
+  the module, not by line**: `vendored/` carries markdown-rs's tokenizer,
+  resolvers and tree builder under one `#![expect]` per lint that does not fit
+  it (indexing, arithmetic, function length), each in the ledger with its
+  reason, while the crate root, `limits` and the budget (`vendored/budget`) are
+  this repository's own and are held to the core lints as written. A bound is
+  a `Refusal`, never a degraded tree: a text past a size, depth, container,
+  delimiter-run or fuel bound is refused whole and a root answers from the
+  TypeScript, so no tree differs from the TypeScript's because a bound fell
+  where it did. Every loop whose length follows the text charges the parse's
+  fuel (96 units a byte, over the 68.5 the dearest ordinary shape spends): every
+  resolver's walk over its events is charged where `resolve::call` dispatches it,
+  and a nested scan or a pass over a text's bytes charges itself, each held by
+  an exact figure in `crates/core/markdown/tests/fuel.rs`. So a
+  quadratic text is bounded by construction, and the cost test reads the clock
+  besides, because a loop that does not charge is invisible to the count (an
+  edit map that scanned its entries per edit took 108 s over a 64 KB text of
+  blank lines and spent as many units as a fast one). The pipeline's one
+  round loop (subtokenization) is a literal-capped `for`. The upstream panics
+  were two bugs in resolving events, fixed at the cause (the list resolver's
+  item end, the setext resolver's chains of underlines); the tree builder is
+  also total on a stream it does not expect, which only the fuzz target
+  (`markdown_parse`) and the totality property can judge.
 - **Properties go through `whiteboard-proptest`** (QR-14b/d/e,
   `crates/testing/proptest`), a dev-dependency only: `check(strategy, cases,
   test)` runs 200 cases unless the call passes another budget, never with a

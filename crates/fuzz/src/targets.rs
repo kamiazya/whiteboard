@@ -521,6 +521,50 @@ pub fn json_canvas_wasm_serialize(data: &[u8]) {
     }
 }
 
+/// The deepest nesting of nodes in a tree, and of block containers in it,
+/// walked from the root without the parser's own counts.
+fn tree_depths(node: &whiteboard_markdown::mdast::Node, containers: usize) -> (usize, usize) {
+    use whiteboard_markdown::mdast::Node;
+    let own = usize::from(matches!(
+        node,
+        Node::Blockquote(_) | Node::ListItem(_) | Node::FootnoteDefinition(_)
+    ));
+    let containers = containers.saturating_add(own);
+    let mut deepest = (1, containers);
+    for child in node.children().into_iter().flatten() {
+        let (below, below_containers) = tree_depths(child, containers);
+        deepest = (deepest.0.max(below.saturating_add(1)), deepest.1.max(below_containers));
+    }
+    deepest
+}
+
+/// `whiteboard_markdown::parse_counting` on any valid UTF-8 text (an invalid
+/// one is not a string to hand it): the parser answers a tree or a refusal,
+/// never a panic, spends no more than its text's fuel, builds no tree deeper
+/// than its declared bounds, and refuses for size only what is over the cap.
+///
+/// # Panics
+///
+/// When the parser panics, or an answer goes past a bound it declares.
+pub fn markdown_parse(data: &[u8]) {
+    use whiteboard_markdown::limits::{MAX_BYTES, MAX_CONTAINER_DEPTH, MAX_DEPTH, fuel_for};
+    use whiteboard_markdown::{Refusal, parse_counting};
+    let Ok(text) = std::str::from_utf8(data) else {
+        return;
+    };
+    let (answer, spent) = parse_counting(text);
+    assert!(spent <= fuel_for(text.len()), "spent {spent} on {} bytes", text.len());
+    match answer {
+        Ok(root) => {
+            let (nodes, containers) = tree_depths(&root, 0);
+            assert!(nodes <= MAX_DEPTH.saturating_add(1), "{nodes} levels of nodes");
+            assert!(containers <= MAX_CONTAINER_DEPTH, "{containers} levels of containers");
+        }
+        Err(Refusal::TooLarge) => assert!(text.len() > MAX_BYTES),
+        Err(Refusal::TooDeep | Refusal::TooCostly) => {}
+    }
+}
+
 /// The sfnt reader on any bytes, the way the daemon reads a font a user
 /// installed: a file over the cap is refused by name, anything else is an
 /// answer or an error and never a panic, and a face that parses must make the

@@ -102,6 +102,16 @@
       "allowedThirdParty": {},
       "absorbs": ["packages/codec"]
     },
+    "whiteboard-markdown": {
+      "path": "crates/core/markdown",
+      "layer": "core",
+      "status": "present",
+      "description": "CommonMark, GFM and math markdown parsed to an mdast tree: a vendored, trimmed and hardened copy of markdown-rs (MIT), with the cost, depth and totality bounds a wasm instance needs",
+      "targets": ["wasm32-unknown-unknown", "native"],
+      "allowedInternalDeps": [],
+      "allowedThirdParty": {},
+      "absorbs": ["packages/codec/src/markdown"]
+    },
     "whiteboard-search": {
       "path": "crates/core/search",
       "layer": "core",
@@ -458,7 +468,7 @@
       "path": "crates/fuzz",
       "layer": "tooling",
       "status": "present",
-      "description": "cargo-fuzz targets, one per untrusted-input entry (OKF/JSON Canvas/OCIF parsers, sync frames, HTTP and MCP JSON-RPC, loro import, wasm-boundary JSON, font files). Nightly toolchain only (libFuzzer, sanitizers), so it is a workspace of its own, excluded from the root one; its library half builds on stable to replay committed regressions",
+      "description": "cargo-fuzz targets, one per untrusted-input entry (OKF/JSON Canvas/OCIF/markdown parsers, sync frames, HTTP and MCP JSON-RPC, loro import, wasm-boundary JSON, font files). Nightly toolchain only (libFuzzer, sanitizers), so it is a workspace of its own, excluded from the root one; its library half builds on stable to replay committed regressions",
       "targets": ["native"],
       "allowedInternalDeps": [
         "whiteboard-det",
@@ -467,6 +477,7 @@
         "whiteboard-facet-engine",
         "whiteboard-scene",
         "whiteboard-codec",
+        "whiteboard-markdown",
         "whiteboard-search",
         "whiteboard-plugin-visual",
         "whiteboard-edge-routing",

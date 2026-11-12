@@ -28,6 +28,7 @@ libfuzzer-sys = { version = "0.4.10", optional = true }
 whiteboard-canvas-render = { path = "../core/canvas-render" }
 whiteboard-codec = { path = "../core/codec" }
 whiteboard-det = { path = "../core/det" }
+whiteboard-markdown = { path = "../core/markdown" }
 whiteboard-model = { path = "../core/model" }
 whiteboard-wasm = { path = "../bindings/wasm" }
 
@@ -82,6 +83,14 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "json_canvas_wasm_serialize"
 path = "fuzz_targets/json_canvas_wasm_serialize.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "markdown_parse"
+path = "fuzz_targets/markdown_parse.rs"
 test = false
 doc = false
 bench = false

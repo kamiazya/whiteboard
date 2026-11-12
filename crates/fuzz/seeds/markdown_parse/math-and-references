@@ -1,0 +1,9 @@
+Inline $a+b$ and
+
+$$
+x^2
+$$
+
+[[Page]] ![[img.png]] [a][ref] ![alt](u)
+
+[ref]: /url "title"

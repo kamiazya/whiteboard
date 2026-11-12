@@ -20,6 +20,7 @@ pub const TARGETS: &[(&str, Target)] = &[
     ("json_canvas_parse", targets::json_canvas_parse),
     ("json_canvas_wasm_parse", targets::json_canvas_wasm_parse),
     ("json_canvas_wasm_serialize", targets::json_canvas_wasm_serialize),
+    ("markdown_parse", targets::markdown_parse),
     ("okf_parse", targets::okf_parse),
     ("okf_wasm_parse", targets::okf_wasm_parse),
     ("okf_wasm_serialize", targets::okf_wasm_serialize),

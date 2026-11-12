@@ -80,6 +80,60 @@
       "reason": "f64::midpoint avoids the overflow (a + b) / 2 has, and the TypeScript's expression overflows where midpoint would not; the port reproduces the TypeScript bit for bit"
     },
     {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::arithmetic_side_effects",
+      "count": 1,
+      "reason": "the same vendored module and the same reason: positions and counts the tokenizer built itself, where an overflow is a defect the fuzz target and the totality property are run to find (the release profile has overflow checks on). The arithmetic this crate's own code does on a count it was handed (`limits.rs`, `lib.rs`, the budget) is saturating and is held to the lint"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::disallowed_methods",
+      "count": 1,
+      "reason": "the cost test times a parse with `Instant::now`, the one clock read in the crate and in a test only: a loop that spends no fuel is invisible to the count of units a parse reports, and only the clock sees it (an edit map that scanned its entries per edit spent as many units as a fast one and took 108 s over 64 KB)"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::disallowed_types",
+      "count": 1,
+      "reason": "the same `Instant` in the same helper, named by its type as well as by its constructor"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::enum_variant_names",
+      "count": 1,
+      "reason": "the state and event names repeat their enum's (`Content`'s `Content` variant, the `...State` names) because they are the upstream vocabulary; a rename would orphan every comparison with upstream"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::indexing_slicing",
+      "count": 1,
+      "reason": "the vendored tokenizer, resolvers and tree builder index events and bytes by positions they computed themselves (`vendored/mod.rs`, one expectation for the whole module). The panic freedom this lint exists for is held by what it cannot see: the `markdown_parse` fuzz target, `tests/totality.rs`'s property over documents of the tokens that decide how markdown parses, and the recorded OKF bodies of `tests/okf_corpus.rs`. The slices that took an input-derived range (`Slice`, the tree builder's stack) are `get`s that answer nothing instead"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::struct_excessive_bools",
+      "count": 1,
+      "reason": "the tokenizer's state and the tree builder's context hold one flag per thing a construct tracks, as upstream; splitting them would move fields between structs and change no behaviour"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::struct_field_names",
+      "count": 1,
+      "reason": "the tree builder's reference record names its fields after what a reference is (`reference_kind`), as upstream"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::to_string_trait_impl",
+      "count": 1,
+      "reason": "`ToString` on a node is how the tree builder flattens a label's children into the text its reference carries; it is not a `Display`, which a node does not have, as upstream"
+    },
+    {
+      "crate": "crates/core/markdown",
+      "lint": "clippy::too_many_lines",
+      "count": 1,
+      "reason": "the upstream state machine and tree builder are long functions by design (`state::call` is one match arm per state, 400 lines); they are kept as they are so a later upstream fix can be compared against them, and arch-lint's function-size ledger records each one"
+    },
+    {
       "crate": "crates/core/scene",
       "lint": "clippy::struct_excessive_bools",
       "count": 1,
