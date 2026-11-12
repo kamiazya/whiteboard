@@ -205,8 +205,12 @@ steps and cache paths to the scripts.
   included, with the joining table `segment-joins.json` held equal to the Rust one) and
   `substituted` by the face's GSUB `ccmp`, which the port does not run. That class is a
   tolerated gap held both ways: within 0.1 em, and a record the port reproduces exactly
-  fails, so the entry cannot go stale. `ttf-parser` is unmaintained (RUSTSEC-2026-0192,
-  ignored in `deny.toml` with its reason).
+  fails, so the entry cannot go stale. The faces are read by an in-house sfnt reader
+  (`crates/core/canvas-render/src/sfnt/`: directory, head, hhea, maxp, hmtx and a cmap in
+  formats 4 and 12, chosen as opentype.js chooses; no dependency, because the maintained
+  crates carry unsafe or f32 and `ttf-parser` is unmaintained). It reads fonts users install, so it
+  is an `input-caps.json` entry (`sfnt_parse`, seeds in `crates/fuzz/seeds/sfnt_parse`) and
+  refuses a cmap whose segments or groups are not sorted and disjoint.
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).

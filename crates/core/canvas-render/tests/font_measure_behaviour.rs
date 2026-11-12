@@ -10,6 +10,7 @@ use whiteboard_canvas_render::constant_ratio::{
 };
 use whiteboard_canvas_render::font_measure::{FontError, FontTableMeasurer};
 use whiteboard_canvas_render::measure::{FontDescriptor, FontStyle, Measure};
+use whiteboard_canvas_render::sfnt::SfntError;
 
 const REGULAR: &[u8] =
     include_bytes!("../../../../packages/mcp-server/assets/fonts/Roboto/Roboto-Regular.ttf");
@@ -147,8 +148,12 @@ fn an_unusable_size_or_an_empty_text_measures_nothing() {
 #[test]
 fn bytes_that_are_not_a_font_are_refused() {
     let refused = FontTableMeasurer::new().with_face("Roboto", false, FontStyle::Normal, b"nope");
-    assert_eq!(refused.err(), Some(FontError));
-    assert_eq!(FontError.to_string(), "the bytes are not a font this measurer can read");
+    assert_eq!(refused.err(), Some(FontError(SfntError::BadMagic)));
+    let message = FontError(SfntError::BadMagic).to_string();
+    assert_eq!(
+        message,
+        "the bytes are not a font this measurer can read: the bytes are not a TrueType or OpenType font"
+    );
 }
 
 #[test]

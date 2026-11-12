@@ -11,8 +11,7 @@
 //! advances, since a narrow glyph can share `.notdef`'s width.
 //!
 //! The vertical metrics are the `hhea` table's, which is the table opentype.js
-//! reads; `ttf-parser`'s own `ascender()` would prefer OS/2 for a face that
-//! sets the use-typographic-metrics bit, so the table is read directly.
+//! reads, never OS/2's typographic ones.
 //!
 //! Two things the TypeScript does that this does not, and a third it does that
 //! this repeats:
@@ -32,11 +31,10 @@
 //!   added ([`carried_run`](FontTableMeasurer)), which moves the last bits;
 //!   the cuts and the additions are ported, so those records are exact.
 
-use ttf_parser::Face;
-
 use crate::constant_ratio::{estimate_advance, estimate_vertical};
 use crate::measure::{FontDescriptor, FontStyle, Measure, VerticalMetrics, clamp_advance};
 use crate::segment_joins::joins_preceding;
+use crate::sfnt::{Sfnt, SfntError};
 
 /// The weight at which CSS selects the bold face.
 const BOLD_FROM: f64 = 600.0;
@@ -47,13 +45,13 @@ const BOLD_FROM: f64 = 600.0;
 const SEGMENT_CODE_POINTS: usize = 64;
 const SEGMENT_CODE_POINTS_MAX: usize = 256;
 
-/// The bytes did not parse as a font.
+/// The bytes did not parse as a font, and why.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub struct FontError;
+pub struct FontError(pub SfntError);
 
 impl core::fmt::Display for FontError {
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        f.write_str("the bytes are not a font this measurer can read")
+        write!(f, "the bytes are not a font this measurer can read: {}", self.0)
     }
 }
 
@@ -62,13 +60,13 @@ impl core::error::Error for FontError {}
 /// One face and the numbers read from it once.
 #[derive(Clone)]
 struct Loaded<'a> {
-    face: Face<'a>,
+    face: Sfnt<'a>,
     units_per_em: f64,
 }
 
 impl Loaded<'_> {
     fn carries(&self, ch: char) -> bool {
-        self.face.glyph_index(ch).is_some_and(|glyph| glyph.0 != 0)
+        self.face.glyph_index(ch) != 0
     }
 
     /// The summed advance of code points all carried by the face.
@@ -76,11 +74,7 @@ impl Loaded<'_> {
         let scale = 1.0 / self.units_per_em * size_px;
         let mut x = 0.0_f64;
         for ch in run.chars() {
-            let units = self
-                .face
-                .glyph_index(ch)
-                .and_then(|glyph| self.face.glyph_hor_advance(glyph))
-                .map_or(0.0, f64::from);
+            let units = f64::from(self.face.advance(self.face.glyph_index(ch)));
             if units != 0.0 {
                 x += units * scale;
             }
@@ -142,12 +136,12 @@ impl Loaded<'_> {
     }
 
     fn vertical(&self, size_px: f64) -> VerticalMetrics {
-        let hhea = self.face.tables().hhea;
+        let (ascender, descender, line_gap) = self.face.hhea();
         let scale = size_px / self.units_per_em;
         VerticalMetrics {
-            ascent: clamp_advance(f64::from(hhea.ascender) * scale),
-            descent: clamp_advance(f64::from(hhea.descender).abs() * scale),
-            line_gap: clamp_advance(f64::from(hhea.line_gap) * scale),
+            ascent: clamp_advance(f64::from(ascender) * scale),
+            descent: clamp_advance(f64::from(descender).abs() * scale),
+            line_gap: clamp_advance(f64::from(line_gap) * scale),
         }
     }
 }
@@ -215,7 +209,7 @@ impl<'a> FontTableMeasurer<'a> {
         style: FontStyle,
         data: &'a [u8],
     ) -> Result<Self, FontError> {
-        let face = Face::parse(data, 0).map_err(|_| FontError)?;
+        let face = Sfnt::parse(data).map_err(FontError)?;
         let units_per_em = f64::from(face.units_per_em());
         let loaded = Loaded { face, units_per_em };
         let slot = face_slot(bold, style);

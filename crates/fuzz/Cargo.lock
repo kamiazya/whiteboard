@@ -240,6 +240,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "whiteboard-canvas-render"
+version = "0.0.0"
+dependencies = [
+ "whiteboard-det",
+ "whiteboard-edge-routing",
+ "whiteboard-model",
+ "whiteboard-plugin-visual",
+ "whiteboard-scene",
+]
+
+[[package]]
 name = "whiteboard-codec"
 version = "0.0.0"
 dependencies = [
@@ -274,6 +285,7 @@ name = "whiteboard-fuzz"
 version = "0.0.0"
 dependencies = [
  "libfuzzer-sys",
+ "whiteboard-canvas-render",
  "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-model",

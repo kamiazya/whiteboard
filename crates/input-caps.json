@@ -42,6 +42,14 @@
       "maxMillis": 1000,
       "reason": "the OKF frontmatter YAML reader takes the text between a document's fences, from a file, an import or a sync, so any holder of a document can call it. maxBytes is MAX_BYTES, the function's own refusal (a longer text answers TooLarge before it is read), 768 KiB: a markdown document holds at most MARKDOWN_MAX_CHARS (256 Ki) UTF-16 units and a unit is at most three UTF-8 bytes, so the frontmatter of any document the model admits is within it (owner decision q37). maxDepth 64 is MAX_PARSE_DEPTH: past MAX_DEPTH (32) the visit refuses, and the parse recurses to 64 only so that a document malformed further down is named malformed first; deeper is refused outright. maxMillis 1000 is 7.9x the slowest draw measured natively in release at the cap: 127 ms for 786414 bytes of 87k integer keys (91 ms for preserved keys, 77 ms for keys under facets, 36 ms for trust events, 28 ms for tags, 23 ms for a flow sequence of ~131k integers and for a type that is a mapping with a long list)"
     },
+    "whiteboard-canvas-render::sfnt::Sfnt::parse": {
+      "crate": "whiteboard-canvas-render",
+      "fuzzTarget": "sfnt_parse",
+      "maxBytes": 33554432,
+      "maxDepth": 1,
+      "maxMillis": 500,
+      "reason": "the font measurer's reader takes the bytes of a font a user installed into the daemon, so anything that can put a file in the fonts directory reaches it. maxBytes is MAX_BYTES (32 MiB), refused before a byte is read: an ordinary face is a few hundred KiB (the vendored Roboto faces are 349-379 KB) and a CJK face tens of MiB. maxDepth 1: the table directory, `cmap` subtables and `hmtx` are flat arrays read by index and nothing recurses. maxMillis 500 is 29x the slowest draw measured at the cap natively in release, 17 ms for 33552652 bytes holding 2796036 sorted format 12 groups (540 ms in a debug build, which is why it is not tighter; 100000 lookups in that font took 10 ms): the reader allocates nothing and its only loops are the directory scan (at most 65535 records), the cmap record scan (at most 65535) and one validation pass over a subtable's segments or groups (at most a file's length over 12), after which a lookup is a binary search"
+    },
     "whiteboard-codec::okf::parse": {
       "crate": "whiteboard-codec",
       "fuzzTarget": "okf_parse",

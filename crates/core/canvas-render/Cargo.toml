@@ -14,7 +14,6 @@ whiteboard-edge-routing = { path = "../edge-routing" }
 whiteboard-model = { path = "../model" }
 whiteboard-plugin-visual = { path = "../plugin-visual" }
 whiteboard-scene = { path = "../scene" }
-ttf-parser.workspace = true
 
 [dev-dependencies]
 serde.workspace = true
