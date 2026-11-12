@@ -259,6 +259,12 @@ pub(crate) fn after(tokenizer: &mut Tokenizer) -> State {
         tokenizer.events[tokenizer.tokenize_state.end].point.index,
     );
 
+    // The whole label is read at its end, so labels nested in each other read
+    // the inner text once a level.
+    if !tokenizer.parse_state.budget.spend(indices.1.saturating_sub(indices.0)) {
+        return State::Nok;
+    }
+
     // We don’t care about virtual spaces, so `indices` and `as_str` are fine.
     let mut id = normalize_identifier(
         Slice::from_indices(tokenizer.parse_state.bytes, indices.0, indices.1).as_str(),

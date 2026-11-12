@@ -26,7 +26,8 @@ const SPENT: &[(&str, &str, usize)] = &[
         "x\n---\n--\ny\n---\n",
         692,
     ),
-    ("emphasis inside an image: the open events each run keeps", "![*a* _b_](u)", 737),
+    ("emphasis inside an image: the open events each run keeps", "![*a* _b_](u)", 744),
+    ("an image in an image: each label read whole at its end", "![![ab](c)](u)", 770),
     (
         "a URL after an entity: the second autolink pass over the finished text",
         "&amp;http://a.b/c d",

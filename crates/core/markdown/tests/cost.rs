@@ -159,6 +159,19 @@ fn a_run_of_failing_literal_urls_is_read_inside_the_fuel_it_charges() {
     assert!(millis < CEILING_MS, "{millis} ms");
 }
 
+/// Images nested in each other's text: each label's text is read whole at its end, so
+/// the inner text is read once a level. Uncharged that was 6.9 s in release for
+/// 100 KB and four times that for twice the text.
+#[test]
+fn nested_labels_are_refused_inside_the_time() {
+    let levels = LENGTH / 6;
+    let text = format!("{}a{}", "![".repeat(levels), "](b)".repeat(levels));
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert_eq!(answer.err(), Some(Refusal::TooCostly));
+    assert!(spent <= fuel_for(text.len()), "{spent}");
+    assert!(millis < CEILING_MS, "{millis} ms");
+}
+
 #[test]
 fn the_shapes_reach_what_the_bounds_are_for() {
     // A shape list that stops containing the hostile cases tests nothing.
