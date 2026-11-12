@@ -223,6 +223,8 @@ pub(crate) fn cdata_open_inside(tokenizer: &mut Tokenizer) -> State {
             State::Next(StateName::HtmlTextCdataOpenInside)
         }
     } else {
+        // A failed attempt leaves `size` for the next construct to read.
+        tokenizer.tokenize_state.size = 0;
         State::Nok
     }
 }

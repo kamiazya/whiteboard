@@ -3,9 +3,13 @@
 // Rust workspace (QR-17).
 //
 //   pr    the mutants in the lines this change touches under crates/, against
-//         RUST_MUTANTS_BASE (default origin/main): `cargo mutants --in-diff`.
-//   full  every mutant in the workspace. Run by hand: CI judges a push to
-//         main in-diff too, until the workspace's survivors are classified.
+//         RUST_MUTANTS_BASE (default origin/main): `cargo mutants --in-diff`,
+//         less the files `.cargo/mutants-pr-exclude.txt` lists, which are too
+//         many to judge in a shard and are passed as `--exclude` here, in this
+//         mode alone (the config's `exclude_globs` would apply to both).
+//   full  every mutant in the workspace, those files included. Run by hand:
+//         CI judges a push to main in-diff too, until the workspace's
+//         survivors are classified.
 //
 // Both judge each mutant by the whole workspace's tests
 // (`--test-workspace=true`), so the edge crate is judged by the wasm crate's
@@ -30,10 +34,17 @@
 // would judge a diff by a list nobody reviewed.
 
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { cargoShard, ledgerEntries, ledgerProblems, mutantNames } from './rust-mutants-ledger.mjs'
+import {
+  cargoShard,
+  ledgerEntries,
+  ledgerProblems,
+  mutantNames,
+  prExcludeGlobs,
+  prExcludeProblems,
+} from './rust-mutants-ledger.mjs'
 
 const VERSION = '27.1.0'
 const INSTALL = `cargo install --locked cargo-mutants --version ${VERSION}`
@@ -91,6 +102,11 @@ if (shard instanceof Error) fail(shard.message)
 if (shard !== undefined) args.push('--shard', shard, '--sharding', 'round-robin')
 
 if (mode === 'pr') {
+  const excluded = prExcludeGlobs(readFileSync('.cargo/mutants-pr-exclude.txt', 'utf8'))
+  const excludeProblems = prExcludeProblems(excluded, existsSync)
+  if (excludeProblems.length > 0)
+    fail(`.cargo/mutants-pr-exclude.txt:\n  ${excludeProblems.join('\n  ')}`)
+  for (const glob of excluded) args.push('--exclude', glob)
   const base = process.env.RUST_MUTANTS_BASE ?? 'origin/main'
   const diff = spawnSync('git', ['diff', '--unified=0', base, '--', ':(glob)crates/**/*.rs'], {
     encoding: 'utf8',

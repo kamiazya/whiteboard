@@ -15,6 +15,7 @@ use crate::vendored::subtokenize::divide_events;
 use crate::vendored::tokenizer::{Container, ContainerState, Tokenizer};
 use crate::vendored::util::skip;
 use alloc::{boxed::Box, vec::Vec};
+use core::mem::take;
 
 /// Phases where we can exit containers.
 #[derive(Debug, PartialEq)]
@@ -482,6 +483,16 @@ fn resolve(tokenizer: &mut Tokenizer) {
         return;
     };
 
+    // Each of the walks below, and `divide_events`, visits every event of one
+    // list or the other once.
+    if !tokenizer
+        .parse_state
+        .budget
+        .spend(child.events.len().saturating_add(tokenizer.events.len()))
+    {
+        return;
+    }
+
     // First, add the container exits into `child`.
     let mut child_index = 0;
     let mut line = 0;
@@ -557,5 +568,5 @@ fn resolve(tokenizer: &mut Tokenizer) {
     // Add the resolvers from child.
     tokenizer.resolvers.append(&mut child.resolvers.split_off(0));
 
-    tokenizer.tokenize_state.definitions.append(&mut child.tokenize_state.definitions.split_off(0));
+    tokenizer.tokenize_state.definitions.extend(take(&mut child.tokenize_state.definitions));
 }

@@ -25,6 +25,7 @@ libfuzzer = ["dep:libfuzzer-sys"]
 
 [dependencies]
 libfuzzer-sys = { version = "0.4.10", optional = true }
+whiteboard-canvas-render = { path = "../core/canvas-render" }
 whiteboard-codec = { path = "../core/codec" }
 whiteboard-det = { path = "../core/det" }
 whiteboard-markdown = { path = "../core/markdown" }
@@ -114,6 +115,14 @@ required-features = ["libfuzzer"]
 [[bin]]
 name = "okf_wasm_serialize"
 path = "fuzz_targets/okf_wasm_serialize.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
+name = "sfnt_parse"
+path = "fuzz_targets/sfnt_parse.rs"
 test = false
 doc = false
 bench = false

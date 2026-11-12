@@ -330,10 +330,10 @@ pub(crate) fn label_after(tokenizer: &mut Tokenizer) -> State {
                 .as_str(),
             );
 
-            // Note: we don’t care about uniqueness.
-            // It’s likely that that doesn’t happen very frequently.
-            // It is more likely that it wastes precious time.
-            tokenizer.tokenize_state.gfm_footnote_definitions.push(id);
+            // A set, not a list: a label is looked up once per reference, and
+            // a body can hold tens of thousands of each. BTree, not hash: the
+            // std hasher is randomly seeded, which a core crate does not take.
+            tokenizer.tokenize_state.gfm_footnote_definitions.insert(id);
 
             tokenizer.enter(Name::DefinitionMarker);
             tokenizer.consume();

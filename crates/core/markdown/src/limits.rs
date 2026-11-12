@@ -50,8 +50,9 @@ pub const MAX_RUNS_PER_INLINE: usize = 1_024;
 
 /// Work units a text of `len` bytes may spend before it is refused.
 ///
-/// One unit is a step of the tokenizer or one step of a walk a resolver makes
-/// over what came before it. The figure is a multiple of the dearest ordinary
+/// One unit is a step of the tokenizer, an event a resolver walks over, a byte
+/// of a text a pass reads, or one step of a walk a resolver makes over what
+/// came before it. The figure is a multiple of the dearest ordinary
 /// text measured (`tests/cost.rs`), so no real document is refused, and a text
 /// built to be quadratic is refused after a time that grows with its length
 /// alone.
@@ -63,8 +64,9 @@ pub const fn fuel_for(len: usize) -> usize {
 /// Fuel every text has, so that a short one is never refused for being short.
 const FUEL_BASE: usize = 1 << 16;
 
-/// Fuel per byte of text.
-const FUEL_PER_BYTE: usize = 64;
+/// Fuel per byte of text: the dearest ordinary shape in `tests/cost.rs` spends
+/// 69 a byte, so a quarter of this is headroom over it.
+const FUEL_PER_BYTE: usize = 96;
 
 /// Refuse a text whose lines open more containers than [`MAX_CONTAINER_DEPTH`].
 ///

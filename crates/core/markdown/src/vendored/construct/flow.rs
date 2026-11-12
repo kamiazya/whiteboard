@@ -34,17 +34,19 @@ use crate::vendored::tokenizer::Tokenizer;
 /// ```
 pub(crate) fn start(tokenizer: &mut Tokenizer) -> State {
     match tokenizer.current {
+        // A fast path that does not start falls to the table, not past it: a
+        // header row may open with any of these markers.
         Some(b'#') => {
             tokenizer.attempt(
                 State::Next(StateName::FlowAfter),
-                State::Next(StateName::FlowBeforeContent),
+                State::Next(StateName::FlowBeforeGfmTable),
             );
             State::Retry(StateName::HeadingAtxStart)
         }
         Some(b'$' | b'`' | b'~') => {
             tokenizer.attempt(
                 State::Next(StateName::FlowAfter),
-                State::Next(StateName::FlowBeforeContent),
+                State::Next(StateName::FlowBeforeGfmTable),
             );
             State::Retry(StateName::RawFlowStart)
         }
@@ -53,7 +55,7 @@ pub(crate) fn start(tokenizer: &mut Tokenizer) -> State {
         Some(b'*' | b'_') => {
             tokenizer.attempt(
                 State::Next(StateName::FlowAfter),
-                State::Next(StateName::FlowBeforeContent),
+                State::Next(StateName::FlowBeforeGfmTable),
             );
             State::Retry(StateName::ThematicBreakStart)
         }

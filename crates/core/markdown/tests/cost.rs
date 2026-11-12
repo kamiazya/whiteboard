@@ -30,6 +30,7 @@ const ORDINARY: &[Shape] = &[
     shape("blank lines", "", "\n"),
     shape("one-letter lines", "", "a\n"),
     shape("one-letter items", "", "- a\n"),
+    shape("blank lines ending an item", "- a", "\n"),
     shape("empty items", "", "-\n"),
     shape("ordered items", "", "1. a\n"),
     shape("task items", "", "- [ ] a\n"),
@@ -145,8 +146,8 @@ fn a_text_built_to_be_quadratic_is_refused_inside_the_time() {
 
 /// The dearest text the second autolink pass can be given and still read: every `www.`
 /// start in one long unbroken run is a failed attempt that reads 2,304 characters. The
-/// pass charges the work, so the text is read inside its fuel (about 50 units a byte
-/// in all, against 64 allowed), and a text a little denser is refused.
+/// pass charges the work, so the text is read inside its fuel: about 58 units a byte
+/// in all, against 96 allowed, and 59 at the byte cap, read there in 0.9 s in release.
 #[test]
 fn a_run_of_failing_literal_urls_is_read_inside_the_fuel_it_charges() {
     let text = "&amp;www.a\\_".repeat(if cfg!(target_arch = "wasm32") { 2_000 } else { 5_000 });
@@ -163,4 +164,95 @@ fn the_shapes_reach_what_the_bounds_are_for() {
     // A shape list that stops containing the hostile cases tests nothing.
     assert!(ORDINARY.len() > 30);
     assert!(HOSTILE.len() >= 6);
+}
+
+/// Every reference is looked up among the definitions, and one that names none
+/// looks at all of them: a list scanned per reference made this 3.2 s in release
+/// at the byte cap and quadratic in the count.
+#[test]
+fn many_definitions_and_references_to_none_are_read_in_time() {
+    let (definitions, references) =
+        if cfg!(target_arch = "wasm32") { (4_000, 8_000) } else { (14_000, 28_000) };
+    let mut text = String::new();
+    text.extend((0..definitions).map(|index| format!("[d{index}]: u\n")));
+    text.push('\n');
+    for _ in 0..references {
+        text.push_str("[zz] ");
+    }
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert!(answer.is_ok(), "{:?}", answer.err());
+    assert!(spent * 4 <= fuel_for(text.len()) * 3, "{spent} units of {}", fuel_for(text.len()));
+    assert!(millis < CEILING_MS, "{millis} ms");
+}
+
+/// Units a shape spends a hundredth of a byte, at least: the walks over the
+/// events and over the bytes of a text that the parser charges. Each floor sits
+/// between what the shape spent before that walk was charged and what it spends
+/// now, so a walk that stops charging falls under it. They hold at
+/// `LENGTH`; a shorter text has more of its cost in the fixed fuel.
+const CHARGED_FLOOR: &[(&str, usize)] = &[
+    ("plain paragraphs", 1354),
+    ("blank lines", 3100),
+    ("one-letter lines", 4975),
+    ("one-letter items", 5375),
+    ("empty items", 4525),
+    ("ordered items", 4620),
+    ("task items", 3844),
+    ("nested items", 4450),
+    ("quoted lines", 3387),
+    ("headings", 2700),
+    ("setext headings", 3891),
+    ("breaks", 1450),
+    ("fenced code", 1220),
+    ("html blocks", 1071),
+    ("a long table", 3033),
+    ("definitions and references", 3668),
+    ("footnotes", 3425),
+    ("images", 3238),
+    ("reference links", 1607),
+    ("balanced brackets", 1816),
+    ("unmatched label ends", 1050),
+    ("unmatched openers", 1450),
+    ("code spans", 1541),
+    ("math spans", 1937),
+    ("entities", 1433),
+    ("autolinks", 903),
+    ("literal autolinks", 1030),
+    ("emails", 833),
+    ("hard breaks", 3012),
+    ("lazy block quote lines", 3916),
+    ("escapes", 1700),
+    ("a long dotted word", 550),
+];
+
+#[test]
+fn the_walks_over_a_text_are_charged() {
+    for (name, floor) in CHARGED_FLOOR {
+        let Some(shape) = ORDINARY.iter().find(|shape| shape.name == *name) else {
+            panic!("no shape named {name}");
+        };
+        let text = text_of(shape);
+        let (answer, spent) = parse_counting(&text);
+        assert!(answer.is_ok(), "{name}");
+        assert!(
+            spent * 100 >= floor * text.len(),
+            "{name}: {} hundredths a byte",
+            spent * 100 / text.len()
+        );
+    }
+    assert!(CHARGED_FLOOR.len() > 30);
+}
+
+/// Definitions each in their own blank-separated block: every block hands its
+/// identifiers up as a set, and merging that into the set gathered so far must
+/// cost what the block brought, not what was gathered before it.
+#[test]
+fn many_blank_separated_definitions_are_read_in_time() {
+    let definitions = if cfg!(target_arch = "wasm32") { 8_000 } else { 60000 };
+    let mut text = String::new();
+    text.extend((0..definitions).map(|index| format!("[d{index}]: u\n\n")));
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert!(answer.is_ok(), "{:?}", answer.err());
+    assert!(spent * 4 <= fuel_for(text.len()) * 3, "{spent} units of {}", fuel_for(text.len()));
+    assert!(millis < CEILING_MS, "{millis} ms");
 }

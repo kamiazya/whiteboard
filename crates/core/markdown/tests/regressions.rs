@@ -74,3 +74,32 @@ fn the_recorded_body_that_crossed_two_lists_reads_as_two() {
     let read = read(body);
     assert!(read.starts_with(r#"root(p(text["」"]) ul(li(code[""])) ol(li(p("#), "{read}");
 }
+
+/// A header row opening with a marker a fast path tries first (`*`, `_`, a
+/// backtick, `~`, `$`, `#`) is still a table when that construct does not
+/// start: the fallback skipped the table and read a paragraph.
+#[test]
+fn a_table_whose_header_opens_with_a_marker_a_fast_path_tries_first_is_a_table() {
+    let table = |header: &str| format!("{header} | b\n--- | ---\n");
+    let cells = |first: &str| format!(r#"root(table(row(cell({first}) cell(text["b"]))))"#);
+    assert_eq!(read(&table("*a*")), cells(r#"em(text["a"])"#));
+    assert_eq!(read(&table("_a_")), cells(r#"em(text["a"])"#));
+    assert_eq!(read(&table("`a`")), cells(r#"icode["a"]"#));
+    assert_eq!(read(&table("~~a~~")), cells(r#"del(text["a"])"#));
+    assert_eq!(read(&table("*a")), cells(r#"text["*a"]"#));
+    assert_eq!(read(&table("#a")), cells(r##"text["#a"]"##));
+}
+
+/// A heading that does start is still a heading, with the table's delimiter
+/// row below it read as text.
+#[test]
+fn a_heading_whose_text_holds_a_pipe_is_not_a_table() {
+    assert_eq!(read("# a | b\n--- | ---\n"), r#"root(h[1](text["a | b"]) p(text["--- | ---"]))"#);
+}
+
+/// `<![CD` opens a CDATA scan that fails at the space; the count it kept made
+/// the next code span open one backtick too short.
+#[test]
+fn a_failed_cdata_open_leaves_the_next_code_span_whole() {
+    assert_eq!(read("a <![CD `x` b`"), r#"root(p(text["a <![CD "] icode["x"] text[" b`"]))"#);
+}

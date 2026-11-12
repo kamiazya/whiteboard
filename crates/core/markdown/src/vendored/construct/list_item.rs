@@ -398,6 +398,11 @@ pub(crate) fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
         if event.name == Name::ListItem {
             if event.kind == Kind::Enter {
                 let end = item_exit(&tokenizer.events, index);
+                // `item_exit` read every event of the item, so a stack of
+                // nested items reads the innermost ones once a level.
+                if !tokenizer.parse_state.budget.spend(end.saturating_sub(index)) {
+                    return None;
+                }
                 let marker = skip::to(&tokenizer.events, index, &[Name::ListItemMarker]);
                 // Guaranteed to be a valid ASCII byte.
                 let marker = tokenizer.parse_state.bytes[tokenizer.events[marker].point.index];
@@ -419,6 +424,11 @@ pub(crate) fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
                             Name::BlockQuotePrefix,
                         ],
                     );
+                    // One unit for the step back over the open lists, and one
+                    // for each event the skip passed.
+                    if !tokenizer.parse_state.budget.spend(before.saturating_sub(previous.3)) {
+                        return None;
+                    }
 
                     if previous.0 == current.0 && previous.1 == current.1 && before == current.2 {
                         let previous_mut = &mut lists_wip[list_index];

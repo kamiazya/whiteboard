@@ -48,7 +48,12 @@ const PIECES: [&str; 20] = [
 ];
 
 fn text() -> impl Strategy<Value = String> {
-    prop::collection::vec(0..PIECES.len(), 0..14)
+    pieces(0..14)
+}
+
+/// Texts of `len` pieces drawn from `PIECES`.
+fn pieces(len: std::ops::Range<usize>) -> impl Strategy<Value = String> {
+    prop::collection::vec(0..PIECES.len(), len)
         .prop_map(|picks| picks.iter().filter_map(|&i| PIECES.get(i).copied()).collect())
 }
 
@@ -63,13 +68,17 @@ fn font() -> FontDescriptor {
 }
 
 /// A text and a width drawn against its length, in UTF-16 units of 6px each:
-/// on a prefix's edge, a hair under it, or unusable.
+/// on a prefix's edge, a hair under it, narrower than any one unit (so even
+/// the first grapheme is over the edge), or unusable.
 fn text_and_width() -> impl Strategy<Value = (String, f64)> {
-    text().prop_flat_map(|text| {
+    // A one-piece text rarely gets cut, and an empty one never; the fit is
+    // about cuts, so most draws are long enough to have one.
+    prop_oneof![1 => text(), 4 => pieces(2..16)].prop_flat_map(|text| {
         let units = u32::try_from(text.encode_utf16().count()).unwrap_or(0);
         let width = prop_oneof![
-            8 => (0..=units).prop_map(|n| f64::from(n) * 6.0),
+            8 => (1..=units.max(1)).prop_map(|n| f64::from(n) * 6.0),
             2 => (1..=units + 1).prop_map(|n| f64::from(n) * 6.0 - 1.0),
+            1 => (1_u32..6).prop_map(f64::from),
             1 => prop::sample::select(vec![0.0, -5.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY]),
         ];
         (Just(text), width)

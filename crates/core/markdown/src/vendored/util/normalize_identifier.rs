@@ -51,3 +51,19 @@ pub(crate) fn normalize_identifier(value: &str) -> String {
     }
     result.to_lowercase().to_uppercase()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    // On wasm32 the same tests run under Node (QR-21 layer 3).
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    #[test]
+    fn words_keep_the_one_space_between_them() {
+        assert_eq!(normalize_identifier("a b"), "A B");
+        assert_eq!(normalize_identifier(" a b "), "A B");
+        assert_eq!(normalize_identifier("a\t\r\n  b  c"), "A B C");
+        assert_eq!(normalize_identifier(" \t"), "");
+    }
+}

@@ -69,7 +69,9 @@ use alloc::vec;
 pub(crate) fn resolve_whitespace(tokenizer: &mut Tokenizer, hard_break: bool, trim_whole: bool) {
     let mut index = 0;
 
-    while index < tokenizer.events.len() {
+    // A refused charge in `trim_data` ends the walk: the parse is refused
+    // whole, so nothing after it would be read.
+    while index < tokenizer.events.len() && tokenizer.parse_state.budget.refusal().is_none() {
         let event = &tokenizer.events[index];
 
         if event.kind == Kind::Exit && event.name == Name::Data {
@@ -85,7 +87,9 @@ pub(crate) fn resolve_whitespace(tokenizer: &mut Tokenizer, hard_break: bool, tr
         index += 1;
     }
 
-    tokenizer.map.consume(&mut tokenizer.events);
+    if tokenizer.parse_state.budget.refusal().is_none() {
+        tokenizer.map.consume(&mut tokenizer.events);
+    }
 }
 
 /// Where the white space of `bytes` bytes, and `virtual_spaces` left of a tab
@@ -128,6 +132,10 @@ fn trim_data(
         }
 
         let diff = slice.bytes.len() - index;
+        // The scan above read the trailing whitespace once.
+        if !tokenizer.parse_state.budget.spend(diff) {
+            return;
+        }
         let name = if hard_break
             && spaces_only
             && diff >= HARD_BREAK_PREFIX_SIZE_MIN
@@ -179,6 +187,11 @@ fn trim_data(
                 b' ' | b'\t' => index += 1,
                 _ => break,
             }
+        }
+
+        // The scan above read the leading whitespace once.
+        if !tokenizer.parse_state.budget.spend(index) {
+            return;
         }
 
         // The whole data is whitespace.

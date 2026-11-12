@@ -211,6 +211,9 @@ pub(crate) fn resolve(tokenizer: &mut Tokenizer) -> Option<Subresult> {
         tokenizer.parse_state.options.constructs.hard_break_trailing,
         true,
     );
+    if tokenizer.parse_state.budget.refusal().is_some() {
+        return None;
+    }
 
     if tokenizer.parse_state.options.constructs.gfm_autolink_literal {
         resolve_gfm_autolink_literal(tokenizer);

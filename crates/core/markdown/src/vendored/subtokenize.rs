@@ -22,13 +22,14 @@ use crate::vendored::parser::ParseState;
 use crate::vendored::state::{Name as StateName, State};
 use crate::vendored::tokenizer::Tokenizer;
 use crate::vendored::util::{edit_map::EditMap, skip};
-use alloc::{string::String, vec, vec::Vec};
+use alloc::{collections::BTreeSet, string::String, vec, vec::Vec};
+use core::mem::take;
 
 #[derive(Debug)]
 pub(crate) struct Subresult {
     pub(crate) done: bool,
-    pub(crate) gfm_footnote_definitions: Vec<String>,
-    pub(crate) definitions: Vec<String>,
+    pub(crate) gfm_footnote_definitions: BTreeSet<String>,
+    pub(crate) definitions: BTreeSet<String>,
 }
 
 /// Link two [`Event`][]s.
@@ -62,7 +63,11 @@ pub(crate) fn subtokenize(
 ) -> Subresult {
     let mut map = EditMap::new();
     let mut index = 0;
-    let mut value = Subresult { done: true, gfm_footnote_definitions: vec![], definitions: vec![] };
+    let mut value = Subresult {
+        done: true,
+        gfm_footnote_definitions: BTreeSet::new(),
+        definitions: BTreeSet::new(),
+    };
     let mut acc = (0, 0);
 
     while index < events.len() && parse_state.budget.spend(1) {
@@ -111,6 +116,9 @@ pub(crate) fn subtokenize(
 
                 // Loop through links to pass them in order to the subtokenizer.
                 while let Some(index) = link_index {
+                    if !parse_state.budget.spend(1) {
+                        break;
+                    }
                     let enter = &events[index];
                     let Some(link_curr) = enter.link.as_ref() else {
                         break;
@@ -132,10 +140,14 @@ pub(crate) fn subtokenize(
                 }
 
                 let mut result = tokenizer.flush(state, true);
-                value.gfm_footnote_definitions.append(&mut result.gfm_footnote_definitions);
-                value.definitions.append(&mut result.definitions);
+                value.gfm_footnote_definitions.extend(take(&mut result.gfm_footnote_definitions));
+                value.definitions.extend(take(&mut result.definitions));
                 value.done = false;
 
+                // `divide_events` visits each event of the child once.
+                if !parse_state.budget.spend(tokenizer.events.len()) {
+                    break;
+                }
                 acc = divide_events(&mut map, events, index, &mut tokenizer.events, acc);
             }
         }
