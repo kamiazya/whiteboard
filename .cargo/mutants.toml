@@ -386,4 +386,9 @@ exclude_re = [
   # event is read as a kept one. A removed event carries no link in any event
   # stream the tokenizer builds, so reading it as kept changes nothing.
   'edit_map\.rs:33:15: replace > with < in shift_links$',
+  # canvas-render scene_digest plan: with a NaN height the TypeScript allocates
+  # `new Int32Array(cols)` and throws past 2^53 - 1, the bound `>` names. At
+  # exactly 2^53 - 1 cells the buffer is 32 PiB, which no engine allocates, so the
+  # TypeScript throws there too and `>=` answers the same.
+  'free_regions\.rs:\d+:\d+: replace > with >= in plan$',
 ]
