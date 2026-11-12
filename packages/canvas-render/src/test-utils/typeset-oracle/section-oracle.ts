@@ -129,8 +129,8 @@ function rangeOf(
 }
 
 /** mulberry32: a recorded fixture's generator; the seed rides the file's first line. */
-export const SECTION_SEED = 0x5ec7_10c5
-export const SECTION_GENERATED = 300
+const SECTION_SEED = 0x5ec7_10c5
+const SECTION_GENERATED = 300
 
 function* rng(seed: number): Generator<number> {
   let a = seed

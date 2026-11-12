@@ -3,6 +3,8 @@
 
 #[path = "typeset_support/examples.rs"]
 mod examples;
+#[path = "typeset_support/laying.rs"]
+mod laying;
 
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
@@ -14,6 +16,7 @@ use whiteboard_model::mdast::{Flow, ListItem, Root, TableCell, TableRow};
 use whiteboard_scene::{Scene, SceneNode, SvgFragmentNode, TextRunNode};
 
 use examples::*;
+use laying::*;
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
@@ -34,7 +37,7 @@ fn a_rule_raw_html_and_a_definition_are_laid_out_in_flow() {
         },
         paragraph(vec![text("x")]),
     ];
-    let scene = laid(100.0, blocks).unwrap_or_default();
+    let scene = laid(100.0, blocks);
     let SceneNode::ThematicBreak(rule) = first(&scene) else { return };
     same(rule.bbox.h, 1.0);
     assert_eq!(rule.appearance.as_ref().and_then(|a| a.fill_opacity), Some(0.35));
@@ -65,7 +68,7 @@ fn math_with(renderer: Option<&Maths>, value: &str, width: f64) -> SvgFragmentNo
         ..TypesetOptions::new(&measure, width, "sans-serif", &theme, &host)
     };
     let math = Flow::Math { value: value.to_owned(), meta: None };
-    let scene = typeset_mdast_blocks(&Root { children: vec![math] }, &options).unwrap_or_default();
+    let scene = typeset_mdast_blocks(&Root { children: vec![math] }, &options);
     let SceneNode::SvgFragment(fragment) = scene.nodes[0].clone() else { return empty_fragment() };
     fragment
 }
@@ -122,7 +125,7 @@ fn a_fragment_in_a_column_that_is_not_a_number_is_as_wide_as_that_column() {
 
 fn fence(value: &str, lang: Option<&str>, width: f64) -> whiteboard_scene::CodeBlockNode {
     let flow = Flow::Code { value: value.to_owned(), lang: lang.map(str::to_owned), meta: None };
-    let scene = laid(width, vec![flow]).unwrap_or_default();
+    let scene = laid(width, vec![flow]);
     let SceneNode::CodeBlock(block) = first(&scene).clone() else {
         return whiteboard_scene::CodeBlockNode {
             bbox: whiteboard_scene::BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
@@ -185,7 +188,7 @@ fn fence_with(tokenizer: &Lines, value: &str) -> Vec<TextRunNode> {
         ..TypesetOptions::new(&measure, 400.0, "sans-serif", &theme, &host)
     };
     let flow = Flow::Code { value: value.to_owned(), lang: Some("js".to_owned()), meta: None };
-    let scene = typeset_mdast_blocks(&Root { children: vec![flow] }, &options).unwrap_or_default();
+    let scene = typeset_mdast_blocks(&Root { children: vec![flow] }, &options);
     let SceneNode::CodeBlock(block) = first(&scene).clone() else { return Vec::new() };
     block.runs.unwrap_or_default()
 }
@@ -233,7 +236,7 @@ fn a_diagram_renderer_that_answers_takes_over_the_fence() {
         meta: None,
     };
     let blocks = vec![fence(Some("dot")), fence(Some("js")), fence(Some("")), fence(None)];
-    let scene = typeset_mdast_blocks(&Root { children: blocks }, &options).unwrap_or_default();
+    let scene = typeset_mdast_blocks(&Root { children: blocks }, &options);
     assert!(matches!(scene.nodes[0], SceneNode::SvgFragment(_)));
     for node in &scene.nodes[1..] {
         assert!(matches!(node, SceneNode::CodeBlock(_)));
@@ -255,7 +258,7 @@ fn words(value: &str) -> Vec<Flow> {
 #[test]
 fn a_blockquote_indents_its_content_behind_a_rail_and_mutes_it() {
     let quote = Flow::Blockquote { children: words("hi") };
-    let scene = laid(200.0, vec![quote]).unwrap_or_default();
+    let scene = laid(200.0, vec![quote]);
     let SceneNode::Blockquote(q) = first(&scene) else { return };
     same(q.bbox.w, 200.0);
     assert!((q.bbox.h - LINE).abs() < 1e-9);
@@ -273,7 +276,7 @@ fn a_blockquote_indents_its_content_behind_a_rail_and_mutes_it() {
 fn a_list_item_stores_its_marker_left_of_its_content_and_its_box_by_depth() {
     let nested = bullets(false, 1.0, vec![item(None, words("inner"))]);
     let outer = item(None, vec![paragraph(vec![text("outer")]), nested]);
-    let scene = laid(300.0, vec![bullets(false, 1.0, vec![outer])]).unwrap_or_default();
+    let scene = laid(300.0, vec![bullets(false, 1.0, vec![outer])]);
     let SceneNode::List(list) = first(&scene) else { return };
     same(list.depth, 0.0);
     let top = &list.items[0];
@@ -291,7 +294,7 @@ fn a_list_item_stores_its_marker_left_of_its_content_and_its_box_by_depth() {
 #[test]
 fn an_ordinal_counts_from_the_start_and_aligns_right_against_the_content() {
     let items = vec![item(None, words("a")), item(None, words("b"))];
-    let scene = laid(300.0, vec![bullets(true, 9.0, items)]).unwrap_or_default();
+    let scene = laid(300.0, vec![bullets(true, 9.0, items)]);
     let SceneNode::List(list) = first(&scene) else { return };
     assert_eq!(list.items[0].ordinal, Some(9.0));
     assert_eq!(list.items[1].ordinal, Some(10.0));
@@ -308,7 +311,7 @@ fn an_ordinal_counts_from_the_start_and_aligns_right_against_the_content() {
 #[test]
 fn a_task_item_draws_a_box_and_a_tick_instead_of_a_bullet() {
     let items = vec![item(Some(true), words("done")), item(Some(false), words("todo"))];
-    let scene = laid(300.0, vec![bullets(false, 1.0, items)]).unwrap_or_default();
+    let scene = laid(300.0, vec![bullets(false, 1.0, items)]);
     let SceneNode::List(list) = first(&scene) else { return };
     let done = &list.items[0];
     assert_eq!(done.checked, Some(true));
@@ -327,8 +330,7 @@ fn row(cells: &[&str]) -> TableRow {
 }
 
 fn table_of(width: f64, rows: Vec<TableRow>) -> whiteboard_scene::TableBlockNode {
-    let scene =
-        laid(width, vec![Flow::Table { align: Vec::new(), children: rows }]).unwrap_or_default();
+    let scene = laid(width, vec![Flow::Table { align: Vec::new(), children: rows }]);
     let SceneNode::Table(table) = first(&scene).clone() else {
         return whiteboard_scene::TableBlockNode {
             bbox: whiteboard_scene::BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
@@ -426,7 +428,7 @@ fn a_table_column_is_sized_for_its_text_in_bold() {
     let host = Host::default();
     let options = TypesetOptions::new(&BoldCostsMore, 10_000.0, "sans-serif", &theme, &host);
     let table = Flow::Table { align: Vec::new(), children: vec![row(&["abc"])] };
-    let scene = typeset_mdast_blocks(&Root { children: vec![table] }, &options).unwrap_or_default();
+    let scene = typeset_mdast_blocks(&Root { children: vec![table] }, &options);
     let SceneNode::Table(table) = first(&scene) else { return };
     same(table.rows[0].cells[0].bbox.w, 2.0 * 30.0 + 26.0);
 }
@@ -440,8 +442,7 @@ fn a_ticks_stroke_is_one_and_a_half_borders_wide_and_never_thinner_than_one_and_
         let measure = FakeMeasure::default();
         let options = TypesetOptions::new(&measure, 300.0, "sans-serif", &theme, &host);
         let list = bullets(false, 1.0, checked());
-        let scene =
-            typeset_mdast_blocks(&Root { children: vec![list] }, &options).unwrap_or_default();
+        let scene = typeset_mdast_blocks(&Root { children: vec![list] }, &options);
         let SceneNode::List(list) = first(&scene) else { return };
         let SceneNode::Edge(tick) = &list.items[0].children[1] else { return };
         same(tick.appearance.as_ref().and_then(|a| a.stroke_width).unwrap_or(0.0), want);

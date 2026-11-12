@@ -114,3 +114,111 @@ impl SyntaxFills {
         fill.as_deref()
     }
 }
+
+/// What a fragment keeps of a canvas target: how many elements it holds (the
+/// nested-layout budget is charged by that), and whether it holds none.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CanvasSummary {
+    pub elements: usize,
+    pub empty: bool,
+}
+
+/// What an embed target resolves to: a markdown document's parsed body, or a
+/// canvas, which the host summarises because laying one out is the composer's.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Embedded {
+    Document {
+        title: Option<String>,
+        root: whiteboard_model::mdast::Root,
+    },
+    /// `canvas` is `None` when the fragment names nothing in the canvas.
+    Canvas {
+        title: Option<String>,
+        canvas: Option<CanvasSummary>,
+    },
+}
+
+impl Embedded {
+    #[must_use]
+    pub fn title(&self) -> Option<&str> {
+        match self {
+            Self::Document { title, .. } | Self::Canvas { title, .. } => title.as_deref(),
+        }
+    }
+}
+
+/// Resolves an embed target (`resolveEmbed`). Its presence is what makes a
+/// paragraph that is only an embed a block; `None` is a target not loaded.
+pub trait EmbedResolver {
+    fn resolve_embed(&self, document_id: &str, fragment: Option<&str>) -> Option<Embedded>;
+}
+
+/// The box a canvas picture may occupy, in the body's own coordinates.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EmbedBox {
+    pub x: f64,
+    pub y: f64,
+    pub max_width: f64,
+    pub max_height: f64,
+}
+
+/// A canvas picture already placed in its box; `w` and `h` are the extent used.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Miniature {
+    pub nodes: Vec<whiteboard_scene::SceneNode>,
+    pub w: f64,
+    pub h: f64,
+}
+
+/// Draws a canvas target into its box (`layoutEmbeddedCanvas`). Absent, a canvas
+/// embed is unresolvable; answering `None` keeps the framed title alone.
+/// `path` is the recursion path INCLUDING the canvas being drawn.
+pub trait CanvasMiniature {
+    fn miniature(
+        &self,
+        document_id: &str,
+        fragment: Option<&str>,
+        space: &EmbedBox,
+        path: &[String],
+    ) -> Option<Miniature>;
+}
+
+/// The nested-layout account an embed spends from, shared by every embed of one
+/// render: a count of layouts and a count of canvas elements.
+#[derive(Debug)]
+pub struct NestedLayoutBudget {
+    layouts: std::cell::Cell<usize>,
+    elements: std::cell::Cell<usize>,
+}
+
+impl NestedLayoutBudget {
+    /// Layouts one render may nest.
+    pub const LAYOUTS: usize = 128;
+    /// Canvas elements one render may nest: a full canvas's nodes, and its
+    /// edges and lines.
+    pub const ELEMENTS: usize = 4000;
+
+    #[must_use]
+    pub fn new() -> Self {
+        Self {
+            layouts: std::cell::Cell::new(Self::LAYOUTS),
+            elements: std::cell::Cell::new(Self::ELEMENTS),
+        }
+    }
+
+    /// Spends one layout and `elements`; false, spending nothing, once either is out.
+    pub(super) fn spend(&self, elements: usize) -> bool {
+        if self.layouts.get() == 0 || elements > self.elements.get() {
+            return false;
+        }
+        self.layouts.set(self.layouts.get().saturating_sub(1));
+        self.elements.set(self.elements.get().saturating_sub(elements));
+        true
+    }
+}
+
+impl Default for NestedLayoutBudget {
+    fn default() -> Self {
+        Self::new()
+    }
+}

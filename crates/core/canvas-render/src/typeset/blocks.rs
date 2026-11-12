@@ -8,18 +8,13 @@ use whiteboard_scene::{
 };
 
 use super::code::layout_code;
+use super::embed::layout_embed;
 use super::furniture::{layout_definition, layout_html, layout_math, layout_rule};
 use super::list::{layout_list, layout_quote};
 use super::options::{Cursor, Style, TypesetOptions, body_line_height_px, finite_positive};
 use super::phrasing::{count_f64, layout_phrasing};
+use super::seams::NestedLayoutBudget;
 use super::table::layout_table;
-
-/// A block kind the typesetter does not carry yet. The set shrinks with each
-/// slice of the port, and the error goes with the last of it: a partial
-/// typesetter that dropped what it could not draw would make every later
-/// recording disagree for a reason nobody named.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Unsupported(pub &'static str);
 
 const IMAGE_PLACEHOLDER: &str = "\u{2002}";
 
@@ -31,18 +26,16 @@ fn block_width(max_width: f64, ink_width: f64) -> f64 {
     if max_width.is_finite() && ink_width > max_width { ink_width } else { max_width }
 }
 
-/// The single mdast to scene path, as far as it is ported.
-///
-/// # Errors
-///
-/// [`Unsupported`] names the first block kind not yet carried.
-pub fn typeset_mdast_blocks(root: &Root, opts: &TypesetOptions<'_>) -> Result<Scene, Unsupported> {
+/// The single mdast to scene path: the same function feeds a preview, a spatial
+/// text node and an export. Total: it never fails, whatever the tree, the
+/// width or the host's answers.
+#[must_use]
+pub fn typeset_mdast_blocks(root: &Root, opts: &TypesetOptions<'_>) -> Scene {
+    let fresh = NestedLayoutBudget::new();
+    let opts = TypesetOptions { budget: Some(opts.budget.unwrap_or(&fresh)), ..*opts };
     let mut cursor = Cursor { x: 0.0, y: 0.0 };
-    let mut nodes = Vec::with_capacity(root.children.len());
-    for block in &root.children {
-        nodes.push(layout_block(block, &mut cursor, opts, 0)?);
-    }
-    Ok(Scene { nodes, legend: None })
+    let nodes = root.children.iter().map(|b| layout_block(b, &mut cursor, &opts, 0, &[])).collect();
+    Scene { nodes, legend: None }
 }
 
 pub(super) fn layout_block(
@@ -50,22 +43,26 @@ pub(super) fn layout_block(
     cursor: &mut Cursor,
     opts: &TypesetOptions<'_>,
     depth: usize,
-) -> Result<SceneNode, Unsupported> {
+    path: &[String],
+) -> SceneNode {
     match block {
-        Flow::Heading { depth, children } => Ok(layout_heading(*depth, children, cursor, opts)),
+        Flow::Heading { depth, children } => layout_heading(*depth, children, cursor, opts),
         Flow::Paragraph { children } => {
-            // A paragraph that IS an embed lays the target's body out as a block.
-            if matches!(children.as_slice(), [Phrasing::Embed { .. }]) {
-                return Err(Unsupported("embed"));
+            // A paragraph that IS an embed lays the target's body out as a block, where
+            // the host resolves embeds at all.
+            match children.as_slice() {
+                [Phrasing::Embed { document_id, fragment }] if opts.embeds.is_some() => {
+                    layout_embed(document_id, fragment.as_deref(), cursor, opts, path)
+                }
+                _ => layout_paragraph(children, cursor, opts),
             }
-            Ok(layout_paragraph(children, cursor, opts))
         }
-        Flow::Code { value, lang, .. } => Ok(layout_code(value, lang.as_deref(), cursor, opts)),
-        Flow::Html { value } => Ok(layout_html(value, cursor, opts)),
-        Flow::ThematicBreak => Ok(layout_rule(cursor, opts)),
-        Flow::Definition { identifier, .. } => Ok(layout_definition(identifier, cursor)),
-        Flow::Math { value, .. } => Ok(layout_math(value, cursor, opts)),
-        Flow::Blockquote { children } => layout_quote(children, cursor, opts, depth),
+        Flow::Code { value, lang, .. } => layout_code(value, lang.as_deref(), cursor, opts),
+        Flow::Html { value } => layout_html(value, cursor, opts),
+        Flow::ThematicBreak => layout_rule(cursor, opts),
+        Flow::Definition { identifier, .. } => layout_definition(identifier, cursor),
+        Flow::Math { value, .. } => layout_math(value, cursor, opts),
+        Flow::Blockquote { children } => layout_quote(children, cursor, opts, depth, path),
         Flow::List { ordered, start, children, .. } => layout_list(
             ordered.unwrap_or(false),
             start.unwrap_or(1.0),
@@ -73,8 +70,9 @@ pub(super) fn layout_block(
             cursor,
             opts,
             depth,
+            path,
         ),
-        Flow::Table { children, .. } => Ok(layout_table(children, cursor, opts)),
+        Flow::Table { children, .. } => layout_table(children, cursor, opts),
     }
 }
 

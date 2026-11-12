@@ -8,7 +8,10 @@ import { iconShortcodeRanges } from '@kamiazya/whiteboard-plugin-visual/icons/sh
 import { highlightCode } from '../../highlight/lowlight.js'
 import { createTokenizerBudget } from '../../highlight/tokenizer-budget.js'
 import { typesetMdastBlocks } from '../../layout/nodes/mdast-blocks.js'
-import type { MdastLayoutOptions } from '../../layout/nodes/mdast-layout-options.js'
+import type {
+  EmbeddedCanvasBox,
+  MdastLayoutOptions,
+} from '../../layout/nodes/mdast-layout-options.js'
 import type { FontDescriptor, TextMetrics } from '../../measure.js'
 import type { ReferenceSeams } from '../../references/seams.js'
 import {
@@ -19,6 +22,17 @@ import {
 } from '../../theme/markdown-theme.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { dumpScene, f64Hex } from '../render-oracle/scene-dump.js'
+import {
+  type CanvasSummary,
+  type EmbeddedWire,
+  embedClosure,
+  embeddedDocumentOf,
+  embeddedWireOf,
+  fragmentKey,
+  type MiniatureMode,
+  miniatureModeOf,
+  summaryOf,
+} from './embed-fixtures.js'
 
 /**
  * The recorded answers of `typesetMdastBlocks` for the blocks the Rust
@@ -33,7 +47,7 @@ import { dumpScene, f64Hex } from '../render-oracle/scene-dump.js'
 export type ThemeName = 'node' | 'document' | 'compact'
 
 /** What the host answered for the questions this input can ask. */
-export interface SeamTables {
+interface SeamTables {
   /** An icon range is in UTF-16 units, as the host's answer is. */
   readonly icons: Readonly<Record<string, readonly { from: number; to: number; name: string }[]>>
   readonly emoji: Readonly<Record<string, string>>
@@ -49,11 +63,20 @@ export interface SeamTables {
   readonly math: Readonly<Record<string, RenderedWire | null>>
   /** The diagram renderer's answer per `lang NUL source`. */
   readonly diagram: Readonly<Record<string, RenderedWire | null>>
+  /** What resolving each embed target answers; empty where the seam is absent. */
+  readonly embedded: Readonly<Record<string, EmbeddedWire | null>>
+  /** What a fragment keeps of a canvas target, per `id NUL fragment`. */
+  readonly canvases: Readonly<Record<string, CanvasSummary>>
+  /** How the host draws each canvas target's miniature. */
+  readonly miniatures: Readonly<Record<string, MiniatureMode>>
 }
 
-export type TokenLinesWire = readonly (readonly { text: string; role?: string }[])[]
+/** Which embed seams the host supplies: none, the documents', or those and the canvas picture. */
+export type EmbedSeams = 'none' | 'documents' | 'full'
+
+type TokenLinesWire = readonly (readonly { text: string; role?: string }[])[]
 /** `s` is the string form a renderer may answer; the other is the object form. */
-export type RenderedWire = { s: string } | { svg: string; width?: number; height?: number }
+type RenderedWire = { s: string } | { svg: string; width?: number; height?: number }
 
 export interface TypesetInput {
   readonly id: string
@@ -62,6 +85,7 @@ export interface TypesetInput {
   readonly width: string
   readonly theme: ThemeName
   readonly fill: string | null
+  readonly embeds: EmbedSeams
   /** The fill of each token role, when the caller supplies a palette. */
   readonly syntax: Readonly<Record<string, string>> | null
   /** Hold the answer as a digest rather than as text. */
@@ -86,11 +110,12 @@ const THEMES: Record<ThemeName, MarkdownTheme> = {
 }
 
 const view = new DataView(new ArrayBuffer(8))
-export function fromHex(hex: string): number {
+function fromHex(hex: string): number {
   view.setUint32(0, Number.parseInt(hex.slice(0, 8), 16))
   view.setUint32(4, Number.parseInt(hex.slice(8), 16))
   return view.getFloat64(0)
 }
+
 export { f64Hex }
 
 const hashOf = (text: string): number => {
@@ -104,8 +129,6 @@ const hashOf = (text: string): number => {
 /** What a host answers for an id or a url: a pure function of it, so a record can hold the table. */
 const titleOf = (id: string): string | null =>
   hashOf(id) % 3 === 0 ? null : `Title ${id.slice(0, 6)}`
-const embedNameOf = (id: string): string | null =>
-  hashOf(`e${id}`) % 3 === 0 ? null : `Doc ${id.slice(0, 6)}`
 const pendingOf = (id: string): boolean => hashOf(`p${id}`) % 4 === 0
 const imageOf = (url: string): SeamTables['images'][string] => {
   const h = hashOf(`i${url}`) % 4
@@ -126,7 +149,7 @@ function walkInline(nodes: readonly Inline[], visit: (node: Inline) => void): vo
 }
 
 /** Every flow block of a tree, containers' content included, in document order. */
-export function flowsOf(blocks: readonly MdastFlowContent[]): MdastFlowContent[] {
+function flowsOf(blocks: readonly MdastFlowContent[]): MdastFlowContent[] {
   return blocks.flatMap((block): MdastFlowContent[] => {
     if (block.type === 'blockquote') return [block, ...flowsOf(block.children)]
     if (block.type === 'list') {
@@ -213,7 +236,7 @@ function blockSeams(root: MdastRoot): Pick<SeamTables, 'highlight' | 'math' | 'd
 }
 
 /** Every question the layout can put to its host about this tree, answered. */
-export function seamsFor(root: MdastRoot): SeamTables {
+function seamsOfTree(root: MdastRoot, mode: EmbedSeams): SeamTables {
   const icons: Record<string, { from: number; to: number; name: string }[]> = {}
   const emoji: Record<string, string> = {}
   const titles: Record<string, string | null> = {}
@@ -222,7 +245,7 @@ export function seamsFor(root: MdastRoot): SeamTables {
   const images: Record<string, SeamTables['images'][string]> = {}
   const ask = (id: string) => {
     titles[id] = titleOf(id)
-    embeds[id] = embedNameOf(id)
+    embeds[id] = mode === 'none' ? null : (embeddedWireOf(id)?.title ?? null)
     if (pendingOf(id)) pending.push(id)
   }
   walkInline(inlinesOf(root), (node) => {
@@ -254,32 +277,62 @@ export function seamsFor(root: MdastRoot): SeamTables {
     pending: [...new Set(pending)],
     images,
     ...blockSeams(root),
+    embedded: {},
+    canvases: {},
+    miniatures: {},
   }
 }
 
-/** A paragraph that is only an embed is a block embed, which a later slice carries. */
-export const isBlockEmbed = (block: MdastFlowContent): boolean =>
-  flowsOf([block]).some(
-    (b) => b.type === 'paragraph' && b.children.length === 1 && b.children[0]?.type === 'embed',
-  )
-
-function referencesFor(seams: SeamTables): ReferenceSeams {
-  const pending = new Set(seams.pending)
+/** Every question the layout can put to its host about this tree and the documents it embeds. */
+function seamsFor(root: MdastRoot, mode: EmbedSeams): SeamTables {
+  const { pairs, roots } = embedClosure(root)
+  const parts = [root, ...roots].map((tree) => seamsOfTree(tree, mode))
+  const merge = <T>(pick: (part: SeamTables) => Readonly<Record<string, T>>) =>
+    Object.assign({}, ...parts.map(pick)) as Record<string, T>
+  const embedded: Record<string, EmbeddedWire | null> = {}
+  const canvases: Record<string, CanvasSummary> = {}
+  const miniatures: Record<string, MiniatureMode> = {}
+  if (mode !== 'none') {
+    for (const [id, fragment] of pairs.values()) {
+      const wire = embeddedWireOf(id)
+      embedded[id] = wire
+      if (wire?.kind !== 'canvas') continue
+      canvases[fragmentKey(id, fragment)] = summaryOf(id, fragment)
+      if (mode === 'full') miniatures[id] = miniatureModeOf(id)
+    }
+  }
   return {
+    icons: merge((p) => p.icons),
+    emoji: merge((p) => p.emoji),
+    titles: merge((p) => p.titles),
+    embeds: merge((p) => p.embeds),
+    pending: [...new Set(parts.flatMap((p) => p.pending))],
+    images: merge((p) => p.images),
+    highlight: merge((p) => p.highlight),
+    math: merge((p) => p.math),
+    diagram: merge((p) => p.diagram),
+    embedded,
+    canvases,
+    miniatures,
+  }
+}
+
+function referencesFor(seams: SeamTables, mode: EmbedSeams): ReferenceSeams {
+  const pending = new Set(seams.pending)
+  const references: ReferenceSeams = {
     resolveAlias: () => null,
     resolveTitle: (id) => seams.titles[id] ?? undefined,
-    resolveEmbed: (id) => {
-      const title = seams.embeds[id]
-      return title === null || title === undefined
-        ? undefined
-        : { title, root: { type: 'root', children: [] } }
-    },
+    resolveEmbed: (id) => embeddedDocumentOf(id),
     isLoading: (id) => pending.has(id),
     resolveReference: (url) => {
       const image = seams.images[url]
       return image === null || image === undefined ? undefined : { image }
     },
   }
+  // A host without the embed seam leaves it undefined, which `withReferenceSeams` reads as absent.
+  return mode === 'none'
+    ? ({ ...references, resolveEmbed: undefined } as unknown as ReferenceSeams)
+    : references
 }
 
 const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/
@@ -293,11 +346,22 @@ class Fnv {
   }
 }
 
-export function typesetAnswer(input: TypesetInput): TypesetRecord {
-  const seams = seamsFor(input.root)
-  if (input.root.children.some(isBlockEmbed)) {
-    throw new Error(`typeset-oracle: ${input.id} holds a block embed`)
+/** How the host draws a canvas target: its picture is a box of the shape its mode says. */
+function miniatureFor(_canvas: unknown, box: EmbeddedCanvasBox) {
+  const mode = miniatureModeOf(box.embedPath.at(-1) ?? '')
+  if (mode === 'none') return undefined
+  if (mode === 'throws') throw new Error('miniature failed')
+  const w = mode === 'tall' ? box.maxWidth : Math.min(box.maxWidth, 120)
+  const h = mode === 'tall' ? box.maxHeight : Math.min(box.maxHeight, 80)
+  return {
+    nodes: [{ kind: 'shape' as const, bbox: { x: box.x, y: box.y, w, h }, radius: 3 }],
+    w,
+    h,
   }
+}
+
+export function typesetAnswer(input: TypesetInput): TypesetRecord {
+  const seams = seamsFor(input.root, input.embeds)
   const base = createFakeMeasure()
   let calls = 0
   const measure = (text: string, font: FontDescriptor): TextMetrics => {
@@ -310,7 +374,8 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord {
     fontFamily: 'sans-serif',
     theme: THEMES[input.theme],
     ...(input.fill === null ? {} : { textFill: input.fill }),
-    references: referencesFor(seams),
+    references: referencesFor(seams, input.embeds),
+    ...(input.embeds === 'full' ? { layoutEmbeddedCanvas: miniatureFor } : {}),
     highlightCode: (lang, value) => highlightFor(lang, value),
     renderMath: (value) => mathFor(value),
     renderDiagram: (lang, value) => diagramFor(lang, value),

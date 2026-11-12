@@ -38,6 +38,7 @@ const asInput = ({
   width,
   theme,
   fill,
+  embeds,
   syntax,
   digest,
 }: TypesetRecord): TypesetInput => ({
@@ -46,6 +47,7 @@ const asInput = ({
   width,
   theme,
   fill,
+  embeds,
   syntax,
   digest,
 })
@@ -63,6 +65,7 @@ describe('the recorded typeset oracle', () => {
     expect(under('blocks/'), 'childless blocks').toBeGreaterThan(300)
     expect(under('containers/'), 'quotes, lists and tables').toBeGreaterThan(150)
     expect(under('doc/'), 'whole documents').toBeGreaterThan(300)
+    expect(under('embeds/'), 'embeds').toBeGreaterThan(300)
     expect(under('gen/'), 'generated trees').toBe(meta.generated)
     expect(under('md/'), 'parsed corpus blocks').toBeGreaterThan(1000)
     expect(new Set(records.map((r) => r.theme)).size, 'themes').toBe(3)
@@ -87,6 +90,8 @@ describe('the recorded typeset oracle', () => {
       'tableCell',
       'edge',
       'shape',
+      'embedResolved',
+      'embedPlaceholder',
     ])
       expect(held.includes(`"kind":"${kind}"`), `a scene holding a ${kind}`).toBe(true)
     for (const key of [
