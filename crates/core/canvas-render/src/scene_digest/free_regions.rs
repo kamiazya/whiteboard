@@ -61,6 +61,9 @@ fn extent(entries: &[Entry], pick: impl Fn(&BoundingBox) -> f64, fold: fn(f64, f
     all.next().map_or(f64::NAN, |first| all.fold(first, fold))
 }
 
+/// `Number.MAX_SAFE_INTEGER`: ECMAScript's `ToIndex` throws `RangeError` past it.
+const MAX_TYPED_ARRAY_LENGTH: f64 = 9_007_199_254_740_991.0;
+
 fn plan(entries: &[Entry]) -> Result<Plan, DigestError> {
     let min_x = extent(entries, |b| b.x, js_min);
     let min_y = extent(entries, |b| b.y, js_min);
@@ -68,10 +71,14 @@ fn plan(entries: &[Entry]) -> Result<Plan, DigestError> {
     let max_y = extent(entries, |b| b.y + b.h, js_max);
     let cols = js_max(1.0, ((max_x - min_x) / GRID_PX).ceil());
     let rows = js_max(1.0, ((max_y - min_y) / GRID_PX).ceil());
-    // A NaN height never runs the TypeScript's row loop; a NaN width with a
-    // height throws allocating the first row; an infinite size is over budget.
+    // A NaN height never runs the TypeScript's row loop, but the column buffer
+    // is allocated before it: `new Int32Array(cols)` throws for a length past
+    // 2^53 - 1 (an infinite width), and a NaN length allocates nothing. A NaN
+    // width with a height throws allocating the first row; an infinite size is
+    // over budget. A finite width that large is refused by memory alone, which
+    // no recording can hold, so it is answered as the loop that never runs.
     if rows.is_nan() {
-        Ok(Plan::NoRows)
+        if cols > MAX_TYPED_ARRAY_LENGTH { Err(DigestError::InvalidGrid) } else { Ok(Plan::NoRows) }
     } else if cols.is_nan() {
         Err(DigestError::InvalidGrid)
     } else {

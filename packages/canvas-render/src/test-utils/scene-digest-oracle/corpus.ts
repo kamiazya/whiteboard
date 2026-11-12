@@ -234,6 +234,18 @@ const named: readonly Case[] = [
   { id: 'a NaN coordinate cannot be allocated', spec: boxes(['nan', 0, 10, 10], [0, 0, 10, 10]) },
   { id: 'a NaN in both axes', spec: boxes(['nan', 'nan', 10, 10], [0, 0, 10, 10]) },
   {
+    id: 'an infinite width over a NaN height cannot be allocated',
+    spec: boxes([0, 0, 'inf', 'nan']),
+  },
+  {
+    id: 'boxes of infinite height that only touch do not overlap',
+    spec: [shape('a', 0, 0, 10, 'inf'), shape('b', 10, 0, 10, 'inf')],
+  },
+  {
+    id: 'boxes of infinite width that only touch do not overlap',
+    spec: [shape('a', 0, 0, 'inf', 10), shape('b', 0, 10, 'inf', 10)],
+  },
+  {
     id: 'a NaN box among shapes',
     spec: [shape('a', 0, 0, 10, 10), shape('b', 'nan', 'nan', 'nan', 'nan')],
   },

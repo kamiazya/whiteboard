@@ -13,6 +13,7 @@ import {
   realScenes,
   recording,
 } from '../test-utils/scene-digest-oracle/oracle.js'
+import { CASES } from '../test-utils/scene-digest-oracle/corpus.js'
 import { sceneOfSpec } from '../test-utils/scene-digest-oracle/spec.js'
 
 /**
@@ -106,6 +107,11 @@ describe('the recorded scene digest oracle', () => {
   })
 
   it('equals what the TypeScript answers for each case today', () => {
+    // A case added to the corpus without re-recording would otherwise be replayed
+    // by neither side: both read the recording, not the corpus.
+    expect(cases.map(({ id, spec }) => ({ id, spec }))).toEqual(
+      CASES.map(({ id, spec }) => ({ id, spec })),
+    )
     const stale = cases.find(
       (r) => JSON.stringify(answerOf(sceneOfSpec(r.spec))) !== JSON.stringify(answerPart(r)),
     )

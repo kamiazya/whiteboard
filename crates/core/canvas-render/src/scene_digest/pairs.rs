@@ -113,16 +113,23 @@ pub(super) fn containment(entries: &[Entry]) -> Vec<super::Containment> {
 /// Every id reachable from entry `seed` by a gap within the threshold, or by
 /// sharing an id (the TypeScript's union-find keys on the id). Marks what it
 /// reaches in `visited`.
-fn component(entries: &[Entry], visited: &mut [bool], seed: usize) -> Vec<String> {
+fn component(
+    entries: &[Entry],
+    visited: &mut [bool],
+    seed: usize,
+    pops: &mut std::ops::Range<usize>,
+) -> Vec<String> {
     let mut ids = Vec::new();
     let mut stack = vec![seed];
     if let Some(flag) = visited.get_mut(seed) {
         *flag = true;
     }
-    // Each entry is pushed once, so `entries.len()` pops drain the stack; the
-    // bound keeps a defect in the visited test from growing it without end.
-    for _ in 0..entries.len() {
-        let Some(current) = stack.pop().and_then(|index| entries.get(index)) else { break };
+    // Each entry is pushed once over the whole walk, so the board's pops are
+    // `entries.len()` across every component; drawing them from one shared
+    // budget keeps a defect in the visited test quadratic (wrong clusters,
+    // quickly) rather than cubic.
+    while let Some(index) = stack.pop() {
+        let (Some(_), Some(current)) = (pops.next(), entries.get(index)) else { break };
         ids.push(current.id.clone());
         for (index, (flag, other)) in visited.iter_mut().zip(entries).enumerate() {
             let near = gap_between(&current.bbox, &other.bbox) <= PROXIMITY_THRESHOLD_PX;
@@ -142,12 +149,13 @@ pub(super) fn clusters(entries: &[Entry]) -> Vec<Vec<String>> {
         return Vec::new();
     }
     let mut seen = vec![false; entries.len()];
+    let mut pops = 0..entries.len();
     let mut groups: Vec<Vec<String>> = Vec::new();
     for seed in 0..entries.len() {
         if seen.get(seed).copied().unwrap_or(true) {
             continue;
         }
-        let mut ids = component(entries, &mut seen, seed);
+        let mut ids = component(entries, &mut seen, seed, &mut pops);
         ids.sort_by(|a, b| code_unit_order(a, b));
         groups.push(ids);
     }
