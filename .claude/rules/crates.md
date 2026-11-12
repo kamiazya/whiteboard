@@ -42,7 +42,7 @@ is a workspace member whose manifest name equals its key.
 | `whiteboard-codec` | core | present | OKF Markdown, JSON Canvas and OCIF serialize and parse; today the frontmatter reader and writer, the OKF envelope and JSON Canvas, across the wasm boundary as `okf_parse` / `okf_serialize` and `json_canvas_parse` / `json_canvas_serialize` |
 | `whiteboard-search` | core | planned | tokenizer, BM25 ranking, snippets, searchable text |
 | `whiteboard-plugin-visual` | core | present | the visual facets' payload types, generated from `contracts/facets/visual`, the matchers of their patterns, the colour check and the one-grapheme check (`unicode-segmentation`); the bundled plugin loaded from its files into a registry (`host.rs`, over the asset JSON the TypeScript package also reads); the plugin's other contributions follow |
-| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; composer, typesetter, digest follow |
+| `whiteboard-canvas-render` | core | present | the SVG backend (`svg`: `render_scene_to_svg`, `render_scene_to_keyed_svg`) and what it reads (arrowheads, bounds, sketch ink, outlines), held to the recorded `svg.jsonl`; line breaking (`linebreak`: `segment_ends`, the strict pair walk over a generated table), held to the recorded `linebreak.jsonl`; the text primitives (`uax_segments`, `longest_fit`, `truncate`'s `fit_to_width`, `inline_junction`), held to `text-primitives.jsonl`; the theme layer (`theme`: palettes, the spatial theme's resolvers, the themed appearance of a token bundle, the markdown chrome), held to `theme.jsonl`; composer, typesetter, digest follow |
 | `whiteboard-crdt` | core | planned | the loro bridge, workspace tree, file references, text limits |
 | `whiteboard-history` | core | planned | checkpoint scheduling, version retention, frontier encoding |
 | `whiteboard-workspace-index` | core | planned | the document index over a workspace tree |
@@ -202,6 +202,24 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/tests/theme_oracle.rs` replays it; `WHITEBOARD_RECORD_ORACLE=1`
   re-records. Not ported: the layout's read of a canvas's `visual.theme/v0` facet (it waits for
   the composer). The TypeScript's module-level memo is a `ThemedAppearanceCache` per call site.
+- **The BudouX phrase breaker is held to a recording and a generated model**:
+  `crates/core/canvas-render/src/budoux/model.rs` is written by
+  `packages/canvas-render/scripts/gen-budoux-model.mjs <out.rs>` from the
+  vendored `ja-model.ts` (`--check` is `tools/arch-lint`'s byte-equality test),
+  and `packages/canvas-render/src/oracle/budoux.jsonl` records what the vendored
+  parser cut (hand-written corpora, one string aimed at each of the 1,678
+  entries, per-prefix and seeded-stream digests); `crates/core/canvas-render/tests/budoux_oracle.rs`
+  replays it natively and on wasm32. The model does not know surrogate pairs and
+  may cut between their halves, as the TypeScript does.
+- **The text primitives are held to one recording**:
+  `src/oracle/text-primitives.jsonl` holds `uaxSegments`, `longestFittingCount` (with
+  its probe sequence), `fitToWidth` (kept text, flags, widths as hex doubles and the
+  length of every text it measured, through the fake measurer) and the inline
+  junction (seeded operation sequences with each answer and the final position of
+  every run), plus digests for the large corpora and for `Intl.Segmenter` against
+  `unicode-segmentation`; `crates/core/canvas-render/tests/text_primitives_oracle.rs` replays it and
+  `WHITEBOARD_RECORD_ORACLE=1` re-records it. A `&str` holds no lone surrogate, so
+  those answers are recorded for `uaxSegments` only.
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).

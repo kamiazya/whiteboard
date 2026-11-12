@@ -290,4 +290,14 @@ exclude_re = [
   # canvas-render halo_underlay: the pill's pad is the constant 2, and
   # `2 * pad` and `2 + pad` are both 4.
   'runs\.rs:\d+:\d+: replace \* with \+ in halo_underlay$',
+  # canvas-render truncate: `may_cluster` only chooses how a text is walked.
+  # Answering true for text that holds no cluster sends it down the grapheme
+  # segmenter, which cuts it at the same code points (714,056 strings below
+  # U+0300 agree, measured in the TypeScript this ports), so the answer is the
+  # same and only the cost differs.
+  'truncate\.rs:\d+:\d+: replace may_cluster -> bool with true$',
+  # canvas-render truncate: `c != '\r'` is true of every character but CR, and
+  # a text of CRs alone holds no cluster, so it is the same eager-only change
+  # as above.
+  'truncate\.rs:\d+:\d+: replace == with != in may_cluster$',
 ]

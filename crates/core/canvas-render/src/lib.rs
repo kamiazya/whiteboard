@@ -19,14 +19,17 @@
 // line of production code.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+pub mod budoux;
 pub mod edge_arrows;
 pub mod edge_flatten;
 pub mod fake_measure;
 pub mod finite_box;
 pub mod glow;
 pub mod ink;
+pub mod inline_junction;
 pub mod legend_geometry;
 pub mod linebreak;
+pub mod longest_fit;
 pub mod measure;
 pub mod measure_memo;
 pub mod node_outline;
@@ -35,4 +38,6 @@ pub mod scene_entries;
 pub mod scene_walk;
 pub mod svg;
 pub mod theme;
+pub mod truncate;
+pub mod uax_segments;
 pub mod xml_escape;

@@ -539,6 +539,7 @@ version = "0.0.0"
 dependencies = [
  "serde",
  "serde_json",
+ "unicode-segmentation",
  "wasm-bindgen-test",
  "whiteboard-det",
  "whiteboard-edge-routing",
