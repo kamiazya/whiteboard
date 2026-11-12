@@ -99,3 +99,37 @@ export function cargoShard(leg) {
     return new Error(`RUST_MUTANTS_SHARD must be k/n with 1 <= k <= n, got ${leg}`)
   return `${k - 1}/${n}`
 }
+
+/**
+ * The globs of `.cargo/mutants-pr-exclude.txt`: one a line, `#` comments and
+ * blank lines ignored.
+ * @param {string} text
+ * @returns {string[]}
+ */
+export function prExcludeGlobs(text) {
+  return text
+    .split('\n')
+    .map((l) => l.trim())
+    .filter((l) => l !== '' && !l.startsWith('#'))
+}
+
+/**
+ * What is wrong with the in-diff exclusions: a glob that is not a plain
+ * repository path (a wildcard would hide files nobody listed), one repeated,
+ * or one that names no file, which would outlive the code it excused.
+ * @param {string[]} globs
+ * @param {(path: string) => boolean} exists
+ * @returns {string[]}
+ */
+export function prExcludeProblems(globs, exists) {
+  /** @type {string[]} */
+  const problems = []
+  const seen = new Set()
+  for (const g of globs) {
+    if (!/^crates\/[\w./-]+\.rs$/.test(g)) problems.push(`${g}: not a path to one Rust source file`)
+    else if (!exists(g)) problems.push(`${g}: names no file, so it is stale`)
+    if (seen.has(g)) problems.push(`${g}: listed twice`)
+    seen.add(g)
+  }
+  return problems
+}

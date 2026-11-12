@@ -148,6 +148,9 @@ steps and cache paths to the scripts.
   count is pinned (`rust-mutants-ledger.mjs`, held by arch-lint). A push to
   main judges the merged change in-diff the same way; `rust:mutants:full`
   (the whole workspace) is run by hand until its survivors are classified.
+  The vendored markdown parser's files are left out of the in-diff run alone,
+  by `.cargo/mutants-pr-exclude.txt` passed as `--exclude`: a config
+  `exclude_globs` applies to every run, so the full run would skip them too.
 - **`whiteboard-markdown` is vendored code held to the workspace lints by
   the module, not by line**: `vendored/` carries markdown-rs's tokenizer,
   resolvers and tree builder under one `#![expect]` per lint that does not fit
