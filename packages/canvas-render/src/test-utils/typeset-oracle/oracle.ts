@@ -51,9 +51,9 @@ interface SeamTables {
   readonly diagram: Readonly<Record<string, RenderedWire | null>>
 }
 
-export type TokenLinesWire = readonly (readonly { text: string; role?: string }[])[]
+type TokenLinesWire = readonly (readonly { text: string; role?: string }[])[]
 /** `s` is the string form a renderer may answer; the other is the object form. */
-export type RenderedWire = { s: string } | { svg: string; width?: number; height?: number }
+type RenderedWire = { s: string } | { svg: string; width?: number; height?: number }
 
 export interface TypesetInput {
   readonly id: string
