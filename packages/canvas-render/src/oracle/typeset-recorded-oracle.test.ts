@@ -41,6 +41,7 @@ const asInput = ({
   embeds,
   syntax,
   digest,
+  embedPath,
 }: TypesetRecord): TypesetInput => ({
   id,
   root,
@@ -50,6 +51,7 @@ const asInput = ({
   embeds,
   syntax,
   digest,
+  ...(embedPath === undefined ? {} : { embedPath }),
 })
 
 describe('the recorded typeset oracle', () => {
@@ -94,6 +96,12 @@ describe('the recorded typeset oracle', () => {
       'embedPlaceholder',
     ])
       expect(held.includes(`"kind":"${kind}"`), `a scene holding a ${kind}`).toBe(true)
+    for (const reason of ['cycle', 'depthCap', 'budget', 'unresolvable'])
+      expect(held.includes(`"reason":"${reason}"`), `an embed placeholder for ${reason}`).toBe(true)
+    expect(
+      records.some((r) => r.embedPath !== undefined),
+      'a body laid out inside documents the host names',
+    ).toBe(true)
     for (const key of [
       'truncated',
       'overflows',

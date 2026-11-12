@@ -94,10 +94,31 @@ type Target = { title?: string; root: MdastRoot } | { title?: string; canvas: Sp
 
 const memo = new Map<string, Target | null>()
 
+/**
+ * Documents whose embeds are fixed rather than hashed, so the recording holds the
+ * two guards the hashed graph never reaches: `loop-a` and `loop-b` embed each
+ * other (a cycle one level down), and `chain-0` to `chain-3` each embed the next
+ * (the depth cap at the fourth level).
+ */
+const FIXED_EMBEDS: Readonly<Record<string, string>> = {
+  'loop-a': 'loop-b',
+  'loop-b': 'loop-a',
+  'chain-0': 'chain-1',
+  'chain-1': 'chain-2',
+  'chain-2': 'chain-3',
+  'chain-3': 'chain-4',
+}
+
 /** What resolving an embed answers for an id; null where the target is not loaded. */
 function targetFor(id: string): Target | null {
   const known = memo.get(id)
   if (known !== undefined) return known
+  const next = FIXED_EMBEDS[id]
+  if (next !== undefined) {
+    const fixed = { title: `Doc ${id}`, root: rootOf(para(text(id)), para(embedOf(next))) }
+    memo.set(id, fixed)
+    return fixed
+  }
   const variant = hashOf(`t${id}`) % 8
   const title = `Doc ${id.slice(-6)}`
   const made: Target | null = (() => {

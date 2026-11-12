@@ -90,6 +90,8 @@ export interface TypesetInput {
   readonly syntax: Readonly<Record<string, string>> | null
   /** Hold the answer as a digest rather than as text. */
   readonly digest: boolean
+  /** The documents the host is already laying out around this body; absent, none. */
+  readonly embedPath?: readonly string[]
 }
 
 export type TypesetRecord = TypesetInput & {
@@ -393,6 +395,7 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord {
     renderMath: (value) => mathFor(value),
     renderDiagram: (lang, value) => diagramFor(lang, value),
     ...(input.syntax === null ? {} : { syntax: input.syntax }),
+    ...(input.embedPath === undefined ? {} : { embedPath: input.embedPath }),
   }
   const scene = typesetMdastBlocks(input.root, options)
   // A `&str` cannot hold half a surrogate pair, so a scene that has one is not an answer the Rust

@@ -35,6 +35,11 @@ pub struct TypesetOptions<'a> {
     pub canvas_layout: Option<&'a dyn CanvasMiniature>,
     /// The account embeds spend from; absent, the typesetter opens a fresh one.
     pub budget: Option<&'a NestedLayoutBudget>,
+    /// The documents already being laid out around this body, outermost first:
+    /// a host typesetting a canvas text node inside an embedded canvas passes
+    /// the path that reached it, so a cycle through the canvas is still a cycle
+    /// and the depth cap counts from the outermost document.
+    pub embed_path: &'a [String],
 }
 
 impl<'a> TypesetOptions<'a> {
@@ -61,6 +66,7 @@ impl<'a> TypesetOptions<'a> {
             embeds: None,
             canvas_layout: None,
             budget: None,
+            embed_path: &[],
         }
     }
 }

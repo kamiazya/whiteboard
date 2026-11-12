@@ -34,7 +34,11 @@ pub fn typeset_mdast_blocks(root: &Root, opts: &TypesetOptions<'_>) -> Scene {
     let fresh = NestedLayoutBudget::new();
     let opts = TypesetOptions { budget: Some(opts.budget.unwrap_or(&fresh)), ..*opts };
     let mut cursor = Cursor { x: 0.0, y: 0.0 };
-    let nodes = root.children.iter().map(|b| layout_block(b, &mut cursor, &opts, 0, &[])).collect();
+    let nodes = root
+        .children
+        .iter()
+        .map(|b| layout_block(b, &mut cursor, &opts, 0, opts.embed_path))
+        .collect();
     Scene { nodes, legend: None }
 }
 

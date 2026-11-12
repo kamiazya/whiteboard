@@ -269,6 +269,9 @@ pub(crate) struct Record {
     pub(crate) embeds: String,
     pub(crate) syntax: Option<BTreeMap<String, String>>,
     pub(crate) digest: bool,
+    /// The documents the host is already laying out around this body; absent, none.
+    #[serde(default, rename = "embedPath")]
+    pub(crate) embed_path: Vec<String>,
     pub(crate) seams: Seams,
     pub(crate) calls: usize,
     pub(crate) scene: Option<String>,
