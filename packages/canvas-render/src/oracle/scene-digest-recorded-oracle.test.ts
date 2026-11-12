@@ -3,6 +3,7 @@ import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { sceneDigest } from '../scene-digest.js'
 import { decodeLines, encodeLines, type RenderRecord } from '../test-utils/render-oracle/oracle.js'
+import { CASES } from '../test-utils/scene-digest-oracle/corpus.js'
 import {
   type Answer,
   answerOf,
@@ -13,7 +14,6 @@ import {
   realScenes,
   recording,
 } from '../test-utils/scene-digest-oracle/oracle.js'
-import { CASES } from '../test-utils/scene-digest-oracle/corpus.js'
 import { sceneOfSpec } from '../test-utils/scene-digest-oracle/spec.js'
 
 /**
