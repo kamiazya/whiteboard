@@ -139,8 +139,10 @@ pub(crate) fn subtokenize(
                 }
 
                 let mut result = tokenizer.flush(state, true);
-                value.gfm_footnote_definitions.append(&mut result.gfm_footnote_definitions);
-                value.definitions.append(&mut result.definitions);
+                value
+                    .gfm_footnote_definitions
+                    .extend(core::mem::take(&mut result.gfm_footnote_definitions));
+                value.definitions.extend(core::mem::take(&mut result.definitions));
                 value.done = false;
 
                 // `divide_events` visits each event of the child once.

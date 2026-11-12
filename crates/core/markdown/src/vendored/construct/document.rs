@@ -567,5 +567,8 @@ fn resolve(tokenizer: &mut Tokenizer) {
     // Add the resolvers from child.
     tokenizer.resolvers.append(&mut child.resolvers.split_off(0));
 
-    tokenizer.tokenize_state.definitions.append(&mut child.tokenize_state.definitions);
+    tokenizer
+        .tokenize_state
+        .definitions
+        .extend(core::mem::take(&mut child.tokenize_state.definitions));
 }

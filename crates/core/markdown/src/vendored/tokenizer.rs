@@ -581,8 +581,8 @@ impl<'a> Tokenizer<'a> {
             let fn_defs = &mut value.gfm_footnote_definitions;
             while index < resolvers.len() {
                 if let Some(mut result) = call_resolve(self, resolvers[index]) {
-                    fn_defs.append(&mut result.gfm_footnote_definitions);
-                    defs.append(&mut result.definitions);
+                    fn_defs.extend(core::mem::take(&mut result.gfm_footnote_definitions));
+                    defs.extend(core::mem::take(&mut result.definitions));
                 }
                 index += 1;
             }

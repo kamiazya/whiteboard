@@ -222,3 +222,17 @@ fn the_walks_over_a_text_are_charged() {
     }
     assert!(CHARGED_FLOOR.len() > 30);
 }
+
+/// Definitions each in their own blank-separated block: every block hands its
+/// identifiers up as a set, and merging that into the set gathered so far must
+/// cost what the block brought, not what was gathered before it.
+#[test]
+fn many_blank_separated_definitions_are_read_in_time() {
+    let definitions = if cfg!(target_arch = "wasm32") { 8_000 } else { 60000 };
+    let mut text = String::new();
+    text.extend((0..definitions).map(|index| format!("[d{index}]: u\n\n")));
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert!(answer.is_ok(), "{:?}", answer.err());
+    assert!(spent * 4 <= fuel_for(text.len()) * 3, "{spent} units of {}", fuel_for(text.len()));
+    assert!(millis < CEILING_MS, "{millis} ms");
+}

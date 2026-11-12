@@ -63,8 +63,8 @@ pub(crate) fn parse<'a>(
     for _ in 0..MAX_ROUNDS {
         let fn_defs = &mut parse_state.gfm_footnote_definitions;
         let defs = &mut parse_state.definitions;
-        fn_defs.append(&mut result.gfm_footnote_definitions);
-        defs.append(&mut result.definitions);
+        fn_defs.extend(core::mem::take(&mut result.gfm_footnote_definitions));
+        defs.extend(core::mem::take(&mut result.definitions));
 
         if result.done || parse_state.budget.refusal().is_some() {
             return (events, parse_state);
