@@ -15,18 +15,24 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 
 /// A text, the walk it reaches, and the units it spends.
 const SPENT: &[(&str, &str, usize)] = &[
-    ("a paragraph: the resolvers and the passes over the finished events", "a\n", 150),
-    ("a container: the document resolver's walks", "> a\n", 212),
-    ("a line break: the trim of trailing whitespace", "a  \nb", 269),
-    ("leading whitespace: the trim of the start of a line", "a\n  b", 329),
-    ("an address: the scan of a text's bytes for an email", "a b@c.d e", 205),
-    ("nested items: the scan for an item's end, and the open lists", "- a\n  - b\n- c\n", 876),
+    ("a paragraph: the resolvers and the passes over the finished events", "a\n", 152),
+    ("a container: the document resolver's walks", "> a\n", 214),
+    ("a line break: the trim of trailing whitespace", "a  \nb", 296),
+    ("leading whitespace: the trim of the start of a line", "a\n  b", 354),
+    ("an address: the scan of a text's bytes for an email", "a b@c.d e", 232),
+    ("nested items: the scan for an item's end, and the open lists", "- a\n  - b\n- c\n", 882),
     (
         "a heading, an underline merged into the next paragraph, and a second heading",
         "x\n---\n--\ny\n---\n",
-        686,
+        692,
     ),
-    ("emphasis inside an image: the open events each run keeps", "![*a* _b_](u)", 712),
+    ("emphasis inside an image: the open events each run keeps", "![*a* _b_](u)", 744),
+    ("an image in an image: each label read whole at its end", "![![ab](c)](u)", 770),
+    (
+        "a URL after an entity: the second autolink pass over the finished text",
+        "&amp;http://a.b/c d",
+        329,
+    ),
 ];
 
 #[test]

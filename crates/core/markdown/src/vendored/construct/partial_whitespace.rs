@@ -57,7 +57,7 @@
 //! [hard_break_prefix_size_min]: crate::vendored::util::constant::HARD_BREAK_PREFIX_SIZE_MIN
 //! [html]: https://html.spec.whatwg.org/multipage/text-level-semantics.html#the-br-element
 
-use crate::vendored::event::{Event, Kind, Name};
+use crate::vendored::event::{Event, Kind, Name, Point};
 use crate::vendored::tokenizer::Tokenizer;
 use crate::vendored::util::{
     constant::HARD_BREAK_PREFIX_SIZE_MIN,
@@ -90,6 +90,19 @@ pub(crate) fn resolve_whitespace(tokenizer: &mut Tokenizer, hard_break: bool, tr
     if tokenizer.parse_state.budget.refusal().is_none() {
         tokenizer.map.consume(&mut tokenizer.events);
     }
+}
+
+/// Where the white space of `bytes` bytes, and `virtual_spaces` left of a tab
+/// the data starts inside, ends.
+///
+/// Data that starts inside a tab is already past the tab's byte, and what is
+/// left of the tab is white space too.
+fn point_after_whitespace(from: &Point, bytes: usize, virtual_spaces: usize) -> Point {
+    let mut point = from.clone();
+    point.index += bytes + usize::from(virtual_spaces > 0);
+    point.column += bytes + virtual_spaces;
+    point.vs = 0;
+    point
 }
 
 /// Trim a [`Data`][Name::Data] event.
@@ -191,10 +204,7 @@ fn trim_data(
 
         if index > 0 || slice.before > 0 {
             let enter_point = tokenizer.events[exit_index - 1].point.clone();
-            let mut exit_point = enter_point.clone();
-            exit_point.index += index;
-            exit_point.column += index;
-            exit_point.vs = 0;
+            let exit_point = point_after_whitespace(&enter_point, index, slice.before);
 
             tokenizer.map.add(
                 exit_index - 1,

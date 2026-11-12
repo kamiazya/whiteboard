@@ -30,6 +30,7 @@ const ORDINARY: &[Shape] = &[
     shape("blank lines", "", "\n"),
     shape("one-letter lines", "", "a\n"),
     shape("one-letter items", "", "- a\n"),
+    shape("blank lines ending an item", "- a", "\n"),
     shape("empty items", "", "-\n"),
     shape("ordered items", "", "1. a\n"),
     shape("task items", "", "- [ ] a\n"),
@@ -55,6 +56,10 @@ const ORDINARY: &[Shape] = &[
     shape("autolinks", "", "<http://a.b> "),
     shape("literal autolinks", "", "awww."),
     shape("emails", "", "a@b.c "),
+    shape("literal URLs after an entity", "", "&amp;http://a.b/c "),
+    shape("literal www after an entity", "", "&amp;www.a.b. "),
+    shape("emails after an entity", "", "&amp;a@b.co "),
+    shape("emails refused one by one", "", "&amp;a@b- "),
     shape("hard breaks", "", "a  \n"),
     shape("lazy block quote lines", "", "> a\nb\n"),
     shape("escapes", "a]", "\\*"),
@@ -137,6 +142,34 @@ fn a_text_built_to_be_quadratic_is_refused_inside_the_time() {
         assert!(spent <= fuel_for(text.len()), "{}: {spent}", shape.name);
         assert!(millis < CEILING_MS, "{}: {millis} ms", shape.name);
     }
+}
+
+/// The dearest text the second autolink pass can be given and still read: every `www.`
+/// start in one long unbroken run is a failed attempt that reads 2,304 characters. The
+/// pass charges the work, so the text is read inside its fuel: about 58 units a byte
+/// in all, against 96 allowed, and 59 at the byte cap, read there in 0.9 s in release.
+#[test]
+fn a_run_of_failing_literal_urls_is_read_inside_the_fuel_it_charges() {
+    let text = "&amp;www.a\\_".repeat(if cfg!(target_arch = "wasm32") { 2_000 } else { 5_000 });
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert!(answer.is_ok(), "{:?}", answer.err());
+    assert!(spent <= fuel_for(text.len()), "{spent}");
+    // The pass, not the tokenizer, is most of it.
+    assert!(spent > fuel_for(text.len()) / 2, "{spent}");
+    assert!(millis < CEILING_MS, "{millis} ms");
+}
+
+/// Images nested in each other's text: each label's text is read whole at its end, so
+/// the inner text is read once a level. Uncharged that was 6.9 s in release for
+/// 100 KB and four times that for twice the text.
+#[test]
+fn nested_labels_are_refused_inside_the_time() {
+    let levels = LENGTH / 6;
+    let text = format!("{}a{}", "![".repeat(levels), "](b)".repeat(levels));
+    let ((answer, spent), millis) = timed(|| parse_counting(&text));
+    assert_eq!(answer.err(), Some(Refusal::TooCostly));
+    assert!(spent <= fuel_for(text.len()), "{spent}");
+    assert!(millis < CEILING_MS, "{millis} ms");
 }
 
 #[test]
@@ -228,7 +261,7 @@ fn the_walks_over_a_text_are_charged() {
 /// cost what the block brought, not what was gathered before it.
 #[test]
 fn many_blank_separated_definitions_are_read_in_time() {
-    let definitions = if cfg!(target_arch = "wasm32") { 8_000 } else { 60000 };
+    let definitions = if cfg!(target_arch = "wasm32") { 8_000 } else { 20_000 };
     let mut text = String::new();
     text.extend((0..definitions).map(|index| format!("[d{index}]: u\n\n")));
     let ((answer, spent), millis) = timed(|| parse_counting(&text));

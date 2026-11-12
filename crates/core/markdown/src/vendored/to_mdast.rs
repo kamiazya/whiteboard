@@ -7,9 +7,10 @@ use crate::vendored::mdast::{
     ListItem, Math, Node, Paragraph, ReferenceKind, Root, Strong, Table, TableCell, TableRow, Text,
     ThematicBreak,
 };
+use crate::vendored::tree_text::{edge_end, edge_start, text_with_alt, unlink};
 use crate::vendored::unist::{Point, Position};
 use crate::vendored::util::{
-    character_reference::decode as decode_character_reference,
+    character_reference::{decode as decode_character_reference, decode_string},
     infer::{gfm_table_align, list_item_loose, list_loose},
     normalize_identifier::normalize_identifier,
     slice::{Position as SlicePosition, Slice},
@@ -718,13 +719,10 @@ fn on_exit_raw_text(context: &mut CompileContext) {
         value = value.replace("\\|", "|");
     }
 
-    if value.len() > 2
-        && value.starts_with(' ')
-        && value.ends_with(' ')
-        && !value.bytes().all(|b| b == b' ')
-    {
-        value.remove(0);
-        value.pop();
+    // A line ending counts as a space at an edge, and only then is one of each removed.
+    let (head, tail) = (edge_start(&value), edge_end(&value));
+    if head > 0 && tail > 0 && !value.bytes().all(|b| matches!(b, b' ' | b'\n' | b'\r')) {
+        value = value[head..value.len() - tail].to_string();
     }
 
     match context.tail_mut() {
@@ -743,7 +741,7 @@ fn on_exit_data(context: &mut CompileContext) {
         &SlicePosition::from_exit_event(context.events, context.index),
     );
     if let Node::Text(text) = context.tail_mut() {
-        text.value.push_str(value.as_str());
+        text.value.push_str(&value.to_text());
     }
     on_exit(context);
 }
@@ -758,11 +756,12 @@ fn on_exit_definition_destination_string(context: &mut CompileContext) {
 
 /// Handle [`Exit`][Kind::Exit]:{[`DefinitionLabelString`][Name::DefinitionLabelString],[`GfmFootnoteDefinitionLabelString`][Name::GfmFootnoteDefinitionLabelString]}.
 fn on_exit_definition_id(context: &mut CompileContext) {
-    let label = context.resume().to_string();
+    context.resume();
     let slice = Slice::from_position(
         context.bytes,
         &SlicePosition::from_exit_event(context.events, context.index),
     );
+    let label = decode_string(slice.as_str());
     let identifier = normalize_identifier(slice.as_str()).to_lowercase();
 
     match context.tail_mut() {
@@ -872,7 +871,7 @@ fn on_exit_heading_setext_underline_sequence(context: &mut CompileContext) {
 /// Handle [`Exit`][Kind::Exit]:[`LabelText`][Name::LabelText].
 fn on_exit_label_text(context: &mut CompileContext) {
     let mut fragment = context.resume();
-    let label = fragment.to_string();
+    let alt = text_with_alt(&fragment);
     let children =
         fragment.children_mut().map(|children| children.split_off(0)).unwrap_or_default();
     let slice = Slice::from_position(
@@ -882,13 +881,14 @@ fn on_exit_label_text(context: &mut CompileContext) {
     let identifier = normalize_identifier(slice.as_str()).to_lowercase();
 
     if let Some(reference) = context.media_reference_stack.last_mut() {
-        reference.label.clone_from(&label);
+        // The label is the text as written, decoded, not the text of what it parsed to.
+        reference.label = decode_string(slice.as_str());
         reference.identifier = identifier;
     }
 
     match context.tail_mut() {
-        Node::Link(node) => node.children = children,
-        Node::Image(node) => node.alt = label,
+        Node::Link(node) => node.children = unlink(children),
+        Node::Image(node) => node.alt = alt,
         _ => {}
     }
 }
@@ -1061,11 +1061,12 @@ fn on_exit_list_item_value(context: &mut CompileContext) {
 }
 /// Handle [`Exit`][Kind::Exit]:[`ReferenceString`][Name::ReferenceString].
 fn on_exit_reference_string(context: &mut CompileContext) {
-    let label = context.resume().to_string();
+    context.resume();
     let slice = Slice::from_position(
         context.bytes,
         &SlicePosition::from_exit_event(context.events, context.index),
     );
+    let label = decode_string(slice.as_str());
     let identifier = normalize_identifier(slice.as_str()).to_lowercase();
     if let Some(reference) = context.media_reference_stack.last_mut() {
         reference.reference_kind = Some(ReferenceKind::Full);

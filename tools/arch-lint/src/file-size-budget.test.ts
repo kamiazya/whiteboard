@@ -619,8 +619,9 @@ const RUST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The HTML flow tokenizer: seven kinds of block, one set of states each.
   'crates/core/markdown/src/vendored/construct/html_flow.rs': 873,
   // The label end: resource, full, collapsed and shortcut references and the
-  // injection of what was found into the events.
-  'crates/core/markdown/src/vendored/construct/label_end.rs': 828,
+  // injection of what was found into the events. Raised from 828 for the fuel
+  // charge on reading a label's text whole, which nested labels made quadratic.
+  'crates/core/markdown/src/vendored/construct/label_end.rs': 833,
   // Every event name with the example it is documented by; the names are 58
   // and the documentation is most of the file.
   'crates/core/markdown/src/vendored/event.rs': 2786,

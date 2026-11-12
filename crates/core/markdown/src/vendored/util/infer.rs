@@ -84,6 +84,19 @@ pub(crate) fn list_loose(events: &[Event], mut index: usize, include_items: bool
     false
 }
 
+/// Whether only blank lines and the white space of them are left of the item at `next`.
+///
+/// A blank line the item ends on separates nothing inside it, which is how the
+/// `TypeScript` reads `spread`.
+fn ends_item(events: &[Event], mut next: usize) -> bool {
+    while next < events.len()
+        && matches!(events[next].name, Name::BlankLineEnding | Name::SpaceOrTab)
+    {
+        next += 1;
+    }
+    next < events.len() && events[next].kind == Kind::Exit && events[next].name == Name::ListItem
+}
+
 /// Figure out if an item is spread or not.
 pub(crate) fn list_item_loose(events: &[Event], mut index: usize) -> bool {
     let mut balance = 0;
@@ -117,8 +130,10 @@ pub(crate) fn list_item_loose(events: &[Event], mut index: usize) -> bool {
                     at_prefix = true;
                 }
 
+                // Past a blank line the item ends on there are only blank lines:
+                // answered here, not once a line (that walked the tail per line).
                 if !at_prefix {
-                    return true;
+                    return !ends_item(events, index + 1);
                 }
             }
 

@@ -9,7 +9,8 @@
 # regression tests, its fuzz target, the remark oracle that follows it and the
 # full run, not in-diff: its 2,531 mutants at about 54 s each are far past four
 # 40-minute shards. The code written for it here stays judged in-diff: `lib.rs`
-# and `limits.rs`, and the two vendored files that are ours (`budget.rs`, and
+# and `limits.rs`, `autolink.rs` (the second literal-autolink pass), and the
+# three files under `vendored/` that are ours (`budget.rs`, `tree_text.rs`, and
 # `util/edit_map.rs`, rewritten as a BTreeMap), so they are left out of this
 # list. A glob cannot except a file, hence the list. An entry naming no file
 # fails the script, so the list cannot outlive the code it names.

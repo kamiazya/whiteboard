@@ -65,7 +65,7 @@ pub const fn fuel_for(len: usize) -> usize {
 const FUEL_BASE: usize = 1 << 16;
 
 /// Fuel per byte of text: the dearest ordinary shape in `tests/cost.rs` spends
-/// 68.5 a byte, so a quarter of this is headroom over it.
+/// 69 a byte, so a quarter of this is headroom over it.
 const FUEL_PER_BYTE: usize = 96;
 
 /// Refuse a text whose lines open more containers than [`MAX_CONTAINER_DEPTH`].

@@ -1,0 +1,132 @@
+{
+  "classes": [
+    {
+      "id": "D1a",
+      "reason": "The vendored tokenizer reads literal autolinks as cmark-gfm does and remark-gfm's micromark tokenizer reads them its own way; the second pass now closes every difference that was a text left for it, and what is left is a difference of the tokenizers. Here a literal URL right after a `[` (an unclosed label start): one parser links it, the other leaves the text, and which depends on the domain.",
+      "repro": "x [http://a y",
+      "cases": [
+        "r23",
+        "r102",
+        "r202",
+        "r224",
+        "r282",
+        "r291",
+        "r332",
+        "r494",
+        "r565",
+        "r601",
+        "r657",
+        "r760",
+        "r836",
+        "r885",
+        "r936",
+        "r1057",
+        "r1076",
+        "r1082",
+        "r1092",
+        "r1208",
+        "r1228",
+        "r1297",
+        "r1392",
+        "r1424",
+        "r1472",
+        "r1535",
+        "r1582",
+        "r1595",
+        "r1641",
+        "r1690",
+        "r1917",
+        "r1972",
+        "r1976",
+        "r2095",
+        "r2110",
+        "r2140",
+        "r2206",
+        "r2219",
+        "r2259",
+        "r2260",
+        "r2269",
+        "r2306",
+        "r2313",
+        "r2320",
+        "r2338",
+        "r2543",
+        "r2557",
+        "r2580",
+        "r2590",
+        "r2608",
+        "r2689",
+        "r2710",
+        "r2718",
+        "r2741",
+        "r2897",
+        "r2903",
+        "r2922",
+        "r2923",
+        "r2927",
+        "r2986"
+      ]
+    },
+    {
+      "id": "D1b",
+      "reason": "The vendored tokenizer reads literal autolinks as cmark-gfm does and remark-gfm's micromark tokenizer reads them its own way; the second pass now closes every difference that was a text left for it, and what is left is a difference of the tokenizers. Here a `www.` literal and the punctuation, CR or `@` that follows it.",
+      "repro": "[www.&",
+      "cases": [
+        "r201",
+        "r348",
+        "r1052",
+        "r1200",
+        "r1262",
+        "r1613",
+        "r2253",
+        "r2365",
+        "r2407",
+        "r2777",
+        "r2792",
+        "r2974"
+      ]
+    },
+    {
+      "id": "D1c",
+      "reason": "The vendored tokenizer reads literal autolinks as cmark-gfm does and remark-gfm's micromark tokenizer reads them its own way; the second pass now closes every difference that was a text left for it, and what is left is a difference of the tokenizers. Here an email address right after a `[` whose domain starts with a dot.",
+      "repro": "[a@.o",
+      "cases": ["r1306", "r1553", "r2184", "r2992"]
+    },
+    {
+      "id": "D1d",
+      "reason": "The vendored tokenizer reads literal autolinks as cmark-gfm does and remark-gfm's micromark tokenizer reads them its own way; the second pass now closes every difference that was a text left for it, and what is left is a difference of the tokenizers. Here a URL right after a non-ASCII character, the domain starting with a dot.",
+      "repro": "日http://.b",
+      "cases": ["r95"]
+    },
+    {
+      "id": "D5",
+      "reason": "emphasis flanking next to emoji and symbols: markdown-rs follows CommonMark 0.31, where Unicode punctuation includes the symbol categories; the micromark remark uses does not.",
+      "repro": "_c_😀",
+      "cases": ["r51", "r128", "r246", "r678", "r796"]
+    },
+    {
+      "id": "D11",
+      "reason": "an ordered item that does not start at 1, after an indented code block: it cannot interrupt a paragraph, but after code there is none, so markdown-rs starts a list (CommonMark) and micromark reads a paragraph.",
+      "repro": "    x\\n2) y",
+      "cases": ["r176"]
+    },
+    {
+      "id": "D13",
+      "reason": "a CRLF right after a task marker: markdown-rs drops the line ending from the item text where remark keeps a leading one.",
+      "repro": "- [x]\\r\\n)",
+      "cases": ["r1096"]
+    },
+    {
+      "id": "D15",
+      "reason": "a block quote whose first line is indented code, opened right under a paragraph: micromark reads the code, markdown-rs keeps the paragraph going into the quote.",
+      "repro": "a\\n>     b",
+      "cases": ["r756"]
+    },
+    {
+      "id": "U1",
+      "reason": "two seeded hostile documents with a ~~~ fence and an unclosed $$ fence or emphasis run that read differently; not minimised further, and not an autolink or an emoji difference (the difference stays with both removed).",
+      "repro": "~*~~*~~",
+      "cases": ["r1219", "r1713"]
+    }
+  ]
+}

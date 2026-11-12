@@ -161,7 +161,7 @@ steps and cache paths to the scripts.
   delimiter-run or fuel bound is refused whole and a root answers from the
   TypeScript, so no tree differs from the TypeScript's because a bound fell
   where it did. Every loop whose length follows the text charges the parse's
-  fuel (96 units a byte, over the 68.5 the dearest ordinary shape spends): every
+  fuel (96 units a byte, over the 69 the dearest ordinary shape spends): every
   resolver's walk over its events is charged where `resolve::call` dispatches it,
   and a nested scan or a pass over a text's bytes charges itself, each held by
   an exact figure in `crates/core/markdown/tests/fuel.rs`. So a
@@ -273,6 +273,16 @@ steps and cache paths to the scripts.
   `unicode-segmentation`; `crates/core/canvas-render/tests/text_primitives_oracle.rs` replays it and
   `WHITEBOARD_RECORD_ORACLE=1` re-records it. A `&str` holds no lone surrogate, so
   those answers are recorded for `uaxSegments` only.
+- **The markdown parser is held to `parseMarkdownBody`'s model tree**:
+  `packages/codec/src/markdown/oracle/mdast.jsonl` records the digest of each
+  document's canonical tree (the trees too for the spec and dialect sets), over
+  frozen repository text, the CommonMark and GFM examples and seeded hostile
+  text; `crates/core/markdown/tests/mdast_oracle.rs` replays it exactly except
+  for `mdast_tolerated.json`, a shrink-only ledger (a differing case not in it
+  fails, and so does a listed one that no longer differs; the count is pinned).
+  An input past a bound is refused by Rust and not compared (`b<N>` ids).
+  `codec-node`'s `mdast-recorded-oracle.test.ts` fails when the TypeScript
+  stops answering as recorded.
 - **What is ported is ledgered**: `tools/arch-lint/src/ported-functions.ts`
   (`PORTED_FUNCTIONS`) maps each ported TypeScript function to its Rust
   port and differential (QR-33a item 16).
