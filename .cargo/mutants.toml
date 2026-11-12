@@ -300,4 +300,9 @@ exclude_re = [
   # a text of CRs alone holds no cluster, so it is the same eager-only change
   # as above.
   'truncate\.rs:\d+:\d+: replace == with != in may_cluster$',
+  # canvas-render scene_digest plan: with a NaN height the TypeScript allocates
+  # `new Int32Array(cols)` and throws past 2^53 - 1, the bound `>` names. At
+  # exactly 2^53 - 1 cells the buffer is 32 PiB, which no engine allocates, so the
+  # TypeScript throws there too and `>=` answers the same.
+  'free_regions\.rs:\d+:\d+: replace > with >= in plan$',
 ]

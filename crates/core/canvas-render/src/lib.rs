@@ -7,6 +7,9 @@
 //! its inputs, so it is held to the TypeScript's recorded answers alone
 //! (`tests/svg_oracle.rs`).
 //!
+//! [`scene_digest`] is the AI-facing spatial digest of a laid-out scene, held to
+//! the recorded `scene-digest.jsonl` (`tests/scene_digest_oracle.rs`).
+//!
 //! Two inputs of the TypeScript backend are not ported: the caller-supplied
 //! `icons` and `shapes` tables of `SvgDocumentOptions`, whose Rust shape is a
 //! trait over data the plugin crate owns and which no caller has yet. The
@@ -34,6 +37,7 @@ pub mod measure;
 pub mod measure_memo;
 pub mod node_outline;
 pub mod scene_bounds;
+pub mod scene_digest;
 pub mod scene_entries;
 pub mod scene_walk;
 pub mod svg;

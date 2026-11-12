@@ -32,6 +32,18 @@
       "reason": "`f64::midpoint` avoids the overflow `(a + b) / 2` has, which the TypeScript does not; the sketch ink's control point reads `2 * mid - (a + b) / 2` and is held to its bits"
     },
     {
+      "crate": "crates/core/canvas-render",
+      "lint": "clippy::cast_possible_truncation",
+      "count": 1,
+      "reason": "the digest's free-region grid counts cells as doubles the way the TypeScript does, and a u32 index is made once from a double already known to be a whole number in 0..=250_000 (the cell budget, or a clamped span inside it)"
+    },
+    {
+      "crate": "crates/core/canvas-render",
+      "lint": "clippy::cast_sign_loss",
+      "count": 1,
+      "reason": "the same cell count read as cast_possible_truncation: clamped to zero or above before the one conversion"
+    },
+    {
       "crate": "crates/core/edge-routing",
       "lint": "clippy::arithmetic_side_effects",
       "count": 4,
