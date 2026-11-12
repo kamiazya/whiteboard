@@ -8,6 +8,7 @@ use crate::theme::markdown::MarkdownTheme;
 
 use super::seams::{CodeTokenizer, DiagramRenderer, InlineSeams, MathRenderer, SyntaxFills};
 
+#[derive(Clone, Copy)]
 pub struct TypesetOptions<'a> {
     pub measure: &'a dyn Measure,
     /// The wrap width. Not finite, or not positive, means wrapping is off.
@@ -56,6 +57,12 @@ impl<'a> TypesetOptions<'a> {
 /// answer the other.
 pub(super) fn js_min(a: f64, b: f64) -> f64 {
     if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
+}
+
+/// `Math.max`: a NaN on either side is the answer, where `f64::max` would
+/// answer the other.
+pub(super) fn js_max(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() { f64::NAN } else { a.max(b) }
 }
 
 pub(super) fn code_line_height_px(theme: &MarkdownTheme) -> f64 {

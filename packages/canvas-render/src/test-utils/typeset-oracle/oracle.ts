@@ -126,10 +126,25 @@ function walkInline(nodes: readonly Inline[], visit: (node: Inline) => void): vo
   }
 }
 
+/** Every flow block of a tree, containers' content included, in document order. */
+function flowsOf(blocks: readonly MdastFlowContent[]): MdastFlowContent[] {
+  return blocks.flatMap((block): MdastFlowContent[] => {
+    if (block.type === 'blockquote') return [block, ...flowsOf(block.children)]
+    if (block.type === 'list') {
+      return [block, ...flowsOf(block.children.flatMap((item) => item.children))]
+    }
+    return [block]
+  })
+}
+
 const inlinesOf = (root: MdastRoot): readonly Inline[] =>
-  root.children.flatMap((block) =>
-    block.type === 'paragraph' || block.type === 'heading' ? block.children : [],
-  )
+  flowsOf(root.children).flatMap((block) => {
+    if (block.type === 'paragraph' || block.type === 'heading') return block.children
+    if (block.type === 'table') {
+      return block.children.flatMap((row) => row.children.flatMap((cell) => cell.children))
+    }
+    return []
+  })
 
 const keyOf = (lang: string, value: string): string => `${lang}\u0000${value}`
 
@@ -185,7 +200,7 @@ function blockSeams(root: MdastRoot): Pick<SeamTables, 'highlight' | 'math' | 'd
   const highlight: Record<string, TokenLinesWire | null> = {}
   const math: Record<string, RenderedWire | null> = {}
   const diagram: Record<string, RenderedWire | null> = {}
-  for (const block of root.children) {
+  for (const block of flowsOf(root.children)) {
     if (block.type === 'math') math[block.value] = wireOf(attempt(() => mathFor(block.value)))
     if (block.type !== 'code') continue
     const lang = block.lang ?? ''
@@ -245,7 +260,9 @@ function seamsFor(root: MdastRoot): SeamTables {
 
 /** A paragraph that is only an embed is a block embed, which a later slice carries. */
 export const isBlockEmbed = (block: MdastFlowContent): boolean =>
-  block.type === 'paragraph' && block.children.length === 1 && block.children[0]?.type === 'embed'
+  flowsOf([block]).some(
+    (b) => b.type === 'paragraph' && b.children.length === 1 && b.children[0]?.type === 'embed',
+  )
 
 function referencesFor(seams: SeamTables): ReferenceSeams {
   const pending = new Set(seams.pending)
