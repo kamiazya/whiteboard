@@ -777,7 +777,8 @@ const RUST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'crates/core/markdown/src/vendored/construct/gfm_table.rs#flush_cell': 115,
   'crates/core/markdown/src/vendored/construct/heading_atx.rs#resolve': 60,
   'crates/core/markdown/src/vendored/construct/html_flow.rs#tag_name': 60,
-  'crates/core/markdown/src/vendored/construct/label_end.rs#after': 55,
+  // Raised from 55: `after` reads a label's whole text, and charges it.
+  'crates/core/markdown/src/vendored/construct/label_end.rs#after': 61,
   'crates/core/markdown/src/vendored/construct/label_end.rs#inject_labels': 119,
   'crates/core/markdown/src/vendored/construct/list_item.rs#resolve': 111,
   'crates/core/markdown/src/vendored/construct/partial_whitespace.rs#trim_data': 126,
