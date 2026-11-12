@@ -14,10 +14,11 @@ import { f64Hex, isBlockEmbed, type ThemeName, type TypesetInput } from './oracl
  * widens the filter, and the recorded file grows with it.
  */
 
-type Block = Extract<MdastFlowContent, { type: 'paragraph' | 'heading' }>
+type Block = MdastFlowContent
+type Textual = Extract<MdastFlowContent, { type: 'paragraph' | 'heading' }>
 const t = (value: string): MdastPhrasingContent => ({ type: 'text', value })
-const p = (...children: MdastPhrasingContent[]): Block => ({ type: 'paragraph', children })
-const h = (depth: 1 | 2 | 3 | 4 | 5 | 6, ...children: MdastPhrasingContent[]): Block => ({
+const p = (...children: MdastPhrasingContent[]): Textual => ({ type: 'paragraph', children })
+const h = (depth: 1 | 2 | 3 | 4 | 5 | 6, ...children: MdastPhrasingContent[]): Textual => ({
   type: 'heading',
   depth,
   children,
@@ -213,6 +214,73 @@ const HAND: readonly (readonly [string, readonly Block[]])[] = [
   ['leading-break', [p({ type: 'break' }, t('x'))]],
 ]
 
+const fence = (value: string, lang?: string): Block => ({
+  type: 'code',
+  value,
+  ...(lang === undefined ? {} : { lang }),
+})
+
+const TS_SOURCE =
+  'const a: number = 1 // note\nfunction f(x) { return "s" + x + 0xff }\n\n  if (a) {\n\treturn `t`\n}'
+
+/** Blocks with no children of their own: a rule, raw html, a definition, display math, a fence. */
+const HAND_BLOCKS: readonly (readonly [string, readonly Block[]])[] = [
+  ['hr', [{ type: 'thematicBreak' }]],
+  [
+    'hr-between',
+    [p(t('above')), { type: 'thematicBreak' }, p(t('below')), { type: 'thematicBreak' }],
+  ],
+  ['html-block', [{ type: 'html', value: '<div class="x">raw <b>html</b></div>' }]],
+  ['html-then-text', [{ type: 'html', value: '<br>' }, p(t('after'))]],
+  ['definition', [{ type: 'definition', identifier: 'ref', url: 'https://e.com' }]],
+  [
+    'definition-between',
+    [p(t('a')), { type: 'definition', identifier: 'x', url: 'u' }, h(2, t('b'))],
+  ],
+  ['math-one', [{ type: 'math', value: 'a^2 + b^2 = c^2' }]],
+  ['math-lines', [{ type: 'math', value: 'x = 1\ny = 2\nz = 3' }]],
+  ['math-empty', [{ type: 'math', value: '' }]],
+  ['math-escapes', [{ type: 'math', value: 'a < b && c > "d" \' e' }]],
+  [
+    'math-many',
+    ['E=mc^2', 'a+b', 'x', 'long long long long', 'y^2', 'z', 'q', 'w', 'r', 't'].map(
+      (value): Block => ({ type: 'math', value }),
+    ),
+  ],
+  ['code-ts', [fence(TS_SOURCE, 'ts')]],
+  ['code-json', [fence('{"a": [1, 2.5, null], "b": true}', 'json')]],
+  ['code-plain', [fence('no language\n  indented\n\ttabbed')]],
+  ['code-empty', [fence('')]],
+  ['code-empty-lang', [fence('', 'ts')]],
+  ['code-blank-lines', [fence('a\n\n\nb\n', 'js')]],
+  ['code-wide', [fence(`const x = "${'w'.repeat(120)}"`, 'js')]],
+  ['code-wide-token', [fence('w'.repeat(200))]],
+  ['code-cjk', [fence('const s = "日本語のとても長い文字列です、ここまで"; // コメント', 'js')]],
+  ['code-emoji', [fence('const e = "👨‍👩‍👧‍👦👨‍👩‍👧‍👦👨‍👩‍👧‍👦"', 'js')]],
+  ['code-crlf', [fence('a\r\nb', 'js')]],
+  ['code-unknown-lang', [fence('x = 1', 'nosuchlang')]],
+  ['code-mermaid', [fence('graph TD\n  A --> B', 'mermaid')]],
+  ['code-mermaid-b', [fence('sequenceDiagram\n  A->>B: hi', 'mermaid')]],
+  [
+    'code-diagrams',
+    ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'].map((v): Block => fence(`flow ${v}`, 'dot')),
+  ],
+  ['code-then-prose', [fence('x', 'js'), p(t('prose after')), h(1, t('H')), fence('y', 'py')]],
+  [
+    'mixed',
+    [
+      h(1, t('T')),
+      p(t(LONG_EN)),
+      fence(TS_SOURCE, 'ts'),
+      { type: 'math', value: 'E=mc^2' },
+      { type: 'thematicBreak' },
+      { type: 'html', value: '<hr>' },
+      { type: 'definition', identifier: 'd', url: 'u' },
+      p(t('end')),
+    ],
+  ],
+]
+
 const WIDTHS = [40, 96, 160, 280, 600]
 const EXTREME: readonly (readonly [string, number])[] = [
   ['huge', 1e9],
@@ -225,6 +293,8 @@ const EXTREME: readonly (readonly [string, number])[] = [
 ]
 const THEME_CYCLE: readonly ThemeName[] = ['node', 'document', 'compact']
 
+const SYNTAX = { keyword: '#cf222e', string: '#0a3069', number: '#0550ae', comment: '#6e7781' }
+
 let counter = 0
 function input(id: string, blocks: readonly Block[], width: number, digest: boolean): TypesetInput {
   counter += 1
@@ -234,6 +304,7 @@ function input(id: string, blocks: readonly Block[], width: number, digest: bool
     width: f64Hex(width),
     theme: THEME_CYCLE[counter % 3] as ThemeName,
     fill: counter % 2 === 0 ? '#1f2328' : null,
+    syntax: counter % 3 === 0 ? null : SYNTAX,
     digest,
   }
 }
@@ -342,15 +413,22 @@ function generated(): TypesetInput[] {
   })
 }
 
+const CARRIED = new Set([
+  'paragraph',
+  'heading',
+  'code',
+  'math',
+  'html',
+  'thematicBreak',
+  'definition',
+])
+
 const blocksOf = (root: MdastRoot): Block[] =>
-  root.children.filter(
-    (block): block is Block =>
-      (block.type === 'paragraph' || block.type === 'heading') && !isBlockEmbed(block),
-  )
+  root.children.filter((block) => CARRIED.has(block.type) && !isBlockEmbed(block))
 
 function walkBlocks(nodes: readonly MdastFlowContent[], out: Block[]): void {
   for (const node of nodes) {
-    if (node.type === 'paragraph' || node.type === 'heading') {
+    if (CARRIED.has(node.type)) {
       if (!isBlockEmbed(node)) out.push(node)
     } else if (node.type === 'blockquote') walkBlocks(node.children, out)
     else if (node.type === 'list') for (const item of node.children) walkBlocks(item.children, out)
@@ -372,11 +450,13 @@ function harvested(): TypesetInput[] {
     const record = JSON.parse(line) as { i?: string; t?: string }
     if (record.i === undefined || record.t === undefined) continue
     const wanted =
-      /^(cm#|gfm#|d\d|cv)/.test(record.i) || (/^md:/.test(record.i) && docs++ % 3 === 0)
+      /^(cm#|gfm#|d\d|cv)/.test(record.i) || (/^md:/.test(record.i) && docs++ % 6 === 0)
     if (!wanted) continue
     const blocks: Block[] = []
     walkBlocks(parseMarkdownBody(record.t).children, blocks)
-    blocks.slice(0, 3).forEach((block, n) => {
+    const prose = blocks.filter((b) => b.type === 'paragraph' || b.type === 'heading')
+    const furniture = blocks.filter((b) => b.type !== 'paragraph' && b.type !== 'heading')
+    ;[...prose.slice(0, 2), ...furniture.slice(0, 2)].forEach((block, n) => {
       const width = WIDTHS[(out.length + n) % WIDTHS.length] as number
       out.push(input(`md/${record.i}/${n}`, [block], width, true))
     })
@@ -389,6 +469,11 @@ export function typesetInputs(withHarvest: boolean): readonly TypesetInput[] {
   const named: TypesetInput[] = []
   for (const [name, blocks] of HAND) {
     for (const width of WIDTHS) named.push(input(`hand/${name}@${width}`, blocks, width, false))
+  }
+  for (const [name, blocks] of HAND_BLOCKS) {
+    for (const width of WIDTHS) named.push(input(`blocks/${name}@${width}`, blocks, width, false))
+    for (const [label, width] of EXTREME)
+      named.push(input(`blocks/${name}@${label}`, blocks, width, false))
   }
   for (const [name, blocks] of HAND.slice(0, 20)) {
     for (const [label, width] of EXTREME)

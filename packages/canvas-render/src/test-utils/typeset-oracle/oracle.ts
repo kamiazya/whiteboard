@@ -5,6 +5,8 @@ import type {
 } from '@kamiazya/whiteboard-model/mdast'
 import { expandEmojiShortcodes } from '@kamiazya/whiteboard-plugin-visual/emoji/shortcode'
 import { iconShortcodeRanges } from '@kamiazya/whiteboard-plugin-visual/icons/shortcode'
+import { highlightCode } from '../../highlight/lowlight.js'
+import { createTokenizerBudget } from '../../highlight/tokenizer-budget.js'
 import { typesetMdastBlocks } from '../../layout/nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from '../../layout/nodes/mdast-layout-options.js'
 import type { FontDescriptor, TextMetrics } from '../../measure.js'
@@ -41,7 +43,17 @@ interface SeamTables {
   readonly images: Readonly<
     Record<string, { href: string; width?: number; height?: number } | null>
   >
+  /** Token lines per `lang NUL source`; null where the seam threw or answered nothing. */
+  readonly highlight: Readonly<Record<string, TokenLinesWire | null>>
+  /** The math renderer's answer per source; null where it threw or answered nothing. */
+  readonly math: Readonly<Record<string, RenderedWire | null>>
+  /** The diagram renderer's answer per `lang NUL source`. */
+  readonly diagram: Readonly<Record<string, RenderedWire | null>>
 }
+
+type TokenLinesWire = readonly (readonly { text: string; role?: string }[])[]
+/** `s` is the string form a renderer may answer; the other is the object form. */
+type RenderedWire = { s: string } | { svg: string; width?: number; height?: number }
 
 export interface TypesetInput {
   readonly id: string
@@ -50,6 +62,8 @@ export interface TypesetInput {
   readonly width: string
   readonly theme: ThemeName
   readonly fill: string | null
+  /** The fill of each token role, when the caller supplies a palette. */
+  readonly syntax: Readonly<Record<string, string>> | null
   /** Hold the answer as a digest rather than as text. */
   readonly digest: boolean
 }
@@ -117,6 +131,73 @@ const inlinesOf = (root: MdastRoot): readonly Inline[] =>
     block.type === 'paragraph' || block.type === 'heading' ? block.children : [],
   )
 
+const keyOf = (lang: string, value: string): string => `${lang}\u0000${value}`
+
+/** What the highlighter answers for a fence, one in seven of them faulty on purpose. */
+function highlightFor(lang: string, value: string) {
+  const fault = hashOf(`hl${keyOf(lang, value)}`) % 7
+  if (fault === 0) throw new Error('highlighter failed')
+  if (fault === 1) return undefined
+  const lines = highlightCode(lang, value, createTokenizerBudget())
+  // A line count that disagrees with the source, which the layout has to refuse.
+  return fault === 2 && lines !== undefined ? [...lines, [{ text: '' }]] : lines
+}
+
+type Rendered = string | { svg: string; width?: number; height?: number } | undefined
+
+/** What a math or diagram renderer answers: every shape the layout reads, and failures. */
+function renderedFor(salt: string, key: string): Rendered {
+  const h = hashOf(`${salt}${key}`)
+  switch (h % 7) {
+    case 0:
+      return undefined
+    case 1:
+      throw new Error('renderer failed')
+    case 2:
+      return `<path d="M${key.length}"/>`
+    case 3:
+      return { svg: `<g id="${h % 100}"/>`, width: 40 + (h % 90), height: 20 + (h % 60) }
+    case 4:
+      return { svg: '<g/>', width: 5000, height: 0 }
+    case 5:
+      return { svg: '<g/>' }
+    default:
+      return { svg: '<g/>', width: -3, height: 12.5 }
+  }
+}
+
+const mathFor = (value: string): Rendered => renderedFor('m', value)
+const diagramFor = (lang: string, value: string): Rendered => renderedFor('d', keyOf(lang, value))
+
+const attempt = <T>(answer: () => T): T | undefined => {
+  try {
+    return answer()
+  } catch {
+    return undefined
+  }
+}
+
+const wireOf = (rendered: Rendered): RenderedWire | null =>
+  rendered === undefined ? null : typeof rendered === 'string' ? { s: rendered } : rendered
+
+/** What the host answers about the fences and the display math of a tree. */
+function blockSeams(root: MdastRoot): Pick<SeamTables, 'highlight' | 'math' | 'diagram'> {
+  const highlight: Record<string, TokenLinesWire | null> = {}
+  const math: Record<string, RenderedWire | null> = {}
+  const diagram: Record<string, RenderedWire | null> = {}
+  for (const block of root.children) {
+    if (block.type === 'math') math[block.value] = wireOf(attempt(() => mathFor(block.value)))
+    if (block.type !== 'code') continue
+    const lang = block.lang ?? ''
+    highlight[keyOf(lang, block.value)] = (attempt(() => highlightFor(lang, block.value)) ??
+      null) as TokenLinesWire | null
+    if (lang !== '') {
+      diagram[keyOf(lang, block.value)] = wireOf(attempt(() => diagramFor(lang, block.value)))
+    }
+  }
+  return { highlight, math, diagram }
+}
+
 /** Every question the layout can put to its host about this tree, answered. */
 function seamsFor(root: MdastRoot): SeamTables {
   const icons: Record<string, { from: number; to: number; name: string }[]> = {}
@@ -151,7 +232,15 @@ function seamsFor(root: MdastRoot): SeamTables {
     } else if (node.type === 'wikiLink' || node.type === 'embed') ask(node.documentId)
     else if (node.type === 'image') images[node.url] = imageOf(node.url)
   })
-  return { icons, emoji, titles, embeds, pending: [...new Set(pending)], images }
+  return {
+    icons,
+    emoji,
+    titles,
+    embeds,
+    pending: [...new Set(pending)],
+    images,
+    ...blockSeams(root),
+  }
 }
 
 /** A paragraph that is only an embed is a block embed, which a later slice carries. */
@@ -196,6 +285,11 @@ class Fnv {
   }
 }
 
+/** `f64Hex`, with every NaN written as the positive quiet NaN `f64::NAN` is. */
+function canonicalNanHex(value: number): string {
+  return Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value)
+}
+
 export function typesetAnswer(input: TypesetInput): TypesetRecord {
   const seams = seamsFor(input.root)
   if (input.root.children.some(isBlockEmbed)) {
@@ -214,12 +308,18 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord {
     theme: THEMES[input.theme],
     ...(input.fill === null ? {} : { textFill: input.fill }),
     references: referencesFor(seams),
+    highlightCode: (lang, value) => highlightFor(lang, value),
+    renderMath: (value) => mathFor(value),
+    renderDiagram: (lang, value) => diagramFor(lang, value),
+    ...(input.syntax === null ? {} : { syntax: input.syntax }),
   }
   const scene = typesetMdastBlocks(input.root, options)
   // A `&str` cannot hold half a surrogate pair, so a scene that has one is not an answer the Rust
   // typesetter can give; the corpus must not reach it.
   if (holdsHalfAPair(scene)) throw new Error(`typeset-oracle: ${input.id} lays out half a pair`)
-  const text = dumpScene(scene)
+  // The sign of a NaN is the engine's to choose (x86 arithmetic makes a negative one), so a NaN
+  // is held as the canonical positive quiet NaN on both sides — at the number, never in a string.
+  const text = dumpScene(scene, canonicalNanHex)
   const answer = { ...input, seams, calls }
   if (!input.digest) return { ...answer, scene: text }
   const fnv = new Fnv()

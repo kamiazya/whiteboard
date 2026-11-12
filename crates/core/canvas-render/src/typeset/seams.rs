@@ -47,3 +47,70 @@ pub trait InlineSeams {
     /// What `resolveReference(url)?.image` answers.
     fn image_reference(&self, url: &str) -> Option<ImageRef>;
 }
+
+/// The token roles a highlighter names: roles, not colours, so the palette
+/// stays with the one appearance producer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenRole {
+    Keyword,
+    String,
+    Number,
+    Comment,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CodeToken {
+    pub text: String,
+    pub role: Option<TokenRole>,
+}
+
+/// One list of tokens per SOURCE line.
+pub type CodeTokenLines = Vec<Vec<CodeToken>>;
+
+/// Tokenises a fenced block (`highlightCode`). Its work budget is the host's:
+/// a host that has spent it answers `None`, and so does one that does not know
+/// the language, fails, or has nothing to say.
+pub trait CodeTokenizer {
+    fn tokenize(&self, lang: &str, value: &str) -> Option<CodeTokenLines>;
+}
+
+/// What a math or diagram renderer answers: markup alone, or markup with the
+/// size it knows.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Rendered {
+    Markup(String),
+    Fragment { svg: String, width: Option<f64>, height: Option<f64> },
+}
+
+/// Renders display math (`renderMath`); `None` for a renderer that has no
+/// answer or failed, which the layout draws as the source.
+pub trait MathRenderer {
+    fn render_math(&self, value: &str) -> Option<Rendered>;
+}
+
+/// Renders a fence as a diagram (`renderDiagram`); `None` keeps the code block.
+pub trait DiagramRenderer {
+    fn render_diagram(&self, lang: &str, value: &str) -> Option<Rendered>;
+}
+
+/// The fill of each token role.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SyntaxFills {
+    pub keyword: Option<String>,
+    pub string: Option<String>,
+    pub number: Option<String>,
+    pub comment: Option<String>,
+}
+
+impl SyntaxFills {
+    #[must_use]
+    pub fn fill(&self, role: TokenRole) -> Option<&str> {
+        let fill = match role {
+            TokenRole::Keyword => &self.keyword,
+            TokenRole::String => &self.string,
+            TokenRole::Number => &self.number,
+            TokenRole::Comment => &self.comment,
+        };
+        fill.as_deref()
+    }
+}
