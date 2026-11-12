@@ -5,6 +5,7 @@
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
+use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
 use whiteboard_canvas_render::typeset::{
     IconRange, ImageRef, InlineSeams, TypesetOptions, Unsupported, typeset_mdast_blocks,
@@ -445,4 +446,44 @@ fn a_padding_that_is_not_a_positive_number_takes_no_room() {
         let run = runs_of(&scene)[0];
         same(run.bbox.x, 0.0);
     }
+}
+
+/// The fake measurer, except that `z` and `あ` take no room at all.
+struct ZeroWidthFace;
+
+impl Measure for ZeroWidthFace {
+    fn advance_width(&self, text: &str, font: &FontDescriptor) -> f64 {
+        let inked = text.replace(['z', 'あ'], "");
+        FakeMeasure::default().advance_width(&inked, font)
+    }
+    fn vertical_metrics(&self, font: &FontDescriptor) -> VerticalMetrics {
+        FakeMeasure::default().vertical_metrics(font)
+    }
+}
+
+/// Two zero-width runs leave the cursor at 0 although the line is not empty,
+/// and the second may not be parted from the `。` that follows it. A cursor at
+/// 0 is read as an empty line, so the `。` overflows where it stands instead of
+/// taking the run it is joined to down a line with it.
+#[test]
+fn a_zero_width_stretch_is_not_moved_down_with_what_it_is_joined_to() {
+    let theme = MarkdownTheme::node();
+    let options = TypesetOptions {
+        measure: &ZeroWidthFace,
+        max_width: 5.0,
+        font_family: "sans-serif",
+        theme: &theme,
+        text_fill: None,
+        seams: &Host::default(),
+    };
+    let children = vec![text("z"), text("あ"), text("。")];
+    let root = Root { children: vec![paragraph(children)] };
+    let scene = typeset_mdast_blocks(&root, &options).unwrap_or_default();
+    let placed: Vec<(&str, f64, f64)> =
+        runs_of(&scene).iter().map(|r| (r.text.as_str(), r.bbox.x, r.bbox.y)).collect();
+    assert_eq!(placed, [("z", 0.0, 0.0), ("あ", 0.0, 0.0), ("。", 0.0, 0.0)]);
+    let SceneNode::Paragraph(block) = &scene.nodes[0] else {
+        panic!("scene node is not the expected variant")
+    };
+    same(block.bbox.h, LINE);
 }
