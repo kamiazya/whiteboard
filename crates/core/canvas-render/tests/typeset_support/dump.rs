@@ -7,7 +7,10 @@ use whiteboard_scene::{
     Appearance, BoundingBox, LinkProvenance, RunPaint, Scene, SceneNode, TextRunNode,
 };
 
+/// A NaN's sign is the arithmetic's to choose, so every NaN is written as
+/// `f64::NAN`, matching the TypeScript oracle's `canonicalNanHex`.
 fn num(value: f64) -> String {
+    let value = if value.is_nan() { f64::NAN } else { value };
     format!("#{:016x}", value.to_bits())
 }
 

@@ -66,11 +66,14 @@ function childFieldsOf(node: SceneWalkNode): readonly string[] {
   }
 }
 
-function dumpValue(value: unknown): string {
+/** How a number is written; the default keeps every bit, a NaN's sign included. */
+type NumberText = (value: number) => string
+
+function dumpValue(value: unknown, num: NumberText): string {
   if (value === null) return 'null'
   switch (typeof value) {
     case 'number':
-      return `#${f64Hex(value)}`
+      return `#${num(value)}`
     case 'string':
       return JSON.stringify(value)
     case 'boolean':
@@ -80,14 +83,15 @@ function dumpValue(value: unknown): string {
     default:
       throw new Error(`scene-dump: a ${typeof value} is not scene data`)
   }
-  if (Array.isArray(value)) return `[${value.map(dumpValue).join(',')}]`
-  return dumpFields(value as Record<string, unknown>, [], () => '')
+  if (Array.isArray(value)) return `[${value.map((item) => dumpValue(item, num)).join(',')}]`
+  return dumpFields(value as Record<string, unknown>, [], () => '', num)
 }
 
 function dumpFields(
   fields: Record<string, unknown>,
   nodeFields: readonly string[],
   dumpChild: (child: unknown) => string,
+  num: NumberText,
 ): string {
   const parts = Object.keys(fields)
     .filter((key) => fields[key] !== undefined)
@@ -97,21 +101,31 @@ function dumpFields(
       const text =
         nodeFields.includes(key) && Array.isArray(value)
           ? `[${value.map(dumpChild).join(',')}]`
-          : dumpValue(value)
+          : dumpValue(value, num)
       return `${JSON.stringify(key)}:${text}`
     })
   return `{${parts.join(',')}}`
 }
 
-function dumpNode(node: SceneWalkNode): string {
-  return dumpFields(node as unknown as Record<string, unknown>, childFieldsOf(node), (child) =>
-    dumpNode(child as SceneWalkNode),
+function dumpNode(node: SceneWalkNode, num: NumberText): string {
+  return dumpFields(
+    node as unknown as Record<string, unknown>,
+    childFieldsOf(node),
+    (child) => dumpNode(child as SceneWalkNode, num),
+    num,
   )
 }
 
-/** The canonical text of a scene: its fields sorted like every object's, `nodes` in paint order. */
-export function dumpScene(scene: Scene): string {
-  return dumpFields(scene as unknown as Record<string, unknown>, ['nodes'], (child) =>
-    dumpNode(child as SceneWalkNode),
+/**
+ * The canonical text of a scene: its fields sorted like every object's, `nodes` in paint order.
+ * `num` writes each number's hex (default `f64Hex`); it is applied to numbers only, so a string
+ * that happens to spell a number's text is never rewritten.
+ */
+export function dumpScene(scene: Scene, num: NumberText = f64Hex): string {
+  return dumpFields(
+    scene as unknown as Record<string, unknown>,
+    ['nodes'],
+    (child) => dumpNode(child as SceneWalkNode, num),
+    num,
   )
 }

@@ -285,6 +285,11 @@ class Fnv {
   }
 }
 
+/** `f64Hex`, with every NaN written as the positive quiet NaN `f64::NAN` is. */
+function canonicalNanHex(value: number): string {
+  return Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value)
+}
+
 export function typesetAnswer(input: TypesetInput): TypesetRecord {
   const seams = seamsFor(input.root)
   if (input.root.children.some(isBlockEmbed)) {
@@ -313,8 +318,8 @@ export function typesetAnswer(input: TypesetInput): TypesetRecord {
   // typesetter can give; the corpus must not reach it.
   if (holdsHalfAPair(scene)) throw new Error(`typeset-oracle: ${input.id} lays out half a pair`)
   // The sign of a NaN is the engine's to choose (x86 arithmetic makes a negative one), so a NaN
-  // is held as the canonical positive quiet NaN on both sides.
-  const text = dumpScene(scene).replaceAll('#fff8000000000000', '#7ff8000000000000')
+  // is held as the canonical positive quiet NaN on both sides — at the number, never in a string.
+  const text = dumpScene(scene, canonicalNanHex)
   const answer = { ...input, seams, calls }
   if (!input.digest) return { ...answer, scene: text }
   const fnv = new Fnv()
