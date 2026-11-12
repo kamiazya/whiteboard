@@ -43,5 +43,6 @@ pub mod scene_walk;
 pub mod svg;
 pub mod theme;
 pub mod truncate;
+pub mod typeset;
 pub mod uax_segments;
 pub mod xml_escape;
