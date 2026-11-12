@@ -195,6 +195,15 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/tests/linebreak_oracle.rs` regenerates from its `meta`
   record; `WHITEBOARD_RECORD_ORACLE=1` re-records it. The port's header lists the holes
   of the oracle it preserves.
+- **The BudouX phrase breaker is held to a recording and a generated model**:
+  `crates/core/canvas-render/src/budoux/model.rs` is written by
+  `packages/canvas-render/scripts/gen-budoux-model.mjs <out.rs>` from the
+  vendored `ja-model.ts` (`--check` is `tools/arch-lint`'s byte-equality test),
+  and `packages/canvas-render/src/oracle/budoux.jsonl` records what the vendored
+  parser cut (hand-written corpora, one string aimed at each of the 1,678
+  entries, per-prefix and seeded-stream digests); `crates/core/canvas-render/tests/budoux_oracle.rs`
+  replays it natively and on wasm32. The model does not know surrogate pairs and
+  may cut between their halves, as the TypeScript does.
 - **The text primitives are held to one recording**:
   `src/oracle/text-primitives.jsonl` holds `uaxSegments`, `longestFittingCount` (with
   its probe sequence), `fitToWidth` (kept text, flags, widths as hex doubles and the
