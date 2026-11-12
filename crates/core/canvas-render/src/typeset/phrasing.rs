@@ -67,7 +67,7 @@ pub(super) fn count_f64(count: usize) -> f64 {
 }
 
 /// `a › b`, how a reference with a `#fragment` reads: the way a breadcrumb does.
-fn reference_label(title: &str, fragment: Option<&str>) -> String {
+pub(super) fn reference_label(title: &str, fragment: Option<&str>) -> String {
     fragment.map_or_else(|| title.to_owned(), |f| format!("{title} › {f}"))
 }
 

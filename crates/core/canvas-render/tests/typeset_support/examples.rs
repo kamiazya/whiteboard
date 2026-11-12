@@ -1,13 +1,8 @@
 //! What the examples share: a host with whatever answers a test gives it, and
 //! the helpers that lay blocks out with the fake measurer.
 
-use whiteboard_canvas_render::fake_measure::FakeMeasure;
-use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
-use whiteboard_canvas_render::typeset::{
-    IconRange, ImageRef, InlineSeams, TypesetOptions, Unsupported, typeset_mdast_blocks,
-};
-use whiteboard_model::mdast::{Flow, Phrasing, Root};
-use whiteboard_scene::Scene;
+use whiteboard_canvas_render::typeset::{IconRange, ImageRef, InlineSeams};
+use whiteboard_model::mdast::{Flow, Phrasing};
 
 /// A host with whatever answers a test gives it; by default it knows nothing.
 #[derive(Default)]
@@ -51,25 +46,6 @@ pub(crate) const LINE: f64 = 16.0 * 1.55;
 
 pub(crate) fn text(value: &str) -> Phrasing {
     Phrasing::Text { value: value.to_owned() }
-}
-
-pub(crate) fn laid(width: f64, blocks: Vec<Flow>) -> Result<Scene, Unsupported> {
-    laid_by(&Host::default(), width, blocks)
-}
-
-pub(crate) fn laid_by(host: &Host, width: f64, blocks: Vec<Flow>) -> Result<Scene, Unsupported> {
-    laid_with(&MarkdownTheme::node(), host, width, blocks)
-}
-
-pub(crate) fn laid_with(
-    theme: &MarkdownTheme,
-    host: &Host,
-    width: f64,
-    blocks: Vec<Flow>,
-) -> Result<Scene, Unsupported> {
-    let measure = FakeMeasure::default();
-    let options = TypesetOptions::new(&measure, width, "sans-serif", theme, host);
-    typeset_mdast_blocks(&Root { children: blocks }, &options)
 }
 
 pub(crate) fn paragraph(children: Vec<Phrasing>) -> Flow {

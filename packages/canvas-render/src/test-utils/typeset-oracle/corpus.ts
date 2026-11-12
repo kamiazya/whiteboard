@@ -1,16 +1,12 @@
 import { readFileSync } from 'node:fs'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type {
-  MdastListItem as ListItem,
-  MdastCellPhrasingContent,
   MdastFlowContent,
   MdastPhrasingContent,
   MdastRoot,
-  MdastTableCell,
-  MdastTableRow,
 } from '@kamiazya/whiteboard-model/mdast'
 import { TEXT_WRAPPING_CORPUS } from '../text-wrapping-corpus.js'
-import { f64Hex, isBlockEmbed, type ThemeName, type TypesetInput } from './oracle.js'
+import { type EmbedSeams, f64Hex, type ThemeName, type TypesetInput } from './oracle.js'
 
 /**
  * The inputs of `typeset.jsonl`. Only the blocks the Rust typesetter carries
@@ -18,45 +14,26 @@ import { f64Hex, isBlockEmbed, type ThemeName, type TypesetInput } from './oracl
  * widens the filter, and the recorded file grows with it.
  */
 
-type Block = MdastFlowContent
-type Textual = Extract<MdastFlowContent, { type: 'paragraph' | 'heading' }>
-const t = (value: string): MdastPhrasingContent => ({ type: 'text', value })
-const p = (...children: MdastPhrasingContent[]): Textual => ({ type: 'paragraph', children })
-const h = (depth: 1 | 2 | 3 | 4 | 5 | 6, ...children: MdastPhrasingContent[]): Textual => ({
-  type: 'heading',
-  depth,
-  children,
-})
-const em = (...children: MdastPhrasingContent[]): MdastPhrasingContent => ({
-  type: 'emphasis',
-  children,
-})
-const strong = (...children: MdastPhrasingContent[]): MdastPhrasingContent => ({
-  type: 'strong',
-  children,
-})
-const del = (...children: MdastPhrasingContent[]): MdastPhrasingContent => ({
-  type: 'delete',
-  children,
-})
-const code = (value: string): MdastPhrasingContent => ({ type: 'inlineCode', value })
-const link = (url: string, ...children: MdastPhrasingContent[]): MdastPhrasingContent => ({
-  type: 'link',
-  url,
-  children,
-})
+import {
+  type Block,
+  code,
+  del,
+  em,
+  fence,
+  h,
+  ID,
+  ID2,
+  ID3,
+  ID4,
+  JA,
+  LONG_EN,
+  link,
+  p,
+  strong,
+  t,
+} from './hand-builders.js'
+import { FLOOR_TABLE, HAND_CONTAINERS, HAND_EMBEDS } from './hand-containers.js'
 
-const ID = '01HZX3Q8K9V2M4N5P6R7S8T9WA'
-const ID2 = '01HZX3Q8K9V2M4N5P6R7S8T9WB'
-const ID3 = '01HZX3Q8K9V2M4N5P6R7S8T9WC'
-const ID4 = '01HZX3Q8K9V2M4N5P6R7S8T9WD'
-
-const JA =
-  'これは日本語の長い文章です。ノードの幅を超えても折り返されるべきですが、実際にどうなるかを測ります。'
-const LONG_EN =
-  'This is a fairly long English sentence that should wrap across several lines when the box is narrow.'
-
-/** One block per case, aimed at one rule each. */
 const HAND: readonly (readonly [string, readonly Block[]])[] = [
   ['empty-paragraph', [p()]],
   ['blank-text', [p(t('   '))]],
@@ -218,12 +195,6 @@ const HAND: readonly (readonly [string, readonly Block[]])[] = [
   ['leading-break', [p({ type: 'break' }, t('x'))]],
 ]
 
-const fence = (value: string, lang?: string): Block => ({
-  type: 'code',
-  value,
-  ...(lang === undefined ? {} : { lang }),
-})
-
 const TS_SOURCE =
   'const a: number = 1 // note\nfunction f(x) { return "s" + x + 0xff }\n\n  if (a) {\n\treturn `t`\n}'
 
@@ -285,227 +256,6 @@ const HAND_BLOCKS: readonly (readonly [string, readonly Block[]])[] = [
   ],
 ]
 
-const quote = (...children: Block[]): Block => ({ type: 'blockquote', children })
-const item = (checked: boolean | null, ...children: Block[]): ListItem => ({
-  type: 'listItem',
-  checked,
-  children,
-})
-const bullet = (...items: ListItem[]): Block => ({ type: 'list', ordered: false, children: items })
-const numbered = (start: number | undefined, ...items: ListItem[]): Block => ({
-  type: 'list',
-  ordered: true,
-  ...(start === undefined ? {} : { start }),
-  children: items,
-})
-const plain = (text: string): ListItem => item(null, p(t(text)))
-const cell = (...children: MdastCellPhrasingContent[]): MdastTableCell => ({
-  type: 'tableCell',
-  children,
-})
-const row = (...cells: MdastTableCell[]): MdastTableRow => ({ type: 'tableRow', children: cells })
-const grid = (...rows: MdastTableRow[]): Block => ({ type: 'table', children: rows })
-const word = (text: string) => cell({ type: 'text', value: text })
-
-/** Blocks that hold blocks or cells: a quote, a list with its items and a table. */
-const HAND_CONTAINERS: readonly (readonly [string, readonly Block[]])[] = [
-  ['quote', [quote(p(t(LONG_EN)))]],
-  ['quote-two', [quote(p(t('one')), p(t('two')))]],
-  ['quote-nested', [quote(p(t('outer')), quote(p(t('inner ')), quote(p(t(LONG_EN)))))]],
-  [
-    'quote-mixed',
-    [
-      quote(
-        h(2, t('Head')),
-        fence('x = 1', 'py'),
-        { type: 'thematicBreak' },
-        { type: 'math', value: 'a+b' },
-      ),
-    ],
-  ],
-  ['quote-empty', [quote()]],
-  ['quote-ja', [p(t('before')), quote(p(t(JA))), p(t('after'))]],
-  ['quote-list', [quote(bullet(plain('a'), plain('b')))]],
-  ['bullets', [bullet(plain('first'), plain(LONG_EN), plain('third'))]],
-  ['ordered', [numbered(undefined, plain('one'), plain('two'), plain('three'))]],
-  ['ordered-start', [numbered(8, plain('eight'), plain('nine'), plain('ten'), plain('eleven'))]],
-  ['ordered-zero', [numbered(0, plain('zero'), plain('one'))]],
-  ['ordered-big', [numbered(1e21, plain('a'), plain('b'))]],
-  [
-    'ordered-fraction',
-    [numbered(1.5, plain('a'), plain('b')), numbered(-3, plain('c'), plain('d'))],
-  ],
-  [
-    'nested',
-    [
-      bullet(
-        item(
-          null,
-          p(t('top')),
-          bullet(item(null, p(t('mid')), bullet(plain('deep'), plain('deeper'))), plain('mid two')),
-        ),
-        plain('top two'),
-      ),
-    ],
-  ],
-  [
-    'nested-ordered',
-    [numbered(1, item(null, p(t('a')), numbered(1, plain('a.1'), plain('a.2'))), plain('b'))],
-  ],
-  [
-    'spread',
-    [
-      {
-        type: 'list',
-        ordered: false,
-        spread: true,
-        children: [item(null, p(t('p1')), p(t('p2'))), plain('x')],
-      },
-    ],
-  ],
-  [
-    'tasks',
-    [
-      bullet(
-        item(true, p(t('done'))),
-        item(false, p(t('todo'))),
-        plain('plain'),
-        item(true, p(t(LONG_EN))),
-      ),
-    ],
-  ],
-  ['tasks-ordered', [numbered(3, item(true, p(t('done'))), item(false, p(t('todo'))))]],
-  [
-    'item-blocks',
-    [
-      bullet(
-        item(
-          null,
-          p(t('lead')),
-          fence('code', 'js'),
-          { type: 'thematicBreak' },
-          quote(p(t('q'))),
-          h(3, t('h')),
-        ),
-      ),
-    ],
-  ],
-  ['item-empty', [bullet(item(null), item(false), plain('after'))]],
-  ['list-empty', [{ type: 'list', ordered: false, children: [] }]],
-  [
-    'list-then-text',
-    [
-      p(t('before')),
-      bullet(plain('a'), plain('b')),
-      p(t('after')),
-      numbered(undefined, plain('c')),
-    ],
-  ],
-  ['list-in-list-in-quote', [quote(bullet(item(null, p(t('a')), quote(p(t('deep quote'))))))]],
-  [
-    'table',
-    [
-      grid(
-        row(word('Name'), word('Role')),
-        row(word('Ada'), word('Engineer')),
-        row(word('Grace'), word('Admiral')),
-      ),
-    ],
-  ],
-  [
-    'table-styled',
-    [
-      grid(
-        row(word('H1'), word('H2')),
-        row(
-          cell(
-            { type: 'strong', children: [{ type: 'text', value: 'bold' }] },
-            { type: 'text', value: ' ' },
-            { type: 'inlineCode', value: 'code' },
-          ),
-          cell(
-            { type: 'link', url: 'u', children: [{ type: 'text', value: 'link' }] },
-            { type: 'delete', children: [{ type: 'text', value: 'gone' }] },
-          ),
-        ),
-      ),
-    ],
-  ],
-  [
-    'table-long',
-    [
-      grid(
-        row(word('Short'), word('Long')),
-        row(word('x'), word(LONG_EN)),
-        row(word(JA), word('y')),
-      ),
-    ],
-  ],
-  [
-    'table-wide',
-    [
-      grid(
-        row(...Array.from({ length: 8 }, (_, i) => word(`Column ${i} header`))),
-        row(...Array.from({ length: 8 }, (_, i) => word(`value ${i} that is wide`))),
-      ),
-    ],
-  ],
-  [
-    'table-ragged',
-    [grid(row(word('a'), word('b'), word('c')), row(word('d')), row(), row(word('e'), word('f')))],
-  ],
-  ['table-empty-cells', [grid(row(cell(), cell()), row(cell(), word('x')))]],
-  ['table-header-only', [grid(row(word('only'), word('header')))]],
-  ['table-no-rows', [grid()]],
-  [
-    'table-wiki',
-    [
-      grid(
-        row(
-          cell({ type: 'wikiLink', documentId: ID }, { type: 'embed', documentId: ID2 }),
-          cell({ type: 'image', url: 'https://e.com/a.png', alt: 'pic' }),
-        ),
-      ),
-    ],
-  ],
-  [
-    'table-nested-text',
-    [
-      grid(
-        row(
-          cell({
-            type: 'emphasis',
-            children: [
-              { type: 'strong', children: [{ type: 'text', value: 'both' }] },
-              {
-                type: 'linkReference',
-                identifier: 'r',
-                referenceType: 'full',
-                children: [{ type: 'text', value: 'ref' }],
-              },
-            ],
-          }),
-          cell({ type: 'inlineMath', value: 'a+b' }, { type: 'html', value: '<b>' }),
-        ),
-      ),
-    ],
-  ],
-  [
-    'table-among',
-    [p(t('above')), grid(row(word('a'), word('b')), row(word('c'), word('d'))), p(t('below'))],
-  ],
-  [
-    'everything',
-    [
-      h(1, t('Doc')),
-      p(t(LONG_EN)),
-      quote(bullet(item(true, p(t('t'))), plain('u'))),
-      grid(row(word('k'), word('v')), row(word('1'), word('2'))),
-      numbered(1, plain('last')),
-    ],
-  ],
-]
-
 const WIDTHS = [40, 96, 160, 280, 600]
 const EXTREME: readonly (readonly [string, number])[] = [
   ['huge', 1e9],
@@ -520,6 +270,16 @@ const THEME_CYCLE: readonly ThemeName[] = ['node', 'document', 'compact']
 
 const SYNTAX = { keyword: '#cf222e', string: '#0a3069', number: '#0550ae', comment: '#6e7781' }
 
+const EMBED_CYCLE: readonly EmbedSeams[] = [
+  'full',
+  'full',
+  'documents',
+  'full',
+  'none',
+  'full',
+  'full',
+]
+
 let counter = 0
 function input(id: string, blocks: readonly Block[], width: number, digest: boolean): TypesetInput {
   counter += 1
@@ -529,6 +289,7 @@ function input(id: string, blocks: readonly Block[], width: number, digest: bool
     width: f64Hex(width),
     theme: THEME_CYCLE[counter % 3] as ThemeName,
     fill: counter % 2 === 0 ? '#1f2328' : null,
+    embeds: EMBED_CYCLE[counter % EMBED_CYCLE.length] as EmbedSeams,
     syntax: counter % 3 === 0 ? null : SYNTAX,
     digest,
   }
@@ -629,8 +390,6 @@ function generated(): TypesetInput[] {
   const next = () => stream.next().value as number
   return Array.from({ length: GENERATED_COUNT }, (_, n) => {
     const children = generatedInline(next, 0)
-    // A paragraph that is only an embed is a block embed, which a later slice carries.
-    if (children.length === 1 && children[0]?.type === 'embed') children.push(t('.'))
     const block: Block =
       next() < 0.25 ? h((1 + Math.floor(next() * 6)) as 1, ...children) : p(...children)
     const width = [30, 64, 120, 200, 330, 800][Math.floor(next() * 6)] as number
@@ -652,12 +411,12 @@ const CARRIED = new Set([
 ])
 
 const blocksOf = (root: MdastRoot): Block[] =>
-  root.children.filter((block) => CARRIED.has(block.type) && !isBlockEmbed(block))
+  root.children.filter((block) => CARRIED.has(block.type))
 
 function walkBlocks(nodes: readonly MdastFlowContent[], out: Block[]): void {
   for (const node of nodes) {
     if (CARRIED.has(node.type)) {
-      if (!isBlockEmbed(node)) out.push(node)
+      out.push(node)
       if (node.type === 'blockquote') walkBlocks(node.children, out)
       if (node.type === 'list') for (const item of node.children) walkBlocks(item.children, out)
     }
@@ -686,7 +445,7 @@ function harvested(): TypesetInput[] {
     const prose = blocks.filter((b) => b.type === 'paragraph' || b.type === 'heading')
     const furniture = blocks.filter((b) => b.type !== 'paragraph' && b.type !== 'heading')
     if (/^(cm#|gfm#)/.test(record.i)) {
-      const whole = parseMarkdownBody(record.t).children.filter((b) => !isBlockEmbed(b))
+      const whole = parseMarkdownBody(record.t).children
       out.push(input(`doc/${record.i}`, whole, WIDTHS[out.length % WIDTHS.length] as number, true))
     }
     ;[...prose.slice(0, 2), ...furniture.slice(0, 2)].forEach((block, n) => {
@@ -705,10 +464,11 @@ function harvested(): TypesetInput[] {
  */
 const FLOOR_EXACT: TypesetInput = {
   id: 'containers/table-floor-exact',
-  root: { type: 'root', children: [grid(row(word('ab'), word('abcd')))] },
+  root: { type: 'root', children: [FLOOR_TABLE] },
   width: f64Hex(101.84070796460176),
   theme: 'node',
   fill: null,
+  embeds: 'none',
   syntax: SYNTAX,
   digest: false,
 }
@@ -724,6 +484,23 @@ export function typesetInputs(withHarvest: boolean): readonly TypesetInput[] {
       named.push(input(`containers/${name}@${width}`, blocks, width, width !== 160 && width !== 24))
     for (const [label, width] of EXTREME.filter(([l]) => ['nan', 'negative', 'zero'].includes(l)))
       named.push(input(`containers/${name}@${label}`, blocks, width, true))
+  }
+  for (const [name, blocks] of HAND_EMBEDS) {
+    for (const width of [40, 160, 600]) {
+      for (const embeds of ['full', 'documents', 'none'] as const) {
+        named.push({
+          ...input(
+            `embeds/${name}@${width}/${embeds}`,
+            blocks,
+            width,
+            !(embeds === 'full' && (width === 160 || (width === 600 && name.startsWith('budget')))),
+          ),
+          embeds,
+        })
+      }
+    }
+    for (const [label, width] of EXTREME.filter(([l]) => ['nan', 'zero', 'negative'].includes(l)))
+      named.push(input(`embeds/${name}@${label}`, blocks, width, true))
   }
   for (const [name, blocks] of HAND_BLOCKS) {
     for (const width of WIDTHS) named.push(input(`blocks/${name}@${width}`, blocks, width, false))

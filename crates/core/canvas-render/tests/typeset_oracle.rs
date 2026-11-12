@@ -14,7 +14,9 @@ use typeset_support::record::{Counting, Record};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
-use whiteboard_canvas_render::typeset::{TypesetOptions, typeset_mdast_blocks};
+use whiteboard_canvas_render::typeset::{
+    CanvasMiniature, EmbedResolver, TypesetOptions, typeset_mdast_blocks,
+};
 
 fn fnv(text: &str) -> u32 {
     text.encode_utf16()
@@ -37,10 +39,12 @@ fn lay_out(record: &Record) -> Result<(String, usize), String> {
         syntax: syntax.as_ref(),
         math: Some(&record.seams),
         diagram: Some(&record.seams),
+        embeds: (record.embeds != "none").then_some(&record.seams as &dyn EmbedResolver),
+        canvas_layout: (record.embeds == "full").then_some(&record.seams as &dyn CanvasMiniature),
         ..TypesetOptions::new(&measure, f64::from_bits(bits), "sans-serif", &theme, &record.seams)
     };
     let root = typeset_support::model::root(&record.root)?;
-    let scene = typeset_mdast_blocks(&root, &options).map_err(|e| format!("unsupported {e:?}"))?;
+    let scene = typeset_mdast_blocks(&root, &options);
     if let Some(miss) = record.seams.misses().first() {
         return Err(format!("the recording holds no {miss}"));
     }

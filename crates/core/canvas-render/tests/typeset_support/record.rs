@@ -8,9 +8,11 @@ use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::typeset::{
-    CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer, IconRange, ImageRef, InlineSeams,
-    MathRenderer, Rendered, SyntaxFills, TokenRole,
+    CanvasMiniature, CanvasSummary, CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer,
+    EmbedBox, EmbedResolver, Embedded, IconRange, ImageRef, InlineSeams, MathRenderer, Miniature,
+    Rendered, SyntaxFills, TokenRole,
 };
+use whiteboard_scene::{BoundingBox, SceneNode, ShapeSceneNode};
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -54,6 +56,26 @@ impl Wire {
     }
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EmbeddedWire {
+    kind: String,
+    title: Option<String>,
+    root: Option<Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanvasWire {
+    elements: usize,
+    empty: bool,
+}
+
+/// `Math.min`, which a NaN on either side answers with.
+fn js_min(a: f64, b: f64) -> f64 {
+    if a.is_nan() || b.is_nan() { f64::NAN } else { a.min(b) }
+}
+
 fn key(lang: &str, value: &str) -> String {
     format!("{lang}\u{0}{value}")
 }
@@ -72,6 +94,9 @@ pub(crate) struct Seams {
     highlight: BTreeMap<String, Option<Vec<Vec<Token>>>>,
     math: BTreeMap<String, Option<Wire>>,
     diagram: BTreeMap<String, Option<Wire>>,
+    embedded: BTreeMap<String, Option<EmbeddedWire>>,
+    canvases: BTreeMap<String, Option<CanvasWire>>,
+    miniatures: BTreeMap<String, String>,
     /// Questions the tables could not answer: a hole in the recording, which
     /// the replay reports rather than reading as an answer.
     #[serde(skip)]
@@ -154,6 +179,61 @@ impl CodeTokenizer for Seams {
     }
 }
 
+impl EmbedResolver for Seams {
+    fn resolve_embed(&self, document_id: &str, fragment: Option<&str>) -> Option<Embedded> {
+        let wire = self.held(&self.embedded, "embed target", document_id)?.as_ref()?;
+        if wire.kind == "document" {
+            let root = wire.root.as_ref().map(super::model::root)?;
+            let Ok(root) = root else {
+                self.misses.borrow_mut().push(format!("a readable body for {document_id:?}"));
+                return None;
+            };
+            return Some(Embedded::Document { title: wire.title.clone(), root });
+        }
+        let at = format!(
+            "{document_id}\u{0}{}",
+            fragment.map_or_else(|| "u".to_owned(), |f| format!("s{f}"))
+        );
+        let summary = self.held(&self.canvases, "canvas summary", &at)?;
+        let canvas =
+            summary.as_ref().map(|c| CanvasSummary { elements: c.elements, empty: c.empty });
+        Some(Embedded::Canvas { title: wire.title.clone(), canvas })
+    }
+}
+
+impl CanvasMiniature for Seams {
+    fn miniature(
+        &self,
+        document_id: &str,
+        _fragment: Option<&str>,
+        space: &EmbedBox,
+        _path: &[String],
+    ) -> Option<Miniature> {
+        let mode = self.held(&self.miniatures, "miniature mode", document_id)?;
+        let tall = match mode.as_str() {
+            "shape" => false,
+            "tall" => true,
+            _ => return None,
+        };
+        let w = if tall { space.max_width } else { js_min(space.max_width, 120.0) };
+        let h = if tall { space.max_height } else { js_min(space.max_height, 80.0) };
+        let shape = ShapeSceneNode {
+            truncated: false,
+            overflows: false,
+            id: None,
+            bbox: BoundingBox { x: space.x, y: space.y, w, h },
+            comment_chrome: false,
+            proposal_chrome: None,
+            radius: Some(3.0),
+            shape: None,
+            appearance: None,
+            task_box: None,
+            ink: None,
+        };
+        Some(Miniature { nodes: vec![SceneNode::Shape(Box::new(shape))], w, h })
+    }
+}
+
 impl MathRenderer for Seams {
     fn render_math(&self, value: &str) -> Option<Rendered> {
         self.held(&self.math, "math", value).and_then(Option::as_ref).map(Wire::rendered)
@@ -186,6 +266,7 @@ pub(crate) struct Record {
     pub(crate) width: String,
     pub(crate) theme: String,
     pub(crate) fill: Option<String>,
+    pub(crate) embeds: String,
     pub(crate) syntax: Option<BTreeMap<String, String>>,
     pub(crate) digest: bool,
     pub(crate) seams: Seams,

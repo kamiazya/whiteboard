@@ -6,7 +6,10 @@ use whiteboard_scene::{Appearance, TextRunNode};
 use crate::measure::{FontDescriptor, FontStyle, Measure, clamp_advance};
 use crate::theme::markdown::MarkdownTheme;
 
-use super::seams::{CodeTokenizer, DiagramRenderer, InlineSeams, MathRenderer, SyntaxFills};
+use super::seams::{
+    CanvasMiniature, CodeTokenizer, DiagramRenderer, EmbedResolver, InlineSeams, MathRenderer,
+    NestedLayoutBudget, SyntaxFills,
+};
 
 #[derive(Clone, Copy)]
 pub struct TypesetOptions<'a> {
@@ -26,6 +29,12 @@ pub struct TypesetOptions<'a> {
     /// Absent, display math is drawn as its escaped source.
     pub math: Option<&'a dyn MathRenderer>,
     pub diagram: Option<&'a dyn DiagramRenderer>,
+    /// Absent, a paragraph that is only an embed is set as inline prose.
+    pub embeds: Option<&'a dyn EmbedResolver>,
+    /// Absent, a canvas embed is unresolvable.
+    pub canvas_layout: Option<&'a dyn CanvasMiniature>,
+    /// The account embeds spend from; absent, the typesetter opens a fresh one.
+    pub budget: Option<&'a NestedLayoutBudget>,
 }
 
 impl<'a> TypesetOptions<'a> {
@@ -49,6 +58,9 @@ impl<'a> TypesetOptions<'a> {
             syntax: None,
             math: None,
             diagram: None,
+            embeds: None,
+            canvas_layout: None,
+            budget: None,
         }
     }
 }

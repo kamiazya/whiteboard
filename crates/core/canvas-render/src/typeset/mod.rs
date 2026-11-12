@@ -9,6 +9,7 @@
 
 mod blocks;
 mod code;
+mod embed;
 mod furniture;
 mod list;
 mod options;
@@ -21,10 +22,11 @@ mod task_checkbox;
 mod text;
 mod wrap;
 
-pub use blocks::{Unsupported, typeset_mdast_blocks};
+pub use blocks::typeset_mdast_blocks;
 pub use options::TypesetOptions;
 pub use seams::{
-    CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer, IconRange, ImageRef, InlineSeams,
-    MathRenderer, Rendered, SyntaxFills, TokenRole,
+    CanvasMiniature, CanvasSummary, CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer,
+    EmbedBox, EmbedResolver, Embedded, IconRange, ImageRef, InlineSeams, MathRenderer, Miniature,
+    NestedLayoutBudget, Rendered, SyntaxFills, TokenRole,
 };
 pub use section::select_markdown_section;
