@@ -1,16 +1,15 @@
 import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
-import { nodeKind, type SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'
 import type { RenderContribution, SceneNode } from '@kamiazya/whiteboard-scene'
-import { composeFileNode } from '../../layout/compose-file-node.js'
 import { composeNode } from '../../layout/compose-node.js'
 import type {
   ResolvedLayoutOptions,
   SpatialContentCache,
   SpatialLayoutDegradation,
 } from '../../layout/layout-options.js'
-import { createNestedLayoutBudget } from '../../layout/nodes/embed-budget.js'
+import { canvasElementCount, createNestedLayoutBudget } from '../../layout/nodes/embed-budget.js'
 import type { FittedBlocks } from '../../layout/nodes/mdast-blocks.js'
 import { BUNDLED_SHAPE_TABLE } from '../../layout/nodes/node-outline.js'
 import type { FontDescriptor, TextMetrics } from '../../measure.js'
@@ -19,7 +18,19 @@ import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { createThemedAppearance } from '../../theme/theme-asset.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { dumpScene, f64Hex } from '../render-oracle/scene-dump.js'
-import { type CaseSpec, caseSpecs, DOC_ID, REFERENCES, RESOURCES, THROWING_BODY } from './corpus.js'
+import {
+  BOARD_CANVAS,
+  BOARD_ID,
+  type CaseSpec,
+  caseSpecs,
+  DOC_ID,
+  REFERENCES,
+  RESOURCES,
+  resolveAlias,
+  THROWING_BODY,
+} from './corpus.js'
+import { type DecorationRecord, decorationRecords } from './decorations.js'
+import { type FitRecord, fitRecords } from './fit.js'
 
 /**
  * The recorded answers of `composeNode` (`layout/compose-node.ts`): the text,
@@ -30,8 +41,9 @@ import { type CaseSpec, caseSpecs, DOC_ID, REFERENCES, RESOURCES, THROWING_BODY 
  * and kept, the scene composed again over the same cache, and the scene composed
  * over a cache seeded under the first key asked. What the composer asks a host
  * the Rust port takes as a seam — a body parsed and its references resolved, a
- * reference resolved, an embed target, a file node's canvas embed — is in the
- * meta line and the case, as data. Every double is the hex of its IEEE bits
+ * reference resolved, an embed target, the expansion policy, and a nested canvas
+ * laid out — is in the meta line and the case, as data; what the nested layout
+ * was handed is part of the answer. Every double is the hex of its IEEE bits
  * (a NaN the canonical one), and `calls` counts what the measurer was asked.
  */
 
@@ -62,7 +74,6 @@ const fromHex = (text: string): number => {
 }
 
 /** The body the recording's parser reads, its references resolved; `null` is a parser that throws. */
-const resolveAlias = (alias: string): string | null => (alias === 'doc' ? DOC_ID : null)
 const parseBody = (text: string): MdastRoot => {
   if (text === THROWING_BODY) throw new Error('compose-node-oracle: a body that does not parse')
   return parseMarkdownBody(text)
@@ -72,7 +83,11 @@ const bodyOf = (text: string): MdastRoot | null =>
 
 const EMBEDDED_BODY = 'Embedded body'
 const resolveEmbed = (id: string) =>
-  id === DOC_ID ? { title: 'Doc', root: parseMarkdownBody(EMBEDDED_BODY) } : undefined
+  id === DOC_ID
+    ? { title: 'Doc', root: parseMarkdownBody(EMBEDDED_BODY) }
+    : id === BOARD_ID
+      ? { title: 'Board', canvas: BOARD_CANVAS }
+      : undefined
 
 const resolveReference = (ref: string): ResolvedReference | undefined => {
   const wire = REFERENCES[ref]
@@ -113,10 +128,14 @@ interface MetaRecord {
   readonly sketch: unknown
   /** Each body as parsed with its references resolved; `null` is a parse that throws. */
   readonly bodies: Readonly<Record<string, MdastRoot | null>>
-  /** The one embed target answered, by document id. */
+  /** The document embed target answered, by document id. */
   readonly embedded: Readonly<Record<string, { title: string; root: MdastRoot }>>
+  /** The canvas embed target answered, by document id. */
+  readonly canvases: Readonly<Record<string, { title: string; canvas: SpatialCanvas }>>
   readonly references: typeof REFERENCES
   readonly seeded: FittedBlocks
+  /** What the nested layout answers for any canvas. */
+  readonly miniature: readonly SceneNode[]
 }
 
 /** A node as data: its box as IEEE bits, the rest as JSON. */
@@ -142,16 +161,15 @@ interface CaseRecord {
   readonly embedDepth: number
   /**
    * Which of the case's switches are on: `locked`, `suppressed` (the editor owns
-   * the body), `emptyFrame`, `cache` (a content cache is handed over) and
-   * `spent` (the nested-layout budget has no layout left).
+   * the body), `emptyFrame`, `cache` (a content cache is handed over), `spent`
+   * (the nested-layout budget has no layout left) and `collapsed` (the expansion
+   * policy keeps a file node's canvas closed).
    */
   readonly flags: readonly Flag[]
-  /**
-   * The canvas a file node embeds, scaled into its box, as data: `null` when the
-   * embed draws nothing and the next representation is asked. The port asks it
-   * of its host until the nested layout is ported.
-   */
-  readonly embed: SceneNode | null
+  /** The layouts and elements left in the budget, when not the default. */
+  readonly budget?: readonly [number, number]
+  /** The documents being laid out around the node, when there are any. */
+  readonly embedPath?: readonly string[]
   readonly answer: CaseAnswer
 }
 
@@ -163,9 +181,18 @@ interface CaseAnswer {
   readonly again: { n: number; h: number }
   readonly seeded: { n: number; h: number } | null
   readonly calls: number
+  /** What each nested layout was handed, over every composition of the case. */
+  readonly nested?: readonly Nested[]
 }
 
-export type ComposeNodeRecord = MetaRecord | CaseRecord
+/** A nested layout's input: the recursion path, the depth and the canvas's size. */
+interface Nested {
+  readonly path: readonly string[]
+  readonly depth: number
+  readonly elements: number
+}
+
+export type ComposeNodeRecord = MetaRecord | CaseRecord | DecorationRecord | FitRecord
 
 function nodeOf(wire: NodeWire): SpatialNode {
   const [x, y, width, height] = wire.box.map(fromHex) as [number, number, number, number]
@@ -201,8 +228,8 @@ class RecordingCache implements SpatialContentCache {
   }
 }
 
-type Flag = 'locked' | 'suppressed' | 'emptyFrame' | 'cache' | 'spent'
-const FLAGS: readonly Flag[] = ['locked', 'suppressed', 'emptyFrame', 'cache', 'spent']
+type Flag = 'locked' | 'suppressed' | 'emptyFrame' | 'cache' | 'spent' | 'collapsed'
+const FLAGS: readonly Flag[] = ['locked', 'suppressed', 'emptyFrame', 'cache', 'spent', 'collapsed']
 
 type Input = Omit<CaseRecord, 'answer'>
 
@@ -226,6 +253,7 @@ function optionsOf(
   count: () => void,
   events: SpatialLayoutDegradation[],
   cache: SpatialContentCache | undefined,
+  nested: Nested[],
 ): ResolvedLayoutOptions {
   const measure = countingMeasure(count)
   const appearance = appearanceOf(record.theme)
@@ -241,6 +269,10 @@ function optionsOf(
   const budget = createNestedLayoutBudget()
   const on = (flag: Flag) => record.flags.includes(flag)
   if (on('spent')) budget.remaining = 0
+  if (record.budget !== undefined) {
+    budget.remaining = record.budget[0]
+    budget.elementsRemaining = record.budget[1]
+  }
   const id = record.node.id
   return {
     measure,
@@ -256,7 +288,7 @@ function optionsOf(
     resolveEmbed,
     resolveReference,
     nestedLayoutBudget: budget,
-    activeEmbedPath: new Set<string>(),
+    activeEmbedPath: new Set<string>(record.embedPath ?? []),
     embedDepth: record.embedDepth,
     passagesByNode: new Map(),
     suppressedBodyNodeIds: on('suppressed') ? [id] : [],
@@ -264,8 +296,15 @@ function optionsOf(
     emptyFrameIds: new Set(on('emptyFrame') ? [id] : []),
     onDegrade: (event: SpatialLayoutDegradation) => events.push(event),
     ...(cache === undefined ? {} : { contentCache: cache }),
-    expandFileNode: () => true,
-    layoutNestedCanvas: () => MINIATURE,
+    expandFileNode: () => !on('collapsed'),
+    layoutNestedCanvas: (canvas: SpatialCanvas, inner: ResolvedLayoutOptions) => {
+      nested.push({
+        path: [...inner.activeEmbedPath],
+        depth: inner.embedDepth,
+        elements: canvasElementCount(canvas),
+      })
+      return MINIATURE
+    },
   } as unknown as ResolvedLayoutOptions
 }
 
@@ -284,15 +323,16 @@ function answerOf(record: Input): CaseAnswer {
     calls += 1
   }
   const events: SpatialLayoutDegradation[] = []
+  const nested: Nested[] = []
   const cache = record.flags.includes('cache') ? new RecordingCache() : undefined
-  const scene = dump(composeNode(node, optionsOf(record, count, events, cache)))
-  const again = digest(dump(composeNode(node, optionsOf(record, count, events, cache))))
+  const scene = dump(composeNode(node, optionsOf(record, count, events, cache, nested)))
+  const again = digest(dump(composeNode(node, optionsOf(record, count, events, cache, nested))))
   const first = cache?.asked[0]
   let seeded: { n: number; h: number } | null = null
   if (first !== undefined) {
     const seed = new RecordingCache()
     seed.entries.set(first, SEEDED)
-    seeded = digest(dump(composeNode(node, optionsOf(record, count, events, seed))))
+    seeded = digest(dump(composeNode(node, optionsOf(record, count, events, seed, nested))))
   }
   return {
     scene,
@@ -306,29 +346,12 @@ function answerOf(record: Input): CaseAnswer {
     again,
     seeded,
     calls,
+    ...(nested.length === 0 ? {} : { nested }),
   }
-}
-
-/**
- * The canvas embed a file node draws, as the composer draws it: the one
- * `embedResolved` entry at the top of its scene, which no other representation
- * puts there. Recorded as JSON, so it is checked to survive the trip.
- */
-function embedOf(record: Omit<Input, 'embed'>): SceneNode | null {
-  if (nodeKind(nodeOf(record.node)) !== 'file') return null
-  const options = optionsOf({ ...record, embed: null }, () => {}, [], undefined)
-  const drawn = composeFileNode(nodeOf(record.node), options)
-  const embed = drawn.find((entry) => entry.kind === 'embedResolved')
-  if (embed === undefined) return null
-  const wire = viaJson(embed)
-  if (dump([wire]) !== dump([embed])) {
-    throw new Error(`compose-node-oracle: ${record.id}'s embed does not survive JSON`)
-  }
-  return wire
 }
 
 function caseRecord(spec: CaseSpec, index: number): CaseRecord {
-  const partial = {
+  const input: Input = {
     kind: 'case' as const,
     id: spec.id,
     node: wireOf(spec, index),
@@ -339,8 +362,9 @@ function caseRecord(spec: CaseSpec, index: number): CaseRecord {
     geometry: spec.geometry.map(hex),
     embedDepth: spec.embedDepth,
     flags: FLAGS.filter((flag) => spec[flag]),
+    ...(spec.budget === undefined ? {} : { budget: spec.budget }),
+    ...(spec.embedPath === undefined ? {} : { embedPath: spec.embedPath }),
   }
-  const input = { ...partial, embed: embedOf(partial) }
   return { ...input, answer: answerOf(input) }
 }
 
@@ -355,19 +379,26 @@ function metaRecord(): MetaRecord {
     embedded: {
       [DOC_ID]: { title: 'Doc', root: viaJson(parseMarkdownBody(EMBEDDED_BODY)) },
     },
+    canvases: { [BOARD_ID]: { title: 'Board', canvas: viaJson(BOARD_CANVAS) } },
     references: REFERENCES,
     seeded: viaJson(SEEDED),
+    miniature: viaJson(MINIATURE.nodes),
   }
 }
 
-/** Every record, in file order: the meta line, then the cases. */
+const decorations = () => decorationRecords(hex, dump, appearanceOf)
+const fits = () => fitRecords(hex, dump, MINIATURE.nodes)
+
+/** Every record, in file order: the meta line, the cases, the decorations, then the fits. */
 export function composeNodeRecords(): readonly ComposeNodeRecord[] {
-  return [metaRecord(), ...caseSpecs().map(caseRecord)]
+  return [metaRecord(), ...caseSpecs().map(caseRecord), ...decorations(), ...fits()]
 }
 
 /** A recorded record answered again from its inputs. */
-export function reanswer(record: ComposeNodeRecord): ComposeNodeRecord {
+export function reanswer(record: ComposeNodeRecord): ComposeNodeRecord | undefined {
   if (record.kind === 'meta') return metaRecord()
+  if (record.kind === 'decoration') return decorations().find((d) => d.id === record.id)
+  if (record.kind === 'fit') return fits().find((f) => f.id === record.id)
   const { answer: _recorded, ...input } = record
   return { ...input, answer: answerOf(input) }
 }
