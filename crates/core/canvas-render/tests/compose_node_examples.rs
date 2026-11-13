@@ -69,8 +69,13 @@ impl ComposeHost for Marking {
         vec![mark()]
     }
 
-    fn compose_file_node(&self, _: &SpatialNode, _: &ComposeOptions<'_>) -> Vec<SceneNode> {
-        Vec::new()
+    fn compose_file_embed(
+        &self,
+        _: &SpatialNode,
+        _: Option<&ResolvedReference>,
+        _: &ComposeOptions<'_>,
+    ) -> Option<SceneNode> {
+        None
     }
 
     fn body_suppressed(&self, _: &str) -> bool {

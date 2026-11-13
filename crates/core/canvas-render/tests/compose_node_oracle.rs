@@ -3,8 +3,8 @@
 //! degradations reported, the content-cache keys asked and kept, the scene drawn
 //! again over the same cache and over one seeded under the first key asked, and
 //! how many times the measurer was asked. What the composer asks its host (a
-//! body parsed, a reference resolved, an embed target, a file node's
-//! representation) is answered from the recording.
+//! body parsed, a reference resolved, an embed target, a file node's canvas
+//! embed) is answered from the recording.
 
 #[path = "typeset_support/dump.rs"]
 mod dump;
@@ -25,7 +25,8 @@ use whiteboard_canvas_render::compose_node::{
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::node_box::{
-    NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference, TextPlacement,
+    FacetCard, FacetRow, NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference,
+    TextPlacement,
 };
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::asset::create_themed_appearance;
@@ -121,8 +122,7 @@ struct Case {
     embed_depth: usize,
     /// The switches that are on: `locked`, `suppressed`, `emptyFrame`, `cache`, `spent`.
     flags: Vec<String>,
-    file: Option<Vec<SceneNode>>,
-    file_calls: usize,
+    embed: Option<SceneNode>,
     answer: Answer,
 }
 
@@ -141,10 +141,46 @@ struct ImageWire {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct RowWire {
+    label: String,
+    value: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CardWire {
+    title: Option<String>,
+    rows: Vec<RowWire>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ResolvedWire {
     label: Option<String>,
     missing: Option<bool>,
     image: Option<ImageWire>,
+    /// Only the host's embed answer reads the canvas, and it is recorded.
+    #[serde(rename = "canvas")]
+    _canvas: Option<Value>,
+    markdown: Option<Value>,
+    facets: Option<CardWire>,
+}
+
+fn resolved_of(wire: ResolvedWire) -> Res<ResolvedReference> {
+    Ok(ResolvedReference {
+        label: wire.label,
+        missing: wire.missing.unwrap_or(false),
+        image: wire.image.map(|i| ReferenceImage { href: i.href, alt: i.alt }),
+        markdown: wire.markdown.as_ref().map(model::root).transpose()?,
+        facets: wire.facets.map(|card| FacetCard {
+            title: card.title,
+            rows: card
+                .rows
+                .into_iter()
+                .map(|row| FacetRow { label: row.label, value: row.value })
+                .collect(),
+        }),
+    })
 }
 
 #[derive(Deserialize)]
@@ -193,18 +229,10 @@ fn context_of(meta: &Value) -> Res<Context> {
     for (id, target) in wire.embedded {
         embedded.insert(id, (target.title, model::root(&target.root)?));
     }
-    let references = wire
-        .references
-        .into_iter()
-        .map(|(reference, resolved)| {
-            let resolved = resolved.map(|r| ResolvedReference {
-                label: r.label,
-                missing: r.missing.unwrap_or(false),
-                image: r.image.map(|i| ReferenceImage { href: i.href, alt: i.alt }),
-            });
-            (reference, resolved)
-        })
-        .collect();
+    let mut references = BTreeMap::new();
+    for (reference, resolved) in wire.references {
+        references.insert(reference, resolved.map(resolved_of).transpose()?);
+    }
     Ok(Context {
         sketch: tokens::theme_tokens(&wire.sketch)?,
         bodies,
@@ -262,8 +290,6 @@ struct Host<'c> {
     align: Option<TextPlacement>,
     events: RefCell<Vec<Event>>,
     misses: RefCell<Vec<String>>,
-    /// How many times a file node was drawn, each costing the recorded measurer calls.
-    files: Cell<usize>,
 }
 
 impl Host<'_> {
@@ -302,12 +328,13 @@ impl ComposeHost for Host<'_> {
         Vec::new()
     }
 
-    fn compose_file_node(&self, _: &SpatialNode, _: &ComposeOptions<'_>) -> Vec<SceneNode> {
-        self.files.set(self.files.get() + 1);
-        self.case.file.clone().unwrap_or_else(|| {
-            self.miss("a file node's representation".to_owned());
-            Vec::new()
-        })
+    fn compose_file_embed(
+        &self,
+        _: &SpatialNode,
+        _: Option<&ResolvedReference>,
+        _: &ComposeOptions<'_>,
+    ) -> Option<SceneNode> {
+        self.case.embed.clone()
     }
 
     fn body_suppressed(&self, node_id: &str) -> bool {
@@ -338,17 +365,22 @@ impl ComposeHost for Host<'_> {
     }
 }
 
+/// A shortcode is a name between two colons; a facet card's `: value` holds one.
+fn may_hold_shortcode(text: &str) -> bool {
+    text.matches(':').nth(1).is_some()
+}
+
 impl InlineSeams for Host<'_> {
-    /// The corpus holds no shortcode, which a colon would begin.
+    /// The corpus holds no shortcode.
     fn expand_emoji(&self, text: &str) -> String {
-        if text.contains(':') {
+        if may_hold_shortcode(text) {
             self.miss(format!("emoji in {text:?}"));
         }
         text.to_owned()
     }
 
     fn icon_ranges(&self, text: &str) -> Vec<IconRange> {
-        if text.contains(':') {
+        if may_hold_shortcode(text) {
             self.miss(format!("icons in {text:?}"));
         }
         Vec::new()
@@ -455,7 +487,6 @@ impl<'c> Setup<'c> {
                 align,
                 events: RefCell::new(Vec::new()),
                 misses: RefCell::new(Vec::new()),
-                files: Cell::new(0),
             },
             geometry: SpatialGeometry {
                 padding_px: f64_of(padding)?,
@@ -525,8 +556,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     };
     differ("seeded", &seeded, &want.seeded)?;
     differ("events", &*setup.host.events.borrow(), &want.events)?;
-    let calls = setup.measure.calls.get() + setup.host.files.get() * case.file_calls;
-    differ("measurer calls", &calls, &want.calls)?;
+    differ("measurer calls", &setup.measure.calls.get(), &want.calls)?;
     differ("host misses", &*setup.host.misses.borrow(), &Vec::new())
 }
 

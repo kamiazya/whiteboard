@@ -1,14 +1,16 @@
-//! How ONE node is drawn and filled (`layout/compose-node.ts`): the text body,
-//! the frame with its background, the link card, the lock badge, and
-//! [`compose_node`], which chooses between them by the node's kind.
+//! How ONE node is drawn and filled (`layout/compose-node.ts` and
+//! `layout/compose-file-node.ts`): the text body, the frame with its
+//! background, the link card, the file node's representations, the lock badge,
+//! and [`compose_node`], which chooses between them by the node's kind.
 //!
 //! What the composer knows and this crate does not is asked through
 //! [`ComposeHost`]: the body parser with its reference resolution, a reference's
-//! resolution, the comment layer's passage highlights, and a file node's
-//! representations. Each is a seam rather than a port because the code that
+//! resolution, the comment layer's passage highlights, and a file node's canvas
+//! embed. Each is a seam rather than a port because the code that
 //! answers it lives in another layer (the markdown parser, the keeper) or has
 //! not been ported yet; the replay answers it from the recording.
 
+mod file;
 mod frame;
 mod text;
 
@@ -25,6 +27,7 @@ use crate::typeset::{
     MathRenderer, NestedLayoutBudget,
 };
 
+pub use file::fit_body_in_node;
 pub use text::{MdastStyle, mdast_style_for};
 
 /// What a composer reports instead of failing: the scene still holds something
@@ -63,9 +66,15 @@ pub trait ComposeHost {
         body: &FittedBlocks,
     ) -> Vec<SceneNode>;
 
-    /// A file node drawn as its best representation (`composeFileNode`).
-    fn compose_file_node(&self, node: &SpatialNode, options: &ComposeOptions<'_>)
-    -> Vec<SceneNode>;
+    /// The canvas a file node's reference resolves to, laid out and scaled into
+    /// the node's box (`composeFileEmbed`); none when it is not drawn, so the
+    /// next representation is asked.
+    fn compose_file_embed(
+        &self,
+        node: &SpatialNode,
+        resolved: Option<&ResolvedReference>,
+        options: &ComposeOptions<'_>,
+    ) -> Option<SceneNode>;
 
     /// The editor overlay owns this node's text, so only its chrome is drawn.
     fn body_suppressed(&self, node_id: &str) -> bool;
@@ -157,7 +166,7 @@ fn compose_node_content(node: &SpatialNode, options: &ComposeOptions<'_>) -> Vec
         Some(NodeKind::Text) => text::compose_text_node(node, options),
         Some(NodeKind::Frame) => frame::compose_frame_node(node, options),
         Some(NodeKind::Link) => compose_link_node(node, &options.node_box),
-        Some(NodeKind::File) => options.host.compose_file_node(node, options),
+        Some(NodeKind::File) => file::compose_file_node(node, options),
         None => {
             options.host.degrade(Degradation::UnknownNodeKind {
                 node_id: node.id.clone(),

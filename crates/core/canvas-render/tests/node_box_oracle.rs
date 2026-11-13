@@ -135,6 +135,7 @@ impl ResolvedWire {
                 .image
                 .as_ref()
                 .map(|i| ReferenceImage { href: i.href.clone(), alt: i.alt.clone() }),
+            ..ResolvedReference::default()
         }
     }
 }
