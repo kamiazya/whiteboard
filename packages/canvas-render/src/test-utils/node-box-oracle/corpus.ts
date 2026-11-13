@@ -29,7 +29,7 @@ export const RESOURCES: Readonly<Record<string, NodeResource | null>> = {
 }
 
 /** A frame's caption, by name; absent is no `label` field. */
-export const FRAME_LABELS: readonly (string | undefined)[] = [
+const FRAME_LABELS: readonly (string | undefined)[] = [
   'Group A',
   '',
   undefined,
@@ -45,7 +45,7 @@ export type ResolvedWire = {
   readonly image?: { readonly href: string; readonly alt?: string }
 } | null
 
-export const RESOLVED: readonly ResolvedWire[] = [
+const RESOLVED: readonly ResolvedWire[] = [
   null,
   { missing: true, label: 'ignored' },
   { missing: false, label: 'Doc A' },
@@ -59,7 +59,7 @@ export const RESOLVED: readonly ResolvedWire[] = [
 ]
 
 /** `[x, y, w, h]`: ordinary, fractional, small, degenerate, negative and non-finite boxes. */
-export const BOXES: readonly (readonly [number, number, number, number])[] = [
+const BOXES: readonly (readonly [number, number, number, number])[] = [
   [0, 0, 160, 100],
   [12.5, -30.25, 240, 60],
   [100, 100, 40, 20],
@@ -74,7 +74,7 @@ export const BOXES: readonly (readonly [number, number, number, number])[] = [
   [7, 9, 200, 36],
 ]
 
-export const SHAPES: readonly (string | null)[] = [
+const SHAPES: readonly (string | null)[] = [
   null,
   'visual.ellipse',
   'visual.diamond',
@@ -86,13 +86,13 @@ export const SHAPES: readonly (string | null)[] = [
   'other.ellipse',
 ]
 
-export type ThemeName = 'light' | 'dark' | 'sketch'
-export const THEMES: readonly ThemeName[] = ['light', 'dark', 'sketch']
-export const ALIGNS: readonly ('start' | 'center' | null)[] = [null, 'start', 'center']
-export const COLORS: readonly (string | null)[] = [null, '3', '#ff0000']
+type ThemeName = 'light' | 'dark' | 'sketch'
+const THEMES: readonly ThemeName[] = ['light', 'dark', 'sketch']
+const ALIGNS: readonly ('start' | 'center' | null)[] = [null, 'start', 'center']
+const COLORS: readonly (string | null)[] = [null, '3', '#ff0000']
 
 /** `[padding, label size, minimum content width]`. */
-export const GEOMETRIES: readonly (readonly [number, number, number])[] = [
+const GEOMETRIES: readonly (readonly [number, number, number])[] = [
   [8, 16, 0],
   [0, 12, 30],
   [20, 16, 0],
@@ -100,7 +100,7 @@ export const GEOMETRIES: readonly (readonly [number, number, number])[] = [
 ]
 
 /** A label a box is asked to fit, beside the one the node itself has. */
-export const PROBE_LABELS: readonly string[] = [
+const PROBE_LABELS: readonly string[] = [
   'Label',
   '',
   'A label far too long to fit inside the narrow content box of this node',

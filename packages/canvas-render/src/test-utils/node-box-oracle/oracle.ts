@@ -67,7 +67,7 @@ const digest = (text: string): { n: number; h: number } => {
   return { n: text.length, h: fnv.state }
 }
 
-export interface MetaRecord {
+interface MetaRecord {
   readonly kind: 'meta'
   /** The sketch theme's tokens, which the replay reads into its own types. */
   readonly sketch: unknown
@@ -75,13 +75,13 @@ export interface MetaRecord {
   readonly contents: Readonly<Record<string, readonly SceneNode[]>>
 }
 
-export interface SeedRecord {
+interface SeedRecord {
   readonly kind: 'seed'
   readonly ids: readonly string[]
   readonly seeds: readonly number[]
 }
 
-export interface TranslateRecord {
+interface TranslateRecord {
   readonly kind: 'translate'
   readonly content: string
   readonly dx: string
@@ -91,7 +91,7 @@ export interface TranslateRecord {
 }
 
 /** A node as data: its box as IEEE bits, the rest as JSON. */
-export interface NodeWire {
+interface NodeWire {
   readonly id: string
   readonly box: readonly string[]
   readonly color?: string
@@ -99,7 +99,7 @@ export interface NodeWire {
   readonly label?: string
 }
 
-export interface CaseRecord {
+interface CaseRecord {
   readonly kind: 'case'
   readonly id: string
   readonly node: NodeWire
@@ -203,7 +203,7 @@ const resolvedOf = (wire: ResolvedWire): ResolvedReference | undefined =>
   wire === null ? undefined : (wire as ResolvedReference)
 
 /** What the box primitives answer for a case, from its inputs alone. */
-export function answerOf(record: Omit<CaseRecord, 'answer'>): CaseAnswer {
+function answerOf(record: Omit<CaseRecord, 'answer'>): CaseAnswer {
   const node = nodeOf(record.node)
   const { options, calls } = optionsOf(record)
   const content: Scene = contentScene(record.content)

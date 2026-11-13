@@ -194,7 +194,10 @@ fn icon_geometry_in(table: &str, name: &str) -> Option<Vec<IconElement>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ICON_VIEWBOX, IconElement, icon_geometry, icon_geometry_in, shape_outline};
+    use super::{
+        ICON_VIEWBOX, IconElement, icon_geometry, icon_geometry_in, shape_content_box,
+        shape_outline,
+    };
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
     use whiteboard_scene::{BoundingBox, NodeOutline, ScenePoint};
@@ -204,6 +207,29 @@ mod tests {
 
     fn polygon(points: &[(f64, f64)]) -> NodeOutline {
         NodeOutline::Polygon { points: points.iter().map(|&(x, y)| ScenePoint { x, y }).collect() }
+    }
+
+    #[test]
+    fn each_silhouette_leaves_its_content_the_box_inscribed_in_it() {
+        let boxed = |x, y, w, h| Some(BoundingBox { x, y, w, h });
+        let cases = [
+            ("ellipse", boxed(40.0, 32.0, 140.0, 56.0)),
+            ("diamond", boxed(60.0, 40.0, 100.0, 40.0)),
+            ("hexagon", boxed(50.0, 20.0, 120.0, 80.0)),
+            ("parallelogram", boxed(50.0, 20.0, 120.0, 80.0)),
+            ("octagon", boxed(20.0, 30.0, 180.0, 60.0)),
+            ("cylinder", boxed(10.0, 60.0, 200.0, 20.0)),
+        ];
+        for (name, want) in cases {
+            assert_eq!(shape_content_box(&format!("visual.{name}"), &WIDE), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_name_outside_the_namespace_has_no_content_box() {
+        for id in ["visual.star", "visualellipse", "other.ellipse", "ellipse"] {
+            assert_eq!(shape_content_box(id, &WIDE), None, "{id}");
+        }
     }
 
     #[test]
