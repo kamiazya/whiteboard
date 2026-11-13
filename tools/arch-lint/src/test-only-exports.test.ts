@@ -239,6 +239,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the switch a composition root sets per ported function in `SpatialLayoutOptions.core` (ADR-0054's CoreImpl); the roots set it in ADR-0054 step 5's next slice, and the switch's own tests drive each value",
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
     'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
+  'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels':
+    'the edge pass its Rust port is held to (test-utils/compose-edges-oracle records compose-edges.jsonl, ADR-0054 step 7); layoutSpatialCanvas and layoutSpatialEdges are its production callers, in its own file',
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
     'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
   'packages/canvas-render/src/generated/geometry.zod.ts#rectSchema':

@@ -23,6 +23,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod budoux;
+pub mod compose_edges;
 pub mod compose_node;
 pub mod constant_ratio;
 pub mod edge_arrows;
