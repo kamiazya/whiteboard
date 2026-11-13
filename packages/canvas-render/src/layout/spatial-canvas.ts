@@ -605,7 +605,12 @@ function routeAndCompose(
   return { routedEdges, anchors }
 }
 
-function composeEdgesAndLabels(
+/**
+ * The edge pass on its own: every edge and line routed, weighed, pulled onto
+ * its silhouettes and labelled, with the anchors the routing settled. Exported
+ * for the recorder the Rust port is held to (`compose-edges.jsonl`).
+ */
+export function composeEdgesAndLabels(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
