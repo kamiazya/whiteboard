@@ -1,7 +1,7 @@
 //! A Rust scene as the canonical text the TypeScript's `dumpScene` writes: every
 //! number as the hex of its 64 IEEE bits, keys sorted, nothing absent written.
-//! Only the node kinds the typesetter has ported so far are written; a later
-//! slice adds its kinds here, and an unplaced one fails loudly.
+//! Every scene node kind and field is written, as the TypeScript's generic walk
+//! writes it.
 
 use whiteboard_scene::{
     Appearance, BoundingBox, LinkProvenance, RunPaint, Scene, SceneNode, TextRunNode,
@@ -104,6 +104,7 @@ fn run(r: &TextRunNode) -> String {
     fields.extend(r.backdrop.as_ref().map(|a| ("backdrop", appearance(a))));
     fields.extend(r.backdrop_pad_x_px.map(|v| ("backdropPadXPx", num(v))));
     fields.extend(r.baseline.map(|v| ("baseline", num(v))));
+    fields.extend(r.annotates.as_ref().map(|a| ("annotates", annotates(a))));
     object(fields)
 }
 
@@ -154,6 +155,39 @@ fn node(n: &SceneNode) -> Result<String, String> {
         SceneNode::Table(t) => table(t),
         SceneNode::Shape(shape) => self::shape(shape),
         SceneNode::Edge(e) => edge(e),
+        other => picture(other)?,
+    })
+}
+
+/// The nodes that draw a picture rather than text.
+fn picture(n: &SceneNode) -> Result<String, String> {
+    Ok(match n {
+        SceneNode::Image(i) => {
+            let mut f =
+                vec![("kind", string("image")), ("bbox", bbox(&i.bbox)), ("href", string(&i.href))];
+            f.extend(i.alt.as_deref().map(|a| ("alt", string(a))));
+            f.extend(i.fit.map(|fit| {
+                (
+                    "fit",
+                    string(match fit {
+                        whiteboard_scene::ImageFit::Contain => "contain",
+                        whiteboard_scene::ImageFit::Cover => "cover",
+                    }),
+                )
+            }));
+            object(f)
+        }
+        SceneNode::Icon(i) => {
+            let mut f =
+                vec![("kind", string("icon")), ("bbox", bbox(&i.bbox)), ("icon", string(&i.icon))];
+            f.extend(i.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+            object(f)
+        }
+        SceneNode::Glyph(g) => object(vec![
+            ("kind", string("glyph")),
+            ("bbox", bbox(&g.bbox)),
+            ("glyph", string(&g.glyph)),
+        ]),
         other => return Err(format!("an unplaced scene node {other:?}")),
     })
 }
@@ -247,8 +281,33 @@ fn table(t: &whiteboard_scene::TableBlockNode) -> String {
     ])
 }
 
+fn annotates(a: &whiteboard_scene::Annotates) -> String {
+    let kind = match a.kind {
+        whiteboard_scene::AnnotatesKind::Edge => "edge",
+        whiteboard_scene::AnnotatesKind::Node => "node",
+    };
+    object(vec![("kind", string(kind)), ("id", string(&a.id))])
+}
+
+fn ink(i: whiteboard_scene::SceneInk) -> String {
+    let mut f = vec![("style", string("sketch")), ("seed", num(f64::from(i.seed)))];
+    f.extend(i.fill.map(|_| ("fill", string("hatch"))));
+    object(f)
+}
+
 fn shape(s: &whiteboard_scene::ShapeSceneNode) -> String {
     let mut f = vec![("kind", string("shape")), ("bbox", bbox(&s.bbox))];
+    f.extend(s.id.as_deref().map(|i| ("id", string(i))));
+    f.extend(s.shape.as_deref().map(|i| ("shape", string(i))));
+    f.extend(s.ink.map(|i| ("ink", ink(i))));
+    f.extend(s.truncated.then(|| ("truncated", "true".to_owned())));
+    f.extend(s.overflows.then(|| ("overflows", "true".to_owned())));
+    f.extend(s.comment_chrome.then(|| ("commentChrome", "true".to_owned())));
+    f.extend(
+        s.proposal_chrome
+            .as_ref()
+            .map(|p| ("proposalChrome", object(vec![("proposalId", string(&p.proposal_id))]))),
+    );
     f.extend(s.radius.map(|r| ("radius", num(r))));
     f.extend(s.appearance.as_ref().map(|a| ("appearance", appearance(a))));
     f.extend(s.task_box.map(|t| ("taskBox", object(vec![("checked", t.checked.to_string())]))));
@@ -273,6 +332,15 @@ fn edge(e: &whiteboard_scene::ResolvedEdgeNode) -> String {
         ("toEnd", end(e.to_end)),
     ];
     f.extend(e.appearance.as_ref().map(|a| ("appearance", appearance(a))));
+    f.extend(e.jumps.as_ref().map(|jumps| {
+        let points = jumps
+            .iter()
+            .map(|j| object(vec![("segment", num(j.segment)), ("x", num(j.x)), ("y", num(j.y))]));
+        ("jumps", list_of(points.collect()))
+    }));
+    f.extend(e.rounded.then(|| ("rounded", "true".to_owned())));
+    f.extend(e.ink.map(|i| ("ink", ink(i))));
+    f.extend(e.comment_chrome.then(|| ("commentChrome", "true".to_owned())));
     object(f)
 }
 

@@ -308,6 +308,7 @@ name = "whiteboard-plugin-visual"
 version = "0.0.0"
 dependencies = [
  "unicode-segmentation",
+ "whiteboard-det",
  "whiteboard-facet-engine",
  "whiteboard-model",
  "whiteboard-scene",

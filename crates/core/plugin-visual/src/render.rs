@@ -1,12 +1,13 @@
 //! What the bundled visual plugin contributes to RENDERING, as data: its
-//! silhouettes under their namespaced ids and its icon geometry. The
-//! renderer holds no table of its own, so what a silhouette is and which
-//! icons exist is this plugin's business.
+//! silhouettes under their namespaced ids, the box each leaves its content,
+//! and its icon geometry. The renderer holds no table of its own, so what a
+//! silhouette is and which icons exist is this plugin's business.
 //!
-//! The closure-shaped half of the TypeScript contribution (`contentBox`, the
-//! stencil badge decoration, the facet readers and themes) is not here: it
-//! joins when the composer that calls it is ported.
+//! The rest of the TypeScript contribution (the stencil badge decoration, the
+//! facet readers and themes) is not here: it joins when the composer that calls
+//! it is ported.
 
+use whiteboard_det::math::js_min;
 use whiteboard_model::Value;
 use whiteboard_model::json;
 use whiteboard_scene::{BoundingBox, NodeOutline, ScenePoint};
@@ -22,7 +23,7 @@ fn polygon(points: &[(f64, f64)]) -> NodeOutline {
 /// any proportion: a quarter of it is pronounced enough to read as a cut corner
 /// and never large enough to make two cuts meet.
 fn octagon_cut(bbox: &BoundingBox) -> f64 {
-    bbox.w.min(bbox.h) / 4.0
+    js_min(bbox.w, bbox.h) / 4.0
 }
 
 /// The silhouette `visual.<name>` draws in `bbox`, or none for a name this
@@ -76,6 +77,42 @@ pub fn shape_outline(id: &str, bbox: &BoundingBox) -> Option<NodeOutline> {
             ])
         }
         "cylinder" => NodeOutline::Cylinder { x, y, w, h, ry: (w * 0.1).min(h / 4.0) },
+        _ => return None,
+    })
+}
+
+/// The box `visual.<name>` leaves its content in `bbox`: the axis-aligned box
+/// inscribed in the silhouette, so text laid out inside it never crosses the
+/// outline. None for a name this plugin does not carry, which a caller reads as
+/// the box itself.
+///
+/// The ellipse insets 0.15 of each side rather than the exact (1 - 1/√2)/2: the
+/// exact value puts the corners ON the rim, where float error flips containment.
+/// The hexagon and parallelogram give up only their slanted horizontal margins,
+/// the octagon half its corner cut on every side (each corner then lies on its
+/// diagonal), and the cylinder its lid (the front rim dips to 2·ry) and bottom
+/// bulge.
+#[must_use]
+pub fn shape_content_box(id: &str, bbox: &BoundingBox) -> Option<BoundingBox> {
+    let name = id.strip_prefix(SHAPE_NAMESPACE)?.strip_prefix('.')?;
+    let BoundingBox { x, y, w, h } = *bbox;
+    let inset =
+        |dx: f64, dy: f64| BoundingBox { x: x + dx, y: y + dy, w: w - 2.0 * dx, h: h - 2.0 * dy };
+    Some(match name {
+        "ellipse" => inset(w * 0.15, h * 0.15),
+        "diamond" => BoundingBox { x: x + w / 4.0, y: y + h / 4.0, w: w / 2.0, h: h / 2.0 },
+        "hexagon" | "parallelogram" => {
+            let dx = js_min(w / 4.0, h / 2.0);
+            BoundingBox { x: x + dx, y, w: w - 2.0 * dx, h }
+        }
+        "octagon" => {
+            let half = octagon_cut(bbox) / 2.0;
+            inset(half, half)
+        }
+        "cylinder" => {
+            let ry = js_min(w * 0.1, h / 4.0);
+            BoundingBox { x, y: y + 2.0 * ry, w, h: h - 3.0 * ry }
+        }
         _ => return None,
     })
 }
@@ -157,7 +194,10 @@ fn icon_geometry_in(table: &str, name: &str) -> Option<Vec<IconElement>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{ICON_VIEWBOX, IconElement, icon_geometry, icon_geometry_in, shape_outline};
+    use super::{
+        ICON_VIEWBOX, IconElement, icon_geometry, icon_geometry_in, shape_content_box,
+        shape_outline,
+    };
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
     use whiteboard_scene::{BoundingBox, NodeOutline, ScenePoint};
@@ -167,6 +207,29 @@ mod tests {
 
     fn polygon(points: &[(f64, f64)]) -> NodeOutline {
         NodeOutline::Polygon { points: points.iter().map(|&(x, y)| ScenePoint { x, y }).collect() }
+    }
+
+    #[test]
+    fn each_silhouette_leaves_its_content_the_box_inscribed_in_it() {
+        let boxed = |x, y, w, h| Some(BoundingBox { x, y, w, h });
+        let cases = [
+            ("ellipse", boxed(40.0, 32.0, 140.0, 56.0)),
+            ("diamond", boxed(60.0, 40.0, 100.0, 40.0)),
+            ("hexagon", boxed(50.0, 20.0, 120.0, 80.0)),
+            ("parallelogram", boxed(50.0, 20.0, 120.0, 80.0)),
+            ("octagon", boxed(20.0, 30.0, 180.0, 60.0)),
+            ("cylinder", boxed(10.0, 60.0, 200.0, 20.0)),
+        ];
+        for (name, want) in cases {
+            assert_eq!(shape_content_box(&format!("visual.{name}"), &WIDE), want, "{name}");
+        }
+    }
+
+    #[test]
+    fn a_name_outside_the_namespace_has_no_content_box() {
+        for id in ["visual.star", "visualellipse", "other.ellipse", "ellipse"] {
+            assert_eq!(shape_content_box(id, &WIDE), None, "{id}");
+        }
     }
 
     #[test]

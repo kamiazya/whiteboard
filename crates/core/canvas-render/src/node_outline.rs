@@ -7,7 +7,7 @@
 //! ported.
 
 use crate::finite_box::is_finite_box;
-use whiteboard_plugin_visual::render::shape_outline;
+use whiteboard_plugin_visual::render::{shape_content_box, shape_outline};
 use whiteboard_scene::{BoundingBox, NodeOutline};
 
 /// The outline of silhouette `shape_id` in `bbox`. An unknown id degrades to
@@ -20,4 +20,15 @@ pub fn node_outline(shape_id: &str, bbox: &BoundingBox) -> Option<NodeOutline> {
         return None;
     }
     shape_outline(shape_id, bbox)
+}
+
+/// The axis-aligned box inside silhouette `shape_id` where a node's content can
+/// lay out without crossing it. No silhouette, an unknown one, or a box with a
+/// non-finite field is its own content box, per [`node_outline`]'s none.
+#[must_use]
+pub fn outline_content_box(shape_id: Option<&str>, bbox: &BoundingBox) -> BoundingBox {
+    shape_id
+        .filter(|_| is_finite_box(bbox))
+        .and_then(|id| shape_content_box(id, bbox))
+        .unwrap_or(*bbox)
 }

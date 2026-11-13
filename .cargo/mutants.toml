@@ -323,4 +323,12 @@ exclude_re = [
   # canvas-render typeset block_width: with an ink width exactly equal to the wrap
   # width `>=` takes the widening branch and answers the same number.
   'blocks\.rs:\d+:\d+: replace > with >= in block_width$',
+  # canvas-render node_box place_in_node: `ink_w < inner_w` made `<=` differs only
+  # where the two are equal. `ink_w` is `Math.max(0, ...)`, so +0 or more (or
+  # NaN), and an infinite `inner_w` needs an infinite box, whose padding is NaN,
+  # so equal values are finite and `(inner_w - ink_w) / 2` is the `0.0` the other
+  # branch answers. The one sign it could change is `-0` (a `-0`-wide box with no
+  # padding): `dx` then only moves a node by `x + -0`, and the placement adds
+  # `bounds.x + pad_x`, never `-0`, after it, so the zero's sign never survives.
+  'node_box\.rs:\d+:\d+: replace < with <= in place_in_node$',
 ]
