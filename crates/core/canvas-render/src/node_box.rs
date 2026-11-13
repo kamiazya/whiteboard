@@ -12,6 +12,7 @@
 
 use whiteboard_det::math::{js_max, js_min};
 use whiteboard_facet_engine::engine::{ThemeInk, ThemeTokens};
+use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::SpatialNode;
 use whiteboard_scene::{
     Annotates, AnnotatesKind, Appearance, BoundingBox, ParagraphBlockNode, SceneInk, SceneInkFill,
@@ -68,13 +69,32 @@ pub struct ReferenceImage {
     pub alt: Option<String>,
 }
 
-/// What a file node's reference resolves to (`references/resolved.ts`), the
-/// fields the box reads.
+/// One `label: value` row of a facet card.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FacetRow {
+    pub label: String,
+    pub value: String,
+}
+
+/// A card the caller built from the referenced document's facets: a heading
+/// and labelled rows, presentation-shaped, so this crate learns nothing of what
+/// a facet means.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FacetCard {
+    pub title: Option<String>,
+    pub rows: Vec<FacetRow>,
+}
+
+/// What a file node's reference resolves to (`references/resolved.ts`), the
+/// fields the composer reads. A referenced canvas is the host's to embed.
+#[derive(Debug, Clone, PartialEq, Default)]
 pub struct ResolvedReference {
     pub label: Option<String>,
     pub missing: bool,
     pub image: Option<ReferenceImage>,
+    /// A referenced markdown document's parsed body.
+    pub markdown: Option<Root>,
+    pub facets: Option<FacetCard>,
 }
 
 /// Where a label is drawn: above the box, as a container's is, or inside it.
@@ -370,9 +390,12 @@ pub fn place_above_node(node: &SpatialNode, content: &[SceneNode]) -> Vec<SceneN
     placed
 }
 
-/// `String.prototype.trim`'s whitespace: ECMAScript's `WhiteSpace` and
-/// `LineTerminator`, which is not Unicode's `White_Space` (U+FEFF is trimmed,
-/// U+0085 is not).
+/// `String.prototype.trim`: ECMAScript's `WhiteSpace` and `LineTerminator`,
+/// which is not Unicode's `White_Space` (U+FEFF is trimmed, U+0085 is not).
+pub(crate) fn js_trim(text: &str) -> &str {
+    text.trim_matches(is_js_space)
+}
+
 const fn is_js_space(c: char) -> bool {
     matches!(
         c,
@@ -394,7 +417,7 @@ const fn is_js_space(c: char) -> bool {
 /// "Image", since the reference is a storage id that names nothing a reader knows.
 fn image_label(resolved: Option<&ResolvedReference>) -> String {
     let alt = resolved.and_then(|r| r.image.as_ref()?.alt.as_deref());
-    match alt.map(|alt| alt.trim_matches(is_js_space)) {
+    match alt.map(js_trim) {
         Some(alt) if !alt.is_empty() => alt.to_owned(),
         _ => "Image".to_owned(),
     }
@@ -424,7 +447,7 @@ pub fn label_of(node: &SpatialNode, resolved: Option<&ResolvedReference>) -> Opt
 }
 
 /// The padded content box's height, when the box has room in both directions.
-fn content_box_height(node: &SpatialNode, options: &NodeBoxOptions<'_>) -> Option<f64> {
+pub(crate) fn content_box_height(node: &SpatialNode, options: &NodeBoxOptions<'_>) -> Option<f64> {
     let area = ContentArea::of(node, options);
     let h = area.inner_h();
     (area.inner_w() > 0.0 && h > 0.0).then_some(h)
