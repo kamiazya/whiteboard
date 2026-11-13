@@ -45,6 +45,8 @@ export const BOXES: readonly BoundingBox[] = [
   { x: 5, y: 5, w: 0, h: 80 },
   { x: 5, y: 5, w: 80, h: 0 },
   { x: 0, y: 0, w: -60, h: 40 },
+  { x: 0, y: 0, w: 60, h: -40 },
+  { x: 3, y: 4, w: -60, h: -40 },
   { x: 0, y: Number.NaN, w: 60, h: 40 },
   { x: 0, y: 0, w: Number.POSITIVE_INFINITY, h: 40 },
   { x: BIG, y: BIG, w: BIG, h: BIG },

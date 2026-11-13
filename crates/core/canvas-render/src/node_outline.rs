@@ -62,9 +62,11 @@ fn outline_holds(outline: &NodeOutline, point: ScenePoint) -> bool {
             if rx <= 0.0 || *ry <= 0.0 {
                 return point.y >= *y && point.y <= y + h;
             }
-            // Above the body, the upper half of the lid; below it, the lower half of the bulge.
-            let cap_cy = if point.y < y + ry { y + ry } else { y + h - ry };
-            inside_ellipse(point, x + rx, cap_cy, rx, *ry)
+            // Outside the body, in the lid or the bulge. Neither ellipse reaches
+            // past the body to the other's side, since `ry` is at most a quarter
+            // of the height, so asking both is asking the one on the point's side.
+            inside_ellipse(point, x + rx, y + ry, rx, *ry)
+                || inside_ellipse(point, x + rx, y + h - ry, rx, *ry)
         }
     }
 }
@@ -127,10 +129,10 @@ pub fn outline_entry_point(
     from: ScenePoint,
     to: ScenePoint,
 ) -> ScenePoint {
-    if !is_finite_box(bbox) || ![from.x, from.y, to.x, to.y].iter().all(|v| v.is_finite()) {
-        return to;
-    }
-    if outline_contains(shape_id, bbox, to) {
+    // An approach that is not finite has no direction to follow. A box or a
+    // terminal that is not finite needs no test of its own: no point is inside
+    // such a box, and such a terminal is inside none, so both answer `to` below.
+    if !from.x.is_finite() || !from.y.is_finite() || outline_contains(shape_id, bbox, to) {
         return to;
     }
     let center = ScenePoint { x: bbox.x + bbox.w / 2.0, y: bbox.y + bbox.h / 2.0 };
