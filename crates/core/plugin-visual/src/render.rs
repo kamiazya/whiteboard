@@ -3,14 +3,17 @@
 //! and its icon geometry. The renderer holds no table of its own, so what a
 //! silhouette is and which icons exist is this plugin's business.
 //!
-//! The rest of the TypeScript contribution (the stencil badge decoration, the
-//! facet readers and themes) is not here: it joins when the composer that calls
-//! it is ported.
+//! Its one decoration is the badge a stencil-wearing box carries
+//! ([`stencil_badge`]). The facet readers that answer which stencil and symbol a
+//! node wears, and the themes, are not here yet: the renderer asks its host for
+//! the facet values and hands them to the badge.
 
 use whiteboard_det::math::js_min;
 use whiteboard_model::Value;
 use whiteboard_model::json;
-use whiteboard_scene::{BoundingBox, NodeOutline, ScenePoint};
+use whiteboard_scene::{Appearance, BoundingBox, IconSceneNode, NodeOutline, ScenePoint};
+
+use crate::visual::VisualSymbolFacet;
 
 /// The namespace the plugin's silhouettes are composed under.
 pub const SHAPE_NAMESPACE: &str = "visual";
@@ -192,12 +195,53 @@ fn icon_geometry_in(table: &str, name: &str) -> Option<Vec<IconElement>> {
     elements.iter().map(element).collect()
 }
 
+/// Edge of a stencil's badge, and its distance from the node's top edge.
+const BADGE_SIZE_PX: f64 = 16.0;
+const BADGE_INSET_PX: f64 = 6.0;
+/// Below this node height the badge would sit on the label, so it is left off.
+const BADGE_MIN_NODE_HEIGHT_PX: f64 = 48.0;
+
+/// The mark a box wearing a stencil carries (`stencilBadge`), at the top centre,
+/// where every silhouette here is at its widest and clear: a corner is outside a
+/// diamond, an ellipse and a parallelogram. Only a stencil-wearing box draws it,
+/// since a stencil is a kind, and two kinds that differ only by silhouette are
+/// hard to tell apart at a glance; a symbol set by hand reaches the surfaces too
+/// small to read a node on instead. An icon is stroked, so the badge takes the
+/// label's ink, and `currentColor` when the label has none.
+#[must_use]
+pub fn stencil_badge(
+    node: &BoundingBox,
+    stencil: Option<&str>,
+    symbol: Option<&VisualSymbolFacet>,
+    label_fill: Option<&str>,
+) -> Option<IconSceneNode> {
+    stencil?;
+    let Some(VisualSymbolFacet::VisualSymbolIcon(icon)) = symbol else { return None };
+    if node.h < BADGE_MIN_NODE_HEIGHT_PX {
+        return None;
+    }
+    Some(IconSceneNode {
+        bbox: BoundingBox {
+            x: node.x + (node.w - BADGE_SIZE_PX) / 2.0,
+            y: node.y + BADGE_INSET_PX,
+            w: BADGE_SIZE_PX,
+            h: BADGE_SIZE_PX,
+        },
+        icon: icon.name.clone(),
+        appearance: Some(Appearance {
+            stroke: Some(label_fill.unwrap_or("currentColor").to_owned()),
+            ..Appearance::default()
+        }),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         ICON_VIEWBOX, IconElement, icon_geometry, icon_geometry_in, shape_content_box,
-        shape_outline,
+        shape_outline, stencil_badge,
     };
+    use crate::visual::{VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
     use whiteboard_scene::{BoundingBox, NodeOutline, ScenePoint};
@@ -442,5 +486,36 @@ mod tests {
         );
         assert_eq!(icon_geometry_in(table, "empty"), Some(Vec::new()));
         assert_eq!(icon_geometry_in(table, "missing"), None);
+    }
+
+    #[test]
+    fn a_badge_is_inked_with_the_label_or_the_current_colour() {
+        let star =
+            VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name: "star".to_owned() });
+        let stroke = |fill| {
+            stencil_badge(&WIDE, Some("visual.datastore"), Some(&star), fill)
+                .and_then(|badge| badge.appearance)
+                .and_then(|appearance| appearance.stroke)
+        };
+        assert_eq!(stroke(Some("#123456")).as_deref(), Some("#123456"));
+        assert_eq!(stroke(None).as_deref(), Some("currentColor"));
+    }
+
+    #[test]
+    fn only_a_stencil_wearing_an_icon_in_a_tall_enough_box_draws_a_badge() {
+        let star =
+            VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name: "star".to_owned() });
+        let emoji =
+            VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji { char: "x".to_owned() });
+        let stencil = Some("visual.datastore");
+        let badge = stencil_badge(&WIDE, stencil, Some(&star), None);
+        assert_eq!(
+            badge.map(|b| (b.icon, b.bbox)),
+            Some(("star".to_owned(), BoundingBox { x: 102.0, y: 26.0, w: 16.0, h: 16.0 }))
+        );
+        assert_eq!(stencil_badge(&WIDE, None, Some(&star), None), None);
+        assert_eq!(stencil_badge(&WIDE, stencil, Some(&emoji), None), None);
+        assert_eq!(stencil_badge(&WIDE, stencil, None, None), None);
+        assert_eq!(stencil_badge(&SMALL, stencil, Some(&star), None), None);
     }
 }

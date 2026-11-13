@@ -216,7 +216,7 @@ impl NestedLayoutBudget {
     }
 
     /// Spends one layout and `elements`; false, spending nothing, once either is out.
-    pub(super) fn spend(&self, elements: usize) -> bool {
+    pub(crate) fn spend(&self, elements: usize) -> bool {
         if self.layouts.get() == 0 || elements > self.elements.get() {
             self.refuse();
             return false;

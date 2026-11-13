@@ -1,5 +1,5 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import type { NodeResource } from '@kamiazya/whiteboard-model'
+import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
+import type { NodeResource, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { FacetCardData } from '../../references/resolved.js'
 import { ID } from '../typeset-oracle/hand-builders.js'
@@ -14,8 +14,26 @@ import { ID } from '../typeset-oracle/hand-builders.js'
 /** The text that makes the recording's body parser throw. */
 export const THROWING_BODY = '<<throw>>'
 
-/** The id `[[doc]]` and `![[doc]]` resolve to, and the one embed target answered. */
+/** The id `[[doc]]` and `![[doc]]` resolve to, and the one document embed target answered. */
 export const DOC_ID = ID
+
+/** The id `![[board]]` resolves to, and the one canvas embed target answered. */
+export const BOARD_ID = '01HZX3Q8K9V2M4N5P6R7S8T9WB'
+
+/** What the recording's bodies resolve an alias to; `null` is an alias nothing holds. */
+export const resolveAlias = (alias: string): string | null =>
+  alias === 'doc' ? DOC_ID : alias === 'board' ? BOARD_ID : null
+
+/**
+ * A canvas of five elements: three nodes, an edge and a line. Only its count is
+ * read, since the nested layout's answer is fixed; the line is what makes a count
+ * that forgets the ink differ.
+ */
+export const BOARD_CANVAS = {
+  nodes: [{ id: 'b1' }, { id: 'b2' }, { id: 'b3' }],
+  edges: [{ id: 'e1', fromNode: 'b1', toNode: 'b2' }],
+  lines: [{ id: 'l1' }],
+} as unknown as SpatialCanvas
 
 /**
  * Bodies a text node carries. None holds a colon in its prose, so the emoji and
@@ -58,6 +76,16 @@ const FILE_REFERENCES: Readonly<Record<string, string>> = {
   'file-throws': 'throws',
 }
 
+/**
+ * What a node shows that the main sweep passes over, so the cases it draws keep
+ * their options: a body over a canvas embed, and a file node whose canvas sits
+ * over a body that itself embeds, where what the canvas spent decides the body.
+ */
+const LATE_RESOURCES: Readonly<Record<string, NodeResource>> = {
+  'text-board': { mimeType: 'text/markdown', content: 'Over the board\n\n![[board]]' },
+  'file-board-embeds': { mimeType: 'application/octet-stream', location: 'board-embeds' },
+}
+
 /** What a node shows, by name; `null` is a frame. */
 export const RESOURCES: Readonly<Record<string, NodeResource | null>> = {
   ...Object.fromEntries(
@@ -81,6 +109,7 @@ export const RESOURCES: Readonly<Record<string, NodeResource | null>> = {
     location: 'md:doc',
     subpath: '#Heading',
   },
+  ...LATE_RESOURCES,
 }
 
 /** What a reference resolves to, by the reference; `null` is a resolver that throws. */
@@ -88,12 +117,13 @@ export type ResolvedWire = {
   readonly label?: string
   readonly missing?: boolean
   readonly image?: { readonly href: string; readonly alt?: string }
-  readonly canvas?: { readonly nodes: readonly never[]; readonly edges: readonly never[] }
+  readonly canvas?: SpatialCanvas
   readonly markdown?: MdastRoot
   readonly facets?: FacetCardData
 } | null
 
-const md = (text: string): MdastRoot => JSON.parse(JSON.stringify(parseMarkdownBody(text)))
+const md = (text: string): MdastRoot =>
+  JSON.parse(JSON.stringify(resolveReferences(parseMarkdownBody(text), resolveAlias)))
 
 const TALL_BODY = [
   ...Array.from({ length: 10 }, (_, i) => `Paragraph ${i} of the referenced document`),
@@ -133,7 +163,12 @@ export const REFERENCES: Readonly<Record<string, ResolvedWire>> = {
   'card:blank': { facets: { title: '\t', rows: [{ label: ' ', value: '\n' }] } },
   'card:none': { facets: { rows: [] } },
   'pic:md': { image: { href: 'blob:pic', alt: 'Picture' }, markdown: md('Under the picture') },
-  board: { label: 'Board', canvas: { nodes: [], edges: [] }, markdown: md('Board notes') },
+  board: {
+    label: 'Board',
+    canvas: { nodes: [], edges: [] } as unknown as SpatialCanvas,
+    markdown: md('Board notes'),
+  },
+  'board-embeds': { label: 'Board E', canvas: BOARD_CANVAS, markdown: md('![[doc]]') },
   gone: { missing: true, markdown: md('Still here') },
 }
 
@@ -200,6 +235,12 @@ export interface CaseSpec {
   readonly cache: boolean
   /** Whether the render's nested-layout budget is already spent. */
   readonly spent: boolean
+  /** Whether the expansion policy keeps a file node's canvas collapsed. */
+  readonly collapsed: boolean
+  /** The layouts and elements left in the render's budget, when not the default. */
+  readonly budget?: readonly [number, number]
+  /** The documents being laid out around the node, when there are any. */
+  readonly embedPath?: readonly string[]
 }
 
 const pick = <T>(list: readonly T[], at: number): T => list[at % list.length] as T
@@ -236,6 +277,7 @@ export function caseSpecs(): readonly CaseSpec[] {
       emptyFrame: at % 2 === 0,
       cache: at % 3 !== 0,
       spent: at % 13 === 6,
+      collapsed: false,
       ...extra,
     })
     at += 1
@@ -247,7 +289,7 @@ export function caseSpecs(): readonly CaseSpec[] {
 type Push = (resource: string, box: CaseSpec['box'], extra?: Partial<CaseSpec>) => void
 
 function sweep(push: Push): void {
-  const names = Object.keys(RESOURCES)
+  const names = Object.keys(RESOURCES).filter((name) => !(name in LATE_RESOURCES))
   for (const resource of names) {
     for (const box of BOXES) push(resource, box)
   }
@@ -278,5 +320,45 @@ function sweep(push: Push): void {
     [0, 0, 60, 16],
   ] as const) {
     push('file-pic-md', box, { geometry: [8, 16, 0], fitToBox: false })
+  }
+  lateSweep(push)
+}
+
+/**
+ * The canvas embeds: the body's in every box and theme and with the budget
+ * spent; then the file node's canvas over an embedding body in every box, and
+ * on each side of each thing that keeps it from drawing — the policy, the depth
+ * cap, the path, the budget's layouts and elements, and a fit with no room,
+ * which the TypeScript reaches only after the canvas has spent.
+ */
+function lateSweep(push: Push): void {
+  for (const box of BOXES) push('text-board', box)
+  for (const theme of THEMES) push('text-board', [10, 20, 200, 120], { theme, cache: true })
+  push('text-board', [10, 20, 200, 120], { cache: true, spent: true, suppressed: false })
+  const file = 'file-board-embeds'
+  const box = [10, 20, 200, 120] as const
+  const plain = { fitToBox: false, shape: null, locked: false, spent: false, embedDepth: 0 }
+  for (const at of BOXES) push(file, at, { spent: false })
+  for (const collapsed of [false, true]) push(file, box, { ...plain, collapsed })
+  for (const embedDepth of [2, 3]) push(file, box, { ...plain, embedDepth })
+  for (const embedPath of [['other'], ['board-embeds'], ['other', 'board-embeds']]) {
+    push(file, box, { ...plain, embedPath })
+  }
+  for (const budget of [
+    [1, 5],
+    [0, 5],
+    [5, 4],
+    [5, 5],
+  ] as const) {
+    push(file, box, { ...plain, budget })
+  }
+  // A box with no room one way: the canvas spends before its fit is refused,
+  // so with one layout left the body's own embed finds the account empty.
+  for (const budget of [
+    [1, 4000],
+    [2, 4000],
+  ] as const) {
+    push(file, [0, 0, 16, 60], { ...plain, geometry: [8, 16, 0], budget })
+    push(file, [0, 0, 60, 16], { ...plain, geometry: [8, 16, 0], budget })
   }
 }

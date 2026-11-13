@@ -52,7 +52,7 @@ impl MdastStyle {
     pub fn options<'s>(
         &'s self,
         max_width: f64,
-        compose: &ComposeOptions<'s>,
+        compose: &'s ComposeOptions<'s>,
     ) -> TypesetOptions<'s> {
         TypesetOptions {
             measure: compose.node_box.measure,
@@ -66,7 +66,7 @@ impl MdastStyle {
             math: compose.body.math,
             diagram: compose.body.diagram,
             embeds: compose.body.embeds,
-            canvas_layout: compose.body.canvas_layout,
+            canvas_layout: Some(compose),
             budget: Some(compose.budget),
             embed_path: compose.embed_path,
         }
