@@ -31,7 +31,7 @@ use crate::typeset::{
     NestedLayoutBudget,
 };
 
-pub use decoration::{NodeMarks, compose_decorations};
+pub use decoration::compose_decorations;
 pub use file::fit_body_in_node;
 pub use text::{MdastStyle, mdast_style_for};
 
