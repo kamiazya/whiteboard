@@ -1,9 +1,12 @@
 //! The facet registry (ADR-0013 decisions 3, 6, 7) over plugin manifests: what
 //! each facet is called, where it attaches, which asset ids its payload may
-//! name, and the one write check, which judges a payload by the contract the
+//! name, the one write check, which judges a payload by the contract the
 //! facet's manifest points at (owner decision q41) and refuses as the
-//! TypeScript registry's `validateFacetWrite` does, stage by stage.
+//! TypeScript registry's `validateFacetWrite` does, stage by stage, and the one
+//! read, which resolves a stored payload of any version through the facet's
+//! compat chain as `resolveFacetPayload` does.
 
+use whiteboard_det::format::js_number_to_string;
 use whiteboard_model::Value;
 
 use crate::checks;
@@ -36,6 +39,29 @@ pub enum BuildError {
         facet: String,
         field: String,
     },
+    /// A compat entry's migration that the host does not supply.
+    MissingMigration {
+        plugin: String,
+        facet: String,
+        name: String,
+    },
+}
+
+/// A compat step: an older version's payload, already judged by that
+/// version's retained schema, in the shape of the next version.
+pub type Migration = fn(&Value) -> Value;
+
+/// What a stored payload reads as.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Resolution {
+    /// Registered and valid, after any compat migration: what a reader uses.
+    Resolved(Value),
+    /// Registered but unreadable: refused by its schema, or no compat path.
+    Dropped,
+    /// A registered facet's NEWER version than this build knows: kept, never read.
+    Preserved(Value),
+    /// No plugin registers it: someone else's facet, carried as it came.
+    Passthrough(Value),
 }
 
 /// Why a write is refused, by the stage that refused it.
@@ -77,6 +103,12 @@ pub enum StencilRefusal {
     Facet { key: String, why: PayloadRefusal },
 }
 
+struct CompatStep {
+    tag: String,
+    schema: DefId,
+    migrate: Migration,
+}
+
 struct FacetEntry {
     namespace: String,
     name: String,
@@ -84,6 +116,13 @@ struct FacetEntry {
     targets: Vec<FacetTarget>,
     schema: DefId,
     asset_refs: Vec<(String, AssetKind)>,
+    compat: Vec<CompatStep>,
+}
+
+/// The number a version tag names, as `Number` reads its digits: correctly
+/// rounded, and past the largest double infinite.
+fn version_number(tag: &str) -> f64 {
+    tag.get(1..).and_then(|digits| digits.parse().ok()).unwrap_or(f64::NAN)
 }
 
 /// The facets the loaded plugins declare, and the asset ids the host holds.
@@ -98,17 +137,20 @@ const KINDS: [AssetKind; 3] = [AssetKind::Themes, AssetKind::Icons, AssetKind::S
 impl Registry {
     /// Builds the registry of `manifests`, whose facets' payload schemas are
     /// definitions of `contracts`. `asset_ids` answers which asset ids of a
-    /// kind are registered, in registration order.
+    /// kind are registered, in registration order, and `migrations` are the
+    /// compat steps the host supplies, by the name a manifest gives them.
     ///
     /// # Errors
     ///
     /// The first manifest that cannot be registered: a duplicate or reserved
     /// plugin id, a duplicate facet name, a schema pointer no contract holds,
-    /// or an `assetRefs` field the payload schema does not declare.
+    /// an `assetRefs` field the payload schema does not declare, or a
+    /// migration the host does not supply.
     pub fn build(
         manifests: &[PluginManifest],
         contracts: Contracts,
         asset_ids: impl Fn(AssetKind) -> Vec<String>,
+        migrations: &[(&str, Migration)],
     ) -> Result<Self, BuildError> {
         let mut facets: Vec<FacetEntry> = Vec::new();
         for (index, manifest) in manifests.iter().enumerate() {
@@ -141,6 +183,7 @@ impl Registry {
                         field: field.clone(),
                     });
                 }
+                let compat = compat_steps(plugin, decl, &contracts, migrations)?;
                 facets.push(FacetEntry {
                     namespace: plugin.clone(),
                     name: decl.name.clone(),
@@ -148,6 +191,7 @@ impl Registry {
                     targets: decl.targets.clone(),
                     schema,
                     asset_refs: refs.to_vec(),
+                    compat,
                 });
             }
         }
@@ -185,6 +229,63 @@ impl Registry {
     #[must_use]
     pub fn registered(&self, kind: AssetKind) -> &[String] {
         self.assets.iter().find(|(known, _)| *known == kind).map_or(&[], |(_, ids)| ids.as_slice())
+    }
+
+    /// What `payload`, stored under `key`, reads as (`resolveFacetPayload`): a
+    /// malformed key is dropped, a key no plugin registers passes through, a
+    /// newer version is preserved, the current one is parsed, and an older one
+    /// is parsed by its retained schema and walked forward one version at a
+    /// time. Versions compare as numbers, so `v01` is `v1`; the compat entry a
+    /// stored payload starts from is the one its own tag names.
+    #[must_use]
+    pub fn resolve_facet_payload(&self, key: &str, payload: &Value) -> Resolution {
+        let Some((facet, version)) = self.entry(key) else {
+            return if checks::facet_key(key) {
+                Resolution::Passthrough(payload.clone())
+            } else {
+                Resolution::Dropped
+            };
+        };
+        let (stored, current) = (version_number(version), version_number(&facet.version));
+        if stored > current {
+            return Resolution::Preserved(payload.clone());
+        }
+        let value = if stored < current {
+            self.migrate_forward(facet, version, stored, current, payload)
+        } else {
+            Some(payload.clone())
+        };
+        value
+            .and_then(|value| self.contracts.validate(facet.schema, &value).ok())
+            .map_or(Resolution::Dropped, Resolution::Resolved)
+    }
+
+    /// An older payload walked to the current version's shape, or none when a
+    /// step is missing or the retained schema refuses it. Every step names a
+    /// distinct compat entry, so the walk takes at most as many steps as the
+    /// facet has entries; a version past 2^53, where adding one changes
+    /// nothing, would walk for ever in the TypeScript and is dropped here.
+    fn migrate_forward(
+        &self,
+        facet: &FacetEntry,
+        tag: &str,
+        stored: f64,
+        current: f64,
+        payload: &Value,
+    ) -> Option<Value> {
+        let first = facet.compat.iter().find(|step| step.tag == tag)?;
+        let mut value = self.contracts.validate(first.schema, payload).ok()?;
+        let mut step = stored;
+        for _ in &facet.compat {
+            if step >= current {
+                break;
+            }
+            let tag = format!("v{}", js_number_to_string(step));
+            let entry = facet.compat.iter().find(|candidate| candidate.tag == tag)?;
+            value = (entry.migrate)(&value);
+            step += 1.0;
+        }
+        (step >= current).then_some(value)
     }
 
     /// Whether `payload` is what the current schema of the facet `key` names
@@ -298,4 +399,36 @@ impl Registry {
             })
         })
     }
+}
+
+/// The compat steps a facet declares, each with its retained schema and the
+/// migration the host supplies for it.
+fn compat_steps(
+    plugin: &str,
+    decl: &crate::plugin_manifest::FacetDecl,
+    contracts: &Contracts,
+    migrations: &[(&str, Migration)],
+) -> Result<Vec<CompatStep>, BuildError> {
+    let entries = decl.compat.as_deref().unwrap_or_default();
+    entries
+        .iter()
+        .map(|(tag, entry)| {
+            let schema =
+                contracts.resolve(&entry.schema).ok_or_else(|| BuildError::UnresolvedSchema {
+                    plugin: plugin.to_owned(),
+                    facet: decl.name.clone(),
+                    pointer: entry.schema.clone(),
+                })?;
+            let migrate = migrations
+                .iter()
+                .find(|(name, _)| *name == entry.migrate)
+                .map(|(_, migrate)| *migrate)
+                .ok_or_else(|| BuildError::MissingMigration {
+                    plugin: plugin.to_owned(),
+                    facet: decl.name.clone(),
+                    name: entry.migrate.clone(),
+                })?;
+            Ok(CompatStep { tag: tag.clone(), schema, migrate })
+        })
+        .collect()
 }

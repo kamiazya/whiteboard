@@ -3,14 +3,16 @@
 //! generated [`PluginManifest`].
 //!
 //! The registry reads what a facet is called, where it attaches, which payload
-//! schema judges it and which fields name assets, so that is what is decoded.
-//! The editor and the compat chain are the derived form's and the migration
-//! chain's (`editor` and `compat` stay `None`); they join when those are ported.
+//! schema judges it, which fields name assets and which older versions it still
+//! reads, so that is what is decoded. The editor is the derived form's (`editor`
+//! stays `None`); it joins when that is ported.
 
 use whiteboard_model::Value;
 
 use crate::plugin::{LoadError, definition};
-use crate::plugin_manifest::{AssetKind, FacetDecl, FacetTarget, ManifestAssets, PluginManifest};
+use crate::plugin_manifest::{
+    AssetKind, CompatEntry, FacetDecl, FacetTarget, ManifestAssets, PluginManifest,
+};
 use crate::schema::Contracts;
 use crate::value::{entries, field, items, text};
 
@@ -54,7 +56,18 @@ fn facet(decl: &Value) -> FacetDecl {
                 .collect()
         }),
         editor: None,
-        compat: None,
+        compat: field(decl, "compat").map(|entries_of| {
+            entries(entries_of)
+                .iter()
+                .map(|(tag, entry)| {
+                    let named = |key: &str| field(entry, key).map(text).unwrap_or_default();
+                    (
+                        tag.clone(),
+                        CompatEntry { schema: named("schema"), migrate: named("migrate") },
+                    )
+                })
+                .collect()
+        }),
     }
 }
 

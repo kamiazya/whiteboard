@@ -49,7 +49,7 @@ fn load(
     tables: &[(&str, &str)],
 ) -> Result<whiteboard_facet_engine::registry::Registry, LoadError> {
     let contracts = [("facets/demo/demo.schema.json", contract)];
-    build(&PluginSources { manifest, contracts: &contracts, tables }, &NO_HOST)
+    build(&PluginSources { manifest, contracts: &contracts, tables, migrations: &[] }, &NO_HOST)
 }
 
 fn tables() -> Vec<(&'static str, &'static str)> {

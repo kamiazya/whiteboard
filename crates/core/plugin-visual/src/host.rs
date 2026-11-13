@@ -93,6 +93,7 @@ pub fn registry_from(sources: &VisualSources<'_>) -> Result<Registry, LoadError>
                 ("visual.icons", sources.glyph_icons),
                 ("visual.stencils", sources.stencils),
             ],
+            migrations: &[],
         },
         &VISUAL_HOST,
     )

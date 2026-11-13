@@ -9,6 +9,7 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+whiteboard-det = { path = "../det" }
 whiteboard-model = { path = "../model" }
 
 # The recorded oracle and the contracts are read as JSON; no shipped code does.

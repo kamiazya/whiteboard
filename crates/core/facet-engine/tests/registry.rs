@@ -69,7 +69,7 @@ fn registry() -> Option<Registry> {
         facet("mark", "v1", "Mark", &[("theme", AssetKind::Themes), ("icon", AssetKind::Icons)]),
         facet("tone", "v0", "Tone", &[]),
     ];
-    Registry::build(&[plugin("demo", facets)], contracts()?, assets).ok()
+    Registry::build(&[plugin("demo", facets)], contracts()?, assets, &[]).ok()
 }
 
 fn value(json: &Json) -> Value {
@@ -88,7 +88,7 @@ fn text(s: &str) -> Value {
 fn a_registry_is_refused_where_a_plugin_cannot_be_registered() {
     let mark = || facet("mark", "v1", "Mark", &[]);
     let build = |plugins: &[PluginManifest]| {
-        Registry::build(plugins, contracts().expect("it compiles"), assets).err()
+        Registry::build(plugins, contracts().expect("it compiles"), assets, &[]).err()
     };
     assert_eq!(
         build(&[plugin("demo", vec![mark()]), plugin("demo", vec![])]),

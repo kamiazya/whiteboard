@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "Note": {
+      "type": "object",
+      "properties": { "text": { "type": "string" }, "size": { "type": "number" } },
+      "required": ["text"],
+      "x-wb-order": ["text", "size"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "NoteFirst": {
+      "type": "object",
+      "properties": { "body": { "type": "string" } },
+      "required": ["body"],
+      "x-wb-order": ["body"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "NoteSecond": {
+      "type": "object",
+      "properties": { "title": { "type": "string" } },
+      "required": ["title"],
+      "x-wb-order": ["title"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "Gap": {
+      "type": "object",
+      "properties": { "k": { "type": "string" } },
+      "required": ["k"],
+      "x-wb-order": ["k"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    },
+    "GapOld": {
+      "type": "object",
+      "properties": { "old": { "type": "string" } },
+      "required": ["old"],
+      "x-wb-order": ["old"],
+      "additionalProperties": true,
+      "x-wb-unknownKeys": "strip"
+    }
+  }
+}
