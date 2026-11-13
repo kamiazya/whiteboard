@@ -27,7 +27,7 @@ const workOf = (grid: SegmentGrid): number => (grid as unknown as { work: number
 type ReachWire = readonly (readonly [number, 0 | 1, readonly string[]])[]
 
 /** One edge's step: each run's reach, then each run's candidates. */
-export interface EdgeStep {
+interface EdgeStep {
   readonly reached: readonly (ReachWire | null)[]
   readonly workAfterReach: number
   readonly candidates: readonly (readonly (readonly [number, number])[] | 'spent' | null)[]
