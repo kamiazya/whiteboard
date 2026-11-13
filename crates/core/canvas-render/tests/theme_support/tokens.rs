@@ -5,8 +5,8 @@
 use serde_json::Value;
 use whiteboard_facet_engine::engine::{
     Fill, GroupFrameTokens, NodeStyleTokens, PaletteComment, PaletteNode, PalettePresets,
-    PaletteProposal, PaletteSyntax, PaletteTokens, PresetAccent, ThemeDefaults, ThemeGlow,
-    ThemeInk, ThemePalette, ThemeTokens,
+    PaletteProposal, PaletteSyntax, PaletteTokens, PresetAccent, ThemeDefaults, ThemeEdgeRouting,
+    ThemeGlow, ThemeInk, ThemePalette, ThemeTokens,
 };
 
 type Res<T> = Result<T, String>;
@@ -86,7 +86,9 @@ fn defaults(value: Option<&Value>) -> ThemeDefaults {
         stroke_dasharray: opt_text(frame, "strokeDasharray"),
         stroke_width: frame.get("strokeWidth").and_then(Value::as_f64),
     });
-    ThemeDefaults { group_frame, ..ThemeDefaults::default() }
+    let edge_routing =
+        value.get("edgeRouting").and_then(Value::as_str).and_then(ThemeEdgeRouting::from_wire);
+    ThemeDefaults { group_frame, edge_routing, ..ThemeDefaults::default() }
 }
 
 pub(crate) fn theme_tokens(value: &Value) -> Res<ThemeTokens> {
