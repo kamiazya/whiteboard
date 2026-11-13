@@ -10,7 +10,7 @@
  */
 
 type Xy = readonly [number, number]
-export interface Edge {
+interface Edge {
   readonly id: string
   readonly path: readonly Xy[]
 }
