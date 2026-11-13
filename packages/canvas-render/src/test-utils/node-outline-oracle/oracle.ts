@@ -24,7 +24,7 @@ const hex = (value: number): string => (Number.isNaN(value) ? '7ff8000000000000'
 const pointHex = (p: Point): readonly string[] => [hex(p.x), hex(p.y)]
 const boxHex = (b: BoundingBox): readonly string[] => [b.x, b.y, b.w, b.h].map(hex)
 
-export const SHAPES = [
+const SHAPES = [
   'visual.ellipse',
   'visual.diamond',
   'visual.hexagon',
@@ -36,7 +36,7 @@ export const SHAPES = [
 
 const BIG = 1e308
 
-export const BOXES: readonly BoundingBox[] = [
+const BOXES: readonly BoundingBox[] = [
   { x: 0, y: 0, w: 160, h: 100 },
   { x: -30.5, y: 12.25, w: 40, h: 200 },
   { x: 10, y: 10, w: 300, h: 20 },
