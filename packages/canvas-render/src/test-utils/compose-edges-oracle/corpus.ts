@@ -73,8 +73,21 @@ function shapedBoard(shape: string, index: number): Board {
     edge('s-a', end('s', 'top'), end('a', undefined, true)),
     edge('s-t', end('s', 'left', false), end('t', 'right', true)),
   ]
+  // Ink onto the shaped node's right side, whose midpoint a slanted silhouette
+  // (the parallelogram's) leaves outside, so a line's node end is pulled as an edge's is.
+  const lines = [
+    line(
+      'ink',
+      { kind: 'point', point: { x: 760, y: 120 } },
+      { kind: 'node', node: 's', side: 'right' },
+    ),
+  ]
   // Both ends shaped on the last edge, so each is pulled along its own approach.
-  return { name: `shape-${shape}`, canvas: { nodes, edges }, shapes: { s: shape, t: shape } }
+  return {
+    name: `shape-${shape}`,
+    canvas: { nodes, edges, lines },
+    shapes: { s: shape, t: shape },
+  }
 }
 
 /** Labels that fit at the midpoint, that slide along or off their line, and that find nowhere. */
