@@ -39,8 +39,7 @@ const tokensOf = (name: 'sketch' | 'neon') => {
 }
 
 /** `f64Hex`, with every NaN written as the positive quiet NaN `f64::NAN` is. */
-export const hex = (value: number): string =>
-  Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value)
+const hex = (value: number): string => (Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value))
 
 const FAMILY = { sketch: 'Yomogi', neon: 'Roboto' } as const
 
