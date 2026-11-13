@@ -34,6 +34,7 @@ describe('the recorded compose-node oracle', () => {
   it('reaches every kind of node and every outcome', () => {
     expect(records[0]?.kind, 'the meta line first').toBe('meta')
     expect(cases.length, 'cases').toBeGreaterThan(150)
+    expect(cases.filter((c) => c.embed !== null).length, 'embeds answered').toBeGreaterThan(5)
     const answers = cases.map((c) => c.answer)
     const has = (what: string, test: (a: (typeof answers)[number]) => boolean) =>
       expect(answers.some(test), what).toBe(true)
@@ -52,6 +53,14 @@ describe('the recorded compose-node oracle', () => {
     has('an embed laid out', (a) => a.scene.includes('Embedded'))
     has('a first line kept', (a) => a.scene.includes('"truncated":true'))
     has('a file drawn', (a) => a.scene.includes('Notes A'))
+    has('a file drawn as its picture', (a) => a.scene.includes('blob:pic'))
+    has('a file drawn as its body', (a) => a.scene.includes('referenced document'))
+    has('a file drawn as its card', (a) => a.scene.includes('Spec'))
+    has('a card that fell back from an empty body', (a) => a.scene.includes('Fallback card'))
+    has('a card row the trim keeps', (a) => a.scene.includes('\u0085'))
+    has('a file drawn as its canvas', (a) => a.scene.includes('"embedResolved"'))
+    has('a canvas the spent budget refused', (a) => a.scene.includes('Board notes'))
+    has('a file whose subpath follows its name', (a) => a.scene.includes('Doc MD#Heading'))
   })
 
   it('equals what the TypeScript answers today', () => {

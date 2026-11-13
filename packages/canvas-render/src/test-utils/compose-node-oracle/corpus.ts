@@ -1,4 +1,7 @@
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { NodeResource } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { FacetCardData } from '../../references/resolved.js'
 import { ID } from '../typeset-oracle/hand-builders.js'
 
 /**
@@ -34,6 +37,27 @@ const BODIES: readonly string[] = [
   '```js\nconst a = 1\n```',
 ]
 
+/**
+ * File nodes by name and the reference each points at: a body, a tall body, an
+ * empty body over a card, cards with and without a usable title or row (the
+ * blanks are `String.prototype.trim`'s: U+FEFF is blank and U+0085 is not), a
+ * picture over a body, a canvas over a body, a missing target, and a resolver
+ * that throws.
+ */
+const FILE_REFERENCES: Readonly<Record<string, string>> = {
+  'file-md': 'md:doc',
+  'file-md-tall': 'md:tall',
+  'file-md-empty': 'md:empty',
+  'file-card': 'card:full',
+  'file-card-untitled': 'card:untitled',
+  'file-card-blank': 'card:blank',
+  'file-card-none': 'card:none',
+  'file-pic-md': 'pic:md',
+  'file-board': 'board',
+  'file-gone': 'gone',
+  'file-throws': 'throws',
+}
+
 /** What a node shows, by name; `null` is a frame. */
 export const RESOURCES: Readonly<Record<string, NodeResource | null>> = {
   ...Object.fromEntries(
@@ -46,6 +70,17 @@ export const RESOURCES: Readonly<Record<string, NodeResource | null>> = {
   'link-empty': { mimeType: 'text/uri-list', location: '' },
   unclaimed: { mimeType: 'image/png' },
   frame: null,
+  ...Object.fromEntries(
+    Object.entries(FILE_REFERENCES).map(([name, location]) => [
+      name,
+      { mimeType: 'application/octet-stream', location },
+    ]),
+  ),
+  'file-md-sub': {
+    mimeType: 'application/octet-stream',
+    location: 'md:doc',
+    subpath: '#Heading',
+  },
 }
 
 /** What a reference resolves to, by the reference; `null` is a resolver that throws. */
@@ -53,7 +88,18 @@ export type ResolvedWire = {
   readonly label?: string
   readonly missing?: boolean
   readonly image?: { readonly href: string; readonly alt?: string }
+  readonly canvas?: { readonly nodes: readonly never[]; readonly edges: readonly never[] }
+  readonly markdown?: MdastRoot
+  readonly facets?: FacetCardData
 } | null
+
+const md = (text: string): MdastRoot => JSON.parse(JSON.stringify(parseMarkdownBody(text)))
+
+const TALL_BODY = [
+  ...Array.from({ length: 10 }, (_, i) => `Paragraph ${i} of the referenced document`),
+  '- one\n- two words\n  - three',
+  '```js\nconst a = 1\n```',
+].join('\n\n')
 
 export const REFERENCES: Readonly<Record<string, ResolvedWire>> = {
   'asset:bg': { image: { href: 'blob:bg', alt: 'Background' } },
@@ -61,6 +107,34 @@ export const REFERENCES: Readonly<Record<string, ResolvedWire>> = {
   'doc-ref': { label: 'Doc' },
   'notes/a.md': { label: 'Notes A' },
   throws: null,
+  'md:doc': {
+    label: 'Doc MD',
+    markdown: md('# Heading\n\nA paragraph in the referenced document that wraps'),
+  },
+  'md:tall': { markdown: md(TALL_BODY) },
+  'md:empty': {
+    label: 'Empty',
+    markdown: { type: 'root', children: [] },
+    facets: { title: 'Fallback card', rows: [{ label: 'type', value: 'note' }] },
+  },
+  'card:full': {
+    label: 'Card',
+    facets: {
+      title: 'Spec',
+      rows: [
+        { label: 'type', value: 'note' },
+        { label: ' ', value: '\u3000' },
+        { label: '', value: 'unlabelled' },
+        { label: 'tags', value: 'alpha, beta and a longer value that wraps in the card' },
+      ],
+    },
+  },
+  'card:untitled': { facets: { title: ' \uFEFF', rows: [{ label: '\u0085', value: '' }] } },
+  'card:blank': { facets: { title: '\t', rows: [{ label: ' ', value: '\n' }] } },
+  'card:none': { facets: { rows: [] } },
+  'pic:md': { image: { href: 'blob:pic', alt: 'Picture' }, markdown: md('Under the picture') },
+  board: { label: 'Board', canvas: { nodes: [], edges: [] }, markdown: md('Board notes') },
+  gone: { missing: true, markdown: md('Still here') },
 }
 
 /** A frame's caption, background and how it fills the frame. */
@@ -134,8 +208,10 @@ const pick = <T>(list: readonly T[], at: number): T => list[at % list.length] as
  * Every resource in every box, with the options drawn round-robin at co-prime
  * strides so each combination is reached without the product; then the text
  * bodies again under every theme with a cache, and once more with the budget
- * spent, which is what the cache refuses to keep; then every frame background
- * in every fill, in a box and in one with no width or no height.
+ * spent, which is what the cache refuses to keep; then every file node fitted
+ * and not, plain and shaped, and once with the budget spent, which the canvas
+ * embed needs; then every frame background in every fill, in a box and in one
+ * with no width or no height.
  */
 export function caseSpecs(): readonly CaseSpec[] {
   const specs: CaseSpec[] = []
@@ -166,17 +242,21 @@ export function caseSpecs(): readonly CaseSpec[] {
   }
   const names = Object.keys(RESOURCES)
   for (const resource of names) {
-    for (const box of BOXES) {
-      // A file node's drawing is recorded as JSON, which has no NaN to carry.
-      const shown = RESOURCES[resource]
-      const file = shown?.location !== undefined && shown.mimeType !== 'text/uri-list'
-      if (!(file && box.some((v) => !Number.isFinite(v)))) push(resource, box)
-    }
+    for (const box of BOXES) push(resource, box)
   }
   const texts = names.filter((name) => name.startsWith('text'))
   for (const resource of texts) {
     for (const theme of THEMES) push(resource, [10, 20, 200, 120], { theme, cache: true })
     push(resource, [10, 20, 200, 120], { cache: true, spent: true, suppressed: false })
+  }
+  const files = names.filter((name) => name.startsWith('file'))
+  for (const resource of files) {
+    for (const fitToBox of [true, false]) {
+      for (const shape of SHAPES.slice(0, 2)) {
+        push(resource, [10, 20, 200, 120], { fitToBox, shape, spent: false })
+      }
+    }
+    push(resource, [10, 20, 200, 120], { spent: true })
   }
   for (const background of BACKGROUNDS) {
     for (const backgroundStyle of BACKGROUND_STYLES) {

@@ -30,8 +30,8 @@ import { type CaseSpec, caseSpecs, DOC_ID, REFERENCES, RESOURCES, THROWING_BODY 
  * and kept, the scene composed again over the same cache, and the scene composed
  * over a cache seeded under the first key asked. What the composer asks a host
  * the Rust port takes as a seam — a body parsed and its references resolved, a
- * reference resolved, an embed target, a file node's representation — is in
- * the meta line and the case, as data. Every double is the hex of its IEEE bits
+ * reference resolved, an embed target, a file node's canvas embed — is in the
+ * meta line and the case, as data. Every double is the hex of its IEEE bits
  * (a NaN the canonical one), and `calls` counts what the measurer was asked.
  */
 
@@ -94,6 +94,20 @@ const SEEDED: FittedBlocks = {
   overflows: false,
 }
 
+/** What the nested layout answers for any embedded canvas: one box, scaled into the node's. */
+const MINIATURE: { readonly nodes: readonly SceneNode[] } = {
+  nodes: [
+    { kind: 'shape', bbox: { x: -10, y: 5, w: 400, h: 120 }, radius: 6 },
+    {
+      kind: 'textRun',
+      bbox: { x: 0, y: 10, w: 80, h: 16 },
+      baseline: 12,
+      text: 'inside',
+      appearance: { fontSize: 14 },
+    },
+  ],
+}
+
 interface MetaRecord {
   readonly kind: 'meta'
   readonly sketch: unknown
@@ -132,10 +146,12 @@ interface CaseRecord {
    * `spent` (the nested-layout budget has no layout left).
    */
   readonly flags: readonly Flag[]
-  /** What a file node's representation draws, as data; the port asks it of its host. */
-  readonly file: readonly SceneNode[] | null
-  /** How many times drawing the file node asks the measurer, each time it is drawn. */
-  readonly fileCalls: number
+  /**
+   * The canvas a file node embeds, scaled into its box, as data: `null` when the
+   * embed draws nothing and the next representation is asked. The port asks it
+   * of its host until the nested layout is ported.
+   */
+  readonly embed: SceneNode | null
   readonly answer: CaseAnswer
 }
 
@@ -243,7 +259,8 @@ function optionsOf(
     emptyFrameIds: new Set(on('emptyFrame') ? [id] : []),
     onDegrade: (event: SpatialLayoutDegradation) => events.push(event),
     ...(cache === undefined ? {} : { contentCache: cache }),
-    layoutNestedCanvas: () => ({ nodes: [] }),
+    expandFileNode: () => true,
+    layoutNestedCanvas: () => MINIATURE,
   } as unknown as ResolvedLayoutOptions
 }
 
@@ -287,18 +304,22 @@ function answerOf(record: Input): CaseAnswer {
   }
 }
 
-/** A file node's representation, drawn as the composer draws it. */
-function fileOf(record: Omit<Input, 'file' | 'fileCalls'>): {
-  file: readonly SceneNode[] | null
-  fileCalls: number
-} {
-  if (nodeKind(nodeOf(record.node)) !== 'file') return { file: null, fileCalls: 0 }
-  let fileCalls = 0
-  const count = () => {
-    fileCalls += 1
+/**
+ * The canvas embed a file node draws, as the composer draws it: the one
+ * `embedResolved` entry at the top of its scene, which no other representation
+ * puts there. Recorded as JSON, so it is checked to survive the trip.
+ */
+function embedOf(record: Omit<Input, 'embed'>): SceneNode | null {
+  if (nodeKind(nodeOf(record.node)) !== 'file') return null
+  const options = optionsOf({ ...record, embed: null }, () => {}, [], undefined)
+  const drawn = composeFileNode(nodeOf(record.node), options)
+  const embed = drawn.find((entry) => entry.kind === 'embedResolved')
+  if (embed === undefined) return null
+  const wire = viaJson(embed)
+  if (dump([wire]) !== dump([embed])) {
+    throw new Error(`compose-node-oracle: ${record.id}'s embed does not survive JSON`)
   }
-  const options = optionsOf({ ...record, file: null, fileCalls: 0 }, count, [], undefined)
-  return { file: viaJson(composeFileNode(nodeOf(record.node), options)), fileCalls }
+  return wire
 }
 
 function caseRecord(spec: CaseSpec, index: number): CaseRecord {
@@ -314,7 +335,7 @@ function caseRecord(spec: CaseSpec, index: number): CaseRecord {
     embedDepth: spec.embedDepth,
     flags: FLAGS.filter((flag) => spec[flag]),
   }
-  const input = { ...partial, ...fileOf(partial) }
+  const input = { ...partial, embed: embedOf(partial) }
   return { ...input, answer: answerOf(input) }
 }
 
