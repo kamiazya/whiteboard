@@ -266,13 +266,7 @@ function optionsOf(
     namespace: 'oracle',
     readTextPlacement: () => record.align ?? undefined,
   }
-  const budget = createNestedLayoutBudget()
   const on = (flag: Flag) => record.flags.includes(flag)
-  if (on('spent')) budget.remaining = 0
-  if (record.budget !== undefined) {
-    budget.remaining = record.budget[0]
-    budget.elementsRemaining = record.budget[1]
-  }
   const id = record.node.id
   return {
     measure,
@@ -287,7 +281,7 @@ function optionsOf(
     resolveAlias,
     resolveEmbed,
     resolveReference,
-    nestedLayoutBudget: budget,
+    nestedLayoutBudget: budgetOf(record),
     activeEmbedPath: new Set<string>(record.embedPath ?? []),
     embedDepth: record.embedDepth,
     passagesByNode: new Map(),
@@ -297,15 +291,31 @@ function optionsOf(
     onDegrade: (event: SpatialLayoutDegradation) => events.push(event),
     ...(cache === undefined ? {} : { contentCache: cache }),
     expandFileNode: () => !on('collapsed'),
-    layoutNestedCanvas: (canvas: SpatialCanvas, inner: ResolvedLayoutOptions) => {
-      nested.push({
-        path: [...inner.activeEmbedPath],
-        depth: inner.embedDepth,
-        elements: canvasElementCount(canvas),
-      })
-      return MINIATURE
-    },
+    layoutNestedCanvas: recordingNestedLayout(nested),
   } as unknown as ResolvedLayoutOptions
+}
+
+/** A fresh budget per composition, as the TypeScript opens one per render. */
+function budgetOf(record: Input) {
+  const budget = createNestedLayoutBudget()
+  if (record.flags.includes('spent')) budget.remaining = 0
+  if (record.budget !== undefined) {
+    budget.remaining = record.budget[0]
+    budget.elementsRemaining = record.budget[1]
+  }
+  return budget
+}
+
+/** The nested layout, answering the fixed miniature and noting what it was handed. */
+function recordingNestedLayout(nested: Nested[]) {
+  return (canvas: SpatialCanvas, inner: ResolvedLayoutOptions) => {
+    nested.push({
+      path: [...inner.activeEmbedPath],
+      depth: inner.embedDepth,
+      elements: canvasElementCount(canvas),
+    })
+    return MINIATURE
+  }
 }
 
 const detailOf = (event: SpatialLayoutDegradation): string =>

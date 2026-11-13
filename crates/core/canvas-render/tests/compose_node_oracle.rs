@@ -9,6 +9,8 @@
 
 #[path = "typeset_support/dump.rs"]
 mod dump;
+#[path = "compose_node_support/extras.rs"]
+mod extras;
 #[path = "typeset_support/model.rs"]
 mod model;
 #[path = "theme_support/tokens.rs"]
@@ -18,11 +20,11 @@ use std::cell::{Cell, RefCell};
 use std::collections::BTreeMap;
 
 use dump::dump_scene;
+use extras::{Decoration, Fit};
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::compose_node::{
-    BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, NodeMarks, ParseFailed,
-    compose_decorations, compose_node,
+    BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed, compose_node,
 };
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
@@ -30,15 +32,14 @@ use whiteboard_canvas_render::node_box::{
     FacetCard, FacetRow, NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference,
     TextPlacement,
 };
-use whiteboard_canvas_render::scale_scene::fit_scene_into_box;
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::asset::create_themed_appearance;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
-    CanvasSummary, EmbedBox, EmbedResolver, Embedded, FittedBlocks, IconRange, ImageRef,
-    InlineSeams, NestedLayoutBudget,
+    CanvasSummary, EmbedResolver, Embedded, FittedBlocks, IconRange, ImageRef, InlineSeams,
+    NestedLayoutBudget,
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_model::mdast::Root;
@@ -46,7 +47,6 @@ use whiteboard_model::spatial::{
     BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine, NodeResource,
     SpatialCanvas, SpatialNode,
 };
-use whiteboard_plugin_visual::visual::{VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon};
 use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -650,52 +650,6 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     differ("host misses", &*setup.host.misses.borrow(), &Vec::new())
 }
 
-/// A symbol as the TypeScript's reader answers it.
-#[derive(Deserialize)]
-#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
-enum SymbolWire {
-    Icon { name: String },
-    Emoji { char: String },
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BoxWire {
-    id: String,
-    #[serde(rename = "box")]
-    bbox: [String; 4],
-}
-
-/// The decorations drawn over a node, from the stencil and symbol it wears.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Decoration {
-    id: String,
-    node: BoxWire,
-    theme: String,
-    stencil: Option<String>,
-    symbol: Option<SymbolWire>,
-    scene: String,
-}
-
-impl NodeMarks for Decoration {
-    fn stencil(&self, node: &SpatialNode) -> Option<String> {
-        self.stencil.clone().filter(|_| node.id == self.node.id)
-    }
-
-    fn symbol(&self, node: &SpatialNode) -> Option<VisualSymbolFacet> {
-        let symbol = self.symbol.as_ref().filter(|_| node.id == self.node.id)?;
-        Some(match symbol {
-            SymbolWire::Icon { name } => {
-                VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name: name.clone() })
-            }
-            SymbolWire::Emoji { char } => {
-                VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji { char: char.clone() })
-            }
-        })
-    }
-}
-
 fn appearance_of(context: &Context, theme: &str) -> Box<dyn SpatialAppearanceResolver> {
     match theme {
         "sketch" => {
@@ -706,61 +660,6 @@ fn appearance_of(context: &Context, theme: &str) -> Box<dyn SpatialAppearanceRes
     }
 }
 
-fn replay_decoration(context: &Context, decoration: &Decoration) -> Res<()> {
-    let [x, y, w, h] = &decoration.node.bbox;
-    let node = SpatialNode {
-        id: decoration.node.id.clone(),
-        x: f64_of(x)?,
-        y: f64_of(y)?,
-        width: f64_of(w)?,
-        height: f64_of(h)?,
-        ..SpatialNode::default()
-    };
-    let appearance = appearance_of(context, &decoration.theme);
-    let scene = dump_nodes(compose_decorations(&node, appearance.as_ref(), decoration))?;
-    if scene == decoration.scene {
-        Ok(())
-    } else {
-        Err(format!("decorations: got\n{scene}\nrecorded\n{}", decoration.scene))
-    }
-}
-
-#[derive(Deserialize, Debug, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct FitAnswer {
-    scene: String,
-    w: String,
-    h: String,
-}
-
-/// A scene fitted into a box, and what the fit answers.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct Fit {
-    id: String,
-    scene: Vec<SceneNode>,
-    /// `[x, y, maxWidth, maxHeight]`.
-    #[serde(rename = "box")]
-    space: [String; 4],
-    answer: Option<FitAnswer>,
-}
-
-fn replay_fit(fit: &Fit) -> Res<()> {
-    let [x, y, max_width, max_height] = &fit.space;
-    let space = EmbedBox {
-        x: f64_of(x)?,
-        y: f64_of(y)?,
-        max_width: f64_of(max_width)?,
-        max_height: f64_of(max_height)?,
-    };
-    let hex = |value: f64| format!("{:016x}", value.to_bits());
-    let got = match fit_scene_into_box(&fit.scene, &space) {
-        None => None,
-        Some(m) => Some(FitAnswer { scene: dump_nodes(m.nodes)?, w: hex(m.w), h: hex(m.h) }),
-    };
-    differ("fit", &got, &fit.answer)
-}
-
 /// One record after the meta line, replayed by its kind.
 fn replay_record(context: &Context, record: &Value) -> Res<()> {
     let fields = without_kind(record);
@@ -768,11 +667,12 @@ fn replay_record(context: &Context, record: &Value) -> Res<()> {
     match record.get("kind").and_then(Value::as_str) {
         Some("decoration") => {
             let decoration: Decoration = serde_json::from_value(fields).map_err(parse)?;
-            replay_decoration(context, &decoration).map_err(|e| format!("{}: {e}", decoration.id))
+            extras::replay_decoration(context, &decoration)
+                .map_err(|e| format!("{}: {e}", decoration.id))
         }
         Some("fit") => {
             let fit: Fit = serde_json::from_value(fields).map_err(parse)?;
-            replay_fit(&fit).map_err(|e| format!("{}: {e}", fit.id))
+            extras::replay_fit(&fit).map_err(|e| format!("{}: {e}", fit.id))
         }
         _ => {
             let case: Case = serde_json::from_value(fields).map_err(parse)?;
