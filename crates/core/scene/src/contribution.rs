@@ -1,6 +1,10 @@
-//! The data half of what a plugin contributes to drawing.
+//! What a plugin contributes to drawing: the geometry vocabulary, and the
+//! trait a per-node decoration implements.
+
+use whiteboard_model::spatial::SpatialNode;
 
 use crate::appearance::{Appearance, BoundingBox};
+use crate::graph::SceneNode;
 
 /// A point in canvas coordinates, the shape a scene path is made of.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -40,4 +44,12 @@ pub enum NodeOutline {
 pub struct DecorationContext {
     pub bounds: BoundingBox,
     pub label: Appearance,
+}
+
+/// A plugin's mark on a node (`NodeDecoration`): the scene nodes drawn over it
+/// after its own content, in the shared vocabulary, so the node union stays
+/// closed and a contribution builds from it. The renderer asks every
+/// contribution in order and appends what each answers.
+pub trait NodeDecoration {
+    fn decorate(&self, node: &SpatialNode, context: &DecorationContext) -> Vec<SceneNode>;
 }

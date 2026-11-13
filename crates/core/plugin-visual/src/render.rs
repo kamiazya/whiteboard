@@ -4,14 +4,19 @@
 //! silhouette is and which icons exist is this plugin's business.
 //!
 //! Its one decoration is the badge a stencil-wearing box carries
-//! ([`stencil_badge`]). The facet readers that answer which stencil and symbol a
-//! node wears, and the themes, are not here yet: the renderer asks its host for
-//! the facet values and hands them to the badge.
+//! ([`StencilBadge`]), a [`NodeDecoration`] the renderer asks with every other
+//! contribution. The facet readers that answer which stencil and symbol a node
+//! wears, and the themes, are not here yet: the badge asks [`NodeMarks`], which
+//! the host answers until they are.
 
 use whiteboard_det::math::js_min;
 use whiteboard_model::Value;
 use whiteboard_model::json;
-use whiteboard_scene::{Appearance, BoundingBox, IconSceneNode, NodeOutline, ScenePoint};
+use whiteboard_model::spatial::SpatialNode;
+use whiteboard_scene::{
+    Appearance, BoundingBox, DecorationContext, IconSceneNode, NodeDecoration, NodeOutline,
+    SceneNode, ScenePoint,
+};
 
 use crate::visual::VisualSymbolFacet;
 
@@ -208,8 +213,7 @@ const BADGE_MIN_NODE_HEIGHT_PX: f64 = 48.0;
 /// hard to tell apart at a glance; a symbol set by hand reaches the surfaces too
 /// small to read a node on instead. An icon is stroked, so the badge takes the
 /// label's ink, and `currentColor` when the label has none.
-#[must_use]
-pub fn stencil_badge(
+fn stencil_badge(
     node: &BoundingBox,
     stencil: Option<&str>,
     symbol: Option<&VisualSymbolFacet>,
@@ -235,16 +239,48 @@ pub fn stencil_badge(
     })
 }
 
+/// The facet values the badge reads off a node.
+pub trait NodeMarks {
+    /// The stencil the node wears (`visual.stencil/v0`), by id.
+    fn stencil(&self, node: &SpatialNode) -> Option<String>;
+
+    /// The symbol the node wears (`visual.symbol/v0`).
+    fn symbol(&self, node: &SpatialNode) -> Option<VisualSymbolFacet>;
+}
+
+/// The plugin's decoration (`stencilBadge`): the badge over a node, placed by
+/// the node's own box rather than the content bounds it is told, as the
+/// TypeScript places it.
+pub struct StencilBadge<'a> {
+    pub marks: &'a dyn NodeMarks,
+}
+
+impl NodeDecoration for StencilBadge<'_> {
+    fn decorate(&self, node: &SpatialNode, context: &DecorationContext) -> Vec<SceneNode> {
+        let bbox = BoundingBox { x: node.x, y: node.y, w: node.width, h: node.height };
+        let stencil = self.marks.stencil(node);
+        let symbol = self.marks.symbol(node);
+        stencil_badge(&bbox, stencil.as_deref(), symbol.as_ref(), context.label.fill.as_deref())
+            .map(SceneNode::Icon)
+            .into_iter()
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        ICON_VIEWBOX, IconElement, icon_geometry, icon_geometry_in, shape_content_box,
-        shape_outline, stencil_badge,
+        ICON_VIEWBOX, IconElement, NodeMarks, StencilBadge, icon_geometry, icon_geometry_in,
+        shape_content_box, shape_outline, stencil_badge,
     };
     use crate::visual::{VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
-    use whiteboard_scene::{BoundingBox, NodeOutline, ScenePoint};
+    use whiteboard_model::spatial::SpatialNode;
+    use whiteboard_scene::{
+        Appearance, BoundingBox, DecorationContext, NodeDecoration, NodeOutline, SceneNode,
+        ScenePoint,
+    };
 
     const WIDE: BoundingBox = BoundingBox { x: 10.0, y: 20.0, w: 200.0, h: 80.0 };
     const SMALL: BoundingBox = BoundingBox { x: 0.0, y: 0.0, w: 40.0, h: 12.0 };
@@ -517,5 +553,42 @@ mod tests {
         assert_eq!(stencil_badge(&WIDE, stencil, Some(&emoji), None), None);
         assert_eq!(stencil_badge(&WIDE, stencil, None, None), None);
         assert_eq!(stencil_badge(&SMALL, stencil, Some(&star), None), None);
+    }
+
+    /// Every node wears the `datastore` stencil and the `star` icon.
+    struct Starred;
+
+    impl NodeMarks for Starred {
+        fn stencil(&self, _: &SpatialNode) -> Option<String> {
+            Some("visual.datastore".to_owned())
+        }
+
+        fn symbol(&self, _: &SpatialNode) -> Option<VisualSymbolFacet> {
+            Some(VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name: "star".to_owned() }))
+        }
+    }
+
+    #[test]
+    fn the_decoration_places_its_badge_by_the_node_and_inks_it_with_the_label() {
+        let node = SpatialNode {
+            x: WIDE.x,
+            y: WIDE.y,
+            width: WIDE.w,
+            height: WIDE.h,
+            ..SpatialNode::default()
+        };
+        let context = DecorationContext {
+            bounds: SMALL,
+            label: Appearance { fill: Some("#123456".to_owned()), ..Appearance::default() },
+        };
+        let drawn = StencilBadge { marks: &Starred }.decorate(&node, &context);
+        let expected = stencil_badge(
+            &WIDE,
+            Some("visual.datastore"),
+            Some(&Starred.symbol(&node).unwrap()),
+            Some("#123456"),
+        );
+        assert_eq!(drawn, expected.map(SceneNode::Icon).into_iter().collect::<Vec<_>>());
+        assert_eq!(drawn.len(), 1, "a stencil wearing an icon in a tall box is badged");
     }
 }
