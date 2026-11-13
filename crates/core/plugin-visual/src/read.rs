@@ -1,0 +1,119 @@
+//! The plugin's facet readers (`data.ts`, `apply-stencil.ts`): each reads one
+//! key of an object's facet bucket through the registry's compat chain, and a
+//! payload that does not resolve reads as the facet's absence, so every
+//! surface degrades on it the same way. They take the BUCKET, as `readSymbol`
+//! does, so one reader serves a node, an edge, a line and a canvas alike.
+
+use whiteboard_facet_engine::registry::{Registry, Resolution};
+use whiteboard_model::Value;
+use whiteboard_model::spatial::ExtensionFacets;
+
+use crate::visual::{
+    EdgeRoutingStyle, LineJumps, VisualEdgesFacet, VisualShapeKind, VisualStrokeWidth,
+    VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon, VisualTextAlign,
+};
+
+pub const VISUAL_SHAPE_KEY: &str = "visual.shape/v0";
+pub const VISUAL_TEXT_KEY: &str = "visual.text/v0";
+pub const VISUAL_EDGES_KEY: &str = "visual.edges/v0";
+pub const VISUAL_STROKE_KEY: &str = "visual.stroke/v0";
+pub const VISUAL_THEME_KEY: &str = "visual.theme/v0";
+pub const VISUAL_STENCIL_KEY: &str = "visual.stencil/v0";
+pub const VISUAL_SYMBOL_KEY: &str = "visual.symbol/v0";
+
+fn field<'v>(value: &'v Value, name: &str) -> Option<&'v Value> {
+    let Value::Map(entries) = value else { return None };
+    entries.iter().find(|(key, _)| key == name).map(|(_, found)| found)
+}
+
+fn text<'v>(value: &'v Value, name: &str) -> Option<&'v str> {
+    match field(value, name)? {
+        Value::String(text) => Some(text),
+        _ => None,
+    }
+}
+
+/// The payload stored under `key`, as its facet's current schema parses it,
+/// when it resolves.
+fn resolved(facets: Option<&ExtensionFacets>, key: &str, registry: &Registry) -> Option<Value> {
+    let (_, stored) = facets?.iter().find(|(name, _)| name == key)?;
+    match registry.resolve_facet_payload(key, stored) {
+        Resolution::Resolved(value) => Some(value),
+        _ => None,
+    }
+}
+
+/// The silhouette a node draws (`resolveNodeShape`); none is the rect.
+#[must_use]
+pub fn node_shape(
+    facets: Option<&ExtensionFacets>,
+    registry: &Registry,
+) -> Option<VisualShapeKind> {
+    let value = resolved(facets, VISUAL_SHAPE_KEY, registry)?;
+    VisualShapeKind::from_wire(text(&value, "kind")?)
+}
+
+/// Where a node's text sits (`resolveNodeTextAlign`); none is the default.
+#[must_use]
+pub fn node_text_align(
+    facets: Option<&ExtensionFacets>,
+    registry: &Registry,
+) -> Option<VisualTextAlign> {
+    let value = resolved(facets, VISUAL_TEXT_KEY, registry)?;
+    VisualTextAlign::from_wire(text(&value, "align")?)
+}
+
+/// What the bucket's `visual.edges/v0` says, field by field
+/// (`resolveEdgeOwnStyle`, and `resolveCanvasEdgeStyle` on a canvas); a field
+/// it does not say is none.
+#[must_use]
+pub fn edges_style(facets: Option<&ExtensionFacets>, registry: &Registry) -> VisualEdgesFacet {
+    let Some(value) = resolved(facets, VISUAL_EDGES_KEY, registry) else {
+        return VisualEdgesFacet::default();
+    };
+    VisualEdgesFacet {
+        routing: text(&value, "routing").and_then(EdgeRoutingStyle::from_wire),
+        line_jumps: text(&value, "lineJumps").and_then(LineJumps::from_wire),
+    }
+}
+
+/// The weight a stroke draws at (`resolveStrokeWidth`); none is thin.
+#[must_use]
+pub fn stroke_width(
+    facets: Option<&ExtensionFacets>,
+    registry: &Registry,
+) -> Option<VisualStrokeWidth> {
+    let value = resolved(facets, VISUAL_STROKE_KEY, registry)?;
+    VisualStrokeWidth::from_wire(text(&value, "width")?)
+}
+
+/// The theme id a canvas names (`resolveCanvasTheme`); whether a theme of
+/// that id is registered is the renderer's question.
+#[must_use]
+pub fn canvas_theme(facets: Option<&ExtensionFacets>, registry: &Registry) -> Option<String> {
+    let value = resolved(facets, VISUAL_THEME_KEY, registry)?;
+    text(&value, "theme").map(str::to_owned)
+}
+
+/// The stencil a node wears (`resolveNodeStencil`), registered or not: a
+/// stored id another deployment registered is data.
+#[must_use]
+pub fn node_stencil(facets: Option<&ExtensionFacets>, registry: &Registry) -> Option<String> {
+    let value = resolved(facets, VISUAL_STENCIL_KEY, registry)?;
+    text(&value, "stencil").map(str::to_owned)
+}
+
+/// The symbol an object wears (`readSymbol`).
+#[must_use]
+pub fn symbol(facets: Option<&ExtensionFacets>, registry: &Registry) -> Option<VisualSymbolFacet> {
+    let value = resolved(facets, VISUAL_SYMBOL_KEY, registry)?;
+    match text(&value, "kind")? {
+        VisualSymbolIcon::KIND => Some(VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon {
+            name: text(&value, "name")?.to_owned(),
+        })),
+        VisualSymbolEmoji::KIND => Some(VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji {
+            char: text(&value, "char")?.to_owned(),
+        })),
+        _ => None,
+    }
+}
