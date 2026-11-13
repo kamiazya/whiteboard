@@ -46,12 +46,24 @@ fn note_second(old: &Value) -> Value {
     map(vec![("text", text), ("size", Value::Number(1.0)), ("extra", Value::Bool(true))])
 }
 
-fn gap_old(old: &Value) -> Value {
+fn gap_zero(old: &Value) -> Value {
+    let text = match get(old, "old") {
+        Some(Value::String(text)) => format!("{text}!"),
+        _ => String::new(),
+    };
+    map(vec![("old", Value::String(text))])
+}
+
+fn gap_two(old: &Value) -> Value {
     map(vec![("k", get(old, "old").cloned().unwrap_or_default())])
 }
 
-const MIGRATIONS: &[(&str, Migration)] =
-    &[("demo.note-v1", note_first), ("demo.note-v2", note_second), ("demo.gap-v0", gap_old)];
+const MIGRATIONS: &[(&str, Migration)] = &[
+    ("demo.note-v1", note_first),
+    ("demo.note-v2", note_second),
+    ("demo.gap-v0", gap_zero),
+    ("demo.gap-v2", gap_two),
+];
 
 fn registry_with(manifest: &str, migrations: &[(&str, Migration)]) -> Result<Registry, String> {
     let contracts = [("facets/demo/demo.schema.json", CONTRACT)];
@@ -83,7 +95,7 @@ fn every_recorded_read_resolves_as_the_typescript_resolved_it() {
         assert_eq!(value, expected.as_ref(), "{line}");
         replayed += 1;
     }
-    assert_eq!(replayed, 260, "every recorded line replayed");
+    assert_eq!(replayed, 273, "every recorded line replayed");
 }
 
 #[test]
@@ -113,8 +125,17 @@ fn a_retained_schema_no_contract_holds_refuses_the_plugin() {
 #[test]
 fn a_walk_that_cannot_advance_is_dropped() {
     let manifest = MANIFEST
-        .replacen("\"version\": \"v2\"", "\"version\": \"v9007199254740994\"", 1)
-        .replacen("\"v0\": {", "\"v9007199254740992\": {", 1);
+        .replacen(
+            "\"Gap\",\n      \"version\": \"v3\"",
+            "\"Gap\",\n      \"version\": \"v9007199254740994\"",
+            1,
+        )
+        .replacen(
+            "\"v2\": { \"schema\": \"facets/demo/demo.schema.json#/$defs/GapOld\"",
+            "\"v9007199254740992\": { \"schema\": \"facets/demo/demo.schema.json#/$defs/GapOld\"",
+            1,
+        );
+    assert!(manifest.contains("v9007199254740994") && manifest.contains("\"v9007199254740992\""));
     let registry = registry_with(&manifest, MIGRATIONS).expect("it loads");
     let payload = map(vec![("old", Value::String("o".to_owned()))]);
     let key = "demo.gap/v9007199254740992";

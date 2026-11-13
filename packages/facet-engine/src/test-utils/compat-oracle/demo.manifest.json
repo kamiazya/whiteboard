@@ -22,11 +22,12 @@
     {
       "name": "gap",
       "displayName": "Gap",
-      "version": "v2",
+      "version": "v3",
       "targets": ["node"],
       "schema": "facets/demo/demo.schema.json#/$defs/Gap",
       "compat": {
-        "v0": { "schema": "facets/demo/demo.schema.json#/$defs/GapOld", "migrate": "demo.gap-v0" }
+        "v0": { "schema": "facets/demo/demo.schema.json#/$defs/GapOld", "migrate": "demo.gap-v0" },
+        "v2": { "schema": "facets/demo/demo.schema.json#/$defs/GapOld", "migrate": "demo.gap-v2" }
       }
     },
     {

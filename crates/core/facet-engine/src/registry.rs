@@ -152,49 +152,7 @@ impl Registry {
         asset_ids: impl Fn(AssetKind) -> Vec<String>,
         migrations: &[(&str, Migration)],
     ) -> Result<Self, BuildError> {
-        let mut facets: Vec<FacetEntry> = Vec::new();
-        for (index, manifest) in manifests.iter().enumerate() {
-            let plugin = &manifest.id;
-            if plugin == WORKSPACE_PLUGIN_ID {
-                return Err(BuildError::ReservedPlugin(plugin.clone()));
-            }
-            if manifests.iter().take(index).any(|earlier| earlier.id == *plugin) {
-                return Err(BuildError::DuplicatePlugin(plugin.clone()));
-            }
-            for decl in &manifest.facets {
-                let facet = decl.name.clone();
-                if facets.iter().any(|f| f.namespace == *plugin && f.name == facet) {
-                    return Err(BuildError::DuplicateFacet { plugin: plugin.clone(), facet });
-                }
-                let schema = contracts.resolve(&decl.schema).ok_or_else(|| {
-                    BuildError::UnresolvedSchema {
-                        plugin: plugin.clone(),
-                        facet: facet.clone(),
-                        pointer: decl.schema.clone(),
-                    }
-                })?;
-                let refs = decl.asset_refs.as_deref().unwrap_or_default();
-                if let Some((field, _)) =
-                    refs.iter().find(|(field, _)| !contracts.declares(schema, field))
-                {
-                    return Err(BuildError::UndeclaredAssetField {
-                        plugin: plugin.clone(),
-                        facet,
-                        field: field.clone(),
-                    });
-                }
-                let compat = compat_steps(plugin, decl, &contracts, migrations)?;
-                facets.push(FacetEntry {
-                    namespace: plugin.clone(),
-                    name: decl.name.clone(),
-                    version: decl.version.clone(),
-                    targets: decl.targets.clone(),
-                    schema,
-                    asset_refs: refs.to_vec(),
-                    compat,
-                });
-            }
-        }
+        let facets = facet_entries(manifests, &contracts, migrations)?;
         let assets = KINDS.map(|kind| (kind, asset_ids(kind))).to_vec();
         Ok(Self { contracts, facets, assets })
     }
@@ -399,6 +357,58 @@ impl Registry {
             })
         })
     }
+}
+
+/// Every facet `manifests` declare, in order, or the first that cannot be
+/// registered.
+fn facet_entries(
+    manifests: &[PluginManifest],
+    contracts: &Contracts,
+    migrations: &[(&str, Migration)],
+) -> Result<Vec<FacetEntry>, BuildError> {
+    let mut facets: Vec<FacetEntry> = Vec::new();
+    for (index, manifest) in manifests.iter().enumerate() {
+        let plugin = &manifest.id;
+        if plugin == WORKSPACE_PLUGIN_ID {
+            return Err(BuildError::ReservedPlugin(plugin.clone()));
+        }
+        if manifests.iter().take(index).any(|earlier| earlier.id == *plugin) {
+            return Err(BuildError::DuplicatePlugin(plugin.clone()));
+        }
+        for decl in &manifest.facets {
+            let facet = decl.name.clone();
+            if facets.iter().any(|f| f.namespace == *plugin && f.name == facet) {
+                return Err(BuildError::DuplicateFacet { plugin: plugin.clone(), facet });
+            }
+            let schema =
+                contracts.resolve(&decl.schema).ok_or_else(|| BuildError::UnresolvedSchema {
+                    plugin: plugin.clone(),
+                    facet: facet.clone(),
+                    pointer: decl.schema.clone(),
+                })?;
+            let refs = decl.asset_refs.as_deref().unwrap_or_default();
+            if let Some((field, _)) =
+                refs.iter().find(|(field, _)| !contracts.declares(schema, field))
+            {
+                return Err(BuildError::UndeclaredAssetField {
+                    plugin: plugin.clone(),
+                    facet,
+                    field: field.clone(),
+                });
+            }
+            let compat = compat_steps(plugin, decl, contracts, migrations)?;
+            facets.push(FacetEntry {
+                namespace: plugin.clone(),
+                name: decl.name.clone(),
+                version: decl.version.clone(),
+                targets: decl.targets.clone(),
+                schema,
+                asset_refs: refs.to_vec(),
+                compat,
+            });
+        }
+    }
+    Ok(facets)
 }
 
 /// The compat steps a facet declares, each with its retained schema and the

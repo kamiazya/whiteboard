@@ -4,8 +4,9 @@
  * key of a small plugin whose facets carry compat chains, crossed with payloads
  * of every version's shape, so each outcome is reached — a malformed key, a
  * facet nobody registers, a newer version, the current one, a chain walked to
- * the end, a chain with a step missing, a retained schema refusing, and a
- * version tag with leading zeros, which compares as its number.
+ * the end, a chain with a step missing in its middle, a retained schema
+ * refusing, and a version tag with leading zeros, which compares as its
+ * number.
  *
  * The manifest is the one file both languages load. The payload schemas are
  * written twice, as Zod here and as `compat-oracle/demo.contract.json` for the
@@ -27,7 +28,8 @@ const MIGRATIONS = {
     const { title } = old as { title: string }
     return { text: title === 'x' ? 1 : title, size: 1, extra: true }
   },
-  'demo.gap-v0': (old: unknown) => ({ k: (old as { old: string }).old }),
+  'demo.gap-v0': (old: unknown) => ({ old: `${(old as { old: string }).old}!` }),
+  'demo.gap-v2': (old: unknown) => ({ k: (old as { old: string }).old }),
 }
 
 export function compatRegistry(): FacetRegistry {
@@ -57,6 +59,7 @@ const KEYS = [
   'demo.gap/v0',
   'demo.gap/v1',
   'demo.gap/v2',
+  'demo.gap/v3',
   'demo.plain/v0',
   'demo.plain/v1',
   'other.thing/v0',

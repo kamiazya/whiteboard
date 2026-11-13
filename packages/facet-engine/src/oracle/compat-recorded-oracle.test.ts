@@ -42,6 +42,7 @@ describe('the recorded compat oracle', () => {
     expect(walked('demo.note/v2'), 'one step walked').toBeGreaterThan(0)
     expect(walked('demo.note/v03'), 'leading zeros read as the current version').toBeGreaterThan(0)
     expect(walked('demo.gap/v0'), 'a chain with a step missing').toBe(0)
+    expect(walked('demo.gap/v2'), 'the same chain past its gap').toBeGreaterThan(0)
   })
 
   it('equals what the TypeScript answers today', () => {

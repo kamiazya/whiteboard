@@ -43,14 +43,27 @@ fn resolved(facets: Option<&ExtensionFacets>, key: &str, registry: &Registry) ->
     }
 }
 
+/// The text of one field of the payload stored under `key`, when it resolves.
+/// The schema has already made the field a string; any other value reads as
+/// none.
+fn resolved_text(
+    facets: Option<&ExtensionFacets>,
+    key: &str,
+    name: &str,
+    registry: &Registry,
+) -> Option<String> {
+    let value = resolved(facets, key, registry)?;
+    text(&value, name).map(str::to_owned)
+}
+
 /// The silhouette a node draws (`resolveNodeShape`); none is the rect.
 #[must_use]
 pub fn node_shape(
     facets: Option<&ExtensionFacets>,
     registry: &Registry,
 ) -> Option<VisualShapeKind> {
-    let value = resolved(facets, VISUAL_SHAPE_KEY, registry)?;
-    VisualShapeKind::from_wire(text(&value, "kind")?)
+    resolved_text(facets, VISUAL_SHAPE_KEY, "kind", registry)
+        .and_then(|kind| VisualShapeKind::from_wire(&kind))
 }
 
 /// Where a node's text sits (`resolveNodeTextAlign`); none is the default.
@@ -59,8 +72,8 @@ pub fn node_text_align(
     facets: Option<&ExtensionFacets>,
     registry: &Registry,
 ) -> Option<VisualTextAlign> {
-    let value = resolved(facets, VISUAL_TEXT_KEY, registry)?;
-    VisualTextAlign::from_wire(text(&value, "align")?)
+    resolved_text(facets, VISUAL_TEXT_KEY, "align", registry)
+        .and_then(|align| VisualTextAlign::from_wire(&align))
 }
 
 /// What the bucket's `visual.edges/v0` says, field by field
@@ -83,37 +96,71 @@ pub fn stroke_width(
     facets: Option<&ExtensionFacets>,
     registry: &Registry,
 ) -> Option<VisualStrokeWidth> {
-    let value = resolved(facets, VISUAL_STROKE_KEY, registry)?;
-    VisualStrokeWidth::from_wire(text(&value, "width")?)
+    resolved_text(facets, VISUAL_STROKE_KEY, "width", registry)
+        .and_then(|width| VisualStrokeWidth::from_wire(&width))
 }
 
 /// The theme id a canvas names (`resolveCanvasTheme`); whether a theme of
 /// that id is registered is the renderer's question.
 #[must_use]
 pub fn canvas_theme(facets: Option<&ExtensionFacets>, registry: &Registry) -> Option<String> {
-    let value = resolved(facets, VISUAL_THEME_KEY, registry)?;
-    text(&value, "theme").map(str::to_owned)
+    resolved_text(facets, VISUAL_THEME_KEY, "theme", registry)
 }
 
 /// The stencil a node wears (`resolveNodeStencil`), registered or not: a
 /// stored id another deployment registered is data.
 #[must_use]
 pub fn node_stencil(facets: Option<&ExtensionFacets>, registry: &Registry) -> Option<String> {
-    let value = resolved(facets, VISUAL_STENCIL_KEY, registry)?;
-    text(&value, "stencil").map(str::to_owned)
+    resolved_text(facets, VISUAL_STENCIL_KEY, "stencil", registry)
+}
+
+/// A symbol payload read by its `kind`; anything else is no symbol.
+fn symbol_of(value: &Value) -> Option<VisualSymbolFacet> {
+    let named = |name: &str| text(value, name).map(str::to_owned);
+    match text(value, "kind") {
+        Some(VisualSymbolIcon::KIND) => {
+            named("name").map(|name| VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name }))
+        }
+        Some(VisualSymbolEmoji::KIND) => named("char")
+            .map(|char| VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji { char })),
+        _ => None,
+    }
 }
 
 /// The symbol an object wears (`readSymbol`).
 #[must_use]
 pub fn symbol(facets: Option<&ExtensionFacets>, registry: &Registry) -> Option<VisualSymbolFacet> {
-    let value = resolved(facets, VISUAL_SYMBOL_KEY, registry)?;
-    match text(&value, "kind")? {
-        VisualSymbolIcon::KIND => Some(VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon {
-            name: text(&value, "name")?.to_owned(),
-        })),
-        VisualSymbolEmoji::KIND => Some(VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji {
-            char: text(&value, "char")?.to_owned(),
-        })),
-        _ => None,
+    resolved(facets, VISUAL_SYMBOL_KEY, registry).as_ref().and_then(symbol_of)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{symbol_of, text};
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+    use whiteboard_model::Value;
+
+    fn map(entries: &[(&str, Value)]) -> Value {
+        Value::Map(entries.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect())
+    }
+
+    fn string(text: &str) -> Value {
+        Value::String(text.to_owned())
+    }
+
+    #[test]
+    fn a_field_that_is_not_a_string_of_a_mapping_has_no_text() {
+        assert_eq!(text(&map(&[("kind", string("icon"))]), "kind"), Some("icon"));
+        assert_eq!(text(&map(&[("kind", Value::Number(1.0))]), "kind"), None);
+        assert_eq!(text(&map(&[]), "kind"), None);
+        assert_eq!(text(&string("kind"), "kind"), None);
+    }
+
+    #[test]
+    fn a_symbol_of_no_kind_this_plugin_draws_or_missing_its_field_is_none() {
+        assert_eq!(symbol_of(&map(&[("kind", string("other")), ("name", string("x"))])), None);
+        assert_eq!(symbol_of(&map(&[("kind", string("icon"))])), None);
+        assert_eq!(symbol_of(&map(&[("kind", string("emoji"))])), None);
+        assert_eq!(symbol_of(&map(&[("name", string("x"))])), None);
     }
 }
