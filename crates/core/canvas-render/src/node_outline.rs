@@ -98,11 +98,14 @@ fn convex_polygon_contains(points: &[ScenePoint], point: ScenePoint) -> bool {
     let mut sign = Ordering::Equal;
     for (a, b) in points.iter().zip(points.iter().cycle().skip(1)) {
         let cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x);
-        if cross == 0.0 {
-            continue;
-        }
-        // A cross that is not a number (vertices past `f64::MAX`) counts as negative.
-        let current = if cross > 0.0 { Ordering::Greater } else { Ordering::Less };
+        // A point on the edge's line fixes no side; a cross that is not a number
+        // (vertices past `f64::MAX`) counts as negative, as the TypeScript's
+        // sign test reads it.
+        let current = match cross.partial_cmp(&0.0) {
+            Some(Ordering::Equal) => continue,
+            Some(Ordering::Greater) => Ordering::Greater,
+            _ => Ordering::Less,
+        };
         if sign == Ordering::Equal {
             sign = current;
         } else if sign != current {
