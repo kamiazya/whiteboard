@@ -34,9 +34,7 @@ describe('the recorded edge-jumps oracle', () => {
     expect(hopsOf(board('scene-cap'), 'target'), 'hand-overs cut by the scene cap').toBe(11)
     expect(hopsOf(board('scene-cap'), 'handing'), 'a rail under the scene cap').toBe(20)
     expect(hopsOf(board('segment-cap'), 'long'), 'the segment cap met').toBe(64)
-    expect(hopsOf(board('segment-cap'), 'hand-rail'), 'hand-overs cut by the segment cap').toBe(
-      64,
-    )
+    expect(hopsOf(board('segment-cap'), 'hand-rail'), 'hand-overs cut by the segment cap').toBe(64)
     const handed = board('hand-overs')
     expect(hopsOf(handed, 'rail-0'), 'a hand-over too close to a hop').toBe(1)
     expect(hopsOf(handed, 'rail-3'), 'a hand-over kept').toBe(2)
