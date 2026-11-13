@@ -138,6 +138,8 @@ fn node(n: &SceneNode) -> Result<String, String> {
         ]),
         SceneNode::SvgFragment(g) => fragment(g),
         SceneNode::TextRun(r) => run(r),
+        SceneNode::EmbedResolved(e) => embed_resolved(e)?,
+        SceneNode::EmbedPlaceholder(e) => embed_placeholder(e),
         SceneNode::Blockquote(q) => quote(q)?,
         SceneNode::List(l) => list_block(l)?,
         SceneNode::Table(t) => table(t),
@@ -263,4 +265,29 @@ fn edge(e: &whiteboard_scene::ResolvedEdgeNode) -> String {
     ];
     f.extend(e.appearance.as_ref().map(|a| ("appearance", appearance(a))));
     object(f)
+}
+
+fn embed_resolved(e: &whiteboard_scene::EmbedResolvedNode) -> Result<String, String> {
+    Ok(object(vec![
+        ("kind", string("embedResolved")),
+        ("bbox", bbox(&e.bbox)),
+        ("documentId", string(&e.document_id)),
+        ("children", nodes(&e.children)?),
+    ]))
+}
+
+fn embed_placeholder(e: &whiteboard_scene::EmbedPlaceholderNode) -> String {
+    let reason = match e.reason {
+        whiteboard_scene::EmbedReason::Cycle => "cycle",
+        whiteboard_scene::EmbedReason::DepthCap => "depthCap",
+        whiteboard_scene::EmbedReason::Budget => "budget",
+        whiteboard_scene::EmbedReason::Unresolvable => "unresolvable",
+    };
+    object(vec![
+        ("kind", string("embedPlaceholder")),
+        ("bbox", bbox(&e.bbox)),
+        ("documentId", string(&e.document_id)),
+        ("title", string(&e.title)),
+        ("reason", string(reason)),
+    ])
 }

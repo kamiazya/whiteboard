@@ -14,6 +14,7 @@ const inputOf = (value: string, digest: boolean): TypesetInput => {
     width: f64Hex(1000),
     theme: 'document',
     fill: null,
+    embeds: 'none',
     syntax: null,
     digest,
   }

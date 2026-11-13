@@ -9,7 +9,16 @@ const inputOf = (value: string, width: string): TypesetInput => {
     type: 'root',
     children: [{ type: 'paragraph', children: [{ type: 'text', value }] }],
   }
-  return { id: 'nan', root, width, theme: 'document', fill: null, syntax: null, digest: false }
+  return {
+    id: 'nan',
+    root,
+    width,
+    theme: 'document',
+    fill: null,
+    embeds: 'none',
+    syntax: null,
+    digest: false,
+  }
 }
 
 const sceneOf = (input: TypesetInput): string => {

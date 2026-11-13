@@ -4,6 +4,8 @@
 
 #[path = "typeset_support/examples.rs"]
 mod examples;
+#[path = "typeset_support/laying.rs"]
+mod laying;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -11,12 +13,13 @@ use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::theme::markdown::MarkdownTheme;
 use whiteboard_canvas_render::typeset::{
-    IconRange, ImageRef, TypesetOptions, Unsupported, typeset_mdast_blocks,
+    IconRange, ImageRef, TypesetOptions, typeset_mdast_blocks,
 };
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_scene::{LinkProvenance, RunPaint, Scene, SceneNode, TextRunNode};
 
 use examples::*;
+use laying::*;
 
 fn runs_of(scene: &Scene) -> Vec<&TextRunNode> {
     scene
@@ -31,14 +34,8 @@ fn runs_of(scene: &Scene) -> Vec<&TextRunNode> {
 }
 
 #[test]
-fn a_paragraph_that_is_an_embed_is_not_yet_carried() {
-    let embed = Phrasing::Embed { document_id: "x".to_owned(), fragment: None };
-    assert_eq!(laid(100.0, vec![paragraph(vec![embed])]).err(), Some(Unsupported("embed")));
-}
-
-#[test]
 fn text_that_fits_is_one_run_at_the_origin() {
-    let scene = laid(1000.0, vec![paragraph(vec![text("ab cd")])]).unwrap_or_default();
+    let scene = laid(1000.0, vec![paragraph(vec![text("ab cd")])]);
     let runs = runs_of(&scene);
     assert_eq!(runs.len(), 1);
     assert_eq!(runs[0].text, "ab cd");
@@ -48,7 +45,7 @@ fn text_that_fits_is_one_run_at_the_origin() {
 
 #[test]
 fn text_that_does_not_fit_wraps_at_a_space_one_run_a_line() {
-    let scene = laid(60.0, vec![paragraph(vec![text("aaaa bbbb")])]).unwrap_or_default();
+    let scene = laid(60.0, vec![paragraph(vec![text("aaaa bbbb")])]);
     let runs = runs_of(&scene);
     assert_eq!(runs.iter().map(|r| r.text.as_str()).collect::<Vec<_>>(), ["aaaa", "bbbb"]);
     assert_eq!((runs[0].bbox.y, runs[1].bbox.y), (0.0, LINE));
@@ -62,7 +59,7 @@ fn text_that_does_not_fit_wraps_at_a_space_one_run_a_line() {
 #[test]
 fn a_hard_break_starts_a_line_whatever_the_width() {
     let children = vec![text("a"), Phrasing::Break, text("b")];
-    let scene = laid(1000.0, vec![paragraph(children)]).unwrap_or_default();
+    let scene = laid(1000.0, vec![paragraph(children)]);
     let runs = runs_of(&scene);
     assert_eq!((runs[0].bbox.y, runs[1].bbox.y), (0.0, LINE));
 }
@@ -74,7 +71,7 @@ fn a_closing_character_does_not_open_a_line_after_inline_code() {
         Phrasing::InlineCode { value: "layout".to_owned() },
         text("。つづき"),
     ];
-    let scene = laid(150.0, vec![paragraph(children)]).unwrap_or_default();
+    let scene = laid(150.0, vec![paragraph(children)]);
     for run in runs_of(&scene).iter().filter(|r| r.bbox.x == 0.0) {
         assert!(!run.text.starts_with('。'), "{}", run.text);
     }
@@ -83,7 +80,7 @@ fn a_closing_character_does_not_open_a_line_after_inline_code() {
 #[test]
 fn inline_code_is_atomic_padded_in_flow_and_cut_to_the_width() {
     let code = Phrasing::InlineCode { value: "x".repeat(60) };
-    let scene = laid(100.0, vec![paragraph(vec![code])]).unwrap_or_default();
+    let scene = laid(100.0, vec![paragraph(vec![code])]);
     let run = runs_of(&scene)[0];
     assert!(run.code && run.truncated && !run.overflows);
     assert_eq!(run.backdrop_pad_x_px, Some(5.0));
@@ -94,7 +91,7 @@ fn inline_code_is_atomic_padded_in_flow_and_cut_to_the_width() {
 #[test]
 fn inline_math_overflows_instead_of_being_cut() {
     let math = Phrasing::InlineMath { value: "x".repeat(60) };
-    let scene = laid(100.0, vec![paragraph(vec![math])]).unwrap_or_default();
+    let scene = laid(100.0, vec![paragraph(vec![math])]);
     let run = runs_of(&scene)[0];
     assert!(!run.truncated && run.bbox.w > 100.0);
     let SceneNode::Paragraph(block) = &scene.nodes[0] else {
@@ -111,7 +108,7 @@ fn a_link_stamps_its_address_on_every_run_it_holds() {
         title: Some("T".to_owned()),
         children: vec![text("see "), inner],
     };
-    let scene = laid(1000.0, vec![paragraph(vec![link])]).unwrap_or_default();
+    let scene = laid(1000.0, vec![paragraph(vec![link])]);
     let want =
         LinkProvenance::Link { href: "https://e.com".to_owned(), title: Some("T".to_owned()) };
     let runs = runs_of(&scene);
@@ -132,7 +129,7 @@ fn a_wiki_link_reads_as_its_alias_else_its_id_with_the_fragment() {
         alias: Some("shown".to_owned()),
         fragment: None,
     };
-    let scene = laid(1000.0, vec![paragraph(vec![plain, text(" "), aliased])]).unwrap_or_default();
+    let scene = laid(1000.0, vec![paragraph(vec![plain, text(" "), aliased])]);
     let texts: Vec<&str> = runs_of(&scene).iter().map(|r| r.text.as_str()).collect();
     assert_eq!(texts, ["01ID › Part", "shown"]);
 }
@@ -142,8 +139,7 @@ fn a_picture_with_nowhere_to_load_from_reads_as_its_alt() {
     let relative =
         Phrasing::Image { url: "pics/a.png".to_owned(), title: None, alt: Some("alt".to_owned()) };
     let remote = Phrasing::Image { url: "HTTPS://e.com/a.png".to_owned(), title: None, alt: None };
-    let scene =
-        laid(1000.0, vec![paragraph(vec![relative, text(" "), remote])]).unwrap_or_default();
+    let scene = laid(1000.0, vec![paragraph(vec![relative, text(" "), remote])]);
     let runs = runs_of(&scene);
     assert_eq!(runs[0].text, "alt");
     assert!(runs[0].paints.is_none());
@@ -154,7 +150,7 @@ fn a_picture_with_nowhere_to_load_from_reads_as_its_alt() {
 #[test]
 fn a_heading_takes_space_above_unless_it_leads() {
     let h = |depth| Flow::Heading { depth, children: vec![text("T")] };
-    let scene = laid(1000.0, vec![h(1), h(2)]).unwrap_or_default();
+    let scene = laid(1000.0, vec![h(1), h(2)]);
     let (SceneNode::Heading(first), SceneNode::Heading(second)) =
         (&scene.nodes[0], &scene.nodes[1])
     else {
@@ -170,7 +166,7 @@ fn a_heading_takes_space_above_unless_it_leads() {
 #[test]
 fn a_non_finite_width_turns_wrapping_off() {
     let long = "word ".repeat(40);
-    let scene = laid(f64::INFINITY, vec![paragraph(vec![text(&long)])]).unwrap_or_default();
+    let scene = laid(f64::INFINITY, vec![paragraph(vec![text(&long)])]);
     assert_eq!(runs_of(&scene).len(), 1);
     let SceneNode::Paragraph(block) = &scene.nodes[0] else {
         panic!("scene node is not the expected variant")
@@ -185,8 +181,7 @@ fn icon(from: usize, to: usize) -> IconRange {
 #[test]
 fn an_icon_shortcode_is_a_run_of_its_own_between_the_text_around_it() {
     let host = Host { icons: vec![icon(2, 13)], ..Host::default() };
-    let scene =
-        laid_by(&host, 1000.0, vec![paragraph(vec![text("a :icon-star: b")])]).unwrap_or_default();
+    let scene = laid_by(&host, 1000.0, vec![paragraph(vec![text("a :icon-star: b")])]);
     let runs = runs_of(&scene);
     let texts: Vec<&str> = runs.iter().map(|r| r.text.as_str()).collect();
     assert_eq!(texts, ["a", "\u{2003}", "b"]);
@@ -202,14 +197,12 @@ fn a_range_the_text_cannot_hold_names_no_icon() {
     let starts_inside_a_pair = icon(1, 4);
     for range in [reversed, past, empty, starts_inside_a_pair] {
         let host = Host { icons: vec![range], ..Host::default() };
-        let scene =
-            laid_by(&host, 1000.0, vec![paragraph(vec![text("😀:i:")])]).unwrap_or_default();
+        let scene = laid_by(&host, 1000.0, vec![paragraph(vec![text("😀:i:")])]);
         let texts: Vec<&str> = runs_of(&scene).iter().map(|r| r.text.as_str()).collect();
         assert_eq!(texts, ["😀:i:"]);
     }
     let ends_inside_a_pair = Host { icons: vec![icon(0, 4)], ..Host::default() };
-    let scene = laid_by(&ends_inside_a_pair, 1000.0, vec![paragraph(vec![text(":i:😀")])])
-        .unwrap_or_default();
+    let scene = laid_by(&ends_inside_a_pair, 1000.0, vec![paragraph(vec![text(":i:😀")])]);
     let texts: Vec<&str> = runs_of(&scene).iter().map(|r| r.text.as_str()).collect();
     assert_eq!(texts, [":i:😀"]);
 }
@@ -217,7 +210,7 @@ fn a_range_the_text_cannot_hold_names_no_icon() {
 #[test]
 fn a_range_before_the_cursor_is_skipped_and_the_rest_still_reads() {
     let host = Host { icons: vec![icon(0, 3), icon(1, 2)], ..Host::default() };
-    let scene = laid_by(&host, 1000.0, vec![paragraph(vec![text("abcdef")])]).unwrap_or_default();
+    let scene = laid_by(&host, 1000.0, vec![paragraph(vec![text("abcdef")])]);
     let texts: Vec<&str> = runs_of(&scene).iter().map(|r| r.text.as_str()).collect();
     assert_eq!(texts, ["\u{2003}", "def"]);
 }
@@ -225,8 +218,7 @@ fn a_range_before_the_cursor_is_skipped_and_the_rest_still_reads() {
 #[test]
 fn emoji_are_substituted_into_the_text() {
     let host = Host { emoji: Some((":ok:", "✅")), ..Host::default() };
-    let scene =
-        laid_by(&host, 1000.0, vec![paragraph(vec![text("done :ok:")])]).unwrap_or_default();
+    let scene = laid_by(&host, 1000.0, vec![paragraph(vec![text("done :ok:")])]);
     assert_eq!(runs_of(&scene)[0].text, "done ✅");
 }
 
@@ -242,7 +234,7 @@ fn an_embed_is_named_by_its_document_else_by_its_title_while_loading_else_by_its
         ])
     };
     let label = |host: &Host, fragment| {
-        let scene = laid_by(host, 1000.0, vec![embed(fragment)]).unwrap_or_default();
+        let scene = laid_by(host, 1000.0, vec![embed(fragment)]);
         runs_of(&scene)[1].text.clone()
     };
     let loaded = Host { embed: Some("Doc"), title: Some("Listed"), ..Host::default() };
@@ -251,7 +243,7 @@ fn an_embed_is_named_by_its_document_else_by_its_title_while_loading_else_by_its
     assert_eq!(label(&loading, None), "Listed");
     let titled_only = Host { title: Some("Listed"), ..Host::default() };
     assert_eq!(label(&titled_only, None), "01ID");
-    let scene = laid_by(&loaded, 1000.0, vec![embed(Some(""))]).unwrap_or_default();
+    let scene = laid_by(&loaded, 1000.0, vec![embed(Some(""))]);
     let want = LinkProvenance::Embed { document_id: "01ID".to_owned(), fragment: None };
     assert_eq!(runs_of(&scene)[1].link, Some(want));
 }
@@ -266,7 +258,7 @@ fn a_lone_picture_of_known_size_is_a_figure_scaled_to_the_column() {
         alt: alt.map(str::to_owned),
     };
     let blocks = vec![paragraph(vec![picture(Some("alt"))]), paragraph(vec![picture(None)])];
-    let scene = laid_by(&host, 100.0, blocks).unwrap_or_default();
+    let scene = laid_by(&host, 100.0, blocks);
     let (SceneNode::Paragraph(first), SceneNode::Paragraph(second)) =
         (&scene.nodes[0], &scene.nodes[1])
     else {
@@ -277,7 +269,7 @@ fn a_lone_picture_of_known_size_is_a_figure_scaled_to_the_column() {
     assert_eq!(first.runs[0].text, "alt");
     same(second.bbox.y, 50.0 + 12.0);
     assert_eq!(second.runs[0].text, "\u{2002}");
-    let wide = laid_by(&host, 1000.0, vec![paragraph(vec![picture(None)])]).unwrap_or_default();
+    let wide = laid_by(&host, 1000.0, vec![paragraph(vec![picture(None)])]);
     let SceneNode::Paragraph(only) = &wide.nodes[0] else {
         panic!("scene node is not the expected variant")
     };
@@ -293,7 +285,7 @@ fn a_picture_among_text_or_of_unknown_size_is_set_as_prose() {
         [(sized, vec![text("x"), picture.clone()]), (unsized_, vec![picture.clone()])]
     {
         let host = Host { image: Some(image), ..Host::default() };
-        let scene = laid_by(&host, 100.0, vec![paragraph(children)]).unwrap_or_default();
+        let scene = laid_by(&host, 100.0, vec![paragraph(children)]);
         let SceneNode::Paragraph(block) = &scene.nodes[0] else {
             panic!("scene node is not the expected variant")
         };
@@ -315,8 +307,7 @@ fn a_picture_sized_zero_negative_or_infinite_is_set_as_prose() {
     ] {
         let image = ImageRef { href: "i".to_owned(), width: Some(width), height: Some(height) };
         let host = Host { image: Some(image), ..Host::default() };
-        let scene =
-            laid_by(&host, 100.0, vec![paragraph(vec![picture.clone()])]).unwrap_or_default();
+        let scene = laid_by(&host, 100.0, vec![paragraph(vec![picture.clone()])]);
         let SceneNode::Paragraph(block) = &scene.nodes[0] else {
             panic!("scene node is not the expected variant")
         };
@@ -330,8 +321,7 @@ fn a_figure_is_drawn_at_its_own_size_where_the_column_is_unusable() {
     let host = Host { image: Some(image), ..Host::default() };
     let picture = Phrasing::Image { url: "a".to_owned(), title: None, alt: None };
     for column in [0.0, -1.0, f64::INFINITY, f64::NAN] {
-        let scene =
-            laid_by(&host, column, vec![paragraph(vec![picture.clone()])]).unwrap_or_default();
+        let scene = laid_by(&host, column, vec![paragraph(vec![picture.clone()])]);
         let SceneNode::Paragraph(block) = &scene.nodes[0] else {
             panic!("scene node is not the expected variant")
         };
@@ -346,8 +336,7 @@ fn a_padding_that_is_not_a_positive_number_takes_no_room() {
     for padding in [0.0, -3.0, f64::INFINITY, f64::NAN] {
         let theme = MarkdownTheme { inline_code_padding_x_px: padding, ..MarkdownTheme::node() };
         let scene =
-            laid_with(&theme, &Host::default(), 1000.0, vec![paragraph(vec![code.clone()])])
-                .unwrap_or_default();
+            laid_with(&theme, &Host::default(), 1000.0, vec![paragraph(vec![code.clone()])]);
         let run = runs_of(&scene)[0];
         same(run.bbox.x, 0.0);
     }
@@ -377,7 +366,7 @@ fn a_zero_width_stretch_is_not_moved_down_with_what_it_is_joined_to() {
     let options = TypesetOptions::new(&ZeroWidthFace, 5.0, "sans-serif", &theme, &host);
     let children = vec![text("z"), text("あ"), text("。")];
     let root = Root { children: vec![paragraph(children)] };
-    let scene = typeset_mdast_blocks(&root, &options).unwrap_or_default();
+    let scene = typeset_mdast_blocks(&root, &options);
     let placed: Vec<(&str, f64, f64)> =
         runs_of(&scene).iter().map(|r| (r.text.as_str(), r.bbox.x, r.bbox.y)).collect();
     assert_eq!(placed, [("z", 0.0, 0.0), ("あ", 0.0, 0.0), ("。", 0.0, 0.0)]);
