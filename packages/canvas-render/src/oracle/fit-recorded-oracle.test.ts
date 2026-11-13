@@ -52,7 +52,14 @@ describe('the recorded fit oracle', () => {
 
   it('holds every hand scene the corpus declares', () => {
     const recorded = new Set(records.map((r) => r.id))
-    expect(HAND_SCENES.map(([id]) => id).filter((id) => !recorded.has(id))).toEqual([])
+    const declared = HAND_SCENES.map(([id]) => id)
+    expect(declared.length, 'hand scenes declared').toBeGreaterThanOrEqual(26)
+    for (const family of ['edge-', 'list', 'offset-', 'table-'])
+      expect(
+        declared.some((id) => id.startsWith(`hand-scene/${family}`)),
+        `a ${family} hand scene`,
+      ).toBe(true)
+    expect(declared.filter((id) => !recorded.has(id))).toEqual([])
   })
 
   it('equals what the TypeScript keeps today', () => {
