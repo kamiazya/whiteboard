@@ -1,6 +1,8 @@
 //! What `compose-node.jsonl` does not reach: the recording asks for no passage
 //! highlights, since the comment layer that answers them is a host seam here.
 
+use std::cell::Cell;
+
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed, compose_node,
 };
@@ -20,8 +22,11 @@ use whiteboard_scene::{BoundingBox, SceneNode, ShapeSceneNode};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
-/// A host whose comment layer marks the body's origin.
-struct Marking;
+/// A host whose comment layer marks the body's origin, counting degradations.
+#[derive(Default)]
+struct Marking {
+    degraded: Cell<usize>,
+}
 
 fn mark() -> SceneNode {
     SceneNode::Shape(Box::new(ShapeSceneNode {
@@ -80,8 +85,8 @@ impl ComposeHost for Marking {
         false
     }
 
-    fn degrade(&self, event: Degradation) {
-        panic!("nothing degrades here: {event:?}");
+    fn degrade(&self, _: Degradation) {
+        self.degraded.set(self.degraded.get() + 1);
     }
 }
 
@@ -145,6 +150,7 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
     let measure = FakeMeasure::default();
     let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
     let budget = NestedLayoutBudget::new();
+    let host = Marking::default();
     let options = ComposeOptions {
         node_box: NodeBoxOptions {
             measure: &measure,
@@ -152,13 +158,13 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
             geometry: SPATIAL_THEME_GEOMETRY,
             fit_to_box: true,
             theme: None,
-            host: &Marking,
+            host: &host,
         },
         theme_id: None,
-        host: &Marking,
+        host: &host,
         content_cache: None,
         body: BodySeams {
-            inline: &Marking,
+            inline: &host,
             highlight: None,
             math: None,
             diagram: None,
@@ -176,4 +182,5 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
     assert_eq!(kinds, ["t", "mark", "paragraph"]);
     let Some(SceneNode::Shape(highlight)) = drawn.get(1) else { panic!("a highlight") };
     assert_eq!(highlight.bbox, BoundingBox { x: 100.0 + pad, y: 50.0 + pad, w: 5.0, h: 5.0 });
+    assert_eq!(host.degraded.get(), 0, "nothing degrades here");
 }
