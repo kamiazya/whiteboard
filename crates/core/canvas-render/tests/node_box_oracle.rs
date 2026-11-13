@@ -1,7 +1,7 @@
 //! The node-box primitives, `translate_scene` and `seed_from_id` against the
 //! recorded TypeScript answers (`node-box.jsonl`): for each node and the options
 //! a composer hands its box, the content bounds and width, the chrome with and
-//! without a fit, the recorded label's runs above and inside, a probe label's
+//! without a fit, the label and its runs above and inside, a probe label's
 //! runs, and a content scene placed in the node, above it and fitted to it, with
 //! how many times the measurer was asked. Every double is compared as its IEEE
 //! bits.
@@ -20,9 +20,9 @@ use serde_json::Value;
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::node_box::{
-    LabelPlace, NodeBoxHost, NodeBoxOptions, TextPlacement, chrome_shape, chrome_with_fit,
-    content_width, fit_scene_in_node, label_runs, node_content_bounds, place_above_node,
-    place_in_node,
+    LabelPlace, NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference, TextPlacement,
+    chrome_shape, chrome_with_fit, content_width, fit_scene_in_node, label_of, label_runs,
+    node_content_bounds, place_above_node, place_in_node,
 };
 use whiteboard_canvas_render::seed::seed_from_id;
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
@@ -112,6 +112,34 @@ struct Answer {
 }
 
 #[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ImageWire {
+    href: String,
+    alt: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ResolvedWire {
+    label: Option<String>,
+    missing: Option<bool>,
+    image: Option<ImageWire>,
+}
+
+impl ResolvedWire {
+    fn resolved(&self) -> ResolvedReference {
+        ResolvedReference {
+            label: self.label.clone(),
+            missing: self.missing.unwrap_or(false),
+            image: self
+                .image
+                .as_ref()
+                .map(|i| ReferenceImage { href: i.href.clone(), alt: i.alt.clone() }),
+        }
+    }
+}
+
+#[derive(Deserialize)]
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct Case {
     id: String,
@@ -121,10 +149,8 @@ struct Case {
     align: Option<String>,
     shape: Option<String>,
     geometry: [String; 3],
-    /// What a file node's reference resolved to: the input of the label, which
-    /// the replay reads as recorded until the label itself is ported (S11b).
-    #[serde(rename = "resolved")]
-    _resolved: Value,
+    /// What a file node's reference resolved to: the input of the label.
+    resolved: Option<ResolvedWire>,
     probe: String,
     content: String,
     answer: Answer,
@@ -270,6 +296,11 @@ fn check_box(node: &SpatialNode, options: &NodeBoxOptions<'_>, case: &Case) -> R
     differ("chrome", &dump_nodes(vec![chrome])?, &want.chrome)?;
     let fitted = SceneNode::Shape(Box::new(chrome_with_fit(node, options, true, true)));
     differ("fitted chrome", &dump_nodes(vec![fitted])?, &want.fitted)?;
+    let resolved = case.resolved.as_ref().map(ResolvedWire::resolved);
+    let label = label_of(node, resolved.as_ref());
+    if label != want.label {
+        return Err(format!("label {label:?}, recorded {:?}", want.label));
+    }
     let runs = |text: Option<&str>, place| dump_nodes(label_runs(node, text, place, options));
     differ("above", &runs(want.label.as_deref(), LabelPlace::Above)?, &want.above)?;
     differ("inside", &runs(want.label.as_deref(), LabelPlace::Inside)?, &want.inside)?;

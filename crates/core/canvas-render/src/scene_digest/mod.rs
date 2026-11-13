@@ -13,7 +13,7 @@
 //! reproduced, since no scene a layout produces comes near it.
 
 mod free_regions;
-mod json;
+pub(crate) mod json;
 mod pairs;
 
 use whiteboard_scene::{BoundingBox, Scene, SceneNode};
