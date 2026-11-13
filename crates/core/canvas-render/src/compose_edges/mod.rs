@@ -4,14 +4,15 @@
 //! put on the ones that draw them, and a label beside each that carries one.
 //!
 //! What this crate does not read yet is asked of the host: the visual plugin's
-//! facets on the canvas and on each element ([`EdgeFacets`]), and the hops over
-//! the routed edges ([`EdgeJumps`]).
+//! facets on the canvas and on each element ([`EdgeFacets`]).
 
 mod label;
 mod route;
 
+use whiteboard_edge_routing::edge_jumps::{EdgePath, compute_edge_jumps};
 use whiteboard_edge_routing::edge_router::{RoutedEdge, RoutingStyle};
 use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
+use whiteboard_edge_routing::geometry::Point;
 use whiteboard_edge_routing::routing_input::Arrowhead;
 use whiteboard_facet_engine::engine::ThemeEdgeRouting;
 use whiteboard_model::spatial::{CanvasEdge, CanvasLine, LineEnd, SpatialCanvas};
@@ -42,18 +43,11 @@ pub trait EdgeFacets {
     fn stroke_width(&self, element: RoutableElement<'_>) -> Option<VisualStrokeWidth>;
 }
 
-/// The hops of every crossing over the routed edges (`computeEdgeJumps`), by
-/// edge id; asked only when some element draws them.
-pub trait EdgeJumps {
-    fn compute_edge_jumps(&self, routed: &[ResolvedEdgeNode]) -> Vec<(String, Vec<EdgeJumpPoint>)>;
-}
-
 /// What the edge pass is handed beside the canvas.
 #[derive(Clone, Copy)]
 pub struct EdgeOptions<'a> {
     pub node_box: NodeBoxOptions<'a>,
     pub facets: &'a dyn EdgeFacets,
-    pub jumps: &'a dyn EdgeJumps,
     /// The editor's frozen sides, by element id.
     pub side_overrides: Option<&'a [(String, EdgeAnchorOverride)]>,
 }
@@ -260,12 +254,32 @@ fn own_styles(elements: &[RoutableElement<'_>], facets: &dyn EdgeFacets) -> Vec<
         .collect()
 }
 
-/// The hops each element that draws them carries, when any does.
-fn put_jumps(edges: &mut [ResolvedEdgeNode], hops: &[bool], jumps: &dyn EdgeJumps) {
+/// The hops each element that draws them carries, over every routed element:
+/// who crosses whom is geometry, and an element that draws no arcs of its own
+/// is still something its neighbours cross. Computed only when one draws them.
+fn put_jumps(edges: &mut [ResolvedEdgeNode], hops: &[bool]) {
     if !hops.contains(&true) {
         return;
     }
-    let computed = jumps.compute_edge_jumps(edges);
+    let paths: Vec<Vec<Point>> = edges
+        .iter()
+        .map(|edge| edge.path.iter().map(|p| Point { x: p.x, y: p.y }).collect())
+        .collect();
+    let routed: Vec<EdgePath<'_>> =
+        edges.iter().zip(&paths).map(|(edge, path)| EdgePath { id: &edge.id, path }).collect();
+    let computed: Vec<(String, Vec<EdgeJumpPoint>)> = compute_edge_jumps(&routed)
+        .into_iter()
+        .map(|(id, points)| {
+            let points = points
+                .iter()
+                .map(|p| {
+                    let segment = f64::from(u32::try_from(p.segment).unwrap_or(u32::MAX));
+                    EdgeJumpPoint { segment, x: p.x, y: p.y }
+                })
+                .collect();
+            (id.to_owned(), points)
+        })
+        .collect();
     for (edge, hops) in edges.iter_mut().zip(hops) {
         if !hops {
             continue;
@@ -326,7 +340,7 @@ pub fn compose_edges_and_labels(
         .zip(routes)
         .map(|(&element, routed)| compose_edge(canvas, element, &routed, options))
         .collect();
-    put_jumps(&mut drawn, &hops, options.jumps);
+    put_jumps(&mut drawn, &hops);
     let obstacles = label_obstacles(&canvas.nodes, &titles);
     let labels: Vec<SceneNode> = elements
         .iter()
