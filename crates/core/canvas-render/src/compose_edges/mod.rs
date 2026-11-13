@@ -275,34 +275,44 @@ fn put_jumps(edges: &mut [ResolvedEdgeNode], hops: &[bool], jumps: &dyn EdgeJump
     }
 }
 
+/// Each element's routing and whether it draws hops: its own `visual.edges`
+/// field by field over the canvas's, and the theme's routing only where the
+/// canvas's own facet is silent.
+fn styles_and_hops(
+    canvas: &SpatialCanvas,
+    elements: &[RoutableElement<'_>],
+    options: &EdgeOptions<'_>,
+) -> (Vec<RoutingStyle>, Vec<bool>) {
+    let board = options.facets.canvas_style(canvas);
+    let board_routing = board.routing.map(visual_routing).or_else(|| {
+        options.node_box.theme.and_then(|tokens| tokens.defaults.edge_routing).map(theme_routing)
+    });
+    own_styles(elements, options.facets)
+        .iter()
+        .map(|style| {
+            let routing = style
+                .routing
+                .map(visual_routing)
+                .or(board_routing)
+                .unwrap_or(RoutingStyle::Straight);
+            (routing, style.line_jumps.or(board.line_jumps) == Some(LineJumps::Arc))
+        })
+        .unzip()
+}
+
 /// Every edge, then every line, of `canvas` drawn, then each one's label.
 #[must_use]
 pub fn compose_edges_and_labels(
     canvas: &SpatialCanvas,
     options: &EdgeOptions<'_>,
 ) -> ComposedEdges {
-    let board = options.facets.canvas_style(canvas);
-    // The theme's routing fills in only where the canvas's own facet is silent.
-    let board_routing = board.routing.map(visual_routing).or_else(|| {
-        options.node_box.theme.and_then(|tokens| tokens.defaults.edge_routing).map(theme_routing)
-    });
     let elements: Vec<RoutableElement<'_>> = canvas
         .edges
         .iter()
         .map(RoutableElement::Edge)
         .chain(canvas.lines.iter().flatten().map(RoutableElement::Line))
         .collect();
-    let own = own_styles(&elements, options.facets);
-    let styles = own
-        .iter()
-        .map(|style| {
-            style.routing.map(visual_routing).or(board_routing).unwrap_or(RoutingStyle::Straight)
-        })
-        .collect();
-    let hops: Vec<bool> = own
-        .iter()
-        .map(|style| style.line_jumps.or(board.line_jumps) == Some(LineJumps::Arc))
-        .collect();
+    let (styles, hops) = styles_and_hops(canvas, &elements, options);
     let titles = frame_title_boxes(&canvas.nodes, &options.node_box);
     let input = route::RouteInput {
         elements: &elements,
