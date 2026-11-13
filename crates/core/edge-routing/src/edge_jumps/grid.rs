@@ -115,8 +115,12 @@ fn cells_of(p: &Placed, cell: f64) -> Vec<CellKey> {
         let cx = c0 + i;
         let mut lo = js_min(0.0, dy);
         let mut hi = js_max(0.0, dy);
-        if dx != 0.0 && c1 > c0 {
-            // The part of the run inside this column, by its x extent.
+        // The part of the run inside this column, by its x extent. The
+        // TypeScript also skips this when the run sits in one column, where it
+        // changes nothing: that column holds the padded span, so both clamps
+        // keep the run's own ends, a pad clear of rounding, and the offsets
+        // are `0 * dy` and `1 * dy`.
+        if dx != 0.0 {
             let left = cx * cell - a.x - cell * PHASE_IN_CELLS;
             let x_l = js_max(js_min(0.0, dx), left);
             let x_r = js_min(js_max(0.0, dx), left + cell);
