@@ -22,6 +22,7 @@ pub mod edge_contact;
 pub mod edge_crossing_sweep;
 pub mod edge_geometry;
 pub mod edge_ink;
+pub mod edge_jumps;
 pub mod edge_rounding;
 pub mod edge_router;
 pub mod edge_rules;

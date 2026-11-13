@@ -97,7 +97,7 @@ const PHASE_IN_CELLS = 0.381966
  * no crossing: a zero extent has no direction (the narrow phase rejects it
  * as degenerate) and a non-finite one turns its arithmetic NaN.
  */
-function place(seg: IndexedSegment): Placed | undefined {
+export function place(seg: IndexedSegment): Placed | undefined {
   const minX = Math.min(seg.a.x, seg.b.x)
   const maxX = Math.max(seg.a.x, seg.b.x)
   const minY = Math.min(seg.a.y, seg.b.y)
@@ -217,7 +217,7 @@ function file(cells: Map<string, number[]>, keys: readonly string[], index: numb
  * filed, so a coarser segment that comes later still finds a finer one
  * that came earlier.
  */
-class SegmentGrid {
+export class SegmentGrid {
   /** Every level in use, finest first. */
   private readonly levels: Level[]
   private readonly segments: IndexedSegment[] = []
