@@ -2,7 +2,7 @@
 //! `visual.shape/v0` composed under the plugin's namespace, else the theme's
 //! default shape for anything but a frame, else nothing. Each expected table is
 //! what the TypeScript composes for the same nodes; the reader itself is held to
-//! the recording by `plugin-visual`'s `facet_read_oracle`.
+//! `facet-read.jsonl` by plugin-visual's replay of it.
 
 use whiteboard_canvas_render::node_box::{NodeOutlines, resolve_node_outlines};
 use whiteboard_model::Value;
