@@ -10,9 +10,10 @@ import type { RoutableElement } from '@kamiazya/whiteboard-scene'
 import type { Board } from './corpus.js'
 
 /**
- * A board as the Rust replay reads it: every double as the hex of its bits, an
- * element's facets left out (the replay is handed what the readers answer,
- * `Facts`), and the silhouettes and frozen sides beside the canvas.
+ * A board as the Rust replay reads it: every double as the hex of its bits, the
+ * canvas's and each element's facets as JSON (the replay reads them through
+ * its own readers and holds those to what the TypeScript's answer, `Facts`),
+ * and the silhouettes and frozen sides beside the canvas.
  */
 
 type Hex = (value: number) => string
@@ -38,6 +39,7 @@ interface ElementWire {
   readonly label?: string
   readonly color?: string
   readonly bends?: readonly (readonly string[])[]
+  readonly facets?: CanvasEdge['facets']
 }
 
 interface OverrideWire {
@@ -51,6 +53,7 @@ interface OverrideWire {
 }
 
 export interface Wire {
+  readonly facets?: SpatialCanvas['facets']
   readonly nodes: readonly NodeWire[]
   readonly edges: readonly ElementWire[]
   readonly lines?: readonly ElementWire[]
@@ -92,11 +95,13 @@ const elementWire = (element: CanvasEdge | CanvasLine, hex: Hex): ElementWire =>
   ...(element.label === undefined ? {} : { label: element.label }),
   ...(element.color === undefined ? {} : { color: element.color }),
   ...(element.bends === undefined ? {} : { bends: element.bends.map((b) => [hex(b.x), hex(b.y)]) }),
+  ...(element.facets === undefined ? {} : { facets: element.facets }),
 })
 
 export function canvasWire(board: Board, hex: Hex): Omit<Wire, 'overrides'> {
   const { canvas } = board
   return {
+    ...(canvas.facets === undefined ? {} : { facets: canvas.facets }),
     nodes: canvas.nodes.map((node) => nodeWire(node, hex)),
     edges: canvas.edges.map((edge) => elementWire(edge, hex)),
     ...(canvas.lines === undefined ? {} : { lines: canvas.lines.map((l) => elementWire(l, hex)) }),

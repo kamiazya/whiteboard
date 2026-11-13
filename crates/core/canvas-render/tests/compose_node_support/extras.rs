@@ -5,15 +5,17 @@
 use serde::Deserialize;
 use whiteboard_canvas_render::compose_node::compose_decorations;
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
-use whiteboard_canvas_render::node_box::{NodeBoxHost, NodeBoxOptions, TextPlacement};
+use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines};
 use whiteboard_canvas_render::scale_scene::fit_scene_into_box;
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::typeset::EmbedBox;
 use whiteboard_model::spatial::SpatialNode;
-use whiteboard_plugin_visual::render::{NodeMarks, StencilBadge};
+use whiteboard_plugin_visual::read;
+use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_plugin_visual::visual::{VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon};
 use whiteboard_scene::SceneNode;
 
+use super::facet_support::facets_of;
 use super::{Context, Res, appearance_of, differ, dump_nodes, f64_of};
 
 /// A symbol as the TypeScript's reader answers it.
@@ -30,6 +32,7 @@ struct BoxWire {
     id: String,
     #[serde(rename = "box")]
     bbox: [String; 4],
+    facets: Option<serde_json::Value>,
 }
 
 /// The decorations drawn over a node, from the stencil and symbol it wears.
@@ -44,35 +47,18 @@ pub(super) struct Decoration {
     scene: String,
 }
 
-impl NodeMarks for Decoration {
-    fn stencil(&self, node: &SpatialNode) -> Option<String> {
-        self.stencil.clone().filter(|_| node.id == self.node.id)
-    }
-
-    fn symbol(&self, node: &SpatialNode) -> Option<VisualSymbolFacet> {
-        let symbol = self.symbol.as_ref().filter(|_| node.id == self.node.id)?;
-        Some(match symbol {
+impl Decoration {
+    /// The stencil and symbol the TypeScript's readers answered for the node.
+    fn recorded_marks(&self) -> (Option<String>, Option<VisualSymbolFacet>) {
+        let symbol = self.symbol.as_ref().map(|symbol| match symbol {
             SymbolWire::Icon { name } => {
                 VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name: name.clone() })
             }
             SymbolWire::Emoji { char } => {
                 VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji { char: char.clone() })
             }
-        })
-    }
-}
-
-/// The recorder tells the decoration the node's own box, which an unshaped node
-/// laid out without a fit is told too.
-struct Unshaped;
-
-impl NodeBoxHost for Unshaped {
-    fn silhouette(&self, _: &str) -> Option<&str> {
-        None
-    }
-
-    fn text_placement(&self, _: &SpatialNode) -> Option<TextPlacement> {
-        None
+        });
+        (self.stencil.clone(), symbol)
     }
 }
 
@@ -84,8 +70,15 @@ pub(super) fn replay_decoration(context: &Context, decoration: &Decoration) -> R
         y: f64_of(y)?,
         width: f64_of(w)?,
         height: f64_of(h)?,
+        facets: facets_of(decoration.node.facets.as_ref()),
         ..SpatialNode::default()
     };
+    let registry = &context.registry;
+    let marks = (
+        read::node_stencil(node.facets.as_ref(), registry),
+        read::symbol(node.facets.as_ref(), registry),
+    );
+    differ("marks", &marks, &decoration.recorded_marks())?;
     let appearance = appearance_of(context, &decoration.theme);
     let measure = FakeMeasure::default();
     let options = NodeBoxOptions {
@@ -94,9 +87,10 @@ pub(super) fn replay_decoration(context: &Context, decoration: &Decoration) -> R
         geometry: SPATIAL_THEME_GEOMETRY,
         fit_to_box: false,
         theme: None,
-        host: &Unshaped,
+        outlines: &NodeOutlines::default(),
+        registry,
     };
-    let badge = StencilBadge { marks: decoration };
+    let badge = StencilBadge { registry };
     let scene = dump_nodes(compose_decorations(&node, &options, &[&badge]))?;
     if scene == decoration.scene {
         Ok(())

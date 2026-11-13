@@ -7,9 +7,7 @@ use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed, compose_node,
 };
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
-use whiteboard_canvas_render::node_box::{
-    NodeBoxHost, NodeBoxOptions, ResolvedReference, TextPlacement,
-};
+use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines, ResolvedReference};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
@@ -17,6 +15,7 @@ use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
+use whiteboard_plugin_visual::host::visual_registry;
 use whiteboard_scene::{BoundingBox, SceneNode, ShapeSceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -42,16 +41,6 @@ fn mark() -> SceneNode {
         task_box: None,
         ink: None,
     }))
-}
-
-impl NodeBoxHost for Marking {
-    fn silhouette(&self, _: &str) -> Option<&str> {
-        None
-    }
-
-    fn text_placement(&self, _: &SpatialNode) -> Option<TextPlacement> {
-        None
-    }
 }
 
 impl ComposeHost for Marking {
@@ -159,6 +148,7 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
     let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
     let budget = NestedLayoutBudget::new();
     let host = Marking::default();
+    let registry = visual_registry().expect("the bundled plugin loads");
     let options = ComposeOptions {
         node_box: NodeBoxOptions {
             measure: &measure,
@@ -166,7 +156,8 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
             geometry: SPATIAL_THEME_GEOMETRY,
             fit_to_box: true,
             theme: None,
-            host: &host,
+            outlines: &NodeOutlines::default(),
+            registry: &registry,
         },
         theme_id: None,
         host: &host,

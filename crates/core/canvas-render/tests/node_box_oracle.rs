@@ -20,9 +20,9 @@ use serde_json::Value;
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::node_box::{
-    LabelPlace, NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference, TextPlacement,
-    chrome_shape, chrome_with_fit, content_width, fit_scene_in_node, label_of, label_runs,
-    node_content_bounds, place_above_node, place_in_node,
+    LabelPlace, NodeBoxOptions, NodeOutlines, ReferenceImage, ResolvedReference, chrome_shape,
+    chrome_with_fit, content_width, fit_scene_in_node, label_of, label_runs, node_content_bounds,
+    place_above_node, place_in_node,
 };
 use whiteboard_canvas_render::seed::seed_from_id;
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
@@ -32,7 +32,9 @@ use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::translate_scene::translate_scene;
 use whiteboard_facet_engine::engine::ThemeTokens;
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::spatial::{CanvasColor, CanvasColorPreset, NodeResource, SpatialNode};
+use whiteboard_plugin_visual::host::visual_registry;
 use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -174,24 +176,8 @@ impl Measure for Counting {
     }
 }
 
-/// What the host resolved for the one node of a case.
-struct Host {
-    id: String,
-    shape: Option<String>,
-    align: Option<TextPlacement>,
-}
-
-impl NodeBoxHost for Host {
-    fn silhouette(&self, node_id: &str) -> Option<&str> {
-        if node_id == self.id { self.shape.as_deref() } else { None }
-    }
-
-    fn text_placement(&self, _node: &SpatialNode) -> Option<TextPlacement> {
-        self.align
-    }
-}
-
-fn node_of(wire: &NodeWire) -> Res<SpatialNode> {
+/// The node of a case, carrying the `visual.text/v0` payload the case names.
+fn node_of(wire: &NodeWire, align: Option<&str>) -> Res<SpatialNode> {
     let [x, y, w, h] = &wire.bbox;
     Ok(SpatialNode {
         id: wire.id.clone(),
@@ -212,6 +198,13 @@ fn node_of(wire: &NodeWire) -> Res<SpatialNode> {
             subpath: r.subpath.clone(),
         }),
         label: wire.label.clone(),
+        facets: align.map(|align| {
+            let payload = whiteboard_model::Value::Map(vec![(
+                "align".to_owned(),
+                whiteboard_model::Value::String(align.to_owned()),
+            )]);
+            vec![("visual.text/v0".to_owned(), payload)]
+        }),
         ..SpatialNode::default()
     })
 }
@@ -221,6 +214,7 @@ fn dump_nodes(nodes: Vec<SceneNode>) -> Res<String> {
 }
 
 struct Context {
+    registry: Registry,
     sketch: ThemeTokens,
     contents: BTreeMap<String, Vec<SceneNode>>,
 }
@@ -237,7 +231,8 @@ fn differ(what: &str, got: &str, want: &str) -> Res<()> {
 struct Setup<'c> {
     measure: Counting,
     appearance: Box<dyn SpatialAppearanceResolver>,
-    host: Host,
+    outlines: NodeOutlines,
+    registry: &'c Registry,
     geometry: SpatialGeometry,
     theme: Option<&'c ThemeTokens>,
     fit_to_box: bool,
@@ -255,15 +250,13 @@ impl<'c> Setup<'c> {
             _ => Box::new(create_spatial_theme(SpatialThemeMode::Light, None)),
         };
         let [padding, label, floor] = &case.geometry;
-        let align = match case.align.as_deref() {
-            Some("start") => Some(TextPlacement::Start),
-            Some("center") => Some(TextPlacement::Center),
-            _ => None,
-        };
         Ok(Self {
             measure: Counting { base: FakeMeasure::default(), calls: Cell::new(0) },
             appearance,
-            host: Host { id: node.id.clone(), shape: case.shape.clone(), align },
+            outlines: NodeOutlines(
+                case.shape.iter().map(|shape| (node.id.clone(), shape.clone())).collect(),
+            ),
+            registry: &context.registry,
             geometry: SpatialGeometry {
                 padding_px: f64_of(padding)?,
                 label_font_size_px: f64_of(label)?,
@@ -281,7 +274,8 @@ impl<'c> Setup<'c> {
             geometry: self.geometry,
             fit_to_box: self.fit_to_box,
             theme: self.theme,
-            host: &self.host,
+            outlines: &self.outlines,
+            registry: self.registry,
         }
     }
 }
@@ -335,7 +329,7 @@ fn check_content(
 }
 
 fn replay_case(context: &Context, case: &Case) -> Res<()> {
-    let node = node_of(&case.node)?;
+    let node = node_of(&case.node, case.align.as_deref())?;
     let setup = Setup::of(context, case, &node)?;
     let options = setup.options();
     check_box(&node, &options, case)?;
@@ -377,6 +371,7 @@ fn without_kind(record: &Value) -> Value {
 
 fn context_of(meta: &Value) -> Res<Context> {
     Ok(Context {
+        registry: visual_registry().map_err(|e| format!("{e:?}"))?,
         sketch: tokens::theme_tokens(&meta["sketch"])?,
         contents: serde_json::from_value(meta["contents"].clone()).map_err(|e| e.to_string())?,
     })

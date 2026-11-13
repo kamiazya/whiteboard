@@ -93,7 +93,7 @@ fn cache_key(node: &SpatialNode, text: &str, options: &ComposeOptions<'_>) -> St
     key.push(',');
     quote(&mut key, text);
     key.push(',');
-    push_nullable(&mut key, nb.host.silhouette(&node.id));
+    push_nullable(&mut key, nb.outlines.of(&node.id));
     key.push(',');
     push_nullable(&mut key, nb.appearance.resolve_label().font_family.as_deref());
     key.push(',');

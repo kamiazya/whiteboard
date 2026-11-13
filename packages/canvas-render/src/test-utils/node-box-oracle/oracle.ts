@@ -1,6 +1,7 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'
-import type { RenderContribution, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import type { ResolvedLayoutOptions } from '../../layout/layout-options.js'
 import {
   chromeShape,
@@ -36,11 +37,12 @@ import {
  * two scene transforms they stand on, `translateScene` and `seedFromId`.
  *
  * A `case` record holds a node, the options a composer hands the box (theme,
- * geometry, fit, the silhouette and text placement the host resolved, a file
- * node's resolution), and every answer: the content bounds and width, the chrome
- * and the chrome carrying a fit, the label and its runs above and inside, a probe
- * label's runs, and a named content scene placed in the node, above it and fitted
- * to it. Every double is the hex of its IEEE bits (a NaN the canonical one), and
+ * geometry, fit, the silhouette the canvas resolved, a file node's resolution),
+ * the `visual.text/v0` alignment the node carries, read by the plugin's own
+ * reader, and every answer: the content bounds and width, the chrome and the
+ * chrome carrying a fit, the label and its runs above and inside, a probe
+ * label's runs, and a named content scene placed in the node, above it and
+ * fitted to it. Every double is the hex of its IEEE bits (a NaN the canonical one), and
  * `calls` counts what the measurer was asked.
  */
 
@@ -105,6 +107,7 @@ interface CaseRecord {
   readonly node: NodeWire
   readonly theme: CaseSpec['theme']
   readonly fitToBox: boolean
+  /** The alignment the node's `visual.text/v0` payload names, none for no payload. */
   readonly align: CaseSpec['align']
   readonly shape: string | null
   readonly geometry: readonly string[]
@@ -137,6 +140,10 @@ const fromHex = (text: string): number => {
   view.setUint32(4, Number.parseInt(text.slice(8), 16))
   return view.getFloat64(0)
 }
+
+/** The node carrying the `visual.text/v0` payload a case names, which the plugin's own reader reads. */
+const withAlign = (node: SpatialNode, align: CaseRecord['align']): SpatialNode =>
+  align === null ? node : { ...node, facets: { 'visual.text/v0': { align } } }
 
 function nodeOf(wire: NodeWire): SpatialNode {
   const [x, y, width, height] = wire.box.map(fromHex) as [number, number, number, number]
@@ -182,10 +189,6 @@ function optionsOf(record: Omit<CaseRecord, 'answer'>) {
     number,
     number,
   ]
-  const placement: RenderContribution = {
-    namespace: 'oracle',
-    readTextPlacement: () => record.align ?? undefined,
-  }
   const options = {
     measure,
     appearance,
@@ -193,7 +196,7 @@ function optionsOf(record: Omit<CaseRecord, 'answer'>) {
     fitToBox: record.fitToBox,
     nodeOutlines: record.shape === null ? undefined : { [record.node.id]: record.shape },
     shapeTable: BUNDLED_SHAPE_TABLE,
-    contributions: [placement],
+    contributions: [visualRenderContribution],
     ...(record.theme === 'sketch' ? { activeTheme: { id: 'visual.sketch', tokens: sketch } } : {}),
   } as unknown as ResolvedLayoutOptions
   return { options, calls: () => calls }
@@ -204,7 +207,7 @@ const resolvedOf = (wire: ResolvedWire): ResolvedReference | undefined =>
 
 /** What the box primitives answer for a case, from its inputs alone. */
 function answerOf(record: Omit<CaseRecord, 'answer'>): CaseAnswer {
-  const node = nodeOf(record.node)
+  const node = withAlign(nodeOf(record.node), record.align)
   const { options, calls } = optionsOf(record)
   const content: Scene = contentScene(record.content)
   const bounds = nodeContentBounds(node, options)
