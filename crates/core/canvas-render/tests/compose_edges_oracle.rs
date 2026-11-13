@@ -2,8 +2,9 @@
 //! (`compose-edges.jsonl`): for each board under each theme and geometry, the
 //! edges and lines drawn with their labels, the anchors the routing settled in
 //! the order it settled them, and how many times the measurer was asked. What
-//! the edge pass asks its host (the visual plugin's facets, the hops over the
-//! routed edges) is answered from the recording.
+//! the edge pass asks its host (the visual plugin's facets) is answered from
+//! the recording. The hops it computes itself; where any element draws them,
+//! the hops recorded over every routed edge, drawn or not, are compared too.
 
 #[path = "typeset_support/dump.rs"]
 mod dump;
@@ -16,9 +17,7 @@ use std::collections::BTreeMap;
 use dump::dump_scene;
 use serde::Deserialize;
 use serde_json::Value;
-use whiteboard_canvas_render::compose_edges::{
-    EdgeFacets, EdgeJumps, EdgeOptions, compose_edges_and_labels,
-};
+use whiteboard_canvas_render::compose_edges::{EdgeFacets, EdgeOptions, compose_edges_and_labels};
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::node_box::{NodeBoxHost, NodeBoxOptions, TextPlacement};
@@ -28,6 +27,7 @@ use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_edge_routing::edge_geometry::Side;
+use whiteboard_edge_routing::edge_jumps::{EdgePath, compute_edge_jumps};
 use whiteboard_edge_routing::edge_rules::SidePair;
 use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use whiteboard_edge_routing::geometry::Point;
@@ -39,7 +39,7 @@ use whiteboard_model::spatial::{
 use whiteboard_plugin_visual::visual::{
     EdgeRoutingStyle, LineJumps, VisualEdgesFacet, VisualStrokeWidth,
 };
-use whiteboard_scene::{EdgeJumpPoint, ResolvedEdgeNode, Scene};
+use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -297,7 +297,6 @@ impl Measure for Counting {
 struct Host<'c> {
     case: &'c Case,
     canvas: &'c SpatialCanvas,
-    jumps_asked: Cell<usize>,
     misses: RefCell<Vec<String>>,
 }
 
@@ -366,28 +365,36 @@ impl Host<'_> {
     }
 }
 
-impl EdgeJumps for Host<'_> {
-    fn compute_edge_jumps(
-        &self,
-        _routed: &[ResolvedEdgeNode],
-    ) -> Vec<(String, Vec<EdgeJumpPoint>)> {
-        self.jumps_asked.set(self.jumps_asked.get() + 1);
-        let Some(table) = &self.case.answer.jumps else {
-            self.miss("hops nothing draws".to_owned());
-            return Vec::new();
-        };
-        let point = |p: &[String; 3]| -> Res<EdgeJumpPoint> {
-            Ok(EdgeJumpPoint { segment: f64_of(&p[0])?, x: f64_of(&p[1])?, y: f64_of(&p[2])? })
-        };
-        table
-            .iter()
-            .map(|(id, points)| Ok((id.clone(), points.iter().map(point).collect::<Res<_>>()?)))
-            .collect::<Res<_>>()
-            .unwrap_or_else(|e: String| {
-                self.miss(e);
-                Vec::new()
-            })
-    }
+/// The hops over every edge drawn in `content`, its own hops taken off, as
+/// the recording writes them.
+fn jumps_over(content: &[SceneNode]) -> JumpsWire {
+    let edges: Vec<(&str, Vec<Point>)> = content
+        .iter()
+        .filter_map(|node| match node {
+            SceneNode::Edge(edge) => Some((
+                edge.id.as_str(),
+                edge.path.iter().map(|p| Point { x: p.x, y: p.y }).collect(),
+            )),
+            _ => None,
+        })
+        .collect();
+    let paths: Vec<EdgePath<'_>> = edges.iter().map(|(id, path)| EdgePath { id, path }).collect();
+    compute_edge_jumps(&paths)
+        .into_iter()
+        .map(|(id, points)| {
+            let wire = points
+                .iter()
+                .map(|p| {
+                    [
+                        hex(f64::from(u32::try_from(p.segment).unwrap_or(u32::MAX))),
+                        hex(p.x),
+                        hex(p.y),
+                    ]
+                })
+                .collect();
+            (id.to_owned(), wire)
+        })
+        .collect()
 }
 
 fn anchor_row(id: &str, pair: &EdgeAnchorPair) -> Vec<Option<String>> {
@@ -442,8 +449,7 @@ fn differ<T: PartialEq + std::fmt::Debug>(what: &str, got: &T, want: &T) -> Res<
 
 fn replay_case(themes: &(ThemeTokens, ThemeTokens), case: &Case) -> Res<()> {
     let canvas = canvas_of(case)?;
-    let host =
-        Host { case, canvas: &canvas, jumps_asked: Cell::new(0), misses: RefCell::new(Vec::new()) };
+    let host = Host { case, canvas: &canvas, misses: RefCell::new(Vec::new()) };
     let measure = Counting { base: FakeMeasure::default(), calls: Cell::new(0) };
     let appearance = appearance_of(&themes.0, &themes.1, &case.theme);
     let theme = match case.theme.as_str() {
@@ -466,10 +472,12 @@ fn replay_case(themes: &(ThemeTokens, ThemeTokens), case: &Case) -> Res<()> {
             host: &host,
         },
         facets: &host,
-        jumps: &host,
         side_overrides: pins.as_deref(),
     };
     let composed = compose_edges_and_labels(&canvas, &options);
+    if let Some(recorded) = &case.answer.jumps {
+        differ("hops over every edge", &jumps_over(&composed.content), recorded)?;
+    }
     let scene = dump_scene(&Scene { nodes: composed.content, legend: None })?;
     if scene != case.answer.scene {
         return Err(format!("scene: got\n{scene}\nrecorded\n{}", case.answer.scene));
@@ -477,7 +485,6 @@ fn replay_case(themes: &(ThemeTokens, ThemeTokens), case: &Case) -> Res<()> {
     let anchors: Vec<_> = composed.anchors.iter().map(|(id, pair)| anchor_row(id, pair)).collect();
     differ("anchors", &anchors, &case.answer.anchors)?;
     differ("measurer calls", &measure.calls.get(), &case.answer.calls)?;
-    differ("hops asked", &host.jumps_asked.get(), &usize::from(case.answer.jumps.is_some()))?;
     differ("host misses", &*host.misses.borrow(), &Vec::new())
 }
 
