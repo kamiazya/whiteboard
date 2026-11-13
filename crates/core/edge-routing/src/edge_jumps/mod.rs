@@ -87,13 +87,11 @@ fn straight_through(path: &[Point], at: usize) -> bool {
 fn placed_runs_of(path: &[Point], edge: usize) -> Vec<Option<Run>> {
     let mut runs = Vec::new();
     let mut first: usize = 0;
-    loop {
-        let mut end = first.saturating_add(1);
-        let (Some(&a), Some(_)) = (path.get(first), path.get(end)) else { break };
-        while straight_through(path, end) {
-            end = end.saturating_add(1);
-        }
-        let Some(&b) = path.get(end) else { break };
+    // The last point never runs straight on, so a run ends by then.
+    while let Some(end) =
+        (first.saturating_add(1)..path.len()).find(|&at| !straight_through(path, at))
+    {
+        let (Some(&a), Some(&b)) = (path.get(first), path.get(end)) else { break };
         let last = end.saturating_sub(1);
         runs.push(place(a, b).map(|placed| Run { edge, first, last, placed }));
         first = end;

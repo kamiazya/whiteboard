@@ -82,6 +82,12 @@ function splits(): Board {
       edge('over-diagonal', [400, 0], [500, 0]),
       edge('negative', [-50, -500], [-50, -300], [-50, -100]),
       edge('over-negative', [-100, -300], [0, -300]),
+      edge('repeat-flat', [1000, 0], [1050, 0], [1050, 0], [1100, 0]),
+      edge('over-repeat-flat', [1050, -50], [1050, 50]),
+      edge('diagonal-then-vertical', [600, -50], [650, 0], [650, 50]),
+      edge('over-dtv', [600, 0], [700, 0]),
+      edge('diagonal-then-flat', [800, -50], [850, 0], [900, 0]),
+      edge('over-dtf', [850, -40], [850, 40]),
       edge('negative-back', [-500, -50], [-300, -50], [-100, -50]),
       edge('over-negative-back', [-300, -100], [-300, 0]),
     ],
@@ -100,6 +106,13 @@ function clearances(): Board {
     edges.push(edge(`split2-${i}`, [x + d, 1000 - 64], [x + d, 1000 + 64]))
     edges.push(edge(`split3-${i}`, [x - 32 + d, 900], [x + d, 1100], [x + d + 64, 1100]))
   })
+  // A crossing handed to an earlier run exactly the slack from either end.
+  const slack = 6 - 1e-9
+  for (const [i, y] of [16 - slack, slack].entries()) {
+    const x = 2000 + i * 100
+    edges.push(edge(`post-${i}`, [x, 0], [x, 16]))
+    edges.push(edge(`split-at-slack-${i}`, [x - 50, y], [x, y], [x + 50, y]))
+  }
   return { id: 'clearances', edges }
 }
 
@@ -191,6 +204,25 @@ function workBudget(): Board {
   }
 }
 
+/**
+ * A run whose far end is a repeated point, at 2^57, where coordinates fall on
+ * a grid of 32: the crossing clears the run's end as the intersection measures
+ * it, and not as a projection onto the segment does, so whether the repeat
+ * joins the run decides which edge hops.
+ */
+function farRepeat(): Board {
+  const at = 2 ** 57
+  return {
+    id: 'far-repeat',
+    edges: [
+      edge('slant', [-37.3, at + 1008 - 37.3 * 1.3], [51.1, at + 1008 + 51.1 * 1.3]),
+      edge('repeat-end', [0, at], [0, at + 1024], [0, at + 1024]),
+      edge('slant-x', [at + 1008 - 37.3 * 1.3, 1e4 - 37.3], [at + 1008 + 51.1 * 1.3, 1e4 + 51.1]),
+      edge('repeat-end-x', [at, 1e4], [at + 1024, 1e4], [at + 1024, 1e4]),
+    ],
+  }
+}
+
 /** Paths a router would not draw: empty, a point, non-finite and far away. */
 function degenerate(): Board {
   const n = Number.NaN
@@ -240,6 +272,7 @@ export const BOARDS: readonly Board[] = [
   sceneCap(),
   workBudget(),
   degenerate(),
+  farRepeat(),
   scaled(handOvers(), 2 ** 500, 'hand-overs-huge'),
   scaled(splits(), 2 ** 502, 'splits-huge'),
   scaled(routedBoard('routed-top', 5, 30, 300, 10), 2 ** 503, 'routed-top'),
