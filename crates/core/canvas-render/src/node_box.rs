@@ -262,11 +262,12 @@ fn centre_lines(paragraph: &ParagraphBlockNode, width: f64) -> ParagraphBlockNod
     let mut lines: Vec<Vec<TextRunNode>> = Vec::new();
     let mut by_top: std::collections::BTreeMap<u64, usize> = std::collections::BTreeMap::new();
     for run in &paragraph.runs {
-        let index = *by_top.entry(map_key(run.bbox.y)).or_insert_with(|| {
-            lines.push(Vec::new());
-            lines.len() - 1
-        });
-        lines[index].push(run.clone());
+        let next = lines.len();
+        let index = *by_top.entry(map_key(run.bbox.y)).or_insert(next);
+        match lines.get_mut(index) {
+            Some(line) => line.push(run.clone()),
+            None => lines.push(vec![run.clone()]),
+        }
     }
     let mut runs = Vec::with_capacity(paragraph.runs.len());
     for mut line in lines {
