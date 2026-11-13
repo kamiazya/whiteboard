@@ -5,17 +5,21 @@
 //!
 //! What the composer knows and this crate does not is asked through
 //! [`ComposeHost`]: the body parser with its reference resolution, a reference's
-//! resolution, the comment layer's passage highlights, and a file node's canvas
-//! embed. Each is a seam rather than a port because the code that
-//! answers it lives in another layer (the markdown parser, the keeper) or has
-//! not been ported yet; the replay answers it from the recording.
+//! resolution, the comment layer's passage highlights, the expansion policy over
+//! a file node, a body's canvas embed target, and the layout of a canvas nested
+//! in another. Each is a seam rather than a port because the code that answers
+//! it lives in another layer (the markdown parser, the keeper, the caller's
+//! policy) or has not been ported yet (the composer over a whole canvas); the
+//! replay answers it from the recording.
 
+mod decoration;
+mod embed;
 mod file;
 mod frame;
 mod text;
 
 use whiteboard_model::mdast::Root;
-use whiteboard_model::spatial::{BackgroundStyle, SpatialNode};
+use whiteboard_model::spatial::{BackgroundStyle, SpatialCanvas, SpatialNode};
 use whiteboard_scene::{Appearance, BoundingBox, IconSceneNode, SceneNode};
 
 use crate::node_box::{
@@ -23,10 +27,11 @@ use crate::node_box::{
 };
 use crate::node_content::{NodeKind, node_kind};
 use crate::typeset::{
-    CanvasMiniature, CodeTokenizer, DiagramRenderer, EmbedResolver, FittedBlocks, InlineSeams,
-    MathRenderer, NestedLayoutBudget,
+    CodeTokenizer, DiagramRenderer, EmbedResolver, FittedBlocks, InlineSeams, MathRenderer,
+    NestedLayoutBudget,
 };
 
+pub use decoration::{NodeMarks, compose_decorations};
 pub use file::fit_body_in_node;
 pub use text::{MdastStyle, mdast_style_for};
 
@@ -66,15 +71,23 @@ pub trait ComposeHost {
         body: &FittedBlocks,
     ) -> Vec<SceneNode>;
 
-    /// The canvas a file node's reference resolves to, laid out and scaled into
-    /// the node's box (`composeFileEmbed`); none when it is not drawn, so the
-    /// next representation is asked.
-    fn compose_file_embed(
+    /// Whether a file node's canvas is drawn open (`expandFileNode`): the
+    /// caller's policy over the node, which the editor decides by its size on
+    /// screen and an export by its own.
+    fn expand_file_node(&self, node: &SpatialNode) -> bool;
+
+    /// A canvas nested in this one, laid out at its own size by the composer
+    /// over a whole canvas (`layoutNestedCanvas`), under `options`, whose path
+    /// already holds it. Its own theme and silhouettes are the host's to resolve.
+    fn layout_nested_canvas(
         &self,
-        node: &SpatialNode,
-        resolved: Option<&ResolvedReference>,
+        canvas: &SpatialCanvas,
         options: &ComposeOptions<'_>,
-    ) -> Option<SceneNode>;
+    ) -> Vec<SceneNode>;
+
+    /// The canvas a body's `![[canvas]]` draws, narrowed to `fragment`: the
+    /// typesetter's resolver keeps only its size.
+    fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas>;
 
     /// The editor overlay owns this node's text, so only its chrome is drawn.
     fn body_suppressed(&self, node_id: &str) -> bool;
@@ -95,7 +108,8 @@ pub trait ContentCache {
 }
 
 /// The typesetter's seams a body is laid out with, forwarded as they are: a
-/// body is a body, whichever surface lays it out.
+/// body is a body, whichever surface lays it out. A canvas the body embeds is
+/// drawn by the composer itself (`ComposeOptions` is the `CanvasMiniature`).
 #[derive(Clone, Copy)]
 pub struct BodySeams<'a> {
     pub inline: &'a dyn InlineSeams,
@@ -103,7 +117,6 @@ pub struct BodySeams<'a> {
     pub math: Option<&'a dyn MathRenderer>,
     pub diagram: Option<&'a dyn DiagramRenderer>,
     pub embeds: Option<&'a dyn EmbedResolver>,
-    pub canvas_layout: Option<&'a dyn CanvasMiniature>,
 }
 
 /// What the composer hands each node.

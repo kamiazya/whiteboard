@@ -72,7 +72,7 @@ fn file_embed(
     resolved: Option<&ResolvedReference>,
     options: &ComposeOptions<'_>,
 ) -> Option<Vec<SceneNode>> {
-    let embed = options.host.compose_file_embed(node, resolved, options)?;
+    let embed = super::embed::compose_file_embed(node, resolved, options)?;
     let nb = &options.node_box;
     let mut drawn = vec![chrome(node, nb)];
     drawn.extend(label_runs(node, label_of(node, resolved).as_deref(), LabelPlace::Above, nb));

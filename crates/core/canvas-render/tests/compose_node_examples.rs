@@ -16,7 +16,7 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
-use whiteboard_model::spatial::{NodeResource, SpatialNode};
+use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_scene::{BoundingBox, SceneNode, ShapeSceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -69,12 +69,15 @@ impl ComposeHost for Marking {
         vec![mark()]
     }
 
-    fn compose_file_embed(
-        &self,
-        _: &SpatialNode,
-        _: Option<&ResolvedReference>,
-        _: &ComposeOptions<'_>,
-    ) -> Option<SceneNode> {
+    fn expand_file_node(&self, _: &SpatialNode) -> bool {
+        false
+    }
+
+    fn layout_nested_canvas(&self, _: &SpatialCanvas, _: &ComposeOptions<'_>) -> Vec<SceneNode> {
+        Vec::new()
+    }
+
+    fn embedded_canvas(&self, _: &str, _: Option<&str>) -> Option<SpatialCanvas> {
         None
     }
 
@@ -168,14 +171,7 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
         theme_id: None,
         host: &host,
         content_cache: None,
-        body: BodySeams {
-            inline: &host,
-            highlight: None,
-            math: None,
-            diagram: None,
-            embeds: None,
-            canvas_layout: None,
-        },
+        body: BodySeams { inline: &host, highlight: None, math: None, diagram: None, embeds: None },
         budget: &budget,
         embed_path: &[],
         embed_depth: 0,

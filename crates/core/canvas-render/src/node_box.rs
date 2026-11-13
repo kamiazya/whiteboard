@@ -13,7 +13,7 @@
 use whiteboard_det::math::{js_max, js_min};
 use whiteboard_facet_engine::engine::{ThemeInk, ThemeTokens};
 use whiteboard_model::mdast::Root;
-use whiteboard_model::spatial::SpatialNode;
+use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_scene::{
     Annotates, AnnotatesKind, Appearance, BoundingBox, ParagraphBlockNode, SceneInk, SceneInkFill,
     SceneInkStyle, SceneNode, ShapeSceneNode, TextRunNode,
@@ -86,12 +86,14 @@ pub struct FacetCard {
 }
 
 /// What a file node's reference resolves to (`references/resolved.ts`), the
-/// fields the composer reads. A referenced canvas is the host's to embed.
+/// fields the composer reads.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ResolvedReference {
     pub label: Option<String>,
     pub missing: bool,
     pub image: Option<ReferenceImage>,
+    /// The referenced canvas, drawn in miniature inside the node.
+    pub canvas: Option<SpatialCanvas>,
     /// A referenced markdown document's parsed body.
     pub markdown: Option<Root>,
     pub facets: Option<FacetCard>,

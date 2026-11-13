@@ -2,9 +2,10 @@
 //! for each node and the options a composer hands it, the scene drawn, the
 //! degradations reported, the content-cache keys asked and kept, the scene drawn
 //! again over the same cache and over one seeded under the first key asked, and
-//! how many times the measurer was asked. What the composer asks its host (a
-//! body parsed, a reference resolved, an embed target, a file node's canvas
-//! embed) is answered from the recording.
+//! how many times the measurer was asked, and what each nested canvas layout was
+//! handed. What the composer asks its host (a body parsed, a reference resolved,
+//! an embed target, the expansion policy, a nested canvas laid out) is answered
+//! from the recording.
 
 #[path = "typeset_support/dump.rs"]
 mod dump;
@@ -20,7 +21,8 @@ use dump::dump_scene;
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::compose_node::{
-    BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed, compose_node,
+    BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, NodeMarks, ParseFailed,
+    compose_decorations, compose_node,
 };
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
@@ -28,19 +30,23 @@ use whiteboard_canvas_render::node_box::{
     FacetCard, FacetRow, NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference,
     TextPlacement,
 };
+use whiteboard_canvas_render::scale_scene::fit_scene_into_box;
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::asset::create_themed_appearance;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{
-    EmbedResolver, Embedded, FittedBlocks, IconRange, ImageRef, InlineSeams, NestedLayoutBudget,
+    CanvasSummary, EmbedBox, EmbedResolver, Embedded, FittedBlocks, IconRange, ImageRef,
+    InlineSeams, NestedLayoutBudget,
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{
-    BackgroundStyle, CanvasColor, CanvasColorPreset, NodeResource, SpatialNode,
+    BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine, NodeResource,
+    SpatialCanvas, SpatialNode,
 };
+use whiteboard_plugin_visual::visual::{VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon};
 use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -97,6 +103,15 @@ struct Event {
     detail: String,
 }
 
+/// What a nested canvas layout was handed: the path, the depth and the canvas's size.
+#[derive(Deserialize, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct Nested {
+    path: Vec<String>,
+    depth: usize,
+    elements: usize,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Answer {
@@ -107,6 +122,8 @@ struct Answer {
     again: Digest,
     seeded: Option<Digest>,
     calls: usize,
+    #[serde(default)]
+    nested: Vec<Nested>,
 }
 
 #[derive(Deserialize)]
@@ -120,9 +137,13 @@ struct Case {
     shape: Option<String>,
     geometry: [String; 3],
     embed_depth: usize,
-    /// The switches that are on: `locked`, `suppressed`, `emptyFrame`, `cache`, `spent`.
+    /// The switches that are on: `locked`, `suppressed`, `emptyFrame`, `cache`,
+    /// `spent`, `collapsed`.
     flags: Vec<String>,
-    embed: Option<SceneNode>,
+    /// The layouts and elements left in the budget, when not the default.
+    budget: Option<[usize; 2]>,
+    #[serde(default)]
+    embed_path: Vec<String>,
     answer: Answer,
 }
 
@@ -153,15 +174,47 @@ struct CardWire {
     rows: Vec<RowWire>,
 }
 
+/// A node of a recorded canvas: only its id, since only the count is read.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanvasNodeWire {
+    id: String,
+}
+
+/// A recorded canvas. Its edges and lines are counted and never read.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CanvasWire {
+    nodes: Vec<CanvasNodeWire>,
+    edges: Vec<Value>,
+    lines: Option<Vec<Value>>,
+}
+
+fn canvas_of(wire: CanvasWire) -> SpatialCanvas {
+    SpatialCanvas {
+        nodes: wire
+            .nodes
+            .into_iter()
+            .map(|node| SpatialNode { id: node.id, ..SpatialNode::default() })
+            .collect(),
+        edges: vec![CanvasEdge::default(); wire.edges.len()],
+        lines: wire.lines.map(|lines| vec![CanvasLine::default(); lines.len()]),
+        ..SpatialCanvas::default()
+    }
+}
+
+/// How many elements the TypeScript's `canvasElementCount` reads in a canvas.
+fn elements_of(canvas: &SpatialCanvas) -> usize {
+    canvas.nodes.len() + canvas.edges.len() + canvas.lines.as_ref().map_or(0, Vec::len)
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ResolvedWire {
     label: Option<String>,
     missing: Option<bool>,
     image: Option<ImageWire>,
-    /// Only the host's embed answer reads the canvas, and it is recorded.
-    #[serde(rename = "canvas")]
-    _canvas: Option<Value>,
+    canvas: Option<CanvasWire>,
     markdown: Option<Value>,
     facets: Option<CardWire>,
 }
@@ -171,6 +224,7 @@ fn resolved_of(wire: ResolvedWire) -> Res<ResolvedReference> {
         label: wire.label,
         missing: wire.missing.unwrap_or(false),
         image: wire.image.map(|i| ReferenceImage { href: i.href, alt: i.alt }),
+        canvas: wire.canvas.map(canvas_of),
         markdown: wire.markdown.as_ref().map(model::root).transpose()?,
         facets: wire.facets.map(|card| FacetCard {
             title: card.title,
@@ -192,6 +246,13 @@ struct EmbeddedWire {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct CanvasTargetWire {
+    title: String,
+    canvas: CanvasWire,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct SeededWire {
     nodes: Vec<SceneNode>,
     truncated: bool,
@@ -206,8 +267,10 @@ struct MetaWire {
     sketch: Value,
     bodies: BTreeMap<String, Option<Value>>,
     embedded: BTreeMap<String, EmbeddedWire>,
+    canvases: BTreeMap<String, CanvasTargetWire>,
     references: BTreeMap<String, Option<ResolvedWire>>,
     seeded: SeededWire,
+    miniature: Vec<SceneNode>,
 }
 
 /// What the meta line holds, read into the crate's types.
@@ -215,8 +278,10 @@ struct Context {
     sketch: ThemeTokens,
     bodies: BTreeMap<String, Option<Root>>,
     embedded: BTreeMap<String, (String, Root)>,
+    canvases: BTreeMap<String, (String, SpatialCanvas)>,
     references: BTreeMap<String, Option<ResolvedReference>>,
     seeded: FittedBlocks,
+    miniature: Vec<SceneNode>,
 }
 
 fn context_of(meta: &Value) -> Res<Context> {
@@ -229,6 +294,11 @@ fn context_of(meta: &Value) -> Res<Context> {
     for (id, target) in wire.embedded {
         embedded.insert(id, (target.title, model::root(&target.root)?));
     }
+    let canvases = wire
+        .canvases
+        .into_iter()
+        .map(|(id, target)| (id, (target.title, canvas_of(target.canvas))))
+        .collect();
     let mut references = BTreeMap::new();
     for (reference, resolved) in wire.references {
         references.insert(reference, resolved.map(resolved_of).transpose()?);
@@ -237,12 +307,14 @@ fn context_of(meta: &Value) -> Res<Context> {
         sketch: tokens::theme_tokens(&wire.sketch)?,
         bodies,
         embedded,
+        canvases,
         references,
         seeded: FittedBlocks {
             nodes: wire.seeded.nodes,
             truncated: wire.seeded.truncated,
             overflows: wire.seeded.overflows,
         },
+        miniature: wire.miniature,
     })
 }
 
@@ -289,6 +361,7 @@ struct Host<'c> {
     case: &'c Case,
     align: Option<TextPlacement>,
     events: RefCell<Vec<Event>>,
+    nested: RefCell<Vec<Nested>>,
     misses: RefCell<Vec<String>>,
 }
 
@@ -328,13 +401,28 @@ impl ComposeHost for Host<'_> {
         Vec::new()
     }
 
-    fn compose_file_embed(
+    fn expand_file_node(&self, _: &SpatialNode) -> bool {
+        !self.case.on("collapsed")
+    }
+
+    fn layout_nested_canvas(
         &self,
-        _: &SpatialNode,
-        _: Option<&ResolvedReference>,
-        _: &ComposeOptions<'_>,
-    ) -> Option<SceneNode> {
-        self.case.embed.clone()
+        canvas: &SpatialCanvas,
+        options: &ComposeOptions<'_>,
+    ) -> Vec<SceneNode> {
+        self.nested.borrow_mut().push(Nested {
+            path: options.embed_path.to_vec(),
+            depth: options.embed_depth,
+            elements: elements_of(canvas),
+        });
+        self.context.miniature.clone()
+    }
+
+    fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas> {
+        if fragment.is_some() {
+            self.miss(format!("a fragment of {document_id}"));
+        }
+        self.context.canvases.get(document_id).map(|(_, canvas)| canvas.clone())
     }
 
     fn body_suppressed(&self, node_id: &str) -> bool {
@@ -391,7 +479,9 @@ impl InlineSeams for Host<'_> {
     }
 
     fn embed_name(&self, document_id: &str) -> Option<String> {
-        self.context.embedded.get(document_id).map(|(title, _)| title.clone())
+        let canvas = self.context.canvases.get(document_id);
+        let title = self.context.embedded.get(document_id).map(|(title, _)| title);
+        title.or(canvas.map(|(title, _)| title)).cloned()
     }
 
     fn embed_pending(&self, _: &str) -> bool {
@@ -405,6 +495,11 @@ impl InlineSeams for Host<'_> {
 
 impl EmbedResolver for Host<'_> {
     fn resolve_embed(&self, document_id: &str, _: Option<&str>) -> Option<Embedded> {
+        if let Some((title, canvas)) = self.context.canvases.get(document_id) {
+            let elements = elements_of(canvas);
+            let canvas = Some(CanvasSummary { elements, empty: elements == 0 });
+            return Some(Embedded::Canvas { title: Some(title.clone()), canvas });
+        }
         let (title, root) = self.context.embedded.get(document_id)?;
         Some(Embedded::Document { title: Some(title.clone()), root: root.clone() })
     }
@@ -463,15 +558,7 @@ struct Setup<'c> {
 
 impl<'c> Setup<'c> {
     fn of(context: &'c Context, case: &'c Case) -> Res<Self> {
-        let appearance: Box<dyn SpatialAppearanceResolver> = match case.theme.as_str() {
-            "sketch" => Box::new(create_themed_appearance(
-                &context.sketch,
-                SpatialThemeMode::Light,
-                "Yomogi",
-            )),
-            "dark" => Box::new(create_spatial_theme(SpatialThemeMode::Dark, None)),
-            _ => Box::new(create_spatial_theme(SpatialThemeMode::Light, None)),
-        };
+        let appearance = appearance_of(context, &case.theme);
         let align = match case.align.as_deref() {
             Some("start") => Some(TextPlacement::Start),
             Some("center") => Some(TextPlacement::Center),
@@ -486,6 +573,7 @@ impl<'c> Setup<'c> {
                 case,
                 align,
                 events: RefCell::new(Vec::new()),
+                nested: RefCell::new(Vec::new()),
                 misses: RefCell::new(Vec::new()),
             },
             geometry: SpatialGeometry {
@@ -499,10 +587,12 @@ impl<'c> Setup<'c> {
 
     /// One composition, over `cache`; the TypeScript opens a fresh budget for each.
     fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> Res<String> {
-        let budget = if self.host.case.on("spent") {
-            NestedLayoutBudget::with_remaining(0, NestedLayoutBudget::ELEMENTS)
-        } else {
-            NestedLayoutBudget::new()
+        let budget = match self.host.case.budget {
+            Some([layouts, elements]) => NestedLayoutBudget::with_remaining(layouts, elements),
+            None if self.host.case.on("spent") => {
+                NestedLayoutBudget::with_remaining(0, NestedLayoutBudget::ELEMENTS)
+            }
+            None => NestedLayoutBudget::new(),
         };
         let options = ComposeOptions {
             node_box: NodeBoxOptions {
@@ -522,10 +612,9 @@ impl<'c> Setup<'c> {
                 math: None,
                 diagram: None,
                 embeds: Some(&self.host),
-                canvas_layout: None,
             },
             budget: &budget,
-            embed_path: &[],
+            embed_path: &self.host.case.embed_path,
             embed_depth: self.host.case.embed_depth,
         };
         dump_nodes(compose_node(node, &options))
@@ -557,7 +646,139 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     differ("seeded", &seeded, &want.seeded)?;
     differ("events", &*setup.host.events.borrow(), &want.events)?;
     differ("measurer calls", &setup.measure.calls.get(), &want.calls)?;
+    differ("nested layouts", &*setup.host.nested.borrow(), &want.nested)?;
     differ("host misses", &*setup.host.misses.borrow(), &Vec::new())
+}
+
+/// A symbol as the TypeScript's reader answers it.
+#[derive(Deserialize)]
+#[serde(tag = "kind", rename_all = "camelCase", deny_unknown_fields)]
+enum SymbolWire {
+    Icon { name: String },
+    Emoji { char: String },
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct BoxWire {
+    id: String,
+    #[serde(rename = "box")]
+    bbox: [String; 4],
+}
+
+/// The decorations drawn over a node, from the stencil and symbol it wears.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Decoration {
+    id: String,
+    node: BoxWire,
+    theme: String,
+    stencil: Option<String>,
+    symbol: Option<SymbolWire>,
+    scene: String,
+}
+
+impl NodeMarks for Decoration {
+    fn stencil(&self, node: &SpatialNode) -> Option<String> {
+        self.stencil.clone().filter(|_| node.id == self.node.id)
+    }
+
+    fn symbol(&self, node: &SpatialNode) -> Option<VisualSymbolFacet> {
+        let symbol = self.symbol.as_ref().filter(|_| node.id == self.node.id)?;
+        Some(match symbol {
+            SymbolWire::Icon { name } => {
+                VisualSymbolFacet::VisualSymbolIcon(VisualSymbolIcon { name: name.clone() })
+            }
+            SymbolWire::Emoji { char } => {
+                VisualSymbolFacet::VisualSymbolEmoji(VisualSymbolEmoji { char: char.clone() })
+            }
+        })
+    }
+}
+
+fn appearance_of(context: &Context, theme: &str) -> Box<dyn SpatialAppearanceResolver> {
+    match theme {
+        "sketch" => {
+            Box::new(create_themed_appearance(&context.sketch, SpatialThemeMode::Light, "Yomogi"))
+        }
+        "dark" => Box::new(create_spatial_theme(SpatialThemeMode::Dark, None)),
+        _ => Box::new(create_spatial_theme(SpatialThemeMode::Light, None)),
+    }
+}
+
+fn replay_decoration(context: &Context, decoration: &Decoration) -> Res<()> {
+    let [x, y, w, h] = &decoration.node.bbox;
+    let node = SpatialNode {
+        id: decoration.node.id.clone(),
+        x: f64_of(x)?,
+        y: f64_of(y)?,
+        width: f64_of(w)?,
+        height: f64_of(h)?,
+        ..SpatialNode::default()
+    };
+    let appearance = appearance_of(context, &decoration.theme);
+    let scene = dump_nodes(compose_decorations(&node, appearance.as_ref(), decoration))?;
+    if scene == decoration.scene {
+        Ok(())
+    } else {
+        Err(format!("decorations: got\n{scene}\nrecorded\n{}", decoration.scene))
+    }
+}
+
+#[derive(Deserialize, Debug, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct FitAnswer {
+    scene: String,
+    w: String,
+    h: String,
+}
+
+/// A scene fitted into a box, and what the fit answers.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Fit {
+    id: String,
+    scene: Vec<SceneNode>,
+    /// `[x, y, maxWidth, maxHeight]`.
+    #[serde(rename = "box")]
+    space: [String; 4],
+    answer: Option<FitAnswer>,
+}
+
+fn replay_fit(fit: &Fit) -> Res<()> {
+    let [x, y, max_width, max_height] = &fit.space;
+    let space = EmbedBox {
+        x: f64_of(x)?,
+        y: f64_of(y)?,
+        max_width: f64_of(max_width)?,
+        max_height: f64_of(max_height)?,
+    };
+    let hex = |value: f64| format!("{:016x}", value.to_bits());
+    let got = match fit_scene_into_box(&fit.scene, &space) {
+        None => None,
+        Some(m) => Some(FitAnswer { scene: dump_nodes(m.nodes)?, w: hex(m.w), h: hex(m.h) }),
+    };
+    differ("fit", &got, &fit.answer)
+}
+
+/// One record after the meta line, replayed by its kind.
+fn replay_record(context: &Context, record: &Value) -> Res<()> {
+    let fields = without_kind(record);
+    let parse = |e: serde_json::Error| e.to_string();
+    match record.get("kind").and_then(Value::as_str) {
+        Some("decoration") => {
+            let decoration: Decoration = serde_json::from_value(fields).map_err(parse)?;
+            replay_decoration(context, &decoration).map_err(|e| format!("{}: {e}", decoration.id))
+        }
+        Some("fit") => {
+            let fit: Fit = serde_json::from_value(fields).map_err(parse)?;
+            replay_fit(&fit).map_err(|e| format!("{}: {e}", fit.id))
+        }
+        _ => {
+            let case: Case = serde_json::from_value(fields).map_err(parse)?;
+            replay_case(context, &case).map_err(|e| format!("{}: {e}", case.id))
+        }
+    }
 }
 
 /// A record's fields but its `kind`, which the reader has already dispatched on.
@@ -578,18 +799,18 @@ fn every_recorded_composition_is_reproduced_to_the_last_bit() {
         .collect();
     let context = context_of(records.first().unwrap_or_else(|| panic!("a meta line")))
         .unwrap_or_else(|e| panic!("the meta line: {e}"));
-    let mut cases = 0;
+    let mut kinds = BTreeMap::<&str, usize>::new();
     let mut failures = Vec::new();
     for (at, record) in records.iter().enumerate().skip(1) {
-        let outcome = serde_json::from_value::<Case>(without_kind(record))
-            .map_err(|e| e.to_string())
-            .and_then(|case| replay_case(&context, &case).map_err(|e| format!("{}: {e}", case.id)));
-        cases += 1;
-        if let Err(e) = outcome {
+        let kind = record.get("kind").and_then(Value::as_str).unwrap_or_default();
+        *kinds.entry(kind).or_default() += 1;
+        if let Err(e) = replay_record(&context, record) {
             failures.push(format!("line {}: {e}", at + 1));
         }
     }
-    assert!(cases > 150, "{cases} cases");
+    assert!(kinds.get("case").is_some_and(|&n| n > 150), "{kinds:?}");
+    assert!(kinds.get("decoration").is_some_and(|&n| n > 50), "{kinds:?}");
+    assert!(kinds.get("fit").is_some_and(|&n| n > 20), "{kinds:?}");
     assert!(
         failures.is_empty(),
         "{} differ:\n{}",
