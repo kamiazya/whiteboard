@@ -301,3 +301,38 @@ fn a_canvas_in_a_column_that_is_not_a_number_is_drawn_in_a_box_that_is_not_one()
     // column never described.
     assert!(spy.0.get().is_some_and(f64::is_nan));
 }
+
+fn typeset_within(path: &[String], targets: &Targets, blocks: Vec<Flow>) -> Scene {
+    let theme = MarkdownTheme::node();
+    let measure = FakeMeasure::default();
+    let host = Host::default();
+    let options = TypesetOptions {
+        embeds: Some(targets),
+        embed_path: path,
+        ..TypesetOptions::new(&measure, 200.0, "sans-serif", &theme, &host)
+    };
+    typeset_mdast_blocks(&Root { children: blocks }, &options)
+}
+
+#[test]
+fn a_body_laid_out_inside_a_document_cannot_embed_that_document() {
+    let body = doc(vec![paragraph(vec![text("a")])]);
+    let targets = Targets { documents: vec![("a", body)], ..Targets::default() };
+    let around = ["a".to_owned()];
+    let scene = typeset_within(&around, &targets, vec![embed("a", None)]);
+    assert_eq!(reason(first(&scene)), Some(EmbedReason::Cycle));
+    // The same target with nothing around it is laid out.
+    let fresh = typeset_within(&[], &targets, vec![embed("a", None)]);
+    assert!(matches!(first(&fresh), SceneNode::EmbedResolved(_)));
+}
+
+#[test]
+fn the_depth_cap_counts_the_documents_around_a_body() {
+    let body = doc(vec![paragraph(vec![text("a")])]);
+    let targets = Targets { documents: vec![("d", body)], ..Targets::default() };
+    let around: Vec<String> = ["p", "q", "r"].map(str::to_owned).to_vec();
+    let scene = typeset_within(&around, &targets, vec![embed("d", None)]);
+    assert_eq!(reason(first(&scene)), Some(EmbedReason::DepthCap));
+    let shallower = typeset_within(&around[..2], &targets, vec![embed("d", None)]);
+    assert!(matches!(first(&shallower), SceneNode::EmbedResolved(_)));
+}

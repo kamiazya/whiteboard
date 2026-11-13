@@ -42,6 +42,7 @@ fn lay_out(record: &Record, seams: &Seams) -> Result<(String, usize), String> {
         diagram: Some(seams),
         embeds: (record.embeds != "none").then_some(seams as &dyn EmbedResolver),
         canvas_layout: (record.embeds == "full").then_some(seams as &dyn CanvasMiniature),
+        embed_path: &record.embed_path,
         ..TypesetOptions::new(&measure, f64::from_bits(bits), "sans-serif", &theme, seams)
     };
     let root = typeset_support::model::root(&record.root)?;

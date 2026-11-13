@@ -278,6 +278,9 @@ pub(crate) struct Record {
     pub(crate) embeds: String,
     pub(crate) syntax: Option<BTreeMap<String, String>>,
     pub(crate) digest: bool,
+    /// The documents the host is already laying out around this body; absent, none.
+    #[serde(default, rename = "embedPath")]
+    pub(crate) embed_path: Vec<String>,
     /// The key of the host's answers, which the recording holds once for every record that shares them.
     pub(crate) seams: String,
     pub(crate) calls: usize,

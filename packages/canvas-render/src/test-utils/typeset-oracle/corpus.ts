@@ -473,6 +473,41 @@ const FLOOR_EXACT: TypesetInput = {
   digest: false,
 }
 
+const embedOnly = (documentId: string): Block => ({
+  type: 'paragraph',
+  children: [{ type: 'embed', documentId }],
+})
+
+/**
+ * The embed guards, reached through the fixed documents and through a path the
+ * host seeds: a cycle and the depth cap one level down, and the same two met at
+ * the top because the host is already inside the document, or three deep. Built
+ * without `input` so no other record's cycled fields move.
+ */
+const EMBED_GUARDS: readonly TypesetInput[] = (
+  [
+    ['loop', 'loop-a', undefined],
+    ['chain', 'chain-0', undefined],
+    ['seeded-cycle', 'loop-a', ['loop-a']],
+    ['seeded-cap', 'chain-0', ['outer-0', 'outer-1', 'outer-2']],
+    ['seeded-shallower', 'chain-0', ['outer-0']],
+  ] as const
+).flatMap(([name, target, embedPath]) =>
+  (['documents', 'full'] as const).map(
+    (embeds): TypesetInput => ({
+      id: `embeds/guard-${name}/${embeds}`,
+      root: { type: 'root', children: [embedOnly(target)] },
+      width: f64Hex(320),
+      theme: 'node',
+      fill: null,
+      embeds,
+      syntax: SYNTAX,
+      digest: false,
+      ...(embedPath === undefined ? {} : { embedPath }),
+    }),
+  ),
+)
+
 export function typesetInputs(withHarvest: boolean): readonly TypesetInput[] {
   counter = 0
   const named: TypesetInput[] = []
@@ -517,6 +552,6 @@ export function typesetInputs(withHarvest: boolean): readonly TypesetInput[] {
     for (const width of [40, 64, 96, 160, 280])
       named.push(input(`wrap/${c.name}@${width}`, blocks, width, false))
   }
-  named.push(FLOOR_EXACT)
+  named.push(FLOOR_EXACT, ...EMBED_GUARDS)
   return [...named, ...generated(), ...(withHarvest ? harvested() : [])]
 }

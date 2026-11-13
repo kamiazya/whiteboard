@@ -91,6 +91,8 @@ export interface TypesetInput {
   readonly syntax: Readonly<Record<string, string>> | null
   /** Hold the answer as a digest rather than as text. */
   readonly digest: boolean
+  /** The documents the host is already laying out around this body; absent, none. */
+  readonly embedPath?: readonly string[]
 }
 
 export type TypesetRecord = TypesetInput & {
@@ -395,6 +397,7 @@ export function layoutOf(input: TypesetInput) {
     renderMath: (value) => mathFor(value),
     renderDiagram: (lang, value) => diagramFor(lang, value),
     ...(input.syntax === null ? {} : { syntax: input.syntax }),
+    ...(input.embedPath === undefined ? {} : { embedPath: input.embedPath }),
   }
   const scene = typesetMdastBlocks(input.root, options)
   return { scene, seams, calls: () => calls }
