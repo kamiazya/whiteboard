@@ -83,10 +83,17 @@ fn cell_index(v: f64, delta: f64, cell: f64) -> f64 {
     base + ((v - base * cell + cell * PHASE_IN_CELLS + delta) / cell).floor()
 }
 
+/// Most cells a run's padded span covers on one axis, at any level. At its
+/// own level the span is at most `1 + 2^-19` cells, so the two floors in
+/// [`cell_index`] differ by at most 2; past 2^53 adding them to the base can
+/// round each to a neighbouring even index, 4 apart at most, which is 5 cells.
+/// A coarser level's cell is larger and covers fewer.
+const MAX_CELLS_PER_AXIS: u32 = 8;
+
 /// `0, 1, ..` while at most `last`, as the TypeScript's `i <= last` loop
 /// counts: nothing when `last` is negative or NaN.
 fn steps_to(last: f64) -> impl Iterator<Item = f64> {
-    (0_u32..).map(f64::from).take_while(move |&i| i <= last)
+    (0..MAX_CELLS_PER_AXIS).map(f64::from).take_while(move |&i| i <= last)
 }
 
 /// A cell, as the bits of its column and row index.

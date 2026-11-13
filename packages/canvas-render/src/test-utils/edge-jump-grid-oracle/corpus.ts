@@ -100,7 +100,7 @@ function reachGaps(): Board {
   return { id: 'reach-gaps', edges: [[coarse], ...fine.map((r) => [r]), [coarse]] }
 }
 
-/** Ends on a cell line, and a pad either side of it, at several cells. */
+/** Either end on a cell line, and a pad either side of it, at several cells. */
 function onCellLines(): Board {
   const edges: Run[][] = []
   for (const cell of [4, 16, 64, 1024]) {
@@ -111,6 +111,8 @@ function onCellLines(): Board {
         edges.push([[line + off, k * 7, line + off + extent, k * 7]])
         edges.push([[k * 7, line + off, k * 7, line + off - extent]])
         edges.push([[line + off, line, line + off + extent, line + extent / 3]])
+        edges.push([[line + off - extent, k * 7 + 1, line + off, k * 7 + 1]])
+        edges.push([[k * 7 + 1, line + off - extent, k * 7 + 1, line + off]])
       }
     }
   }
