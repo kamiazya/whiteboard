@@ -211,12 +211,12 @@ const pick = <T>(list: readonly T[], at: number): T => list[at % list.length] as
  * spent, which is what the cache refuses to keep; then every file node fitted
  * and not, plain and shaped, and once with the budget spent, which the canvas
  * embed needs; then every frame background in every fill, in a box and in one
- * with no width or no height.
+ * with no width or no height; then a picture whose padded box is empty one way.
  */
 export function caseSpecs(): readonly CaseSpec[] {
   const specs: CaseSpec[] = []
   let at = 0
-  const push = (resource: string, box: CaseSpec['box'], extra: Partial<CaseSpec> = {}) => {
+  const push: Push = (resource, box, extra = {}) => {
     specs.push({
       id: `${specs.length}/${resource}`,
       resource,
@@ -240,6 +240,13 @@ export function caseSpecs(): readonly CaseSpec[] {
     })
     at += 1
   }
+  sweep(push)
+  return specs
+}
+
+type Push = (resource: string, box: CaseSpec['box'], extra?: Partial<CaseSpec>) => void
+
+function sweep(push: Push): void {
   const names = Object.keys(RESOURCES)
   for (const resource of names) {
     for (const box of BOXES) push(resource, box)
@@ -265,5 +272,11 @@ export function caseSpecs(): readonly CaseSpec[] {
       push('frame', [0, 0, 40, 0], { background, backgroundStyle })
     }
   }
-  return specs
+  // A picture whose padded box is exactly empty one way: it is not drawn.
+  for (const box of [
+    [0, 0, 16, 60],
+    [0, 0, 60, 16],
+  ] as const) {
+    push('file-pic-md', box, { geometry: [8, 16, 0], fitToBox: false })
+  }
 }

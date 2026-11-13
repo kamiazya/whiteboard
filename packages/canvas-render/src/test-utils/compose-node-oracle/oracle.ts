@@ -211,6 +211,15 @@ const appearanceOf = (theme: CaseSpec['theme']) =>
     ? createThemedAppearance({ tokens: sketch!, mode: 'light', fontFamily: 'Yomogi' })
     : createSpatialTheme({ mode: theme })
 
+/** The fake measurer, counting what it is asked. */
+function countingMeasure(count: () => void): (text: string, font: FontDescriptor) => TextMetrics {
+  const base = createFakeMeasure()
+  return (text, font) => {
+    count()
+    return base(text, font)
+  }
+}
+
 /** The options a composer hands `composeNode` for a case. */
 function optionsOf(
   record: Input,
@@ -218,11 +227,7 @@ function optionsOf(
   events: SpatialLayoutDegradation[],
   cache: SpatialContentCache | undefined,
 ): ResolvedLayoutOptions {
-  const base = createFakeMeasure()
-  const measure = (text: string, font: FontDescriptor): TextMetrics => {
-    count()
-    return base(text, font)
-  }
+  const measure = countingMeasure(count)
   const appearance = appearanceOf(record.theme)
   const [paddingPx, labelFontSizePx, minContentWidthPx] = record.geometry.map(fromHex) as [
     number,
