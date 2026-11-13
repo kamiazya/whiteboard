@@ -271,7 +271,11 @@ function overrideBoard(): Board {
     name: 'overrides',
     canvas: {
       nodes: [box('a', 0, 0), box('b', 400, 200)],
-      edges: [edge('ab', end('a'), end('b'), { label: 'frozen' }), edge('ba', end('b'), end('a'))],
+      // `ba` names both arrowheads against the defaults: one at its start, none at its end.
+      edges: [
+        edge('ab', end('a'), end('b'), { label: 'frozen' }),
+        edge('ba', end('b', undefined, true), end('a', undefined, false)),
+      ],
     },
     shapes: {},
     overrides: [
