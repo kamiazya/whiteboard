@@ -413,10 +413,8 @@ pub fn label_of(node: &SpatialNode, resolved: Option<&ResolvedReference>) -> Opt
             None if is_image_ref(file) => image_label(resolved),
             None => file.to_owned(),
         };
-        return Some(match node_subpath(node) {
-            Some(subpath) if !subpath.is_empty() => base + subpath,
-            _ => base,
-        });
+        // An empty subpath appends nothing, which is the TypeScript's falsy test.
+        return Some(base + node_subpath(node).unwrap_or_default());
     }
     if let Some(url) = node_url(node) {
         return Some(url.to_owned());

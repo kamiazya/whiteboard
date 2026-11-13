@@ -135,7 +135,7 @@ const pick = <T>(list: readonly T[], at: number): T => list[at % list.length] as
  * strides so each combination is reached without the product; then the text
  * bodies again under every theme with a cache, and once more with the budget
  * spent, which is what the cache refuses to keep; then every frame background
- * in every fill, in a box and in one with no width.
+ * in every fill, in a box and in one with no width or no height.
  */
 export function caseSpecs(): readonly CaseSpec[] {
   const specs: CaseSpec[] = []
@@ -182,6 +182,7 @@ export function caseSpecs(): readonly CaseSpec[] {
     for (const backgroundStyle of BACKGROUND_STYLES) {
       push('frame', [5, 6, 180, 90], { background, backgroundStyle })
       push('frame', [0, 0, 0, 40], { background, backgroundStyle })
+      push('frame', [0, 0, 40, 0], { background, backgroundStyle })
     }
   }
   return specs
