@@ -261,23 +261,31 @@ fn tighten_to_ink(mut paragraph: ParagraphBlockNode) -> ParagraphBlockNode {
     paragraph
 }
 
-/// `Map` key equality: NaN is itself and the two zeros are one key.
-fn same_key(a: f64, b: f64) -> bool {
-    a.partial_cmp(&b) == Some(std::cmp::Ordering::Equal) || (a.is_nan() && b.is_nan())
+/// A `Map` key for a number: NaN is itself and the two zeros are one key.
+fn map_key(n: f64) -> u64 {
+    if n.is_nan() {
+        f64::NAN.to_bits()
+    } else if n == 0.0 {
+        0
+    } else {
+        n.to_bits()
+    }
 }
 
 /// Each line of a paragraph moved so its ink is centred in `width`. A line is
 /// the runs that share a top, in the order its first run appears.
 fn centre_lines(paragraph: &ParagraphBlockNode, width: f64) -> ParagraphBlockNode {
-    let mut lines: Vec<(f64, Vec<TextRunNode>)> = Vec::new();
+    let mut lines: Vec<Vec<TextRunNode>> = Vec::new();
+    let mut by_top: std::collections::BTreeMap<u64, usize> = std::collections::BTreeMap::new();
     for run in &paragraph.runs {
-        match lines.iter_mut().find(|(top, _)| same_key(*top, run.bbox.y)) {
-            Some((_, line)) => line.push(run.clone()),
-            None => lines.push((run.bbox.y, vec![run.clone()])),
-        }
+        let index = *by_top.entry(map_key(run.bbox.y)).or_insert_with(|| {
+            lines.push(Vec::new());
+            lines.len() - 1
+        });
+        lines[index].push(run.clone());
     }
     let mut runs = Vec::with_capacity(paragraph.runs.len());
-    for (_, mut line) in lines {
+    for mut line in lines {
         let left = line.iter().map(|run| run.bbox.x).fold(f64::INFINITY, js_min);
         let right = line.iter().map(run_right).fold(f64::NEG_INFINITY, js_max);
         let used = right - left;
