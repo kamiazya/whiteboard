@@ -19,12 +19,12 @@ use whiteboard_scene::{
 };
 
 use crate::measure::{FontDescriptor, FontStyle, Measure};
+use crate::node_content::{frame_label, is_frame, is_image_ref, node_file, node_subpath, node_url};
 use crate::node_outline::outline_content_box;
 use crate::scene_walk::SceneWalk;
 use crate::seed::seed_from_id;
 use crate::theme::appearance::SpatialAppearanceResolver;
 use crate::theme::geometry::SpatialGeometry;
-use crate::theme::spatial_theme::is_frame;
 use crate::translate_scene::translate_scene;
 use crate::truncate::fit_to_width;
 use crate::typeset::{FittedBlocks, fit_blocks_to_height};
@@ -59,6 +59,22 @@ pub struct NodeBoxOptions<'a> {
     /// The theme in force for the canvas being laid out; none draws clean.
     pub theme: Option<&'a ThemeTokens>,
     pub host: &'a dyn NodeBoxHost,
+}
+
+/// A picture a reference resolves to.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ReferenceImage {
+    pub href: String,
+    pub alt: Option<String>,
+}
+
+/// What a file node's reference resolves to (`references/resolved.ts`), the
+/// fields the box reads.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ResolvedReference {
+    pub label: Option<String>,
+    pub missing: bool,
+    pub image: Option<ReferenceImage>,
 }
 
 /// Where a label is drawn: above the box, as a container's is, or inside it.
@@ -352,6 +368,59 @@ pub fn place_above_node(node: &SpatialNode, content: &[SceneNode]) -> Vec<SceneN
         }
     }
     placed
+}
+
+/// `String.prototype.trim`'s whitespace: ECMAScript's `WhiteSpace` and
+/// `LineTerminator`, which is not Unicode's `White_Space` (U+FEFF is trimmed,
+/// U+0085 is not).
+const fn is_js_space(c: char) -> bool {
+    matches!(
+        c,
+        '\u{9}'..='\u{d}'
+            | ' '
+            | '\u{a0}'
+            | '\u{1680}'
+            | '\u{2000}'..='\u{200a}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{202f}'
+            | '\u{205f}'
+            | '\u{3000}'
+            | '\u{feff}'
+    )
+}
+
+/// What an image node is called when its picture is not drawn: its alt text, or
+/// "Image", since the reference is a storage id that names nothing a reader knows.
+fn image_label(resolved: Option<&ResolvedReference>) -> String {
+    let alt = resolved.and_then(|r| r.image.as_ref()?.alt.as_deref());
+    match alt.map(|alt| alt.trim_matches(is_js_space)) {
+        Some(alt) if !alt.is_empty() => alt.to_owned(),
+        _ => "Image".to_owned(),
+    }
+}
+
+/// The readable label of a non-text node, or none. A file's reference is an
+/// opaque id, so its resolved name stands in, and its subpath follows only a
+/// target that was found.
+#[must_use]
+pub fn label_of(node: &SpatialNode, resolved: Option<&ResolvedReference>) -> Option<String> {
+    if let Some(file) = node_file(node) {
+        if resolved.is_some_and(|r| r.missing) {
+            return Some("Missing reference".to_owned());
+        }
+        let base = match resolved.and_then(|r| r.label.clone()) {
+            Some(label) => label,
+            None if is_image_ref(file) => image_label(resolved),
+            None => file.to_owned(),
+        };
+        // An empty subpath appends nothing, which is the TypeScript's falsy test.
+        return Some(base + node_subpath(node).unwrap_or_default());
+    }
+    if let Some(url) = node_url(node) {
+        return Some(url.to_owned());
+    }
+    frame_label(node).filter(|label| !label.is_empty()).map(str::to_owned)
 }
 
 /// The padded content box's height, when the box has room in both directions.

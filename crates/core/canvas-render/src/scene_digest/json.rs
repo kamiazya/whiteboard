@@ -9,7 +9,7 @@ use whiteboard_scene::BoundingBox;
 
 use super::SceneDigest;
 
-fn quote(out: &mut String, text: &str) {
+pub(crate) fn quote(out: &mut String, text: &str) {
     out.push('"');
     for c in text.chars() {
         match c {
@@ -29,7 +29,7 @@ fn quote(out: &mut String, text: &str) {
     out.push('"');
 }
 
-fn number(out: &mut String, x: f64) {
+pub(crate) fn number(out: &mut String, x: f64) {
     if x.is_finite() {
         out.push_str(&js_number_to_string(x));
     } else {

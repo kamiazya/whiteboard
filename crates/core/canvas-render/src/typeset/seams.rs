@@ -184,11 +184,13 @@ pub trait CanvasMiniature {
 }
 
 /// The nested-layout account an embed spends from, shared by every embed of one
-/// render: a count of layouts and a count of canvas elements.
+/// render: a count of layouts and a count of canvas elements, and how often
+/// something was declined for want of them.
 #[derive(Debug)]
 pub struct NestedLayoutBudget {
     layouts: std::cell::Cell<usize>,
     elements: std::cell::Cell<usize>,
+    refused: std::cell::Cell<usize>,
 }
 
 impl NestedLayoutBudget {
@@ -200,20 +202,42 @@ impl NestedLayoutBudget {
 
     #[must_use]
     pub fn new() -> Self {
+        Self::with_remaining(Self::LAYOUTS, Self::ELEMENTS)
+    }
+
+    /// An account with `layouts` and `elements` left.
+    #[must_use]
+    pub const fn with_remaining(layouts: usize, elements: usize) -> Self {
         Self {
-            layouts: std::cell::Cell::new(Self::LAYOUTS),
-            elements: std::cell::Cell::new(Self::ELEMENTS),
+            layouts: std::cell::Cell::new(layouts),
+            elements: std::cell::Cell::new(elements),
+            refused: std::cell::Cell::new(0),
         }
     }
 
     /// Spends one layout and `elements`; false, spending nothing, once either is out.
     pub(super) fn spend(&self, elements: usize) -> bool {
         if self.layouts.get() == 0 || elements > self.elements.get() {
+            self.refuse();
             return false;
         }
         self.layouts.set(self.layouts.get().saturating_sub(1));
         self.elements.set(self.elements.get().saturating_sub(elements));
         true
+    }
+
+    /// Something this render declined because the account ran out: an embed,
+    /// or a fence the host's tokeniser would not tokenise on this render's
+    /// budget. A body degraded by either is degraded only because THIS render
+    /// ran out, so a cache must not keep it.
+    pub fn refuse(&self) {
+        self.refused.set(self.refused.get().saturating_add(1));
+    }
+
+    /// How many times [`Self::refuse`] has been called on this account.
+    #[must_use]
+    pub fn refused(&self) -> usize {
+        self.refused.get()
     }
 }
 
