@@ -23,6 +23,7 @@ mod task_checkbox;
 mod text;
 mod wrap;
 
+pub(crate) use blocks::empty_run;
 pub use blocks::typeset_mdast_blocks;
 pub use fit::{FittedBlocks, first_line_of_blocks, fit_blocks_to_height};
 pub use options::TypesetOptions;

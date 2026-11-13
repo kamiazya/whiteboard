@@ -183,7 +183,7 @@ const pick = <T>(list: readonly T[], at: number): T => list[at % list.length] as
 /**
  * Every resource in every box, with a silhouette, theme, alignment, colour,
  * geometry, resolution, probe label and content drawn round-robin at co-prime
- * strides, so each pairing is reached without the product; then every box in
+ * strides, so each combination is reached without the product; then every box in
  * every silhouette with the fit both on and off, for the content box itself.
  */
 export function caseSpecs(): readonly CaseSpec[] {

@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 unicode-segmentation.workspace = true
+whiteboard-det = { path = "../det" }
 whiteboard-facet-engine = { path = "../facet-engine" }
 whiteboard-model = { path = "../model" }
 whiteboard-scene = { path = "../scene" }

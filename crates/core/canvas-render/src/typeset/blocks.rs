@@ -189,7 +189,7 @@ fn layout_figure(
     Some(ParagraphBlockNode { bbox, runs: vec![run] })
 }
 
-pub(super) fn empty_run() -> TextRunNode {
+pub(crate) fn empty_run() -> TextRunNode {
     TextRunNode {
         bbox: BoundingBox { x: 0.0, y: 0.0, w: 0.0, h: 0.0 },
         text: String::new(),
