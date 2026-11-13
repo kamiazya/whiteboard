@@ -34,7 +34,7 @@ const READERS = {
   symbol: ['visual.symbol/v0', (facets: Bucket) => node(facets, resolveNodeSymbol)],
 } as const
 
-export type ReaderName = keyof typeof READERS
+type ReaderName = keyof typeof READERS
 
 const withFacets = (facets: Bucket) => (facets === undefined ? {} : { facets })
 
