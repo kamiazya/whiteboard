@@ -3,10 +3,14 @@
 //! scene fitted into a box.
 
 use serde::Deserialize;
-use whiteboard_canvas_render::compose_node::{NodeMarks, compose_decorations};
+use whiteboard_canvas_render::compose_node::compose_decorations;
+use whiteboard_canvas_render::fake_measure::FakeMeasure;
+use whiteboard_canvas_render::node_box::{NodeBoxHost, NodeBoxOptions, TextPlacement};
 use whiteboard_canvas_render::scale_scene::fit_scene_into_box;
+use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::typeset::EmbedBox;
 use whiteboard_model::spatial::SpatialNode;
+use whiteboard_plugin_visual::render::{NodeMarks, StencilBadge};
 use whiteboard_plugin_visual::visual::{VisualSymbolEmoji, VisualSymbolFacet, VisualSymbolIcon};
 use whiteboard_scene::SceneNode;
 
@@ -58,6 +62,20 @@ impl NodeMarks for Decoration {
     }
 }
 
+/// The recorder tells the decoration the node's own box, which an unshaped node
+/// laid out without a fit is told too.
+struct Unshaped;
+
+impl NodeBoxHost for Unshaped {
+    fn silhouette(&self, _: &str) -> Option<&str> {
+        None
+    }
+
+    fn text_placement(&self, _: &SpatialNode) -> Option<TextPlacement> {
+        None
+    }
+}
+
 pub(super) fn replay_decoration(context: &Context, decoration: &Decoration) -> Res<()> {
     let [x, y, w, h] = &decoration.node.bbox;
     let node = SpatialNode {
@@ -69,7 +87,17 @@ pub(super) fn replay_decoration(context: &Context, decoration: &Decoration) -> R
         ..SpatialNode::default()
     };
     let appearance = appearance_of(context, &decoration.theme);
-    let scene = dump_nodes(compose_decorations(&node, appearance.as_ref(), decoration))?;
+    let measure = FakeMeasure::default();
+    let options = NodeBoxOptions {
+        measure: &measure,
+        appearance: appearance.as_ref(),
+        geometry: SPATIAL_THEME_GEOMETRY,
+        fit_to_box: false,
+        theme: None,
+        host: &Unshaped,
+    };
+    let badge = StencilBadge { marks: decoration };
+    let scene = dump_nodes(compose_decorations(&node, &options, &[&badge]))?;
     if scene == decoration.scene {
         Ok(())
     } else {
