@@ -135,6 +135,9 @@ function far(): Board {
       [2 ** 53 + 2, 0, 2 ** 53 + 2, 8],
     ],
     [[0, 0, 1e308, 1e308]],
+    // One column at the top of the range: the column's left edge overflows,
+    // so clipping the run to it would collapse its rows.
+    [[15 * 2 ** 1020, 0, 15 * 2 ** 1020 + 2 ** 972, 7 * 2 ** 1019]],
   ]
   return {
     id: 'far',
