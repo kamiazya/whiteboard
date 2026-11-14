@@ -2,6 +2,7 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import type { FontDescriptor, TextMetrics } from '../../measure.js'
@@ -22,10 +23,12 @@ import { type Board, boards, type CaseSpec, caseSpecs, THROWING_BODY } from './c
 
 /**
  * The recorded answers of the comment layer (`composeRegionOutlines` and
- * `composeComments` in `layout/comments.ts`) as the walk draws it over a
- * whole canvas: the scene, where the walk's own share of it ends (found by
- * laying the canvas out again with the comment layer off), and every question
- * the layer asked the measurer past the walk's, bodies and labels included.
+ * `composeComments` in `layout/comments.ts`, and the passage highlights
+ * `composePassageHighlights` draws behind a text node's body) as the walk
+ * draws it over a whole canvas: the scene, where the walk's own share of it
+ * ends (found by laying the canvas out again with the comment layer off, which
+ * draws the same walk less its highlights), and every question the layout
+ * asked the measurer, bodies, highlights and labels included.
  *
  * A comment's markdown is parsed by the host, which is a seam in the Rust port,
  * so the meta line carries each message's tree as `parseBody` answers it, with
@@ -55,7 +58,13 @@ type AnchorWire =
       readonly width?: string
       readonly height?: string
     }
-  | { readonly kind: 'text'; readonly nodeId?: string }
+  | {
+      readonly kind: 'text'
+      readonly nodeId?: string
+      readonly quote: { readonly prefix?: string; readonly exact: string; readonly suffix?: string }
+      readonly start: number
+      readonly end: number
+    }
   | { readonly kind: 'document' }
 
 interface ThreadWire {
@@ -73,12 +82,10 @@ interface CaseRecord extends Omit<CaseSpec, 'obstacles'> {
   readonly obstacles?: readonly (readonly string[])[]
   readonly answer: {
     readonly scene: string
-    /** How many nodes the walk drew before the comment layer. */
+    /** How many nodes the walk drew before the comment layer, highlights included. */
     readonly from: number
-    /** What the comment layer asked the measurer: text, family and size. */
-    readonly layerCalls: readonly (readonly [string, string, string])[]
-    /** What the walk asked the measurer. */
-    readonly walkCalls: number
+    /** Every question the layout asked the measurer: text, family and size. */
+    readonly calls: readonly (readonly [string, string, string])[]
     readonly events: readonly Event[]
   }
 }
@@ -88,7 +95,8 @@ export type ComposeCommentsRecord = MetaRecord | CaseRecord
 const anchorWire = (anchor: CommentThread['anchor']): AnchorWire => {
   if (anchor.kind === 'document') return { kind: 'document' }
   if (anchor.kind === 'text') {
-    return { kind: 'text', ...(anchor.nodeId === undefined ? {} : { nodeId: anchor.nodeId }) }
+    const { kind, nodeId, quote, start, end } = anchor
+    return { kind, ...(nodeId === undefined ? {} : { nodeId }), quote, start, end }
   }
   const { kind, x, y, width, height, ...refs } = anchor
   return {
@@ -155,29 +163,30 @@ function parseBody(text: string): MdastRoot {
 
 const fresh = (): Run => ({ asked: [], events: [] })
 
+/** A passage highlight: comment chrome the walk draws inside a text node. */
+const isPassage = (node: SceneNode): boolean =>
+  node.kind === 'shape' && node.commentChrome === true && /\/passage-\d+$/.test(node.id ?? '')
+
 function answerOf(spec: CaseSpec, board: Board): CaseRecord['answer'] {
   const run = fresh()
   const { scene } = layoutSpatialCanvasWithAnchors(
     board.canvas,
     optionsOf(spec, board.threads, run),
   )
-  const walk = fresh()
   const bare = layoutSpatialCanvasWithAnchors(board.canvas, {
-    ...optionsOf(spec, board.threads, walk),
+    ...optionsOf(spec, board.threads, fresh()),
     commentLayer: false,
   }).scene.nodes
-  const from = bare.length
-  if (dump(scene.nodes.slice(0, from)) !== dump(bare) || scene.legend !== undefined) {
+  const highlights = scene.nodes.filter(isPassage).length
+  const from = bare.length + highlights
+  const walk = scene.nodes.slice(0, from).filter((node) => !isPassage(node))
+  if (dump(walk) !== dump(bare) || scene.legend !== undefined) {
     throw new Error(`compose-comments-oracle: ${board.name}'s comments moved what the walk drew`)
   }
-  const layerCalls = run.asked
-    .slice(walk.asked.length)
-    .map(({ text, font }) => [text, font.family, hex(font.sizePx)] as const)
   return {
     scene: dump(scene.nodes),
     from,
-    layerCalls,
-    walkCalls: walk.asked.length,
+    calls: run.asked.map(({ text, font }) => [text, font.family, hex(font.sizePx)] as const),
     events: run.events.map(eventOf),
   }
 }

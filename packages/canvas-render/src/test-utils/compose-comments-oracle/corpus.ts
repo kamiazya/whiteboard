@@ -11,8 +11,8 @@ import type {
  * reaches every arm a thread projects through (a node, an edge, a point, a
  * node set live, partly live and orphaned, a region, a passage of a node, and
  * the arms with no pin), and the placements a crowd forces onto the ring.
- * Nothing is random, and no passage quote occurs in the text it names, so the
- * walk draws no highlight and the comment layer is all the threads add.
+ * Nothing is random. Only the `passages` board quotes text its nodes hold, so
+ * only there does the walk draw highlights behind the bodies.
  */
 
 export interface Board {
@@ -200,6 +200,50 @@ function inside(): Board {
   }
 }
 
+const quoting = (
+  nodeId: string,
+  exact: string,
+  start: number,
+  context: { prefix?: string; suffix?: string } = {},
+): Anchor =>
+  ({
+    kind: 'text',
+    nodeId,
+    quote: { exact, ...context },
+    start,
+    end: start + exact.length,
+  }) as Anchor
+
+/**
+ * Passages of text nodes that the walk highlights: a repeated quote told apart
+ * by its context, one across a wrap, one in emphasis, one in a centred
+ * node, a settled one, one the text no longer holds and one on a node that is
+ * gone.
+ */
+function passages(): Board {
+  const plan = 'the plan is the plan, and **the plan** holds when the plan is kept'
+  const diagram = 'see *a diagram* here'
+  const nodes = [
+    text('p1', 0, 0, plan, 160, 120),
+    text('p2', 300, 0, diagram, 200, 80),
+    {
+      ...text('p3', 0, 260, 'centred words here', 200, 120),
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+    } as SpatialNode,
+  ]
+  const threads = [
+    thread('q-repeat', quoting('p1', 'the plan', 12, { prefix: 'is ' })),
+    thread('q-moved', quoting('p1', 'the plan', 3, { suffix: ' holds' })),
+    thread('q-wrap', quoting('p1', 'plan, and', 16)),
+    thread('q-bold', quoting('p2', 'a diagram', 5)),
+    thread('q-settled', quoting('p2', 'see', 0), ['settled'], 'resolved'),
+    thread('q-centred', quoting('p3', 'words', 8)),
+    thread('q-missing', quoting('p1', 'nowhere', 0)),
+    thread('q-gone', quoting('gone', 'the plan', 0)),
+  ]
+  return { name: 'passages', canvas: { nodes, edges: [] }, threads }
+}
+
 /** The text the recording's body parser throws on. */
 export const THROWING_BODY = '<<throw>>'
 
@@ -229,7 +273,14 @@ function settled(): Board {
   return { name: 'settled', canvas: { nodes: [], edges: [] }, threads }
 }
 
-export const boards = (): readonly Board[] => [arms(), crowded(), themed(), inside(), settled()]
+export const boards = (): readonly Board[] => [
+  arms(),
+  crowded(),
+  themed(),
+  inside(),
+  settled(),
+  passages(),
+]
 
 export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'arms', appearance: 'light' },
@@ -252,4 +303,7 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'settled', appearance: 'light', showResolved: true },
   { board: 'settled', appearance: 'dark', style: 'visual.sketch', showResolved: true },
   { board: 'settled', appearance: 'bare', showResolved: true },
+  { board: 'passages', appearance: 'light' },
+  { board: 'passages', appearance: 'dark', showResolved: true },
+  { board: 'passages', appearance: 'bare', showResolved: true },
 ]
