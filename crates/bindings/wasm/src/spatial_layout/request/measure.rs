@@ -1,0 +1,57 @@
+//! The measurer a request names: the fake measurer at its factor, the ratio
+//! estimate, or the font-table measurer over faces placed in the fonts argument.
+
+use whiteboard_model::Value;
+
+use super::flag_of;
+use crate::json_canvas_wire::{Fields, items_of, number_of, string_of};
+
+/// One face of a font-table measurer: where its bytes sit in the fonts argument.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Face {
+    pub(crate) family: String,
+    pub(crate) bold: bool,
+    pub(crate) italic: bool,
+    pub(crate) from: usize,
+    pub(crate) to: usize,
+}
+
+/// The measurer the host's own `measure` is, named as data.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum MeasureSpec {
+    /// `createFakeMeasure(factor)`.
+    Fake(f64),
+    /// `constantRatioMeasureText`, the estimate with no font.
+    Ratio,
+    /// The Node measurer over these faces.
+    Fonts(Vec<Face>),
+}
+
+/// A whole number that indexes the fonts argument: a fraction, a sign, an
+/// exponent or a non-finite number spells no index, so its text does not parse.
+fn offset_of(value: &Value) -> Option<usize> {
+    format!("{}", number_of(value)?).parse().ok()
+}
+
+fn face_of(value: &Value) -> Option<Face> {
+    let mut f = Fields::of(value)?;
+    let face = Face {
+        family: f.field("family", string_of)??,
+        bold: f.field("bold", flag_of)??,
+        italic: f.field("italic", flag_of)??,
+        from: f.field("from", offset_of)??,
+        to: f.field("to", offset_of)??,
+    };
+    f.all_named().then_some(face)
+}
+
+pub(super) fn measure_of(value: &Value) -> Option<MeasureSpec> {
+    let mut f = Fields::of(value)?;
+    let spec = match f.field("kind", string_of)??.as_str() {
+        "fake" => MeasureSpec::Fake(f.field("factor", number_of)??),
+        "ratio" => MeasureSpec::Ratio,
+        "fonts" => MeasureSpec::Fonts(f.field("faces", |v| items_of(v, face_of))??),
+        _ => return None,
+    };
+    f.all_named().then_some(spec)
+}
