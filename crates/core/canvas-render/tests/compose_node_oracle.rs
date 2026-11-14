@@ -27,6 +27,7 @@ use dump::dump_scene;
 use extras::{Decoration, Fit};
 use serde::Deserialize;
 use serde_json::Value;
+use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlaid, Overlays, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed, compose_node,
@@ -47,6 +48,7 @@ use whiteboard_canvas_render::typeset::{
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{
     BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine, NodeResource,
@@ -394,6 +396,10 @@ impl ComposeHost for Host<'_> {
         self.context.canvases.get(document_id).map(|(_, canvas)| canvas.clone())
     }
 
+    fn comment_body(&self, _: &PlacedComment) -> Vec<SceneNode> {
+        Vec::new()
+    }
+
     fn degrade(&self, event: Degradation) {
         let (kind, node_id, detail) = degrade_support::event_of(event);
         self.events.borrow_mut().push(Event { kind: kind.to_owned(), node_id, detail });
@@ -581,6 +587,7 @@ impl<'c> Setup<'c> {
             side_overrides: None,
             host: &self.host,
             overlays: &self.host,
+            comments: CommentOptions::default(),
             content_cache: cache.map(|c| c as &dyn ContentCache),
             body: BodySeams {
                 inline: &self.host,

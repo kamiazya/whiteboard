@@ -51,8 +51,8 @@ describe('the recorded compose-canvas oracle', () => {
       'a legend',
     ).toBe(true)
     expect(
-      cases.some((c) => c.answer.canvas.overlay.nodes.length > 0),
-      'an overlay',
+      cases.every((c) => c.answer.canvas.overlay.nodes.length === 0),
+      'no overlay node: the comment layer is the compose-comments recording, and no board proposes',
     ).toBe(true)
     expect(
       cases.some((c) => c.answer.natural.some(([, w]) => w !== '0000000000000000')),

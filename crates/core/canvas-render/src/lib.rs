@@ -23,6 +23,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod budoux;
+pub mod comments;
 pub mod compose_canvas;
 pub mod compose_edges;
 pub mod compose_node;
@@ -48,6 +49,7 @@ pub mod scale_scene;
 pub mod scene_bounds;
 pub mod scene_digest;
 pub mod scene_entries;
+pub mod scene_extent;
 pub mod scene_walk;
 pub mod seed;
 pub mod segment_joins;

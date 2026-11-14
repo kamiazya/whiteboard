@@ -42,19 +42,20 @@ import { type CanvasWire, canvasWire } from './wire.js'
  * caller hands a layout.
  *
  * What the Rust port takes as a seam is data here: each body as parsed, and
- * what the overlays (comments, proposals, the legend) drew over the top-level
- * canvas — the nodes after what the walk itself drew, found by laying the
- * canvas out again with the comment layer off, and the legend. Every double is
+ * what the overlays (proposals, the legend) drew over the top-level canvas —
+ * the nodes after what the walk itself drew, and the legend. No board carries
+ * a thread: the comment layer is the compose-comments recording's. Every double is
  * the hex of its IEEE bits (a NaN the canonical one), and `calls` counts what
  * the measurer was asked.
  */
 
 /** `f64Hex`, with every NaN written as the positive quiet NaN `f64::NAN` is. */
-const hex = (value: number): string => (Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value))
+export const hex = (value: number): string =>
+  Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value)
 
-const viaJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+export const viaJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 
-const dump = (nodes: readonly SceneNode[]): string => dumpScene({ nodes: [...nodes] }, hex)
+export const dump = (nodes: readonly SceneNode[]): string => dumpScene({ nodes: [...nodes] }, hex)
 
 const sketch = VISUAL_THEMES.sketch
 if (sketch === undefined)
@@ -67,10 +68,10 @@ const BOXY: ThemeTokens = {
 }
 
 /** A contribution that registers one theme and reads nothing. */
-const TEST_CONTRIBUTION: RenderContribution = { namespace: 'test', themes: { boxy: BOXY } }
+export const TEST_CONTRIBUTION: RenderContribution = { namespace: 'test', themes: { boxy: BOXY } }
 
 /** The theme table the layouts resolve against, by namespaced id. */
-const THEMES: readonly (readonly [string, ThemeTokens])[] = [
+export const THEMES: readonly (readonly [string, ThemeTokens])[] = [
   ...Object.entries(VISUAL_THEMES).map(([name, tokens]) => [`visual.${name}`, tokens] as const),
   [BOXY_THEME_ID, BOXY],
 ]
@@ -87,7 +88,7 @@ interface MetaRecord {
   readonly embeds: Readonly<Record<string, { title: string; canvas: CanvasWire }>>
 }
 
-interface Event {
+export interface Event {
   readonly kind: string
   readonly nodeId: string
   readonly detail: string
@@ -95,7 +96,7 @@ interface Event {
 
 interface CanvasAnswer {
   readonly scene: string
-  /** What the overlays drew: everything after the first `from` nodes, and the legend. */
+  /** What the overlays drew: everything after the first `from` nodes. */
   readonly overlay: { readonly from: number; readonly nodes: readonly SceneNode[] }
   readonly legend: Scene['legend'] | null
   readonly anchors: readonly (readonly (string | null)[])[]
@@ -146,7 +147,7 @@ const detailOf = (event: SpatialLayoutDegradation): string => {
   }
 }
 
-const eventOf = (e: SpatialLayoutDegradation): Event => ({
+export const eventOf = (e: SpatialLayoutDegradation): Event => ({
   kind: e.kind,
   nodeId: 'nodeId' in e ? e.nodeId : '',
   detail: detailOf(e),
@@ -183,7 +184,7 @@ function recordingCache(run: Run): SpatialContentCache {
 }
 
 /** What a caller hands every entry point for a case, counting into `run`. */
-function optionsOf(spec: CaseSpec, board: Board, run: Run): SpatialLayoutOptions {
+function optionsOf(spec: CaseSpec, run: Run): SpatialLayoutOptions {
   const base = createFakeMeasure()
   const measure = (text: string, font: FontDescriptor): TextMetrics => {
     run.calls += 1
@@ -205,7 +206,6 @@ function optionsOf(spec: CaseSpec, board: Board, run: Run): SpatialLayoutOptions
     ...(spec.library === true ? { tagLibrary: TAG_LIBRARY } : {}),
     ...(spec.overrides === undefined ? {} : { edgeSideOverrides: new Map(spec.overrides) }),
     ...(spec.embedPath === undefined ? {} : { embedPath: spec.embedPath }),
-    ...(board.threads === undefined ? {} : { threads: board.threads }),
     ...(spec.cache === true ? { contentCache: recordingCache(run) } : {}),
     resolveAlias,
     resolveReference: (ref) => {
@@ -228,13 +228,10 @@ const fresh = (): Run => ({ calls: 0, events: [], asked: [] })
 /** The whole layout, and where the overlays begin in it. */
 function canvasAnswer(spec: CaseSpec, board: Board): CanvasAnswer {
   const run = fresh()
-  const { scene, anchors } = layoutSpatialCanvasWithAnchors(
-    board.canvas,
-    optionsOf(spec, board, run),
-  )
+  const { scene, anchors } = layoutSpatialCanvasWithAnchors(board.canvas, optionsOf(spec, run))
   const walk = fresh()
   const bare = layoutSpatialCanvasWithAnchors(board.canvas, {
-    ...optionsOf(spec, board, walk),
+    ...optionsOf(spec, walk),
     commentLayer: false,
   }).scene.nodes
   const from = bare.length
@@ -254,13 +251,13 @@ function canvasAnswer(spec: CaseSpec, board: Board): CanvasAnswer {
 
 function edgesAnswer(spec: CaseSpec, board: Board): EntryAnswer {
   const run = fresh()
-  const content = layoutSpatialEdges(board.canvas, optionsOf(spec, board, run))
+  const content = layoutSpatialEdges(board.canvas, optionsOf(spec, run))
   return { scene: dump(content), events: run.events.map(eventOf), calls: run.calls }
 }
 
 function naturalAnswer(spec: CaseSpec, board: Board) {
   const run = fresh()
-  const options = optionsOf(spec, board, run)
+  const options = optionsOf(spec, run)
   const natural = board.canvas.nodes.map((node) => {
     const { w, h } = naturalNodeContentSize(node, options)
     return [node.id, hex(w), hex(h)]
@@ -301,7 +298,7 @@ function caseRecord(spec: CaseSpec, index: number): CaseRecord {
   }
 }
 
-const bodiesOf = (canvases: readonly SpatialCanvas[]): Record<string, MdastRoot> => {
+export const bodiesOf = (canvases: readonly SpatialCanvas[]): Record<string, MdastRoot> => {
   const texts = canvases.flatMap((canvas) =>
     canvas.nodes.flatMap((node) =>
       node.resource?.content === undefined ? [] : [node.resource.content],
