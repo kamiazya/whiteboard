@@ -9,8 +9,10 @@
 //! everywhere is `unused` before any partition is asked. The boxes' partitions
 //! are, in order: the first frame holding each box, what each box shows, the
 //! stencil it wears, each scoped-tag key (ADR-0040 decision 3) and each axis
-//! the canvas declares (`visual.axes/v0`). A partition of one class declares
-//! nothing and is dropped. The edges' are their scoped-tag keys alone.
+//! the canvas declares (`visual.axes/v0`). The edges' are their scoped-tag
+//! keys alone. A partition of one class declares nothing, and needs no
+//! filter: a channel constant within it holds one value everywhere, which is
+//! `unused` before any partition is asked.
 
 use std::collections::BTreeMap;
 
@@ -169,11 +171,8 @@ fn channel_use(values: &[Option<&CanvasColor>], partitions: &[Partition]) -> Cha
     if values.iter().all(|value| Some(value) == first) {
         return ChannelUse::Unused;
     }
-    let carried: Vec<String> = partitions
-        .iter()
-        .filter(|p| p.classes.len() >= 2 && constant_within(p, values))
-        .map(|p| p.name.clone())
-        .collect();
+    let carried: Vec<String> =
+        partitions.iter().filter(|p| constant_within(p, values)).map(|p| p.name.clone()).collect();
     if carried.is_empty() { ChannelUse::Contested } else { ChannelUse::Carried(carried) }
 }
 
@@ -189,5 +188,34 @@ pub fn colour_channels(canvas: &SpatialCanvas, registry: &Registry) -> ColourCha
     ColourChannels {
         boxes: channel_use(&box_colours, &box_partitions(canvas, &boxes, registry)),
         edges: channel_use(&edge_colours, &tag_partitions(&edge_tags)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::canonical;
+    use whiteboard_model::Value;
+
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn map(entries: &[(&str, Value)]) -> Value {
+        Value::Map(entries.iter().map(|(k, v)| ((*k).to_owned(), v.clone())).collect())
+    }
+
+    #[test]
+    fn a_payload_is_one_class_whatever_order_its_keys_were_written_in() {
+        let inner = |a: f64, b: f64| map(&[("b", Value::Number(b)), ("a", Value::Number(a))]);
+        let written = map(&[("z", Value::Seq(vec![inner(1.0, 2.0)])), ("y", Value::Null)]);
+        let reordered = map(&[
+            ("y", Value::Null),
+            ("z", Value::Seq(vec![map(&[("a", Value::Number(1.0)), ("b", Value::Number(2.0))])])),
+        ]);
+        assert_ne!(written, reordered);
+        assert_eq!(canonical(&written), canonical(&reordered));
+        assert_ne!(
+            canonical(&written),
+            canonical(&map(&[("z", Value::Seq(vec![inner(2.0, 1.0)])), ("y", Value::Null)]))
+        );
     }
 }
