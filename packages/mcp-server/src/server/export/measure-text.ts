@@ -6,7 +6,7 @@
 
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
-import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText, describeMeasure } from '@kamiazya/whiteboard-canvas-render'
 import type * as opentype from 'opentype.js'
 import { errnoCode } from '../../shared/errno.js'
 
@@ -308,6 +308,35 @@ async function loadInstalledFamilies(
 // path below where nothing is measured with a real face at all.
 const BUNDLED_ONLY: ReadonlySet<string> = new Set([EXPORT_FONT_FAMILY])
 
+const FACE_SLOTS = ['regular', 'bold', 'italic', 'boldItalic'] as const
+
+/**
+ * Names the measurer as the vendored family's four faces, so the Rust core
+ * can lay a canvas out measuring as this does (ADR-0054 step 7, a whole
+ * layout's `layoutSpatialCanvas` switch). Only for the vendored set alone: an
+ * installed family is measured by the name a descriptor gives, which the core
+ * is not handed, so a measurer with one stays unnamed and the TypeScript lays
+ * its canvases out.
+ */
+async function describeVendoredFaces(
+  measure: MeasureText,
+  paths: Record<ExportFontFace, string | null>,
+): Promise<void> {
+  const faces = []
+  for (const slot of FACE_SLOTS) {
+    const path = paths[slot]
+    if (path === null) return
+    const bytes = new Uint8Array(await readFile(path))
+    faces.push({
+      family: EXPORT_FONT_FAMILY,
+      bold: slot === 'bold' || slot === 'boldItalic',
+      italic: slot === 'italic' || slot === 'boldItalic',
+      bytes,
+    })
+  }
+  describeMeasure(measure, { kind: 'fonts', faces })
+}
+
 async function loadRealMeasurer(
   fontsDir: string,
   resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>>,
@@ -331,8 +360,12 @@ async function loadRealMeasurer(
       }
     }
     const installed = await loadInstalledFamilies(fontsDir)
+    const measure = buildOpentypeMeasurer(regular, faces, installed)
+    if (installed.size === 0 && Object.keys(faces).length === FACE_SLOTS.length) {
+      await describeVendoredFaces(measure, paths)
+    }
     return {
-      measure: buildOpentypeMeasurer(regular, faces, installed),
+      measure,
       measurableFamilies: new Set([EXPORT_FONT_FAMILY, ...installed.keys()]),
     }
   } catch (err) {

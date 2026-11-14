@@ -95,7 +95,8 @@ export function artifactDirectory(
 
 /** What one line of the log says of a mismatch: where the answers part, never the whole request. */
 function summarize(mismatch: CoreMismatch) {
-  if (mismatch.kind !== 'differs') return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
+  if (mismatch.kind !== 'differs')
+    return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   if (mismatch.fn === 'layoutSpatialCanvas') {
     const { fn, kind, at, ts, rust } = mismatch
     return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }

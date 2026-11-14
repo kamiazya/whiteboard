@@ -153,3 +153,30 @@ fn a_request_with_no_face_measures_by_the_ratio_estimate() {
     assert_eq!(by_fonts, by_ratio);
     assert_ne!(by_ratio, by_fake);
 }
+
+const ROBOTO: &[u8] =
+    include_bytes!("../../../../../packages/mcp-server/assets/fonts/Roboto/Roboto-Regular.ttf");
+
+fn roboto() -> Json {
+    let face = m(&[
+        ("family", json!("Roboto")),
+        ("bold", json!(false)),
+        ("italic", json!(false)),
+        ("from", json!(0)),
+        ("to", json!(ROBOTO.len())),
+    ]);
+    m(&[("kind", json!("fonts")), ("faces", s(vec![face]))])
+}
+
+#[test]
+fn a_font_measures_what_it_holds_and_declines_a_mark_it_would_combine() {
+    let by_font = answer(&request(board("hello"), &[("measure", roboto())]), ROBOTO);
+    let by_ratio =
+        answer(&request(board("hello"), &[("measure", m(&[("kind", json!("ratio"))]))]), &[]);
+    assert_eq!(by_font.get(0), Some(&json!("ok")));
+    assert_ne!(by_font, by_ratio);
+    let marked = request(board("cafe\u{301} \u{200d}"), &[("measure", roboto())]);
+    assert_eq!(answer(&marked, ROBOTO), json!(["declined", "measure"]));
+    let estimated = request(board("cafe\u{301}"), &[("measure", m(&[("kind", json!("ratio"))]))]);
+    assert_eq!(answer(&estimated, &[]).get(0), Some(&json!("ok")));
+}

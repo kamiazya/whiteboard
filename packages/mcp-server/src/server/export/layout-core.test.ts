@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
+import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import {
   installOkfCore,
@@ -30,6 +30,7 @@ import {
   refuseFacetCoreForDeployment,
   stagedArtifacts,
 } from './layout-core.js'
+import { createExportTextMeasurer } from './measure-text.js'
 
 /** The routing factory alone. */
 const layoutCore = (settings: LayoutCoreSettings) => coreLoaders(settings).layoutCore
@@ -105,9 +106,21 @@ describe('the daemon layout core', () => {
   it('reads rust, log and the staged artifacts when nothing is set', () => {
     expect(layoutCoreSettingsFrom({})).toEqual({
       WHITEBOARD_CORE: 'rust',
+      WHITEBOARD_CORE_LAYOUT: 'ts',
       WHITEBOARD_CORE_MISMATCH: 'log',
     })
     expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
+    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_LAYOUT: 'fast' })).toThrow()
+  })
+
+  it('loads the core when only the whole layout asks for it', async () => {
+    const settings = layoutCoreSettingsFrom({
+      WHITEBOARD_CORE: 'ts',
+      WHITEBOARD_CORE_LAYOUT: 'differential',
+      WHITEBOARD_CORE_MISMATCH: 'throw',
+      WHITEBOARD_CORE_DIR: emptyDir(),
+    })
+    await expect(layoutCore(settings)()).rejects.toThrow()
   })
 
   it('loads nothing under ts, the rollback setting', async () => {
@@ -158,9 +171,29 @@ describe('the daemon layout core', () => {
   })
 
   describe.runIf(built)('over the staged artifact', () => {
-    it('routes with the Rust core when nothing is set', async () => {
+    it('routes with the Rust core when nothing is set, and lays out in TypeScript', async () => {
       const core = await layoutCore(layoutCoreSettingsFrom({}))()
-      expect(core?.impl.routeLayout).toBe('rust')
+      expect(core?.impl).toEqual({ routeLayout: 'rust', layoutSpatialCanvas: 'ts' })
+    })
+
+    it('lays the whole canvas out in the core when the layout switch says so', async () => {
+      const core = await layoutCore(
+        layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'ts', WHITEBOARD_CORE_LAYOUT: 'rust' }),
+      )()
+      expect(core?.impl).toEqual({ routeLayout: 'ts', layoutSpatialCanvas: 'rust' })
+      if (core?.layout === undefined) throw new Error('the core has no whole layout')
+      const { layout } = core
+      let asked = 0
+      const counting = {
+        ...core,
+        layout: {
+          layoutSpatialCanvas: (r: never) => ((asked += 1), layout.layoutSpatialCanvas(r)),
+        },
+      }
+      const themed = { ...options, appearance: createSpatialTheme({ mode: 'light' }) }
+      const reference = layoutSpatialCanvas(board, themed)
+      expect(layoutSpatialCanvas(board, { ...themed, core: counting })).toEqual(reference)
+      expect(asked).toBe(1)
     })
 
     it('loads once, and a differential layout over it reports nothing', async () => {
@@ -175,6 +208,68 @@ describe('the daemon layout core', () => {
           reference,
         )
         expect(capture.records).toEqual([])
+      } finally {
+        capture.restore()
+      }
+    })
+
+    it('lays out with the vendored faces in the core, and answers a mark from the TypeScript', async () => {
+      const core = await layoutCore(
+        layoutCoreSettingsFrom({
+          WHITEBOARD_CORE_LAYOUT: 'differential',
+          WHITEBOARD_CORE_MISMATCH: 'throw',
+        }),
+      )()
+      if (core?.layout === undefined) throw new Error('the core has no whole layout')
+      const { layout } = core
+      const answers: string[] = []
+      const counting = {
+        ...core,
+        layout: {
+          layoutSpatialCanvas: (r: never) => {
+            const answer = layout.layoutSpatialCanvas(r)
+            answers.push('declined' in answer ? answer.declined : 'laid out')
+            return answer
+          },
+        },
+      }
+      const { measure } = await createExportTextMeasurer({ fontsDir: emptyDir() })
+      const themed = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
+      const marked: SpatialCanvas = {
+        nodes: [textNode({ id: 'm', x: 0, y: 0, width: 200, height: 80, text: 'cafe\u0301' })],
+        edges: [],
+      }
+      for (const canvas of [board, marked]) {
+        expect(layoutSpatialCanvas(canvas, { ...themed, core: counting })).toEqual(
+          layoutSpatialCanvas(canvas, themed),
+        )
+      }
+      expect(answers).toEqual(['laid out', 'measure'])
+    })
+
+    it('summarizes a whole-layout difference by the path it parts at', async () => {
+      const capture = captureLogsForTests('warning')
+      try {
+        const lenient = await layoutCore(
+          layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }),
+        )()
+        lenient?.onMismatch?.({
+          fn: 'layoutSpatialCanvas',
+          kind: 'differs',
+          at: '/scene/nodes/0',
+          ts: 1,
+          rust: 2,
+          repro: { canvas: board } as never,
+        })
+        expect(capture.records.map((r) => r.data)).toMatchObject([
+          {
+            fn: 'layoutSpatialCanvas',
+            at: '/scene/nodes/0',
+            ts: 1,
+            rust: 2,
+            nodes: board.nodes.length,
+          },
+        ])
       } finally {
         capture.restore()
       }

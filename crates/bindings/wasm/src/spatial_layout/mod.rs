@@ -15,12 +15,14 @@
 //!   is not a request;
 //! - `["declined", class]`: a request the core cannot answer exactly as the
 //!   TypeScript would (a body past the parser's bounds, a shortcode, a fence
-//!   the highlighter colours, a canvas narrowed to a fragment, a number the
-//!   answer cannot spell).
+//!   the highlighter colours, a canvas narrowed to a fragment, a text the
+//!   font measurer cannot measure as the host's does, a number the answer
+//!   cannot spell).
 //!
 //! A host answers the last two from the TypeScript.
 
 mod answer;
+mod measure;
 mod request;
 
 use std::sync::OnceLock;
@@ -28,10 +30,6 @@ use std::sync::OnceLock;
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::compose_canvas::{self, LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::BodySeams;
-use whiteboard_canvas_render::constant_ratio::ConstantRatioMeasure;
-use whiteboard_canvas_render::fake_measure::FakeMeasure;
-use whiteboard_canvas_render::font_measure::FontTableMeasurer;
-use whiteboard_canvas_render::measure::{FontStyle, Measure};
 use whiteboard_canvas_render::references::WireHost;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
@@ -44,7 +42,8 @@ use whiteboard_scene::NodeDecoration;
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, refused};
-use request::{MeasureSpec, Request, request_of};
+use measure::{Measurer, measurer};
+use request::{Request, request_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
 /// own canvas and every canvas it references together: this entry's
@@ -97,26 +96,8 @@ fn registry() -> Option<&'static Registry> {
     REGISTRY.get_or_init(|| visual_registry().ok()).as_ref()
 }
 
-/// The measurer a request names, over `fonts`; `None` when a face is not
-/// where it says or does not parse.
-fn measurer<'f>(spec: &MeasureSpec, fonts: &'f [u8]) -> Option<Box<dyn Measure + 'f>> {
-    Some(match spec {
-        MeasureSpec::Fake(factor) => Box::new(FakeMeasure::new(*factor)),
-        MeasureSpec::Ratio => Box::new(ConstantRatioMeasure),
-        MeasureSpec::Fonts(faces) => {
-            let mut measurer = FontTableMeasurer::new();
-            for face in faces {
-                let style = if face.italic { FontStyle::Italic } else { FontStyle::Normal };
-                let bytes = fonts.get(face.from..face.to)?;
-                measurer = measurer.with_face(&face.family, face.bold, style, bytes).ok()?;
-            }
-            Box::new(measurer)
-        }
-    })
-}
-
 /// The request laid out, as the answer's JSON text.
-fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> String {
+fn lay_out(request: &Request, measure: &Measurer<'_>, registry: &Registry) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand);
@@ -152,6 +133,7 @@ fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> Str
     let laid = compose_canvas::layout_spatial_canvas(&request.canvas, &options);
     match host.refused() {
         Some(why) => declined(why.class()),
+        None if measure.inexact() => declined("measure"),
         None => laid_out(&laid, &host.degradations()),
     }
 }
@@ -179,7 +161,7 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
         return refused("malformed", "font");
     };
     match registry() {
-        Some(registry) => lay_out(&request, measure.as_ref(), registry),
+        Some(registry) => lay_out(&request, &measure, registry),
         None => refused("malformed", "registry"),
     }
 }

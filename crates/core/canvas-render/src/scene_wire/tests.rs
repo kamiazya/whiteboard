@@ -19,13 +19,13 @@ fn placeholder(x: f64, title: &str) -> SceneNode {
 
 #[test]
 fn a_scene_is_written_as_the_typescript_object_with_every_double_read_back() {
-    let scene = Scene { nodes: vec![placeholder(-0.0, "a \"b\" \\ \u{1}\n")], legend: None };
+    let scene = Scene { nodes: vec![placeholder(-0.0, "a \"b\" \\ \u{1}\u{1f}\n")], legend: None };
     let json = scene_tree(&scene).to_json();
     assert_eq!(
         json.as_deref(),
         Ok(concat!(
             r#"{"nodes":[{"kind":"embedPlaceholder","bbox":{"x":-0,"y":1.5,"w":0.1,"h":1e+21},"#,
-            r#""documentId":"d","title":"a \"b\" \\ \u0001\u000a","reason":"depthCap"}]}"#
+            r#""documentId":"d","title":"a \"b\" \\ \u0001\u001f\u000a","reason":"depthCap"}]}"#
         ))
     );
 }
