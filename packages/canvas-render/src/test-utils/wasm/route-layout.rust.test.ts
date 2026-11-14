@@ -6,7 +6,6 @@ import { describe, expect } from 'vitest'
 import { marksContact } from '../../layout/edges/edge-contact.js'
 import type { Rect } from '../../layout/edges/edge-geometry.js'
 import { createRoutingBudget, type RoutingBudget } from '../../layout/edges/routing-budget.js'
-import { assignEdgeAnchors } from '../../layout/edges/spatial-edges.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
 import { firstDifference } from './edge-arbitraries.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
@@ -34,16 +33,36 @@ import { board, type Drawn, drawn, overrideMap } from './search-arbitraries.js'
  * past what the search itself spends, so the routing AFTER the search is
  * the pass that runs it dry. A fixed cut alone reached that last case too
  * rarely to judge it on every run.
+ *
+ * `pastSearch` leaves a SHARE of what the routing after the search spends
+ * with the account ample, not a fixed slack: a grid call the account cannot
+ * cover is refused before it spends anything, and the routing's spend runs
+ * from under a hundred tests to several thousand, so a fixed slack was
+ * refused outright on most boards that reached it. The share is a percentage
+ * from half up: measured over boards whose routing reaches the grid, a tenth
+ * of its spend let it draw on 2 of 105, half on 38, nine tenths on 93 — and
+ * all of it on every one, where nothing is left to run dry.
  */
 type GridDraw =
   | { readonly kind: 'full' }
   | { readonly kind: 'cut'; readonly grid: number }
-  | { readonly kind: 'pastSearch'; readonly slack: number }
-const gridDraw: fc.Arbitrary<GridDraw> = fc.oneof(
-  fc.constant({ kind: 'full' as const }),
-  fc.record({ kind: fc.constant('cut' as const), grid: fc.integer({ min: 0, max: 5_000 }) }),
-  fc.record({ kind: fc.constant('pastSearch' as const), slack: fc.integer({ min: 0, max: 400 }) }),
-)
+  | { readonly kind: 'pastSearch'; readonly percent: number }
+const pastSearch: fc.Arbitrary<GridDraw> = fc.record({
+  kind: fc.constant('pastSearch' as const),
+  percent: fc.integer({ min: 50, max: 100 }),
+})
+const gridDraw = (pastSearchWeight: number): fc.Arbitrary<GridDraw> =>
+  fc.oneof(
+    { weight: 1, arbitrary: fc.constant({ kind: 'full' as const }) },
+    {
+      weight: 1,
+      arbitrary: fc.record({
+        kind: fc.constant('cut' as const),
+        grid: fc.integer({ min: 0, max: 5_000 }),
+      }),
+    },
+    { weight: pastSearchWeight, arbitrary: pastSearch },
+  )
 
 const reach = { bent: 0, contact: 0, gridSpent: 0, overridden: 0 }
 
@@ -58,7 +77,7 @@ function check([d, draw]: [Drawn, GridDraw]) {
   const labels = d.labels as readonly Rect[]
   const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
   const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
-  const grid = gridOf(draw, d, styleOf, overrides, labels)
+  const grid = gridOf(draw, d)
   const { input, expected, routed, anchors, budget, afterSearch } = routeLayoutCase(d, grid)
   const out = requireWasm().edge_route_layout(input)
   expect(firstDifference(expected, out)).toBeUndefined()
@@ -86,44 +105,45 @@ function check([d, draw]: [Drawn, GridDraw]) {
   if (overrides !== undefined && overrides.size > 0) reach.overridden += 1
 }
 
-/** The grid account a draw names; `pastSearch` measures the search's own spend first. */
-function gridOf(
-  draw: GridDraw,
-  d: Drawn,
-  styleOf: (e: RoutableElement) => EdgeRoutingStyle,
-  overrides: ReturnType<typeof overrideMap>,
-  labels: readonly Rect[],
-): number {
+/**
+ * The grid account a draw names; `pastSearch` measures, with the account
+ * ample, what the search spends and what the routing after it spends.
+ */
+function gridOf(draw: GridDraw, d: Drawn): number {
   const full = createRoutingBudget().grid
   if (draw.kind === 'full') return full
   if (draw.kind === 'cut') return draw.grid
-  const probe: RoutingBudget = { ...createRoutingBudget(), trials: d.trials, pairs: d.pairs }
-  assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, probe, labels)
-  return full - probe.grid + draw.slack
+  const ample = routeLayoutCase(d, full)
+  const routing = ample.afterSearch - ample.budget.grid
+  return full - ample.afterSearch + Math.floor((draw.percent * routing) / 100)
 }
 
 describe.runIf(built)('one layout routed in one call matches the composer', () => {
   fcTest.prop(
     [
-      fc.tuple(
-        fc.oneof(
-          drawn(scene),
-          drawn(board(9, 14)),
-          // Every edge orthogonal on a crowded board: the routing after the
-          // search searches the grid, which is what spends that account.
-          drawn(board(9, 14), { style: fc.constant('orthogonal' as const) }),
+      fc.oneof(
+        fc.tuple(drawn(scene), gridDraw(1)),
+        fc.tuple(drawn(board(9, 14)), gridDraw(1)),
+        // Every edge orthogonal on a board of six edges or more: the routing
+        // after the search searches the grid, which is what spends that
+        // account. It reaches the grid on about a third of these boards
+        // even so, so this arm draws `pastSearch` three times in five.
+        fc.tuple(
+          drawn(board(9, 14, 6), { style: fc.constant('orthogonal' as const) }),
+          gridDraw(3),
         ),
-        gridDraw,
       ),
     ],
     withDefaults(),
   )('every route and the budget left', check)
 
   afterAllFloor(['every route and the budget left'], () => {
-    // About half the lowest of five measured runs (bent 185, contact 10,
-    // gridSpent 4, overridden 79). gridSpent is a cut account the routing
-    // drew on AFTER the search: the `pastSearch` draws and the orthogonal
-    // boards are what reach it; before them a run could reach it never.
+    // About half the lowest of 80 measured fresh-process runs (bent
+    // 173, contact 10, gridSpent 5, overridden 75; medians 188, 18, 15, 90).
+    // gridSpent is a cut account the routing drew on AFTER the search: the
+    // `pastSearch` share and the orthogonal arm's weight on it reach it.
+    // With a fixed slack of up to 400 tests drawn on a ninth of the mix its
+    // median was 6, and this floor failed on CI at 1 and at 0.
     const floors = { bent: 92, gridSpent: 2, overridden: 40, contact: 5 }
     for (const [kind, floor] of Object.entries(floors)) {
       expect(reach[kind as keyof typeof reach], kind).toBeGreaterThanOrEqual(floor)
