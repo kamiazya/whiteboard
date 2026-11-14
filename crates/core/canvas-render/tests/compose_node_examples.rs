@@ -12,7 +12,7 @@ use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines, ResolvedReference};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
-use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
+use whiteboard_canvas_render::theme::spatial_theme::{SpatialTheme, create_spatial_theme};
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::registry::Registry;
@@ -141,19 +141,18 @@ fn quoting(exact: &str, resolved: bool) -> CommentThread {
     }
 }
 
-/// `hello_at(100, 50)` composed under `threads`, its passages drawn or not.
-fn hello_composed(
-    host: &Marking,
-    registry: &Registry,
-    threads: &[CommentThread],
-    annotated: bool,
-) -> Vec<SceneNode> {
-    let measure = FakeMeasure::default();
-    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
-    let budget = NestedLayoutBudget::new();
-    let layout = LayoutOptions {
-        measure: &measure,
-        appearance: &appearance,
+/// What `hello_composed` lays its node out under: the bundled light theme, no
+/// overlays but the threads.
+fn layout_of<'a>(
+    measure: &'a FakeMeasure,
+    appearance: &'a SpatialTheme,
+    host: &'a Marking,
+    registry: &'a Registry,
+    threads: &'a [CommentThread],
+) -> LayoutOptions<'a> {
+    LayoutOptions {
+        measure,
+        appearance,
         geometry: None,
         style: RenderStyle::Clean,
         themes: &[],
@@ -172,7 +171,20 @@ fn hello_composed(
         body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
         embed_path: &[],
-    };
+    }
+}
+
+/// `hello_at(100, 50)` composed under `threads`, its passages drawn or not.
+fn hello_composed(
+    host: &Marking,
+    registry: &Registry,
+    threads: &[CommentThread],
+    annotated: bool,
+) -> Vec<SceneNode> {
+    let measure = FakeMeasure::default();
+    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
+    let budget = NestedLayoutBudget::new();
+    let layout = layout_of(&measure, &appearance, host, registry, threads);
     let options = ComposeOptions {
         node_box: NodeBoxOptions {
             measure: &measure,

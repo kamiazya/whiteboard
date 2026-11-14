@@ -66,26 +66,9 @@ const proposal = (id: string, changes: readonly ProposedChange[]): Proposal =>
 const pointEnd = (x: number, y: number) => ({ kind: 'point', point: { x, y } }) as const
 const nodeEnd = (node: string) => ({ kind: 'node', node }) as const
 
-function arms(): ProposalBoard {
-  const nodes = [
-    box('a', 0, 0),
-    box('b', 400, 0),
-    box('c', 0, 300),
-    { id: 'g', x: 600, y: 200, width: 300, height: 220, label: 'Group' } as SpatialNode,
-    box('d', 650, 260, 120, 60),
-  ]
-  const edges = [
-    link('e1', 'a', 'b', { label: 'flow' }),
-    link('e2', 'a', 'c', { facets: { 'visual.edges/v0': { routing: 'curved' } } }),
-  ]
-  const lines: CanvasLine[] = [
-    { id: 'k1', from: pointEnd(-200, 100), to: nodeEnd('c') },
-    { id: 'k2', from: nodeEnd('b'), to: pointEnd(700, -150) },
-  ]
-  const b = nodes[1] as SpatialNode
-  const e1 = edges[0] as CanvasEdge
-  const k2 = lines[1] as CanvasLine
-  const proposals = [
+/** The proposals over `arms`'s boxes and edges, the edge `e1` the one with a label. */
+function boxAndEdgeProposals(b: SpatialNode, e1: CanvasEdge): Proposal[] {
+  return [
     proposal('p-add', [change({ op: 'node.add', node: box('new', 300, 500, 90, 50) })]),
     proposal('p-mixed', [
       change({ op: 'node.patch', nodeId: 'a', patch: { x: 10, width: 200 }, assumed: { x: 0 } }),
@@ -103,6 +86,12 @@ function arms(): ProposalBoard {
       change({ op: 'edge.add', edge: link('fresh', 'c', 'd') }),
       change({ op: 'node.add', node: box('later', -300, 400, 80, 40) }),
     ]),
+  ]
+}
+
+/** The proposals over ink, gone elements, decided and prose changes, and a throwing label. */
+function otherProposals(k2: CanvasLine): Proposal[] {
+  return [
     proposal('p-ink', [
       change({
         op: 'line.add',
@@ -131,6 +120,28 @@ function arms(): ProposalBoard {
       passage(),
       passage(),
     ]),
+  ]
+}
+
+function arms(): ProposalBoard {
+  const nodes = [
+    box('a', 0, 0),
+    box('b', 400, 0),
+    box('c', 0, 300),
+    { id: 'g', x: 600, y: 200, width: 300, height: 220, label: 'Group' } as SpatialNode,
+    box('d', 650, 260, 120, 60),
+  ]
+  const edges = [
+    link('e1', 'a', 'b', { label: 'flow' }),
+    link('e2', 'a', 'c', { facets: { 'visual.edges/v0': { routing: 'curved' } } }),
+  ]
+  const lines: CanvasLine[] = [
+    { id: 'k1', from: pointEnd(-200, 100), to: nodeEnd('c') },
+    { id: 'k2', from: nodeEnd('b'), to: pointEnd(700, -150) },
+  ]
+  const proposals = [
+    ...boxAndEdgeProposals(nodes[1] as SpatialNode, edges[0] as CanvasEdge),
+    ...otherProposals(lines[1] as CanvasLine),
   ]
   return { name: 'proposals', canvas: { nodes, edges, lines }, threads: [], proposals }
 }
