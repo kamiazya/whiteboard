@@ -66,11 +66,10 @@ fn strings_of(value: &Value) -> Option<Vec<String>> {
     items_of(value, string_of)
 }
 
-/// A whole number that indexes the fonts argument.
+/// A whole number that indexes the fonts argument: a fraction, a sign, an
+/// exponent or a non-finite number spells no index, so its text does not parse.
 fn offset_of(value: &Value) -> Option<usize> {
-    let n = number_of(value)?;
-    let whole = n.fract() == 0.0 && (0.0..=f64::from(u32::MAX)).contains(&n);
-    whole.then(|| format!("{n}").parse().ok()).flatten()
+    format!("{}", number_of(value)?).parse().ok()
 }
 
 /// The entries of a mapping, each read by `read`.

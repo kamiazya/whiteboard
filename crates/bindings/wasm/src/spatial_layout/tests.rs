@@ -180,3 +180,53 @@ fn a_font_measures_what_it_holds_and_declines_a_mark_it_would_combine() {
     let estimated = request(board("cafe\u{301}"), &[("measure", m(&[("kind", json!("ratio"))]))]);
     assert_eq!(answer(&estimated, &[]).get(0), Some(&json!("ok")));
 }
+
+fn two_boxes() -> Json {
+    let edge = whiteboard_model::spatial::CanvasEdge {
+        id: "e".to_owned(),
+        from: whiteboard_model::spatial::EdgeEnd { node: "a".to_owned(), ..Default::default() },
+        to: whiteboard_model::spatial::EdgeEnd { node: "b".to_owned(), ..Default::default() },
+        ..Default::default()
+    };
+    let b = SpatialNode { x: 400.0, y: 300.0, ..text_node("b", "b") };
+    canvas_json(&SpatialCanvas {
+        nodes: vec![text_node("a", "a"), b],
+        edges: vec![edge],
+        ..SpatialCanvas::default()
+    })
+}
+
+#[test]
+fn every_side_and_a_pinned_point_are_read_from_an_override() {
+    let pinned = |from: &str, to: &str| {
+        let pin = m(&[
+            ("fromSide", json!(from)),
+            ("toSide", json!(to)),
+            ("from", m(&[("x", json!(160)), ("y", json!(40))])),
+        ]);
+        let request = request(two_boxes(), &[("sideOverrides", s(vec![s(vec![json!("e"), pin])]))]);
+        answer(&request, &[])
+    };
+    let answers = [
+        pinned("left", "right"),
+        pinned("right", "left"),
+        pinned("top", "bottom"),
+        pinned("bottom", "top"),
+    ];
+    for (at, answer) in answers.iter().enumerate() {
+        assert_eq!(answer.get(0), Some(&json!("ok")), "{at}: {answer}");
+        assert!(answers.iter().skip(at + 1).all(|other| other.get(2) != answer.get(2)), "{at}");
+    }
+}
+
+#[test]
+fn a_request_at_each_cap_is_read() {
+    let text = request(board("x"), &[]);
+    let fill = vec![0_u8; LAYOUT_SPATIAL_CANVAS.max_bytes - text.len()];
+    assert_eq!(answer(&text, &fill).get(0), Some(&json!("ok")));
+    let at_cap = canvas_json(&SpatialCanvas {
+        nodes: (0..MAX_ELEMENTS).map(|i| text_node(&format!("n{i}"), "")).collect(),
+        ..SpatialCanvas::default()
+    });
+    assert_eq!(answer(&request(at_cap, &[]), &[]).get(0), Some(&json!("ok")));
+}
