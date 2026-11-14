@@ -612,6 +612,7 @@ name = "whiteboard-model"
 version = "0.0.0"
 dependencies = [
  "wasm-bindgen-test",
+ "whiteboard-det",
 ]
 
 [[package]]
