@@ -71,8 +71,10 @@ pub fn find_next_reference(value: &str, cursor: usize) -> Option<ReferenceMatch<
     let mut pos = cursor;
     // Where the last walk for a target's end stopped.
     let mut walked = 0;
-    // Each pass moves `pos` forward, so the bound is never what ends the loop.
-    for _ in 0..=bytes.len() {
+    // Each pass moves `pos` past the opener it looked at (a resume is past
+    // the target's end, which is past the opener), so the scan ends where no
+    // `[[` is left.
+    loop {
         let rest = bytes.get(pos..).unwrap_or_default();
         let open = pos.saturating_add(rest.windows(2).position(|w| w == b"[[")?);
         let content = open.saturating_add(2);
@@ -102,5 +104,4 @@ pub fn find_next_reference(value: &str, cursor: usize) -> Option<ReferenceMatch<
             fragment: fragment.filter(|f| !f.is_empty()),
         });
     }
-    None
 }

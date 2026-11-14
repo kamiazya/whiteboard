@@ -133,6 +133,11 @@ const DEEP: readonly string[] = [
     `x[^1]\n\n[^1]: ${nested(levels - 1)}`,
   ]),
   `${'*a '.repeat(63)}${VALUED}${' b*'.repeat(63)}`,
+  // A list item's blocks sit two levels under the list: 32 lists, the most the parser opens, put them past 64.
+  ...[31, 32].flatMap((lists) => [
+    `${'- '.repeat(lists)}*x* ${VALUED}`,
+    `${'1. '.repeat(lists)}x\n\n${'   '.repeat(lists)}${VALUED}`,
+  ]),
   // A footnote of several blocks reads as their text joined, each kind's own string kept.
   `x[^1]\n\n[^1]: ${VALUED}\n\n    \`\`\`js\n    fenced\n    \`\`\`\n\n    $$\n    display\n    $$\n\n    <div>block</div>`,
 ]

@@ -3,7 +3,9 @@
 //! (a footnote), and a tree nested past [`MAX_NESTING_DEPTH`] is flattened to
 //! its text there, since every reader of the model tree recurses.
 
-use whiteboard_markdown::mdast::{AlignKind, FootnoteDefinition, Node, ReferenceKind};
+use whiteboard_markdown::mdast::{
+    AlignKind, FootnoteDefinition, Image, ImageReference, Link, LinkReference, Node, ReferenceKind,
+};
 use whiteboard_model::mdast::{
     Align, Flow, ListItem, Phrasing, ReferenceType, Root, TableCell, TableRow,
 };
@@ -73,7 +75,6 @@ fn phrasing_at(node: &Node, depth: usize) -> Phrasing {
     }
     let next = depth.saturating_add(1);
     match node {
-        Node::Text(x) => text(x.value.clone()),
         Node::InlineCode(x) => Phrasing::InlineCode { value: x.value.clone() },
         Node::Break(_) => Phrasing::Break,
         Node::Html(x) => Phrasing::Html { value: x.value.clone() },
@@ -82,10 +83,11 @@ fn phrasing_at(node: &Node, depth: usize) -> Phrasing {
         Node::Strong(x) => Phrasing::Strong { children: phrasings(&x.children, next) },
         Node::Delete(x) => Phrasing::Delete { children: phrasings(&x.children, next) },
         Node::FootnoteReference(x) => text(footnote_marker(x.label.as_ref(), &x.identifier)),
-        Node::Link(_) | Node::Image(_) | Node::LinkReference(_) | Node::ImageReference(_) => {
-            media(node, next)
-        }
-        // A kind the model does not hold reads as its own string rather than vanishing.
+        Node::Link(x) => link(x, next),
+        Node::Image(x) => image(x),
+        Node::LinkReference(x) => link_reference(x, next),
+        Node::ImageReference(x) => image_reference(x),
+        // A text, and a kind the model does not hold, read as their own string.
         other => text(own_value(other).to_owned()),
     }
 }
@@ -98,30 +100,33 @@ const fn reference_type(kind: ReferenceKind) -> ReferenceType {
     }
 }
 
-/// Links and images, written or by reference.
-fn media(node: &Node, next: usize) -> Phrasing {
-    match node {
-        Node::Link(x) => Phrasing::Link {
-            url: x.url.clone(),
-            title: x.title.clone(),
-            children: phrasings(&x.children, next),
-        },
-        Node::Image(x) => {
-            Phrasing::Image { url: x.url.clone(), title: x.title.clone(), alt: Some(x.alt.clone()) }
-        }
-        Node::LinkReference(x) => Phrasing::LinkReference {
-            identifier: x.identifier.clone(),
-            label: x.label.clone(),
-            reference_type: reference_type(x.reference_kind),
-            children: phrasings(&x.children, next),
-        },
-        Node::ImageReference(x) => Phrasing::ImageReference {
-            identifier: x.identifier.clone(),
-            label: x.label.clone(),
-            reference_type: reference_type(x.reference_kind),
-            alt: Some(x.alt.clone()),
-        },
-        other => text(own_value(other).to_owned()),
+fn link(x: &Link, next: usize) -> Phrasing {
+    Phrasing::Link {
+        url: x.url.clone(),
+        title: x.title.clone(),
+        children: phrasings(&x.children, next),
+    }
+}
+
+fn image(x: &Image) -> Phrasing {
+    Phrasing::Image { url: x.url.clone(), title: x.title.clone(), alt: Some(x.alt.clone()) }
+}
+
+fn link_reference(x: &LinkReference, next: usize) -> Phrasing {
+    Phrasing::LinkReference {
+        identifier: x.identifier.clone(),
+        label: x.label.clone(),
+        reference_type: reference_type(x.reference_kind),
+        children: phrasings(&x.children, next),
+    }
+}
+
+fn image_reference(x: &ImageReference) -> Phrasing {
+    Phrasing::ImageReference {
+        identifier: x.identifier.clone(),
+        label: x.label.clone(),
+        reference_type: reference_type(x.reference_kind),
+        alt: Some(x.alt.clone()),
     }
 }
 
