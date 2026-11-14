@@ -45,6 +45,8 @@ export interface CaseSpec {
   readonly library?: boolean
   readonly overrides?: readonly (readonly [string, EdgeAnchorOverride])[]
   readonly embedPath?: readonly string[]
+  /** A content cache is handed over, and the keys it is asked are recorded. */
+  readonly cache?: boolean
 }
 
 const text = (
@@ -262,7 +264,10 @@ export const REFERENCES: Readonly<Record<string, Nested>> = {
   'boards/plain.canvas': {
     title: 'Plain',
     canvas: {
-      nodes: [text('p1', 0, 0, 'first', { facets: shaped('ellipse') }), text('p2', 240, 0, 'second')],
+      nodes: [
+        text('p1', 0, 0, 'first', { facets: shaped('ellipse') }),
+        text('p2', 240, 0, 'second'),
+      ],
       edges: [edge('p1-p2', 'p1', 'p2', { label: 'on' })],
     },
   },
@@ -349,7 +354,7 @@ export const caseSpecs = (): readonly CaseSpec[] => [
     overrides: [['m-n2', OVERRIDE]],
   },
   { board: 'themed', style: 'document', appearance: 'light', fonts: 'default' },
-  { board: 'themed', style: 'document', appearance: 'light', fonts: 'all' },
+  { board: 'themed', style: 'document', appearance: 'light', fonts: 'all', cache: true },
   { board: 'themed', style: 'document', appearance: 'unmoded-dark', fonts: 'none' },
   { board: 'themed', appearance: 'light', fonts: 'all' },
   { board: 'themed', style: 'clean', appearance: 'dark', fonts: 'all' },

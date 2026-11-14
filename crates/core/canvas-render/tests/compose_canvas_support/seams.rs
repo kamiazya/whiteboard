@@ -10,7 +10,7 @@ use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::compose_canvas::{Overlaid, Overlays};
 use whiteboard_canvas_render::compose_node::{
-    ComposeHost, ComposeOptions, Degradation, ParseFailed,
+    ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed,
 };
 use whiteboard_canvas_render::node_box::ResolvedReference;
 use whiteboard_canvas_render::theme::appearance::{
@@ -143,6 +143,30 @@ impl Context {
                 .map(|(id, wire)| Ok((id.clone(), (wire.title.clone(), canvas_of(&wire.canvas)?))))
                 .collect::<Res<_>>()?,
         })
+    }
+}
+
+/// A content cache that keeps what it is handed and notes every key it is asked.
+#[derive(Default)]
+pub(crate) struct KeyCache {
+    asked: RefCell<Vec<String>>,
+    entries: RefCell<BTreeMap<String, FittedBlocks>>,
+}
+
+impl KeyCache {
+    pub(crate) fn asked(&self) -> Vec<String> {
+        self.asked.borrow().clone()
+    }
+}
+
+impl ContentCache for KeyCache {
+    fn get(&self, key: &str) -> Option<FittedBlocks> {
+        self.asked.borrow_mut().push(key.to_owned());
+        self.entries.borrow().get(key).cloned()
+    }
+
+    fn set(&self, key: &str, body: &FittedBlocks) {
+        self.entries.borrow_mut().insert(key.to_owned(), body.clone());
     }
 }
 

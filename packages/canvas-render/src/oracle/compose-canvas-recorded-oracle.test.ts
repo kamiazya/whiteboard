@@ -42,9 +42,18 @@ describe('the recorded compose-canvas oracle', () => {
     has('a file drawn as its canvas', (s) => s.includes('"documentId":"boards/plain.canvas"'))
     has('a body drawing a canvas', (s) => s.includes('"documentId":"01HZX3Q8K9V2M4N5P6R7S8T9WC"'))
     has('a canvas three embeds down', (s) => s.includes('level 3'))
-    has('a canvas past the depth cap left a card', (s) => !s.includes('level 4') && s.includes('deep-4'))
-    expect(cases.some((c) => c.answer.canvas.legend !== null), 'a legend').toBe(true)
-    expect(cases.some((c) => c.answer.canvas.overlay.nodes.length > 0), 'an overlay').toBe(true)
+    has(
+      'a canvas past the depth cap left a card',
+      (s) => !s.includes('level 4') && s.includes('deep-4'),
+    )
+    expect(
+      cases.some((c) => c.answer.canvas.legend !== null),
+      'a legend',
+    ).toBe(true)
+    expect(
+      cases.some((c) => c.answer.canvas.overlay.nodes.length > 0),
+      'an overlay',
+    ).toBe(true)
     expect(
       cases.some((c) => c.answer.natural.some(([, w]) => w !== '0000000000000000')),
       'a natural size',

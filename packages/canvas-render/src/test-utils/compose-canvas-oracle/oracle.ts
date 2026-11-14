@@ -5,7 +5,12 @@ import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { type TagLibrary, VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { RenderContribution, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
-import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
+import type {
+  SpatialContentCache,
+  SpatialLayoutDegradation,
+  SpatialLayoutOptions,
+} from '../../layout/layout-options.js'
+import type { FittedBlocks } from '../../layout/nodes/mdast-blocks.js'
 import {
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
@@ -18,8 +23,8 @@ import { overridesWire } from '../compose-edges-oracle/wire.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { dumpScene, f64Hex } from '../render-oracle/scene-dump.js'
 import {
-  type Board,
   BOXY_THEME_ID,
+  type Board,
   boards,
   type CaseSpec,
   CHILD_ID,
@@ -52,10 +57,14 @@ const viaJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
 const dump = (nodes: readonly SceneNode[]): string => dumpScene({ nodes: [...nodes] }, hex)
 
 const sketch = VISUAL_THEMES.sketch
-if (sketch === undefined) throw new Error('compose-canvas-oracle: the bundled sketch theme is missing')
+if (sketch === undefined)
+  throw new Error('compose-canvas-oracle: the bundled sketch theme is missing')
 
 /** The sketch tokens with a default silhouette, which no bundled theme declares. */
-const BOXY: ThemeTokens = { ...sketch, defaults: { ...sketch.defaults, nodeShape: 'visual.diamond' } }
+const BOXY: ThemeTokens = {
+  ...sketch,
+  defaults: { ...sketch.defaults, nodeShape: 'visual.diamond' },
+}
 
 /** A contribution that registers one theme and reads nothing. */
 const TEST_CONTRIBUTION: RenderContribution = { namespace: 'test', themes: { boxy: BOXY } }
@@ -93,6 +102,8 @@ interface CanvasAnswer {
   readonly events: readonly Event[]
   /** What the walk asked the measurer, the overlays' own questions not counted. */
   readonly calls: number
+  /** The keys the content cache was asked, when the case hands one over. */
+  readonly asked?: readonly string[]
 }
 
 interface EntryAnswer {
@@ -114,6 +125,7 @@ interface CaseRecord extends Omit<CaseSpec, 'geometry' | 'overrides'> {
     readonly natural: readonly (readonly string[])[]
     readonly naturalCalls: number
     readonly naturalEvents: readonly Event[]
+    readonly naturalAsked?: readonly string[]
   }
 }
 
@@ -149,10 +161,25 @@ const appearanceOf = (spec: CaseSpec) => {
 const fontsOf = (spec: CaseSpec) =>
   spec.fonts === 'default' ? {} : { fontAvailable: () => spec.fonts === 'all' }
 
-/** A run's counters: the measurer's calls and the degradations reported. */
+/** A run's counters: the measurer's calls, the degradations reported and the cache keys asked. */
 interface Run {
   calls: number
   readonly events: SpatialLayoutDegradation[]
+  readonly asked: string[]
+}
+
+/** A content cache that keeps what it is handed and notes every key it is asked. */
+function recordingCache(run: Run): SpatialContentCache {
+  const entries = new Map<string, FittedBlocks>()
+  return {
+    get: (key) => {
+      run.asked.push(key)
+      return entries.get(key)
+    },
+    set: (key, value) => {
+      entries.set(key, value)
+    },
+  }
 }
 
 /** What a caller hands every entry point for a case, counting into `run`. */
@@ -179,6 +206,7 @@ function optionsOf(spec: CaseSpec, board: Board, run: Run): SpatialLayoutOptions
     ...(spec.overrides === undefined ? {} : { edgeSideOverrides: new Map(spec.overrides) }),
     ...(spec.embedPath === undefined ? {} : { embedPath: spec.embedPath }),
     ...(board.threads === undefined ? {} : { threads: board.threads }),
+    ...(spec.cache === true ? { contentCache: recordingCache(run) } : {}),
     resolveAlias,
     resolveReference: (ref) => {
       const nested = REFERENCES[ref]
@@ -195,7 +223,7 @@ const childEmbed = () => {
   return child
 }
 
-const fresh = (): Run => ({ calls: 0, events: [] })
+const fresh = (): Run => ({ calls: 0, events: [], asked: [] })
 
 /** The whole layout, and where the overlays begin in it. */
 function canvasAnswer(spec: CaseSpec, board: Board): CanvasAnswer {
@@ -220,6 +248,7 @@ function canvasAnswer(spec: CaseSpec, board: Board): CanvasAnswer {
     anchors: [...anchors].map(([id, pair]) => anchorRow(id, pair)),
     events: run.events.map(eventOf),
     calls: walk.calls,
+    ...(spec.cache === true ? { asked: [...run.asked] } : {}),
   }
 }
 
@@ -236,7 +265,12 @@ function naturalAnswer(spec: CaseSpec, board: Board) {
     const { w, h } = naturalNodeContentSize(node, options)
     return [node.id, hex(w), hex(h)]
   })
-  return { natural, naturalCalls: run.calls, naturalEvents: run.events.map(eventOf) }
+  return {
+    natural,
+    naturalCalls: run.calls,
+    naturalEvents: run.events.map(eventOf),
+    ...(spec.cache === true ? { naturalAsked: [...run.asked] } : {}),
+  }
 }
 
 function boardNamed(name: string): Board {
@@ -291,7 +325,9 @@ export function composeCanvasRecords(): readonly ComposeCanvasRecord[] {
     references: Object.fromEntries(
       Object.entries(REFERENCES).map(([ref, nested]) => [ref, canvasWire(nested.canvas, hex)]),
     ),
-    embeds: { [CHILD_ID]: { title: childEmbed().title, canvas: canvasWire(childEmbed().canvas, hex) } },
+    embeds: {
+      [CHILD_ID]: { title: childEmbed().title, canvas: canvasWire(childEmbed().canvas, hex) },
+    },
   }
   return [meta, ...caseSpecs().map(caseRecord)]
 }

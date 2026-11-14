@@ -27,14 +27,16 @@ use std::collections::BTreeMap;
 
 use canvas_wire::{Counting, OverrideWire, Res, anchor_row, differ, f64_of, hex, pin_of};
 use dump::dump_scene;
-use seams::{CanvasWire, Context, Event, Host, OverlayWire, Recorded, Unmoded, canvas_of};
+use seams::{
+    CanvasWire, Context, Event, Host, KeyCache, OverlayWire, Recorded, Unmoded, canvas_of,
+};
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::compose_canvas::{
     LayoutOptions, RenderStyle, layout_spatial_canvas, layout_spatial_edges,
     natural_node_content_size,
 };
-use whiteboard_canvas_render::compose_node::BodySeams;
+use whiteboard_canvas_render::compose_node::{BodySeams, ContentCache};
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
@@ -57,6 +59,7 @@ struct CanvasAnswer {
     anchors: Vec<Vec<Option<String>>>,
     events: Vec<Event>,
     calls: usize,
+    asked: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -75,6 +78,7 @@ struct Answer {
     natural: Vec<[String; 3]>,
     natural_calls: usize,
     natural_events: Vec<Event>,
+    natural_asked: Option<Vec<String>>,
 }
 
 #[derive(Deserialize)]
@@ -95,6 +99,7 @@ struct Case {
     overrides: Option<Vec<(String, OverrideWire)>>,
     #[serde(default)]
     embed_path: Vec<String>,
+    cache: Option<bool>,
     answer: Answer,
 }
 
@@ -155,8 +160,13 @@ impl<'c> Setup<'c> {
         })
     }
 
-    /// One entry point's run, with a fresh host and measurer.
-    fn run<T>(&self, entry: impl FnOnce(&LayoutOptions<'_>) -> T) -> (T, Recorded) {
+    /// One entry point's run, with a fresh host, measurer and cache; the keys
+    /// the cache was asked, when the case hands one over.
+    fn run<T>(
+        &self,
+        entry: impl FnOnce(&LayoutOptions<'_>) -> T,
+    ) -> (T, Recorded, Option<Vec<String>>) {
+        let cache = (self.case.cache == Some(true)).then(KeyCache::default);
         let measure = Counting { base: FakeMeasure::default(), calls: Cell::new(0) };
         let want = &self.case.answer.canvas;
         let host = Host::new(self.context, &want.overlay, want.legend.as_ref());
@@ -181,7 +191,7 @@ impl<'c> Setup<'c> {
             side_overrides: self.pins.as_deref(),
             host: &host,
             overlays: &host,
-            content_cache: None,
+            content_cache: cache.as_ref().map(|c| c as &dyn ContentCache),
             body: BodySeams {
                 inline: &host,
                 highlight: None,
@@ -193,7 +203,7 @@ impl<'c> Setup<'c> {
             embed_path: &self.case.embed_path,
         };
         let answer = entry(&options);
-        (answer, host.recorded(measure.calls.get()))
+        (answer, host.recorded(measure.calls.get()), cache.map(|c| c.asked()))
     }
 }
 
@@ -207,7 +217,9 @@ fn check_scene(what: &str, got: &str, want: &str) -> Res<()> {
 
 fn replay_canvas(setup: &Setup<'_>) -> Res<Vec<SceneNode>> {
     let want = &setup.case.answer.canvas;
-    let (laid, recorded) = setup.run(|options| layout_spatial_canvas(&setup.canvas, options));
+    let (laid, recorded, asked) =
+        setup.run(|options| layout_spatial_canvas(&setup.canvas, options));
+    differ("keys asked", &asked, &want.asked)?;
     let from = want.overlay.from;
     let drawn: Vec<SceneNode> = laid.scene.nodes.iter().take(from).cloned().collect();
     check_scene("scene", &dump_nodes(laid.scene.nodes)?, &want.scene)?;
@@ -220,7 +232,7 @@ fn replay_canvas(setup: &Setup<'_>) -> Res<Vec<SceneNode>> {
 
 fn replay_edges(setup: &Setup<'_>, drawn: &[SceneNode]) -> Res<()> {
     let want = &setup.case.answer.edges;
-    let (content, recorded) = setup.run(|options| layout_spatial_edges(&setup.canvas, options));
+    let (content, recorded, _) = setup.run(|options| layout_spatial_edges(&setup.canvas, options));
     let suffix = drawn.get(drawn.len().saturating_sub(content.len())..).unwrap_or_default();
     differ("the edges alone against the whole layout's suffix", &content.as_slice(), &suffix)?;
     check_scene("edges", &dump_nodes(content)?, &want.scene)?;
@@ -229,7 +241,7 @@ fn replay_edges(setup: &Setup<'_>, drawn: &[SceneNode]) -> Res<()> {
 
 fn replay_natural(setup: &Setup<'_>) -> Res<()> {
     let answer = &setup.case.answer;
-    let (sizes, recorded) = setup.run(|options| {
+    let (sizes, recorded, asked) = setup.run(|options| {
         setup
             .canvas
             .nodes
@@ -241,6 +253,7 @@ fn replay_natural(setup: &Setup<'_>) -> Res<()> {
             .collect::<Vec<_>>()
     });
     differ("natural sizes", &sizes, &answer.natural)?;
+    differ("keys asked for natural sizes", &asked, &answer.natural_asked)?;
     recorded.check(&answer.natural_events, answer.natural_calls)
 }
 
