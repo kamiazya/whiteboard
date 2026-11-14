@@ -69,6 +69,39 @@ function fitTextBody(
 }
 
 /**
+ * The content cache's key, or undefined without a cache: everything a body's
+ * layout depends on but its position.
+ */
+function contentCacheKey(
+  node: SpatialNode,
+  text: string,
+  options: ResolvedLayoutOptions,
+): string | undefined {
+  if (options.contentCache === undefined) return undefined
+  // Position deliberately absent from the key: the cached value is
+  // origin-relative (see `contentCache`'s contract), so a moved node hits.
+  // The silhouette is part of the key: a shaped node lays out against its
+  // inscribed box, so the same (width, height, text) fits differently.
+  return JSON.stringify([
+    node.width,
+    node.height,
+    text,
+    options.nodeOutlines?.[node.id] ?? null,
+    // A theme's family fits differently; two themes on one cache must
+    // not hand each other the other's wrapped lines.
+    options.appearance.resolveLabel().fontFamily ?? null,
+    // The theme itself, which the family alone does not identify: one
+    // naming no font of its own measures where a clean render does and
+    // paints in its own ink, so the two looks would share an entry.
+    options.activeTheme?.id ?? null,
+    // The documents being laid out around this one: a body's embed is a
+    // cycle on one path and drawn on another, and past the depth cap at
+    // one depth only.
+    [...options.activeEmbedPath],
+  ])
+}
+
+/**
  * Composes a `text` node's chrome plus its laid-out markdown body. A
  * malformed body (one whose parsed mdast falls outside the caller's
  * accepted subset) degrades to a single literal text run rather than
@@ -83,42 +116,29 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
   // so no reader spells where the text is stored.
   const text = nodeText(node) ?? ''
   const maxWidth = contentWidth(node, options)
-  // Position deliberately absent from the key: the cached value is
-  // origin-relative (see `contentCache`'s contract), so a moved node hits.
-  // The silhouette is part of the key: a shaped node lays out against its
-  // inscribed box, so the same (width, height, text) fits differently.
-  const cacheKey =
-    options.contentCache === undefined
-      ? undefined
-      : JSON.stringify([
-          node.width,
-          node.height,
-          text,
-          options.nodeOutlines?.[node.id] ?? null,
-          // A theme's family fits differently; two themes on one cache must
-          // not hand each other the other's wrapped lines.
-          options.appearance.resolveLabel().fontFamily ?? null,
-          // The theme itself, which the family alone does not identify: one
-          // naming no font of its own measures where a clean render does and
-          // paints in its own ink, so the two looks would share an entry.
-          options.activeTheme?.id ?? null,
-        ])
+  const cacheKey = contentCacheKey(node, text, options)
   const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks
   if (cached !== undefined) {
     body = cached
   } else {
-    const refusedBefore = options.nestedLayoutBudget.refused
+    const budget = options.nestedLayoutBudget
+    const before = { remaining: budget.remaining, refused: budget.refused }
     try {
       const laid = typesetMdastBlocks(
         resolveReferences(options.parseBody(text), options.resolveAlias),
         mdastOptionsFor(maxWidth, options),
       )
       body = fitTextBody(laid, node, options)
-      // A body whose embed this render's budget refused holds a placeholder
-      // only because THIS render ran out; caching it would hand that
-      // degradation to a later render that has budget left.
-      if (cacheKey !== undefined && options.nestedLayoutBudget.refused === refusedBefore) {
+      // Only a body that left the render's account untouched is kept. One
+      // whose embed was refused holds a placeholder only because THIS render
+      // ran out; one whose embed was drawn spent from the account, and a hit
+      // would skip that charge, handing later embeds budget they do not have.
+      if (
+        cacheKey !== undefined &&
+        budget.remaining === before.remaining &&
+        budget.refused === before.refused
+      ) {
         options.contentCache?.set(cacheKey, body)
       }
     } catch (err) {

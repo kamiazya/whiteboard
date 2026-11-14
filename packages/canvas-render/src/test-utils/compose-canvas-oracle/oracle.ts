@@ -326,5 +326,5 @@ export function composeCanvasRecords(): readonly ComposeCanvasRecord[] {
       [CHILD_ID]: { title: childEmbed().title, canvas: canvasWire(childEmbed().canvas, hex) },
     },
   }
-  return [meta, ...caseSpecs().map(caseRecord)]
+  return [meta, ...caseSpecs().map((spec, index) => caseRecord(spec, index))]
 }

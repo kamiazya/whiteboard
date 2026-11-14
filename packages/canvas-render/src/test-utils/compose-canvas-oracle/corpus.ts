@@ -308,7 +308,8 @@ export const BOXY_THEME_ID = 'test.boxy'
 
 const OVERRIDE: EdgeAnchorOverride = { fromSide: 'bottom', toSide: 'top' }
 
-export const caseSpecs = (): readonly CaseSpec[] => [
+/** The layered board: geometry overrides, locks, suppression and an embed path. */
+const layeredCases = (): readonly CaseSpec[] => [
   { board: 'layered', appearance: 'light', fonts: 'default' },
   {
     board: 'layered',
@@ -321,6 +322,7 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'layered', appearance: 'light', fonts: 'default', geometry: [Number.NaN, -1, -1] },
   { board: 'layered', appearance: 'light', fonts: 'default', geometry: [-1, 0, Infinity] },
   { board: 'layered', appearance: 'light', fonts: 'default', geometry: [0, 0.5, 0] },
+  { board: 'layered', appearance: 'light', fonts: 'default', geometry: [12, -1, 40] },
   {
     board: 'layered',
     appearance: 'light',
@@ -329,6 +331,10 @@ export const caseSpecs = (): readonly CaseSpec[] => [
     embedPath: ['doc-a'],
     overrides: [['m-n2', OVERRIDE]],
   },
+]
+
+/** Themes, unknown themes and declared tag colours. */
+const themedCases = (): readonly CaseSpec[] => [
   { board: 'themed', style: 'document', appearance: 'light', fonts: 'default' },
   { board: 'themed', style: 'document', appearance: 'light', fonts: 'all', cache: true },
   { board: 'themed', style: 'document', appearance: 'unmoded-dark', fonts: 'none' },
@@ -341,6 +347,10 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'unknown', style: 'visual.gone', appearance: 'dark', fonts: 'default' },
   { board: 'tagged', appearance: 'light', fonts: 'default', library: true },
   { board: 'tagged', appearance: 'light', fonts: 'default' },
+]
+
+/** Nested canvases, including a cached walk under an embed path. */
+const nestingCases = (): readonly CaseSpec[] => [
   { board: 'nesting', style: 'document', appearance: 'light', fonts: 'all' },
   {
     board: 'nesting',
@@ -353,4 +363,19 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   },
   { board: 'nesting', appearance: 'light', fonts: 'default', embedPath: ['boards/plain.canvas'] },
   { board: 'nesting', style: 'visual.neon', appearance: 'light', fonts: 'default' },
+  // A cached walk under a path of two documents: the content cache's key
+  // carries the path, so its every entry is spelled the same on both sides.
+  {
+    board: 'nesting',
+    appearance: 'light',
+    fonts: 'default',
+    embedPath: ['doc-a', 'doc-b'],
+    cache: true,
+  },
+]
+
+export const caseSpecs = (): readonly CaseSpec[] => [
+  ...layeredCases(),
+  ...themedCases(),
+  ...nestingCases(),
 ]

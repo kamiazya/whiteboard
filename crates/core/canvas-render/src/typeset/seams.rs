@@ -234,6 +234,12 @@ impl NestedLayoutBudget {
         self.refused.set(self.refused.get().saturating_add(1));
     }
 
+    /// How many nested layouts the account has left.
+    #[must_use]
+    pub fn layouts_remaining(&self) -> usize {
+        self.layouts.get()
+    }
+
     /// How many times [`Self::refuse`] has been called on this account.
     #[must_use]
     pub fn refused(&self) -> usize {
