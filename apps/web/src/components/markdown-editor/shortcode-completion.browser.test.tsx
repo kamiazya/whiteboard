@@ -13,6 +13,11 @@ import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// The source loads the emoji table with a dynamic `import()` on its first
+// ask. Importing it here puts it in the module graph before any test runs,
+// so the first test's popup does not race that load against `waitFor`'s
+// one-second default on a loaded runner.
+import '@kamiazya/whiteboard-plugin-visual/emoji/search'
 import { completionPopupTheme } from './completion-popup.js'
 import { shortcodeCompletionSource, shortcodeOptionRenderers } from './shortcode-completion.js'
 
