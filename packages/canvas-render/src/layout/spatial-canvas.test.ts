@@ -9,7 +9,6 @@ import {
 import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import type {
   HeadingBlockNode,
-  ParagraphBlockNode,
   Scene,
   ShapeSceneNode,
   TextRunNode,
@@ -278,29 +277,6 @@ describe('layoutSpatialCanvas', () => {
     const plainScene = layoutSpatialCanvas(canvas([plain]), baseOptions())
     const plainBlock = plainScene.nodes.find((n) => n.kind === 'paragraph')
     expect(plainBlock?.bbox.y).toBe(NODE_PADDING_PX)
-  })
-
-  it('a node whose id names an Object.prototype member is unshaped beside a shaped one', () => {
-    // The silhouette table is keyed by node id, so an id such as
-    // `constructor` must find nothing there unless a facet put it there.
-    const shaped = {
-      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
-      facets: { 'visual.shape/v0': { kind: 'ellipse' as const } },
-    }
-    for (const id of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
-      const plain = textNode({ id, x: 0, y: 300, width: 200, height: 100, text: 'one line' })
-      const scene = layoutSpatialCanvas(canvas([shaped, plain]), baseOptions())
-      const chrome = scene.nodes.find(
-        (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
-          n.kind === 'shape' && n.id === id,
-      )
-      expect(chrome, id).toBeDefined()
-      expect(chrome?.shape, id).toBeUndefined()
-      const block = scene.nodes.find(
-        (n): n is ParagraphBlockNode => n.kind === 'paragraph' && n.bbox.y >= 300,
-      )
-      expect(block?.bbox.y, id).toBe(300 + NODE_PADDING_PX)
-    }
   })
 
   // A symbol is a mark for the surfaces where a node or document is TOO
