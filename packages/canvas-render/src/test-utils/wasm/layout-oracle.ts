@@ -75,6 +75,11 @@ export function layoutRecords(): Map<LayoutTopic, LayoutRecord[]> {
   return byTopic
 }
 
+/** The class the core declines a case built to be declined with: a fence, else a shortcode. */
+function declinedClass(name: string): string {
+  return name.includes('```') ? 'highlight' : 'shortcode'
+}
+
 /** One case as the TypeScript answers it, or undefined when the core cannot be handed it. */
 function layoutRecord(
   name: string,
@@ -89,11 +94,7 @@ function layoutRecord(
     ...options,
     onDegrade: (event) => events.push(coreEvent(event)),
   })
-  const declined = name.startsWith('declined: ')
-    ? name.includes('```')
-      ? 'highlight'
-      : 'shortcode'
-    : undefined
+  const declined = name.startsWith('declined: ') ? declinedClass(name) : undefined
   const answer =
     declined === undefined
       ? (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')

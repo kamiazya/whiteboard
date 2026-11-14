@@ -170,18 +170,20 @@ function composerCases(): LayoutCase[] {
 export function layoutCases(synthetic: number): LayoutCase[] {
   const cases = composerCases()
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
-  cases.push({
-    topic: 'bodies',
-    name: 'bodies',
-    canvas: bodiesBoard(),
-    options: { ...light, references: referenceSeamsFromWire(WIRE), expandFileNode: () => true },
-  })
-  cases.push({
-    topic: 'bodies',
-    name: 'bodies, nothing resolved',
-    canvas: bodiesBoard(),
-    options: light,
-  })
+  cases.push(
+    {
+      topic: 'bodies',
+      name: 'bodies',
+      canvas: bodiesBoard(),
+      options: { ...light, references: referenceSeamsFromWire(WIRE), expandFileNode: () => true },
+    },
+    {
+      topic: 'bodies',
+      name: 'bodies, nothing resolved',
+      canvas: bodiesBoard(),
+      options: light,
+    },
+  )
   // What only the TypeScript can draw exactly: a fence its highlighter colours, a shortcode.
   for (const text of ['```js\nlet x = 1\n```', 'ship it :rocket:']) {
     const canvas = {

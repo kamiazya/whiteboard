@@ -56,7 +56,7 @@ describe('the recorded whole-layout oracle', () => {
     ]) {
       expect(requests, field).toContain(field)
     }
-    expect(all.filter((r) => r.answer.startsWith('["declined"')).length).toBe(2)
+    expect(all.filter((r) => r.answer.startsWith('["declined"'))).toHaveLength(2)
     expect(
       all.filter((r) => r.answer.includes('"kind":"unknown-node-kind"')).length,
     ).toBeGreaterThan(0)
@@ -70,7 +70,7 @@ describe('the recorded whole-layout oracle', () => {
         parted === -1 ? undefined : committed[parted]?.id,
         `the first record of ${topic} that moved`,
       ).toBeUndefined()
-      expect(committed.length, topic).toBe(records.length)
+      expect(committed, topic).toHaveLength(records.length)
     }
   })
 })
