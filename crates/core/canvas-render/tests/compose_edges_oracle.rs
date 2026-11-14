@@ -210,7 +210,7 @@ fn replay_case(themes: &(ThemeTokens, ThemeTokens), registry: &Registry, case: &
     if let Some(recorded) = &case.answer.jumps {
         differ("hops over every edge", &jumps_over(&composed.content), recorded)?;
     }
-    let scene = dump_scene(&Scene { nodes: composed.content, legend: None })?;
+    let scene = dump_scene(&Scene { nodes: composed.content, legend: None });
     if scene != case.answer.scene {
         return Err(format!("scene: got\n{scene}\nrecorded\n{}", case.answer.scene));
     }

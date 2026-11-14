@@ -266,7 +266,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
         embed_path: &[],
     };
     let laid = layout_spatial_canvas(&canvas, &options);
-    let scene = dump_scene(&Scene { nodes: laid.scene.nodes, legend: None })?;
+    let scene = dump_scene(&Scene { nodes: laid.scene.nodes, legend: None });
     if scene != want.scene {
         return Err(format!("scene: got\n{scene}\nrecorded\n{}", want.scene));
     }

@@ -209,7 +209,7 @@ fn node_of(wire: &NodeWire, align: Option<&str>) -> Res<SpatialNode> {
     })
 }
 
-fn dump_nodes(nodes: Vec<SceneNode>) -> Res<String> {
+fn dump_nodes(nodes: Vec<SceneNode>) -> String {
     dump_scene(&Scene { nodes, legend: None })
 }
 
@@ -288,18 +288,18 @@ fn check_box(node: &SpatialNode, options: &NodeBoxOptions<'_>, case: &Case) -> R
     differ("bounds", &bounds, &want.bounds.join(","))?;
     differ("width", &hex(content_width(node, options)), &want.width)?;
     let chrome = SceneNode::Shape(Box::new(chrome_shape(node, options)));
-    differ("chrome", &dump_nodes(vec![chrome])?, &want.chrome)?;
+    differ("chrome", &dump_nodes(vec![chrome]), &want.chrome)?;
     let fitted = SceneNode::Shape(Box::new(chrome_with_fit(node, options, true, true)));
-    differ("fitted chrome", &dump_nodes(vec![fitted])?, &want.fitted)?;
+    differ("fitted chrome", &dump_nodes(vec![fitted]), &want.fitted)?;
     let resolved = case.resolved.as_ref().map(ResolvedWire::resolved);
     let label = label_of(node, resolved.as_ref());
     if label != want.label {
         return Err(format!("label {label:?}, recorded {:?}", want.label));
     }
     let runs = |text: Option<&str>, place| dump_nodes(label_runs(node, text, place, options));
-    differ("above", &runs(want.label.as_deref(), LabelPlace::Above)?, &want.above)?;
-    differ("inside", &runs(want.label.as_deref(), LabelPlace::Inside)?, &want.inside)?;
-    differ("probe", &runs(Some(&case.probe), LabelPlace::Inside)?, &want.probe)
+    differ("above", &runs(want.label.as_deref(), LabelPlace::Above), &want.above)?;
+    differ("inside", &runs(want.label.as_deref(), LabelPlace::Inside), &want.inside)?;
+    differ("probe", &runs(Some(&case.probe), LabelPlace::Inside), &want.probe)
 }
 
 /// A content scene placed in the node, lifted above it and fitted to it.
@@ -309,18 +309,18 @@ fn check_content(
     scene: &[SceneNode],
     want: &Answer,
 ) -> Res<()> {
-    let placed = dump_nodes(place_in_node(node, scene, options))?;
+    let placed = dump_nodes(place_in_node(node, scene, options));
     if digest(&placed) != want.placed {
         return Err(format!("placed {:?}, recorded {:?}\n{placed}", digest(&placed), want.placed));
     }
-    let lifted = dump_nodes(place_above_node(node, scene))?;
+    let lifted = dump_nodes(place_above_node(node, scene));
     if digest(&lifted) != want.lifted {
         return Err(format!("lifted {:?}, recorded {:?}\n{lifted}", digest(&lifted), want.lifted));
     }
     let got = match fit_scene_in_node(scene, node, options) {
         None => None,
         Some(kept) => {
-            let text = dump_nodes(kept.nodes)?;
+            let text = dump_nodes(kept.nodes);
             Some((text.encode_utf16().count(), fnv(&text), kept.truncated, kept.overflows))
         }
     };
@@ -346,7 +346,7 @@ fn replay_translate(context: &Context, record: &Value) -> Res<()> {
     let text = |key: &str| record[key].as_str().ok_or_else(|| format!("no {key}"));
     let scene = content(context, text("content")?)?;
     let moved = translate_scene(scene, f64_of(text("dx")?)?, f64_of(text("dy")?)?);
-    let got = digest(&dump_nodes(moved)?);
+    let got = digest(&dump_nodes(moved));
     let want: Digest = serde_json::from_value(record.clone()).map_err(|e| e.to_string())?;
     if got == want { Ok(()) } else { Err(format!("translated {got:?}, recorded {want:?}")) }
 }

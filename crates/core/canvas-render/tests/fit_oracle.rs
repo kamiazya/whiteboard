@@ -42,7 +42,7 @@ fn fnv(text: &str) -> u32 {
 
 /// How a kept body differs from what was recorded, or `Ok`.
 fn check(kept: FittedBlocks, want: &Answer) -> Result<(), String> {
-    let text = dump_scene(&Scene { nodes: kept.nodes, legend: None })?;
+    let text = dump_scene(&Scene { nodes: kept.nodes, legend: None });
     let got = (text.encode_utf16().count(), fnv(&text), kept.truncated, kept.overflows);
     let held = (want.n, want.h, want.truncated, want.overflows);
     if got != held {

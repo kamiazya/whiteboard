@@ -495,7 +495,7 @@ fn node_of(wire: &NodeWire, align: Option<&str>) -> Res<SpatialNode> {
     })
 }
 
-fn dump_nodes(nodes: Vec<SceneNode>) -> Res<String> {
+fn dump_nodes(nodes: Vec<SceneNode>) -> String {
     dump_scene(&Scene { nodes, legend: None })
 }
 
@@ -557,7 +557,7 @@ impl<'c> Setup<'c> {
         }
     }
 
-    fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> Res<String> {
+    fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> String {
         let budget = self.budget();
         let layout = LayoutOptions {
             measure: &self.measure,
@@ -613,11 +613,11 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     let setup = Setup::of(context, case)?;
     let want = &case.answer;
     let cache = case.on("cache").then(Recording::default);
-    let scene = setup.compose(&node, cache.as_ref())?;
+    let scene = setup.compose(&node, cache.as_ref());
     if scene != want.scene {
         return Err(format!("scene: got\n{scene}\nrecorded\n{}", want.scene));
     }
-    differ("again", &digest(&setup.compose(&node, cache.as_ref())?), &want.again)?;
+    differ("again", &digest(&setup.compose(&node, cache.as_ref())), &want.again)?;
     let asked = cache.as_ref().map(|c| c.asked.borrow().clone()).unwrap_or_default();
     let kept = cache.as_ref().map(|c| c.kept.borrow().clone()).unwrap_or_default();
     differ("asked", &asked, &want.asked)?;
@@ -627,7 +627,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
         Some(first) => {
             let seed = Recording::default();
             seed.entries.borrow_mut().insert(first.clone(), context.seeded.clone());
-            Some(digest(&setup.compose(&node, Some(&seed))?))
+            Some(digest(&setup.compose(&node, Some(&seed))))
         }
     };
     differ("seeded", &seeded, &want.seeded)?;
