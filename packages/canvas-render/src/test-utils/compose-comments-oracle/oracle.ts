@@ -217,5 +217,5 @@ export function composeCommentsRecords(): readonly ComposeCommentsRecord[] {
     references: {},
     embeds: {},
   }
-  return [meta, ...caseSpecs().map(caseRecord)]
+  return [meta, ...caseSpecs().map((spec, index) => caseRecord(spec, index))]
 }
