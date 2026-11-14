@@ -28,13 +28,13 @@ use crate::compose_node::{
 };
 use crate::declared_colours::with_declared_colours;
 use crate::measure::Measure;
-use crate::node_content::is_frame;
 use crate::scene_walk::SceneWalk;
 use crate::theme::appearance::SpatialAppearanceResolver;
 use crate::theme::geometry::SpatialGeometry;
 use crate::typeset::NestedLayoutBudget;
 pub use level::resolve_geometry;
 use level::{Level, Place};
+use whiteboard_model::node_content::is_frame;
 
 /// Which look a render draws (`SpatialRenderStyle`): `Clean` ignores any theme
 /// a canvas names, `Document` draws the one it names, and a theme id draws that

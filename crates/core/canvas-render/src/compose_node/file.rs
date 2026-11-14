@@ -13,8 +13,8 @@ use crate::node_box::{
     FacetCard, LabelPlace, ResolvedReference, chrome_with_fit, content_box_height, content_width,
     fit_scene_in_node, js_trim, label_of, label_runs, place_in_node,
 };
-use crate::node_content::node_file;
 use crate::typeset::{FittedBlocks, typeset_mdast_blocks};
+use whiteboard_model::node_content::node_file;
 
 /// A body typeset at the node's content width and cut to its box. A box with no
 /// room is refused before anything is measured; a box that is not fitted has

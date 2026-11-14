@@ -15,8 +15,10 @@ pub mod checks;
 pub mod frames;
 pub mod json;
 pub mod mdast;
+pub mod node_content;
 #[path = "generated/okf.rs"]
 pub mod okf;
+pub mod proposal;
 #[path = "generated/spatial.rs"]
 pub mod spatial;
 pub mod tags;

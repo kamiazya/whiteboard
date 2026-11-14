@@ -30,13 +30,13 @@ use whiteboard_scene::{
 use crate::compose_node::ComposeOptions;
 use crate::edge_flatten::flatten_drawn_edge_path;
 use crate::measure::{FontDescriptor, FontStyle};
-use crate::node_content::is_frame;
 use crate::scene_extent::content_extent;
 use crate::theme::appearance::{SpatialCommentAppearance, SpatialCommentChromeAppearance};
 use crate::translate_scene::translate_scene;
 use body::{COMMENT_TEXT_MAX_WIDTH_PX, collapse_resolved_body, layout_comment_body};
 use placement::{comment_leader_end, nearest_point_on_polyline, place_comment_bubble};
 use regions::{Region, region_outlines, regions_of};
+use whiteboard_model::node_content::is_frame;
 
 /// Pin diameter: a mark, not content.
 pub const COMMENT_PIN_SIZE_PX: f64 = 20.0;

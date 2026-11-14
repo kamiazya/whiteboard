@@ -6,7 +6,8 @@
 //! drew over the top-level canvas, are answered from the recording. The edges
 //! laid out alone are also held to the edge suffix of the whole layout, which is
 //! what a live drag relies on. The comment layer is replayed beside it, from
-//! `compose-comments.jsonl` (`comments`).
+//! `compose-comments.jsonl` (`comments`), and the proposal layer from
+//! `proposal-conflicts.jsonl` (`proposals`).
 
 #[path = "canvas_wire/mod.rs"]
 mod canvas_wire;
@@ -20,6 +21,10 @@ mod dump;
 mod facet_support;
 #[path = "typeset_support/model.rs"]
 mod model;
+#[path = "compose_canvas_support/proposal_wire.rs"]
+mod proposal_wire;
+#[path = "compose_canvas_support/proposals.rs"]
+mod proposals;
 #[path = "compose_canvas_support/seams.rs"]
 mod seams;
 #[path = "theme_support/tokens.rs"]

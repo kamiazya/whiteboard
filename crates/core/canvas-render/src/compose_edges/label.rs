@@ -11,7 +11,7 @@ use whiteboard_model::spatial::SpatialNode;
 use whiteboard_scene::{BoundingBox, SceneNode, ScenePoint};
 
 use crate::node_box::{LabelPlace, NodeBoxOptions, label_of, label_runs};
-use crate::node_content::is_frame;
+use whiteboard_model::node_content::is_frame;
 
 /// The size of a label's box.
 #[derive(Debug, Clone, Copy, PartialEq)]

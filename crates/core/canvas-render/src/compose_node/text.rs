@@ -10,13 +10,13 @@ use crate::node_box::{
     NodeBoxOptions, chrome_shape, chrome_with_fit, content_width, fit_scene_in_node, label_run,
     place_in_node,
 };
-use crate::node_content::node_text;
 use crate::scene_digest::json::{number, quote};
 use crate::theme::asset::markdown_theme;
 use crate::theme::markdown::MarkdownTheme;
 use crate::typeset::{
     FittedBlocks, SyntaxFills, TypesetOptions, first_line_of_blocks, typeset_mdast_blocks,
 };
+use whiteboard_model::node_content::node_text;
 
 /// What a body is typeset with besides its width (`mdastOptionsFor`): the
 /// markdown theme the active theme's palette colours, and the family and fill

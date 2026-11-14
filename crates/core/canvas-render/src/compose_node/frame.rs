@@ -6,7 +6,7 @@ use whiteboard_scene::{BoundingBox, ImageFit, ImageSceneNode, SceneNode, ShapeSc
 
 use super::{ComposeOptions, Degradation};
 use crate::node_box::{LabelPlace, chrome_shape, label_of, label_runs};
-use crate::node_content::{frame_background, frame_background_style};
+use whiteboard_model::node_content::{frame_background, frame_background_style};
 
 /// Alpha of the stroke colour an empty frame is tinted with.
 const EMPTY_FRAME_TINT_OPACITY: f64 = 0.06;

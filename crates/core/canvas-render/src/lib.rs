@@ -43,7 +43,6 @@ pub mod longest_fit;
 pub mod measure;
 pub mod measure_memo;
 pub mod node_box;
-pub mod node_content;
 pub mod node_outline;
 pub mod scale_scene;
 pub mod scene_bounds;

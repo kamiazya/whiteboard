@@ -21,7 +21,8 @@ use super::palette::{
     SpatialCommentChrome, SpatialNodeStyle, SpatialNodeStyles, SpatialPalette, SpatialPresetAccent,
     SpatialPresets, SpatialProposalChrome, SpatialSyntaxPalette,
 };
-use super::spatial_theme::{SpatialTheme, create_spatial_theme, is_frame};
+use super::spatial_theme::{SpatialTheme, create_spatial_theme};
+use whiteboard_model::node_content::is_frame;
 
 fn style_of(tokens: &NodeStyleTokens) -> SpatialNodeStyle {
     let fill = match &tokens.fill {
