@@ -9,7 +9,7 @@ use std::cell::RefCell;
 use serde::Deserialize;
 use whiteboard_canvas_render::comments::loose::loose_occurrences;
 use whiteboard_canvas_render::comments::passage::{
-    NodePassage, PassagePaint, compose_passage_highlights,
+    NodePassage, PassagePaint, PlacedRun, compose_passage_highlights,
 };
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, FontStyle, Measure, VerticalMetrics};
@@ -30,13 +30,15 @@ struct QuoteWire {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct RunWire {
     text: String,
     bbox: [String; 4],
     emphasis: bool,
     strong: bool,
     paint: Option<PaintWire>,
+    /// What enclosing list items and table cells shift the run by; absent is 0.
+    offset_x: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -123,6 +125,11 @@ fn quote_of(wire: &QuoteWire) -> TextQuote {
     }
 }
 
+/// What enclosing list items and table cells shift a run by; absent is 0.
+fn offset_of(wire: &RunWire) -> Res<f64> {
+    wire.offset_x.as_deref().map_or(Ok(0.0), f64_of)
+}
+
 fn run_of(wire: &RunWire) -> Res<TextRunNode> {
     let [x, y, w, h] = &wire.bbox;
     let appearance = match &wire.paint {
@@ -198,6 +205,7 @@ fn replay_highlights(
     measure: &str,
     want: &Drawn,
 ) -> Res<()> {
+    let offsets = runs.iter().map(offset_of).collect::<Res<Vec<_>>>()?;
     let runs = runs.iter().map(run_of).collect::<Res<Vec<_>>>()?;
     let anchors: Vec<TextAnchor> = passages
         .iter()
@@ -221,7 +229,8 @@ fn replay_highlights(
         base: FakeMeasure::default(),
         asked: RefCell::new(Vec::new()),
     };
-    let refs: Vec<&TextRunNode> = runs.iter().collect();
+    let refs: Vec<PlacedRun<'_>> =
+        runs.iter().zip(offsets).map(|(run, offset_x)| PlacedRun { run, offset_x }).collect();
     let drawn = compose_passage_highlights(&passages, &refs, &measure, paint, &units(source));
     let mut shapes = Vec::new();
     for node in &drawn {

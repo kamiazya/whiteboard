@@ -14,12 +14,16 @@
  * `paints` renders exactly what it rendered before.
  */
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { passageBoxes } from '../passage-highlight.js'
 import { typesetMdastBlocks } from './mdast-blocks.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 600, fontFamily: 'sans-serif' }
+
+/** Top-level paragraph runs, which no list item or table cell translates. */
+const atOrigin = (runs: readonly TextRunNode[]) => runs.map((run) => ({ run, offsetX: 0 }))
 
 const runsOf = (root: MdastRoot) =>
   typesetMdastBlocks(root, options).nodes.flatMap((node) =>
@@ -91,7 +95,7 @@ describe('a comment can still be anchored across an inline image', () => {
         { type: 'text', value: ' here' },
       ]),
     )
-    const boxes = passageBoxes(runs, { exact: 'see a diagram here' }, options.measure)
+    const boxes = passageBoxes(atOrigin(runs), { exact: 'see a diagram here' }, options.measure)
     expect(boxes.length).toBeGreaterThan(0)
   })
 
@@ -102,7 +106,9 @@ describe('a comment can still be anchored across an inline image', () => {
         { type: 'image', url: 'diagram.png', alt: 'a diagram' },
       ]),
     )
-    expect(passageBoxes(runs, { exact: 'a diagram' }, options.measure).length).toBeGreaterThan(0)
+    expect(
+      passageBoxes(atOrigin(runs), { exact: 'a diagram' }, options.measure).length,
+    ).toBeGreaterThan(0)
   })
 })
 
