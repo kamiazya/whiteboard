@@ -6,6 +6,7 @@
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
+use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{
     LayoutOptions, Overlaid, Overlays, RenderStyle, layout_spatial_canvas,
 };
@@ -21,6 +22,7 @@ use whiteboard_canvas_render::typeset::{
     NestedLayoutBudget,
 };
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -84,6 +86,10 @@ impl ComposeHost for Naming {
     }
 
     fn degrade(&self, _: Degradation) {}
+
+    fn comment_body(&self, _: &PlacedComment) -> Vec<SceneNode> {
+        Vec::new()
+    }
 }
 
 impl EmbedResolver for Naming {
@@ -161,6 +167,7 @@ fn scene_of(canvas: &SpatialCanvas, cached: bool, layouts: usize, registry: &Reg
         host: &Naming,
         overlays: &Naming,
         content_cache: cached.then_some(&cache as &dyn ContentCache),
+        comments: CommentOptions::default(),
         body: BodySeams {
             inline: &Naming,
             highlight: None,
