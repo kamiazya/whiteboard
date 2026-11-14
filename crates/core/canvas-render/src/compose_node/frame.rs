@@ -32,13 +32,13 @@ fn has_area(node: &SpatialNode) -> bool {
 /// reported. A reference that resolves to no picture keeps the plain frame.
 fn group_background(node: &SpatialNode, options: &ComposeOptions<'_>) -> Option<SceneNode> {
     let background = frame_background(node)?;
-    let image = options.host.resolve_reference(background)?.image?;
+    let image = options.layout.host.resolve_reference(background)?.image?;
     if !has_area(node) {
         return None;
     }
     let style = frame_background_style(node);
     if style == Some(BackgroundStyle::Repeat) {
-        options.host.degrade(Degradation::UnsupportedBackgroundStyle {
+        options.layout.host.degrade(Degradation::UnsupportedBackgroundStyle {
             node_id: node.id.clone(),
             style: BackgroundStyle::Repeat,
         });
@@ -58,7 +58,7 @@ pub(super) fn compose_frame_node(
     options: &ComposeOptions<'_>,
 ) -> Vec<SceneNode> {
     let mut chrome = chrome_shape(node, &options.node_box);
-    if options.host.empty_frame(&node.id) {
+    if options.empty_frames.contains(&node.id) {
         tint_empty(&mut chrome);
     }
     let mut drawn = vec![SceneNode::Shape(Box::new(chrome))];

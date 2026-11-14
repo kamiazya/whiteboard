@@ -60,12 +60,12 @@ impl MdastStyle {
             font_family: &self.font_family,
             theme: &self.theme,
             text_fill: self.text_fill.as_deref(),
-            seams: compose.body.inline,
-            highlight: compose.body.highlight,
+            seams: compose.layout.body.inline,
+            highlight: compose.layout.body.highlight,
             syntax: self.syntax.as_ref(),
-            math: compose.body.math,
-            diagram: compose.body.diagram,
-            embeds: compose.body.embeds,
+            math: compose.layout.body.math,
+            diagram: compose.layout.body.diagram,
+            embeds: compose.layout.body.embeds,
             canvas_layout: Some(compose),
             budget: Some(compose.budget),
             embed_path: compose.embed_path,
@@ -124,15 +124,15 @@ fn lay_out_body(
 ) -> FittedBlocks {
     let nb = &options.node_box;
     let refused_before = options.budget.refused();
-    let Ok(root) = options.host.parse_body(text) else {
-        options.host.degrade(Degradation::BodyParseFailed { node_id: node.id.clone() });
+    let Ok(root) = options.layout.host.parse_body(text) else {
+        options.layout.host.degrade(Degradation::BodyParseFailed { node_id: node.id.clone() });
         let line = SceneNode::TextRun(Box::new(label_run(text, nb, max_width)));
         return fit_text_body(&[line], node, nb);
     };
     let style = mdast_style_for(nb);
     let laid = typeset_mdast_blocks(&root, &style.options(max_width, options));
     let body = fit_text_body(&laid.nodes, node, nb);
-    if let (Some(cache), Some(key)) = (options.content_cache, key)
+    if let (Some(cache), Some(key)) = (options.layout.content_cache, key)
         && options.budget.refused() == refused_before
     {
         cache.set(key, &body);
@@ -145,18 +145,23 @@ pub(super) fn compose_text_node(
     options: &ComposeOptions<'_>,
 ) -> Vec<SceneNode> {
     let nb = &options.node_box;
-    if options.host.body_suppressed(&node.id) {
+    if options.layout.suppressed.contains(&node.id) {
         return vec![SceneNode::Shape(Box::new(chrome_shape(node, nb)))];
     }
     let text = node_text(node).unwrap_or_default();
     let max_width = content_width(node, nb);
-    let key = options.content_cache.map(|_| cache_key(node, text, options));
-    let cached = options.content_cache.zip(key.as_deref()).and_then(|(cache, key)| cache.get(key));
+    let key = options.layout.content_cache.map(|_| cache_key(node, text, options));
+    let cached =
+        options.layout.content_cache.zip(key.as_deref()).and_then(|(cache, key)| cache.get(key));
     let body =
         cached.unwrap_or_else(|| lay_out_body(node, text, max_width, key.as_deref(), options));
     // Behind the runs and in the same origin-relative space, so placing the
     // body carries them into the node with it.
-    let mut content = options.host.passage_highlights(node, text, &body);
+    let mut content = if options.annotated {
+        options.layout.host.passage_highlights(node, text, &body)
+    } else {
+        Vec::new()
+    };
     let chrome = chrome_with_fit(node, nb, body.truncated, body.overflows);
     content.extend(body.nodes);
     let mut drawn = vec![SceneNode::Shape(Box::new(chrome))];

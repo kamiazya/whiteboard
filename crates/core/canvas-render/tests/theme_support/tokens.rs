@@ -88,7 +88,7 @@ fn defaults(value: Option<&Value>) -> ThemeDefaults {
     });
     let edge_routing =
         value.get("edgeRouting").and_then(Value::as_str).and_then(ThemeEdgeRouting::from_wire);
-    ThemeDefaults { group_frame, edge_routing, ..ThemeDefaults::default() }
+    ThemeDefaults { group_frame, edge_routing, node_shape: opt_text(value, "nodeShape") }
 }
 
 pub(crate) fn theme_tokens(value: &Value) -> Res<ThemeTokens> {

@@ -34,10 +34,6 @@ describe('the recorded compose-node oracle', () => {
   it('reaches every kind of node and every outcome', () => {
     expect(records[0]?.kind, 'the meta line first').toBe('meta')
     expect(cases.length, 'cases').toBeGreaterThan(150)
-    const nested = cases.flatMap((c) => c.answer.nested ?? [])
-    expect(nested.length, 'nested layouts').toBeGreaterThan(5)
-    const deeper = (n: (typeof nested)[number]) => n.depth > 1 && n.path.length > 0
-    expect(nested.some(deeper), 'a nested layout below the top').toBe(true)
     const answers = cases.map((c) => c.answer)
     const has = (what: string, test: (a: (typeof answers)[number]) => boolean) =>
       expect(answers.some(test), what).toBe(true)
@@ -61,14 +57,8 @@ describe('the recorded compose-node oracle', () => {
     has('a file drawn as its card', (a) => a.scene.includes('Spec'))
     has('a card that fell back from an empty body', (a) => a.scene.includes('Fallback card'))
     has('a card row the trim keeps', (a) => a.scene.includes('\u0085'))
-    has('a file drawn as its canvas', (a) => a.scene.includes('"embedResolved"'))
     has('a canvas the spent budget refused', (a) => a.scene.includes('Board notes'))
     has('a file whose subpath follows its name', (a) => a.scene.includes('Doc MD#Heading'))
-    has('a body drawing a canvas', (a) => a.scene.includes('"inside"') && a.scene.includes('Over'))
-    has(
-      'a canvas spent before a fit with no room',
-      (a) => a.scene.includes('"budget"') && !a.scene.includes('"embedResolved"'),
-    )
     has('a canvas the element account refused', (a) => a.scene.includes('Board E'))
     const badges = records.flatMap((r) => (r.kind === 'decoration' ? [r] : []))
     expect(badges.filter((d) => d.scene.includes('"icon"')).length, 'badges drawn').toBeGreaterThan(

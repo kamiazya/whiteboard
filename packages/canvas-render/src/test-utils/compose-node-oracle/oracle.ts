@@ -42,9 +42,10 @@ import { type FitRecord, fitRecords } from './fit.js'
  * and kept, the scene composed again over the same cache, and the scene composed
  * over a cache seeded under the first key asked. What the composer asks a host
  * the Rust port takes as a seam — a body parsed and its references resolved, a
- * reference resolved, an embed target, the expansion policy, and a nested canvas
- * laid out — is in the meta line and the case, as data; what the nested layout
- * was handed is part of the answer. Every double is the hex of its IEEE bits
+ * reference resolved, an embed target and the expansion policy — is in the meta
+ * line and the case, as data. A case whose node lays a nested canvas out is not
+ * recorded: the Rust composer lays that canvas out with its own walk, which
+ * `compose-canvas.jsonl` holds with real nested layouts. Every double is the hex of its IEEE bits
  * (a NaN the canonical one), and `calls` counts what the measurer was asked.
  */
 
@@ -135,8 +136,6 @@ interface MetaRecord {
   readonly canvases: Readonly<Record<string, { title: string; canvas: SpatialCanvas }>>
   readonly references: typeof REFERENCES
   readonly seeded: FittedBlocks
-  /** What the nested layout answers for any canvas. */
-  readonly miniature: readonly SceneNode[]
 }
 
 /** A node as data: its box as IEEE bits, the rest as JSON. */
@@ -183,8 +182,6 @@ interface CaseAnswer {
   readonly again: { n: number; h: number }
   readonly seeded: { n: number; h: number } | null
   readonly calls: number
-  /** What each nested layout was handed, over every composition of the case. */
-  readonly nested?: readonly Nested[]
 }
 
 /** A nested layout's input: the recursion path, the depth and the canvas's size. */
@@ -327,8 +324,8 @@ const detailOf = (event: SpatialLayoutDegradation): string =>
       ? event.style
       : ''
 
-/** What `composeNode` answers for a case, from its inputs alone. */
-function answerOf(record: Input): CaseAnswer {
+/** What `composeNode` answers for a case, from its inputs alone, and whether it laid a canvas out. */
+function answerOf(record: Input): { answer: CaseAnswer; nested: boolean } {
   const node = withAlign(nodeOf(record.node), record.align)
   let calls = 0
   const count = () => {
@@ -346,7 +343,7 @@ function answerOf(record: Input): CaseAnswer {
     seed.entries.set(first, SEEDED)
     seeded = digest(dump(composeNode(node, optionsOf(record, count, events, seed, nested))))
   }
-  return {
+  const answer = {
     scene,
     events: events.map((e) => ({
       kind: e.kind,
@@ -358,11 +355,11 @@ function answerOf(record: Input): CaseAnswer {
     again,
     seeded,
     calls,
-    ...(nested.length === 0 ? {} : { nested }),
   }
+  return { answer, nested: nested.length > 0 }
 }
 
-function caseRecord(spec: CaseSpec, index: number): CaseRecord {
+function caseRecord(spec: CaseSpec, index: number): CaseRecord | undefined {
   const input: Input = {
     kind: 'case' as const,
     id: spec.id,
@@ -377,7 +374,8 @@ function caseRecord(spec: CaseSpec, index: number): CaseRecord {
     ...(spec.budget === undefined ? {} : { budget: spec.budget }),
     ...(spec.embedPath === undefined ? {} : { embedPath: spec.embedPath }),
   }
-  return { ...input, answer: answerOf(input) }
+  const { answer, nested } = answerOf(input)
+  return nested ? undefined : { ...input, answer }
 }
 
 function metaRecord(): MetaRecord {
@@ -394,7 +392,6 @@ function metaRecord(): MetaRecord {
     canvases: { [BOARD_ID]: { title: 'Board', canvas: viaJson(BOARD_CANVAS) } },
     references: REFERENCES,
     seeded: viaJson(SEEDED),
-    miniature: viaJson(MINIATURE.nodes),
   }
 }
 
@@ -403,7 +400,8 @@ const fits = () => fitRecords(hex, dump, MINIATURE.nodes)
 
 /** Every record, in file order: the meta line, the cases, the decorations, then the fits. */
 export function composeNodeRecords(): readonly ComposeNodeRecord[] {
-  return [metaRecord(), ...caseSpecs().map(caseRecord), ...decorations(), ...fits()]
+  const cases = caseSpecs().flatMap((spec, index) => caseRecord(spec, index) ?? [])
+  return [metaRecord(), ...cases, ...decorations(), ...fits()]
 }
 
 /** A recorded record answered again from its inputs. */
@@ -412,5 +410,5 @@ export function reanswer(record: ComposeNodeRecord): ComposeNodeRecord | undefin
   if (record.kind === 'decoration') return decorations().find((d) => d.id === record.id)
   if (record.kind === 'fit') return fits().find((f) => f.id === record.id)
   const { answer: _recorded, ...input } = record
-  return { ...input, answer: answerOf(input) }
+  return { ...input, answer: answerOf(input).answer }
 }
