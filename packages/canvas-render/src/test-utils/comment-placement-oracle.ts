@@ -307,6 +307,41 @@ function sweep(): CommentPlacementRecord[] {
   return out
 }
 
+/**
+ * Boards where no candidate is free, so the pick weighs one cover against
+ * another: thirty to fifty boxes up to 360 by 240 scattered within the ring's
+ * reach. A sweep with a free candidate never compares two covers at all.
+ */
+function denseSweep(): CommentPlacementRecord[] {
+  const rand = lcg(0xc0ffee)
+  return Array.from({ length: 60 }, () => {
+    const size: Pt = [rand(120) + 20, rand(60) + 20]
+    const obstacles: Box[] = Array.from({ length: 30 + rand(21) }, () => [
+      half(rand, 300),
+      half(rand, 300),
+      rand(360) + 1,
+      rand(240) + 1,
+    ])
+    return place([half(rand, 20), half(rand, 20)], size, obstacles)
+  })
+}
+
+/**
+ * A bubble of infinite height beside an obstacle it only touches: the overlap
+ * is zero wide and infinitely tall, and zero times infinity is NaN, so the
+ * touch must add nothing rather than its product.
+ */
+function infiniteTouches(): CommentPlacementRecord[] {
+  const tall: Pt = [100, Number.POSITIVE_INFINITY]
+  const wide: Pt = [Number.POSITIVE_INFINITY, 40]
+  return [
+    place([0, 0], tall, [[114, 0, 50, Number.POSITIVE_INFINITY]]),
+    place([0, 0], tall, [[-14, 0, 50, Number.POSITIVE_INFINITY]]),
+    place([0, 0], wide, [[0, 54, Number.POSITIVE_INFINITY, 10]]),
+    place([0, 0], wide, [[0, -14, Number.POSITIVE_INFINITY, 10]]),
+  ]
+}
+
 /** Every record, in file order. */
 export function commentPlacementRecords(): readonly CommentPlacementRecord[] {
   return [
@@ -317,5 +352,7 @@ export function commentPlacementRecords(): readonly CommentPlacementRecord[] {
     ...leaderEdges(),
     ...nearestEdges(),
     ...sweep(),
+    ...denseSweep(),
+    ...infiniteTouches(),
   ]
 }
