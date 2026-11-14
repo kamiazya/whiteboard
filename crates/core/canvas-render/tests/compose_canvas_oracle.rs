@@ -7,7 +7,8 @@
 //! laid out alone are also held to the edge suffix of the whole layout, which is
 //! what a live drag relies on. The comment layer is replayed beside it, from
 //! `compose-comments.jsonl` (`comments`), and the proposal layer from
-//! `proposal-conflicts.jsonl` (`proposals`).
+//! `proposal-conflicts.jsonl` (`proposals`), and the legend from
+//! `canvas-legend.jsonl` (`legend`).
 
 #[path = "canvas_wire/mod.rs"]
 mod canvas_wire;
@@ -19,6 +20,8 @@ mod degrade_support;
 mod dump;
 #[path = "facet_support/mod.rs"]
 mod facet_support;
+#[path = "compose_canvas_support/legend.rs"]
+mod legend;
 #[path = "typeset_support/model.rs"]
 mod model;
 #[path = "compose_canvas_support/proposal_wire.rs"]
@@ -177,8 +180,7 @@ impl<'c> Setup<'c> {
     ) -> (T, Recorded, Option<Vec<String>>) {
         let cache = (self.case.cache == Some(true)).then(KeyCache::default);
         let measure = Counting { base: FakeMeasure::default(), calls: Cell::new(0) };
-        let want = &self.case.answer.canvas;
-        let host = Host::new(self.context, &want.overlay, want.legend.as_ref());
+        let host = Host::new(self.context);
         let badge = StencilBadge { registry: &self.context.registry };
         let decorations: [&dyn NodeDecoration; 1] = [&badge];
         let options = LayoutOptions {
@@ -199,7 +201,6 @@ impl<'c> Setup<'c> {
             locked: &self.case.locked,
             side_overrides: self.pins.as_deref(),
             host: &host,
-            overlays: &host,
             comments: CommentOptions::default(),
             proposals: &[],
             content_cache: cache.as_ref().map(|c| c as &dyn ContentCache),
@@ -235,6 +236,8 @@ fn replay_canvas(setup: &Setup<'_>) -> Res<Vec<SceneNode>> {
     let drawn: Vec<SceneNode> = laid.scene.nodes.iter().take(from).cloned().collect();
     check_scene("scene", &dump_nodes(laid.scene.nodes)?, &want.scene)?;
     differ("legend", &laid.scene.legend, &want.legend)?;
+    // Every overlay the walk draws is its own now; the recording holds none past it.
+    differ("overlay nodes recorded", &want.overlay.nodes.len(), &0)?;
     let anchors: Vec<_> = laid.anchors.iter().map(|(id, pair)| anchor_row(id, pair)).collect();
     differ("anchors", &anchors, &want.anchors)?;
     recorded.check(&want.events, want.calls)?;

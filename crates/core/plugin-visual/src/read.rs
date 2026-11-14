@@ -20,6 +20,9 @@ pub const VISUAL_STROKE_KEY: &str = "visual.stroke/v0";
 pub const VISUAL_THEME_KEY: &str = "visual.theme/v0";
 pub const VISUAL_STENCIL_KEY: &str = "visual.stencil/v0";
 pub const VISUAL_SYMBOL_KEY: &str = "visual.symbol/v0";
+/// Which of its own facets a canvas treats as semantic axes; read raw, since a
+/// stored declaration costs the axis rather than the reading.
+pub const VISUAL_AXES_KEY: &str = "visual.axes/v0";
 
 fn field<'v>(value: &'v Value, name: &str) -> Option<&'v Value> {
     let Value::Map(entries) = value else { return None };

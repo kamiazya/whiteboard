@@ -13,7 +13,7 @@ use std::collections::BTreeMap;
 use crate::canvas_wire::{Res, differ, f64_of, hex};
 use crate::dump::dump_scene;
 use crate::proposal_wire::{ProposalWire, proposal_of};
-use crate::seams::{CanvasWire, Context, Event, Host, OverlayWire, canvas_of};
+use crate::seams::{CanvasWire, Context, Event, Host, canvas_of};
 use crate::without_kind;
 use serde::Deserialize;
 use serde_json::Value;
@@ -44,7 +44,6 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 #[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct Answer {
     scene: String,
-    from: usize,
     calls: Vec<(String, String, String)>,
     events: Vec<Event>,
 }
@@ -236,8 +235,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     let proposals = case.proposals.iter().flatten().map(proposal_of).collect::<Res<Vec<_>>>()?;
     let obstacles = case.obstacles.iter().flatten().map(box_of).collect::<Res<Vec<_>>>()?;
     let want = &case.answer;
-    let overlay = OverlayWire { from: want.from, nodes: Vec::new() };
-    let host = Host::new(context, &overlay, None);
+    let host = Host::new(context);
     let measure = Asking { base: FakeMeasure::default(), asked: RefCell::new(Vec::new()) };
     let appearance = appearance_of(&case.appearance);
     let badge = StencilBadge { registry: &context.registry };
@@ -256,7 +254,6 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
         locked: &[],
         side_overrides: None,
         host: &host,
-        overlays: &host,
         comments: CommentOptions {
             threads: &threads,
             show_resolved: case.show_resolved == Some(true),
