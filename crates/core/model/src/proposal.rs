@@ -56,12 +56,6 @@ pub struct ElementPatchFields<End> {
     pub facets: Option<ExtensionFacets>,
 }
 
-impl<End> Default for ElementPatchFields<End> {
-    fn default() -> Self {
-        Self { from: None, to: None, color: None, label: None, bends: None, facets: None }
-    }
-}
-
 /// A change whose subject is the canvas (`SpatialProposedChange`), stored
 /// resolved: a real id and real geometry, never a draft.
 #[derive(Debug, Clone, PartialEq)]
