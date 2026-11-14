@@ -173,110 +173,31 @@ function leaderEdges(): CommentPlacementRecord[] {
   ]
 }
 
+/** A polyline from its coordinates, x then y. */
+const path = (...xy: readonly number[]): Pt[] =>
+  xy.flatMap((x, i) => (i % 2 === 0 ? [[x, xy[i + 1] ?? 0] as const] : []))
+
+const SEGMENT = path(0, 0, 10, 0)
+const SQUARE = path(0, 0, 10, 0, 10, 10, 0, 10)
+
 function nearestEdges(): CommentPlacementRecord[] {
   return [
     nearest([5, 5], []),
-    nearest([5, 5], [[1, 2]]),
-    nearest(
-      [5, 5],
-      [
-        [1, 2],
-        [1, 2],
-      ],
-    ),
-    nearest(
-      [5, 5],
-      [
-        [0, 0],
-        [10, 0],
-      ],
-    ),
-    nearest(
-      [-5, 5],
-      [
-        [0, 0],
-        [10, 0],
-      ],
-    ),
-    nearest(
-      [15, 5],
-      [
-        [0, 0],
-        [10, 0],
-      ],
-    ),
-    nearest(
-      [0, 0],
-      [
-        [0, 0],
-        [10, 0],
-      ],
-    ),
-    nearest(
-      [10, 0],
-      [
-        [0, 0],
-        [10, 0],
-      ],
-    ),
+    nearest([5, 5], path(1, 2)),
+    nearest([5, 5], path(1, 2, 1, 2)),
+    nearest([5, 5], SEGMENT),
+    nearest([-5, 5], SEGMENT),
+    nearest([15, 5], SEGMENT),
+    nearest([0, 0], SEGMENT),
+    nearest([10, 0], SEGMENT),
     // Two segments equally near: the first keeps it.
-    nearest(
-      [5, 5],
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-      ],
-    ),
-    nearest(
-      [5, 3],
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-      ],
-    ),
-    nearest(
-      [5, 7],
-      [
-        [0, 0],
-        [10, 0],
-        [10, 10],
-        [0, 10],
-      ],
-    ),
-    nearest(
-      [3, 4],
-      [
-        [0, 0],
-        [6, 8],
-        [12, 0],
-      ],
-    ),
-    nearest(
-      [5, 5],
-      [
-        [0, 0],
-        [Number.NaN, 0],
-        [10, 0],
-      ],
-    ),
-    nearest(
-      [Number.NaN, 5],
-      [
-        [0, 0],
-        [10, 0],
-      ],
-    ),
-    nearest(
-      [5, 5],
-      [
-        [0, 0],
-        [Number.POSITIVE_INFINITY, 0],
-      ],
-    ),
+    nearest([5, 5], SQUARE),
+    nearest([5, 3], SQUARE),
+    nearest([5, 7], SQUARE),
+    nearest([3, 4], path(0, 0, 6, 8, 12, 0)),
+    nearest([5, 5], path(0, 0, Number.NaN, 0, 10, 0)),
+    nearest([Number.NaN, 5], SEGMENT),
+    nearest([5, 5], path(0, 0, Number.POSITIVE_INFINITY, 0)),
   ]
 }
 

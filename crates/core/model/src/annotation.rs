@@ -232,13 +232,8 @@ mod tests {
         assert_eq!(spatial_anchor_rect(&other_half, by_id), None);
     }
 
-    #[test]
-    fn every_arm_projects_or_says_why_not() {
-        let nodes = [
-            node("n", 10.0, 20.0, 100.0, 50.0),
-            node("n", 900.0, 900.0, 1.0, 1.0),
-            node("m", 0.0, 0.0, 5.0, 5.0),
-        ];
+    /// A thread on every arm, and on the ways an arm has no pin.
+    fn every_arm() -> [CommentThread; 8] {
         let point = SpatialAnchor {
             node_id: Some("gone".to_owned()),
             edge_id: Some("e".to_owned()),
@@ -255,7 +250,7 @@ mod tests {
         settled.resolved = true;
         let silent =
             CommentThread { messages: Vec::new(), ..thread("silent", spatial(point.clone())) };
-        let threads = [
+        [
             thread("doc", AnnotationAnchor::Document),
             thread("point", spatial(point)),
             thread("region", spatial(region)),
@@ -264,8 +259,17 @@ mod tests {
             thread("note", AnnotationAnchor::Text { node_id: None }),
             silent,
             settled,
+        ]
+    }
+
+    #[test]
+    fn every_arm_projects_or_says_why_not() {
+        let nodes = [
+            node("n", 10.0, 20.0, 100.0, 50.0),
+            node("n", 900.0, 900.0, 1.0, 1.0),
+            node("m", 0.0, 0.0, 5.0, 5.0),
         ];
-        let placed = canvas_comments_of(&threads, &nodes);
+        let placed = canvas_comments_of(&every_arm(), &nodes);
         let at = |c: &PlacedComment| {
             (c.id.clone(), c.x, c.y, c.target_node_id.clone(), c.target_edge_id.clone())
         };
