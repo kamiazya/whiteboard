@@ -34,12 +34,12 @@ const sortKeys = (value: unknown): unknown => {
 }
 
 /** The canonical text of a model tree. */
-const canonical = (tree: unknown): string => JSON.stringify(sortKeys(tree))
+export const canonical = (tree: unknown): string => JSON.stringify(sortKeys(tree))
 
 const MASK = (1n << 64n) - 1n
 const PRIME = 0x100000001b3n
 
-function fnv64(text: string): string {
+export function fnv64(text: string): string {
   let h = 0xcbf29ce484222325n
   for (const byte of new TextEncoder().encode(text)) h = ((h ^ BigInt(byte)) * PRIME) & MASK
   return h.toString(16).padStart(16, '0')

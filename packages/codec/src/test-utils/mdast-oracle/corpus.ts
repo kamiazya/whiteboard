@@ -105,7 +105,7 @@ const TOKENS: readonly string[] = [
 ]
 
 /** xorshift32: the stream a recording is regenerated from, so it never moves with the engine. */
-function stream(seed: number): () => number {
+export function stream(seed: number): () => number {
   let s = seed
   return () => {
     s ^= s << 13
@@ -267,7 +267,7 @@ const families = (): string[] => [
  * embed syntax and the emoji shortcodes are read from TEXT nodes after the
  * parse, so the parser's whole contract is that it leaves them as text.
  */
-const DIALECT: string[] = [
+export const DIALECT: readonly string[] = [
   '[[Page]]',
   '![[img.png]]',
   '[[a/b/c]]',
@@ -323,7 +323,7 @@ function pastBound(): string[] {
 }
 
 export function generated(): Input[] {
-  const label = (prefix: string, texts: string[]): Input[] =>
+  const label = (prefix: string, texts: readonly string[]): Input[] =>
     texts.map((t, n) => ({ i: `${prefix}${n}`, t }))
   return [
     ...randomStrings(),
