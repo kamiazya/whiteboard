@@ -44,13 +44,21 @@ describe('the recorded compose-comments oracle', () => {
     has('a pin on a passage of a node', '"t-passage/pin"')
     has('a pin on an edge', '"on-ad/pin"')
     has('a pin on a curve', '"on-ab/pin"')
+    for (const id of ['q-repeat', 'q-moved', 'q-wrap', 'q-bold', 'q-centred', 'q-settled']) {
+      has(`a highlight of ${id}`, `"${id}/passage-0"`)
+    }
+    has('a highlight across a wrap', '"q-repeat/passage-1"')
     for (const gone of ['t-note', 't-passage-gone', 't-doc']) {
       expect(
         scenes.some((s) => s.includes(`"${gone}/`)),
         `${gone} has no pin`,
       ).toBe(false)
     }
-    const asked = cases.flatMap((c) => c.answer.layerCalls)
+    expect(
+      scenes.some((s) => s.includes('"q-missing/passage-')),
+      'a quote the body does not hold draws no highlight',
+    ).toBe(false)
+    const asked = cases.flatMap((c) => c.answer.calls)
     const sized = (px: number) => asked.some(([, , size]) => size === f64Hex(px))
     expect(sized(10), 'a pin count').toBe(true)
     expect(sized(11), 'a "Resolved" label').toBe(true)

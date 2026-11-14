@@ -380,10 +380,6 @@ impl ComposeHost for Host<'_> {
         self.context.references.get(reference).cloned().flatten()
     }
 
-    fn passage_highlights(&self, _: &SpatialNode, _: &str, _: &FittedBlocks) -> Vec<SceneNode> {
-        Vec::new()
-    }
-
     fn expand_file_node(&self, _: &SpatialNode) -> bool {
         !self.case.on("collapsed")
     }

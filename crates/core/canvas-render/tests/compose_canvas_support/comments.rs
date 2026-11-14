@@ -1,7 +1,8 @@
 //! The comment layer against the recorded TypeScript answers
 //! (`compose-comments.jsonl`): canvases carrying threads laid out whole, the
-//! scene compared to the last bit, where the walk's share ends, what the walk
-//! and then the pin counts asked the measurer, and the degradations reported.
+//! scene compared to the last bit (the passage highlights the walk draws behind
+//! a quoted body included), where the walk's share ends, every question the
+//! layout asked the measurer, and the degradations reported.
 //! Each body as parsed is answered from the recording; the bubbles' bodies are
 //! laid out by the port itself.
 
@@ -30,6 +31,7 @@ use whiteboard_model::annotation::{
     AnnotationAnchor, CommentMessage, CommentThread, SpatialAnchor,
 };
 use whiteboard_model::spatial::SpatialNode;
+use whiteboard_model::text_anchor::{TextAnchor, TextQuote};
 use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_scene::{Appearance, BoundingBox, NodeDecoration, Scene};
 
@@ -41,8 +43,7 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 struct Answer {
     scene: String,
     from: usize,
-    layer_calls: Vec<(String, String, String)>,
-    walk_calls: usize,
+    calls: Vec<(String, String, String)>,
     events: Vec<Event>,
 }
 
@@ -57,6 +58,17 @@ struct AnchorWire {
     y: Option<String>,
     width: Option<String>,
     height: Option<String>,
+    quote: Option<QuoteWire>,
+    start: Option<usize>,
+    end: Option<usize>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct QuoteWire {
+    prefix: Option<String>,
+    exact: String,
+    suffix: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -96,7 +108,19 @@ fn optional(wire: Option<&String>) -> Res<Option<f64>> {
 fn anchor_of(wire: &AnchorWire) -> Res<AnnotationAnchor> {
     Ok(match wire.kind.as_str() {
         "document" => AnnotationAnchor::Document,
-        "text" => AnnotationAnchor::Text { node_id: wire.node_id.clone() },
+        "text" => {
+            let quote = wire.quote.as_ref().ok_or("a text anchor's quote")?;
+            AnnotationAnchor::Text(TextAnchor {
+                node_id: wire.node_id.clone(),
+                quote: TextQuote {
+                    prefix: quote.prefix.clone(),
+                    exact: quote.exact.clone(),
+                    suffix: quote.suffix.clone(),
+                },
+                start: wire.start.ok_or("a text anchor's start")?,
+                end: wire.end.ok_or("a text anchor's end")?,
+            })
+        }
         "spatial" => AnnotationAnchor::Spatial(SpatialAnchor {
             node_id: wire.node_id.clone(),
             edge_id: wire.edge_id.clone(),
@@ -193,17 +217,14 @@ fn style_of(style: Option<&str>) -> RenderStyle<'_> {
     }
 }
 
-/// The measurer's questions past the walk's: the bodies', the pin counts' and
-/// the "Resolved" labels'.
+/// Every question the layout put to the measurer: the walk's, the
+/// highlights', the bodies', the pin counts' and the "Resolved" labels'.
 fn check_asked(asked: &[(String, String, f64)], want: &Answer) -> Res<()> {
-    differ("walk measurer calls", &asked.len().min(want.walk_calls), &want.walk_calls)?;
-    let layer: Vec<(String, String, String)> = asked
-        .get(want.walk_calls..)
-        .unwrap_or_default()
+    let asked: Vec<(String, String, String)> = asked
         .iter()
         .map(|(text, family, size)| (text.clone(), family.clone(), hex(*size)))
         .collect();
-    differ("the layer's measurer calls", &layer, &want.layer_calls)
+    differ("the measurer calls", &asked, &want.calls)
 }
 
 fn replay_case(context: &Context, case: &Case) -> Res<()> {

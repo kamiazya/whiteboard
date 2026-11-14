@@ -3,12 +3,13 @@
 //!
 //! Plain data, like [`crate::mdast`]: the zod schema is the contract, and a
 //! thread reaches this crate already read. Only what a layout reads is held — a
-//! message's author and timestamps, and a text anchor's quote and offsets, stay
-//! with the TypeScript until something here reads them.
+//! message's author and timestamps stay with the TypeScript until something
+//! here reads them. A passage's anchor is [`crate::text_anchor`]'s.
 
 use whiteboard_det::math::{js_max, js_min};
 
 use crate::spatial::{CanvasPoint, SpatialNode};
+use crate::text_anchor::TextAnchor;
 
 /// A spatial anchor: a point, optionally about a node, an edge or a node set,
 /// and a region when it has a size.
@@ -30,9 +31,7 @@ pub struct SpatialAnchor {
 pub enum AnnotationAnchor {
     Spatial(SpatialAnchor),
     /// A passage: of a text node's text when it names one, else of a note's body.
-    Text {
-        node_id: Option<String>,
-    },
+    Text(TextAnchor),
     /// The document as a whole, which has no place on any surface.
     Document,
 }
@@ -150,7 +149,7 @@ fn project(thread: &CommentThread, nodes: &[SpatialNode]) -> Option<PlacedCommen
                 },
             })
         }
-        AnnotationAnchor::Text { node_id } => {
+        AnnotationAnchor::Text(TextAnchor { node_id, .. }) => {
             let node = first_with(nodes, node_id.as_deref()?)?;
             let corner = comment_corner_of(node.x, node.y, node.width);
             Some(PlacedComment { target_node_id: Some(node.id.clone()), ..at(corner) })
@@ -188,6 +187,10 @@ mod tests {
                 CommentMessage { id: "m2".to_owned(), body: "second".to_owned() },
             ],
         }
+    }
+
+    fn text(node_id: Option<String>) -> AnnotationAnchor {
+        AnnotationAnchor::Text(TextAnchor { node_id, ..TextAnchor::default() })
     }
 
     fn spatial(anchor: SpatialAnchor) -> AnnotationAnchor {
@@ -254,9 +257,9 @@ mod tests {
             thread("doc", AnnotationAnchor::Document),
             thread("point", spatial(point)),
             thread("region", spatial(region)),
-            thread("passage", AnnotationAnchor::Text { node_id: Some("n".to_owned()) }),
-            thread("orphan", AnnotationAnchor::Text { node_id: Some("gone".to_owned()) }),
-            thread("note", AnnotationAnchor::Text { node_id: None }),
+            thread("passage", text(Some("n".to_owned()))),
+            thread("orphan", text(Some("gone".to_owned()))),
+            thread("note", text(None)),
             silent,
             settled,
         ]

@@ -5,12 +5,13 @@
 //!
 //! What the composer knows and this crate does not is asked through
 //! [`ComposeHost`]: the body parser with its reference resolution, a reference's
-//! resolution, the comment layer's passage highlights, the expansion policy over
-//! a file node and a body's canvas embed target. Each is a seam rather than a
-//! port because the code that answers it lives in another layer (the markdown
-//! parser, the keeper, the caller's policy) or has not been ported yet (the
-//! comment layer); the replay answers it from the recording. A canvas nested in
-//! another is laid out by the composer's own walk ([`crate::compose_canvas`]).
+//! resolution, the expansion policy over a file node and a body's canvas embed
+//! target. Each is a seam rather than a port because the code that answers it
+//! lives in another layer (the markdown parser, the keeper, the caller's
+//! policy); the replay answers it from the recording. A canvas nested in
+//! another is laid out by the composer's own walk ([`crate::compose_canvas`]),
+//! and a text node's passage highlights by the comment layer
+//! ([`crate::comments::passage`]).
 
 mod decoration;
 mod embed;
@@ -68,15 +69,6 @@ pub trait ComposeHost {
     /// What a reference resolves to (`referenceFor`); a resolver that fails
     /// answers `None`.
     fn resolve_reference(&self, reference: &str) -> Option<ResolvedReference>;
-
-    /// The comment layer's highlights behind a text node's laid-out body, in
-    /// the body's own coordinates.
-    fn passage_highlights(
-        &self,
-        node: &SpatialNode,
-        text: &str,
-        body: &FittedBlocks,
-    ) -> Vec<SceneNode>;
 
     /// Whether a file node's canvas is drawn open (`expandFileNode`): the
     /// caller's policy over the node, which the editor decides by its size on

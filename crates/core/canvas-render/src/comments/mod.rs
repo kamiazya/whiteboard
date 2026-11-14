@@ -13,6 +13,8 @@
 //! ([`crate::compose_node::ComposeHost::parse_markdown`]).
 
 pub mod body;
+pub mod loose;
+pub mod passage;
 pub mod placement;
 mod regions;
 

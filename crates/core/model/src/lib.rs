@@ -20,6 +20,7 @@ pub mod okf;
 #[path = "generated/spatial.rs"]
 pub mod spatial;
 pub mod tags;
+pub mod text_anchor;
 
 /// A frontmatter value: what `yaml`'s core schema makes of a document, as
 /// `toJS()` hands it to the TypeScript.

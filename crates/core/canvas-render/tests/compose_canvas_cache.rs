@@ -72,10 +72,6 @@ impl ComposeHost for Naming {
         Some(ResolvedReference { canvas: Some(embedded()), ..ResolvedReference::default() })
     }
 
-    fn passage_highlights(&self, _: &SpatialNode, _: &str, _: &FittedBlocks) -> Vec<SceneNode> {
-        Vec::new()
-    }
-
     fn expand_file_node(&self, _: &SpatialNode) -> bool {
         true
     }

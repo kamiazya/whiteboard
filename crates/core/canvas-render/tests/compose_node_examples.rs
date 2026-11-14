@@ -1,6 +1,5 @@
-//! What `compose-node.jsonl` does not reach: the recording asks for no passage
-//! highlights, since the comment layer that answers them is a host seam here,
-//! and they are drawn only where that layer reaches.
+//! What `compose-node.jsonl` does not reach: the recording draws no passage
+//! highlights, since they are drawn only where the comment layer reaches.
 
 use std::cell::Cell;
 
@@ -15,36 +14,22 @@ use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
-use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
+use whiteboard_canvas_render::typeset::{IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::{AnnotationAnchor, CommentThread};
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
+use whiteboard_model::text_anchor::{TextAnchor, TextQuote};
 use whiteboard_plugin_visual::host::visual_registry;
-use whiteboard_scene::{BoundingBox, SceneNode, ShapeSceneNode};
+use whiteboard_scene::SceneNode;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
-/// A host whose comment layer marks the body's origin, counting degradations.
+/// A host parsing a body as one paragraph, counting degradations.
 #[derive(Default)]
 struct Marking {
     degraded: Cell<usize>,
-}
-
-fn mark() -> SceneNode {
-    SceneNode::Shape(Box::new(ShapeSceneNode {
-        truncated: false,
-        overflows: false,
-        id: None,
-        bbox: BoundingBox { x: 0.0, y: 0.0, w: 5.0, h: 5.0 },
-        comment_chrome: false,
-        proposal_chrome: None,
-        radius: None,
-        shape: None,
-        appearance: None,
-        task_box: None,
-        ink: None,
-    }))
 }
 
 impl ComposeHost for Marking {
@@ -55,11 +40,6 @@ impl ComposeHost for Marking {
 
     fn resolve_reference(&self, _: &str) -> Option<ResolvedReference> {
         None
-    }
-
-    fn passage_highlights(&self, _: &SpatialNode, _: &str, body: &FittedBlocks) -> Vec<SceneNode> {
-        assert_eq!(body.nodes.len(), 1, "the highlights are asked of the fitted body");
-        vec![mark()]
     }
 
     fn expand_file_node(&self, _: &SpatialNode) -> bool {
@@ -140,8 +120,29 @@ impl Overlays for Marking {
     }
 }
 
-/// `hello_at(100, 50)` composed, its passages drawn or not.
-fn hello_composed(host: &Marking, registry: &Registry, annotated: bool) -> Vec<SceneNode> {
+/// A thread quoting `exact` in node `t`'s text.
+fn quoting(exact: &str, resolved: bool) -> CommentThread {
+    let quote = TextQuote { exact: exact.to_owned(), ..TextQuote::default() };
+    CommentThread {
+        id: "x".to_owned(),
+        anchor: AnnotationAnchor::Text(TextAnchor {
+            node_id: Some("t".to_owned()),
+            quote,
+            start: 1,
+            end: 4,
+        }),
+        resolved,
+        messages: Vec::new(),
+    }
+}
+
+/// `hello_at(100, 50)` composed under `threads`, its passages drawn or not.
+fn hello_composed(
+    host: &Marking,
+    registry: &Registry,
+    threads: &[CommentThread],
+    annotated: bool,
+) -> Vec<SceneNode> {
     let measure = FakeMeasure::default();
     let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
     let budget = NestedLayoutBudget::new();
@@ -160,7 +161,7 @@ fn hello_composed(host: &Marking, registry: &Registry, annotated: bool) -> Vec<S
         side_overrides: None,
         host,
         overlays: host,
-        comments: CommentOptions::default(),
+        comments: CommentOptions { threads, ..CommentOptions::default() },
         content_cache: None,
         body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
@@ -191,18 +192,29 @@ fn hello_composed(host: &Marking, registry: &Registry, annotated: bool) -> Vec<S
 fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
     let host = Marking::default();
     let registry = visual_registry().expect("the bundled plugin loads");
-    let drawn = hello_composed(&host, &registry, true);
+    let drawn = hello_composed(&host, &registry, &[quoting("ell", false)], true);
     let pad = SPATIAL_THEME_GEOMETRY.padding_px;
     let kinds = kinds_of(&drawn);
-    assert_eq!(kinds, ["t", "mark", "paragraph"]);
+    assert_eq!(kinds, ["t", "x/passage-0", "paragraph"]);
     let Some(SceneNode::Shape(highlight)) = drawn.get(1) else { panic!("a highlight") };
-    assert_eq!(highlight.bbox, BoundingBox { x: 100.0 + pad, y: 50.0 + pad, w: 5.0, h: 5.0 });
+    assert!(highlight.comment_chrome);
+    assert!(highlight.bbox.x > 100.0 + pad && highlight.bbox.w > 0.0, "{:?}", highlight.bbox);
+    assert!(highlight.appearance.is_some(), "painted as the theme's passage");
     assert_eq!(host.degraded.get(), 0, "nothing degrades here");
+}
+
+#[test]
+fn a_settled_passage_is_drawn_only_with_the_settled_threads() {
+    let host = Marking::default();
+    let registry = visual_registry().expect("the bundled plugin loads");
+    let drawn = hello_composed(&host, &registry, &[quoting("ell", true)], true);
+    assert_eq!(kinds_of(&drawn), ["t", "paragraph"]);
 }
 
 #[test]
 fn a_canvas_the_comment_layer_does_not_reach_draws_no_passage() {
     let host = Marking::default();
     let registry = visual_registry().expect("the bundled plugin loads");
-    assert_eq!(kinds_of(&hello_composed(&host, &registry, false)), ["t", "paragraph"]);
+    let threads = [quoting("ell", false)];
+    assert_eq!(kinds_of(&hello_composed(&host, &registry, &threads, false)), ["t", "paragraph"]);
 }

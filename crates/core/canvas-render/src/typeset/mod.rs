@@ -27,6 +27,7 @@ pub(crate) use blocks::empty_run;
 pub use blocks::typeset_mdast_blocks;
 pub use fit::{FittedBlocks, first_line_of_blocks, fit_blocks_to_height};
 pub use options::TypesetOptions;
+pub(crate) use options::{Style, body_font};
 pub use seams::{
     CanvasMiniature, CanvasSummary, CodeToken, CodeTokenLines, CodeTokenizer, DiagramRenderer,
     EmbedBox, EmbedResolver, Embedded, IconRange, ImageRef, InlineSeams, MathRenderer, Miniature,

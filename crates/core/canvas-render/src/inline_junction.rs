@@ -12,6 +12,7 @@
 //! The TypeScript closes over the wrapper's run list and cursor; here the
 //! wrapper owns both, so every method is handed the ones it reads or moves.
 
+use whiteboard_det::utf16::is_js_whitespace;
 use whiteboard_scene::{RunPaint, TextRunNode};
 
 use crate::uax_segments::uax_segment_ranges;
@@ -25,23 +26,9 @@ use crate::uax_segments::uax_segment_ranges;
 /// after a space is always allowed.
 const OBJECT_REPLACEMENT: char = '\u{FFFC}';
 
-/// ECMAScript `\s`, which is not Unicode `White_Space`: it takes U+FEFF and
-/// leaves U+0085 out.
+/// ECMAScript `\s`: no character past the basic plane is one.
 fn is_js_space(c: char) -> bool {
-    matches!(
-        u32::from(c),
-        0x09..=0x0d
-            | 0x20
-            | 0xa0
-            | 0x1680
-            | 0x2000..=0x200a
-            | 0x2028
-            | 0x2029
-            | 0x202f
-            | 0x205f
-            | 0x3000
-            | 0xfeff
-    )
+    u16::try_from(u32::from(c)).is_ok_and(is_js_whitespace)
 }
 
 /// `None` for whitespace and for nothing: a break is already allowed there.
