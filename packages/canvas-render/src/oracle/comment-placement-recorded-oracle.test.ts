@@ -51,6 +51,6 @@ describe('the recorded comment-placement oracle', () => {
   it('equals what the TypeScript answers today', () => {
     const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
     expect(parted, 'the first record the TypeScript no longer answers as recorded').toBe(-1)
-    expect(records.length).toBe(fresh.length)
+    expect(records).toHaveLength(fresh.length)
   })
 })

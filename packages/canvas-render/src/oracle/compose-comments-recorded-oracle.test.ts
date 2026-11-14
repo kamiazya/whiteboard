@@ -68,6 +68,6 @@ describe('the recorded compose-comments oracle', () => {
         : `${parted}: ${record.kind === 'case' ? record.id : 'meta'}`,
       'the first record the TypeScript no longer answers as recorded',
     ).toBeUndefined()
-    expect(records.length).toBe(fresh.length)
+    expect(records).toHaveLength(fresh.length)
   })
 })
