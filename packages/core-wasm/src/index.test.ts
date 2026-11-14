@@ -18,6 +18,7 @@ function fakeGlue(abi: string, out: number[]) {
   const glue: CoreGlue = {
     initSync: () => undefined,
     abi_version: () => abi,
+    layout_spatial_canvas: () => '[]',
     facet_bucket_check: () => '["declined","malformed","wire"]',
     okf_parse: () => '["refused","malformed"]',
     okf_serialize: () => '["refused","malformed"]',

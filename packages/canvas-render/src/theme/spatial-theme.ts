@@ -218,3 +218,15 @@ export function createSpatialTheme(options: SpatialThemeOptions): SpatialAppeara
   if (options.palette !== undefined) return buildTheme(options.palette, options.mode)
   return THEMES[options.mode]
 }
+
+/**
+ * The mode of a resolver that is one of the bundled themes as they stand, or
+ * undefined for any other: a custom palette or a resolver of the caller's.
+ * What the Rust core can be handed as data, since it builds the same two.
+ */
+export function bundledThemeModeOf(
+  appearance: SpatialAppearanceResolver,
+): SpatialThemeMode | undefined {
+  if (appearance === THEMES.light) return 'light'
+  return appearance === THEMES.dark ? 'dark' : undefined
+}

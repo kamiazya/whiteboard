@@ -128,3 +128,40 @@ export const constantRatioMeasureText: MeasureText = (text, font) => {
     lineGap: sizePx * RATIO_LINE_GAP,
   }
 }
+
+/**
+ * A measurer named as data, so the Rust core can measure as it does
+ * (ADR-0054 step 7): the deterministic test measurer at its factor, the
+ * ratio estimate above, or a font-table measurer over these faces' bytes.
+ */
+export type MeasureSpec =
+  | { readonly kind: 'fake'; readonly factor: number }
+  | { readonly kind: 'ratio' }
+  | {
+      readonly kind: 'fonts'
+      readonly faces: readonly {
+        readonly family: string
+        readonly bold: boolean
+        readonly italic: boolean
+        readonly bytes: Uint8Array
+      }[]
+    }
+
+const SPECS = new WeakMap<MeasureText, MeasureSpec>()
+
+/**
+ * Names `measure` as `spec`, for the measurer's own maker to call: a measure
+ * nobody named is a function the core cannot repeat, and a layout handed one
+ * is answered by the TypeScript.
+ */
+export function describeMeasure(measure: MeasureText, spec: MeasureSpec): MeasureText {
+  SPECS.set(measure, spec)
+  return measure
+}
+
+/** What `measure` was named as, if anything. */
+export function measureSpecOf(measure: MeasureText): MeasureSpec | undefined {
+  return SPECS.get(measure)
+}
+
+describeMeasure(constantRatioMeasureText, { kind: 'ratio' })

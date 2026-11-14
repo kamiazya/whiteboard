@@ -66,6 +66,13 @@ export type {
   RoutingCore,
 } from './layout/edges/layout-core.js'
 export { routeLayout } from './layout/edges/layout-core.js'
+export type {
+  CanvasLayoutAnswer,
+  CanvasLayoutCore,
+  CanvasLayoutMismatch,
+  CanvasLayoutRequest,
+  CoreDegradation,
+} from './canvas-core.js'
 export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
@@ -128,8 +135,13 @@ export {
 export { translateScene } from './layout/translate-scene.js'
 export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
-export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
-export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
+export type { FontDescriptor, MeasureSpec, MeasureText, TextMetrics } from './measure.js'
+export {
+  clampAdvance,
+  constantRatioMeasureText,
+  describeMeasure,
+  isFullWidthCodePoint,
+} from './measure.js'
 export {
   createReferenceContentAccount,
   REFERENCE_CHARS_BUDGET,

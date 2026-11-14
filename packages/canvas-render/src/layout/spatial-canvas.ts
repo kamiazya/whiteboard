@@ -67,6 +67,7 @@ import {
   labelObstacles,
 } from './edges/edge-label-anchor.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
+import { layoutThroughCore } from './canvas-switch.js'
 import { routeLayout } from './edges/layout-core.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
 import { weighStroke } from './edges/stroke-weight.js'
@@ -299,6 +300,14 @@ export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayou
  * second computation beside it.
  */
 export function layoutSpatialCanvasWithAnchors(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
+  return layoutThroughCore(stored, options, (asked) => layoutInTypeScript(stored, asked))
+}
+
+/** The whole layout in this package: what the core switch answers with under `ts`. */
+function layoutInTypeScript(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
