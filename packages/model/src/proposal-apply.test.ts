@@ -199,6 +199,14 @@ describe('canvasChangeConflicts', () => {
     )
   })
 
+  // A number agrees the way a removal's prior compares it: `0` and `-0` are
+  // one position, and no surface draws them apart.
+  it('reads a prior of 0 as still held by a node at -0', () => {
+    const atNegativeZero = { ...BOARD, nodes: [{ ...NODE_A, x: -0 }, NODE_B] }
+    expect(canvasChangeConflicts(PATCH_A, atNegativeZero)).toBe(false)
+    expect(canvasChangeConflicts({ ...PATCH_A, assumed: { x: -0 } }, BOARD)).toBe(false)
+  })
+
   it('sees a conflict when the element the change is about is gone', () => {
     expect(canvasChangeConflicts(PATCH_A, { nodes: [NODE_B], edges: [] })).toBe(true)
   })
@@ -386,6 +394,32 @@ describe('ink lines and edges in a proposal', () => {
     ).toBe(true)
   })
 
+  // A prior read from the record is a fresh object, never the board's own, so
+  // an end, a bend list or a facet bucket has to agree by VALUE — the way a
+  // removal's whole-element prior already does.
+  it('reads an edge end, bends and facets the prior copied as still held', () => {
+    const rich = link('e1', {
+      from: { node: 'a', side: 'right' },
+      bends: [{ x: 5, y: 6 }],
+      facets: { 'visual.edges/v0': { style: 'curved' } },
+    })
+    const c: SpatialCanvas = { ...BOARD, edges: [rich] }
+    const copy = structuredClone(rich)
+    const wrong = { from: { node: 'b' }, to: { node: 'a' }, bends: [], facets: {} }
+    for (const field of ['from', 'to', 'bends', 'facets'] as const) {
+      const change = (assumed: Partial<CanvasEdge>): SpatialProposedChange => ({
+        id: 'edge:e1',
+        status: 'open',
+        op: 'edge.patch',
+        edgeId: 'e1',
+        patch: { [field]: wrong[field] },
+        assumed,
+      })
+      expect(canvasChangeConflicts(change({ [field]: copy[field] }), c)).toBe(false)
+      expect(canvasChangeConflicts(change({ [field]: wrong[field] }), c)).toBe(true)
+    }
+  })
+
   it('flags a patch of an edge that is gone', () => {
     expect(canvasChangeConflicts(patchEdge('gone', { label: 'x' }), BOARD)).toBe(true)
   })
@@ -403,6 +437,28 @@ describe('ink lines and edges in a proposal', () => {
     expect(
       canvasChangeConflicts(recolour, { ...BOARD, lines: [inkLine('l1', { color: '4' })] }),
     ).toBe(true)
+  })
+
+  it('reads a line end, bends and facets the prior copied as still held', () => {
+    const drawn = inkLine('l1', {
+      to: { kind: 'node', node: 'a', side: 'top' },
+      bends: [{ x: 1, y: 2 }],
+      facets: { 'visual.stroke/v0': { width: 2 } },
+    })
+    const c: SpatialCanvas = { ...BOARD, lines: [drawn] }
+    const copy = structuredClone(drawn)
+    for (const field of ['from', 'to', 'bends', 'facets'] as const) {
+      const change: SpatialProposedChange = {
+        id: 'line:l1',
+        status: 'open',
+        op: 'line.patch',
+        lineId: 'l1',
+        patch: { [field]: copy[field] },
+        assumed: { [field]: copy[field] },
+      }
+      expect(canvasChangeConflicts(change, c)).toBe(false)
+      expect(canvasChangeConflicts({ ...change, assumed: {} }, c)).toBe(true)
+    }
   })
 
   it('flags a patch of a line that is gone', () => {

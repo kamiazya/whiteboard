@@ -122,10 +122,10 @@ pub struct Proposal {
     pub changes: Vec<ProposedChange>,
 }
 
-/// `Object.is` over two doubles a schema keeps finite: the same bits, so `-0`
-/// is not `0`.
+/// A number agrees the way a removal's prior compares it (`sameValue`, by
+/// JSON): `0` and `-0` are one position.
 fn same_number(current: f64, prior: Option<f64>) -> bool {
-    prior.is_some_and(|prior| prior.to_bits() == current.to_bits())
+    prior == Some(current)
 }
 
 /// Whether any field a node patch SETS no longer holds what the prior said,
@@ -157,51 +157,31 @@ fn node_patch_differs(
             && frame_background_style(node) != prior.background_style
 }
 
-/// An element's patchable fields as `Object.is` compares them (`differsFromPrior`):
-/// a colour or a label by value, an end, a bend list or a facet bucket by
-/// IDENTITY. A prior read from the record never shares an object with the
-/// canvas, so an object field agrees only when both are absent, which leaves
-/// its presence the whole of what is compared.
-#[derive(Clone, Copy)]
-struct Compared<'a> {
-    /// Whether `from`, `to`, `bends` and `facets` are present, in that order.
-    objects: [bool; 4],
+/// An element's patchable fields as it stands: it always has both ends.
+struct Held<'a, End> {
+    from: &'a End,
+    to: &'a End,
     color: Option<&'a CanvasColor>,
     label: Option<&'a str>,
-}
-
-impl<End> ElementPatchFields<End> {
-    fn compared(&self) -> Compared<'_> {
-        Compared {
-            objects: [
-                self.from.is_some(),
-                self.to.is_some(),
-                self.bends.is_some(),
-                self.facets.is_some(),
-            ],
-            color: self.color.as_ref(),
-            label: self.label.as_deref(),
-        }
-    }
-}
-
-/// An element as it stands: it always has both ends.
-fn held<'a>(
-    color: Option<&'a CanvasColor>,
-    label: Option<&'a str>,
-    bends: Option<&Bends>,
-    facets: Option<&ExtensionFacets>,
-) -> Compared<'a> {
-    Compared { objects: [true, true, bends.is_some(), facets.is_some()], color, label }
+    bends: Option<&'a Bends>,
+    facets: Option<&'a ExtensionFacets>,
 }
 
 /// Whether any field an element patch SETS no longer holds what the prior
-/// said; an end, which an element always has, never agrees.
-fn element_patch_differs(current: Compared<'_>, patch: Compared<'_>, prior: Compared<'_>) -> bool {
-    let objects = patch.objects.iter().zip(current.objects).zip(prior.objects);
-    objects.into_iter().any(|((&set, held), said)| set && (held || said))
-        || patch.color.is_some() && current.color != prior.color
-        || patch.label.is_some() && current.label != prior.label
+/// said (`differsFromPrior`). By value: a prior read from the record never
+/// shares an object with the board, so an end, a bend list or a facet bucket
+/// agrees when its content does.
+fn element_patch_differs<End: PartialEq>(
+    held: &Held<'_, End>,
+    patch: &ElementPatchFields<End>,
+    prior: &ElementPatchFields<End>,
+) -> bool {
+    patch.from.is_some() && prior.from.as_ref() != Some(held.from)
+        || patch.to.is_some() && prior.to.as_ref() != Some(held.to)
+        || patch.color.is_some() && prior.color.as_ref() != held.color
+        || patch.label.is_some() && prior.label.as_deref() != held.label
+        || patch.bends.is_some() && prior.bends.as_ref() != held.bends
+        || patch.facets.is_some() && prior.facets.as_ref() != held.facets
 }
 
 fn edge_patch_differs(
@@ -209,9 +189,15 @@ fn edge_patch_differs(
     patch: &ElementPatchFields<EdgeEnd>,
     prior: &ElementPatchFields<EdgeEnd>,
 ) -> bool {
-    let current =
-        held(edge.color.as_ref(), edge.label.as_deref(), edge.bends.as_ref(), edge.facets.as_ref());
-    element_patch_differs(current, patch.compared(), prior.compared())
+    let held = Held {
+        from: &edge.from,
+        to: &edge.to,
+        color: edge.color.as_ref(),
+        label: edge.label.as_deref(),
+        bends: edge.bends.as_ref(),
+        facets: edge.facets.as_ref(),
+    };
+    element_patch_differs(&held, patch, prior)
 }
 
 fn line_patch_differs(
@@ -219,9 +205,15 @@ fn line_patch_differs(
     patch: &ElementPatchFields<LineEnd>,
     prior: &ElementPatchFields<LineEnd>,
 ) -> bool {
-    let current =
-        held(line.color.as_ref(), line.label.as_deref(), line.bends.as_ref(), line.facets.as_ref());
-    element_patch_differs(current, patch.compared(), prior.compared())
+    let held = Held {
+        from: &line.from,
+        to: &line.to,
+        color: line.color.as_ref(),
+        label: line.label.as_deref(),
+        bends: line.bends.as_ref(),
+        facets: line.facets.as_ref(),
+    };
+    element_patch_differs(&held, patch, prior)
 }
 
 /// Whether the anchor still holds what the proposal assumed it held
@@ -253,5 +245,122 @@ pub fn canvas_change_conflicts(change: &SpatialChange, canvas: &SpatialCanvas) -
         SpatialChange::NodeRemove { node_id, assumed } => node(node_id) != Some(assumed),
         SpatialChange::EdgeRemove { edge_id, assumed } => edge(edge_id) != Some(assumed),
         SpatialChange::LineRemove { line_id, assumed } => line(line_id) != Some(assumed),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::Value;
+    use crate::spatial::{CanvasPoint, EdgeSide, LineEndNode};
+
+    fn untouched<End>() -> ElementPatchFields<End> {
+        ElementPatchFields {
+            from: None,
+            to: None,
+            color: None,
+            label: None,
+            bends: None,
+            facets: None,
+        }
+    }
+
+    fn edge() -> CanvasEdge {
+        CanvasEdge {
+            id: "e".into(),
+            from: EdgeEnd { node: "a".into(), side: Some(EdgeSide::Right), end: None },
+            to: EdgeEnd { node: "b".into(), ..EdgeEnd::default() },
+            bends: Some(vec![CanvasPoint { x: 5.0, y: 6.0 }]),
+            facets: Some(vec![("visual.edges/v0".into(), Value::String("curved".into()))]),
+            ..CanvasEdge::default()
+        }
+    }
+
+    fn board(edge: CanvasEdge, line: CanvasLine) -> SpatialCanvas {
+        SpatialCanvas { edges: vec![edge], lines: Some(vec![line]), ..SpatialCanvas::default() }
+    }
+
+    fn line() -> CanvasLine {
+        CanvasLine {
+            id: "l".into(),
+            to: LineEnd::LineEndNode(LineEndNode { node: "a".into(), ..LineEndNode::default() }),
+            bends: Some(vec![CanvasPoint { x: 1.0, y: 2.0 }]),
+            facets: Some(vec![("visual.stroke/v0".into(), Value::Null)]),
+            ..CanvasLine::default()
+        }
+    }
+
+    /// Every field an element patch can set, its prior copied from what is
+    /// held: the copy is a different object and the same value.
+    fn copied<End: Clone>(
+        from: &End,
+        to: &End,
+        bends: Option<&Bends>,
+        facets: Option<&ExtensionFacets>,
+    ) -> [ElementPatchFields<End>; 4] {
+        [
+            ElementPatchFields { from: Some(from.clone()), ..untouched() },
+            ElementPatchFields { to: Some(to.clone()), ..untouched() },
+            ElementPatchFields { bends: bends.cloned(), ..untouched() },
+            ElementPatchFields { facets: facets.cloned(), ..untouched() },
+        ]
+    }
+
+    #[test]
+    fn an_edge_patch_whose_prior_copies_the_held_value_fits() {
+        let held = edge();
+        let canvas = board(held.clone(), line());
+        for prior in copied(&held.from, &held.to, held.bends.as_ref(), held.facets.as_ref()) {
+            let change = SpatialChange::EdgePatch {
+                edge_id: "e".into(),
+                patch: prior.clone(),
+                assumed: prior.clone(),
+            };
+            assert!(!canvas_change_conflicts(&change, &canvas), "{prior:?}");
+            let stale = SpatialChange::EdgePatch {
+                edge_id: "e".into(),
+                patch: prior,
+                assumed: untouched(),
+            };
+            assert!(canvas_change_conflicts(&stale, &canvas));
+        }
+    }
+
+    #[test]
+    fn a_line_patch_whose_prior_copies_the_held_value_fits() {
+        let held = line();
+        let canvas = board(edge(), held.clone());
+        for prior in copied(&held.from, &held.to, held.bends.as_ref(), held.facets.as_ref()) {
+            let change = SpatialChange::LinePatch {
+                line_id: "l".into(),
+                patch: prior.clone(),
+                assumed: prior.clone(),
+            };
+            assert!(!canvas_change_conflicts(&change, &canvas), "{prior:?}");
+            let stale = SpatialChange::LinePatch {
+                line_id: "l".into(),
+                patch: prior,
+                assumed: untouched(),
+            };
+            assert!(canvas_change_conflicts(&stale, &canvas));
+        }
+    }
+
+    #[test]
+    fn a_prior_of_zero_fits_a_node_at_negative_zero() {
+        let node = SpatialNode {
+            id: "n".into(),
+            x: -0.0,
+            width: 1.0,
+            height: 1.0,
+            ..SpatialNode::default()
+        };
+        let canvas = SpatialCanvas { nodes: vec![node], ..SpatialCanvas::default() };
+        let change = SpatialChange::NodePatch {
+            node_id: "n".into(),
+            patch: NodePatchFields { x: Some(4.0), ..NodePatchFields::default() },
+            assumed: NodePatchFields { x: Some(0.0), ..NodePatchFields::default() },
+        };
+        assert!(!canvas_change_conflicts(&change, &canvas));
     }
 }

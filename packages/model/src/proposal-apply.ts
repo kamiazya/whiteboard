@@ -167,7 +167,7 @@ export function canvasChangeConflicts(
       // is what the anchor HELD, and the node no longer has a `text` key.
       return Object.keys(change.patch).some(
         (field) =>
-          !Object.is(
+          !sameValue(
             nodePatchField(node, field as keyof NodePatchFields),
             (change.assumed as Fields)[field],
           ),
@@ -200,9 +200,23 @@ export function canvasChangeConflicts(
   }
 }
 
-/** True when any field the change SETS no longer holds what the prior said. */
+/**
+ * True when any field the change SETS no longer holds what the prior said.
+ * By value: a prior read from the record never shares an object with the
+ * board, so identity would make every end, bend list and facet bucket collide.
+ */
 function differsFromPrior(current: Fields, patch: Fields, assumed: Fields): boolean {
-  return Object.keys(patch).some((field) => !Object.is(current[field], assumed[field]))
+  return Object.keys(patch).some((field) => !sameValue(current[field], assumed[field]))
+}
+
+/**
+ * Whether a prior's field still holds — the one comparison every arm uses.
+ * Stored fields are JSON, so their JSON is their value: a node's `embed`, an
+ * end, a bend list and a facets bucket compare by content, and `0` and `-0`
+ * are one position.
+ */
+function sameValue(left: unknown, right: unknown): boolean {
+  return JSON.stringify(left) === JSON.stringify(right)
 }
 
 /**
@@ -217,16 +231,7 @@ function sameElement(
   const a = current as Fields
   const b = assumed as Fields
   const fields = new Set([...Object.keys(a), ...Object.keys(b)])
-  for (const field of fields) {
-    const left = a[field]
-    const right = b[field]
-    if (Object.is(left, right)) continue
-    // One level of structure, for a node's `embed` and its facets bucket.
-    // Deeper than that a JSON comparison is the honest tool, and no element
-    // goes deeper.
-    if (JSON.stringify(left) !== JSON.stringify(right)) return false
-  }
-  return true
+  return [...fields].every((field) => sameValue(a[field], b[field]))
 }
 
 /**

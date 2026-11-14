@@ -17,9 +17,9 @@ import { type ChangeWire, changeWire } from './wire.js'
  * that holds each node kind, edges and ink, with priors that agree, disagree
  * and say nothing, field by field. Every change is a fresh parse of its JSON,
  * as a proposal read from the record is, so no prior shares an object with
- * the board — which is what `Object.is` compares an end, a bend list or a
- * facet bucket by. `structuredClone` rather than a JSON round trip, which
- * would turn a `-0` the board holds into `0`.
+ * the board and an end, a bend list or a facet bucket agrees only by value.
+ * `structuredClone` rather than a JSON round trip, which would turn a `-0`
+ * the board holds into `0`.
  */
 
 interface BoardRecord {
