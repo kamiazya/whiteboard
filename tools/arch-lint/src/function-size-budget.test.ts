@@ -442,7 +442,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
   'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
-  'packages/canvas-render/src/layout/compose-node.ts#composeTextNode': 63,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   // Raised for the layout's routing budget, which the repair pass's routes
   // spend from.

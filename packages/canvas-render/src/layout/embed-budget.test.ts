@@ -208,9 +208,10 @@ describe('nested layout budget', () => {
     expect(count(spent.nodes, 'embedPlaceholder', 'budget')).toBe(1)
     expect(cache.size).toBe(0)
 
+    // Nor one whose embed was drawn: it charged the account, which a hit skips.
     const fresh = layoutSpatialCanvas(canvas, options(NESTED_LAYOUT_BUDGET))
     expect(count(fresh.nodes, 'embedResolved')).toBe(1)
-    expect(cache.size).toBe(1)
+    expect(cache.size).toBe(0)
   })
 })
 
@@ -412,4 +413,53 @@ describe('nested element budget', () => {
       expect(embeds).toBe(Math.min(hubSize, Math.floor(NESTED_ELEMENT_BUDGET / elementsOf(target))))
     },
   )
+})
+
+describe('the content cache across nesting levels', () => {
+  // Every text node here has the same box and text, so the cache key the
+  // composer builds is the same at every level unless the level is in it.
+  const body = (id: string) => textNode({ id, x: 0, y: 0, width: 260, height: 200, text: 'X' })
+  const embedded: SpatialCanvas = { nodes: [body('inner')], edges: [] }
+  const options = (
+    cache: Map<string, FittedBlocks> | undefined,
+    remaining = NESTED_LAYOUT_BUDGET,
+  ): SpatialLayoutOptions => ({
+    measure: createFakeMeasure(),
+    appearance: APPEARANCE,
+    parseBody: () => ({
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'embed', documentId: 'X' }] }],
+    }),
+    resolveEmbed: () => ({ canvas: embedded }),
+    resolveReference: () => ({ canvas: embedded }),
+    expandFileNode: () => true,
+    ...(cache === undefined ? {} : { contentCache: cache }),
+    nestedLayoutBudget: { ...createNestedLayoutBudget(), remaining },
+  })
+
+  it('a body cached inside an embed never answers the same body at the top level', () => {
+    // The file node paints first and lays `X` out a level down, where the body
+    // naming `X` is a cycle; at the top level the same body draws `X`.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        fileNode({ id: 'f', x: 0, y: 0, width: 260, height: 200, file: 'X' }),
+        { ...body('t'), x: 400 },
+      ],
+      edges: [],
+    }
+    const cached = layoutSpatialCanvas(canvas, options(new Map()))
+    expect(JSON.stringify(cached)).toBe(
+      JSON.stringify(layoutSpatialCanvas(canvas, options(undefined))),
+    )
+  })
+
+  it('a body served from the cache still leaves its embed charged to the render', () => {
+    // One nested layout left: the first body spends it, so the second is refused.
+    const canvas: SpatialCanvas = { nodes: [body('a'), { ...body('b'), x: 400 }], edges: [] }
+    const cached = layoutSpatialCanvas(canvas, options(new Map(), 1))
+    expect(count(cached.nodes, 'embedPlaceholder', 'budget')).toBe(1)
+    expect(JSON.stringify(cached)).toBe(
+      JSON.stringify(layoutSpatialCanvas(canvas, options(undefined, 1))),
+    )
+  })
 })

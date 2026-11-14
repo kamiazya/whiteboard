@@ -83,7 +83,7 @@ fn push_nullable(key: &mut String, value: Option<&str>) {
 /// The content cache's key: `JSON.stringify` of everything a body's layout
 /// depends on but its position, since the value is origin-relative. The
 /// silhouette is part of it (a shaped node lays out against its inscribed box),
-/// and so are the label family and the theme's id.
+/// and so are the label family, the theme's id and the embed path.
 fn cache_key(node: &SpatialNode, text: &str, options: &ComposeOptions<'_>) -> String {
     let nb = &options.node_box;
     let mut key = String::from("[");
@@ -98,7 +98,16 @@ fn cache_key(node: &SpatialNode, text: &str, options: &ComposeOptions<'_>) -> St
     push_nullable(&mut key, nb.appearance.resolve_label().font_family.as_deref());
     key.push(',');
     push_nullable(&mut key, options.theme_id);
-    key.push(']');
+    // The documents laid out around this one: a body's embed is a cycle on one
+    // path and drawn on another, and past the depth cap at one depth only.
+    key.push_str(",[");
+    for (at, entered) in options.embed_path.iter().enumerate() {
+        if at > 0 {
+            key.push(',');
+        }
+        quote(&mut key, entered);
+    }
+    key.push_str("]]");
     key
 }
 
@@ -113,8 +122,9 @@ fn fit_text_body(
 }
 
 /// The body laid out and fitted, or its text as one line when it does not
-/// parse. A body this render's budget refused something for is not cached: it
-/// is degraded only because THIS render ran out.
+/// parse. Only a body that left the render's account untouched is cached: one
+/// refused something is degraded only because THIS render ran out, and one that
+/// drew an embed spent from the account, a charge a hit would skip.
 fn lay_out_body(
     node: &SpatialNode,
     text: &str,
@@ -123,7 +133,7 @@ fn lay_out_body(
     options: &ComposeOptions<'_>,
 ) -> FittedBlocks {
     let nb = &options.node_box;
-    let refused_before = options.budget.refused();
+    let before = (options.budget.layouts_remaining(), options.budget.refused());
     let Ok(root) = options.layout.host.parse_body(text) else {
         options.layout.host.degrade(Degradation::BodyParseFailed { node_id: node.id.clone() });
         let line = SceneNode::TextRun(Box::new(label_run(text, nb, max_width)));
@@ -133,7 +143,7 @@ fn lay_out_body(
     let laid = typeset_mdast_blocks(&root, &style.options(max_width, options));
     let body = fit_text_body(&laid.nodes, node, nb);
     if let (Some(cache), Some(key)) = (options.layout.content_cache, key)
-        && options.budget.refused() == refused_before
+        && (options.budget.layouts_remaining(), options.budget.refused()) == before
     {
         cache.set(key, &body);
     }
