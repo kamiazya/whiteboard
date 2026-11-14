@@ -379,4 +379,13 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   },
   { board: 'nesting', appearance: 'light', fonts: 'default', embedPath: ['boards/plain.canvas'] },
   { board: 'nesting', style: 'visual.neon', appearance: 'light', fonts: 'default' },
+  // A cached walk under a path of two documents: the content cache's key
+  // carries the path, so its every entry is spelled the same on both sides.
+  {
+    board: 'nesting',
+    appearance: 'light',
+    fonts: 'default',
+    embedPath: ['doc-a', 'doc-b'],
+    cache: true,
+  },
 ]
