@@ -69,3 +69,39 @@ pub(super) fn region_outlines(
         })
         .collect()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::regions_of;
+    use whiteboard_model::annotation::{
+        AnnotationAnchor, CommentMessage, CommentThread, SpatialAnchor,
+    };
+    use whiteboard_model::spatial::SpatialCanvas;
+
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+
+    fn region(id: &str, x: f64, resolved: bool) -> CommentThread {
+        CommentThread {
+            id: id.to_owned(),
+            anchor: AnnotationAnchor::Spatial(SpatialAnchor {
+                x,
+                width: Some(1.0),
+                height: Some(1.0),
+                ..SpatialAnchor::default()
+            }),
+            resolved,
+            messages: vec![CommentMessage::default()],
+        }
+    }
+
+    #[test]
+    fn a_repeated_thread_keeps_its_first_place_and_its_last_box() {
+        let threads = [region("a", 1.0, false), region("b", 2.0, false), region("a", 3.0, true)];
+        let held: Vec<(String, f64, bool)> = regions_of(&threads, &SpatialCanvas::default())
+            .into_iter()
+            .map(|r| (r.thread_id, r.rect.x, r.resolved))
+            .collect();
+        assert_eq!(held, [("a".to_owned(), 3.0, true), ("b".to_owned(), 2.0, false)]);
+    }
+}

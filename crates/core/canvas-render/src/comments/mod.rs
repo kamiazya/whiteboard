@@ -109,11 +109,13 @@ fn comment_anchor(
         let corner = comment_corner_of(node.x, node.y, node.width);
         return ScenePoint { x: corner.x, y: corner.y };
     }
-    let path = comment.target_edge_id.as_deref().and_then(|id| edge_path(edges, id));
-    match path {
-        Some(path) if !path.is_empty() => nearest_point_on_polyline(stored, &path),
-        _ => stored,
-    }
+    // The TypeScript also falls back for an empty path, which the nearest
+    // point of no points already answers: the stored point itself.
+    comment
+        .target_edge_id
+        .as_deref()
+        .and_then(|id| edge_path(edges, id))
+        .map_or(stored, |path| nearest_point_on_polyline(stored, &path))
 }
 
 /// Where a comment's pin stands: a node set's or region's at the corner of the
