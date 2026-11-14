@@ -78,7 +78,12 @@ mod fixtures {
         let contracts = [("facets/demo/demo.schema.json", CONTRACT)];
         let tables = [("demo.themes", THEMES), ("demo.stencils", STENCILS)];
         build(
-            &PluginSources { manifest: MANIFEST, contracts: &contracts, tables: &tables },
+            &PluginSources {
+                manifest: MANIFEST,
+                contracts: &contracts,
+                tables: &tables,
+                migrations: &[],
+            },
             &NO_HOST,
         )
         .expect("the demo plugin loads")
@@ -341,6 +346,7 @@ fn a_stencil_is_judged_by_the_shape_the_registrys_contracts_hold() {
         &[],
         Contracts::load(&[], &NO_HOST).expect("an empty set compiles"),
         |_| Vec::new(),
+        &[],
     )
     .expect("an empty registry builds");
     let stencil = v(r#"{"displayName": "Box"}"#);

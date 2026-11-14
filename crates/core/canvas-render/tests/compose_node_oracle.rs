@@ -11,6 +11,8 @@
 mod dump;
 #[path = "compose_node_support/extras.rs"]
 mod extras;
+#[path = "facet_support/mod.rs"]
+mod facet_support;
 #[path = "typeset_support/model.rs"]
 mod model;
 #[path = "theme_support/tokens.rs"]
@@ -29,8 +31,7 @@ use whiteboard_canvas_render::compose_node::{
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
 use whiteboard_canvas_render::node_box::{
-    FacetCard, FacetRow, NodeBoxHost, NodeBoxOptions, ReferenceImage, ResolvedReference,
-    TextPlacement,
+    FacetCard, FacetRow, NodeBoxOptions, NodeOutlines, ReferenceImage, ResolvedReference,
 };
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::asset::create_themed_appearance;
@@ -42,11 +43,13 @@ use whiteboard_canvas_render::typeset::{
     NestedLayoutBudget,
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{
     BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine, NodeResource,
     SpatialCanvas, SpatialNode,
 };
+use whiteboard_plugin_visual::host::visual_registry;
 use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -275,6 +278,7 @@ struct MetaWire {
 
 /// What the meta line holds, read into the crate's types.
 struct Context {
+    registry: Registry,
     sketch: ThemeTokens,
     bodies: BTreeMap<String, Option<Root>>,
     embedded: BTreeMap<String, (String, Root)>,
@@ -304,6 +308,7 @@ fn context_of(meta: &Value) -> Res<Context> {
         references.insert(reference, resolved.map(resolved_of).transpose()?);
     }
     Ok(Context {
+        registry: visual_registry().map_err(|e| format!("{e:?}"))?,
         sketch: tokens::theme_tokens(&wire.sketch)?,
         bodies,
         embedded,
@@ -359,7 +364,6 @@ impl ContentCache for Recording {
 struct Host<'c> {
     context: &'c Context,
     case: &'c Case,
-    align: Option<TextPlacement>,
     events: RefCell<Vec<Event>>,
     nested: RefCell<Vec<Nested>>,
     misses: RefCell<Vec<String>>,
@@ -368,16 +372,6 @@ struct Host<'c> {
 impl Host<'_> {
     fn miss(&self, what: String) {
         self.misses.borrow_mut().push(what);
-    }
-}
-
-impl NodeBoxHost for Host<'_> {
-    fn silhouette(&self, node_id: &str) -> Option<&str> {
-        if node_id == self.case.node.id { self.case.shape.as_deref() } else { None }
-    }
-
-    fn text_placement(&self, _node: &SpatialNode) -> Option<TextPlacement> {
-        self.align
     }
 }
 
@@ -505,7 +499,8 @@ impl EmbedResolver for Host<'_> {
     }
 }
 
-fn node_of(wire: &NodeWire) -> Res<SpatialNode> {
+/// The node of a case, carrying the `visual.text/v0` payload the case names.
+fn node_of(wire: &NodeWire, align: Option<&str>) -> Res<SpatialNode> {
     let [x, y, w, h] = &wire.bbox;
     let background_style = match wire.background_style.as_deref() {
         None => None,
@@ -535,6 +530,13 @@ fn node_of(wire: &NodeWire) -> Res<SpatialNode> {
         label: wire.label.clone(),
         background: wire.background.clone(),
         background_style,
+        facets: align.map(|align| {
+            let payload = whiteboard_model::Value::Map(vec![(
+                "align".to_owned(),
+                whiteboard_model::Value::String(align.to_owned()),
+            )]);
+            vec![("visual.text/v0".to_owned(), payload)]
+        }),
         ..SpatialNode::default()
     })
 }
@@ -552,6 +554,7 @@ struct Setup<'c> {
     measure: Counting,
     appearance: Box<dyn SpatialAppearanceResolver>,
     host: Host<'c>,
+    outlines: NodeOutlines,
     geometry: SpatialGeometry,
     sketch: bool,
 }
@@ -559,11 +562,6 @@ struct Setup<'c> {
 impl<'c> Setup<'c> {
     fn of(context: &'c Context, case: &'c Case) -> Res<Self> {
         let appearance = appearance_of(context, &case.theme);
-        let align = match case.align.as_deref() {
-            Some("start") => Some(TextPlacement::Start),
-            Some("center") => Some(TextPlacement::Center),
-            _ => None,
-        };
         let [padding, label, floor] = &case.geometry;
         Ok(Self {
             measure: Counting { base: FakeMeasure::default(), calls: Cell::new(0) },
@@ -571,11 +569,13 @@ impl<'c> Setup<'c> {
             host: Host {
                 context,
                 case,
-                align,
                 events: RefCell::new(Vec::new()),
                 nested: RefCell::new(Vec::new()),
                 misses: RefCell::new(Vec::new()),
             },
+            outlines: NodeOutlines(
+                case.shape.iter().map(|shape| (case.node.id.clone(), shape.clone())).collect(),
+            ),
             geometry: SpatialGeometry {
                 padding_px: f64_of(padding)?,
                 label_font_size_px: f64_of(label)?,
@@ -601,7 +601,8 @@ impl<'c> Setup<'c> {
                 geometry: self.geometry,
                 fit_to_box: self.host.case.fit_to_box,
                 theme: self.sketch.then_some(&self.host.context.sketch),
-                host: &self.host,
+                outlines: &self.outlines,
+                registry: &self.host.context.registry,
             },
             theme_id: self.sketch.then_some("visual.sketch"),
             host: &self.host,
@@ -622,7 +623,7 @@ impl<'c> Setup<'c> {
 }
 
 fn replay_case(context: &Context, case: &Case) -> Res<()> {
-    let node = node_of(&case.node)?;
+    let node = node_of(&case.node, case.align.as_deref())?;
     let setup = Setup::of(context, case)?;
     let want = &case.answer;
     let cache = case.on("cache").then(Recording::default);

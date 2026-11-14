@@ -4,42 +4,27 @@
 
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::node_box::{
-    NodeBoxHost, NodeBoxOptions, TextPlacement, content_width, fit_scene_in_node, place_in_node,
+    NodeBoxOptions, NodeOutlines, content_width, fit_scene_in_node, place_in_node,
 };
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
+use whiteboard_model::Value;
 use whiteboard_model::spatial::SpatialNode;
+use whiteboard_plugin_visual::host::visual_registry;
 use whiteboard_scene::{BoundingBox, ParagraphBlockNode, SceneNode, ShapeSceneNode, TextRunNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
-/// A rect whose text a contribution asks to centre.
-struct Centred;
-
-/// A cylinder, whose text centres by default.
-struct Cylinder;
-
-impl NodeBoxHost for Cylinder {
-    fn silhouette(&self, _node_id: &str) -> Option<&str> {
-        Some("visual.cylinder")
-    }
-
-    fn text_placement(&self, _node: &SpatialNode) -> Option<TextPlacement> {
-        None
-    }
-}
-
-impl NodeBoxHost for Centred {
-    fn silhouette(&self, _node_id: &str) -> Option<&str> {
-        None
-    }
-
-    fn text_placement(&self, _node: &SpatialNode) -> Option<TextPlacement> {
-        Some(TextPlacement::Center)
-    }
+/// How a node's text comes to be centred.
+#[derive(Clone, Copy)]
+enum Centring {
+    /// A rect whose own `visual.text/v0` asks for it.
+    Asked,
+    /// A cylinder carrying no placement, whose text centres by default.
+    Cylinder,
 }
 
 fn run(x: f64, y: f64) -> TextRunNode {
@@ -63,30 +48,48 @@ fn run(x: f64, y: f64) -> TextRunNode {
 }
 
 /// The options every example lays out with: the fake measurer, the light theme
-/// and `geometry`, with the text centred.
-fn with_options<T>(geometry: SpatialGeometry, lay: impl FnOnce(&NodeBoxOptions<'_>) -> T) -> T {
-    with_host(geometry, &Centred, lay)
+/// and `geometry`, with the text centred; none when the bundled plugin does not
+/// load.
+fn with_options<T>(
+    geometry: SpatialGeometry,
+    lay: impl FnOnce(&NodeBoxOptions<'_>) -> T,
+) -> Option<T> {
+    with_centring(geometry, Centring::Asked, lay)
 }
 
-fn with_host<T>(
+fn with_centring<T>(
     geometry: SpatialGeometry,
-    host: &dyn NodeBoxHost,
+    centring: Centring,
     lay: impl FnOnce(&NodeBoxOptions<'_>) -> T,
-) -> T {
+) -> Option<T> {
     let measure = FakeMeasure::default();
     let theme = create_spatial_theme(SpatialThemeMode::Light, None);
-    lay(&NodeBoxOptions {
+    let registry = visual_registry().ok()?;
+    let outlines = match centring {
+        Centring::Asked => NodeOutlines::default(),
+        Centring::Cylinder => NodeOutlines(vec![("n".to_owned(), "visual.cylinder".to_owned())]),
+    };
+    Some(lay(&NodeBoxOptions {
         measure: &measure,
         appearance: &theme,
         geometry,
         fit_to_box: true,
         theme: None,
-        host,
-    })
+        outlines: &outlines,
+        registry: &registry,
+    }))
 }
 
+/// A node whose `visual.text/v0` centres its text.
 fn node(width: f64, height: f64) -> SpatialNode {
-    SpatialNode { id: "n".to_owned(), width, height, ..SpatialNode::default() }
+    let centre = Value::Map(vec![("align".to_owned(), Value::String("center".to_owned()))]);
+    SpatialNode {
+        id: "n".to_owned(),
+        width,
+        height,
+        facets: Some(vec![("visual.text/v0".to_owned(), centre)]),
+        ..SpatialNode::default()
+    }
 }
 
 /// Two runs at `tops`, 20px apart, placed centred in a 200x100 node: the
@@ -98,7 +101,7 @@ fn placed(tops: [f64; 2]) -> Option<(BoundingBox, Vec<f64>)> {
     });
     let placed = with_options(SPATIAL_THEME_GEOMETRY, |o| {
         place_in_node(&node(200.0, 100.0), &[paragraph], o)
-    });
+    })?;
     match placed.first() {
         Some(SceneNode::Paragraph(p)) => Some((p.bbox, p.runs.iter().map(|r| r.bbox.x).collect())),
         _ => None,
@@ -136,7 +139,7 @@ fn runs_at_both_zeros_are_one_line() {
 #[test]
 fn a_width_at_the_floor_is_the_floor_with_its_sign() {
     let geometry = SpatialGeometry { padding_px: 0.0, ..SPATIAL_THEME_GEOMETRY };
-    let width = with_options(geometry, |o| content_width(&node(-0.0, 10.0), o));
+    let width = with_options(geometry, |o| content_width(&node(-0.0, 10.0), o)).expect("options");
     assert_eq!(width.to_bits(), 0.0_f64.to_bits());
 }
 
@@ -153,7 +156,8 @@ fn a_line_as_wide_as_the_box_is_not_moved() {
     });
     let placed = with_options(SPATIAL_THEME_GEOMETRY, |o| {
         place_in_node(&node(200.0, 100.0), &[paragraph], o)
-    });
+    })
+    .expect("options");
     let line = BoundingBox { x: 18.0, y: 42.0, w: 184.0, h: 16.0 };
     let Some(SceneNode::Paragraph(p)) = placed.first() else {
         panic!("a paragraph: {placed:?}");
@@ -178,10 +182,14 @@ fn shape(height: f64) -> SceneNode {
 }
 
 /// Where a 10px-wide shape `height` tall lands, as its top, in `node`.
-fn shape_top(node: &SpatialNode, height: f64, padding: f64, host: &dyn NodeBoxHost) -> f64 {
+fn shape_top(node: &SpatialNode, height: f64, padding: f64, centring: Centring) -> f64 {
     let geometry = SpatialGeometry { padding_px: padding, ..SPATIAL_THEME_GEOMETRY };
-    let placed = with_host(geometry, host, |o| place_in_node(node, &[shape(height)], o));
-    match placed.first() {
+    let node = match centring {
+        Centring::Asked => node.clone(),
+        Centring::Cylinder => SpatialNode { facets: None, ..node.clone() },
+    };
+    let placed = with_centring(geometry, centring, |o| place_in_node(&node, &[shape(height)], o));
+    match placed.as_deref().and_then(<[SceneNode]>::first) {
         Some(SceneNode::Shape(s)) => s.bbox.y,
         _ => f64::NAN,
     }
@@ -196,7 +204,7 @@ fn node_at(y: f64, height: f64) -> SpatialNode {
 /// two differ in the last bit, and the TypeScript answers the short form's.
 #[test]
 fn content_that_fits_centres_by_half_the_room_left() {
-    let top = shape_top(&node_at(-27.8, 49.9), 7.3, 8.0, &Centred);
+    let top = shape_top(&node_at(-27.8, 49.9), 7.3, 8.0, Centring::Asked);
     assert_eq!(top.to_bits(), 0xc01a_0000_0000_0002, "{top}");
 }
 
@@ -204,7 +212,7 @@ fn content_that_fits_centres_by_half_the_room_left() {
 /// here is one ulp off zero rather than zero.
 #[test]
 fn content_as_tall_as_the_padded_box_takes_the_general_offset() {
-    let top = shape_top(&node_at(4.64, 37.32), 30.6, 3.36, &Centred);
+    let top = shape_top(&node_at(4.64, 37.32), 30.6, 3.36, Centring::Asked);
     assert_eq!(top.to_bits(), 0x401f_ffff_ffff_ffff, "{top}");
 }
 
@@ -213,7 +221,10 @@ fn content_as_tall_as_the_padded_box_takes_the_general_offset() {
 /// would start at 15 and is pulled up to 10.
 #[test]
 fn content_taller_than_the_inscribed_box_is_held_inside_the_node() {
-    assert_eq!(shape_top(&node(200.0, 100.0), 90.0, 8.0, &Cylinder).to_bits(), 10.0_f64.to_bits());
+    assert_eq!(
+        shape_top(&node(200.0, 100.0), 90.0, 8.0, Centring::Cylinder).to_bits(),
+        10.0_f64.to_bits()
+    );
 }
 
 /// A padded box with no room in either direction fits nothing, even content
@@ -225,6 +236,7 @@ fn a_box_with_no_room_in_one_direction_fits_nothing() {
         with_options(SPATIAL_THEME_GEOMETRY, |o| {
             fit_scene_in_node(&[shape(content)], &node(width, height), o).is_some()
         })
+        .expect("options")
     };
     assert!(!fits(16.0, 40.0, 10.0), "no width");
     assert!(!fits(40.0, 16.0, 0.0), "no height");

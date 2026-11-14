@@ -10,8 +10,7 @@
 //! the registry is built, and every payload a bundled stencil carries is
 //! checked against the schema of the facet it names.
 //!
-//! Not here yet: the compat chain (reading an older version's payload), the editor's
-//! derived form, more than one plugin and a workspace's own stencil library.
+//! Not here yet: the editor's derived form, more than one plugin and a workspace's own stencil library.
 //! The asset VALUES are judged and then dropped; the registry holds their ids.
 
 use whiteboard_model::Value;
@@ -20,7 +19,7 @@ use whiteboard_model::json;
 use crate::checks;
 use crate::manifest;
 use crate::plugin_manifest::{AssetKind, ManifestAssets};
-use crate::registry::{BuildError, PayloadRefusal, Registry};
+use crate::registry::{BuildError, Migration, PayloadRefusal, Registry};
 use crate::schema::{CompileError, Contracts, DefId, Host, Issue};
 use crate::value::{entries, field};
 
@@ -66,6 +65,8 @@ pub struct PluginSources<'a> {
     /// appear more than once: its texts are read in order as one table, and an
     /// asset in two of them is refused.
     pub tables: &'a [(&'a str, &'a str)],
+    /// The compat steps the manifest names, which only code can be.
+    pub migrations: &'a [(&'a str, Migration)],
 }
 
 /// Why a plugin could not be loaded.
@@ -211,8 +212,9 @@ pub fn build(sources: &PluginSources<'_>, host: &Host<'_>) -> Result<Registry, L
         };
         table.iter().map(|(id, _)| id.clone()).collect()
     };
-    let registry = Registry::build(std::slice::from_ref(&manifest), contracts, ids)
-        .map_err(LoadError::Registry)?;
+    let registry =
+        Registry::build(std::slice::from_ref(&manifest), contracts, ids, sources.migrations)
+            .map_err(LoadError::Registry)?;
     for (id, stencil) in &stencils {
         let facets = field(stencil, "facets").map_or(&[][..], entries);
         for (key, payload) in facets {

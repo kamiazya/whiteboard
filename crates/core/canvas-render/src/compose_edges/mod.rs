@@ -2,9 +2,8 @@
 //! `layout/spatial-canvas.ts`): every edge and line of a canvas routed in one
 //! call, each weighed, inked and pulled onto the silhouettes of its ends, hops
 //! put on the ones that draw them, and a label beside each that carries one.
-//!
-//! What this crate does not read yet is asked of the host: the visual plugin's
-//! facets on the canvas and on each element ([`EdgeFacets`]).
+//! The visual plugin's facets on the canvas and on each element are read
+//! through the registry the node box carries.
 
 mod label;
 mod route;
@@ -15,7 +14,9 @@ use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use whiteboard_edge_routing::geometry::Point;
 use whiteboard_edge_routing::routing_input::Arrowhead;
 use whiteboard_facet_engine::engine::ThemeEdgeRouting;
-use whiteboard_model::spatial::{CanvasEdge, CanvasLine, LineEnd, SpatialCanvas};
+use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::spatial::{CanvasEdge, CanvasLine, ExtensionFacets, LineEnd, SpatialCanvas};
+use whiteboard_plugin_visual::read;
 use whiteboard_plugin_visual::visual::{
     EdgeRoutingStyle, LineJumps, VisualEdgesFacet, VisualStrokeWidth,
 };
@@ -31,23 +32,10 @@ use crate::node_box::{NodeBoxOptions, js_trim, sketch_ink_for};
 use crate::node_outline::outline_entry_point;
 use crate::theme::appearance::RoutableElement;
 
-/// The visual plugin's facets the edge pass reads.
-pub trait EdgeFacets {
-    /// The canvas's `visual.edges/v0`, what its edges default to.
-    fn canvas_style(&self, canvas: &SpatialCanvas) -> VisualEdgesFacet;
-
-    /// An element's own `visual.edges/v0`, narrowing the canvas's field by field.
-    fn own_style(&self, element: RoutableElement<'_>) -> VisualEdgesFacet;
-
-    /// An element's `visual.stroke/v0` weight; none is the thin weight.
-    fn stroke_width(&self, element: RoutableElement<'_>) -> Option<VisualStrokeWidth>;
-}
-
 /// What the edge pass is handed beside the canvas.
 #[derive(Clone, Copy)]
 pub struct EdgeOptions<'a> {
     pub node_box: NodeBoxOptions<'a>,
-    pub facets: &'a dyn EdgeFacets,
     /// The editor's frozen sides, by element id.
     pub side_overrides: Option<&'a [(String, EdgeAnchorOverride)]>,
 }
@@ -136,7 +124,7 @@ fn pull_end(
     options: &EdgeOptions<'_>,
 ) {
     let Some(id) = end_node(element, to) else { return };
-    let Some(shape) = options.node_box.host.silhouette(id) else { return };
+    let Some(shape) = options.node_box.outlines.of(id) else { return };
     let Some(node) = canvas.nodes.iter().find(|node| node.id == id) else { return };
     let last = path.len().saturating_sub(1);
     let (at, inward) = if to { (last, last.checked_sub(1)) } else { (0, Some(1)) };
@@ -169,9 +157,17 @@ fn compose_edge(
     pull_end(&mut edge.path, canvas, element, true, options);
     pull_end(&mut edge.path, canvas, element, false, options);
     let appearance = options.node_box.appearance.resolve_edge(element);
-    edge.appearance = weigh_stroke(appearance, options.facets.stroke_width(element));
+    let width = read::stroke_width(element_facets(element), options.node_box.registry);
+    edge.appearance = weigh_stroke(appearance, width);
     edge.ink = sketch_ink_for(id, &options.node_box, false);
     edge
+}
+
+const fn element_facets(element: RoutableElement<'_>) -> Option<&ExtensionFacets> {
+    match element {
+        RoutableElement::Edge(CanvasEdge { facets, .. })
+        | RoutableElement::Line(CanvasLine { facets, .. }) => facets.as_ref(),
+    }
 }
 
 const fn element_label(element: RoutableElement<'_>) -> Option<&String> {
@@ -238,7 +234,7 @@ const fn theme_routing(style: ThemeEdgeRouting) -> RoutingStyle {
 
 /// Each element's own `visual.edges`, read once per id: a later element under
 /// an id already read answers as the first did.
-fn own_styles(elements: &[RoutableElement<'_>], facets: &dyn EdgeFacets) -> Vec<VisualEdgesFacet> {
+fn own_styles(elements: &[RoutableElement<'_>], registry: &Registry) -> Vec<VisualEdgesFacet> {
     let mut seen: Vec<(&str, VisualEdgesFacet)> = Vec::new();
     elements
         .iter()
@@ -247,7 +243,7 @@ fn own_styles(elements: &[RoutableElement<'_>], facets: &dyn EdgeFacets) -> Vec<
             if let Some((_, style)) = seen.iter().find(|(known, _)| *known == id) {
                 return style.clone();
             }
-            let style = facets.own_style(element);
+            let style = read::edges_style(element_facets(element), registry);
             seen.push((id, style.clone()));
             style
         })
@@ -297,11 +293,11 @@ fn styles_and_hops(
     elements: &[RoutableElement<'_>],
     options: &EdgeOptions<'_>,
 ) -> (Vec<RoutingStyle>, Vec<bool>) {
-    let board = options.facets.canvas_style(canvas);
+    let board = read::edges_style(canvas.facets.as_ref(), options.node_box.registry);
     let board_routing = board.routing.map(visual_routing).or_else(|| {
         options.node_box.theme.and_then(|tokens| tokens.defaults.edge_routing).map(theme_routing)
     });
-    own_styles(elements, options.facets)
+    own_styles(elements, options.node_box.registry)
         .iter()
         .map(|style| {
             let routing = style

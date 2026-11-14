@@ -13,9 +13,9 @@ import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.j
  * The decorations drawn over a node after its content (`composeDecorations` in
  * `spatial-canvas.ts`), which are the bundled visual plugin's: what a node
  * wearing a stencil, a symbol, both or neither draws, in boxes either side of
- * the height a badge needs, under each theme. Which stencil and symbol a node
- * wears is read here through the plugin's own facet readers and recorded as the
- * host's answer, since the Rust port asks its host for them.
+ * the height a badge needs, under each theme. The node's facets are recorded,
+ * which the Rust badge reads through its own readers, and beside them which
+ * stencil and symbol the plugin's readers here answer for them.
  */
 
 type ThemeName = 'light' | 'dark' | 'sketch'
@@ -23,7 +23,11 @@ type ThemeName = 'light' | 'dark' | 'sketch'
 export interface DecorationRecord {
   readonly kind: 'decoration'
   readonly id: string
-  readonly node: { readonly id: string; readonly box: readonly string[] }
+  readonly node: {
+    readonly id: string
+    readonly box: readonly string[]
+    readonly facets?: SpatialNode['facets']
+  }
   readonly theme: ThemeName
   readonly stencil: string | null
   readonly symbol: { readonly kind: string; readonly name?: string; readonly char?: string } | null
@@ -98,7 +102,11 @@ export function decorationRecords(
         records.push({
           kind: 'decoration',
           id: `${node.id}/${theme}`,
-          node: { id: node.id, box: [x, y, width, height].map(hex) },
+          node: {
+            id: node.id,
+            box: [x, y, width, height].map(hex),
+            ...(node.facets === undefined ? {} : { facets: node.facets }),
+          },
           theme,
           stencil: resolveNodeStencil(node) ?? null,
           symbol: symbol === undefined ? null : { ...symbol },

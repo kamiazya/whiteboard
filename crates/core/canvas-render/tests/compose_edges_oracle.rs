@@ -1,27 +1,31 @@
 //! `compose_edges_and_labels` against the recorded TypeScript answers
 //! (`compose-edges.jsonl`): for each board under each theme and geometry, the
 //! edges and lines drawn with their labels, the anchors the routing settled in
-//! the order it settled them, and how many times the measurer was asked. What
-//! the edge pass asks its host (the visual plugin's facets) is answered from
-//! the recording. The hops it computes itself; where any element draws them,
-//! the hops recorded over every routed edge, drawn or not, are compared too.
+//! the order it settled them, and how many times the measurer was asked. The
+//! visual plugin's facets on the canvas and on each element are read by the
+//! plugin's own readers, which are held to what the TypeScript's answered
+//! (`facts`). The hops it computes itself; where any element draws them, the
+//! hops recorded over every routed edge, drawn or not, are compared too.
 
 #[path = "typeset_support/dump.rs"]
 mod dump;
+#[path = "facet_support/mod.rs"]
+mod facet_support;
 #[path = "theme_support/tokens.rs"]
 mod tokens;
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 use std::collections::BTreeMap;
 
 use dump::dump_scene;
+use facet_support::facets_of;
 use serde::Deserialize;
 use serde_json::Value;
-use whiteboard_canvas_render::compose_edges::{EdgeFacets, EdgeOptions, compose_edges_and_labels};
+use whiteboard_canvas_render::compose_edges::{EdgeOptions, compose_edges_and_labels};
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::measure::{FontDescriptor, Measure, VerticalMetrics};
-use whiteboard_canvas_render::node_box::{NodeBoxHost, NodeBoxOptions, TextPlacement};
-use whiteboard_canvas_render::theme::appearance::{RoutableElement, SpatialAppearanceResolver};
+use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines};
+use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::asset::create_themed_appearance;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
@@ -32,13 +36,14 @@ use whiteboard_edge_routing::edge_rules::SidePair;
 use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use whiteboard_edge_routing::geometry::Point;
 use whiteboard_facet_engine::engine::ThemeTokens;
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::spatial::{
     Arrowhead, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine, CanvasPoint, EdgeEnd,
     EdgeSide, LineEnd, LineEndNode, LineEndPoint, NodeResource, SpatialCanvas, SpatialNode,
 };
-use whiteboard_plugin_visual::visual::{
-    EdgeRoutingStyle, LineJumps, VisualEdgesFacet, VisualStrokeWidth,
-};
+use whiteboard_plugin_visual::host::visual_registry;
+use whiteboard_plugin_visual::read;
+use whiteboard_plugin_visual::visual::{EdgeRoutingStyle, LineJumps, VisualEdgesFacet};
 use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
@@ -92,6 +97,7 @@ struct ElementWire {
     label: Option<String>,
     color: Option<String>,
     bends: Option<Vec<[String; 2]>>,
+    facets: Option<Value>,
 }
 
 #[derive(Deserialize)]
@@ -139,6 +145,7 @@ struct Case {
     id: String,
     theme: String,
     geometry: [String; 3],
+    facets: Option<Value>,
     nodes: Vec<NodeWire>,
     edges: Vec<ElementWire>,
     lines: Option<Vec<ElementWire>>,
@@ -215,6 +222,7 @@ fn edge_of(wire: &ElementWire) -> Res<CanvasEdge> {
         color: wire.color.as_deref().map(color_of),
         label: wire.label.clone(),
         bends: bends_of(wire)?,
+        facets: facets_of(wire.facets.as_ref()),
         ..CanvasEdge::default()
     })
 }
@@ -227,7 +235,7 @@ fn line_of(wire: &ElementWire) -> Res<CanvasLine> {
         color: wire.color.as_deref().map(color_of),
         label: wire.label.clone(),
         bends: bends_of(wire)?,
-        facets: None,
+        facets: facets_of(wire.facets.as_ref()),
     })
 }
 
@@ -236,6 +244,7 @@ fn canvas_of(case: &Case) -> Res<SpatialCanvas> {
         nodes: case.nodes.iter().map(node_of).collect::<Res<_>>()?,
         edges: case.edges.iter().map(edge_of).collect::<Res<_>>()?,
         lines: case.lines.as_ref().map(|lines| lines.iter().map(line_of).collect()).transpose()?,
+        facets: facets_of(case.facets.as_ref()),
         ..SpatialCanvas::default()
     })
 }
@@ -293,76 +302,28 @@ impl Measure for Counting {
     }
 }
 
-/// Every host answer of one case, from the case.
-struct Host<'c> {
-    case: &'c Case,
-    canvas: &'c SpatialCanvas,
-    misses: RefCell<Vec<String>>,
-}
-
-impl Host<'_> {
-    fn miss(&self, what: String) {
-        self.misses.borrow_mut().push(what);
-    }
-
-    /// Where the element sits among the canvas's edges then lines, by identity.
-    fn position(&self, element: RoutableElement<'_>) -> Option<usize> {
-        match element {
-            RoutableElement::Edge(edge) => {
-                self.canvas.edges.iter().position(|e| std::ptr::eq(e, edge))
-            }
-            RoutableElement::Line(line) => {
-                let lines = self.canvas.lines.as_deref().unwrap_or_default();
-                lines
-                    .iter()
-                    .position(|l| std::ptr::eq(l, line))
-                    .map(|at| at + self.canvas.edges.len())
-            }
-        }
-    }
-}
-
-impl NodeBoxHost for Host<'_> {
-    fn silhouette(&self, node_id: &str) -> Option<&str> {
-        self.case.shapes.get(node_id).map(String::as_str)
-    }
-
-    fn text_placement(&self, _node: &SpatialNode) -> Option<TextPlacement> {
-        None
-    }
-}
-
-impl EdgeFacets for Host<'_> {
-    fn canvas_style(&self, _canvas: &SpatialCanvas) -> VisualEdgesFacet {
-        style_of(&self.case.facts.canvas).unwrap_or_else(|e| self.miss_with(e))
-    }
-
-    fn own_style(&self, element: RoutableElement<'_>) -> VisualEdgesFacet {
-        match self.position(element).and_then(|at| self.case.facts.own.get(at)).map(style_of) {
-            Some(Ok(style)) => style,
-            Some(Err(e)) => self.miss_with(e),
-            None => self.miss_with("an element the recording does not hold".to_owned()),
-        }
-    }
-
-    fn stroke_width(&self, element: RoutableElement<'_>) -> Option<VisualStrokeWidth> {
-        let wire = self.position(element).and_then(|at| self.case.facts.stroke.get(at));
-        match wire.map(String::as_str) {
-            Some("thin") => None,
-            Some(width) => VisualStrokeWidth::from_wire(width),
-            None => {
-                self.miss("a weight the recording does not hold".to_owned());
-                None
-            }
-        }
-    }
-}
-
-impl Host<'_> {
-    fn miss_with(&self, what: String) -> VisualEdgesFacet {
-        self.miss(what);
-        VisualEdgesFacet::default()
-    }
+/// What the plugin's readers answer for the canvas and each element, edges then
+/// lines, held to what the TypeScript's answered.
+fn check_facts(canvas: &SpatialCanvas, facts: &Facts, registry: &Registry) -> Res<()> {
+    differ(
+        "canvas style",
+        &read::edges_style(canvas.facets.as_ref(), registry),
+        &style_of(&facts.canvas)?,
+    )?;
+    let buckets: Vec<_> = canvas
+        .edges
+        .iter()
+        .map(|edge| edge.facets.as_ref())
+        .chain(canvas.lines.iter().flatten().map(|line| line.facets.as_ref()))
+        .collect();
+    let own: Vec<_> = buckets.iter().map(|facets| read::edges_style(*facets, registry)).collect();
+    let recorded: Vec<_> = facts.own.iter().map(style_of).collect::<Res<_>>()?;
+    differ("own styles", &own, &recorded)?;
+    let stroke: Vec<_> = buckets
+        .iter()
+        .map(|facets| read::stroke_width(*facets, registry).map_or("thin", |w| w.as_str()))
+        .collect();
+    differ("weights", &stroke, &facts.stroke.iter().map(String::as_str).collect())
 }
 
 /// The hops over every edge drawn in `content`, its own hops taken off, as
@@ -447,9 +408,10 @@ fn differ<T: PartialEq + std::fmt::Debug>(what: &str, got: &T, want: &T) -> Res<
     if got == want { Ok(()) } else { Err(format!("{what}: got\n{got:?}\nrecorded\n{want:?}")) }
 }
 
-fn replay_case(themes: &(ThemeTokens, ThemeTokens), case: &Case) -> Res<()> {
+fn replay_case(themes: &(ThemeTokens, ThemeTokens), registry: &Registry, case: &Case) -> Res<()> {
     let canvas = canvas_of(case)?;
-    let host = Host { case, canvas: &canvas, misses: RefCell::new(Vec::new()) };
+    check_facts(&canvas, &case.facts, registry)?;
+    let outlines = NodeOutlines(case.shapes.clone().into_iter().collect());
     let measure = Counting { base: FakeMeasure::default(), calls: Cell::new(0) };
     let appearance = appearance_of(&themes.0, &themes.1, &case.theme);
     let theme = match case.theme.as_str() {
@@ -469,9 +431,9 @@ fn replay_case(themes: &(ThemeTokens, ThemeTokens), case: &Case) -> Res<()> {
             geometry: geometry_of(case)?,
             fit_to_box: true,
             theme,
-            host: &host,
+            outlines: &outlines,
+            registry,
         },
-        facets: &host,
         side_overrides: pins.as_deref(),
     };
     let composed = compose_edges_and_labels(&canvas, &options);
@@ -484,8 +446,7 @@ fn replay_case(themes: &(ThemeTokens, ThemeTokens), case: &Case) -> Res<()> {
     }
     let anchors: Vec<_> = composed.anchors.iter().map(|(id, pair)| anchor_row(id, pair)).collect();
     differ("anchors", &anchors, &case.answer.anchors)?;
-    differ("measurer calls", &measure.calls.get(), &case.answer.calls)?;
-    differ("host misses", &*host.misses.borrow(), &Vec::new())
+    differ("measurer calls", &measure.calls.get(), &case.answer.calls)
 }
 
 fn themes_of(meta: &Value) -> Res<(ThemeTokens, ThemeTokens)> {
@@ -511,11 +472,14 @@ fn every_recorded_edge_pass_is_reproduced_to_the_last_bit() {
         .collect();
     let themes = themes_of(records.first().unwrap_or_else(|| panic!("a meta line")))
         .unwrap_or_else(|e| panic!("the meta line: {e}"));
+    let registry = visual_registry().unwrap_or_else(|e| panic!("the bundled plugin: {e:?}"));
     let mut failures = Vec::new();
     for (at, record) in records.iter().enumerate().skip(1) {
         let outcome = serde_json::from_value::<Case>(without_kind(record))
             .map_err(|e| e.to_string())
-            .and_then(|case| replay_case(&themes, &case).map_err(|e| format!("{}: {e}", case.id)));
+            .and_then(|case| {
+                replay_case(&themes, &registry, &case).map_err(|e| format!("{}: {e}", case.id))
+            });
         if let Err(e) = outcome {
             failures.push(format!("line {}: {e}", at + 1));
         }

@@ -13,6 +13,7 @@
 
 pub mod checks;
 pub mod host;
+pub mod read;
 pub mod render;
 #[path = "generated/visual.rs"]
 pub mod visual;

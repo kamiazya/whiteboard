@@ -3,14 +3,18 @@
 //! the node's content bounds and the label's appearance. The recording holds the
 //! bundled plugin alone, so the order, the context and an empty list are here.
 
+use std::sync::LazyLock;
 use whiteboard_canvas_render::compose_node::compose_decorations;
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
-use whiteboard_canvas_render::node_box::{NodeBoxHost, NodeBoxOptions, TextPlacement};
+
+use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines};
 use whiteboard_canvas_render::theme::appearance::SpatialAppearanceResolver;
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::spatial::SpatialNode;
+use whiteboard_plugin_visual::host::visual_registry;
 use whiteboard_scene::{
     Appearance, BoundingBox, DecorationContext, IconSceneNode, NodeDecoration, SceneNode,
 };
@@ -18,18 +22,9 @@ use whiteboard_scene::{
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
 
-/// Every node wears the diamond, whose inscribed box is its middle half.
-struct Diamond;
-
-impl NodeBoxHost for Diamond {
-    fn silhouette(&self, _: &str) -> Option<&str> {
-        Some("visual.diamond")
-    }
-
-    fn text_placement(&self, _: &SpatialNode) -> Option<TextPlacement> {
-        None
-    }
-}
+/// The node wears the diamond, whose inscribed box is its middle half.
+static DIAMOND: LazyLock<NodeOutlines> =
+    LazyLock::new(|| NodeOutlines(vec![("n".to_owned(), "visual.diamond".to_owned())]));
 
 /// A contribution that draws one icon per name, over the bounds it is told and
 /// in the label's appearance, and only on the node it is about.
@@ -79,6 +74,7 @@ fn options<'a>(
     measure: &'a FakeMeasure,
     appearance: &'a dyn SpatialAppearanceResolver,
     fit_to_box: bool,
+    registry: &'a Registry,
 ) -> NodeBoxOptions<'a> {
     NodeBoxOptions {
         measure,
@@ -86,34 +82,44 @@ fn options<'a>(
         geometry: SPATIAL_THEME_GEOMETRY,
         fit_to_box,
         theme: None,
-        host: &Diamond,
+        outlines: &DIAMOND,
+        registry,
     }
 }
 
 #[test]
 fn every_contribution_is_asked_in_order_and_its_marks_appended() {
     let measure = FakeMeasure::default();
+    let registry = visual_registry().expect("the bundled plugin loads");
     let appearance = create_spatial_theme(SpatialThemeMode::Dark, None);
     let first = Marks { node_id: "n", names: &["a", "b"] };
     let elsewhere = Marks { node_id: "other", names: &["x"] };
     let second = Marks { node_id: "n", names: &["c"] };
     let contributions: [&dyn NodeDecoration; 3] = [&first, &elsewhere, &second];
-    let drawn = compose_decorations(&node(), &options(&measure, &appearance, true), &contributions);
+    let drawn = compose_decorations(
+        &node(),
+        &options(&measure, &appearance, true, &registry),
+        &contributions,
+    );
     assert_eq!(names(&drawn), ["a", "b", "c"]);
-    let none = compose_decorations(&node(), &options(&measure, &appearance, true), &[]);
+    let none = compose_decorations(&node(), &options(&measure, &appearance, true, &registry), &[]);
     assert!(none.is_empty(), "no contribution draws nothing");
 }
 
 #[test]
 fn a_contribution_is_told_the_content_bounds_and_the_label_appearance() {
     let measure = FakeMeasure::default();
+    let registry = visual_registry().expect("the bundled plugin loads");
     let appearance = create_spatial_theme(SpatialThemeMode::Dark, None);
     let label: Appearance = appearance.resolve_label();
     assert!(label.fill.is_some(), "the dark label is inked, so the label is observable");
     let marks = Marks { node_id: "n", names: &["a"] };
     let told = |fit_to_box| {
-        let drawn =
-            compose_decorations(&node(), &options(&measure, &appearance, fit_to_box), &[&marks]);
+        let drawn = compose_decorations(
+            &node(),
+            &options(&measure, &appearance, fit_to_box, &registry),
+            &[&marks],
+        );
         match drawn.first() {
             Some(SceneNode::Icon(icon)) => (icon.bbox, icon.appearance.clone()),
             other => panic!("one icon, got {other:?}"),

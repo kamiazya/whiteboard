@@ -4,16 +4,20 @@
 //! the fit that cuts what cannot fit. The text, frame, link and file nodes are
 //! all built from these.
 //!
-//! What the composer resolved about a node before it reaches the box, the
-//! silhouette its facets and theme select and where a plugin wants its text, is
-//! asked through [`NodeBoxHost`]: those readers live in the plugin and the
-//! engine. The shape TABLE is the bundled visual plugin's, as in the SVG backend;
-//! a caller-supplied table is not ported.
+//! The silhouette each node resolves to is settled once per canvas
+//! ([`resolve_node_outlines`]) and handed to the box as data, as the composer
+//! does; where a node's text sits is read off its own facets. The shape TABLE is
+//! the bundled visual plugin's, as in the SVG backend; a caller-supplied table
+//! is not ported.
 
 use whiteboard_det::math::{js_max, js_min};
 use whiteboard_facet_engine::engine::{ThemeInk, ThemeTokens};
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
+use whiteboard_plugin_visual::read;
+use whiteboard_plugin_visual::render::SHAPE_NAMESPACE;
+use whiteboard_plugin_visual::visual::VisualTextAlign;
 use whiteboard_scene::{
     Annotates, AnnotatesKind, Appearance, BoundingBox, ParagraphBlockNode, SceneInk, SceneInkFill,
     SceneInkStyle, SceneNode, ShapeSceneNode, TextRunNode,
@@ -30,22 +34,41 @@ use crate::translate_scene::translate_scene;
 use crate::truncate::fit_to_width;
 use crate::typeset::{FittedBlocks, fit_blocks_to_height};
 
-/// Where a plugin wants a node's text (`visual.text/v0`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum TextPlacement {
-    Start,
-    Center,
+/// The namespaced silhouette each node of a canvas resolves to, by node id
+/// (`nodeOutlines`). A node it does not name draws the rect.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct NodeOutlines(pub Vec<(String, String)>);
+
+impl NodeOutlines {
+    /// The silhouette of the node `id`. A later entry under an id wins, as a
+    /// later write to the same key of an object does.
+    #[must_use]
+    pub fn of(&self, id: &str) -> Option<&str> {
+        self.0.iter().rev().find(|(node, _)| node == id).map(|(_, shape)| shape.as_str())
+    }
 }
 
-/// What the composer resolved about a node before its box is drawn.
-pub trait NodeBoxHost {
-    /// The namespaced silhouette the node resolves to (`nodeOutlines[id]`): its
-    /// own facet, else the theme's default shape. None draws the rect.
-    fn silhouette(&self, node_id: &str) -> Option<&str>;
-
-    /// Where the contributions place the node's text, the last one that answers
-    /// winning; none keeps the default (a shaped node centres, a rect does not).
-    fn text_placement(&self, node: &SpatialNode) -> Option<TextPlacement>;
+/// The silhouette per node (`resolveNodeOutlines`): its own `visual.shape/v0`,
+/// composed under the plugin's namespace so a document cannot name another
+/// plugin's geometry, else the theme's default shape, which a frame never takes.
+#[must_use]
+pub fn resolve_node_outlines(
+    nodes: &[SpatialNode],
+    registry: &Registry,
+    default_shape: Option<&str>,
+) -> NodeOutlines {
+    NodeOutlines(
+        nodes
+            .iter()
+            .filter_map(|node| {
+                let own = read::node_shape(node.facets.as_ref(), registry)
+                    .map(|kind| format!("{SHAPE_NAMESPACE}.{}", kind.as_str()));
+                let chosen =
+                    own.or_else(|| default_shape.filter(|_| !is_frame(node)).map(str::to_owned))?;
+                Some((node.id.clone(), chosen))
+            })
+            .collect(),
+    )
 }
 
 /// What the box primitives read of the layout's settled options.
@@ -59,7 +82,10 @@ pub struct NodeBoxOptions<'a> {
     pub fit_to_box: bool,
     /// The theme in force for the canvas being laid out; none draws clean.
     pub theme: Option<&'a ThemeTokens>,
-    pub host: &'a dyn NodeBoxHost,
+    /// The silhouette each node of the canvas resolved to.
+    pub outlines: &'a NodeOutlines,
+    /// The facet registry a node's own facets are read through.
+    pub registry: &'a Registry,
 }
 
 /// A picture a reference resolves to.
@@ -121,7 +147,7 @@ pub fn node_content_bounds(node: &SpatialNode, options: &NodeBoxOptions<'_>) -> 
     if !options.fit_to_box {
         return bbox;
     }
-    outline_content_box(options.host.silhouette(&node.id), &bbox)
+    outline_content_box(options.outlines.of(&node.id), &bbox)
 }
 
 /// A node's content bounds and the padding kept inside them, per axis. A
@@ -192,7 +218,7 @@ pub fn chrome_shape(node: &SpatialNode, options: &NodeBoxOptions<'_>) -> ShapeSc
         comment_chrome: false,
         proposal_chrome: None,
         radius: resolved.radius,
-        shape: options.host.silhouette(&node.id).map(str::to_owned),
+        shape: options.outlines.of(&node.id).map(str::to_owned),
         appearance: resolved.appearance,
         task_box: None,
         ink: sketch_ink_for(&node.id, options, hatch),
@@ -360,9 +386,9 @@ pub fn place_in_node(
     options: &NodeBoxOptions<'_>,
 ) -> Vec<SceneNode> {
     let area = ContentArea::of(node, options);
-    let centres = match options.host.text_placement(node) {
-        None => options.host.silhouette(&node.id).is_some(),
-        Some(placement) => placement == TextPlacement::Center,
+    let centres = match read::node_text_align(node.facets.as_ref(), options.registry) {
+        None => options.outlines.of(&node.id).is_some(),
+        Some(align) => align == VisualTextAlign::Center,
     };
     let mut dy = 0.0;
     let placed = if options.fit_to_box && centres {

@@ -2,7 +2,8 @@ import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'
-import type { RenderContribution, SceneNode } from '@kamiazya/whiteboard-scene'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { composeNode } from '../../layout/compose-node.js'
 import type {
   ResolvedLayoutOptions,
@@ -155,6 +156,7 @@ interface CaseRecord {
   readonly node: NodeWire
   readonly theme: CaseSpec['theme']
   readonly fitToBox: boolean
+  /** The alignment the node's `visual.text/v0` payload names, none for no payload. */
   readonly align: CaseSpec['align']
   readonly shape: string | null
   readonly geometry: readonly string[]
@@ -193,6 +195,10 @@ interface Nested {
 }
 
 export type ComposeNodeRecord = MetaRecord | CaseRecord | DecorationRecord | FitRecord
+
+/** The node carrying the `visual.text/v0` payload a case names, which the plugin's own reader reads. */
+const withAlign = (node: SpatialNode, align: CaseRecord['align']): SpatialNode =>
+  align === null ? node : { ...node, facets: { 'visual.text/v0': { align } } }
 
 function nodeOf(wire: NodeWire): SpatialNode {
   const [x, y, width, height] = wire.box.map(fromHex) as [number, number, number, number]
@@ -262,10 +268,6 @@ function optionsOf(
     number,
     number,
   ]
-  const placement: RenderContribution = {
-    namespace: 'oracle',
-    readTextPlacement: () => record.align ?? undefined,
-  }
   const on = (flag: Flag) => record.flags.includes(flag)
   const id = record.node.id
   return {
@@ -275,7 +277,7 @@ function optionsOf(
     fitToBox: record.fitToBox,
     nodeOutlines: record.shape === null ? undefined : { [id]: record.shape },
     shapeTable: BUNDLED_SHAPE_TABLE,
-    contributions: [placement],
+    contributions: [visualRenderContribution],
     ...(record.theme === 'sketch' ? { activeTheme: { id: 'visual.sketch', tokens: sketch } } : {}),
     parseBody,
     resolveAlias,
@@ -327,7 +329,7 @@ const detailOf = (event: SpatialLayoutDegradation): string =>
 
 /** What `composeNode` answers for a case, from its inputs alone. */
 function answerOf(record: Input): CaseAnswer {
-  const node = nodeOf(record.node)
+  const node = withAlign(nodeOf(record.node), record.align)
   let calls = 0
   const count = () => {
     calls += 1
