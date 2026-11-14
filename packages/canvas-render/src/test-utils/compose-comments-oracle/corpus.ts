@@ -200,7 +200,36 @@ function inside(): Board {
   }
 }
 
-export const boards = (): readonly Board[] => [arms(), crowded(), themed(), inside()]
+/** The text the recording's body parser throws on. */
+export const THROWING_BODY = '<<throw>>'
+
+/**
+ * Settled threads whose bodies open with every block a first line is cut from
+ * (a wrapped paragraph, a heading, a list, a quote, a fence, a table, a rule,
+ * nothing at all, a body that will not parse), beside open ones holding the
+ * same shapes whole. Spread far apart, so each bubble lands down-right of its
+ * pin and the layer's only variable is the body.
+ */
+function settled(): Board {
+  const bodies: readonly (readonly [string, string])[] = [
+    ['para', 'a settled remark *long enough* that it **wraps** onto a second line and a third'],
+    ['heading', '## Decided\n\nwith a reason under it'],
+    ['list', '- one\n- two\n  - nested\n- three'],
+    ['quote', '> quoted words that run on past the width of one bubble line\n> and more'],
+    ['code', '```\nfirst line\nsecond line\n```'],
+    ['table', '| a | b |\n| --- | --- |\n| 1 | 2 |'],
+    ['rule', '***\n\nafter the rule'],
+    ['empty', ''],
+    ['broken', THROWING_BODY],
+  ]
+  const threads = bodies.flatMap(([name, body], i) => [
+    thread(`s-${name}`, at(i * 400, 0), [body, 'reply'], 'resolved'),
+    thread(`o-${name}`, at(i * 400, 600), [body]),
+  ])
+  return { name: 'settled', canvas: { nodes: [], edges: [] }, threads }
+}
+
+export const boards = (): readonly Board[] => [arms(), crowded(), themed(), inside(), settled()]
 
 export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'arms', appearance: 'light' },
@@ -220,4 +249,7 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'themed', appearance: 'dark', style: 'document' },
   { board: 'themed', appearance: 'bare' },
   { board: 'inside', appearance: 'light' },
+  { board: 'settled', appearance: 'light', showResolved: true },
+  { board: 'settled', appearance: 'dark', style: 'visual.sketch', showResolved: true },
+  { board: 'settled', appearance: 'bare', showResolved: true },
 ]

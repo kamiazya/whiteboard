@@ -18,7 +18,6 @@ mod file;
 mod frame;
 mod text;
 
-use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{BackgroundStyle, SpatialCanvas, SpatialNode};
 use whiteboard_scene::{Appearance, BoundingBox, IconSceneNode, SceneNode};
@@ -88,10 +87,10 @@ pub trait ComposeHost {
     /// typesetter's resolver keeps only its size.
     fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas>;
 
-    /// A comment bubble's body (`layoutCommentBody`): the opening message laid
-    /// out at the origin, a settled one cut to its first line with its
-    /// "Resolved" label under it.
-    fn comment_body(&self, comment: &PlacedComment) -> Vec<SceneNode>;
+    /// A comment's markdown parsed alone (`parseBody`): a bubble's body takes
+    /// the parser without the reference resolution a node's body gets, as the
+    /// TypeScript's `layoutCommentBody` does.
+    fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed>;
 
     fn degrade(&self, event: Degradation);
 }

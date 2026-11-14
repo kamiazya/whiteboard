@@ -17,7 +17,6 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::registry::Registry;
-use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -71,8 +70,8 @@ impl ComposeHost for Marking {
         None
     }
 
-    fn comment_body(&self, _: &PlacedComment) -> Vec<SceneNode> {
-        Vec::new()
+    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
+        Err(ParseFailed)
     }
 
     fn degrade(&self, _: Degradation) {

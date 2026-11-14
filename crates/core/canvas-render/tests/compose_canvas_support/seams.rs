@@ -23,7 +23,6 @@ use whiteboard_canvas_render::typeset::{
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
-use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -82,6 +81,8 @@ pub(crate) struct Context {
     pub(crate) themes: Vec<(String, ThemeTokens)>,
     pub(crate) library: TagLibrary,
     bodies: BTreeMap<String, Root>,
+    /// A comment's markdown as parsed alone; `None` is a body that throws.
+    markdown: BTreeMap<String, Option<Root>>,
     references: BTreeMap<String, SpatialCanvas>,
     embeds: BTreeMap<String, (String, SpatialCanvas)>,
 }
@@ -125,6 +126,11 @@ impl Context {
         for (text, root) in entries(Some(at("bodies")?)) {
             bodies.insert(text.clone(), model::root(root)?);
         }
+        let mut markdown = BTreeMap::new();
+        for (text, root) in entries(meta.get("markdown")) {
+            let root = if root.is_null() { None } else { Some(model::root(root)?) };
+            markdown.insert(text.clone(), root);
+        }
         let parse = |e: serde_json::Error| e.to_string();
         let references: BTreeMap<String, CanvasWire> =
             serde_json::from_value(at("references")?.clone()).map_err(parse)?;
@@ -135,6 +141,7 @@ impl Context {
             themes,
             library: library_of(at("library")?),
             bodies,
+            markdown,
             references: references
                 .iter()
                 .map(|(reference, wire)| Ok((reference.clone(), canvas_of(wire)?)))
@@ -186,14 +193,12 @@ impl Recorded {
     }
 }
 
-/// The host of one run: each comment's body is answered from `bodies`, by
-/// thread id.
+/// The host of one run.
 pub(crate) struct Host<'c> {
     context: &'c Context,
     overlay: OverlayWire,
     legend: Option<SceneLegend>,
     overlaid: Cell<usize>,
-    bodies: BTreeMap<String, Vec<SceneNode>>,
     events: RefCell<Vec<Event>>,
     misses: RefCell<Vec<String>>,
 }
@@ -203,14 +208,12 @@ impl<'c> Host<'c> {
         context: &'c Context,
         overlay: &OverlayWire,
         legend: Option<&SceneLegend>,
-        bodies: BTreeMap<String, Vec<SceneNode>>,
     ) -> Self {
         Self {
             context,
             overlay: overlay.clone(),
             legend: legend.cloned(),
             overlaid: Cell::new(0),
-            bodies,
             events: RefCell::new(Vec::new()),
             misses: RefCell::new(Vec::new()),
         }
@@ -253,11 +256,15 @@ impl ComposeHost for Host<'_> {
         self.context.embeds.get(document_id).map(|(_, canvas)| canvas.clone())
     }
 
-    fn comment_body(&self, comment: &PlacedComment) -> Vec<SceneNode> {
-        self.bodies.get(&comment.id).cloned().unwrap_or_else(|| {
-            self.miss(format!("the body of {}", comment.id));
-            Vec::new()
-        })
+    fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed> {
+        match self.context.markdown.get(text) {
+            Some(Some(root)) => Ok(root.clone()),
+            Some(None) => Err(ParseFailed),
+            None => {
+                self.miss(format!("a comment's markdown {text:?}"));
+                Err(ParseFailed)
+            }
+        }
     }
 
     fn degrade(&self, event: Degradation) {

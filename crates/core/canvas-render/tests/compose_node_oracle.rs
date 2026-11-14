@@ -48,7 +48,6 @@ use whiteboard_canvas_render::typeset::{
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
-use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{
     BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine, NodeResource,
@@ -396,8 +395,8 @@ impl ComposeHost for Host<'_> {
         self.context.canvases.get(document_id).map(|(_, canvas)| canvas.clone())
     }
 
-    fn comment_body(&self, _: &PlacedComment) -> Vec<SceneNode> {
-        Vec::new()
+    fn parse_markdown(&self, _: &str) -> Result<Root, ParseFailed> {
+        Err(ParseFailed)
     }
 
     fn degrade(&self, event: Degradation) {
