@@ -1,11 +1,12 @@
 //! A Rust scene as the canonical text the TypeScript's `dumpScene` writes: every
 //! number as the hex of its 64 IEEE bits, keys sorted, nothing absent written.
-//! Every scene node kind and field is written, as the TypeScript's generic walk
-//! writes it.
+//!
+//! The scene is the production writer's tree (`scene_wire`), canonicalised, so
+//! every recorded scene a replay compares holds that writer to the
+//! TypeScript's field names as well as the layout to its geometry.
 
-use whiteboard_scene::{
-    Appearance, BoundingBox, LinkProvenance, RunPaint, Scene, SceneNode, TextRunNode,
-};
+use whiteboard_canvas_render::scene_wire::{Tree, nodes_tree};
+use whiteboard_scene::Scene;
 
 /// A NaN's sign is the arithmetic's to choose, so every NaN is written as
 /// `f64::NAN`, matching the TypeScript oracle's `canonicalNanHex`.
@@ -18,353 +19,26 @@ fn string(value: &str) -> String {
     serde_json::to_string(value).unwrap_or_default()
 }
 
-/// `{"k":v,...}` with the keys in code unit order.
-fn object(mut fields: Vec<(&str, String)>) -> String {
-    fields.sort_by(|a, b| a.0.cmp(b.0));
-    let body: Vec<String> =
-        fields.into_iter().map(|(key, value)| format!("{}:{value}", string(key))).collect();
-    format!("{{{}}}", body.join(","))
-}
-
-fn list(items: impl IntoIterator<Item = String>) -> String {
-    format!("[{}]", items.into_iter().collect::<Vec<_>>().join(","))
-}
-
-fn bbox(b: &BoundingBox) -> String {
-    object(vec![("x", num(b.x)), ("y", num(b.y)), ("w", num(b.w)), ("h", num(b.h))])
-}
-
-fn appearance(a: &Appearance) -> String {
-    let mut fields = Vec::new();
-    let mut put = |key: &'static str, value: Option<String>| {
-        if let Some(value) = value {
-            fields.push((key, value));
+fn canonical(tree: &Tree) -> String {
+    match tree {
+        Tree::Number(value) => num(*value),
+        Tree::Text(value) => string(value),
+        Tree::Flag(value) => value.to_string(),
+        Tree::List(items) => {
+            format!("[{}]", items.iter().map(canonical).collect::<Vec<_>>().join(","))
         }
-    };
-    put("fill", a.fill.as_deref().map(string));
-    put("stroke", a.stroke.as_deref().map(string));
-    put("strokeWidth", a.stroke_width.map(num));
-    put("fontFamily", a.font_family.as_deref().map(string));
-    put("fontSize", a.font_size.map(num));
-    put("fillOpacity", a.fill_opacity.map(num));
-    put("strokeOpacity", a.stroke_opacity.map(num));
-    put("halo", a.halo.as_deref().map(string));
-    put("strokeDasharray", a.stroke_dasharray.as_deref().map(string));
-    put("dropShadow", a.drop_shadow.then(|| "true".to_owned()));
-    put("glow", a.glow.map(|g| object(vec![("radiusPx", num(g.radius_px))])));
-    object(fields)
-}
-
-fn link(link: &LinkProvenance) -> String {
-    let opt = |v: &Option<String>| v.as_deref().map(string);
-    let mut fields = Vec::new();
-    match link {
-        LinkProvenance::Link { href, title } => {
-            fields.push(("kind", string("link")));
-            fields.push(("href", string(href)));
-            fields.extend(opt(title).map(|t| ("title", t)));
-        }
-        LinkProvenance::WikiLink { document_id, alias, fragment } => {
-            fields.push(("kind", string("wikiLink")));
-            fields.push(("documentId", string(document_id)));
-            fields.extend(opt(alias).map(|t| ("alias", t)));
-            fields.extend(opt(fragment).map(|t| ("fragment", t)));
-        }
-        LinkProvenance::Embed { document_id, fragment } => {
-            fields.push(("kind", string("embed")));
-            fields.push(("documentId", string(document_id)));
-            fields.extend(opt(fragment).map(|t| ("fragment", t)));
+        Tree::Object(fields) => {
+            let mut fields: Vec<_> = fields.iter().collect();
+            fields.sort_by(|a, b| a.0.cmp(b.0));
+            let body: Vec<String> = fields
+                .iter()
+                .map(|(key, value)| format!("{}:{}", string(key), canonical(value)))
+                .collect();
+            format!("{{{}}}", body.join(","))
         }
     }
-    object(fields)
 }
 
-fn paints(p: &RunPaint) -> String {
-    match p {
-        RunPaint::Image { src } => object(vec![("kind", string("image")), ("src", string(src))]),
-        RunPaint::Icon { name } => object(vec![("kind", string("icon")), ("name", string(name))]),
-    }
-}
-
-fn run(r: &TextRunNode) -> String {
-    let mut fields =
-        vec![("kind", string("textRun")), ("bbox", bbox(&r.bbox)), ("text", string(&r.text))];
-    let flags = [
-        ("emphasis", r.emphasis),
-        ("strong", r.strong),
-        ("code", r.code),
-        ("deleted", r.deleted),
-        ("truncated", r.truncated),
-        ("overflows", r.overflows),
-    ];
-    fields.extend(flags.into_iter().filter(|f| f.1).map(|f| (f.0, "true".to_owned())));
-    fields.extend(r.link.as_ref().map(|l| ("link", link(l))));
-    fields.extend(r.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-    fields.extend(r.paints.as_ref().map(|p| ("paints", paints(p))));
-    fields.extend(r.backdrop.as_ref().map(|a| ("backdrop", appearance(a))));
-    fields.extend(r.backdrop_pad_x_px.map(|v| ("backdropPadXPx", num(v))));
-    fields.extend(r.baseline.map(|v| ("baseline", num(v))));
-    fields.extend(r.annotates.as_ref().map(|a| ("annotates", annotates(a))));
-    object(fields)
-}
-
-fn node(n: &SceneNode) -> Result<String, String> {
-    Ok(match n {
-        SceneNode::Paragraph(p) => object(vec![
-            ("kind", string("paragraph")),
-            ("bbox", bbox(&p.bbox)),
-            ("runs", list(p.runs.iter().map(run))),
-        ]),
-        SceneNode::Heading(h) => object(vec![
-            ("kind", string("heading")),
-            ("bbox", bbox(&h.bbox)),
-            ("level", num(f64::from(h.level))),
-            ("runs", list(h.runs.iter().map(run))),
-        ]),
-        SceneNode::CodeBlock(c) => code_block(c),
-        SceneNode::ThematicBreak(t) => {
-            let mut f = vec![("kind", string("thematicBreak")), ("bbox", bbox(&t.bbox))];
-            f.extend(t.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-            object(f)
-        }
-        SceneNode::RawHtml(h) => object(vec![
-            ("kind", string("rawHtml")),
-            ("bbox", bbox(&h.bbox)),
-            ("value", string(&h.value)),
-        ]),
-        SceneNode::UnresolvedReference(u) => object(vec![
-            ("kind", string("unresolvedReference")),
-            ("bbox", bbox(&u.bbox)),
-            ("identifier", string(&u.identifier)),
-        ]),
-        SceneNode::SvgFragment(g) => fragment(g),
-        SceneNode::TextRun(r) => run(r),
-        SceneNode::EmbedResolved(e) => embed_resolved(e)?,
-        SceneNode::EmbedPlaceholder(e) => embed_placeholder(e),
-        SceneNode::Group(g) => {
-            let mut f = vec![
-                ("kind", string("group")),
-                ("bbox", bbox(&g.bbox)),
-                ("children", nodes(&g.children)?),
-            ];
-            f.extend(g.label.as_deref().map(|l| ("label", string(l))));
-            object(f)
-        }
-        SceneNode::Blockquote(q) => quote(q)?,
-        SceneNode::List(l) => list_block(l)?,
-        SceneNode::Table(t) => table(t),
-        SceneNode::Shape(shape) => self::shape(shape),
-        SceneNode::Edge(e) => edge(e),
-        other => picture(other)?,
-    })
-}
-
-/// The nodes that draw a picture rather than text.
-fn picture(n: &SceneNode) -> Result<String, String> {
-    Ok(match n {
-        SceneNode::Image(i) => {
-            let mut f =
-                vec![("kind", string("image")), ("bbox", bbox(&i.bbox)), ("href", string(&i.href))];
-            f.extend(i.alt.as_deref().map(|a| ("alt", string(a))));
-            f.extend(i.fit.map(|fit| {
-                (
-                    "fit",
-                    string(match fit {
-                        whiteboard_scene::ImageFit::Contain => "contain",
-                        whiteboard_scene::ImageFit::Cover => "cover",
-                    }),
-                )
-            }));
-            object(f)
-        }
-        SceneNode::Icon(i) => {
-            let mut f =
-                vec![("kind", string("icon")), ("bbox", bbox(&i.bbox)), ("icon", string(&i.icon))];
-            f.extend(i.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-            object(f)
-        }
-        SceneNode::Glyph(g) => object(vec![
-            ("kind", string("glyph")),
-            ("bbox", bbox(&g.bbox)),
-            ("glyph", string(&g.glyph)),
-        ]),
-        other => return Err(format!("an unplaced scene node {other:?}")),
-    })
-}
-
-pub(crate) fn dump_scene(scene: &Scene) -> Result<String, String> {
-    let nodes = scene.nodes.iter().map(node).collect::<Result<Vec<_>, _>>()?;
-    Ok(object(vec![("nodes", list(nodes))]))
-}
-
-fn code_block(c: &whiteboard_scene::CodeBlockNode) -> String {
-    let mut f =
-        vec![("kind", string("codeBlock")), ("bbox", bbox(&c.bbox)), ("value", string(&c.value))];
-    f.extend(c.lang.as_deref().map(|l| ("lang", string(l))));
-    f.extend(c.runs.as_ref().map(|r| ("runs", list(r.iter().map(run)))));
-    f.extend(c.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-    f.extend(c.radius.map(|r| ("radius", num(r))));
-    object(f)
-}
-
-fn fragment(g: &whiteboard_scene::SvgFragmentNode) -> String {
-    let mut f =
-        vec![("kind", string("svgFragment")), ("bbox", bbox(&g.bbox)), ("svg", string(&g.svg))];
-    f.extend(g.role.map(|_| ("role", string("presentation"))));
-    object(f)
-}
-
-fn nodes(children: &[SceneNode]) -> Result<String, String> {
-    Ok(list_of(children.iter().map(node).collect::<Result<Vec<_>, _>>()?))
-}
-
-fn list_of(items: Vec<String>) -> String {
-    list(items)
-}
-
-fn quote(q: &whiteboard_scene::BlockquoteNode) -> Result<String, String> {
-    let mut f = vec![
-        ("kind", string("blockquote")),
-        ("bbox", bbox(&q.bbox)),
-        ("children", nodes(&q.children)?),
-    ];
-    f.extend(q.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-    Ok(object(f))
-}
-
-fn item(i: &whiteboard_scene::ListItemNode) -> Result<String, String> {
-    let mut f = vec![
-        ("kind", string("listItem")),
-        ("bbox", bbox(&i.bbox)),
-        ("children", nodes(&i.children)?),
-    ];
-    f.extend(i.ordinal.map(|o| ("ordinal", num(o))));
-    f.extend(i.checked.map(|c| ("checked", c.to_string())));
-    Ok(object(f))
-}
-
-fn list_block(l: &whiteboard_scene::ListBlockNode) -> Result<String, String> {
-    let items = l.items.iter().map(item).collect::<Result<Vec<_>, _>>()?;
-    Ok(object(vec![
-        ("kind", string("list")),
-        ("bbox", bbox(&l.bbox)),
-        ("ordered", l.ordered.to_string()),
-        ("depth", num(l.depth)),
-        ("items", list_of(items)),
-    ]))
-}
-
-fn table(t: &whiteboard_scene::TableBlockNode) -> String {
-    let rows = t.rows.iter().map(|r| {
-        let cells = r.cells.iter().map(|c| {
-            let mut f = vec![
-                ("kind", string("tableCell")),
-                ("bbox", bbox(&c.bbox)),
-                ("runs", list_of(c.runs.iter().map(run).collect())),
-            ];
-            f.extend(c.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-            object(f)
-        });
-        let mut f = vec![
-            ("kind", string("tableRow")),
-            ("bbox", bbox(&r.bbox)),
-            ("cells", list_of(cells.collect())),
-        ];
-        f.extend(r.header.map(|h| ("header", h.to_string())));
-        f.extend(r.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-        object(f)
-    });
-    object(vec![
-        ("kind", string("table")),
-        ("bbox", bbox(&t.bbox)),
-        ("rows", list_of(rows.collect())),
-    ])
-}
-
-fn annotates(a: &whiteboard_scene::Annotates) -> String {
-    let kind = match a.kind {
-        whiteboard_scene::AnnotatesKind::Edge => "edge",
-        whiteboard_scene::AnnotatesKind::Node => "node",
-    };
-    object(vec![("kind", string(kind)), ("id", string(&a.id))])
-}
-
-fn ink(i: whiteboard_scene::SceneInk) -> String {
-    let mut f = vec![("style", string("sketch")), ("seed", num(f64::from(i.seed)))];
-    f.extend(i.fill.map(|_| ("fill", string("hatch"))));
-    object(f)
-}
-
-fn shape(s: &whiteboard_scene::ShapeSceneNode) -> String {
-    let mut f = vec![("kind", string("shape")), ("bbox", bbox(&s.bbox))];
-    f.extend(s.id.as_deref().map(|i| ("id", string(i))));
-    f.extend(s.shape.as_deref().map(|i| ("shape", string(i))));
-    f.extend(s.ink.map(|i| ("ink", ink(i))));
-    f.extend(s.truncated.then(|| ("truncated", "true".to_owned())));
-    f.extend(s.overflows.then(|| ("overflows", "true".to_owned())));
-    f.extend(s.comment_chrome.then(|| ("commentChrome", "true".to_owned())));
-    f.extend(
-        s.proposal_chrome
-            .as_ref()
-            .map(|p| ("proposalChrome", object(vec![("proposalId", string(&p.proposal_id))]))),
-    );
-    f.extend(s.radius.map(|r| ("radius", num(r))));
-    f.extend(s.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-    f.extend(s.task_box.map(|t| ("taskBox", object(vec![("checked", t.checked.to_string())]))));
-    object(f)
-}
-
-fn edge(e: &whiteboard_scene::ResolvedEdgeNode) -> String {
-    let end = |e: whiteboard_scene::EdgeEnd| {
-        string(match e {
-            whiteboard_scene::EdgeEnd::None => "none",
-            whiteboard_scene::EdgeEnd::Arrow => "arrow",
-        })
-    };
-    let path = e.path.iter().map(|p| object(vec![("x", num(p.x)), ("y", num(p.y))])).collect();
-    let mut f = vec![
-        ("kind", string("edge")),
-        ("id", string(&e.id)),
-        ("path", list_of(path)),
-        ("fromSide", string(e.from_side.as_str())),
-        ("toSide", string(e.to_side.as_str())),
-        ("fromEnd", end(e.from_end)),
-        ("toEnd", end(e.to_end)),
-    ];
-    f.extend(e.appearance.as_ref().map(|a| ("appearance", appearance(a))));
-    f.extend(e.jumps.as_ref().map(|jumps| {
-        let points = jumps
-            .iter()
-            .map(|j| object(vec![("segment", num(j.segment)), ("x", num(j.x)), ("y", num(j.y))]));
-        ("jumps", list_of(points.collect()))
-    }));
-    f.extend(e.rounded.then(|| ("rounded", "true".to_owned())));
-    f.extend(e.ink.map(|i| ("ink", ink(i))));
-    f.extend(e.comment_chrome.then(|| ("commentChrome", "true".to_owned())));
-    object(f)
-}
-
-fn embed_resolved(e: &whiteboard_scene::EmbedResolvedNode) -> Result<String, String> {
-    Ok(object(vec![
-        ("kind", string("embedResolved")),
-        ("bbox", bbox(&e.bbox)),
-        ("documentId", string(&e.document_id)),
-        ("children", nodes(&e.children)?),
-    ]))
-}
-
-fn embed_placeholder(e: &whiteboard_scene::EmbedPlaceholderNode) -> String {
-    let reason = match e.reason {
-        whiteboard_scene::EmbedReason::Cycle => "cycle",
-        whiteboard_scene::EmbedReason::DepthCap => "depthCap",
-        whiteboard_scene::EmbedReason::Budget => "budget",
-        whiteboard_scene::EmbedReason::Unresolvable => "unresolvable",
-    };
-    object(vec![
-        ("kind", string("embedPlaceholder")),
-        ("bbox", bbox(&e.bbox)),
-        ("documentId", string(&e.document_id)),
-        ("title", string(&e.title)),
-        ("reason", string(reason)),
-    ])
+pub(crate) fn dump_scene(scene: &Scene) -> String {
+    canonical(&Tree::Object(vec![("nodes", nodes_tree(&scene.nodes))]))
 }

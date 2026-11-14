@@ -14,6 +14,7 @@ function coreAnswering(answer: unknown) {
     okf_serialize: () => '',
     json_canvas_parse: () => '',
     json_canvas_serialize: () => '',
+    layout_spatial_canvas: () => '[]',
     facet_bucket_check: (target, bucket, library) => {
       sent.push([target, bucket, library])
       return raw

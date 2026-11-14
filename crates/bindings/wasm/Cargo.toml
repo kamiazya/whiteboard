@@ -14,12 +14,14 @@ crate-type = ["cdylib", "rlib"]
 [dependencies]
 serde_json.workspace = true
 wasm-bindgen.workspace = true
+whiteboard-canvas-render = { path = "../../core/canvas-render" }
 whiteboard-codec = { path = "../../core/codec" }
 whiteboard-det = { path = "../../core/det" }
 whiteboard-facet-engine = { path = "../../core/facet-engine" }
 whiteboard-model = { path = "../../core/model" }
 whiteboard-edge-routing = { path = "../../core/edge-routing" }
 whiteboard-plugin-visual = { path = "../../core/plugin-visual" }
+whiteboard-scene = { path = "../../core/scene" }
 
 [features]
 # The per-module exports the layer-2 differentials call. Off in every shipped
@@ -28,3 +30,8 @@ oracle-surface = []
 
 [lints]
 workspace = true
+
+# The whole-layout replay compares the core's doubles with the recorded ones,
+# which `serde_json`'s default number parser can read one ulp off.
+[dev-dependencies]
+serde_json = { workspace = true, features = ["float_roundtrip"] }

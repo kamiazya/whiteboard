@@ -50,7 +50,7 @@ fn lay_out(record: &Record, seams: &Seams) -> Result<(String, usize), String> {
     if let Some(miss) = seams.misses().first() {
         return Err(format!("the recording holds no {miss}"));
     }
-    Ok((dump_scene(&scene)?, measure.calls()))
+    Ok((dump_scene(&scene), measure.calls()))
 }
 
 /// How the text differs from what was recorded, or `Ok`.

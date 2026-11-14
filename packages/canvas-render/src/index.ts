@@ -39,6 +39,12 @@ export type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from '@kamiazya/whiteboard-scene'
+export type {
+  CanvasLayoutCore,
+  CanvasLayoutMismatch,
+  CanvasLayoutRequest,
+  CoreDegradation,
+} from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
@@ -128,8 +134,13 @@ export {
 export { translateScene } from './layout/translate-scene.js'
 export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
-export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
-export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
+export type { FontDescriptor, MeasureSpec, MeasureText, TextMetrics } from './measure.js'
+export {
+  clampAdvance,
+  constantRatioMeasureText,
+  describeMeasure,
+  isFullWidthCodePoint,
+} from './measure.js'
 export {
   createReferenceContentAccount,
   REFERENCE_CHARS_BUDGET,

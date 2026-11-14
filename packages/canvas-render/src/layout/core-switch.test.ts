@@ -107,8 +107,8 @@ describe('the routing core switch', () => {
     expect(laid.scene).toEqual(reference.scene)
     expect(laid.mismatches).toHaveLength(1)
     const [mismatch] = laid.mismatches
-    if (mismatch?.kind !== 'differs')
-      throw new Error(`expected a difference, got ${mismatch?.kind}`)
+    if (mismatch?.kind !== 'differs' || mismatch.fn !== 'routeLayout')
+      throw new Error(`expected a routing difference, got ${mismatch?.fn} ${mismatch?.kind}`)
     // The one number moved, and nothing before it: the route's last x.
     expect(mismatch.rust[mismatch.at]).toBe((mismatch.ts[mismatch.at] as number) + 1e-9)
     expect(mismatch.repro.edges.map((e) => e.id)).toEqual(['e1', 'e2'])

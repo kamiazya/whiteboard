@@ -49,3 +49,11 @@ export const EDGE_ROUTE_LAYOUT_CAPS = Object.freeze({
   maxDepth: 2,
   maxMillis: 5000,
 } as const)
+
+/** The caps of `whiteboard-wasm::spatial_layout::layout_spatial_canvas`. */
+export const LAYOUT_SPATIAL_CANVAS_CAPS = Object.freeze({
+  maxBytes: 4194304,
+  maxDepth: 128,
+  maxMillis: 60000,
+  maxNodes: 4096,
+} as const)

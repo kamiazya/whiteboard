@@ -56,6 +56,7 @@ import { withDeclaredColours } from '../tags/declared-colours.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import { createThemedAppearance } from '../theme/theme-asset.js'
+import { layoutThroughCore } from './canvas-switch.js'
 import { canvasTheme, resolveThemeTable, themeFace } from './canvas-theme.js'
 import { composeComments, composeRegionOutlines, regionsOf } from './comments.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
@@ -299,6 +300,14 @@ export function layoutSpatialCanvas(canvas: SpatialCanvas, options: SpatialLayou
  * second computation beside it.
  */
 export function layoutSpatialCanvasWithAnchors(
+  stored: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
+  return layoutThroughCore(stored, options, (asked) => layoutInTypeScript(stored, asked))
+}
+
+/** The whole layout in this package: what the core switch answers with under `ts`. */
+function layoutInTypeScript(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {

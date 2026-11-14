@@ -1,5 +1,6 @@
 import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
+import type { CanvasLayoutCore, CanvasLayoutMismatch } from '../../canvas-core.js'
 import type { Rect } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
@@ -53,6 +54,7 @@ interface RouteLayoutRepro {
  * answers are given whole so the report needs nothing else to be read.
  */
 export type CoreMismatch =
+  | CanvasLayoutMismatch
   | {
       readonly fn: 'routeLayout'
       readonly kind: 'differs'
@@ -76,7 +78,12 @@ export type CoreMismatch =
  */
 export interface LayoutCore {
   readonly routing: RoutingCore
-  readonly impl: { readonly routeLayout: CoreImpl }
+  /**
+   * The whole layout in one call (`layoutSpatialCanvasWithAnchors`), with its
+   * own switch: absent, either reads `ts`.
+   */
+  readonly layout?: CanvasLayoutCore
+  readonly impl: { readonly routeLayout: CoreImpl; readonly layoutSpatialCanvas?: CoreImpl }
   readonly onMismatch?: (mismatch: CoreMismatch) => void
 }
 

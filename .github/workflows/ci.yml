@@ -135,6 +135,7 @@ jobs:
         if: contains(fromJSON(steps.scope.outputs.projects), 'mcp-node')
         env:
           WHITEBOARD_CORE: differential
+          WHITEBOARD_CORE_LAYOUT: differential
           WHITEBOARD_CORE_MISMATCH: throw
         run: pnpm exec vitest run --project=mcp-node --shard=${{ matrix.shard }}/2
 

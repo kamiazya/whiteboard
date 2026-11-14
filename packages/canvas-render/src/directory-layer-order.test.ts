@@ -89,6 +89,9 @@ const FILE_LAYERS: Readonly<Record<string, Layer>> = {
  * to be placed.
  */
 const ROOT_FILES: Readonly<Record<string, Layer>> = {
+  // The whole layout's request and answer, which the routing switch's
+  // `LayoutCore` names: an engine's own rank, reading the edge vocabulary.
+  'canvas-core.ts': 'engines',
   'canvas-fragment.ts': 'leaf',
   'det-math.ts': 'leaf',
   'edge-arrows.ts': 'leaf',

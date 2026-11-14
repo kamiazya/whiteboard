@@ -249,15 +249,15 @@ pub fn canvas_json(c: &SpatialCanvas) -> Json {
 
 /// An object being read: the keys the contract names are taken, and what is
 /// left over makes it no canvas object.
-struct Fields<'a> {
+pub(crate) struct Fields<'a> {
     entries: &'a Map,
     taken: usize,
 }
 
-type Read<T> = Option<Option<T>>;
+pub(crate) type Read<T> = Option<Option<T>>;
 
 impl<'a> Fields<'a> {
-    fn of(value: &'a Value) -> Option<Self> {
+    pub(crate) fn of(value: &'a Value) -> Option<Self> {
         match value {
             Value::Map(entries) => Some(Self { entries, taken: 0 }),
             _ => None,
@@ -266,7 +266,11 @@ impl<'a> Fields<'a> {
 
     /// The field `name` read by `read`: `None` for one that is malformed,
     /// `Some(None)` for one that is absent.
-    fn field<T>(&mut self, name: &str, read: impl FnOnce(&'a Value) -> Option<T>) -> Read<T> {
+    pub(crate) fn field<T>(
+        &mut self,
+        name: &str,
+        read: impl FnOnce(&'a Value) -> Option<T>,
+    ) -> Read<T> {
         let Some((_, value)) = self.entries.iter().find(|(key, _)| key == name) else {
             return Some(None);
         };
@@ -275,33 +279,33 @@ impl<'a> Fields<'a> {
     }
 
     /// Whether every key was one the contract names.
-    fn all_named(&self) -> bool {
+    pub(crate) fn all_named(&self) -> bool {
         self.taken == self.entries.len()
     }
 }
 
-fn string_of(value: &Value) -> Option<String> {
+pub(crate) fn string_of(value: &Value) -> Option<String> {
     match value {
         Value::String(s) => Some(s.clone()),
         _ => None,
     }
 }
 
-fn number_of(value: &Value) -> Option<f64> {
+pub(crate) fn number_of(value: &Value) -> Option<f64> {
     match value {
         Value::Number(n) => Some(*n),
         _ => None,
     }
 }
 
-fn items_of<T>(value: &Value, read: impl Fn(&Value) -> Option<T>) -> Option<Vec<T>> {
+pub(crate) fn items_of<T>(value: &Value, read: impl Fn(&Value) -> Option<T>) -> Option<Vec<T>> {
     match value {
         Value::Seq(items) => items.iter().map(read).collect(),
         _ => None,
     }
 }
 
-fn facets_of(value: &Value) -> Option<Map> {
+pub(crate) fn facets_of(value: &Value) -> Option<Map> {
     match value {
         Value::Map(entries) => Some(entries.clone()),
         _ => None,
@@ -430,7 +434,7 @@ fn line_of(value: &Value) -> Option<CanvasLine> {
     f.all_named().then_some(line)
 }
 
-fn canvas_of(value: &Value) -> Option<SpatialCanvas> {
+pub(crate) fn canvas_of(value: &Value) -> Option<SpatialCanvas> {
     let mut f = Fields::of(value)?;
     let canvas = SpatialCanvas {
         nodes: f.field("nodes", |v| items_of(v, node_of))??,

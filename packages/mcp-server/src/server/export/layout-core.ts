@@ -35,9 +35,16 @@ const log = getLogger('layout-core')
  * docs/contributing/parity/json-canvas-codec.md,
  * docs/contributing/parity/facet-engine.md), so the daemon installs the core
  * at boot (`installRustCoresAtBoot`) and refuses to start without it.
+ *
+ * `WHITEBOARD_CORE_LAYOUT` is the whole layout's own switch
+ * (`layoutSpatialCanvasWithAnchors` in one core call), `ts` unless something
+ * sets it; CI's test jobs set `differential`. It answers only a layout whose
+ * every option the core can be handed as data, and the TypeScript answers the
+ * rest under any setting.
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
+  WHITEBOARD_CORE_LAYOUT: z.enum(['ts', 'differential', 'rust']).default('ts'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
@@ -46,6 +53,7 @@ export type LayoutCoreSettings = z.infer<typeof layoutCoreSettingsSchema>
 export function layoutCoreSettingsFrom(env: Readonly<Record<string, string | undefined>>) {
   return layoutCoreSettingsSchema.parse({
     WHITEBOARD_CORE: env.WHITEBOARD_CORE || undefined,
+    WHITEBOARD_CORE_LAYOUT: env.WHITEBOARD_CORE_LAYOUT || undefined,
     WHITEBOARD_CORE_MISMATCH: env.WHITEBOARD_CORE_MISMATCH || undefined,
     WHITEBOARD_CORE_DIR: env.WHITEBOARD_CORE_DIR || undefined,
   })
@@ -85,20 +93,28 @@ export function artifactDirectory(
     : candidates.staged
 }
 
+/** What one line of the log says of a mismatch: where the answers part, never the whole request. */
+function summarize(mismatch: CoreMismatch) {
+  if (mismatch.kind !== 'differs')
+    return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
+  if (mismatch.fn === 'layoutSpatialCanvas') {
+    const { fn, kind, at, ts, rust } = mismatch
+    return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
+  }
+  return {
+    fn: mismatch.fn,
+    kind: mismatch.kind,
+    at: mismatch.at,
+    ts: mismatch.ts[mismatch.at],
+    rust: mismatch.rust[mismatch.at],
+    edges: mismatch.repro.edges.length,
+  }
+}
+
 /** A mismatch reported, or thrown when the settings ask a test run to fail on one. */
 function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => void {
   return (mismatch) => {
-    const summary =
-      mismatch.kind === 'differs'
-        ? {
-            fn: mismatch.fn,
-            kind: mismatch.kind,
-            at: mismatch.at,
-            ts: mismatch.ts[mismatch.at],
-            rust: mismatch.rust[mismatch.at],
-            edges: mismatch.repro.edges.length,
-          }
-        : { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
+    const summary = summarize(mismatch)
     log.warning(summary, 'the Rust core and the TypeScript disagree')
     log.debug({ repro: mismatch.repro }, 'what reproduces it')
     if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
@@ -148,11 +164,15 @@ export interface CoreLoaders {
  */
 export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
   const routing = settings.WHITEBOARD_CORE
+  const layout = settings.WHITEBOARD_CORE_LAYOUT
   const loadCore = coreLoader(settings)
+  // Nothing loads only when neither switch asks for the core.
+  const asked = routing === 'ts' ? layout : routing
   return {
-    layoutCore: memoized(routing, loadCore, (core) => ({
+    layoutCore: memoized(asked, loadCore, (core) => ({
       routing: core,
-      impl: { routeLayout: routing },
+      layout: core,
+      impl: { routeLayout: routing, layoutSpatialCanvas: layout },
       onMismatch: reporter(settings),
     })),
   }

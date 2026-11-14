@@ -244,6 +244,7 @@ name = "whiteboard-canvas-render"
 version = "0.0.0"
 dependencies = [
  "unicode-segmentation",
+ "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-edge-routing",
  "whiteboard-facet-engine",
@@ -332,12 +333,14 @@ version = "0.0.0"
 dependencies = [
  "serde_json",
  "wasm-bindgen",
+ "whiteboard-canvas-render",
  "whiteboard-codec",
  "whiteboard-det",
  "whiteboard-edge-routing",
  "whiteboard-facet-engine",
  "whiteboard-model",
  "whiteboard-plugin-visual",
+ "whiteboard-scene",
 ]
 
 [[package]]

@@ -91,7 +91,7 @@ pub(super) fn replay_decoration(context: &Context, decoration: &Decoration) -> R
         registry,
     };
     let badge = StencilBadge { registry };
-    let scene = dump_nodes(compose_decorations(&node, &options, &[&badge]))?;
+    let scene = dump_nodes(compose_decorations(&node, &options, &[&badge]));
     if scene == decoration.scene {
         Ok(())
     } else {
@@ -130,7 +130,7 @@ pub(super) fn replay_fit(fit: &Fit) -> Res<()> {
     let hex = |value: f64| format!("{:016x}", value.to_bits());
     let got = match fit_scene_into_box(&fit.scene, &space) {
         None => None,
-        Some(m) => Some(FitAnswer { scene: dump_nodes(m.nodes)?, w: hex(m.w), h: hex(m.h) }),
+        Some(m) => Some(FitAnswer { scene: dump_nodes(m.nodes), w: hex(m.w), h: hex(m.h) }),
     };
     differ("fit", &got, &fit.answer)
 }

@@ -73,16 +73,29 @@ export function referenceWire(
   }
 }
 
+const WIRES = new WeakMap<ReferenceSeams, ReferenceWire>()
+
 /** The bundle again, from the wire — the same on both sides of it. */
 export function referenceSeamsFromWire(wire: ReferenceWire): ReferenceSeams {
   const aliases = new Map(wire.aliases)
   const titles = new Map(wire.titles)
   const extras = new Map(wire.extras)
-  return referenceSeams(new Map(wire.entries), {
+  const seams = referenceSeams(new Map(wire.entries), {
     resolveAlias: (alias) => aliases.get(alias) ?? null,
     resolveTitle: (documentId) => titles.get(documentId),
     extra: (ref) => extras.get(ref),
   })
+  WIRES.set(seams, wire)
+  return seams
+}
+
+/**
+ * The wire a bundle was rebuilt from, when it was: the one form of the
+ * seams the Rust core can be handed, since it answers them from the same
+ * tables rather than through functions (ADR-0054 step 7).
+ */
+export function wireOfSeams(seams: ReferenceSeams): ReferenceWire | undefined {
+  return WIRES.get(seams)
 }
 
 /**

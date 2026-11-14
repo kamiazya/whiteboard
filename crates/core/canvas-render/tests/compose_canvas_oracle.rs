@@ -219,7 +219,7 @@ impl<'c> Setup<'c> {
     }
 }
 
-fn dump_nodes(nodes: Vec<SceneNode>) -> Res<String> {
+fn dump_nodes(nodes: Vec<SceneNode>) -> String {
     dump_scene(&Scene { nodes, legend: None })
 }
 
@@ -234,7 +234,7 @@ fn replay_canvas(setup: &Setup<'_>) -> Res<Vec<SceneNode>> {
     differ("keys asked", &asked, &want.asked)?;
     let from = want.overlay.from;
     let drawn: Vec<SceneNode> = laid.scene.nodes.iter().take(from).cloned().collect();
-    check_scene("scene", &dump_nodes(laid.scene.nodes)?, &want.scene)?;
+    check_scene("scene", &dump_nodes(laid.scene.nodes), &want.scene)?;
     differ("legend", &laid.scene.legend, &want.legend)?;
     // Every overlay the walk draws is its own now; the recording holds none past it.
     differ("overlay nodes recorded", &want.overlay.nodes.len(), &0)?;
@@ -249,7 +249,7 @@ fn replay_edges(setup: &Setup<'_>, drawn: &[SceneNode]) -> Res<()> {
     let (content, recorded, _) = setup.run(|options| layout_spatial_edges(&setup.canvas, options));
     let suffix = drawn.get(drawn.len().saturating_sub(content.len())..).unwrap_or_default();
     differ("the edges alone against the whole layout's suffix", &content.as_slice(), &suffix)?;
-    check_scene("edges", &dump_nodes(content)?, &want.scene)?;
+    check_scene("edges", &dump_nodes(content), &want.scene)?;
     recorded.check(&want.events, want.calls)
 }
 

@@ -28,6 +28,12 @@ import {
   serializeSpatial,
 } from './json-canvas.js'
 import {
+  type LayoutAnswer,
+  type LayoutGlue,
+  type LayoutRequest,
+  layoutSpatialCanvas,
+} from './layout.js'
+import {
   type OkfDocument,
   type OkfErrors,
   type OkfGlue,
@@ -43,7 +49,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '20'
+export const EXPECTED_ABI = '21'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -183,6 +189,16 @@ export interface Core {
     bucket: ExtensionFacets | undefined,
     library?: StoredStencilLibrary,
   ): FacetBucketResult
+
+  /**
+   * `layoutSpatialCanvasWithAnchors` of a request canvas-render built: the
+   * scene, the anchors and the degradations, or the class of what the core
+   * declined (an input past its caps, or one it cannot answer exactly as the
+   * TypeScript would), which a root answers from the TypeScript. Throws
+   * `CoreInputRefused` for a request the wire does not carry or an answer
+   * that is not one.
+   */
+  layoutSpatialCanvas(request: LayoutRequest): LayoutAnswer
 }
 
 const ends = ['none', 'arrow'] as const
@@ -287,6 +303,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   const okf: OkfGlue = glue
   const spatial: SpatialGlue = glue
   const facets: FacetGlue = glue
+  const layout: LayoutGlue = glue
   const errors: OkfErrors & SpatialErrors & FacetErrors = {
     refused: (operation, code, detail) => new CoreInputRefused(operation, code, detail),
     unwritable: (issues) => new CoreOkfUnwritable(issues),
@@ -297,6 +314,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
+    layoutSpatialCanvas: (request) => layoutSpatialCanvas(layout, errors, request),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
