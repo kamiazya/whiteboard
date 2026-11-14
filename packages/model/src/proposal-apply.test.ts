@@ -420,6 +420,42 @@ describe('ink lines and edges in a proposal', () => {
     }
   })
 
+  // A prior read back from storage need not list its keys in the order the
+  // board's copy does: equal objects are equal whatever order they were built in.
+  it('reads a prior whose keys are in another order as still held', () => {
+    const held = link('e1', {
+      from: { node: 'a', side: 'right' },
+      facets: { 'visual.edges/v0': { style: 'curved', jumps: 'arc' }, 'x.y/v0': { b: 1, a: 2 } },
+    })
+    const c: SpatialCanvas = { ...BOARD, edges: [held] }
+    const reordered = {
+      from: { side: 'right', node: 'a' },
+      facets: { 'x.y/v0': { a: 2, b: 1 }, 'visual.edges/v0': { jumps: 'arc', style: 'curved' } },
+    } as const satisfies Partial<CanvasEdge>
+    const patchWith = (assumed: Partial<CanvasEdge>): SpatialProposedChange => ({
+      id: 'edge:e1',
+      status: 'open',
+      op: 'edge.patch',
+      edgeId: 'e1',
+      patch: { from: { node: 'b' }, facets: {} },
+      assumed,
+    })
+    expect(canvasChangeConflicts(patchWith(reordered), c)).toBe(false)
+    const removal: SpatialProposedChange = {
+      id: 'edge:e1',
+      status: 'open',
+      op: 'edge.remove',
+      edgeId: 'e1',
+      assumed: { id: 'e1', to: { node: 'b' }, ...reordered },
+    }
+    expect(canvasChangeConflicts(removal, c)).toBe(false)
+    const moved = { ...reordered.facets, 'x.y/v0': { a: 2, b: 3 } }
+    expect(canvasChangeConflicts(patchWith({ ...reordered, facets: moved }), c)).toBe(true)
+    expect(
+      canvasChangeConflicts({ ...removal, assumed: { ...removal.assumed, facets: moved } }, c),
+    ).toBe(true)
+  })
+
   it('flags a patch of an edge that is gone', () => {
     expect(canvasChangeConflicts(patchEdge('gone', { label: 'x' }), BOARD)).toBe(true)
   })

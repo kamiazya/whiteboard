@@ -213,10 +213,25 @@ function differsFromPrior(current: Fields, patch: Fields, assumed: Fields): bool
  * Whether a prior's field still holds — the one comparison every arm uses.
  * Stored fields are JSON, so their JSON is their value: a node's `embed`, an
  * end, a bend list and a facets bucket compare by content, and `0` and `-0`
- * are one position.
+ * are one position. Keys are sorted first, because an object's key ORDER is
+ * how it was built, not what it holds — a prior read back from storage lists
+ * an end's or a facet bucket's keys in whatever order its writer did. The
+ * Rust core compares the same way (`same_value` in `proposal.rs`).
  */
 function sameValue(left: unknown, right: unknown): boolean {
-  return JSON.stringify(left) === JSON.stringify(right)
+  return JSON.stringify(keySorted(left)) === JSON.stringify(keySorted(right))
+}
+
+/** `value` with every object's keys in sorted order; arrays keep theirs. */
+function keySorted(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(keySorted)
+  if (value === null || typeof value !== 'object') return value
+  const object = value as Record<string, unknown>
+  return Object.fromEntries(
+    Object.keys(object)
+      .sort()
+      .map((key) => [key, keySorted(object[key])]),
+  )
 }
 
 /**

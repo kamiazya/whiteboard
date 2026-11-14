@@ -16,6 +16,7 @@ use crate::spatial::{
     BackgroundStyle, Bends, CanvasColor, CanvasEdge, CanvasLine, EdgeEnd, ExtensionFacets, LineEnd,
     SpatialCanvas, SpatialNode,
 };
+use crate::{Map, Value};
 
 /// Where one change stands (`proposedChangeStatusSchema`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -128,6 +129,49 @@ fn same_number(current: f64, prior: Option<f64>) -> bool {
     prior == Some(current)
 }
 
+/// Whether two values agree the way `sameValue` compares them: a mapping's
+/// keys in any order, since the order is how a writer built it rather than
+/// what it holds, and a sequence's items in order. A number agrees with `-0`
+/// as `0`, which `f64`'s equality already says.
+fn same_value(left: &Value, right: &Value) -> bool {
+    match (left, right) {
+        (Value::Map(left), Value::Map(right)) => same_map(left, right),
+        (Value::Seq(left), Value::Seq(right)) => {
+            left.len() == right.len() && left.iter().zip(right).all(|(a, b)| same_value(a, b))
+        }
+        _ => left == right,
+    }
+}
+
+/// Two mappings with the same keys holding agreeing values. A mapping's keys
+/// are unique (the reader keeps the last of a repeated one), so the same
+/// count plus every left key found on the right is the same key set.
+fn same_map(left: &Map, right: &Map) -> bool {
+    left.len() == right.len()
+        && left.iter().all(|(key, value)| {
+            right.iter().any(|(other, held)| other == key && same_value(value, held))
+        })
+}
+
+fn same_facets(left: Option<&ExtensionFacets>, right: Option<&ExtensionFacets>) -> bool {
+    match (left, right) {
+        (Some(left), Some(right)) => same_map(left, right),
+        (left, right) => left.is_none() && right.is_none(),
+    }
+}
+
+/// A removal's prior against the element held: every field equal, the facets
+/// bucket by [`same_map`] rather than in written order.
+fn same_element<T: Clone + PartialEq>(
+    held: &T,
+    prior: &T,
+    facets: fn(&mut T) -> &mut Option<ExtensionFacets>,
+) -> bool {
+    let (mut held, mut prior) = (held.clone(), prior.clone());
+    let (held_facets, prior_facets) = (facets(&mut held).take(), facets(&mut prior).take());
+    same_facets(held_facets.as_ref(), prior_facets.as_ref()) && held == prior
+}
+
 /// Whether any field a node patch SETS no longer holds what the prior said,
 /// each read through the patch's own vocabulary (`nodePatchField`): `text` is
 /// what the anchor showed, not a field it stores.
@@ -181,7 +225,7 @@ fn element_patch_differs<End: PartialEq>(
         || patch.color.is_some() && prior.color.as_ref() != held.color
         || patch.label.is_some() && prior.label.as_deref() != held.label
         || patch.bends.is_some() && prior.bends.as_ref() != held.bends
-        || patch.facets.is_some() && prior.facets.as_ref() != held.facets
+        || patch.facets.is_some() && !same_facets(prior.facets.as_ref(), held.facets)
 }
 
 fn edge_patch_differs(
@@ -242,16 +286,21 @@ pub fn canvas_change_conflicts(change: &SpatialChange, canvas: &SpatialCanvas) -
         SpatialChange::LinePatch { line_id, patch, assumed } => {
             line(line_id).is_none_or(|held| line_patch_differs(held, patch, assumed))
         }
-        SpatialChange::NodeRemove { node_id, assumed } => node(node_id) != Some(assumed),
-        SpatialChange::EdgeRemove { edge_id, assumed } => edge(edge_id) != Some(assumed),
-        SpatialChange::LineRemove { line_id, assumed } => line(line_id) != Some(assumed),
+        SpatialChange::NodeRemove { node_id, assumed } => {
+            node(node_id).is_none_or(|held| !same_element(held, assumed, |node| &mut node.facets))
+        }
+        SpatialChange::EdgeRemove { edge_id, assumed } => {
+            edge(edge_id).is_none_or(|held| !same_element(held, assumed, |edge| &mut edge.facets))
+        }
+        SpatialChange::LineRemove { line_id, assumed } => {
+            line(line_id).is_none_or(|held| !same_element(held, assumed, |line| &mut line.facets))
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Value;
     use crate::spatial::{CanvasPoint, EdgeSide, LineEndNode};
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -346,6 +395,151 @@ mod tests {
             };
             assert!(canvas_change_conflicts(&stale, &canvas));
         }
+    }
+
+    fn map(entries: &[(&str, Value)]) -> Value {
+        Value::Map(entries.iter().map(|(key, value)| ((*key).to_owned(), value.clone())).collect())
+    }
+
+    /// Two buckets holding the same values, listed in different orders at the
+    /// top level and inside.
+    fn buckets(inner_b: f64) -> (ExtensionFacets, ExtensionFacets) {
+        let held = vec![
+            ("visual.edges/v0".to_owned(), map(&[("style", Value::String("curved".into()))])),
+            ("x.y/v0".to_owned(), map(&[("b", Value::Number(1.0)), ("a", Value::Number(2.0))])),
+        ];
+        let reordered = vec![
+            ("x.y/v0".to_owned(), map(&[("a", Value::Number(2.0)), ("b", Value::Number(inner_b))])),
+            ("visual.edges/v0".to_owned(), map(&[("style", Value::String("curved".into()))])),
+        ];
+        (held, reordered)
+    }
+
+    #[test]
+    fn a_prior_whose_keys_are_in_another_order_still_fits() {
+        let (held_facets, reordered) = buckets(1.0);
+        let held = CanvasEdge { facets: Some(held_facets.clone()), ..edge() };
+        let canvas = board(held.clone(), line());
+        let prior = ElementPatchFields {
+            from: Some(held.from.clone()),
+            facets: Some(reordered.clone()),
+            ..untouched()
+        };
+        let patch =
+            SpatialChange::EdgePatch { edge_id: "e".into(), patch: prior.clone(), assumed: prior };
+        assert!(!canvas_change_conflicts(&patch, &canvas));
+        let removal = SpatialChange::EdgeRemove {
+            edge_id: "e".into(),
+            assumed: CanvasEdge { facets: Some(reordered.clone()), ..held.clone() },
+        };
+        assert!(!canvas_change_conflicts(&removal, &canvas));
+        let inked = SpatialCanvas {
+            lines: Some(vec![CanvasLine { facets: Some(held_facets.clone()), ..line() }]),
+            nodes: vec![SpatialNode {
+                id: "n".into(),
+                facets: Some(held_facets),
+                ..SpatialNode::default()
+            }],
+            ..canvas.clone()
+        };
+        let line_removal = SpatialChange::LineRemove {
+            line_id: "l".into(),
+            assumed: CanvasLine { facets: Some(reordered.clone()), ..line() },
+        };
+        assert!(!canvas_change_conflicts(&line_removal, &inked));
+        let node_removal = SpatialChange::NodeRemove {
+            node_id: "n".into(),
+            assumed: SpatialNode {
+                id: "n".into(),
+                facets: Some(reordered),
+                ..SpatialNode::default()
+            },
+        };
+        assert!(!canvas_change_conflicts(&node_removal, &inked));
+    }
+
+    #[test]
+    fn a_prior_whose_facet_value_moved_still_conflicts() {
+        let (held_facets, moved) = buckets(3.0);
+        let held = CanvasEdge { facets: Some(held_facets.clone()), ..edge() };
+        let canvas = SpatialCanvas {
+            lines: Some(vec![CanvasLine { facets: Some(held_facets.clone()), ..line() }]),
+            nodes: vec![SpatialNode {
+                id: "n".into(),
+                facets: Some(held_facets),
+                ..SpatialNode::default()
+            }],
+            ..board(held.clone(), line())
+        };
+        let prior = ElementPatchFields { facets: Some(moved.clone()), ..untouched() };
+        let patch =
+            SpatialChange::EdgePatch { edge_id: "e".into(), patch: prior.clone(), assumed: prior };
+        assert!(canvas_change_conflicts(&patch, &canvas));
+        let line_prior = ElementPatchFields { facets: Some(moved.clone()), ..untouched() };
+        let line_patch = SpatialChange::LinePatch {
+            line_id: "l".into(),
+            patch: line_prior.clone(),
+            assumed: line_prior,
+        };
+        assert!(canvas_change_conflicts(&line_patch, &canvas));
+        let removals = [
+            SpatialChange::EdgeRemove {
+                edge_id: "e".into(),
+                assumed: CanvasEdge { facets: Some(moved.clone()), ..held },
+            },
+            SpatialChange::LineRemove {
+                line_id: "l".into(),
+                assumed: CanvasLine { facets: Some(moved.clone()), ..line() },
+            },
+            SpatialChange::NodeRemove {
+                node_id: "n".into(),
+                assumed: SpatialNode {
+                    id: "n".into(),
+                    facets: Some(moved),
+                    ..SpatialNode::default()
+                },
+            },
+        ];
+        for removal in removals {
+            assert!(canvas_change_conflicts(&removal, &canvas), "{removal:?}");
+        }
+    }
+
+    #[test]
+    fn values_agree_by_content_and_not_by_key_order() {
+        let n = Value::Number;
+        let ab = map(&[("a", n(1.0)), ("b", n(2.0))]);
+        let ba = map(&[("b", n(2.0)), ("a", n(1.0))]);
+        assert!(same_value(&ab, &ba));
+        assert!(same_value(&Value::Seq(vec![ab.clone()]), &Value::Seq(vec![ba.clone()])));
+        assert!(!same_value(&Value::Seq(vec![ab.clone()]), &Value::Seq(vec![ab.clone(), ba])));
+        assert!(!same_value(&Value::Seq(vec![n(1.0), n(2.0)]), &Value::Seq(vec![n(2.0), n(1.0)])));
+        assert!(!same_value(&ab, &map(&[("a", n(1.0))])));
+        assert!(!same_value(&map(&[("a", n(1.0))]), &ab));
+        assert!(!same_value(&ab, &map(&[("a", n(1.0)), ("c", n(2.0))])));
+        assert!(same_value(&n(-0.0), &n(0.0)));
+        assert!(!same_value(&n(1.0), &Value::String("1".into())));
+    }
+
+    #[test]
+    fn absent_facets_agree_only_with_absent_facets() {
+        let some = vec![("x.y/v0".to_owned(), Value::Null)];
+        assert!(same_facets(None, None));
+        assert!(!same_facets(Some(&some), None));
+        assert!(!same_facets(None, Some(&some)));
+        assert!(!same_facets(Some(&some), Some(&Vec::new())));
+    }
+
+    #[test]
+    fn a_removal_whose_element_moved_beside_agreeing_facets_conflicts() {
+        let (held_facets, reordered) = buckets(1.0);
+        let held = CanvasEdge { facets: Some(held_facets), ..edge() };
+        let canvas = board(held.clone(), line());
+        let relabelled = SpatialChange::EdgeRemove {
+            edge_id: "e".into(),
+            assumed: CanvasEdge { facets: Some(reordered), label: Some("x".into()), ..held },
+        };
+        assert!(canvas_change_conflicts(&relabelled, &canvas));
     }
 
     #[test]

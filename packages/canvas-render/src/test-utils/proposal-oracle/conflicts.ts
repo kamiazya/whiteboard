@@ -102,7 +102,7 @@ const EDGES: readonly CanvasEdge[] = [
       { x: 150, y: 10 },
       { x: 150, y: 40 },
     ],
-    facets: { 'visual.edges/v0': { style: 'curved' } },
+    facets: { 'visual.edges/v0': { style: 'curved' }, 'x.y/v0': { b: 1, a: { d: 2, c: 3 } } },
     tags: ['flow'],
   },
   { id: 'plain', from: { node: 'link' }, to: { node: 'bare' } },
@@ -116,7 +116,7 @@ const LINES: readonly CanvasLine[] = [
     color: '3',
     label: 'note',
     bends: [{ x: 5, y: 6 }],
-    facets: { 'visual.stroke/v0': { width: 2 } },
+    facets: { 'visual.stroke/v0': { width: 2, dash: 'dot' } },
   },
   {
     id: 'stroke',
@@ -208,6 +208,7 @@ const NODE_VARIANTS: readonly Partial<SpatialNode>[] = [
   { tags: ['a'] },
   { tags: ['b', 'a'] },
   { facets: { 'visual.shape/v0': { kind: 'ellipse' } } },
+  { facets: { 'x.y/v0': { b: [1, 2], '2': 1 }, 'visual.shape/v0': { kind: 'ellipse' } } },
   { embed: { documentId: '01HZZZZZZZZZZZZZZZZZZZZZZZ' } },
   { label: 'x' },
   { background: 'asset:x' },
@@ -218,11 +219,29 @@ const NODE_VARIANTS: readonly Partial<SpatialNode>[] = [
   { resource: resource('text/markdown', { location: 'notes/a', subpath: '#i' }) },
 ]
 
+/**
+ * The rich edge's facets with every object's keys in another order, top level
+ * and nested: a prior read back from storage may list them in any order, and
+ * still holds what the board holds.
+ */
+const REORDERED_EDGE_FACETS = {
+  'x.y/v0': { a: { c: 3, d: 2 }, b: 1 },
+  'visual.edges/v0': { style: 'curved' },
+}
+
+/** The same keys in another order, one nested value moved: still a conflict. */
+const MOVED_EDGE_FACETS = {
+  'x.y/v0': { a: { c: 3, d: 4 }, b: 1 },
+  'visual.edges/v0': { style: 'curved' },
+}
+
 const ELEMENT_VARIANTS: readonly Partial<CanvasEdge & CanvasLine>[] = [
   { color: '6' },
   { label: 'other' },
   { bends: [{ x: 1, y: 1 }] },
   { facets: { 'visual.edges/v0': { style: 'straight' } } },
+  { facets: REORDERED_EDGE_FACETS },
+  { facets: { 'visual.stroke/v0': { dash: 'dot', width: 2 } } },
   { tags: ['other'] },
 ]
 
@@ -287,6 +306,9 @@ function edgeChanges(): SpatialProposedChange[] {
     open({ op: 'edge.add', edge: { ...(EDGES[1] as CanvasEdge), id: 'fresh' } }),
     ...EDGES.flatMap((edge) => elementPatches('edge.patch', edge, other)),
     open({ op: 'edge.patch', edgeId: 'gone', patch: { label: 'x' }, assumed: {} }),
+    ...[REORDERED_EDGE_FACETS, MOVED_EDGE_FACETS].map((facets) =>
+      open({ op: 'edge.patch', edgeId: 'rich', patch: { facets: {} }, assumed: { facets } }),
+    ),
     ...EDGES.flatMap((edge) =>
       variantsOf(edge, [...ELEMENT_VARIANTS, ...EDGE_ENDS]).map((assumed) =>
         open({ op: 'edge.remove', edgeId: edge.id, assumed }),
@@ -310,6 +332,17 @@ function lineChanges(): SpatialProposedChange[] {
     open({ op: 'line.add', line: { ...(LINES[1] as CanvasLine), id: 'fresh' } }),
     ...LINES.flatMap((line) => elementPatches('line.patch', line, other)),
     open({ op: 'line.patch', lineId: 'gone', patch: { label: 'x' }, assumed: {} }),
+    ...[
+      { dash: 'dot', width: 2 },
+      { dash: 'dot', width: 3 },
+    ].map((stroke) =>
+      open({
+        op: 'line.patch',
+        lineId: 'ink',
+        patch: { facets: {} },
+        assumed: { facets: { 'visual.stroke/v0': stroke } },
+      }),
+    ),
     ...LINES.flatMap((line) =>
       variantsOf(line, [...lineVariants, ...LINE_ENDS]).map((assumed) =>
         open({ op: 'line.remove', lineId: line.id, assumed }),
