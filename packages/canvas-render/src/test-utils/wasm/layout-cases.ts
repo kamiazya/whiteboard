@@ -142,8 +142,8 @@ function optionsOf(spec: CaseSpec): SpatialLayoutOptions | undefined {
   }
 }
 
-/** Every layout case; `synthetic` draws that many generated routing boards too. */
-export function layoutCases(synthetic: number): LayoutCase[] {
+/** The composer recordings' boards under the clean style, each with file nodes drawn open and closed. */
+function composerCases(): LayoutCase[] {
   const cases: LayoutCase[] = []
   const byName = new Map(boards().map((b) => [b.name, b.canvas]))
   for (const [at, spec] of caseSpecs().entries()) {
@@ -163,6 +163,12 @@ export function layoutCases(synthetic: number): LayoutCase[] {
       })
     }
   }
+  return cases
+}
+
+/** Every layout case; `synthetic` draws that many generated routing boards too. */
+export function layoutCases(synthetic: number): LayoutCase[] {
+  const cases = composerCases()
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
   cases.push({
     topic: 'bodies',

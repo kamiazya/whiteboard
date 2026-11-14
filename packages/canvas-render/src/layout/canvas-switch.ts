@@ -1,6 +1,7 @@
 import { nodeFile, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import type {
+  CanvasLayoutCore,
   CanvasLayoutRequest,
   CanvasLayoutSeam,
   CanvasLayoutSkip,
@@ -200,11 +201,20 @@ export function layoutThroughCore(
     core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: answer.declined })
     return ts(options)
   }
-  const rust = { scene: answer.scene, anchors: answer.anchors }
   if (impl === 'rust') {
     for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
-    return rust
+    return { scene: answer.scene, anchors: answer.anchors }
   }
+  return compared(answer, request, options, ts)
+}
+
+/** `differential`'s answer: the TypeScript's, with the core's compared beside it and a difference reported. */
+function compared(
+  answer: Exclude<ReturnType<CanvasLayoutCore['layoutSpatialCanvas']>, { declined: string }>,
+  request: CanvasLayoutRequest,
+  options: SpatialLayoutOptions,
+  ts: (options: SpatialLayoutOptions) => LaidOutCanvas,
+): LaidOutCanvas {
   const events: CoreDegradation[] = []
   const laid = ts({
     ...options,
@@ -214,10 +224,10 @@ export function layoutThroughCore(
     },
   })
   const tsValue = comparable(laid, events)
-  const rustValue = comparable(rust, answer.degradations)
+  const rustValue = comparable(answer, answer.degradations)
   const at = firstDifference(tsValue, rustValue)
   if (at !== undefined) {
-    core.onMismatch?.({
+    options.core?.onMismatch?.({
       fn: 'layoutSpatialCanvas',
       kind: 'differs',
       at,

@@ -133,7 +133,7 @@ async function daemonCorpora(options) {
 }
 
 /** The census of every corpus, or undefined when the core did not load. */
-export async function measureCensus() {
+async function measureCensus() {
   const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_MISMATCH: 'throw' })
   const base = await coreLoaders({
     ...settings,
