@@ -29,7 +29,7 @@ import {
 import type { Appearance, SceneNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
-import { type SceneWalkNode, sceneChildrenOf } from '../scene-children.js'
+import { type SceneWalkNode, sceneChildrenOf, subtreeOffsetX } from '../scene-children.js'
 import { type LooseSpan, looseOccurrences } from './loose-occurrences.js'
 import { runFontOf } from './nodes/mdast-layout-options.js'
 
@@ -56,19 +56,35 @@ export function nodePassagesOf(threads: readonly CommentThread[]): readonly Node
   return out
 }
 
-/** Every text run under `nodes`, in reading order. */
-export function collectTextRuns(nodes: readonly SceneNode[]): TextRunNode[] {
-  const out: TextRunNode[] = []
-  const visit = (node: SceneWalkNode): void => {
-    if (node.kind === 'textRun') out.push(node)
-    for (const child of sceneChildrenOf(node) ?? []) visit(child)
+/**
+ * A text run and the x its enclosing list items and table cells translate it
+ * by when drawn (`subtreeOffsetX`, composed). A run under one of those is
+ * stored wrapper-relative, so its own `bbox.x` is not where its words are; the
+ * offset travels beside it instead of being written into a run the layout
+ * cache still holds.
+ */
+export interface PlacedRun {
+  readonly run: TextRunNode
+  readonly offsetX: number
+}
+
+/** Every text run under `nodes`, in reading order, with where it is drawn. */
+export function collectTextRuns(nodes: readonly SceneNode[]): PlacedRun[] {
+  const out: PlacedRun[] = []
+  const visit = (node: SceneWalkNode, offsetX: number): void => {
+    if (node.kind === 'textRun') out.push({ run: node, offsetX })
+    const childOffsetX = offsetX + subtreeOffsetX(node)
+    for (const child of sceneChildrenOf(node) ?? []) visit(child, childOffsetX)
   }
-  for (const node of nodes) visit(node)
+  for (const node of nodes) visit(node, 0)
   return out
 }
 
+/** The x a placed run's box starts at as drawn. */
+const drawnX = ({ run, offsetX }: PlacedRun): number => run.bbox.x + offsetX
+
 interface Piece {
-  readonly run: TextRunNode
+  readonly placed: PlacedRun
   /** Where the run's text starts in the rendered string. */
   readonly at: number
 }
@@ -107,28 +123,36 @@ interface RenderedText {
   readonly pieces: readonly Piece[]
 }
 
-function renderedTextOf(runs: readonly TextRunNode[]): RenderedText {
+function renderedTextOf(runs: readonly PlacedRun[]): RenderedText {
   let text = ''
   const pieces: Piece[] = []
-  let previous: TextRunNode | undefined
-  for (const run of runs) {
+  let previous: PlacedRun | undefined
+  for (const placed of runs) {
     // The last character only: a regex anchored at the end still tries
     // every position of the string, which made building the text runs x
     // text.
-    if (previous !== undefined && !WHITESPACE.test(text.at(-1) ?? '') && separated(previous, run)) {
+    if (
+      previous !== undefined &&
+      !WHITESPACE.test(text.at(-1) ?? '') &&
+      separated(previous, placed)
+    ) {
       text += ' '
     }
-    pieces.push({ run, at: text.length })
-    text += run.text
-    previous = run
+    pieces.push({ placed, at: text.length })
+    text += placed.run.text
+    previous = placed
   }
   return { text, pieces }
 }
 
-/** Whether the source had whitespace between two adjacent runs. */
-function separated(previous: TextRunNode, run: TextRunNode): boolean {
-  if (run.bbox.y !== previous.bbox.y) return true
-  const gap = run.bbox.x - (previous.bbox.x + previous.bbox.w)
+/**
+ * Whether the source had whitespace between two adjacent runs, judged where
+ * they are drawn: two table cells' runs are each at their own cell's origin.
+ */
+function separated(previous: PlacedRun, placed: PlacedRun): boolean {
+  const { run } = placed
+  if (run.bbox.y !== previous.run.bbox.y) return true
+  const gap = drawnX(placed) - (drawnX(previous) + previous.run.bbox.w)
   return gap > run.bbox.h * SPACE_GAP_RATIO
 }
 
@@ -277,7 +301,7 @@ function bestScored(
  * and not under where a different font would have put them.
  */
 export function passageBoxes(
-  runs: readonly TextRunNode[],
+  runs: readonly PlacedRun[],
   quote: TextQuoteSelector,
   measure: MeasureText,
   source?: PassageSource,
@@ -290,7 +314,8 @@ export function passageBoxes(
   // From the last piece starting at or before the passage, so a passage
   // visits only the runs it may cross rather than every run of the node.
   for (let index = lastPieceAtOrBefore(pieces, range.start); index < pieces.length; index += 1) {
-    const { run, at } = pieces[index] as Piece
+    const { placed, at } = pieces[index] as Piece
+    const { run } = placed
     if (at >= range.end) break
     const runEnd = at + run.text.length
     const from = Math.max(range.start, at) - at
@@ -301,7 +326,7 @@ export function passageBoxes(
     const lead = clampAdvance(measure(run.text.slice(0, from), font).advanceWidth)
     const width = clampAdvance(measure(run.text.slice(from, to), font).advanceWidth)
     if (width <= 0) continue
-    boxes.push({ x: run.bbox.x + lead, y: run.bbox.y, w: width, h: run.bbox.h })
+    boxes.push({ x: drawnX(placed) + lead, y: run.bbox.y, w: width, h: run.bbox.h })
   }
   return boxes
 }
@@ -318,8 +343,9 @@ function lastPieceAtOrBefore(pieces: readonly Piece[], offset: number): number {
 }
 
 /**
- * The highlight shapes for every passage of one node, laid in the same
- * origin-relative space as `runs` so they travel into the node with them.
+ * The highlight shapes for every passage of one node, laid in the node
+ * body's origin-relative space — where `runs` are drawn, past any list item
+ * or table cell — so they travel into the node with the body.
  * Painted BEFORE the runs (the caller puts them first), and marked
  * `commentChrome` so `sceneDigest` leaves them out and the editor hit-tests
  * them as the thread's own chrome — `${threadId}/passage-<n>`.
@@ -328,7 +354,7 @@ function lastPieceAtOrBefore(pieces: readonly Piece[], offset: number): number {
  */
 export function composePassageHighlights(
   passages: readonly NodePassage[],
-  runs: readonly TextRunNode[],
+  runs: readonly PlacedRun[],
   measure: MeasureText,
   appearance: { readonly open?: Appearance; readonly resolved?: Appearance },
   sourceText: string,

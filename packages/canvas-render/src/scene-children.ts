@@ -43,3 +43,18 @@ export function sceneChildrenOf(node: SceneWalkNode): readonly SceneWalkNode[] |
       return undefined
   }
 }
+
+/**
+ * The x-shift a node applies to its own subtree. `renderListItem` and
+ * `renderTableCell` are the only renderers that emit a transform, and both
+ * translate by their own `bbox.x` on the x axis only — so their descendants
+ * are stored in wrapper-relative coordinates, and every walk that wants where
+ * they are DRAWN (`sceneBounds`, the passage highlights) adds this back,
+ * nested wrappers composing. Every other wrapper emits a plain `<g>`, leaving
+ * its children absolute. A non-finite `bbox.x` contributes no shift rather
+ * than poisoning the whole subtree with NaN.
+ */
+export function subtreeOffsetX(node: SceneWalkNode): number {
+  if (node.kind !== 'listItem' && node.kind !== 'tableCell') return 0
+  return Number.isFinite(node.bbox.x) ? node.bbox.x : 0
+}

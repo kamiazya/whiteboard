@@ -5,13 +5,13 @@ import {
   type TextQuoteSelector,
   textOccurrences,
 } from '@kamiazya/whiteboard-model'
-import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { looseOccurrences } from '../layout/loose-occurrences.js'
 import { typesetMdastBlocks } from '../layout/nodes/mdast-blocks.js'
 import {
   collectTextRuns,
   composePassageHighlights,
   type NodePassage,
+  type PlacedRun,
 } from '../layout/passage-highlight.js'
 import type { FontDescriptor, MeasureText, TextMetrics } from '../measure.js'
 import { createFakeMeasure } from './fake-measure.js'
@@ -38,6 +38,8 @@ interface RunWire {
   readonly strong: boolean
   /** The family and size the run's paint carries, null when it has no paint. */
   readonly paint: { readonly family?: string; readonly size?: string } | null
+  /** What enclosing list items and table cells shift it by, when anything. */
+  readonly offsetX?: string
 }
 
 interface PassageWire {
@@ -278,7 +280,7 @@ const odd: MeasureText = (text, font) => ({
 
 const PAINT = { open: { fill: '#ff0' }, resolved: { fill: '#888' } }
 
-const runWire = (run: TextRunNode): RunWire => {
+const runWire = ({ run, offsetX }: PlacedRun): RunWire => {
   const family = run.appearance?.fontFamily
   const size = run.appearance?.fontSize
   return {
@@ -293,11 +295,12 @@ const runWire = (run: TextRunNode): RunWire => {
             ...(family === undefined ? {} : { family }),
             ...(size === undefined ? {} : { size: f64Hex(size) }),
           },
+    ...(offsetX === 0 ? {} : { offsetX: f64Hex(offsetX) }),
   }
 }
 
 function highlight(
-  runs: readonly TextRunNode[],
+  runs: readonly PlacedRun[],
   passages: readonly PassageWire[],
   source: string,
   measured: Measured,
@@ -351,26 +354,58 @@ function boards(): PassageHighlightRecord[] {
     const passages = Array.from({ length: 1 + draw(8) }, (_, n) => passageOn(draw, source, n))
     out.push(highlight(runs, passages, source, i % 10 === 0 ? 'odd' : 'fake'))
   }
-  return out
+  return [...out, ...wrapped()]
+}
+
+/**
+ * Bodies whose runs sit under a list item or a table cell, which translate
+ * their subtree: a passage there is drawn at the run's x plus every enclosing
+ * wrapper's, and two cells' runs are each at their own cell's origin.
+ */
+function wrapped(): PassageHighlightRecord[] {
+  const bodies: readonly (readonly [string, readonly string[]])[] = [
+    ['- one target two\n  - nested target words\n    - deeper target', ['nested target', 'target']],
+    ['1. ab\n2. ba **ab** ba', ['ba', 'ab']],
+    ['| a | b |\n| --- | --- |\n| one | two |\n| ab ab | ba |', ['two', 'b ab', 'ba']],
+    ['- | x | y |\n  | --- | --- |\n  | in | cell |', ['cell', 'in']],
+  ]
+  return bodies.map(([source, quotes], i) => {
+    const runs = collectTextRuns(
+      typesetMdastBlocks(parseMarkdownBody(source), {
+        measure: fake,
+        maxWidth: 400,
+        fontFamily: 'sans-serif',
+      }).nodes,
+    )
+    const passages = quotes.map((exact, n) => {
+      const start = Math.max(0, source.lastIndexOf(exact))
+      return { ...at(exact, start), threadId: `w${n}`, resolved: n === 1 }
+    })
+    return highlight(runs, passages, source, i === 3 ? 'odd' : 'fake')
+  })
 }
 
 const run = (
   text: string,
   [x, y, w, h]: readonly [number, number, number, number],
   font: { family?: string; size?: number; strong?: boolean; emphasis?: boolean } = {},
-): TextRunNode => ({
-  kind: 'textRun',
-  text,
-  bbox: { x, y, w, h },
-  ...(font.strong === true ? { strong: true } : {}),
-  ...(font.emphasis === true ? { emphasis: true } : {}),
-  appearance: {
-    ...(font.family === undefined ? {} : { fontFamily: font.family }),
-    ...(font.size === undefined ? {} : { fontSize: font.size }),
+  offsetX = 0,
+): PlacedRun => ({
+  run: {
+    kind: 'textRun',
+    text,
+    bbox: { x, y, w, h },
+    ...(font.strong === true ? { strong: true } : {}),
+    ...(font.emphasis === true ? { emphasis: true } : {}),
+    appearance: {
+      ...(font.family === undefined ? {} : { fontFamily: font.family }),
+      ...(font.size === undefined ? {} : { fontSize: font.size }),
+    },
   },
+  offsetX,
 })
 
-type HandBuilt = readonly [readonly TextRunNode[], readonly PassageWire[], string, Measured]
+type HandBuilt = readonly [readonly PlacedRun[], readonly PassageWire[], string, Measured]
 
 const hand = (...entry: HandBuilt): HandBuilt => entry
 
@@ -524,6 +559,22 @@ const HAND_BUILT: readonly HandBuilt[] = [
     'ab ab ab',
     'fake',
   ),
+  // Two cells' runs, each at its own cell's origin: the gap is judged where
+  // they are drawn — flush at 36 is one word, 3.5 apart is a space.
+  hand(
+    [run('see', [0, 0, 36, 20], sans, 10), run('a', [0, 0, 12, 20], sans, 46)],
+    [at('seea', 0)],
+    'seea',
+    'fake',
+  ),
+  hand(
+    [run('see', [0, 0, 36, 20], sans, 10), run('a', [0, 0, 12, 20], sans, 49.5)],
+    [at('see a', 0)],
+    'see a',
+    'fake',
+  ),
+  // A wrapper offset under a stored x: the box is drawn at their sum plus the lead.
+  hand([run('xxab', [4.25, 0, 48, 20], sans, 0.1)], [at('ab', 2)], 'xxab', 'fake'),
 ]
 
 const handBuilt = (): PassageHighlightRecord[] =>

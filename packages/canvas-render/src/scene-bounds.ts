@@ -3,7 +3,7 @@ import { edgeArrowPolygons } from './edge-arrows.js'
 import { glowReachPx } from './layout/ink/glow.js'
 import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
 import { LEGEND_MARGIN_PX, legendPanelSize } from './legend/legend-geometry.js'
-import { type SceneWalkNode, sceneChildrenOf } from './scene-children.js'
+import { type SceneWalkNode, sceneChildrenOf, subtreeOffsetX } from './scene-children.js'
 import { TEXT_HALO_PAD_PX } from './theme/text-halo.js'
 
 /**
@@ -56,20 +56,6 @@ function bboxEdges(bbox: BoundingBox): { x0: number; y0: number; x1: number; y1:
     x1: Math.max(x, cornerX),
     y1: Math.max(y, cornerY),
   }
-}
-
-/**
- * The x-shift a node applies to its own subtree. `renderListItem` and
- * `renderTableCell` are the only renderers that emit a transform, and both
- * translate by their own `bbox.x` on the x axis only — so their descendants
- * are stored in wrapper-relative coordinates and must be re-offset here to
- * land where they are actually drawn. Every other wrapper emits a plain
- * `<g>`, leaving its children absolute. A non-finite `bbox.x` contributes no
- * shift rather than poisoning the whole subtree with NaN.
- */
-function subtreeOffsetX(node: SceneWalkNode): number {
-  if (node.kind !== 'listItem' && node.kind !== 'tableCell') return 0
-  return Number.isFinite(node.bbox.x) ? node.bbox.x : 0
 }
 
 const inkReach = (ink: SceneInk | undefined): number =>

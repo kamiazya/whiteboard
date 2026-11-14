@@ -55,25 +55,43 @@ pub struct PassagePaint<'a> {
     pub resolved: Option<&'a Appearance>,
 }
 
-/// Every text run under `nodes`, in reading order (`collectTextRuns`).
+/// A text run and the x its enclosing list items and table cells translate it
+/// by when drawn (`PlacedRun`): a run under one of those is stored
+/// wrapper-relative, so the offset travels beside the borrowed run.
+#[derive(Debug, Clone, Copy)]
+pub struct PlacedRun<'r> {
+    pub run: &'r TextRunNode,
+    pub offset_x: f64,
+}
+
+impl PlacedRun<'_> {
+    /// The x the run's box starts at as drawn.
+    fn drawn_x(&self) -> f64 {
+        self.run.bbox.x + self.offset_x
+    }
+}
+
+/// Every text run under `nodes`, in reading order, with where it is drawn
+/// (`collectTextRuns`).
 #[must_use]
-pub fn collect_text_runs(nodes: &[SceneNode]) -> Vec<&TextRunNode> {
-    fn visit<'a>(node: SceneWalk<'a>, out: &mut Vec<&'a TextRunNode>) {
-        out.extend(node.text_run());
+pub fn collect_text_runs(nodes: &[SceneNode]) -> Vec<PlacedRun<'_>> {
+    fn visit<'a>(node: SceneWalk<'a>, offset_x: f64, out: &mut Vec<PlacedRun<'a>>) {
+        out.extend(node.text_run().map(|run| PlacedRun { run, offset_x }));
+        let child_offset_x = offset_x + node.subtree_offset_x();
         for child in node.children() {
-            visit(child, out);
+            visit(child, child_offset_x, out);
         }
     }
     let mut out = Vec::new();
     for node in nodes {
-        visit(SceneWalk::Node(node), &mut out);
+        visit(SceneWalk::Node(node), 0.0, &mut out);
     }
     out
 }
 
 /// A run, and where its text starts in the rendered string.
 struct Piece<'r> {
-    run: &'r TextRunNode,
+    placed: PlacedRun<'r>,
     at: usize,
 }
 
@@ -85,27 +103,30 @@ pub struct RenderedText<'r> {
 }
 
 /// Whether the source had whitespace between two adjacent runs: a new line, or
-/// a gap on the same line wider than a fraction of the run's height. Runs split
-/// at an inline boundary with no gap (`**bold**face`) are one word.
-fn separated(previous: &TextRunNode, run: &TextRunNode) -> bool {
+/// a gap on the same line, judged where they are drawn, wider than a fraction
+/// of the run's height. Runs split at an inline boundary with no gap
+/// (`**bold**face`) are one word.
+fn separated(previous: &PlacedRun<'_>, placed: &PlacedRun<'_>) -> bool {
+    let (before, run) = (previous.run, placed.run);
     // `!==`: a NaN differs from everything, and -0 equals 0.
-    let new_line = run.bbox.y.partial_cmp(&previous.bbox.y) != Some(Ordering::Equal);
-    new_line || run.bbox.x - (previous.bbox.x + previous.bbox.w) > run.bbox.h * SPACE_GAP_RATIO
+    let new_line = run.bbox.y.partial_cmp(&before.bbox.y) != Some(Ordering::Equal);
+    let gap = placed.drawn_x() - (previous.drawn_x() + before.bbox.w);
+    new_line || gap > run.bbox.h * SPACE_GAP_RATIO
 }
 
 /// The runs as the search reads them.
 #[must_use]
-pub fn rendered_text_of<'r>(runs: &[&'r TextRunNode]) -> RenderedText<'r> {
+pub fn rendered_text_of<'r>(runs: &[PlacedRun<'r>]) -> RenderedText<'r> {
     let mut rendered = RenderedText { text: Vec::new(), pieces: Vec::new() };
-    let mut previous: Option<&TextRunNode> = None;
-    for &run in runs {
+    let mut previous: Option<&PlacedRun<'r>> = None;
+    for placed in runs {
         let ends_in_space = rendered.text.last().is_some_and(|&unit| is_js_whitespace(unit));
-        if previous.is_some_and(|previous| !ends_in_space && separated(previous, run)) {
+        if previous.is_some_and(|previous| !ends_in_space && separated(previous, placed)) {
             rendered.text.push(SPACE);
         }
-        rendered.pieces.push(Piece { run, at: rendered.text.len() });
-        rendered.text.extend(run.text.encode_utf16());
-        previous = Some(run);
+        rendered.pieces.push(Piece { placed: *placed, at: rendered.text.len() });
+        rendered.text.extend(placed.run.text.encode_utf16());
+        previous = Some(placed);
     }
     rendered
 }
@@ -265,7 +286,8 @@ pub fn passage_boxes(
     // visits only the runs it may cross.
     let first = rendered.pieces.partition_point(|piece| piece.at <= range.start).saturating_sub(1);
     let mut boxes = Vec::new();
-    for Piece { run, at } in rendered.pieces.iter().skip(first) {
+    for Piece { placed, at } in rendered.pieces.iter().skip(first) {
+        let run = placed.run;
         if *at >= range.end {
             break;
         }
@@ -282,20 +304,21 @@ pub fn passage_boxes(
         let width = measured(measure, passage, &font);
         if width > 0.0 {
             let bbox = &run.bbox;
-            boxes.push(BoundingBox { x: bbox.x + lead, y: bbox.y, w: width, h: bbox.h });
+            boxes.push(BoundingBox { x: placed.drawn_x() + lead, y: bbox.y, w: width, h: bbox.h });
         }
     }
     boxes
 }
 
-/// The highlight shapes for every passage of one node, in the runs' own
-/// origin-relative space (`composePassageHighlights`), marked comment chrome
+/// The highlight shapes for every passage of one node, in the body's
+/// origin-relative space where the runs are drawn, past any list item or table
+/// cell (`composePassageHighlights`), marked comment chrome
 /// and named `<thread>/passage-<n>`. `source` is the node's markdown, which
 /// the anchors' stored offsets index.
 #[must_use]
 pub fn compose_passage_highlights(
     passages: &[NodePassage<'_>],
-    runs: &[&TextRunNode],
+    runs: &[PlacedRun<'_>],
     measure: &dyn Measure,
     paint: PassagePaint<'_>,
     source: &[u16],
