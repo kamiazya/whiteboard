@@ -279,6 +279,27 @@ describe('layoutSpatialCanvas', () => {
     expect(plainBlock?.bbox.y).toBe(NODE_PADDING_PX)
   })
 
+  it('a node whose id names an Object.prototype member is unshaped beside a shaped one', () => {
+    // The silhouette table is keyed by node id, so an id such as
+    // `constructor` must find nothing there unless a facet put it there.
+    const shaped = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      facets: { 'visual.shape/v0': { kind: 'ellipse' as const } },
+    }
+    for (const id of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) {
+      const plain = textNode({ id, x: 0, y: 300, width: 200, height: 100, text: 'one line' })
+      const scene = layoutSpatialCanvas(canvas([shaped, plain]), baseOptions())
+      const chrome = scene.nodes.find(
+        (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
+          n.kind === 'shape' && n.id === id,
+      )
+      expect(chrome, id).toBeDefined()
+      expect(chrome?.shape, id).toBeUndefined()
+      const block = scene.nodes.find((n) => n.kind === 'paragraph' && n.bbox.y >= 300)
+      expect(block?.bbox.y, id).toBe(300 + NODE_PADDING_PX)
+    }
+  })
+
   // A symbol is a mark for the surfaces where a node or document is TOO
   // SMALL to read — the tab's favicon, the file row, the canvas overview. It
   // was also drawn on the node itself, as a 16px badge in the content box's
