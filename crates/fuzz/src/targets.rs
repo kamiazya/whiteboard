@@ -612,6 +612,11 @@ pub fn sfnt_parse(data: &[u8]) {
 /// The whole layout's export: a request and the faces it measures in, split at
 /// the first NUL. Every answer is one of the three outcomes, and a call past the
 /// caps is refused before it is read.
+///
+/// # Panics
+///
+/// On an answer that is none of the three, or an input past the caps that is
+/// not refused.
 pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
     use whiteboard_wasm::spatial_layout::layout_spatial_canvas;

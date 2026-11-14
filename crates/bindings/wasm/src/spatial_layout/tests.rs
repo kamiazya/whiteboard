@@ -124,8 +124,8 @@ fn an_input_that_is_not_a_request_or_past_its_caps_is_refused() {
         ("titles", s(Vec::new())),
         ("extras", s(Vec::new())),
     ]);
-    let referenced = request(board(&third), &[("references", references)]);
-    assert_eq!(answer(&referenced, &[]), refused("input-too-large", "bodies"));
+    let asking = request(board(&third), &[("references", references)]);
+    assert_eq!(answer(&asking, &[]), refused("input-too-large", "bodies"));
     let face = |from: i64, to: i64| {
         let face = m(&[
             ("family", json!("F")),

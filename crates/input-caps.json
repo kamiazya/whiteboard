@@ -102,11 +102,11 @@
     "whiteboard-wasm::spatial_layout::layout_spatial_canvas": {
       "crate": "whiteboard-wasm",
       "fuzzTarget": "layout_spatial_canvas_wasm",
-      "maxBytes": 16777216,
+      "maxBytes": 4194304,
       "maxDepth": 128,
-      "maxMillis": 20000,
+      "maxMillis": 60000,
       "maxNodes": 4096,
-      "reason": "TBD"
+      "reason": "the export reads a layout request (the value wire of json_canvas_wire.rs: the canvas, the measurer by name, the options and the reference wire) and the bytes of the faces a font-table measurer reads, so any holder of the wasm glue can call it with bytes of its choosing, which is the decode the fuzz target drives. maxBytes 4194304 counts the request and the faces together: the daemon's vendored Roboto is four faces of 1.45 MB, and a canvas's own wire is a few hundred KB at the element cap; a call past it is refused before it is read, and the TypeScript lays the canvas out. maxDepth 128 is serde_json's own recursion limit (deny.toml bans unbounded_depth), which the value wire spends one array per mapping or list of; the shim sends nothing past 100. maxNodes 4096 is MAX_ELEMENTS: the nodes, edges and lines of the canvas and of every canvas the request references, together, refused past it, because what a layout costs is its routing, which bytes do not bound. The bodies are bounded apart (MAX_BODY_BYTES, 768 KiB together, one parse's own bound), since a body's cost is its parse and its typesetting and maxBytes alone would let a request repeat the dearest one. maxMillis 60000 is 2.6x the slowest draw measured on Node wasm at the caps: 22.9 s for a hub of 2047 edges to 2047 boxes (the side search spends its whole budget; 1023 edges took 14.6 s, 511 took 11.0 s); the others took 6.2 s for a 768 KiB body holding a table of 131k rows, 3.8 s for 1365 boxes and 2730 straight edges (2.6 s orthogonal), 3.1 s for 196k list items, 3.0 s for 2048 boxes and 2048 edges, 2.4 s for 112k links in one paragraph, 1.9 s for 40 file nodes drawing canvases that nest to the depth cap, 0.9 s for 4094 labelled edges between one pair, 0.7 s for 4096 boxes each holding a sentence, and 0.3 s for 4096 bare boxes"
     }
   }
 }
