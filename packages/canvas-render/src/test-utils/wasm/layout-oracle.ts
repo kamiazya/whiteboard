@@ -1,9 +1,10 @@
 import { type CoreGlue, coreFrom, EXPECTED_ABI } from '@kamiazya/whiteboard-core-wasm'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { CanvasLayoutRequest, CoreDegradation } from '../../canvas-core.js'
 import { canvasLayoutRequest } from '../../layout/canvas-switch.js'
-import type { SpatialLayoutDegradation } from '../../layout/layout-options.js'
+import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
-import { layoutCases } from './layout-cases.js'
+import { type LayoutTopic, layoutCases } from './layout-cases.js'
 
 /** One recorded layout: the request as the shim sends it, and the TypeScript's answer as the core spells it. */
 export interface LayoutRecord {
@@ -60,28 +61,42 @@ function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
 
 /**
  * Every layout case the core can be handed, each as the TypeScript answers
- * it. The two cases only the TypeScript draws exactly are recorded with the
- * answer the core gives them, a decline.
+ * it, grouped by the topic file it is recorded in. The two cases only the
+ * TypeScript draws exactly are recorded with the answer the core gives them,
+ * a decline.
  */
-export function layoutRecords(): LayoutRecord[] {
-  return layoutCases(8).flatMap(({ name, canvas, options }) => {
-    const request = canvasLayoutRequest(canvas, options)
-    const sent = 'skip' in request ? undefined : shimRequest(request)
-    if (sent === undefined) return []
-    const events: CoreDegradation[] = []
-    const laid = layoutSpatialCanvasWithAnchors(canvas, {
-      ...options,
-      onDegrade: (event) => events.push(coreEvent(event)),
-    })
-    const declined = name.startsWith('declined: ')
-      ? name.includes('```')
-        ? 'highlight'
-        : 'shortcode'
-      : undefined
-    const answer =
-      declined === undefined
-        ? (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')
-        : JSON.stringify(['declined', declined])
-    return [{ id: name, request: sent, answer }]
+export function layoutRecords(): Map<LayoutTopic, LayoutRecord[]> {
+  const byTopic = new Map<LayoutTopic, LayoutRecord[]>()
+  for (const { topic, name, canvas, options } of layoutCases(8)) {
+    const record = layoutRecord(name, canvas, options)
+    if (record === undefined) continue
+    byTopic.set(topic, [...(byTopic.get(topic) ?? []), record])
+  }
+  return byTopic
+}
+
+/** One case as the TypeScript answers it, or undefined when the core cannot be handed it. */
+function layoutRecord(
+  name: string,
+  canvas: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): LayoutRecord | undefined {
+  const request = canvasLayoutRequest(canvas, options)
+  const sent = 'skip' in request ? undefined : shimRequest(request)
+  if (sent === undefined) return undefined
+  const events: CoreDegradation[] = []
+  const laid = layoutSpatialCanvasWithAnchors(canvas, {
+    ...options,
+    onDegrade: (event) => events.push(coreEvent(event)),
   })
+  const declined = name.startsWith('declined: ')
+    ? name.includes('```')
+      ? 'highlight'
+      : 'shortcode'
+    : undefined
+  const answer =
+    declined === undefined
+      ? (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')
+      : JSON.stringify(['declined', declined])
+  return { id: name, request: sent, answer }
 }
