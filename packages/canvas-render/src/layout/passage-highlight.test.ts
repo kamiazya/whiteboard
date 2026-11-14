@@ -5,23 +5,30 @@ import {
   type TextQuoteSelector,
 } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
-import { composePassageHighlights, type NodePassage, passageBoxes } from './passage-highlight.js'
+import {
+  collectTextRuns,
+  composePassageHighlights,
+  type NodePassage,
+  type PlacedRun,
+  passageBoxes,
+} from './passage-highlight.js'
 
 const options = { measure: createFakeMeasure(), maxWidth: 2000, fontFamily: 'sans-serif' }
 
 /** One paragraph laid out the way a text node's body is: wrapped into runs. */
-function runsOf(text: string): TextRunNode[] {
-  return typesetMdastBlocks(
-    {
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    } as MdastRoot,
-    options,
-  ).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
+function runsOf(text: string): PlacedRun[] {
+  return collectTextRuns(
+    typesetMdastBlocks(
+      {
+        type: 'root',
+        children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+      } as MdastRoot,
+      options,
+    ).nodes,
+  )
 }
 
 /**
@@ -42,7 +49,7 @@ function startOf(text: string, quote: TextQuoteSelector): number | null {
   expect(boxes).toHaveLength(1)
   const [box] = boxes
   const perChar = box.w / quote.exact.length
-  return Math.round((box.x - runs[0].bbox.x) / perChar)
+  return Math.round((box.x - runs[0].run.bbox.x) / perChar)
 }
 
 describe('a passage highlight picks the occurrence whose surroundings match best', () => {
@@ -71,25 +78,27 @@ describe('a passage highlight picks the occurrence whose surroundings match best
   it('reads a run of spaces before an occurrence as one space', () => {
     // Prose collapses its spaces; inline code keeps them, so the rendered
     // text reads `zeta foo. beta  foo.` with two before the second `foo`.
-    const runs = typesetMdastBlocks(
-      {
-        type: 'root',
-        children: [
-          {
-            type: 'paragraph',
-            children: [
-              { type: 'text', value: 'zeta foo. ' },
-              { type: 'inlineCode', value: 'beta  ' },
-              { type: 'text', value: 'foo.' },
-            ],
-          },
-        ],
-      } as MdastRoot,
-      options,
-    ).nodes.flatMap((node) => ('runs' in node ? [...(node.runs ?? [])] : []))
-    expect(runs.map((run) => run.text)).toEqual(['zeta foo.', 'beta  ', 'foo.'])
+    const runs = collectTextRuns(
+      typesetMdastBlocks(
+        {
+          type: 'root',
+          children: [
+            {
+              type: 'paragraph',
+              children: [
+                { type: 'text', value: 'zeta foo. ' },
+                { type: 'inlineCode', value: 'beta  ' },
+                { type: 'text', value: 'foo.' },
+              ],
+            },
+          ],
+        } as MdastRoot,
+        options,
+      ).nodes,
+    )
+    expect(runs.map(({ run }) => run.text)).toEqual(['zeta foo.', 'beta  ', 'foo.'])
     const boxes = passageBoxes(runs, { exact: 'foo', prefix: 'beta ' }, options.measure)
-    expect(boxes.map((box) => box.x)).toEqual([runs[2]?.bbox.x])
+    expect(boxes.map((box) => box.x)).toEqual([runs[2]?.run.bbox.x])
   })
 
   it('reads a run of spaces in the remembered prefix as one space', () => {
@@ -129,7 +138,7 @@ describe('a passage highlight is the occurrence the model resolves in the source
     })
     if (boxes.length === 0) return null
     const [box] = boxes
-    return Math.round((box.x - runs[0].bbox.x) / (box.w / anchor.quote.exact.length))
+    return Math.round((box.x - runs[0].run.bbox.x) / (box.w / anchor.quote.exact.length))
   }
 
   it('highlights the third of four identical sentences when the anchor names the third', () => {
@@ -165,8 +174,8 @@ describe('a passage highlight is the occurrence the model resolves in the source
       end: third + 9,
     })
     expect(boxes).toHaveLength(1)
-    const perChar = (runs[0]?.bbox.w ?? 0) / text.length
-    expect(Math.round(((boxes[0]?.x ?? 0) - (runs[0]?.bbox.x ?? 0)) / perChar)).toBe(third)
+    const perChar = (runs[0]?.run.bbox.w ?? 0) / text.length
+    expect(Math.round(((boxes[0]?.x ?? 0) - (runs[0]?.run.bbox.x ?? 0)) / perChar)).toBe(third)
   })
 
   it('draws nothing for a passage the source no longer holds', () => {

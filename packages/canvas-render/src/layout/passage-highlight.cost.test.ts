@@ -12,11 +12,15 @@ import {
   NODE_TEXT_MAX_CHARS,
   TEXT_ANCHOR_CONTEXT_MAX_CHARS,
 } from '@kamiazya/whiteboard-model'
-import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
-import { collectTextRuns, composePassageHighlights, type NodePassage } from './passage-highlight.js'
+import {
+  collectTextRuns,
+  composePassageHighlights,
+  type NodePassage,
+  type PlacedRun,
+} from './passage-highlight.js'
 
 const contextReads = vi.hoisted(() => ({ count: 0 }))
 
@@ -39,7 +43,7 @@ vi.mock('@kamiazya/whiteboard-model', async (importOriginal) => {
 const options = { measure: createFakeMeasure(), maxWidth: 400, fontFamily: 'sans-serif' }
 
 /** `a a a … [a](a)`: the link's target is a source occurrence the canvas never draws. */
-function periodicNode(): { source: string; runs: TextRunNode[] } {
+function periodicNode(): { source: string; runs: PlacedRun[] } {
   const tail = '[a](a)'
   const source = `${'a '.repeat(Math.floor((NODE_TEXT_MAX_CHARS - tail.length) / 2))}${tail}`
   expect(source.length).toBeLessThanOrEqual(NODE_TEXT_MAX_CHARS)
@@ -48,17 +52,17 @@ function periodicNode(): { source: string; runs: TextRunNode[] } {
 }
 
 /** Each run behind a proxy counting reads of its `text`. */
-function countingRuns(runs: readonly TextRunNode[]): { runs: TextRunNode[]; reads: () => number } {
+function countingRuns(runs: readonly PlacedRun[]): { runs: PlacedRun[]; reads: () => number } {
   let reads = 0
-  const proxied = runs.map(
-    (run) =>
-      new Proxy(run, {
-        get(target, key, receiver) {
-          if (key === 'text') reads += 1
-          return Reflect.get(target, key, receiver)
-        },
-      }),
-  )
+  const proxied = runs.map(({ run, offsetX }) => ({
+    offsetX,
+    run: new Proxy(run, {
+      get(target, key, receiver) {
+        if (key === 'text') reads += 1
+        return Reflect.get(target, key, receiver)
+      },
+    }),
+  }))
   return { runs: proxied, reads: () => reads }
 }
 

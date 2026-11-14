@@ -65,6 +65,25 @@ impl<'a> SceneWalk<'a> {
         }
     }
 
+    /// The x-shift this node applies to its own subtree. Only a list item and
+    /// a table cell emit a transform, translating by their own `x`, so their
+    /// descendants are stored relative to the wrapper; every walk that wants
+    /// where they are DRAWN (the scene's bounds, the passage highlights) adds
+    /// this back, nested wrappers composing. A non-finite `x` contributes no
+    /// shift rather than poisoning the whole subtree (`subtreeOffsetX`).
+    #[must_use]
+    pub fn subtree_offset_x(self) -> f64 {
+        match self {
+            SceneWalk::Item(ListItemNode { bbox, .. })
+            | SceneWalk::Cell(TableCellSceneNode { bbox, .. })
+                if bbox.x.is_finite() =>
+            {
+                bbox.x
+            }
+            _ => 0.0,
+        }
+    }
+
     /// The ink a node is drawn with, for the two kinds that take one.
     #[must_use]
     pub fn ink(self) -> Option<&'a SceneInk> {

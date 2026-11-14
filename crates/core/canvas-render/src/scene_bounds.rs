@@ -52,21 +52,6 @@ fn box_edges(bbox: &BoundingBox) -> Option<(f64, f64, f64, f64)> {
     Some((js_min(x, corner_x), js_min(y, corner_y), js_max(x, corner_x), js_max(y, corner_y)))
 }
 
-/// The x-shift a node applies to its own subtree. Only a list item and a table
-/// cell emit a transform, translating by their own `x`, so their descendants
-/// are stored relative to the wrapper and must be re-offset to land where they
-/// are drawn. A non-finite `x` contributes no shift rather than poisoning the
-/// whole subtree.
-fn subtree_offset_x(node: SceneWalk<'_>) -> f64 {
-    match node {
-        SceneWalk::Item(_) | SceneWalk::Cell(_) => match node.bbox() {
-            Some(bbox) if bbox.x.is_finite() => bbox.x,
-            _ => 0.0,
-        },
-        _ => 0.0,
-    }
-}
-
 /// How far a node's DECORATION reaches beyond its own geometry: ink is bounded
 /// by a declared constant, a glow by its radius and a run's halo pill by its
 /// pad, so a derived viewBox never clips them.
@@ -143,7 +128,7 @@ pub fn scene_bounds(scene: &Scene) -> BoundingBox {
             SceneWalk::Node(SceneNode::Edge(edge)) => widen_by_edge(extent, edge, offset_x, reach),
             _ => node.bbox().map_or(extent, |bbox| widen_by_box(extent, bbox, offset_x, reach)),
         };
-        let child_offset_x = offset_x + subtree_offset_x(node);
+        let child_offset_x = offset_x + node.subtree_offset_x();
         stack.extend(node.children().into_iter().map(|child| (child, child_offset_x)));
     }
     let Some(e) = extent else { return FALLBACK_BOUNDS };
