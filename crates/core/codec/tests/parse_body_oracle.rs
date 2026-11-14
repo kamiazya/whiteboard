@@ -94,19 +94,29 @@ const TOLERATED: &[(&str, &str, &[&str])] = &[(
 fn every_case_resolves_as_the_typescript_does_but_the_ledgered() {
     let recording = recording();
     let mut differing = BTreeSet::new();
+    let mut refused = Vec::new();
     let mut report = Vec::new();
     for case in &recording.cases {
         let (id, text) = (field(case, "i"), field(case, "t"));
-        let agreed = answers(&text, &recording.aliases).is_ok_and(|ours| {
-            agrees(&ours.resolved, case.get("m"), &field(case, "h"))
-                && agrees(&ours.unresolved, case.get("u"), &field(case, "n"))
-        });
+        // A refusal is never a tolerated difference: the TypeScript answered
+        // every recorded case, so one the parser refuses fails on its own
+        // rather than hiding behind a ledgered id.
+        let Ok(ours) = answers(&text, &recording.aliases) else {
+            refused.push(id);
+            continue;
+        };
+        let agreed = agrees(&ours.resolved, case.get("m"), &field(case, "h"))
+            && agrees(&ours.unresolved, case.get("u"), &field(case, "n"));
         if !agreed {
-            let ours = answers(&text, &recording.aliases).map(|a| a.resolved);
-            report.push(format!("{id}: {text:?}\n  rust: {ours:?}\n  ts:   {:?}", case.get("m")));
+            report.push(format!(
+                "{id}: {text:?}\n  rust: {:?}\n  ts:   {:?}",
+                ours.resolved,
+                case.get("m")
+            ));
             differing.insert(id);
         }
     }
+    assert!(refused.is_empty(), "refused by the parser: {refused:?}");
     let ledgered: BTreeSet<String> =
         TOLERATED.iter().flat_map(|(_, _, ids)| ids.iter().map(|id| (*id).to_owned())).collect();
     assert!(TOLERATED.iter().all(|(_, why, ids)| why.len() > 60 && !ids.is_empty()));
