@@ -194,8 +194,10 @@ fn constant_within(p: &Partition, values: &[Option<&str>], totals: &Totals) -> b
             bump(&mut listed, values.get(at).copied().flatten());
         }
     }
-    let in_rest = totals.iter().filter(|(value, n)| listed.get(*value).unwrap_or(&0) < n);
-    in_rest.count() <= 1
+    // Walk only what the listed members show, so the cost is the partition's
+    // size, never the number of distinct values on the board.
+    let exhausted = listed.iter().filter(|(value, n)| totals.get(*value) == Some(*n)).count();
+    totals.len().saturating_sub(exhausted) <= 1
 }
 
 /// One value everywhere is `unused`, answered before any partition is built:
