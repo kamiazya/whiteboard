@@ -121,7 +121,7 @@ pub fn text_occurrences(haystack: &[u16], needle: &[u16]) -> Vec<usize> {
 pub fn shared_context(
     context: &[u16],
     side: ContextSide,
-    mut read: impl FnMut(usize) -> Option<u16>,
+    read: &mut dyn FnMut(usize) -> Option<u16>,
 ) -> usize {
     let reach = context.len().min(TEXT_ANCHOR_CONTEXT_MAX_CHARS);
     let expected = |shared: usize| match side {
@@ -192,11 +192,11 @@ fn place_among(body: &[u16], anchor: &TextAnchor, candidates: &[usize]) -> Optio
     let suffix = units(anchor.quote.suffix.as_deref().unwrap_or_default());
     let mut best: Option<(usize, usize, usize)> = None;
     for &candidate in candidates {
-        let before = shared_context(&prefix, ContextSide::Before, |k| {
+        let before = shared_context(&prefix, ContextSide::Before, &mut |k| {
             candidate.checked_sub(k.saturating_add(1)).and_then(|at| body.get(at).copied())
         });
         let end = candidate.saturating_add(exact.len());
-        let after = shared_context(&suffix, ContextSide::After, |k| {
+        let after = shared_context(&suffix, ContextSide::After, &mut |k| {
             body.get(end.saturating_add(k)).copied()
         });
         let score = before.saturating_add(after);

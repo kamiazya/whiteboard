@@ -36,7 +36,14 @@ struct RunWire {
     bbox: [String; 4],
     emphasis: bool,
     strong: bool,
-    font: Option<(String, String)>,
+    paint: Option<PaintWire>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct PaintWire {
+    family: Option<String>,
+    size: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -118,11 +125,11 @@ fn quote_of(wire: &QuoteWire) -> TextQuote {
 
 fn run_of(wire: &RunWire) -> Res<TextRunNode> {
     let [x, y, w, h] = &wire.bbox;
-    let appearance = match &wire.font {
+    let appearance = match &wire.paint {
         None => None,
-        Some((family, size)) => Some(Appearance {
-            font_family: Some(family.clone()),
-            font_size: Some(f64_of(size)?),
+        Some(paint) => Some(Appearance {
+            font_family: paint.family.clone(),
+            font_size: paint.size.as_deref().map(f64_of).transpose()?,
             ..Appearance::default()
         }),
     };

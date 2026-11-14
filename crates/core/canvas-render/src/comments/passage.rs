@@ -128,7 +128,7 @@ impl Outward<'_> {
     /// rest of the whitespace run when the one read was whitespace.
     fn after(&self, at: usize, space: bool) -> Option<usize> {
         if self.forward {
-            let next = at.checked_add(1)?;
+            let next = at.saturating_add(1);
             let end = self.text.len();
             Some(if space { (next..end).find(|&i| !self.blank(i)).unwrap_or(end) } else { next })
         } else {
@@ -228,8 +228,8 @@ fn best_scored(rendered: &[u16], matches: &[LooseSpan], quote: &TextQuote) -> Op
         };
         let mut after =
             Outward { text: rendered, at: Some(span.end), forward: true, seen: Vec::new() };
-        let score = shared_context(&prefix, ContextSide::Before, |k| before.read(k))
-            .saturating_add(shared_context(&suffix, ContextSide::After, |k| after.read(k)));
+        let score = shared_context(&prefix, ContextSide::Before, &mut |k| before.read(k))
+            .saturating_add(shared_context(&suffix, ContextSide::After, &mut |k| after.read(k)));
         if best.is_none_or(|(_, top)| score > top) {
             best = Some((span, score));
         }
@@ -239,14 +239,12 @@ fn best_scored(rendered: &[u16], matches: &[LooseSpan], quote: &TextQuote) -> Op
 
 /// The font a run was measured in, when its paint says one (`runFontOf`).
 fn run_font_of(run: &TextRunNode) -> Option<FontDescriptor> {
-    let appearance = run.appearance.as_ref()?;
-    let family = appearance.font_family.as_deref()?;
-    let size_px = appearance.font_size?;
-    Some(body_font(
-        family,
-        size_px,
-        Style { emphasis: run.emphasis, strong: run.strong, deleted: false },
-    ))
+    let appearance = run.appearance.as_ref();
+    let family = appearance.and_then(|a| a.font_family.as_deref());
+    let size = appearance.and_then(|a| a.font_size);
+    let (Some(family), Some(size_px)) = (family, size) else { return None };
+    let style = Style { emphasis: run.emphasis, strong: run.strong, deleted: false };
+    Some(body_font(family, size_px, style))
 }
 
 fn measured(measure: &dyn Measure, units: &[u16], font: &FontDescriptor) -> f64 {
@@ -277,7 +275,8 @@ pub fn passage_boxes(
         if to <= from {
             continue;
         }
-        let (Some(head), Some(passage)) = (text.get(..from), text.get(from..to)) else { continue };
+        let head = text.get(..from).unwrap_or_default();
+        let passage = text.get(from..to).unwrap_or_default();
         let Some(font) = run_font_of(run) else { continue };
         let lead = measured(measure, head, &font);
         let width = measured(measure, passage, &font);

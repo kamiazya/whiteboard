@@ -36,8 +36,8 @@ interface RunWire {
   readonly bbox: readonly string[]
   readonly emphasis: boolean
   readonly strong: boolean
-  /** Family and size, when the run's paint carries both. */
-  readonly font: readonly [string, string] | null
+  /** The family and size the run's paint carries, null when it has no paint. */
+  readonly paint: { readonly family?: string; readonly size?: string } | null
 }
 
 interface PassageWire {
@@ -286,7 +286,13 @@ const runWire = (run: TextRunNode): RunWire => {
     bbox: [run.bbox.x, run.bbox.y, run.bbox.w, run.bbox.h].map(f64Hex),
     emphasis: run.emphasis === true,
     strong: run.strong === true,
-    font: family === undefined || size === undefined ? null : [family, f64Hex(size)],
+    paint:
+      run.appearance === undefined
+        ? null
+        : {
+            ...(family === undefined ? {} : { family }),
+            ...(size === undefined ? {} : { size: f64Hex(size) }),
+          },
   }
 }
 
@@ -488,6 +494,15 @@ const HAND_BUILT: readonly HandBuilt[] = [
     [run('b  a b a', [0, 0, 96, 20], sans)],
     [at('b', 0, { quote: { exact: 'b', suffix: ' a' } })],
     'b',
+    'fake',
+  ),
+  // The rendered text holds the quote and the source no longer does: orphaned.
+  hand([run('ab', [0, 0, 24, 20], sans)], [at('ab', 0)], 'xy', 'fake'),
+  // A run whose paint names a family and no size, or a size and no family.
+  hand(
+    [run('ab', [0, 0, 24, 20], { family: 'serif' }), run('ab', [0, 20, 24, 20], { size: 20 })],
+    [at('ab ab', 0)],
+    'ab ab',
     'fake',
   ),
   // Source counts that disagree with the rendered ones, both ways round.
