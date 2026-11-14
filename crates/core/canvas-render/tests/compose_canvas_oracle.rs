@@ -173,7 +173,7 @@ impl<'c> Setup<'c> {
         let cache = (self.case.cache == Some(true)).then(KeyCache::default);
         let measure = Counting { base: FakeMeasure::default(), calls: Cell::new(0) };
         let want = &self.case.answer.canvas;
-        let host = Host::new(self.context, &want.overlay, want.legend.as_ref(), BTreeMap::new());
+        let host = Host::new(self.context, &want.overlay, want.legend.as_ref());
         let badge = StencilBadge { registry: &self.context.registry };
         let decorations: [&dyn NodeDecoration; 1] = [&badge];
         let options = LayoutOptions {

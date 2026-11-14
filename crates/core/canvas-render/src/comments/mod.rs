@@ -8,10 +8,11 @@
 //! `resolve_comment` (its resolved overlay for a settled thread), and a
 //! resolver that has none still lays the geometry out, bare.
 //!
-//! A bubble's body is the host's
-//! ([`crate::compose_node::ComposeHost::comment_body`]): the opening
-//! message laid out at the origin, a settled one collapsed to its first line.
+//! A bubble's body is the opening message laid out at the origin ([`body`]), a
+//! settled one collapsed to its first line; only its parse is the host's
+//! ([`crate::compose_node::ComposeHost::parse_markdown`]).
 
+pub mod body;
 pub mod placement;
 mod regions;
 
@@ -31,6 +32,7 @@ use crate::node_content::is_frame;
 use crate::scene_extent::content_extent;
 use crate::theme::appearance::{SpatialCommentAppearance, SpatialCommentChromeAppearance};
 use crate::translate_scene::translate_scene;
+use body::{COMMENT_TEXT_MAX_WIDTH_PX, collapse_resolved_body, layout_comment_body};
 use placement::{comment_leader_end, nearest_point_on_polyline, place_comment_bubble};
 use regions::{Region, region_outlines, regions_of};
 
@@ -261,6 +263,21 @@ fn messages_of(threads: &[CommentThread], id: &str) -> usize {
     threads.iter().rev().find(|thread| thread.id == id).map_or(1, |thread| thread.messages.len())
 }
 
+/// What a bubble holds (`bubbleBody`): the opening message, a settled one
+/// collapsed under the resolved overlay's text.
+fn bubble_body(
+    comment: &PlacedComment,
+    options: &ComposeOptions<'_>,
+    chrome: Option<&SpatialCommentAppearance>,
+) -> Vec<SceneNode> {
+    let laid = layout_comment_body(&comment.id, &comment.text, COMMENT_TEXT_MAX_WIDTH_PX, options);
+    if !comment.resolved {
+        return laid;
+    }
+    let text = chrome.and_then(|c| c.resolved_overlay.text.as_ref());
+    collapse_resolved_body(&laid, text, options)
+}
+
 /// One comment: leader, pin, count, bubble, then its body inside the bubble.
 fn compose_comment(
     comment: &PlacedComment,
@@ -270,7 +287,7 @@ fn compose_comment(
     chrome: Option<&SpatialCommentAppearance>,
 ) -> Vec<SceneNode> {
     let appearance = wear(comment, chrome);
-    let body = options.layout.host.comment_body(comment);
+    let body = bubble_body(comment, options, chrome);
     let extent = content_extent(&body);
     let room = COMMENT_BUBBLE_ROOM_PX;
     let bubble = place_comment_bubble(anchor, extent.right + room, extent.bottom + room, obstacles);

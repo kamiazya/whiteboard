@@ -2,13 +2,13 @@
 //! (`compose-comments.jsonl`): canvases carrying threads laid out whole, the
 //! scene compared to the last bit, where the walk's share ends, what the walk
 //! and then the pin counts asked the measurer, and the degradations reported.
-//! Each body as parsed, and each bubble's body laid out at the origin, are
-//! answered from the recording.
+//! Each body as parsed is answered from the recording; the bubbles' bodies are
+//! laid out by the port itself.
 
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use crate::canvas_wire::{Res, differ, f64_of};
+use crate::canvas_wire::{Res, differ, f64_of, hex};
 use crate::dump::dump_scene;
 use crate::seams::{CanvasWire, Context, Event, Host, OverlayWire, canvas_of};
 use crate::without_kind;
@@ -31,7 +31,7 @@ use whiteboard_model::annotation::{
 };
 use whiteboard_model::spatial::SpatialNode;
 use whiteboard_plugin_visual::render::StencilBadge;
-use whiteboard_scene::{Appearance, BoundingBox, NodeDecoration, Scene, SceneNode};
+use whiteboard_scene::{Appearance, BoundingBox, NodeDecoration, Scene};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -41,8 +41,7 @@ use wasm_bindgen_test::wasm_bindgen_test as test;
 struct Answer {
     scene: String,
     from: usize,
-    bodies: BTreeMap<String, Vec<SceneNode>>,
-    pin_counts: Vec<(String, String)>,
+    layer_calls: Vec<(String, String, String)>,
     walk_calls: usize,
     events: Vec<Event>,
 }
@@ -194,19 +193,17 @@ fn style_of(style: Option<&str>) -> RenderStyle<'_> {
     }
 }
 
-/// The measurer's questions past the walk's, as the recording keeps them.
+/// The measurer's questions past the walk's: the bodies', the pin counts' and
+/// the "Resolved" labels'.
 fn check_asked(asked: &[(String, String, f64)], want: &Answer) -> Res<()> {
     differ("walk measurer calls", &asked.len().min(want.walk_calls), &want.walk_calls)?;
-    let counts: Vec<(String, String)> = asked
+    let layer: Vec<(String, String, String)> = asked
         .get(want.walk_calls..)
         .unwrap_or_default()
         .iter()
-        .map(|(text, family, size)| {
-            differ("a pin count's size", size, &10.0)?;
-            Ok((text.clone(), family.clone()))
-        })
-        .collect::<Res<_>>()?;
-    differ("pin counts", &counts, &want.pin_counts)
+        .map(|(text, family, size)| (text.clone(), family.clone(), hex(*size)))
+        .collect();
+    differ("the layer's measurer calls", &layer, &want.layer_calls)
 }
 
 fn replay_case(context: &Context, case: &Case) -> Res<()> {
@@ -215,7 +212,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     let obstacles = case.obstacles.iter().flatten().map(box_of).collect::<Res<Vec<_>>>()?;
     let want = &case.answer;
     let overlay = OverlayWire { from: want.from, nodes: Vec::new() };
-    let host = Host::new(context, &overlay, None, want.bodies.clone());
+    let host = Host::new(context, &overlay, None);
     let measure = Asking { base: FakeMeasure::default(), asked: RefCell::new(Vec::new()) };
     let appearance = appearance_of(&case.appearance);
     let badge = StencilBadge { registry: &context.registry };
