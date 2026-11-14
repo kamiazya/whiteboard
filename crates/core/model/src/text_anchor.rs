@@ -67,6 +67,22 @@ pub struct OccurrenceRange {
     pub to: usize,
 }
 
+/// How much of `needle` is matched once `unit` follows a match of `k` units:
+/// fall back along the borders until `unit` extends one, then extend it.
+///
+/// Each fall-back strictly shortens the match, so it takes at most `k` steps;
+/// the loop says so, which also keeps a wrong border from spinning for ever.
+fn extend(needle: &[u16], border: &[usize], k: usize, unit: u16) -> usize {
+    let mut k = k;
+    for _ in 0..needle.len() {
+        if k == 0 || needle.get(k) == Some(&unit) {
+            break;
+        }
+        k = border.get(k.saturating_sub(1)).copied().unwrap_or(0);
+    }
+    if needle.get(k) == Some(&unit) { k.saturating_add(1) } else { k }
+}
+
 /// `border[i]`: the length of the longest proper prefix of `needle[..=i]` that
 /// is also its suffix, where matching resumes after a mismatch or a match.
 fn borders(needle: &[u16]) -> Vec<usize> {
@@ -74,12 +90,7 @@ fn borders(needle: &[u16]) -> Vec<usize> {
     let mut border = vec![0; needle.len().min(1)];
     let mut k = 0;
     for &unit in needle.iter().skip(1) {
-        while k > 0 && needle.get(k) != Some(&unit) {
-            k = border.get(k.saturating_sub(1)).copied().unwrap_or(0);
-        }
-        if needle.get(k) == Some(&unit) {
-            k = k.saturating_add(1);
-        }
+        k = extend(needle, &border, k, unit);
         border.push(k);
     }
     border
@@ -94,12 +105,7 @@ pub fn text_occurrences(haystack: &[u16], needle: &[u16]) -> Vec<usize> {
     let mut found = Vec::new();
     let mut k = 0;
     for (i, &unit) in haystack.iter().enumerate() {
-        while k > 0 && needle.get(k) != Some(&unit) {
-            k = border.get(k.saturating_sub(1)).copied().unwrap_or(0);
-        }
-        if needle.get(k) == Some(&unit) {
-            k = k.saturating_add(1);
-        }
+        k = extend(needle, &border, k, unit);
         if k == needle.len() && k > 0 {
             found.push(i.saturating_add(1).saturating_sub(k));
             k = border.get(k.saturating_sub(1)).copied().unwrap_or(0);
@@ -122,11 +128,7 @@ pub fn shared_context(
         ContextSide::Before => context.iter().rev().nth(shared),
         ContextSide::After => context.get(shared),
     };
-    let mut shared = 0;
-    while shared < reach && read(shared).as_ref() == expected(shared) {
-        shared = shared.saturating_add(1);
-    }
-    shared
+    (0..reach).take_while(|&shared| read(shared).as_ref() == expected(shared)).count()
 }
 
 /// Which of a quote's occurrences resolution scores around `around`, given
@@ -135,7 +137,9 @@ pub fn shared_context(
 /// a sorted list are contiguous in it, so a range says it exactly.
 #[must_use]
 pub fn scored_occurrence_range(sorted: &[usize], around: usize, max: usize) -> OccurrenceRange {
-    let split = sorted.partition_point(|&at| at < around);
+    // Where `around` sorts: occurrences are distinct, so an equal one is
+    // the first of `after`, at distance 0.
+    let (Ok(split) | Err(split)) = sorted.binary_search(&around);
     let before = sorted.get(..split).unwrap_or_default().iter().rev();
     let mut after = sorted.get(split..).unwrap_or_default().iter().peekable();
     let mut before = before.peekable();
