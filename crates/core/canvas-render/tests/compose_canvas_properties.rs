@@ -18,16 +18,19 @@ use whiteboard_canvas_render::compose_node::{
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::node_box::ResolvedReference;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
+use whiteboard_canvas_render::theme::spatial_theme::SpatialTheme;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::engine::ThemeTokens;
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{CanvasEdge, EdgeEnd, NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
+use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_plugin_visual::visual::{TagKeyDeclaration, TagLibrary, TagValueDeclaration};
 use whiteboard_proptest::proptest::prelude::{Strategy, any, prop, prop_assert_eq};
 use whiteboard_proptest::{Floor, check};
-use whiteboard_scene::SceneNode;
+use whiteboard_scene::{NodeDecoration, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -214,82 +217,100 @@ fn library() -> TagLibrary {
     ]
 }
 
+/// The bundled themes and the test one, as the recording's meta line holds them.
+fn themes() -> Result<Vec<(String, ThemeTokens)>, String> {
+    let text = include_str!("../../../../packages/canvas-render/src/oracle/compose-canvas.jsonl");
+    let meta: Value = serde_json::from_str(text.lines().next().unwrap_or_default())
+        .map_err(|e| format!("the meta line: {e}"))?;
+    let pairs = meta.get("themes").and_then(Value::as_array).ok_or("the meta line's themes")?;
+    pairs
+        .iter()
+        .map(|pair| {
+            let id = pair.get(0).and_then(Value::as_str).ok_or("a theme id")?;
+            Ok((id.to_owned(), tokens::theme_tokens(pair.get(1).ok_or("a theme")?)?))
+        })
+        .collect()
+}
+
+const STYLES: [RenderStyle<'static>; 4] = [
+    RenderStyle::Clean,
+    RenderStyle::Document,
+    RenderStyle::Theme("visual.neon"),
+    RenderStyle::Theme("test.boxy"),
+];
+
+/// What every layout of the property shares.
+struct Fixture {
+    themes: Vec<(String, ThemeTokens)>,
+    registry: Registry,
+    declared: TagLibrary,
+    measure: FakeMeasure,
+    appearance: SpatialTheme,
+}
+
+fn options_of<'a>(
+    fixture: &'a Fixture,
+    decorations: &'a [&'a dyn NodeDecoration],
+    style: RenderStyle<'a>,
+    library: bool,
+) -> LayoutOptions<'a> {
+    LayoutOptions {
+        measure: &fixture.measure,
+        appearance: &fixture.appearance,
+        geometry: None,
+        style,
+        themes: &fixture.themes,
+        font_available: None,
+        registry: &fixture.registry,
+        decorations,
+        tag_library: library.then_some(&fixture.declared),
+        suppressed: &[],
+        locked: &[],
+        side_overrides: None,
+        host: &Plain,
+        overlays: &Plain,
+        content_cache: None,
+        body: BodySeams {
+            inline: &Plain,
+            highlight: None,
+            math: None,
+            diagram: None,
+            embeds: None,
+        },
+        budget: None,
+        embed_path: &[],
+    }
+}
+
+/// Whether the library colours one of the canvas's edges.
+fn colours_an_edge(canvas: &SpatialCanvas, library: bool) -> bool {
+    library
+        && canvas
+            .edges
+            .iter()
+            .any(|e| e.tags.iter().flatten().any(|t| t == "health:ok" || t == "team:core"))
+}
+
 #[test]
 fn the_edges_alone_are_the_whole_layouts_edge_suffix() {
-    let meta: Value = serde_json::from_str(
-        include_str!("../../../../packages/canvas-render/src/oracle/compose-canvas.jsonl")
-            .lines()
-            .next()
-            .unwrap_or_default(),
-    )
-    .unwrap_or_else(|e| panic!("the meta line: {e}"));
-    let themes: Vec<(String, ThemeTokens)> = meta["themes"]
-        .as_array()
-        .into_iter()
-        .flatten()
-        .map(|pair| {
-            let tokens = tokens::theme_tokens(&pair[1]).unwrap_or_else(|e| panic!("a theme: {e}"));
-            (pair[0].as_str().unwrap_or_default().to_owned(), tokens)
-        })
-        .collect();
-    let registry = visual_registry().unwrap_or_else(|e| panic!("the bundled plugin: {e:?}"));
-    let declared = library();
-    let measure = FakeMeasure::default();
-    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
-    let badge = whiteboard_plugin_visual::render::StencilBadge { registry: &registry };
-    let decorations: [&dyn whiteboard_scene::NodeDecoration; 1] = [&badge];
+    let fixture = Fixture {
+        themes: themes().unwrap_or_else(|e| panic!("{e}")),
+        registry: visual_registry().unwrap_or_else(|e| panic!("the bundled plugin: {e:?}")),
+        declared: library(),
+        measure: FakeMeasure::default(),
+        appearance: create_spatial_theme(SpatialThemeMode::Light, None),
+    };
+    let badge = StencilBadge { registry: &fixture.registry };
+    let decorations: [&dyn NodeDecoration; 1] = [&badge];
     let inked = Floor::new("a themed board with an edge");
     let coloured = Floor::new("an edge coloured by the library");
     check(board(), Some(64), |(canvas, style, library)| {
-        let style = pick(
-            &[
-                RenderStyle::Clean,
-                RenderStyle::Document,
-                RenderStyle::Theme("visual.neon"),
-                RenderStyle::Theme("test.boxy"),
-            ],
-            style,
-        );
-        let options = LayoutOptions {
-            measure: &measure,
-            appearance: &appearance,
-            geometry: None,
-            style,
-            themes: &themes,
-            font_available: None,
-            registry: &registry,
-            decorations: &decorations,
-            tag_library: library.then_some(&declared),
-            suppressed: &[],
-            locked: &[],
-            side_overrides: None,
-            host: &Plain,
-            overlays: &Plain,
-            content_cache: None,
-            body: BodySeams {
-                inline: &Plain,
-                highlight: None,
-                math: None,
-                diagram: None,
-                embeds: None,
-            },
-            budget: None,
-            embed_path: &[],
-        };
+        let options = options_of(&fixture, &decorations, pick(&STYLES, style), library);
         let whole = layout_spatial_canvas(&canvas, &options).scene.nodes;
         let alone = layout_spatial_edges(&canvas, &options);
         let suffix = whole.get(whole.len() - alone.len()..).unwrap_or_default();
-        let has_edge = !canvas.edges.is_empty();
-        inked.draw(
-            has_edge && alone.iter().any(|n| matches!(n, SceneNode::Edge(e) if e.ink.is_some())),
-        );
-        coloured.draw(
-            library
-                && canvas
-                    .edges
-                    .iter()
-                    .any(|e| e.tags.iter().flatten().any(|t| t == "health:ok" || t == "team:core")),
-        );
+        inked.draw(alone.iter().any(|n| matches!(n, SceneNode::Edge(e) if e.ink.is_some())));
+        coloured.draw(colours_an_edge(&canvas, library));
         prop_assert_eq!(alone.as_slice(), suffix);
         Ok(())
     });

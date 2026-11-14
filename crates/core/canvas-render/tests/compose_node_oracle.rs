@@ -553,14 +553,19 @@ impl<'c> Setup<'c> {
     }
 
     /// One composition, over `cache`; the TypeScript opens a fresh budget for each.
-    fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> Res<String> {
-        let budget = match self.host.case.budget {
+    /// The account a composition opens: the case's, else spent, else a fresh one.
+    fn budget(&self) -> NestedLayoutBudget {
+        match self.host.case.budget {
             Some([layouts, elements]) => NestedLayoutBudget::with_remaining(layouts, elements),
             None if self.host.case.on("spent") => {
                 NestedLayoutBudget::with_remaining(0, NestedLayoutBudget::ELEMENTS)
             }
             None => NestedLayoutBudget::new(),
-        };
+        }
+    }
+
+    fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> Res<String> {
+        let budget = self.budget();
         let layout = LayoutOptions {
             measure: &self.measure,
             appearance: self.appearance.as_ref(),
