@@ -9,6 +9,7 @@ import {
 import { visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import type {
   HeadingBlockNode,
+  ParagraphBlockNode,
   Scene,
   ShapeSceneNode,
   TextRunNode,
@@ -295,7 +296,9 @@ describe('layoutSpatialCanvas', () => {
       )
       expect(chrome, id).toBeDefined()
       expect(chrome?.shape, id).toBeUndefined()
-      const block = scene.nodes.find((n) => n.kind === 'paragraph' && n.bbox.y >= 300)
+      const block = scene.nodes.find(
+        (n): n is ParagraphBlockNode => n.kind === 'paragraph' && n.bbox.y >= 300,
+      )
       expect(block?.bbox.y, id).toBe(300 + NODE_PADDING_PX)
     }
   })
