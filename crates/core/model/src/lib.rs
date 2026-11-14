@@ -10,6 +10,7 @@
 // line of production code.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+pub mod annotation;
 pub mod checks;
 pub mod frames;
 pub mod json;
