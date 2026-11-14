@@ -744,7 +744,9 @@ function resolveNodeOutlines(
       chosen = defaultShape
     }
     if (chosen === undefined) continue
-    fromFacets ??= {}
+    // No prototype: the table is read by node id, and an id such as
+    // `constructor` would otherwise find Object.prototype's member there.
+    fromFacets ??= Object.create(null) as Record<string, string>
     fromFacets[node.id] = chosen
   }
   return fromFacets
