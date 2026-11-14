@@ -44,6 +44,7 @@ pub mod measure;
 pub mod measure_memo;
 pub mod node_box;
 pub mod node_outline;
+pub mod proposals;
 pub mod scale_scene;
 pub mod scene_bounds;
 pub mod scene_digest;

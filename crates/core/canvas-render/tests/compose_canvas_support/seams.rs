@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::Value;
-use whiteboard_canvas_render::compose_canvas::{Overlaid, Overlays};
+use whiteboard_canvas_render::compose_canvas::Overlays;
 use whiteboard_canvas_render::compose_node::{
     ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed,
 };
@@ -318,7 +318,12 @@ impl EmbedResolver for Host<'_> {
 
 impl Overlays for Host<'_> {
     /// The recorded overlays, once: the corpus lays out no nested canvas.
-    fn overlay(&self, _: &SpatialCanvas, drawn: &[SceneNode], _: &ComposeOptions<'_>) -> Overlaid {
+    fn overlay(
+        &self,
+        _: &SpatialCanvas,
+        drawn: &[SceneNode],
+        _: &ComposeOptions<'_>,
+    ) -> Option<SceneLegend> {
         self.overlaid.set(self.overlaid.get() + 1);
         if self.overlaid.get() > 1 {
             self.miss("a second overlay".to_owned());
@@ -330,7 +335,10 @@ impl Overlays for Host<'_> {
                 self.overlay.from
             ));
         }
-        Overlaid { nodes: self.overlay.nodes.clone(), legend: self.legend.clone() }
+        if !self.overlay.nodes.is_empty() {
+            self.miss(format!("{} overlay nodes recorded", self.overlay.nodes.len()));
+        }
+        self.legend.clone()
     }
 }
 

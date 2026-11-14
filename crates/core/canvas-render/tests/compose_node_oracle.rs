@@ -28,7 +28,7 @@ use extras::{Decoration, Fit};
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::comments::CommentOptions;
-use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlaid, Overlays, RenderStyle};
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlays, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed, compose_node,
 };
@@ -54,7 +54,7 @@ use whiteboard_model::spatial::{
     SpatialCanvas, SpatialNode,
 };
 use whiteboard_plugin_visual::host::visual_registry;
-use whiteboard_scene::{Scene, SceneNode};
+use whiteboard_scene::{Scene, SceneLegend, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -403,9 +403,14 @@ impl ComposeHost for Host<'_> {
 
 /// No recorded case lays a nested canvas out, so no overlay is asked for.
 impl Overlays for Host<'_> {
-    fn overlay(&self, _: &SpatialCanvas, _: &[SceneNode], _: &ComposeOptions<'_>) -> Overlaid {
+    fn overlay(
+        &self,
+        _: &SpatialCanvas,
+        _: &[SceneNode],
+        _: &ComposeOptions<'_>,
+    ) -> Option<SceneLegend> {
         self.miss("an overlay".to_owned());
-        Overlaid::default()
+        None
     }
 }
 
@@ -583,6 +588,7 @@ impl<'c> Setup<'c> {
             host: &self.host,
             overlays: &self.host,
             comments: CommentOptions::default(),
+            proposals: &[],
             content_cache: cache.map(|c| c as &dyn ContentCache),
             body: BodySeams {
                 inline: &self.host,

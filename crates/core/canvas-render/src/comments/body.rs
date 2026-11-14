@@ -22,6 +22,16 @@ use crate::typeset::{first_line_of_blocks, typeset_mdast_blocks};
 /// with its text covers what it is about.
 pub const COMMENT_TEXT_MAX_WIDTH_PX: f64 = 200.0;
 
+/// How much room the surface drawing a comment's prose has. Not a theme: a
+/// surface never picks a comment's typography, only its density.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CommentDensity {
+    /// A bubble floating at canvas reading size: the node theme.
+    Comfortable,
+    /// A panel, or a bubble that carries a count rather than prose.
+    Compact,
+}
+
 const RESOLVED_LABEL: &str = "Resolved";
 const RESOLVED_LABEL_FONT_PX: f64 = 11.0;
 const RESOLVED_LABEL_GAP_PX: f64 = 2.0;
@@ -35,7 +45,7 @@ fn literal_root(text: &str) -> Root {
     }
 }
 
-/// A comment's markdown laid out at the origin, `max_width` wide
+/// A comment's markdown laid out at the origin, `max_width` wide at `density`
 /// (`layoutCommentBody`). A body the host cannot parse is reported against the
 /// comment's id and drawn as its literal text, so the comment stays on screen.
 #[must_use]
@@ -43,6 +53,7 @@ pub fn layout_comment_body(
     id: &str,
     text: &str,
     max_width: f64,
+    density: CommentDensity,
     options: &ComposeOptions<'_>,
 ) -> Vec<SceneNode> {
     let host = options.layout.host;
@@ -50,7 +61,11 @@ pub fn layout_comment_body(
         host.degrade(Degradation::BodyParseFailed { node_id: id.to_owned() });
         literal_root(text)
     });
-    let style = MdastStyle { theme: MarkdownTheme::node(), ..mdast_style_for(&options.node_box) };
+    let theme = match density {
+        CommentDensity::Comfortable => MarkdownTheme::node(),
+        CommentDensity::Compact => MarkdownTheme::compact(),
+    };
+    let style = MdastStyle { theme, ..mdast_style_for(&options.node_box) };
     typeset_mdast_blocks(&root, &style.options(max_width, options)).nodes
 }
 

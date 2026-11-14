@@ -201,6 +201,7 @@ impl<'c> Setup<'c> {
             host: &host,
             overlays: &host,
             comments: CommentOptions::default(),
+            proposals: &[],
             content_cache: cache.as_ref().map(|c| c as &dyn ContentCache),
             body: BodySeams {
                 inline: &host,

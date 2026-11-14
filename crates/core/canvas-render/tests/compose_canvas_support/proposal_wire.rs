@@ -5,7 +5,8 @@
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_model::proposal::{
-    ChangeOp, ChangeStatus, ElementPatchFields, NodePatchFields, ProposedChange, SpatialChange,
+    ChangeOp, ChangeStatus, ElementPatchFields, NodePatchFields, Proposal, ProposedChange,
+    SpatialChange,
 };
 use whiteboard_model::spatial::BackgroundStyle;
 
@@ -29,6 +30,13 @@ pub(crate) struct ChangeWire {
     line_id: Option<String>,
     patch: Option<Value>,
     assumed: Option<Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ProposalWire {
+    id: String,
+    changes: Vec<ChangeWire>,
 }
 
 #[derive(Deserialize)]
@@ -162,4 +170,11 @@ pub(crate) fn change_of(wire: &ChangeWire) -> Res<ProposedChange> {
         ChangeOp::Spatial(Box::new(spatial_of(wire)?))
     };
     Ok(ProposedChange { id: wire.id.clone(), status, op })
+}
+
+pub(crate) fn proposal_of(wire: &ProposalWire) -> Res<Proposal> {
+    Ok(Proposal {
+        id: wire.id.clone(),
+        changes: wire.changes.iter().map(change_of).collect::<Res<_>>()?,
+    })
 }

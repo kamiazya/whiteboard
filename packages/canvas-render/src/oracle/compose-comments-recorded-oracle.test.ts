@@ -7,7 +7,7 @@ import {
 import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
 
 /**
- * The committed recording of what the comment layer draws over a whole canvas
+ * The committed recording of what the comment and proposal layers draw over a whole canvas
  * equals what it draws today, and the Rust port replays it exactly
  * (`tests/compose_canvas_support/comments.rs` in `crates/core/canvas-render`). Re-record
  * after a deliberate change with
@@ -65,6 +65,26 @@ describe('the recorded compose-comments oracle', () => {
     expect(
       cases.some((c) => c.answer.events.some((e) => e.kind === 'body-parse-failed')),
       'a body that does not parse',
+    ).toBe(true)
+  })
+
+  it('reaches every outcome the proposal layer has', () => {
+    const scenes = cases.map((c) => c.answer.scene)
+    const has = (what: string, needle: string, want = true) =>
+      expect(
+        scenes.some((s) => s.includes(needle)),
+        what,
+      ).toBe(want)
+    for (const id of ['p-add', 'p-mixed', 'p-edge', 'p-new-edges', 'p-ink', 'p-throws']) {
+      has(`a bubble for ${id}`, `"${id}/bubble"`)
+    }
+    for (const id of ['p-gone', 'p-decided', 'p-prose'])
+      has(`no bubble for ${id}`, `"${id}/`, false)
+    has('a count that needs a look', 'needs')
+    has('a proposal beside a comment', '"mixed-p/bubble"')
+    expect(
+      cases.some((c) => c.answer.events.some((e) => e.nodeId === 'p-throws')),
+      'a label that does not parse',
     ).toBe(true)
   })
 

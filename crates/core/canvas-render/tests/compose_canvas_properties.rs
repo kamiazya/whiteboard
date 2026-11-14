@@ -11,7 +11,7 @@ mod tokens;
 use serde_json::Value;
 use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{
-    LayoutOptions, Overlaid, Overlays, RenderStyle, layout_spatial_canvas, layout_spatial_edges,
+    LayoutOptions, Overlays, RenderStyle, layout_spatial_canvas, layout_spatial_edges,
 };
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed,
@@ -31,7 +31,7 @@ use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_plugin_visual::visual::{TagKeyDeclaration, TagLibrary, TagValueDeclaration};
 use whiteboard_proptest::proptest::prelude::{Strategy, any, prop, prop_assert_eq};
 use whiteboard_proptest::{Floor, check};
-use whiteboard_scene::{NodeDecoration, SceneNode};
+use whiteboard_scene::{NodeDecoration, SceneLegend, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -91,8 +91,13 @@ impl InlineSeams for Plain {
 }
 
 impl Overlays for Plain {
-    fn overlay(&self, _: &SpatialCanvas, _: &[SceneNode], _: &ComposeOptions<'_>) -> Overlaid {
-        Overlaid::default()
+    fn overlay(
+        &self,
+        _: &SpatialCanvas,
+        _: &[SceneNode],
+        _: &ComposeOptions<'_>,
+    ) -> Option<SceneLegend> {
+        None
     }
 }
 
@@ -271,6 +276,7 @@ fn options_of<'a>(
         host: &Plain,
         overlays: &Plain,
         comments: CommentOptions::default(),
+        proposals: &[],
         content_cache: None,
         body: BodySeams {
             inline: &Plain,

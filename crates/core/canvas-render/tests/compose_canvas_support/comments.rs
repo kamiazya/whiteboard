@@ -1,5 +1,6 @@
-//! The comment layer against the recorded TypeScript answers
-//! (`compose-comments.jsonl`): canvases carrying threads laid out whole, the
+//! The annotation layers against the recorded TypeScript answers
+//! (`compose-comments.jsonl`): canvases carrying threads and proposals laid
+//! out whole, the
 //! scene compared to the last bit (the passage highlights the walk draws behind
 //! a quoted body included), where the walk's share ends, every question the
 //! layout asked the measurer, and the degradations reported.
@@ -11,6 +12,7 @@ use std::collections::BTreeMap;
 
 use crate::canvas_wire::{Res, differ, f64_of, hex};
 use crate::dump::dump_scene;
+use crate::proposal_wire::{ProposalWire, proposal_of};
 use crate::seams::{CanvasWire, Context, Event, Host, OverlayWire, canvas_of};
 use crate::without_kind;
 use serde::Deserialize;
@@ -94,6 +96,7 @@ struct Case {
     board: String,
     canvas: CanvasWire,
     threads: Vec<ThreadWire>,
+    proposals: Option<Vec<ProposalWire>>,
     appearance: String,
     style: Option<String>,
     show_resolved: Option<bool>,
@@ -168,7 +171,7 @@ impl Measure for Asking {
     }
 }
 
-/// A resolver that paints as the one it wraps and has no comment chrome.
+/// A resolver that paints as the one it wraps and has no annotation chrome.
 struct Bare<R>(R);
 
 impl<R: SpatialAppearanceResolver> SpatialAppearanceResolver for Bare<R> {
@@ -197,7 +200,7 @@ impl<R: SpatialAppearanceResolver> SpatialAppearanceResolver for Bare<R> {
     }
 
     fn resolve_proposal(&self) -> Option<SpatialProposalAppearance> {
-        self.0.resolve_proposal()
+        None
     }
 }
 
@@ -230,6 +233,7 @@ fn check_asked(asked: &[(String, String, f64)], want: &Answer) -> Res<()> {
 fn replay_case(context: &Context, case: &Case) -> Res<()> {
     let canvas = canvas_of(&case.canvas)?;
     let threads = case.threads.iter().map(thread_of).collect::<Res<Vec<_>>>()?;
+    let proposals = case.proposals.iter().flatten().map(proposal_of).collect::<Res<Vec<_>>>()?;
     let obstacles = case.obstacles.iter().flatten().map(box_of).collect::<Res<Vec<_>>>()?;
     let want = &case.answer;
     let overlay = OverlayWire { from: want.from, nodes: Vec::new() };
@@ -258,6 +262,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
             show_resolved: case.show_resolved == Some(true),
             obstacles: &obstacles,
         },
+        proposals: &proposals,
         content_cache: None,
         body: BodySeams { inline: &host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,

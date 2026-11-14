@@ -6,9 +6,9 @@
 //!
 //! Each canvas is coloured by intent first, then settles its own theme and
 //! silhouettes; every node is drawn in paint order with its decorations, then
-//! every edge and line, then the comment layer ([`crate::comments`]), then what
-//! the overlays draw over all of it. The overlays (proposals and the legend)
-//! are a seam until they are ported.
+//! every edge and line, then the comment layer ([`crate::comments`]), then the
+//! proposal layer ([`crate::proposals`]). The legend is a seam until it is
+//! ported.
 
 mod level;
 
@@ -17,6 +17,7 @@ use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::frames::members_of;
+use whiteboard_model::proposal::Proposal;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::visual::TagLibrary;
 use whiteboard_scene::{BoundingBox, NodeDecoration, Scene, SceneLegend, SceneNode};
@@ -28,6 +29,7 @@ use crate::compose_node::{
 };
 use crate::declared_colours::with_declared_colours;
 use crate::measure::Measure;
+use crate::proposals::compose_proposals;
 use crate::scene_walk::SceneWalk;
 use crate::theme::appearance::SpatialAppearanceResolver;
 use crate::theme::geometry::SpatialGeometry;
@@ -47,26 +49,18 @@ pub enum RenderStyle<'a> {
     Theme(&'a str),
 }
 
-/// What the overlays draw over a laid-out canvas.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct Overlaid {
-    /// Drawn after the comment layer: the proposals.
-    pub nodes: Vec<SceneNode>,
-    pub legend: Option<SceneLegend>,
-}
-
-/// The layers drawn over a canvas once its nodes, edges and comments are: the
-/// proposal layer and the legend.
+/// What is drawn over a canvas once its nodes, edges and annotation layers
+/// are: the legend.
 pub trait Overlays {
-    /// What is drawn over `canvas`, given what the walk drew of it (`drawn`, in
-    /// paint order: every node, then every edge and label, the comment layer
-    /// not included) and the options its nodes were composed with.
+    /// The legend of `canvas`, given what the walk drew of it (`drawn`, in
+    /// paint order: every node, then every edge and label, the annotation
+    /// layers not included) and the options its nodes were composed with.
     fn overlay(
         &self,
         canvas: &SpatialCanvas,
         drawn: &[SceneNode],
         options: &ComposeOptions<'_>,
-    ) -> Overlaid;
+    ) -> Option<SceneLegend>;
 }
 
 /// What a caller asks a layout for (`SpatialLayoutOptions`).
@@ -98,6 +92,9 @@ pub struct LayoutOptions<'a> {
     pub overlays: &'a dyn Overlays,
     /// The comment layer, drawn over the canvas asked for and none nested in it.
     pub comments: CommentOptions<'a>,
+    /// This document's proposals, drawn over the canvas asked for and none
+    /// nested in it.
+    pub proposals: &'a [Proposal],
     pub content_cache: Option<&'a dyn ContentCache>,
     pub body: BodySeams<'a>,
     /// The nested-layout account this canvas spends from when it is itself
@@ -171,14 +168,13 @@ fn walk(
     if !place.annotated {
         return LaidOut { scene: Scene { nodes, legend: None }, anchors: edges.anchors };
     }
-    let comments = {
-        let drawn = Drawn { all: &nodes, edges: nodes.get(from..).unwrap_or_default() };
-        compose_comment_layer(&canvas, &drawn, &compose)
-    };
-    let overlaid = options.overlays.overlay(&canvas, &nodes, &compose);
+    let drawn = Drawn { all: &nodes, edges: nodes.get(from..).unwrap_or_default() };
+    let comments = compose_comment_layer(&canvas, &drawn, &compose);
+    let proposals = compose_proposals(&canvas, drawn.edges, &compose);
+    let legend = options.overlays.overlay(&canvas, &nodes, &compose);
     nodes.extend(comments);
-    nodes.extend(overlaid.nodes);
-    LaidOut { scene: Scene { nodes, legend: overlaid.legend }, anchors: edges.anchors }
+    nodes.extend(proposals);
+    LaidOut { scene: Scene { nodes, legend }, anchors: edges.anchors }
 }
 
 /// A canvas laid out (`layoutSpatialCanvasWithAnchors`): every node in paint

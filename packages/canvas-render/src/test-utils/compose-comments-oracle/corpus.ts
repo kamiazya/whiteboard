@@ -1,9 +1,11 @@
 import type {
   CanvasEdge,
   CommentThread,
+  Proposal,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { proposalBoards } from '../proposal-oracle/layer-corpus.js'
 
 /**
  * The inputs of the compose-comments recording: canvases carrying comment
@@ -19,6 +21,8 @@ export interface Board {
   readonly name: string
   readonly canvas: SpatialCanvas
   readonly threads: readonly CommentThread[]
+  /** The proposal layer's boards carry proposals; the comment layer's none. */
+  readonly proposals?: readonly Proposal[]
 }
 
 /** The base appearance: the bundled theme in either mode, or one with no comment chrome. */
@@ -280,6 +284,7 @@ export const boards = (): readonly Board[] => [
   inside(),
   settled(),
   passages(),
+  ...proposalBoards(),
 ]
 
 export const caseSpecs = (): readonly CaseSpec[] => [
@@ -306,4 +311,10 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'passages', appearance: 'light' },
   { board: 'passages', appearance: 'dark', showResolved: true },
   { board: 'passages', appearance: 'bare', showResolved: true },
+  { board: 'proposals', appearance: 'light' },
+  { board: 'proposals', appearance: 'dark', style: 'visual.sketch' },
+  { board: 'proposals', appearance: 'bare' },
+  { board: 'proposals-crowd', appearance: 'light' },
+  { board: 'proposals-crowd', appearance: 'bare' },
+  { board: 'proposals-mixed', appearance: 'light' },
 ]
