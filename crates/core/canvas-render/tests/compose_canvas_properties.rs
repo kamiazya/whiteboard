@@ -21,7 +21,7 @@ use whiteboard_canvas_render::node_box::ResolvedReference;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::SpatialTheme;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
-use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
+use whiteboard_canvas_render::typeset::{IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
@@ -47,10 +47,6 @@ impl ComposeHost for Plain {
 
     fn resolve_reference(&self, _: &str) -> Option<ResolvedReference> {
         None
-    }
-
-    fn passage_highlights(&self, _: &SpatialNode, _: &str, _: &FittedBlocks) -> Vec<SceneNode> {
-        Vec::new()
     }
 
     fn expand_file_node(&self, _: &SpatialNode) -> bool {

@@ -5,6 +5,7 @@ use whiteboard_model::spatial::SpatialNode;
 use whiteboard_scene::SceneNode;
 
 use super::{ComposeOptions, Degradation};
+use crate::comments::passage::passage_highlights;
 use crate::node_box::{
     NodeBoxOptions, chrome_shape, chrome_with_fit, content_width, fit_scene_in_node, label_run,
     place_in_node,
@@ -167,11 +168,8 @@ pub(super) fn compose_text_node(
         cached.unwrap_or_else(|| lay_out_body(node, text, max_width, key.as_deref(), options));
     // Behind the runs and in the same origin-relative space, so placing the
     // body carries them into the node with it.
-    let mut content = if options.annotated {
-        options.layout.host.passage_highlights(node, text, &body)
-    } else {
-        Vec::new()
-    };
+    let mut content =
+        if options.annotated { passage_highlights(node, text, &body, options) } else { Vec::new() };
     let chrome = chrome_with_fit(node, nb, body.truncated, body.overflows);
     content.extend(body.nodes);
     let mut drawn = vec![SceneNode::Shape(Box::new(chrome))];

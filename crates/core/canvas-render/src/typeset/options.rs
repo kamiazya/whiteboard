@@ -89,7 +89,7 @@ pub(super) fn code_line_height_px(theme: &MarkdownTheme) -> f64 {
 
 /// A run's weight and slant, and whether it is struck through.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
-pub(super) struct Style {
+pub(crate) struct Style {
     pub emphasis: bool,
     pub strong: bool,
     pub deleted: bool,
@@ -97,7 +97,7 @@ pub(super) struct Style {
 
 /// The font a run is measured in. Bold glyphs are wider, so a strong run
 /// measured at 400 would wrap where the painted 700 text does not.
-pub(super) fn body_font(family: &str, size_px: f64, style: Style) -> FontDescriptor {
+pub(crate) fn body_font(family: &str, size_px: f64, style: Style) -> FontDescriptor {
     FontDescriptor {
         family: family.to_owned(),
         fallback_chain: Vec::new(),
