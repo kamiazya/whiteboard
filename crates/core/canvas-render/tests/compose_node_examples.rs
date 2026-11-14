@@ -1,8 +1,10 @@
 //! What `compose-node.jsonl` does not reach: the recording asks for no passage
-//! highlights, since the comment layer that answers them is a host seam here.
+//! highlights, since the comment layer that answers them is a host seam here,
+//! and they are drawn only where that layer reaches.
 
 use std::cell::Cell;
 
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlaid, Overlays, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed, compose_node,
 };
@@ -13,6 +15,7 @@ use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
+use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -62,24 +65,8 @@ impl ComposeHost for Marking {
         false
     }
 
-    fn layout_nested_canvas(&self, _: &SpatialCanvas, _: &ComposeOptions<'_>) -> Vec<SceneNode> {
-        Vec::new()
-    }
-
     fn embedded_canvas(&self, _: &str, _: Option<&str>) -> Option<SpatialCanvas> {
         None
-    }
-
-    fn body_suppressed(&self, _: &str) -> bool {
-        false
-    }
-
-    fn locked(&self, _: &str) -> bool {
-        false
-    }
-
-    fn empty_frame(&self, _: &str) -> bool {
-        false
     }
 
     fn degrade(&self, _: Degradation) {
@@ -142,13 +129,37 @@ fn kinds_of(drawn: &[SceneNode]) -> Vec<String> {
         .collect()
 }
 
-#[test]
-fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
+impl Overlays for Marking {
+    fn overlay(&self, _: &SpatialCanvas, _: &[SceneNode], _: &ComposeOptions<'_>) -> Overlaid {
+        Overlaid::default()
+    }
+}
+
+/// `hello_at(100, 50)` composed, its passages drawn or not.
+fn hello_composed(host: &Marking, registry: &Registry, annotated: bool) -> Vec<SceneNode> {
     let measure = FakeMeasure::default();
     let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
     let budget = NestedLayoutBudget::new();
-    let host = Marking::default();
-    let registry = visual_registry().expect("the bundled plugin loads");
+    let layout = LayoutOptions {
+        measure: &measure,
+        appearance: &appearance,
+        geometry: None,
+        style: RenderStyle::Clean,
+        themes: &[],
+        font_available: None,
+        registry,
+        decorations: &[],
+        tag_library: None,
+        suppressed: &[],
+        locked: &[],
+        side_overrides: None,
+        host,
+        overlays: host,
+        content_cache: None,
+        body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
+        budget: None,
+        embed_path: &[],
+    };
     let options = ComposeOptions {
         node_box: NodeBoxOptions {
             measure: &measure,
@@ -157,22 +168,35 @@ fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
             fit_to_box: true,
             theme: None,
             outlines: &NodeOutlines::default(),
-            registry: &registry,
+            registry,
         },
         theme_id: None,
-        host: &host,
-        content_cache: None,
-        body: BodySeams { inline: &host, highlight: None, math: None, diagram: None, embeds: None },
+        layout: &layout,
         budget: &budget,
         embed_path: &[],
         embed_depth: 0,
+        empty_frames: &[],
+        annotated,
     };
-    let node = hello_at(100.0, 50.0);
-    let drawn = compose_node(&node, &options);
+    compose_node(&hello_at(100.0, 50.0), &options)
+}
+
+#[test]
+fn passage_highlights_are_drawn_behind_the_body_and_placed_with_it() {
+    let host = Marking::default();
+    let registry = visual_registry().expect("the bundled plugin loads");
+    let drawn = hello_composed(&host, &registry, true);
     let pad = SPATIAL_THEME_GEOMETRY.padding_px;
     let kinds = kinds_of(&drawn);
     assert_eq!(kinds, ["t", "mark", "paragraph"]);
     let Some(SceneNode::Shape(highlight)) = drawn.get(1) else { panic!("a highlight") };
     assert_eq!(highlight.bbox, BoundingBox { x: 100.0 + pad, y: 50.0 + pad, w: 5.0, h: 5.0 });
     assert_eq!(host.degraded.get(), 0, "nothing degrades here");
+}
+
+#[test]
+fn a_canvas_the_comment_layer_does_not_reach_draws_no_passage() {
+    let host = Marking::default();
+    let registry = visual_registry().expect("the bundled plugin loads");
+    assert_eq!(kinds_of(&hello_composed(&host, &registry, false)), ["t", "paragraph"]);
 }

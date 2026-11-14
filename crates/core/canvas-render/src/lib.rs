@@ -23,9 +23,11 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod budoux;
+pub mod compose_canvas;
 pub mod compose_edges;
 pub mod compose_node;
 pub mod constant_ratio;
+pub mod declared_colours;
 pub mod edge_arrows;
 pub mod edge_flatten;
 pub mod fake_measure;

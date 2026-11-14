@@ -144,7 +144,7 @@ pub(super) fn compose_file_node(
     node: &SpatialNode,
     options: &ComposeOptions<'_>,
 ) -> Vec<SceneNode> {
-    let resolved = node_file(node).and_then(|file| options.host.resolve_reference(file));
+    let resolved = node_file(node).and_then(|file| options.layout.host.resolve_reference(file));
     let resolved = resolved.as_ref();
     file_image(node, resolved, options)
         .or_else(|| file_embed(node, resolved, options))

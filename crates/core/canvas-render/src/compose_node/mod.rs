@@ -6,11 +6,11 @@
 //! What the composer knows and this crate does not is asked through
 //! [`ComposeHost`]: the body parser with its reference resolution, a reference's
 //! resolution, the comment layer's passage highlights, the expansion policy over
-//! a file node, a body's canvas embed target, and the layout of a canvas nested
-//! in another. Each is a seam rather than a port because the code that answers
-//! it lives in another layer (the markdown parser, the keeper, the caller's
-//! policy) or has not been ported yet (the composer over a whole canvas); the
-//! replay answers it from the recording.
+//! a file node and a body's canvas embed target. Each is a seam rather than a
+//! port because the code that answers it lives in another layer (the markdown
+//! parser, the keeper, the caller's policy) or has not been ported yet (the
+//! comment layer); the replay answers it from the recording. A canvas nested in
+//! another is laid out by the composer's own walk ([`crate::compose_canvas`]).
 
 mod decoration;
 mod embed;
@@ -22,6 +22,7 @@ use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{BackgroundStyle, SpatialCanvas, SpatialNode};
 use whiteboard_scene::{Appearance, BoundingBox, IconSceneNode, SceneNode};
 
+use crate::compose_canvas::LayoutOptions;
 use crate::node_box::{
     LabelPlace, NodeBoxOptions, ResolvedReference, chrome_shape, label_of, label_runs,
 };
@@ -46,6 +47,12 @@ pub enum Degradation {
     /// Tiling needs the picture's own size, which layout never has; it is
     /// drawn to cover the frame instead.
     UnsupportedBackgroundStyle { node_id: String, style: BackgroundStyle },
+    /// The canvas, or the caller's style, names a theme the table does not
+    /// hold; the canvas is drawn clean.
+    UnknownTheme { theme: String },
+    /// The theme names a family this surface cannot measure; its text is
+    /// declared in the bundled family instead.
+    FontMissing { family: String },
 }
 
 /// A body the host's parser could not read.
@@ -76,26 +83,9 @@ pub trait ComposeHost {
     /// screen and an export by its own.
     fn expand_file_node(&self, node: &SpatialNode) -> bool;
 
-    /// A canvas nested in this one, laid out at its own size by the composer
-    /// over a whole canvas (`layoutNestedCanvas`), under `options`, whose path
-    /// already holds it. Its own theme and silhouettes are the host's to resolve.
-    fn layout_nested_canvas(
-        &self,
-        canvas: &SpatialCanvas,
-        options: &ComposeOptions<'_>,
-    ) -> Vec<SceneNode>;
-
     /// The canvas a body's `![[canvas]]` draws, narrowed to `fragment`: the
     /// typesetter's resolver keeps only its size.
     fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas>;
-
-    /// The editor overlay owns this node's text, so only its chrome is drawn.
-    fn body_suppressed(&self, node_id: &str) -> bool;
-
-    fn locked(&self, node_id: &str) -> bool;
-
-    /// The frame holds nothing, so it is tinted to read as a region.
-    fn empty_frame(&self, node_id: &str) -> bool;
 
     fn degrade(&self, event: Degradation);
 }
@@ -119,21 +109,26 @@ pub struct BodySeams<'a> {
     pub embeds: Option<&'a dyn EmbedResolver>,
 }
 
-/// What the composer hands each node.
+/// What the composer hands each node: the caller's ask, and what the walk
+/// settled for the canvas the node is on.
 #[derive(Clone, Copy)]
 pub struct ComposeOptions<'a> {
     pub node_box: NodeBoxOptions<'a>,
     /// The id of the theme in force, which the cache key carries: a family
-    /// alone does not tell two themes apart.
+    /// alone does not tell two themes apart. A canvas nested in this one
+    /// inherits it when it names none.
     pub theme_id: Option<&'a str>,
-    pub host: &'a dyn ComposeHost,
-    pub content_cache: Option<&'a dyn ContentCache>,
-    pub body: BodySeams<'a>,
+    pub layout: &'a LayoutOptions<'a>,
     pub budget: &'a NestedLayoutBudget,
     /// The documents being laid out around this canvas, outermost first.
     pub embed_path: &'a [String],
     /// How deep in embeds this canvas is; the top-level canvas is 0.
     pub embed_depth: usize,
+    /// Frames that hold nothing, tinted to read as a region.
+    pub empty_frames: &'a [String],
+    /// The comment layer's passages are drawn behind bodies: on the canvas the
+    /// caller asked for, never on one nested in it, nor when sizing a node.
+    pub annotated: bool,
 }
 
 /// Side of the padlock, and its inset from the node's top-right corner.
@@ -144,7 +139,7 @@ const LOCK_BADGE_INSET_PX: f64 = 4.0;
 /// own stroke. Top-level canvas only: inside a miniature it would mark
 /// something the reader cannot lock from there.
 fn lock_badge(node: &SpatialNode, options: &ComposeOptions<'_>) -> Option<SceneNode> {
-    if options.embed_depth > 0 || !options.host.locked(&node.id) {
+    if options.embed_depth > 0 || !options.layout.locked.contains(&node.id) {
         return None;
     }
     let resolved = options.node_box.appearance.resolve_node(node);
@@ -181,7 +176,7 @@ fn compose_node_content(node: &SpatialNode, options: &ComposeOptions<'_>) -> Vec
         Some(NodeKind::Link) => compose_link_node(node, &options.node_box),
         Some(NodeKind::File) => file::compose_file_node(node, options),
         None => {
-            options.host.degrade(Degradation::UnknownNodeKind {
+            options.layout.host.degrade(Degradation::UnknownNodeKind {
                 node_id: node.id.clone(),
                 media_type: node
                     .resource

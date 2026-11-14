@@ -11,12 +11,14 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod checks;
+pub mod frames;
 pub mod json;
 pub mod mdast;
 #[path = "generated/okf.rs"]
 pub mod okf;
 #[path = "generated/spatial.rs"]
 pub mod spatial;
+pub mod tags;
 
 /// A frontmatter value: what `yaml`'s core schema makes of a document, as
 /// `toJS()` hands it to the TypeScript.

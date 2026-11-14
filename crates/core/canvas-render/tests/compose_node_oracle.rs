@@ -2,11 +2,13 @@
 //! for each node and the options a composer hands it, the scene drawn, the
 //! degradations reported, the content-cache keys asked and kept, the scene drawn
 //! again over the same cache and over one seeded under the first key asked, and
-//! how many times the measurer was asked, and what each nested canvas layout was
-//! handed. What the composer asks its host (a body parsed, a reference resolved,
-//! an embed target, the expansion policy, a nested canvas laid out) is answered
-//! from the recording.
+//! how many times the measurer was asked. What the composer asks its host (a
+//! body parsed, a reference resolved, an embed target, the expansion policy) is
+//! answered from the recording. No recorded case lays a nested canvas out: that
+//! is the walk's, held by `compose-canvas.jsonl`.
 
+#[path = "degrade_support/mod.rs"]
+mod degrade_support;
 #[path = "typeset_support/dump.rs"]
 mod dump;
 #[path = "compose_node_support/extras.rs"]
@@ -25,6 +27,7 @@ use dump::dump_scene;
 use extras::{Decoration, Fit};
 use serde::Deserialize;
 use serde_json::Value;
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlaid, Overlays, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed, compose_node,
 };
@@ -106,15 +109,6 @@ struct Event {
     detail: String,
 }
 
-/// What a nested canvas layout was handed: the path, the depth and the canvas's size.
-#[derive(Deserialize, Debug, PartialEq)]
-#[serde(deny_unknown_fields)]
-struct Nested {
-    path: Vec<String>,
-    depth: usize,
-    elements: usize,
-}
-
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Answer {
@@ -125,8 +119,6 @@ struct Answer {
     again: Digest,
     seeded: Option<Digest>,
     calls: usize,
-    #[serde(default)]
-    nested: Vec<Nested>,
 }
 
 #[derive(Deserialize)]
@@ -273,7 +265,6 @@ struct MetaWire {
     canvases: BTreeMap<String, CanvasTargetWire>,
     references: BTreeMap<String, Option<ResolvedWire>>,
     seeded: SeededWire,
-    miniature: Vec<SceneNode>,
 }
 
 /// What the meta line holds, read into the crate's types.
@@ -285,7 +276,6 @@ struct Context {
     canvases: BTreeMap<String, (String, SpatialCanvas)>,
     references: BTreeMap<String, Option<ResolvedReference>>,
     seeded: FittedBlocks,
-    miniature: Vec<SceneNode>,
 }
 
 fn context_of(meta: &Value) -> Res<Context> {
@@ -319,7 +309,6 @@ fn context_of(meta: &Value) -> Res<Context> {
             truncated: wire.seeded.truncated,
             overflows: wire.seeded.overflows,
         },
-        miniature: wire.miniature,
     })
 }
 
@@ -365,7 +354,6 @@ struct Host<'c> {
     context: &'c Context,
     case: &'c Case,
     events: RefCell<Vec<Event>>,
-    nested: RefCell<Vec<Nested>>,
     misses: RefCell<Vec<String>>,
 }
 
@@ -399,19 +387,6 @@ impl ComposeHost for Host<'_> {
         !self.case.on("collapsed")
     }
 
-    fn layout_nested_canvas(
-        &self,
-        canvas: &SpatialCanvas,
-        options: &ComposeOptions<'_>,
-    ) -> Vec<SceneNode> {
-        self.nested.borrow_mut().push(Nested {
-            path: options.embed_path.to_vec(),
-            depth: options.embed_depth,
-            elements: elements_of(canvas),
-        });
-        self.context.miniature.clone()
-    }
-
     fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas> {
         if fragment.is_some() {
             self.miss(format!("a fragment of {document_id}"));
@@ -419,31 +394,17 @@ impl ComposeHost for Host<'_> {
         self.context.canvases.get(document_id).map(|(_, canvas)| canvas.clone())
     }
 
-    fn body_suppressed(&self, node_id: &str) -> bool {
-        self.case.on("suppressed") && node_id == self.case.node.id
-    }
-
-    fn locked(&self, node_id: &str) -> bool {
-        self.case.on("locked") && node_id == self.case.node.id
-    }
-
-    fn empty_frame(&self, node_id: &str) -> bool {
-        self.case.on("emptyFrame") && node_id == self.case.node.id
-    }
-
     fn degrade(&self, event: Degradation) {
-        let (kind, node_id, detail) = match event {
-            Degradation::BodyParseFailed { node_id } => {
-                ("body-parse-failed", node_id, String::new())
-            }
-            Degradation::UnknownNodeKind { node_id, media_type } => {
-                ("unknown-node-kind", node_id, media_type)
-            }
-            Degradation::UnsupportedBackgroundStyle { node_id, style } => {
-                ("unsupported-background-style", node_id, style.as_str().to_owned())
-            }
-        };
+        let (kind, node_id, detail) = degrade_support::event_of(event);
         self.events.borrow_mut().push(Event { kind: kind.to_owned(), node_id, detail });
+    }
+}
+
+/// No recorded case lays a nested canvas out, so no overlay is asked for.
+impl Overlays for Host<'_> {
+    fn overlay(&self, _: &SpatialCanvas, _: &[SceneNode], _: &ComposeOptions<'_>) -> Overlaid {
+        self.miss("an overlay".to_owned());
+        Overlaid::default()
     }
 }
 
@@ -557,6 +518,7 @@ struct Setup<'c> {
     outlines: NodeOutlines,
     geometry: SpatialGeometry,
     sketch: bool,
+    node_id: String,
 }
 
 impl<'c> Setup<'c> {
@@ -570,7 +532,6 @@ impl<'c> Setup<'c> {
                 context,
                 case,
                 events: RefCell::new(Vec::new()),
-                nested: RefCell::new(Vec::new()),
                 misses: RefCell::new(Vec::new()),
             },
             outlines: NodeOutlines(
@@ -582,17 +543,54 @@ impl<'c> Setup<'c> {
                 min_content_width_px: f64_of(floor)?,
             },
             sketch: case.theme == "sketch",
+            node_id: case.node.id.clone(),
         })
     }
 
+    /// The case's node alone when the switch is on, else nothing.
+    fn flagged(&self, flag: &str) -> &[String] {
+        if self.host.case.on(flag) { std::slice::from_ref(&self.node_id) } else { &[] }
+    }
+
     /// One composition, over `cache`; the TypeScript opens a fresh budget for each.
-    fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> Res<String> {
-        let budget = match self.host.case.budget {
+    /// The account a composition opens: the case's, else spent, else a fresh one.
+    fn budget(&self) -> NestedLayoutBudget {
+        match self.host.case.budget {
             Some([layouts, elements]) => NestedLayoutBudget::with_remaining(layouts, elements),
             None if self.host.case.on("spent") => {
                 NestedLayoutBudget::with_remaining(0, NestedLayoutBudget::ELEMENTS)
             }
             None => NestedLayoutBudget::new(),
+        }
+    }
+
+    fn compose(&self, node: &SpatialNode, cache: Option<&Recording>) -> Res<String> {
+        let budget = self.budget();
+        let layout = LayoutOptions {
+            measure: &self.measure,
+            appearance: self.appearance.as_ref(),
+            geometry: Some(self.geometry),
+            style: RenderStyle::Clean,
+            themes: &[],
+            font_available: None,
+            registry: &self.host.context.registry,
+            decorations: &[],
+            tag_library: None,
+            suppressed: self.flagged("suppressed"),
+            locked: self.flagged("locked"),
+            side_overrides: None,
+            host: &self.host,
+            overlays: &self.host,
+            content_cache: cache.map(|c| c as &dyn ContentCache),
+            body: BodySeams {
+                inline: &self.host,
+                highlight: None,
+                math: None,
+                diagram: None,
+                embeds: Some(&self.host),
+            },
+            budget: None,
+            embed_path: &self.host.case.embed_path,
         };
         let options = ComposeOptions {
             node_box: NodeBoxOptions {
@@ -605,18 +603,12 @@ impl<'c> Setup<'c> {
                 registry: &self.host.context.registry,
             },
             theme_id: self.sketch.then_some("visual.sketch"),
-            host: &self.host,
-            content_cache: cache.map(|c| c as &dyn ContentCache),
-            body: BodySeams {
-                inline: &self.host,
-                highlight: None,
-                math: None,
-                diagram: None,
-                embeds: Some(&self.host),
-            },
+            layout: &layout,
             budget: &budget,
             embed_path: &self.host.case.embed_path,
             embed_depth: self.host.case.embed_depth,
+            empty_frames: self.flagged("emptyFrame"),
+            annotated: true,
         };
         dump_nodes(compose_node(node, &options))
     }
@@ -647,7 +639,6 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
     differ("seeded", &seeded, &want.seeded)?;
     differ("events", &*setup.host.events.borrow(), &want.events)?;
     differ("measurer calls", &setup.measure.calls.get(), &want.calls)?;
-    differ("nested layouts", &*setup.host.nested.borrow(), &want.nested)?;
     differ("host misses", &*setup.host.misses.borrow(), &Vec::new())
 }
 

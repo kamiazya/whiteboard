@@ -78,7 +78,7 @@ const pointHex = (p: { x: number; y: number } | undefined) =>
   p === undefined ? [null, null] : [hex(p.x), hex(p.y)]
 const optionalHex = (v: number | undefined) => (v === undefined ? null : hex(v))
 
-function anchorRow(id: string, a: EdgeAnchorPair): (string | null)[] {
+export function anchorRow(id: string, a: EdgeAnchorPair): (string | null)[] {
   return [
     id,
     ...pointHex(a.from),
