@@ -48,12 +48,16 @@ describe('the recorded compose-comments oracle', () => {
       has(`a highlight of ${id}`, `"${id}/passage-0"`)
     }
     has('a highlight across a wrap', '"q-repeat/passage-1"')
-    for (const gone of ['t-note', 't-passage-gone', 't-doc', 'q-missing/passage']) {
+    for (const gone of ['t-note', 't-passage-gone', 't-doc']) {
       expect(
         scenes.some((s) => s.includes(`"${gone}/`)),
         `${gone} has no pin`,
       ).toBe(false)
     }
+    expect(
+      scenes.some((s) => s.includes('"q-missing/passage-')),
+      'a quote the body does not hold draws no highlight',
+    ).toBe(false)
     const asked = cases.flatMap((c) => c.answer.calls)
     const sized = (px: number) => asked.some(([, , size]) => size === f64Hex(px))
     expect(sized(10), 'a pin count').toBe(true)
