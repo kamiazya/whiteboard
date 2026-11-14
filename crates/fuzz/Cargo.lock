@@ -257,6 +257,7 @@ name = "whiteboard-codec"
 version = "0.0.0"
 dependencies = [
  "whiteboard-det",
+ "whiteboard-markdown",
  "whiteboard-model",
 ]
 
