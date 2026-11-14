@@ -261,6 +261,7 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(unit[at]?.if).toBe("steps.scope.outputs.run == 'true'")
     expect(unit[test]?.env).toEqual({
       WHITEBOARD_CORE: 'differential',
+      WHITEBOARD_CORE_LAYOUT: 'differential',
       WHITEBOARD_CORE_MISMATCH: 'throw',
     })
   })

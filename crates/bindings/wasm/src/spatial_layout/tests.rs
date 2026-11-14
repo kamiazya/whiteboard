@@ -1,7 +1,7 @@
 use serde_json::{Value as Json, json};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 
-use super::{MAX_ELEMENTS, layout_spatial_canvas};
+use super::{MAX_BODY_BYTES, MAX_ELEMENTS, layout_spatial_canvas};
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::canvas_json;
 
@@ -82,8 +82,8 @@ fn what_the_core_cannot_answer_as_the_typescript_would_is_declined() {
     assert_eq!(shortcode, json!(["declined", "shortcode"]));
     let fence = answer(&request(board("```rust\nfn x() {}\n```"), &[]), &[]);
     assert_eq!(fence, json!(["declined", "highlight"]));
-    let past = "a".repeat(786_433);
-    assert_eq!(answer(&request(board(&past), &[]), &[]), json!(["declined", "body"]));
+    let at_cap = answer(&request(board(&"a".repeat(MAX_BODY_BYTES)), &[]), &[]);
+    assert_eq!(at_cap.get(0), Some(&json!("ok")));
     let huge = canvas_json(&SpatialCanvas {
         nodes: vec![SpatialNode { x: f64::INFINITY, ..text_node("a", "x") }],
         ..SpatialCanvas::default()
@@ -106,6 +106,26 @@ fn an_input_that_is_not_a_request_or_past_its_caps_is_refused() {
         ..SpatialCanvas::default()
     });
     assert_eq!(answer(&request(many, &[]), &[]), refused("input-too-large", "too-many-elements"));
+    let half = "a".repeat(MAX_BODY_BYTES / 2 + 1);
+    let two = canvas_json(&SpatialCanvas {
+        nodes: vec![text_node("a", &half), text_node("b", &half)],
+        ..SpatialCanvas::default()
+    });
+    assert_eq!(answer(&request(two, &[]), &[]), refused("input-too-large", "bodies"));
+    let third = "a".repeat(MAX_BODY_BYTES / 3 + 1);
+    let entries = s(vec![
+        s(vec![json!("n"), m(&[("body", json!(third))])]),
+        s(vec![json!("c"), m(&[("canvas", board(&third))])]),
+        s(vec![json!("g"), Json::Null]),
+    ]);
+    let references = m(&[
+        ("entries", entries),
+        ("aliases", s(Vec::new())),
+        ("titles", s(Vec::new())),
+        ("extras", s(Vec::new())),
+    ]);
+    let referenced = request(board(&third), &[("references", references)]);
+    assert_eq!(answer(&referenced, &[]), refused("input-too-large", "bodies"));
     let face = |from: i64, to: i64| {
         let face = m(&[
             ("family", json!("F")),

@@ -54,6 +54,30 @@ pub const MAX_ELEMENTS: usize = match LAYOUT_SPATIAL_CANVAS.max_nodes {
     None => 0,
 };
 
+/// The most text a request's bodies may hold together, in bytes: every node's
+/// content and every referenced body. One parse's own bound
+/// (`whiteboard_markdown::limits::MAX_BYTES`, 768 KiB), so a layout parses at
+/// most what one body may hold; the cost of a body is in its parse and its
+/// typesetting, which `maxBytes` alone would let a request repeat.
+pub const MAX_BODY_BYTES: usize = 786_432;
+
+fn content_bytes(canvas: &SpatialCanvas) -> usize {
+    canvas
+        .nodes
+        .iter()
+        .filter_map(|node| node.resource.as_ref()?.content.as_ref())
+        .fold(0, |sum, content| sum.saturating_add(content.len()))
+}
+
+fn body_total(request: &Request) -> usize {
+    let referenced = request.references.entries.iter().filter_map(|(_, entry)| entry.as_ref());
+    referenced.fold(content_bytes(&request.canvas), |sum, entry| {
+        let body = entry.body.as_ref().map_or(0, String::len);
+        let canvas = entry.canvas.as_ref().map_or(0, content_bytes);
+        sum.saturating_add(body).saturating_add(canvas)
+    })
+}
+
 fn elements(canvas: &SpatialCanvas) -> usize {
     let lines = canvas.lines.as_ref().map_or(0, Vec::len);
     canvas.nodes.len().saturating_add(canvas.edges.len()).saturating_add(lines)
@@ -147,6 +171,9 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     };
     if element_total(&request) > MAX_ELEMENTS {
         return refused("input-too-large", "too-many-elements");
+    }
+    if body_total(&request) > MAX_BODY_BYTES {
+        return refused("input-too-large", "bodies");
     }
     let Some(measure) = measurer(&request.measure, fonts) else {
         return refused("malformed", "font");

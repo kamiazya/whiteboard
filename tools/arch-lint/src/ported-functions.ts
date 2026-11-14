@@ -96,6 +96,53 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     },
   },
   {
+    name: 'layoutSpatialCanvas',
+    // Defaults to `ts` (S16 moves it); `differential` holds it to the
+    // TypeScript in canvas-render-rust and the crate replays the recording.
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
+      export: 'layoutSpatialCanvasWithAnchors',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutSpatialCanvas',
+      option: 'SpatialLayoutOptions.core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/mod.rs', fn: 'layout_spatial_canvas' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutSpatialCanvas',
+    },
+  },
+  // A body's parse and its reference resolution have no switch of their own:
+  // the core reaches them only through the whole layout, whose differential
+  // compares every scene they shape, so that export is the shim's member.
+  {
+    name: 'parseMarkdownBody',
+    stage: 2,
+    ts: { file: 'packages/codec/src/markdown/pipeline.ts', export: 'parseMarkdownBody' },
+    rust: { file: 'crates/core/codec/src/markdown/mod.rs', fn: 'parse_markdown_body' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutSpatialCanvas',
+    },
+  },
+  {
+    name: 'resolveReferences',
+    stage: 2,
+    ts: { file: 'packages/codec/src/references/resolve.ts', export: 'resolveReferences' },
+    rust: { file: 'crates/core/codec/src/references/resolve.rs', fn: 'resolve_references' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutSpatialCanvas',
+    },
+  },
+  {
     name: 'parseOkf',
     stage: 4,
     ts: { file: 'packages/codec/src/okf/okf-core.ts', export: 'parseOkf' },

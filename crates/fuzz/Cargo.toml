@@ -89,6 +89,14 @@ bench = false
 required-features = ["libfuzzer"]
 
 [[bin]]
+name = "layout_spatial_canvas_wasm"
+path = "fuzz_targets/layout_spatial_canvas_wasm.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
 name = "markdown_parse"
 path = "fuzz_targets/markdown_parse.rs"
 test = false

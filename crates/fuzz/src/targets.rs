@@ -608,3 +608,27 @@ pub fn sfnt_parse(data: &[u8]) {
         assert!(v.ascent.is_finite() && v.descent.is_finite() && v.line_gap.is_finite());
     }
 }
+
+/// The whole layout's export: a request and the faces it measures in, split at
+/// the first NUL. Every answer is one of the three outcomes, and a call past the
+/// caps is refused before it is read.
+pub fn layout_spatial_canvas_wasm(data: &[u8]) {
+    use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
+    use whiteboard_wasm::spatial_layout::layout_spatial_canvas;
+
+    let at = data.iter().position(|&b| b == 0).unwrap_or(data.len());
+    let (request, fonts) = data.split_at(at);
+    let Ok(request) = std::str::from_utf8(request) else {
+        return;
+    };
+    let fonts = fonts.get(1..).unwrap_or_default();
+    let answer = layout_spatial_canvas(request, fonts);
+    if request.len() + fonts.len() > LAYOUT_SPATIAL_CANVAS.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
+        return;
+    }
+    let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && answer.ends_with("]]");
+    let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
+    let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
+    assert!(laid || refused || declined, "{answer:.120} is not an answer");
+}

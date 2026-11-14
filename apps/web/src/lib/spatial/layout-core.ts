@@ -38,16 +38,22 @@ export interface CoreLog {
 }
 
 function summarize(mismatch: CoreMismatch) {
-  return mismatch.kind === 'differs'
-    ? {
-        fn: mismatch.fn,
-        kind: mismatch.kind,
-        at: mismatch.at,
-        ts: mismatch.ts[mismatch.at],
-        rust: mismatch.rust[mismatch.at],
-        edges: mismatch.repro.edges.length,
-      }
-    : { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
+  if (mismatch.kind !== 'differs') return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
+  // The page never switches the whole layout on (it measures with a canvas
+  // context, which the core cannot repeat), so only a routing difference
+  // reaches here; the whole layout's is read for the type's sake.
+  if (mismatch.fn === 'layoutSpatialCanvas') {
+    const { fn, kind, at, ts, rust } = mismatch
+    return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
+  }
+  return {
+    fn: mismatch.fn,
+    kind: mismatch.kind,
+    at: mismatch.at,
+    ts: mismatch.ts[mismatch.at],
+    rust: mismatch.rust[mismatch.at],
+    edges: mismatch.repro.edges.length,
+  }
 }
 
 function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMismatch) => void {
