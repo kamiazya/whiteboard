@@ -272,13 +272,24 @@ function passageOn(draw: Draw, source: string, index: number): PassageWire {
 
 const fake = createFakeMeasure()
 
-/** A measurer answering what layout must clamp: NaN for a `b`, a negative for a `z`. */
-const odd: MeasureText = (text, font) => ({
-  ...fake(text, font),
-  advanceWidth: text.includes('b') ? Number.NaN : text.length * 7 - (text.includes('z') ? 1000 : 0),
-})
+/** What the odd measurer answers: NaN for a `b`, a negative for a `z`. */
+function oddAdvance(text: string): number {
+  if (text.includes('b')) return Number.NaN
+  const advance = text.length * 7
+  return text.includes('z') ? advance - 1000 : advance
+}
+
+/** A measurer answering what layout must clamp. */
+const odd: MeasureText = (text, font) => ({ ...fake(text, font), advanceWidth: oddAdvance(text) })
 
 const PAINT = { open: { fill: '#ff0' }, resolved: { fill: '#888' } }
+
+/** Which paint a shape took, by identity. */
+function paintOf(appearance: unknown): 'open' | 'resolved' | null {
+  if (appearance === PAINT.open) return 'open'
+  if (appearance === PAINT.resolved) return 'resolved'
+  return null
+}
 
 const runWire = ({ run, offsetX }: PlacedRun): RunWire => {
   const family = run.appearance?.fontFamily
@@ -322,11 +333,7 @@ function highlight(
       [
         shape.id ?? '',
         [shape.bbox.x, shape.bbox.y, shape.bbox.w, shape.bbox.h].map(f64Hex),
-        shape.appearance === PAINT.open
-          ? 'open'
-          : shape.appearance === PAINT.resolved
-            ? 'resolved'
-            : null,
+        paintOf(shape.appearance),
       ] as const,
   )
   return {
