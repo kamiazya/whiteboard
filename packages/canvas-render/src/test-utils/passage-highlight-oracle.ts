@@ -476,6 +476,20 @@ const HAND_BUILT: readonly HandBuilt[] = [
     'b',
     'fake',
   ),
+  // A run of spaces is one space: read space by space, the first occurrence
+  // would lose its tie with the second, before it and after it.
+  hand(
+    [run('a  b a b', [0, 0, 96, 20], sans)],
+    [at('b', 0, { quote: { exact: 'b', prefix: 'a ' } })],
+    'b',
+    'fake',
+  ),
+  hand(
+    [run('b  a b a', [0, 0, 96, 20], sans)],
+    [at('b', 0, { quote: { exact: 'b', suffix: ' a' } })],
+    'b',
+    'fake',
+  ),
   // Source counts that disagree with the rendered ones, both ways round.
   hand(
     [run('a a a', [0, 0, 60, 20], sans)],
