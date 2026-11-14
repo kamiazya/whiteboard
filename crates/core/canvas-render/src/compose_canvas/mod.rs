@@ -7,8 +7,8 @@
 //! Each canvas is coloured by intent first, then settles its own theme and
 //! silhouettes; every node is drawn in paint order with its decorations, then
 //! every edge and line, then the comment layer ([`crate::comments`]), then the
-//! proposal layer ([`crate::proposals`]). The legend is a seam until it is
-//! ported.
+//! proposal layer ([`crate::proposals`]), and the legend read off the colour
+//! the canvas spends ([`crate::legend`]).
 
 mod level;
 
@@ -20,7 +20,7 @@ use whiteboard_model::frames::members_of;
 use whiteboard_model::proposal::Proposal;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::visual::TagLibrary;
-use whiteboard_scene::{BoundingBox, NodeDecoration, Scene, SceneLegend, SceneNode};
+use whiteboard_scene::{BoundingBox, NodeDecoration, Scene, SceneNode};
 
 use crate::comments::{CommentOptions, Drawn, compose_comment_layer};
 use crate::compose_edges::{EdgeOptions, compose_edges_and_labels};
@@ -28,6 +28,7 @@ use crate::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, ContentCache, compose_decorations, compose_node,
 };
 use crate::declared_colours::with_declared_colours;
+use crate::legend::canvas_legend;
 use crate::measure::Measure;
 use crate::proposals::compose_proposals;
 use crate::scene_walk::SceneWalk;
@@ -47,20 +48,6 @@ pub enum RenderStyle<'a> {
     Clean,
     Document,
     Theme(&'a str),
-}
-
-/// What is drawn over a canvas once its nodes, edges and annotation layers
-/// are: the legend.
-pub trait Overlays {
-    /// The legend of `canvas`, given what the walk drew of it (`drawn`, in
-    /// paint order: every node, then every edge and label, the annotation
-    /// layers not included) and the options its nodes were composed with.
-    fn overlay(
-        &self,
-        canvas: &SpatialCanvas,
-        drawn: &[SceneNode],
-        options: &ComposeOptions<'_>,
-    ) -> Option<SceneLegend>;
 }
 
 /// What a caller asks a layout for (`SpatialLayoutOptions`).
@@ -89,7 +76,6 @@ pub struct LayoutOptions<'a> {
     /// The editor's frozen sides, by element id.
     pub side_overrides: Option<&'a [(String, EdgeAnchorOverride)]>,
     pub host: &'a dyn ComposeHost,
-    pub overlays: &'a dyn Overlays,
     /// The comment layer, drawn over the canvas asked for and none nested in it.
     pub comments: CommentOptions<'a>,
     /// This document's proposals, drawn over the canvas asked for and none
@@ -171,7 +157,7 @@ fn walk(
     let drawn = Drawn { all: &nodes, edges: nodes.get(from..).unwrap_or_default() };
     let comments = compose_comment_layer(&canvas, &drawn, &compose);
     let proposals = compose_proposals(&canvas, drawn.edges, &compose);
-    let legend = options.overlays.overlay(&canvas, &nodes, &compose);
+    let legend = canvas_legend(&canvas, compose.node_box.appearance, compose.node_box.registry);
     nodes.extend(comments);
     nodes.extend(proposals);
     LaidOut { scene: Scene { nodes, legend }, anchors: edges.anchors }

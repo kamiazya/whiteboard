@@ -37,6 +37,7 @@ pub mod font_measure;
 pub mod glow;
 pub mod ink;
 pub mod inline_junction;
+pub mod legend;
 pub mod legend_geometry;
 pub mod linebreak;
 pub mod longest_fit;

@@ -4,7 +4,7 @@
 use std::cell::Cell;
 
 use whiteboard_canvas_render::comments::CommentOptions;
-use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlays, RenderStyle};
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed, compose_node,
 };
@@ -21,7 +21,7 @@ use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_model::text_anchor::{TextAnchor, TextQuote};
 use whiteboard_plugin_visual::host::visual_registry;
-use whiteboard_scene::{SceneLegend, SceneNode};
+use whiteboard_scene::SceneNode;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -114,17 +114,6 @@ fn kinds_of(drawn: &[SceneNode]) -> Vec<String> {
         .collect()
 }
 
-impl Overlays for Marking {
-    fn overlay(
-        &self,
-        _: &SpatialCanvas,
-        _: &[SceneNode],
-        _: &ComposeOptions<'_>,
-    ) -> Option<SceneLegend> {
-        None
-    }
-}
-
 /// A thread quoting `exact` in node `t`'s text.
 fn quoting(exact: &str, resolved: bool) -> CommentThread {
     let quote = TextQuote { exact: exact.to_owned(), ..TextQuote::default() };
@@ -164,7 +153,6 @@ fn layout_of<'a>(
         locked: &[],
         side_overrides: None,
         host,
-        overlays: host,
         comments: CommentOptions { threads, ..CommentOptions::default() },
         proposals: &[],
         content_cache: None,

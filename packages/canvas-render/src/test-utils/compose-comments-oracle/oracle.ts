@@ -85,8 +85,6 @@ interface CaseRecord extends Omit<CaseSpec, 'obstacles'> {
   readonly obstacles?: readonly (readonly string[])[]
   readonly answer: {
     readonly scene: string
-    /** How many nodes the walk drew before the comment layer, highlights included. */
-    readonly from: number
     /** Every question the layout asked the measurer: text, family and size. */
     readonly calls: readonly (readonly [string, string, string])[]
     readonly events: readonly Event[]
@@ -187,7 +185,6 @@ function answerOf(spec: CaseSpec, board: Board): CaseRecord['answer'] {
   }
   return {
     scene: dump(scene.nodes),
-    from,
     calls: run.asked.map(({ text, font }) => [text, font.family, hex(font.sizePx)] as const),
     events: run.events.map(eventOf),
   }

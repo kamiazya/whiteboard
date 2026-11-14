@@ -1,17 +1,14 @@
 //! What a replay of `compose-canvas.jsonl` answers in the composer's place: the
 //! meta line read into the crate's types, and a host that parses each body as
-//! recorded, draws the recorded overlays over the top-level canvas, and notes
+//! recorded and notes
 //! every degradation and every question the recording cannot answer.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::Value;
-use whiteboard_canvas_render::compose_canvas::Overlays;
-use whiteboard_canvas_render::compose_node::{
-    ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed,
-};
+use whiteboard_canvas_render::compose_node::{ComposeHost, ContentCache, Degradation, ParseFailed};
 use whiteboard_canvas_render::node_box::ResolvedReference;
 use whiteboard_canvas_render::theme::appearance::{
     RoutableElement, SpatialAppearanceResolver, SpatialCommentAppearance, SpatialNodeAppearance,
@@ -27,7 +24,7 @@ use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
 use whiteboard_plugin_visual::visual::{TagKeyDeclaration, TagLibrary, TagValueDeclaration};
-use whiteboard_scene::{Appearance, SceneLegend, SceneNode};
+use whiteboard_scene::{Appearance, SceneNode};
 
 use crate::canvas_wire::{ElementWire, NodeWire, Res, canvas_parts, differ};
 use crate::{degrade_support, model, tokens};
@@ -196,27 +193,13 @@ impl Recorded {
 /// The host of one run.
 pub(crate) struct Host<'c> {
     context: &'c Context,
-    overlay: OverlayWire,
-    legend: Option<SceneLegend>,
-    overlaid: Cell<usize>,
     events: RefCell<Vec<Event>>,
     misses: RefCell<Vec<String>>,
 }
 
 impl<'c> Host<'c> {
-    pub(crate) fn new(
-        context: &'c Context,
-        overlay: &OverlayWire,
-        legend: Option<&SceneLegend>,
-    ) -> Self {
-        Self {
-            context,
-            overlay: overlay.clone(),
-            legend: legend.cloned(),
-            overlaid: Cell::new(0),
-            events: RefCell::new(Vec::new()),
-            misses: RefCell::new(Vec::new()),
-        }
+    pub(crate) fn new(context: &'c Context) -> Self {
+        Self { context, events: RefCell::new(Vec::new()), misses: RefCell::new(Vec::new()) }
     }
 
     fn miss(&self, what: String) {
@@ -313,32 +296,6 @@ impl EmbedResolver for Host<'_> {
             canvas.nodes.len() + canvas.edges.len() + canvas.lines.as_ref().map_or(0, Vec::len);
         let canvas = Some(CanvasSummary { elements, empty: elements == 0 });
         Some(Embedded::Canvas { title: Some(title.clone()), canvas })
-    }
-}
-
-impl Overlays for Host<'_> {
-    /// The recorded overlays, once: the corpus lays out no nested canvas.
-    fn overlay(
-        &self,
-        _: &SpatialCanvas,
-        drawn: &[SceneNode],
-        _: &ComposeOptions<'_>,
-    ) -> Option<SceneLegend> {
-        self.overlaid.set(self.overlaid.get() + 1);
-        if self.overlaid.get() > 1 {
-            self.miss("a second overlay".to_owned());
-        }
-        if drawn.len() != self.overlay.from {
-            self.miss(format!(
-                "overlays over {} drawn, recorded {}",
-                drawn.len(),
-                self.overlay.from
-            ));
-        }
-        if !self.overlay.nodes.is_empty() {
-            self.miss(format!("{} overlay nodes recorded", self.overlay.nodes.len()));
-        }
-        self.legend.clone()
     }
 }
 

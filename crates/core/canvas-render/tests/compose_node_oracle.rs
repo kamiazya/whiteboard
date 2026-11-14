@@ -28,7 +28,7 @@ use extras::{Decoration, Fit};
 use serde::Deserialize;
 use serde_json::Value;
 use whiteboard_canvas_render::comments::CommentOptions;
-use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlays, RenderStyle};
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed, compose_node,
 };
@@ -54,7 +54,7 @@ use whiteboard_model::spatial::{
     SpatialCanvas, SpatialNode,
 };
 use whiteboard_plugin_visual::host::visual_registry;
-use whiteboard_scene::{Scene, SceneLegend, SceneNode};
+use whiteboard_scene::{Scene, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -401,19 +401,6 @@ impl ComposeHost for Host<'_> {
     }
 }
 
-/// No recorded case lays a nested canvas out, so no overlay is asked for.
-impl Overlays for Host<'_> {
-    fn overlay(
-        &self,
-        _: &SpatialCanvas,
-        _: &[SceneNode],
-        _: &ComposeOptions<'_>,
-    ) -> Option<SceneLegend> {
-        self.miss("an overlay".to_owned());
-        None
-    }
-}
-
 /// A shortcode is a name between two colons; a facet card's `: value` holds one.
 fn may_hold_shortcode(text: &str) -> bool {
     text.matches(':').nth(1).is_some()
@@ -586,7 +573,6 @@ impl<'c> Setup<'c> {
             locked: self.flagged("locked"),
             side_overrides: None,
             host: &self.host,
-            overlays: &self.host,
             comments: CommentOptions::default(),
             proposals: &[],
             content_cache: cache.map(|c| c as &dyn ContentCache),

@@ -7,11 +7,9 @@ use std::cell::RefCell;
 use std::collections::BTreeMap;
 
 use whiteboard_canvas_render::comments::CommentOptions;
-use whiteboard_canvas_render::compose_canvas::{
-    LayoutOptions, Overlays, RenderStyle, layout_spatial_canvas,
-};
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, RenderStyle, layout_spatial_canvas};
 use whiteboard_canvas_render::compose_node::{
-    BodySeams, ComposeHost, ComposeOptions, ContentCache, Degradation, ParseFailed,
+    BodySeams, ComposeHost, ContentCache, Degradation, ParseFailed,
 };
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::node_box::ResolvedReference;
@@ -25,7 +23,6 @@ use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
-use whiteboard_scene::{SceneLegend, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -120,17 +117,6 @@ impl InlineSeams for Naming {
     }
 }
 
-impl Overlays for Naming {
-    fn overlay(
-        &self,
-        _: &SpatialCanvas,
-        _: &[SceneNode],
-        _: &ComposeOptions<'_>,
-    ) -> Option<SceneLegend> {
-        None
-    }
-}
-
 /// A cache that keeps whatever it is handed.
 #[derive(Default)]
 struct Keeping(RefCell<BTreeMap<String, FittedBlocks>>);
@@ -165,7 +151,6 @@ fn scene_of(canvas: &SpatialCanvas, cached: bool, layouts: usize, registry: &Reg
         locked: &[],
         side_overrides: None,
         host: &Naming,
-        overlays: &Naming,
         content_cache: cached.then_some(&cache as &dyn ContentCache),
         comments: CommentOptions::default(),
         proposals: &[],
