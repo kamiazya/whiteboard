@@ -1,12 +1,16 @@
 //! Reading what a node SHOWS, without reading how it is stored: the readers of
-//! model's `node-content.ts`, `node-resource.ts` and `asset-ref.ts` the layout
-//! asks. A node's kind follows from its resource (ADR-0038 decision 3): inline
+//! `node-content.ts`, `node-resource.ts` and `asset-ref.ts` the layout and the
+//! proposal layer's conflict check ask. A node's kind follows from its resource (ADR-0038 decision 3): inline
 //! content is text, a location is a link when its media type is a URI list and
 //! a file otherwise, and no resource at all is a frame.
 
-use whiteboard_model::spatial::{BackgroundStyle, NodeResource, SpatialNode};
+use crate::spatial::{BackgroundStyle, NodeResource, SpatialNode};
 
-pub use crate::theme::spatial_theme::is_frame;
+/// Whether a node is a frame: it shows nothing, so it has no resource.
+#[must_use]
+pub const fn is_frame(node: &SpatialNode) -> bool {
+    node.resource.is_none()
+}
 
 /// What a node shows.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -137,5 +141,13 @@ mod tests {
         assert_eq!(frame_background(&frame), Some("asset:b"));
         assert_eq!(frame_background_style(&frame), Some(BackgroundStyle::Ratio));
         assert!(is_image_ref("asset:x") && !is_image_ref("assets:x") && !is_image_ref("a"));
+    }
+
+    #[test]
+    fn only_a_node_that_shows_nothing_is_a_frame() {
+        assert!(is_frame(&SpatialNode::default()));
+        let shown =
+            SpatialNode { resource: Some(NodeResource::default()), ..SpatialNode::default() };
+        assert!(!is_frame(&shown));
     }
 }

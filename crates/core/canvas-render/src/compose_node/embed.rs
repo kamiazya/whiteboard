@@ -9,9 +9,9 @@ use whiteboard_scene::{BoundingBox, EmbedResolvedNode, SceneNode};
 use super::ComposeOptions;
 use crate::compose_canvas::layout_nested_canvas;
 use crate::node_box::ResolvedReference;
-use crate::node_content::node_file;
 use crate::scale_scene::fit_scene_into_box;
 use crate::typeset::{CanvasMiniature, EmbedBox, Miniature};
+use whiteboard_model::node_content::node_file;
 
 /// The top-level canvas is depth 0, so a fourth level is refused: the cap a
 /// body's embeds are held to, so neither kind of embed nests deeper.

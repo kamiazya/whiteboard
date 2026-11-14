@@ -27,11 +27,11 @@ use crate::compose_canvas::LayoutOptions;
 use crate::node_box::{
     LabelPlace, NodeBoxOptions, ResolvedReference, chrome_shape, label_of, label_runs,
 };
-use crate::node_content::{NodeKind, node_kind};
 use crate::typeset::{
     CodeTokenizer, DiagramRenderer, EmbedResolver, FittedBlocks, InlineSeams, MathRenderer,
     NestedLayoutBudget,
 };
+use whiteboard_model::node_content::{NodeKind, node_kind};
 
 pub use decoration::compose_decorations;
 pub use file::fit_body_in_node;

@@ -14,18 +14,18 @@ import type {
 
 type Hex = (value: number) => string
 
-interface NodeWire extends Omit<SpatialNode, 'x' | 'y' | 'width' | 'height'> {
+export interface NodeWire extends Omit<SpatialNode, 'x' | 'y' | 'width' | 'height'> {
   readonly box: readonly string[]
 }
 
-interface EndWire {
+export interface EndWire {
   readonly node?: string
   readonly point?: readonly string[]
   readonly side?: string
   readonly end?: string
 }
 
-interface ElementWire {
+export interface ElementWire {
   readonly id: string
   readonly from: EndWire
   readonly to: EndWire
@@ -44,12 +44,12 @@ export interface CanvasWire {
   readonly lines?: readonly ElementWire[]
 }
 
-function nodeWire(node: SpatialNode, hex: Hex): NodeWire {
+export function nodeWire(node: SpatialNode, hex: Hex): NodeWire {
   const { x, y, width, height, ...rest } = node
   return { ...rest, box: [x, y, width, height].map(hex) }
 }
 
-function endWire(end: EdgeEnd | LineEnd, hex: Hex): EndWire {
+export function endWire(end: EdgeEnd | LineEnd, hex: Hex): EndWire {
   const marks = {
     ...('side' in end && end.side !== undefined ? { side: end.side } : {}),
     ...(end.end === undefined ? {} : { end: end.end }),
@@ -60,7 +60,7 @@ function endWire(end: EdgeEnd | LineEnd, hex: Hex): EndWire {
   return { node: end.node, ...marks }
 }
 
-function elementWire(element: CanvasEdge | CanvasLine, hex: Hex): ElementWire {
+export function elementWire(element: CanvasEdge | CanvasLine, hex: Hex): ElementWire {
   const { from, to, bends, ...rest } = element
   return {
     ...rest,

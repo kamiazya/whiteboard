@@ -24,7 +24,6 @@ use whiteboard_scene::{
 };
 
 use crate::measure::{FontDescriptor, FontStyle, Measure};
-use crate::node_content::{frame_label, is_frame, is_image_ref, node_file, node_subpath, node_url};
 use crate::node_outline::outline_content_box;
 use crate::scene_walk::SceneWalk;
 use crate::seed::seed_from_id;
@@ -33,6 +32,9 @@ use crate::theme::geometry::SpatialGeometry;
 use crate::translate_scene::translate_scene;
 use crate::truncate::fit_to_width;
 use crate::typeset::{FittedBlocks, fit_blocks_to_height};
+use whiteboard_model::node_content::{
+    frame_label, is_frame, is_image_ref, node_file, node_subpath, node_url,
+};
 
 /// The namespaced silhouette each node of a canvas resolves to, by node id
 /// (`nodeOutlines`). A node it does not name draws the rect.

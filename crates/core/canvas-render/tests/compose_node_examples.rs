@@ -4,7 +4,7 @@
 use std::cell::Cell;
 
 use whiteboard_canvas_render::comments::CommentOptions;
-use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlaid, Overlays, RenderStyle};
+use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlays, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed, compose_node,
 };
@@ -12,7 +12,7 @@ use whiteboard_canvas_render::fake_measure::FakeMeasure;
 use whiteboard_canvas_render::node_box::{NodeBoxOptions, NodeOutlines, ResolvedReference};
 use whiteboard_canvas_render::theme::geometry::SPATIAL_THEME_GEOMETRY;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
-use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
+use whiteboard_canvas_render::theme::spatial_theme::{SpatialTheme, create_spatial_theme};
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::registry::Registry;
@@ -21,7 +21,7 @@ use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_model::text_anchor::{TextAnchor, TextQuote};
 use whiteboard_plugin_visual::host::visual_registry;
-use whiteboard_scene::SceneNode;
+use whiteboard_scene::{SceneLegend, SceneNode};
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -115,8 +115,13 @@ fn kinds_of(drawn: &[SceneNode]) -> Vec<String> {
 }
 
 impl Overlays for Marking {
-    fn overlay(&self, _: &SpatialCanvas, _: &[SceneNode], _: &ComposeOptions<'_>) -> Overlaid {
-        Overlaid::default()
+    fn overlay(
+        &self,
+        _: &SpatialCanvas,
+        _: &[SceneNode],
+        _: &ComposeOptions<'_>,
+    ) -> Option<SceneLegend> {
+        None
     }
 }
 
@@ -136,19 +141,18 @@ fn quoting(exact: &str, resolved: bool) -> CommentThread {
     }
 }
 
-/// `hello_at(100, 50)` composed under `threads`, its passages drawn or not.
-fn hello_composed(
-    host: &Marking,
-    registry: &Registry,
-    threads: &[CommentThread],
-    annotated: bool,
-) -> Vec<SceneNode> {
-    let measure = FakeMeasure::default();
-    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
-    let budget = NestedLayoutBudget::new();
-    let layout = LayoutOptions {
-        measure: &measure,
-        appearance: &appearance,
+/// What `hello_composed` lays its node out under: the bundled light theme, no
+/// overlays but the threads.
+fn layout_of<'a>(
+    measure: &'a FakeMeasure,
+    appearance: &'a SpatialTheme,
+    host: &'a Marking,
+    registry: &'a Registry,
+    threads: &'a [CommentThread],
+) -> LayoutOptions<'a> {
+    LayoutOptions {
+        measure,
+        appearance,
         geometry: None,
         style: RenderStyle::Clean,
         themes: &[],
@@ -162,11 +166,25 @@ fn hello_composed(
         host,
         overlays: host,
         comments: CommentOptions { threads, ..CommentOptions::default() },
+        proposals: &[],
         content_cache: None,
         body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
         embed_path: &[],
-    };
+    }
+}
+
+/// `hello_at(100, 50)` composed under `threads`, its passages drawn or not.
+fn hello_composed(
+    host: &Marking,
+    registry: &Registry,
+    threads: &[CommentThread],
+    annotated: bool,
+) -> Vec<SceneNode> {
+    let measure = FakeMeasure::default();
+    let appearance = create_spatial_theme(SpatialThemeMode::Light, None);
+    let budget = NestedLayoutBudget::new();
+    let layout = layout_of(&measure, &appearance, host, registry, threads);
     let options = ComposeOptions {
         node_box: NodeBoxOptions {
             measure: &measure,

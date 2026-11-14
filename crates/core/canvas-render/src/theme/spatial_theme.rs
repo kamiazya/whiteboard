@@ -106,12 +106,6 @@ fn paint_kind(node: &SpatialNode) -> PaintKind {
     }
 }
 
-/// Whether a node is a frame: it shows nothing, so it has no resource.
-#[must_use]
-pub const fn is_frame(node: &SpatialNode) -> bool {
-    node.resource.is_none()
-}
-
 fn solid(fill: &str, stroke: &str) -> Appearance {
     Appearance {
         fill: Some(fill.to_owned()),
@@ -310,13 +304,5 @@ mod tests {
         assert_eq!(theme.mode(), Some(SpatialThemeMode::Light));
         let bundled = create_spatial_theme(SpatialThemeMode::Dark, None);
         assert_eq!(bundled.palette(), &SpatialPalette::dark());
-    }
-
-    #[test]
-    fn only_a_node_that_shows_nothing_is_a_frame() {
-        assert!(is_frame(&SpatialNode::default()));
-        let shown =
-            SpatialNode { resource: Some(NodeResource::default()), ..SpatialNode::default() };
-        assert!(!is_frame(&shown));
     }
 }

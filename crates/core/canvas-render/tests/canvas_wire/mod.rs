@@ -14,7 +14,7 @@ use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use whiteboard_edge_routing::geometry::Point;
 use whiteboard_model::spatial::{
     Arrowhead, BackgroundStyle, CanvasColor, CanvasColorPreset, CanvasEdge, CanvasLine,
-    CanvasPoint, EdgeEnd, EdgeSide, LineEnd, LineEndNode, LineEndPoint, NodeResource,
+    CanvasPoint, EdgeEnd, EdgeSide, LineEnd, LineEndNode, LineEndPoint, NodeEmbed, NodeResource,
     SpatialCanvas, SpatialNode,
 };
 
@@ -51,8 +51,16 @@ pub(crate) struct NodeWire {
     label: Option<String>,
     background: Option<String>,
     background_style: Option<String>,
+    embed: Option<EmbedWire>,
     facets: Option<Value>,
     tags: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+pub(crate) struct EmbedWire {
+    document_id: String,
+    version_ref: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -119,7 +127,10 @@ pub(crate) fn node_of(wire: &NodeWire) -> Res<SpatialNode> {
         background_style,
         facets: facets_of(wire.facets.as_ref()),
         tags: wire.tags.clone(),
-        ..SpatialNode::default()
+        embed: wire.embed.as_ref().map(|e| NodeEmbed {
+            document_id: e.document_id.clone(),
+            version_ref: e.version_ref.clone(),
+        }),
     })
 }
 
