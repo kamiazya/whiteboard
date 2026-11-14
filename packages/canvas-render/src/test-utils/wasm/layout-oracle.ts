@@ -66,7 +66,7 @@ function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
 export function layoutRecords(): LayoutRecord[] {
   return layoutCases(8).flatMap(({ name, canvas, options }) => {
     const request = canvasLayoutRequest(canvas, options)
-    const sent = request === undefined ? undefined : shimRequest(request)
+    const sent = 'skip' in request ? undefined : shimRequest(request)
     if (sent === undefined) return []
     const events: CoreDegradation[] = []
     const laid = layoutSpatialCanvasWithAnchors(canvas, {

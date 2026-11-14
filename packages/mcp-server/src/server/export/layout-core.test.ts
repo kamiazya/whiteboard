@@ -278,6 +278,38 @@ describe('the daemon layout core', () => {
       }
     })
 
+    it('counts a layout the core did not answer by class, and never throws it', async () => {
+      const strict = await layoutCore(
+        layoutCoreSettingsFrom({
+          WHITEBOARD_CORE_LAYOUT: 'differential',
+          WHITEBOARD_CORE_MISMATCH: 'throw',
+        }),
+      )()
+      const capture = captureLogsForTests('debug')
+      try {
+        const tallies = [
+          { kind: 'skipped', reason: 'style' },
+          { kind: 'declined', reason: 'shortcode' },
+          { kind: 'skipped', reason: 'style' },
+        ] as const
+        for (const tally of tallies) {
+          expect(() => strict?.onMismatch?.({ fn: 'layoutSpatialCanvas', ...tally })).not.toThrow()
+        }
+        expect(
+          capture.records
+            .filter((r) => r.msg === 'the Rust core did not answer this layout')
+            .map((r) => r.data),
+        ).toMatchObject([
+          { kind: 'skipped', reason: 'style', count: 1 },
+          { kind: 'declined', reason: 'shortcode', count: 1 },
+          { kind: 'skipped', reason: 'style', count: 2 },
+        ])
+        expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
+      } finally {
+        capture.restore()
+      }
+    })
+
     it('throws a reported mismatch when the settings say so, and only logs it otherwise', async () => {
       const mismatch = {
         fn: 'routeLayout' as const,

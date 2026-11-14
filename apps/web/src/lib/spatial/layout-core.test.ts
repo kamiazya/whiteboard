@@ -87,6 +87,16 @@ describe('createLayoutCoreHost', () => {
     expect(log.warn).toHaveBeenCalledTimes(1)
   })
 
+  it('logs a layout the core did not answer at debug, and never throws it', async () => {
+    const log = silent()
+    const host = createLayoutCoreHost(settings('differential', 'throw'), async () => routing, log)
+    const core = await host.ready()
+    const skipped = { fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'style' } as const
+    expect(() => core?.onMismatch?.(skipped)).not.toThrow()
+    expect(log.warn).not.toHaveBeenCalled()
+    expect(log.debug).toHaveBeenCalledWith('the Rust core did not answer this layout', skipped)
+  })
+
   it('throws a mismatch under throw, naming what differed', async () => {
     const host = createLayoutCoreHost(
       settings('differential', 'throw'),

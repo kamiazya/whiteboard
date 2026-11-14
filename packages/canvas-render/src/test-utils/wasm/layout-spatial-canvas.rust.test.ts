@@ -28,17 +28,24 @@ describe.runIf(built)('the whole layout through the real core', () => {
   }
   const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions, impl: CoreImpl) => {
     const mismatches: CoreMismatch[] = []
+    const tallies: string[] = []
     const core: LayoutCore = {
       routing: real,
       layout: counting,
       impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
-      onMismatch: (mismatch) => mismatches.push(mismatch),
+      onMismatch: (mismatch) => {
+        if (mismatch.kind === 'skipped' || mismatch.kind === 'declined') {
+          tallies.push(`${mismatch.kind}:${mismatch.reason}`)
+        } else mismatches.push(mismatch)
+      },
     }
-    return { ...layoutSpatialCanvasWithAnchors(canvas, { ...options, core }), mismatches }
+    const laid = layoutSpatialCanvasWithAnchors(canvas, { ...options, core })
+    return { ...laid, mismatches, tallies }
   }
 
   const cases = layoutCases(20)
   it('reports no difference under differential, and rust draws what the TypeScript draws', () => {
+    const tallies: string[] = []
     for (const { name, canvas, options } of cases) {
       const reference = layoutSpatialCanvasWithAnchors(canvas, options)
       const differential = lay(canvas, options, 'differential')
@@ -46,11 +53,14 @@ describe.runIf(built)('the whole layout through the real core', () => {
       expect(differential.scene, name).toEqual(reference.scene)
       const rust = lay(canvas, options, 'rust')
       expect(rust.mismatches, name).toEqual([])
+      tallies.push(...differential.tallies, ...rust.tallies)
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
     }
     // Every layout but the two built to be declined is compared: the core is judged, not skipped.
     expect(answered.compared).toBe(2 * (cases.length - 2))
     expect(answered.declined).toEqual(['highlight', 'highlight', 'shortcode', 'shortcode'])
+    // Each decline reaches the sink by its class, and no case is skipped by the gate.
+    expect(tallies).toEqual(answered.declined.map((reason) => `declined:${reason}`))
   })
 })

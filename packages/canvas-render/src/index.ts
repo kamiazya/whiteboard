@@ -43,6 +43,7 @@ export type {
   CanvasLayoutCore,
   CanvasLayoutMismatch,
   CanvasLayoutRequest,
+  CanvasLayoutTally,
   CoreDegradation,
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
