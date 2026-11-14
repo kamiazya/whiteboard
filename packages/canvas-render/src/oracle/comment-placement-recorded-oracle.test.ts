@@ -29,14 +29,17 @@ const records = readFileSync(FILE, 'utf8')
 
 describe('the recorded comment-placement oracle', () => {
   it('reaches every quadrant and the ring', () => {
-    const fromHex = (h: string) => new Float64Array(new BigUint64Array([BigInt(`0x${h}`)]).buffer)[0] ?? 0
+    const fromHex = (h: string) =>
+      new Float64Array(new BigUint64Array([BigInt(`0x${h}`)]).buffer)[0] ?? 0
     const picked = new Set(
       records.flatMap((r) => {
         if (r.kind !== 'place') return []
         const [x, y] = r.anchor.map(fromHex)
         const [w, h] = r.size.map(fromHex)
         const all = commentBubbleCandidates({ x: x ?? 0, y: y ?? 0 }, { w: w ?? 0, h: h ?? 0 })
-        const at = all.findIndex((c) => JSON.stringify([c.x, c.y, c.w, c.h].map(f64Hex)) === JSON.stringify(r.answer))
+        const at = all.findIndex(
+          (c) => JSON.stringify([c.x, c.y, c.w, c.h].map(f64Hex)) === JSON.stringify(r.answer),
+        )
         return [Math.min(at, 4)]
       }),
     )

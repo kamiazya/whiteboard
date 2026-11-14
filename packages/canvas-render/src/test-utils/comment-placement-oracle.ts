@@ -28,7 +28,12 @@ type Box = readonly [number, number, number, number]
 type Pt = readonly [number, number]
 
 export type CommentPlacementRecord =
-  | { readonly kind: 'candidates'; readonly anchor: string[]; readonly size: string[]; readonly answer: string[][] }
+  | {
+      readonly kind: 'candidates'
+      readonly anchor: string[]
+      readonly size: string[]
+      readonly answer: string[][]
+    }
   | {
       readonly kind: 'place'
       readonly anchor: string[]
@@ -36,8 +41,19 @@ export type CommentPlacementRecord =
       readonly obstacles: string[][]
       readonly answer: string[]
     }
-  | { readonly kind: 'leader'; readonly anchor: string[]; readonly bubble: string[]; readonly radius: string; readonly answer: string[] }
-  | { readonly kind: 'nearest'; readonly point: string[]; readonly path: string[][]; readonly answer: string[] }
+  | {
+      readonly kind: 'leader'
+      readonly anchor: string[]
+      readonly bubble: string[]
+      readonly radius: string
+      readonly answer: string[]
+    }
+  | {
+      readonly kind: 'nearest'
+      readonly point: string[]
+      readonly path: string[][]
+      readonly answer: string[]
+    }
 
 /** A linear congruential generator: the same sequence on every run. */
 function lcg(seed: number) {
@@ -81,7 +97,12 @@ function leader(anchor: Pt, bubble: Box, radius: number): CommentPlacementRecord
 
 function nearest(at: Pt, path: readonly Pt[]): CommentPlacementRecord {
   const answer = nearestPointOnPolyline(toPoint(at), path.map(toPoint))
-  return { kind: 'nearest', point: point(toPoint(at)), path: path.map((p) => point(toPoint(p))), answer: point(answer) }
+  return {
+    kind: 'nearest',
+    point: point(toPoint(at)),
+    path: path.map((p) => point(toPoint(p))),
+    answer: point(answer),
+  }
 }
 
 /** The quadrants and the ring around a 100x40 bubble at (0, 0), each blocked or touched on purpose. */
@@ -117,11 +138,21 @@ function placeEdges(): CommentPlacementRecord[] {
     // Not finite.
     place([0, 0], size, [[Number.NaN, 0, 10, 10]]),
     place([0, 0], size, [[0, 0, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]]),
-    place([0, 0], size, [[Number.NEGATIVE_INFINITY, Number.NEGATIVE_INFINITY, Number.POSITIVE_INFINITY, Number.POSITIVE_INFINITY]]),
+    place([0, 0], size, [
+      [
+        Number.NEGATIVE_INFINITY,
+        Number.NEGATIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+        Number.POSITIVE_INFINITY,
+      ],
+    ]),
     place([Number.NaN, 0], size, [[0, 0, 10, 10]]),
     place([0, 0], [Number.NaN, 40], [[0, 0, 10, 10]]),
     // A crowd that only the ring escapes.
-    place([0, 0], size, [[-300, -300, 600, 600], [-40, -40, 80, 80]]),
+    place([0, 0], size, [
+      [-300, -300, 600, 600],
+      [-40, -40, 80, 80],
+    ]),
     place([0, 0], size, [[-200, -100, 400, 200]]),
   ]
 }
@@ -146,20 +177,106 @@ function nearestEdges(): CommentPlacementRecord[] {
   return [
     nearest([5, 5], []),
     nearest([5, 5], [[1, 2]]),
-    nearest([5, 5], [[1, 2], [1, 2]]),
-    nearest([5, 5], [[0, 0], [10, 0]]),
-    nearest([-5, 5], [[0, 0], [10, 0]]),
-    nearest([15, 5], [[0, 0], [10, 0]]),
-    nearest([0, 0], [[0, 0], [10, 0]]),
-    nearest([10, 0], [[0, 0], [10, 0]]),
+    nearest(
+      [5, 5],
+      [
+        [1, 2],
+        [1, 2],
+      ],
+    ),
+    nearest(
+      [5, 5],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ),
+    nearest(
+      [-5, 5],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ),
+    nearest(
+      [15, 5],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ),
+    nearest(
+      [0, 0],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ),
+    nearest(
+      [10, 0],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ),
     // Two segments equally near: the first keeps it.
-    nearest([5, 5], [[0, 0], [10, 0], [10, 10], [0, 10]]),
-    nearest([5, 3], [[0, 0], [10, 0], [10, 10], [0, 10]]),
-    nearest([5, 7], [[0, 0], [10, 0], [10, 10], [0, 10]]),
-    nearest([3, 4], [[0, 0], [6, 8], [12, 0]]),
-    nearest([5, 5], [[0, 0], [Number.NaN, 0], [10, 0]]),
-    nearest([Number.NaN, 5], [[0, 0], [10, 0]]),
-    nearest([5, 5], [[0, 0], [Number.POSITIVE_INFINITY, 0]]),
+    nearest(
+      [5, 5],
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+      ],
+    ),
+    nearest(
+      [5, 3],
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+      ],
+    ),
+    nearest(
+      [5, 7],
+      [
+        [0, 0],
+        [10, 0],
+        [10, 10],
+        [0, 10],
+      ],
+    ),
+    nearest(
+      [3, 4],
+      [
+        [0, 0],
+        [6, 8],
+        [12, 0],
+      ],
+    ),
+    nearest(
+      [5, 5],
+      [
+        [0, 0],
+        [Number.NaN, 0],
+        [10, 0],
+      ],
+    ),
+    nearest(
+      [Number.NaN, 5],
+      [
+        [0, 0],
+        [10, 0],
+      ],
+    ),
+    nearest(
+      [5, 5],
+      [
+        [0, 0],
+        [Number.POSITIVE_INFINITY, 0],
+      ],
+    ),
   ]
 }
 
