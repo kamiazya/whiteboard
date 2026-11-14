@@ -253,6 +253,8 @@ mod tests {
     use super::*;
     use crate::Value;
     use crate::spatial::{CanvasPoint, EdgeSide, LineEndNode};
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
 
     fn untouched<End>() -> ElementPatchFields<End> {
         ElementPatchFields {
