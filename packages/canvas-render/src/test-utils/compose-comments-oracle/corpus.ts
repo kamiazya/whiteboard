@@ -221,12 +221,15 @@ const quoting = (
 /**
  * Passages of text nodes that the walk highlights: a repeated quote told apart
  * by its context, one across a wrap, one in emphasis, one in a centred
- * node, a settled one, one the text no longer holds and one on a node that is
- * gone.
+ * node, one in a nested list item and one in a table cell (both translate
+ * their runs, so the highlight sits at the wrapper's x plus the run's), a
+ * settled one, one the text no longer holds and one on a node that is gone.
  */
 function passages(): Board {
   const plan = 'the plan is the plan, and **the plan** holds when the plan is kept'
   const diagram = 'see *a diagram* here'
+  const list = '- item words\n  - nested quoted words'
+  const table = '| k | v |\n| --- | --- |\n| key | quoted value |'
   const nodes = [
     text('p1', 0, 0, plan, 160, 120),
     text('p2', 300, 0, diagram, 200, 80),
@@ -234,6 +237,8 @@ function passages(): Board {
       ...text('p3', 0, 260, 'centred words here', 200, 120),
       facets: { 'visual.shape/v0': { kind: 'ellipse' } },
     } as SpatialNode,
+    text('p4', 300, 260, list, 240, 100),
+    text('p5', 0, 460, table, 260, 120),
   ]
   const threads = [
     thread('q-repeat', quoting('p1', 'the plan', 12, { prefix: 'is ' })),
@@ -242,6 +247,8 @@ function passages(): Board {
     thread('q-bold', quoting('p2', 'a diagram', 5)),
     thread('q-settled', quoting('p2', 'see', 0), ['settled'], 'resolved'),
     thread('q-centred', quoting('p3', 'words', 8)),
+    thread('q-list', quoting('p4', 'quoted words', list.indexOf('quoted'))),
+    thread('q-cell', quoting('p5', 'value', table.indexOf('value'))),
     thread('q-missing', quoting('p1', 'nowhere', 0)),
     thread('q-gone', quoting('gone', 'the plan', 0)),
   ]

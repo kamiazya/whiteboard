@@ -275,8 +275,13 @@ describe('passage highlights on an ordinary board', () => {
         resolved: anchor.resolved,
       }))
       const appearance = { open: { fill: '#ff0' }, resolved: { fill: '#888' } }
+      // The oracle predates placed runs, so it reads each run at its drawn x.
+      const drawn = runs.map(({ run, offsetX }) => ({
+        ...run,
+        bbox: { ...run.bbox, x: run.bbox.x + offsetX },
+      }))
       expect(composePassageHighlights(passages, runs, measure, appearance, source)).toEqual(
-        oracleHighlights(passages, runs, measure, appearance, source),
+        oracleHighlights(passages, drawn, measure, appearance, source),
       )
     },
   )
