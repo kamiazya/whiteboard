@@ -112,6 +112,7 @@ function arms(): Board {
     thread('t-note', passage()),
     thread('t-passage-gone', passage('gone')),
     thread('t-doc', { kind: 'document' } as Anchor),
+    thread('t-title', at(590, 170), ['beside a frame title']),
   ]
   return { name: 'arms', canvas: { nodes, edges }, threads }
 }
@@ -177,7 +178,29 @@ function themed(): Board {
   }
 }
 
-export const boards = (): readonly Board[] => [arms(), crowded(), themed()]
+/**
+ * A link too short for its label, so the label is a run hanging below its box
+ * with no `annotates`: words inside a box are no obstacle of their own, the box
+ * is. A point comment sits off the box's left end, so its first candidate lies
+ * over the label and nothing else.
+ */
+function inside(): Board {
+  const link = {
+    id: 'link',
+    x: 0,
+    y: 0,
+    width: 300,
+    height: 4,
+    resource: { mimeType: 'text/uri-list', location: 'https://example.com/a' },
+  } as SpatialNode
+  return {
+    name: 'inside',
+    canvas: { nodes: [link], edges: [] },
+    threads: [thread('corner', at(-14, -6), ['x'])],
+  }
+}
+
+export const boards = (): readonly Board[] => [arms(), crowded(), themed(), inside()]
 
 export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'arms', appearance: 'light' },
@@ -196,4 +219,5 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'themed', appearance: 'light', style: 'document', showResolved: true },
   { board: 'themed', appearance: 'dark', style: 'document' },
   { board: 'themed', appearance: 'bare' },
+  { board: 'inside', appearance: 'light' },
 ]
