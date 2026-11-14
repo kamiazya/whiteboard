@@ -23,6 +23,7 @@ use whiteboard_canvas_render::typeset::{
 };
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -185,12 +186,14 @@ impl Recorded {
     }
 }
 
-/// The host of one run.
+/// The host of one run: each comment's body is answered from `bodies`, by
+/// thread id.
 pub(crate) struct Host<'c> {
     context: &'c Context,
     overlay: OverlayWire,
     legend: Option<SceneLegend>,
     overlaid: Cell<usize>,
+    bodies: BTreeMap<String, Vec<SceneNode>>,
     events: RefCell<Vec<Event>>,
     misses: RefCell<Vec<String>>,
 }
@@ -200,12 +203,14 @@ impl<'c> Host<'c> {
         context: &'c Context,
         overlay: &OverlayWire,
         legend: Option<&SceneLegend>,
+        bodies: BTreeMap<String, Vec<SceneNode>>,
     ) -> Self {
         Self {
             context,
             overlay: overlay.clone(),
             legend: legend.cloned(),
             overlaid: Cell::new(0),
+            bodies,
             events: RefCell::new(Vec::new()),
             misses: RefCell::new(Vec::new()),
         }
@@ -246,6 +251,13 @@ impl ComposeHost for Host<'_> {
             self.miss(format!("a fragment of {document_id}"));
         }
         self.context.embeds.get(document_id).map(|(_, canvas)| canvas.clone())
+    }
+
+    fn comment_body(&self, comment: &PlacedComment) -> Vec<SceneNode> {
+        self.bodies.get(&comment.id).cloned().unwrap_or_else(|| {
+            self.miss(format!("the body of {}", comment.id));
+            Vec::new()
+        })
     }
 
     fn degrade(&self, event: Degradation) {

@@ -49,6 +49,7 @@ pub mod scale_scene;
 pub mod scene_bounds;
 pub mod scene_digest;
 pub mod scene_entries;
+pub mod scene_extent;
 pub mod scene_walk;
 pub mod seed;
 pub mod segment_joins;

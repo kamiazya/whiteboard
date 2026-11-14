@@ -9,6 +9,7 @@ mod facet_support;
 mod tokens;
 
 use serde_json::Value;
+use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{
     LayoutOptions, Overlaid, Overlays, RenderStyle, layout_spatial_canvas, layout_spatial_edges,
 };
@@ -23,6 +24,7 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{CanvasEdge, EdgeEnd, NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -58,6 +60,10 @@ impl ComposeHost for Plain {
 
     fn embedded_canvas(&self, _: &str, _: Option<&str>) -> Option<SpatialCanvas> {
         None
+    }
+
+    fn comment_body(&self, _: &PlacedComment) -> Vec<SceneNode> {
+        Vec::new()
     }
 
     fn degrade(&self, _: Degradation) {}
@@ -269,6 +275,7 @@ fn options_of<'a>(
         side_overrides: None,
         host: &Plain,
         overlays: &Plain,
+        comments: CommentOptions::default(),
         content_cache: None,
         body: BodySeams {
             inline: &Plain,
