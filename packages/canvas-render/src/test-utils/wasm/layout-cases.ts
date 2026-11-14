@@ -45,10 +45,24 @@ const WIRE: ReferenceWire = {
   ],
   aliases: [['child', CHILD_ID]],
   titles: [['D-NOTE', 'Note']],
-  extras: [['boards/plain.canvas', { label: 'The plain one' }]],
+  extras: [
+    ['boards/plain.canvas', { label: 'The plain one' }],
+    [
+      'gone',
+      {
+        missing: true,
+        image: { href: 'data:image/png;base64,AAAA', alt: 'a pixel', width: 40, height: 20 },
+      },
+    ],
+    [
+      'card',
+      { label: 'Card', facets: { title: 'Facts', rows: [{ label: 'owner', value: 'core' }] } },
+    ],
+  ],
 }
 
 const BODIES = [
+  'A picture ![a pixel](gone) inline, and alone:\n\n![a pixel](gone)',
   '# Heading\n\nA paragraph with **strong**, *emphasis*, `code` and ~~deleted~~ words.',
   '- one\n- two\n  - nested\n- [x] done\n\n1. first\n2. second',
   '| a | b |\n|---|---|\n| 1 | 2 |\n| long cell text | x |',
@@ -87,6 +101,7 @@ function bodiesBoard(): SpatialCanvas {
       file('fn', 'note', 0),
       file('fp', 'boards/plain.canvas', 260),
       file('fg', 'gone', 520),
+      file('fc', 'card', 1040),
       { id: 'u', x: 780, y: 700, width: 80, height: 80, resource: { mimeType: 'x/unknown' } },
     ],
     edges: [{ id: 'e', from: { node: 't0' }, to: { node: 't1' }, label: 'reads' }],
