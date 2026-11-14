@@ -29,6 +29,7 @@ pub mod okf;
 pub mod okf_wire;
 pub mod routing_wire;
 pub mod spatial_edges;
+pub mod spatial_layout;
 
 /// Identifies the exported surface. Change it whenever an export is added,
 /// removed or changes shape, so a stale artifact fails at init rather than
@@ -38,10 +39,10 @@ pub mod spatial_edges;
 /// reports a different value: a test lane handed the shipped artifact, or a
 /// shim handed the oracle one, is refused at init.
 #[cfg(not(feature = "oracle-surface"))]
-pub const ABI_VERSION: &str = "20";
+pub const ABI_VERSION: &str = "21";
 /// See the default build's constant.
 #[cfg(feature = "oracle-surface")]
-pub const ABI_VERSION: &str = "20+oracle-surface";
+pub const ABI_VERSION: &str = "21+oracle-surface";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]

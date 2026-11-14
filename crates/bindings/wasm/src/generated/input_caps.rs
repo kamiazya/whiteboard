@@ -39,3 +39,7 @@ pub const OKF_SERIALIZE: InputCaps =
 /// The caps of `whiteboard-wasm::spatial_edges::edge_route_layout`.
 pub const EDGE_ROUTE_LAYOUT: InputCaps =
     InputCaps { max_bytes: 262_144, max_depth: 2, max_millis: 5000, max_nodes: None };
+
+/// The caps of `whiteboard-wasm::spatial_layout::layout_spatial_canvas`.
+pub const LAYOUT_SPATIAL_CANVAS: InputCaps =
+    InputCaps { max_bytes: 16_777_216, max_depth: 128, max_millis: 20_000, max_nodes: Some(4096) };
