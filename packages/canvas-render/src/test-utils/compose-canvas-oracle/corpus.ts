@@ -345,6 +345,7 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'layered', appearance: 'light', fonts: 'default', geometry: [Number.NaN, -1, -1] },
   { board: 'layered', appearance: 'light', fonts: 'default', geometry: [-1, 0, Infinity] },
   { board: 'layered', appearance: 'light', fonts: 'default', geometry: [0, 0.5, 0] },
+  { board: 'layered', appearance: 'light', fonts: 'default', geometry: [12, -1, 40] },
   {
     board: 'layered',
     appearance: 'light',
