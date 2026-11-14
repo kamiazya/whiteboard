@@ -319,7 +319,7 @@ function sweepBoard(index: number): Board {
   return { name: `sweep-${index}`, canvas: canvas([...frames, ...nodes], edges) }
 }
 
-export const SWEEP = 160
+const SWEEP = 160
 
 export function boards(): Board[] {
   return [
