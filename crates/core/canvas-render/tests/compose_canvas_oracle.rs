@@ -5,10 +5,13 @@
 //! how many times the measurer was asked. A body parsed, and what the overlays
 //! drew over the top-level canvas, are answered from the recording. The edges
 //! laid out alone are also held to the edge suffix of the whole layout, which is
-//! what a live drag relies on.
+//! what a live drag relies on. The comment layer is replayed beside it, from
+//! `compose-comments.jsonl` (`comments`).
 
 #[path = "canvas_wire/mod.rs"]
 mod canvas_wire;
+#[path = "compose_canvas_support/comments.rs"]
+mod comments;
 #[path = "degrade_support/mod.rs"]
 mod degrade_support;
 #[path = "typeset_support/dump.rs"]
@@ -32,6 +35,7 @@ use seams::{
 };
 use serde::Deserialize;
 use serde_json::Value;
+use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{
     LayoutOptions, RenderStyle, layout_spatial_canvas, layout_spatial_edges,
     natural_node_content_size,
@@ -169,7 +173,7 @@ impl<'c> Setup<'c> {
         let cache = (self.case.cache == Some(true)).then(KeyCache::default);
         let measure = Counting { base: FakeMeasure::default(), calls: Cell::new(0) };
         let want = &self.case.answer.canvas;
-        let host = Host::new(self.context, &want.overlay, want.legend.as_ref());
+        let host = Host::new(self.context, &want.overlay, want.legend.as_ref(), BTreeMap::new());
         let badge = StencilBadge { registry: &self.context.registry };
         let decorations: [&dyn NodeDecoration; 1] = [&badge];
         let options = LayoutOptions {
@@ -191,6 +195,7 @@ impl<'c> Setup<'c> {
             side_overrides: self.pins.as_deref(),
             host: &host,
             overlays: &host,
+            comments: CommentOptions::default(),
             content_cache: cache.as_ref().map(|c| c as &dyn ContentCache),
             body: BodySeams {
                 inline: &host,

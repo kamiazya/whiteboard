@@ -6,9 +6,9 @@
 //!
 //! Each canvas is coloured by intent first, then settles its own theme and
 //! silhouettes; every node is drawn in paint order with its decorations, then
-//! every edge and line, then what the overlays draw over all of it. The
-//! overlays (region outlines, comments, proposals and the legend) are a seam
-//! until they are ported.
+//! every edge and line, then the comment layer ([`crate::comments`]), then what
+//! the overlays draw over all of it. The overlays (proposals and the legend)
+//! are a seam until they are ported.
 
 mod level;
 
@@ -21,6 +21,7 @@ use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::visual::TagLibrary;
 use whiteboard_scene::{BoundingBox, NodeDecoration, Scene, SceneLegend, SceneNode};
 
+use crate::comments::{CommentOptions, Drawn, compose_comment_layer};
 use crate::compose_edges::{EdgeOptions, compose_edges_and_labels};
 use crate::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, ContentCache, compose_decorations, compose_node,
@@ -49,18 +50,17 @@ pub enum RenderStyle<'a> {
 /// What the overlays draw over a laid-out canvas.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct Overlaid {
-    /// Drawn after everything the walk drew: region outlines, then comments,
-    /// then proposals.
+    /// Drawn after the comment layer: the proposals.
     pub nodes: Vec<SceneNode>,
     pub legend: Option<SceneLegend>,
 }
 
-/// The layers drawn over a canvas once its nodes and edges are: the comment
-/// layer, the proposal layer and the legend.
+/// The layers drawn over a canvas once its nodes, edges and comments are: the
+/// proposal layer and the legend.
 pub trait Overlays {
     /// What is drawn over `canvas`, given what the walk drew of it (`drawn`, in
-    /// paint order: every node, then every edge and label) and the options its
-    /// nodes were composed with.
+    /// paint order: every node, then every edge and label, the comment layer
+    /// not included) and the options its nodes were composed with.
     fn overlay(
         &self,
         canvas: &SpatialCanvas,
@@ -96,6 +96,8 @@ pub struct LayoutOptions<'a> {
     pub side_overrides: Option<&'a [(String, EdgeAnchorOverride)]>,
     pub host: &'a dyn ComposeHost,
     pub overlays: &'a dyn Overlays,
+    /// The comment layer, drawn over the canvas asked for and none nested in it.
+    pub comments: CommentOptions<'a>,
     pub content_cache: Option<&'a dyn ContentCache>,
     pub body: BodySeams<'a>,
     /// The nested-layout account this canvas spends from when it is itself
@@ -164,12 +166,17 @@ fn walk(
         &canvas,
         &EdgeOptions { node_box: compose.node_box, side_overrides: options.side_overrides },
     );
+    let from = nodes.len();
     nodes.extend(edges.content);
-    let overlaid = if place.annotated {
-        options.overlays.overlay(&canvas, &nodes, &compose)
-    } else {
-        Overlaid::default()
+    if !place.annotated {
+        return LaidOut { scene: Scene { nodes, legend: None }, anchors: edges.anchors };
+    }
+    let comments = {
+        let drawn = Drawn { all: &nodes, edges: nodes.get(from..).unwrap_or_default() };
+        compose_comment_layer(&canvas, &drawn, &compose)
     };
+    let overlaid = options.overlays.overlay(&canvas, &nodes, &compose);
+    nodes.extend(comments);
     nodes.extend(overlaid.nodes);
     LaidOut { scene: Scene { nodes, legend: overlaid.legend }, anchors: edges.anchors }
 }

@@ -4,6 +4,7 @@
 
 use std::cell::Cell;
 
+use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{LayoutOptions, Overlaid, Overlays, RenderStyle};
 use whiteboard_canvas_render::compose_node::{
     BodySeams, ComposeHost, ComposeOptions, Degradation, ParseFailed, compose_node,
@@ -16,6 +17,7 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::typeset::NestedLayoutBudget;
 use whiteboard_canvas_render::typeset::{FittedBlocks, IconRange, ImageRef, InlineSeams};
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::PlacedComment;
 use whiteboard_model::mdast::{Flow, Phrasing, Root};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 use whiteboard_plugin_visual::host::visual_registry;
@@ -67,6 +69,10 @@ impl ComposeHost for Marking {
 
     fn embedded_canvas(&self, _: &str, _: Option<&str>) -> Option<SpatialCanvas> {
         None
+    }
+
+    fn comment_body(&self, _: &PlacedComment) -> Vec<SceneNode> {
+        Vec::new()
     }
 
     fn degrade(&self, _: Degradation) {
@@ -155,6 +161,7 @@ fn hello_composed(host: &Marking, registry: &Registry, annotated: bool) -> Vec<S
         side_overrides: None,
         host,
         overlays: host,
+        comments: CommentOptions::default(),
         content_cache: None,
         body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
