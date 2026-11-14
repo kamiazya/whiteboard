@@ -1,10 +1,4 @@
-import type {
-  CanvasEdge,
-  CanvasLine,
-  CommentThread,
-  SpatialCanvas,
-  SpatialNode,
-} from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { EdgeAnchorOverride } from '../../layout/edges/edge-sides.js'
 
@@ -19,7 +13,6 @@ import type { EdgeAnchorOverride } from '../../layout/edges/edge-sides.js'
 export interface Board {
   readonly name: string
   readonly canvas: SpatialCanvas
-  readonly threads?: readonly CommentThread[]
 }
 
 /** How the base appearance is built: the light or dark theme, or the dark one with no mode stamped. */
@@ -212,22 +205,6 @@ function tagged(): Board {
   }
 }
 
-/** A note with a comment thread on it, which the overlays draw over everything. */
-function commented(): Board {
-  return {
-    name: 'commented',
-    canvas: { nodes: [text('note', 0, 0, 'ship the plan', {}, 400, 100)], edges: [] },
-    threads: [
-      {
-        id: 't1',
-        anchor: { kind: 'spatial', nodeIds: ['note'] },
-        status: 'open',
-        messages: [{ id: 'm1', body: 'region' }],
-      },
-    ] as unknown as readonly CommentThread[],
-  }
-}
-
 const file = (id: string, x: number, y: number, location: string, w = 300, h = 200) =>
   ({
     id,
@@ -316,7 +293,6 @@ export const boards = (): readonly Board[] => [
   boxy(),
   unknown(),
   tagged(),
-  commented(),
   nesting(),
 ]
 
@@ -365,7 +341,6 @@ export const caseSpecs = (): readonly CaseSpec[] => [
   { board: 'unknown', style: 'visual.gone', appearance: 'dark', fonts: 'default' },
   { board: 'tagged', appearance: 'light', fonts: 'default', library: true },
   { board: 'tagged', appearance: 'light', fonts: 'default' },
-  { board: 'commented', appearance: 'light', fonts: 'default' },
   { board: 'nesting', style: 'document', appearance: 'light', fonts: 'all' },
   {
     board: 'nesting',
