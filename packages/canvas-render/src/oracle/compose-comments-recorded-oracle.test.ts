@@ -4,6 +4,7 @@ import {
   type ComposeCommentsRecord,
   composeCommentsRecords,
 } from '../test-utils/compose-comments-oracle/oracle.js'
+import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
 
 /**
  * The committed recording of what the comment layer draws over a whole canvas
@@ -49,13 +50,17 @@ describe('the recorded compose-comments oracle', () => {
         `${gone} has no pin`,
       ).toBe(false)
     }
+    const asked = cases.flatMap((c) => c.answer.layerCalls)
+    const sized = (px: number) => asked.some(([, , size]) => size === f64Hex(px))
+    expect(sized(10), 'a pin count').toBe(true)
+    expect(sized(11), 'a "Resolved" label').toBe(true)
+    expect(sized(16), 'a body').toBe(true)
+    for (const kind of ['para', 'heading', 'list', 'quote', 'code', 'table', 'rule', 'empty']) {
+      has(`a settled ${kind}`, `"s-${kind}/bubble"`)
+    }
     expect(
-      cases.some((c) => c.answer.pinCounts.length > 0),
-      'a pin count',
-    ).toBe(true)
-    expect(
-      cases.every((c) => Object.keys(c.answer.bodies).length > 0),
-      'a body in every case',
+      cases.some((c) => c.answer.events.some((e) => e.kind === 'body-parse-failed')),
+      'a body that does not parse',
     ).toBe(true)
   })
 
