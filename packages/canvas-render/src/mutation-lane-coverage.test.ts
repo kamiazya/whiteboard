@@ -431,9 +431,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // 128 with `layout/nodes/phrase-pairs.ts`: the join of a BudouX phrase that
     // ends inside a surrogate pair, outside the lane because it is one loop
     // whose every branch `mdast-blocks-surrogate-pair.test.ts` drives.
+    // 130 with `canvas-core.ts` (types alone) and `layout/canvas-switch.ts`,
+    // the whole layout's switch. Outside the lane for the routing switch's
+    // reason: a dispatch, a request built from options and a comparison,
+    // every branch driven by `layout/canvas-switch.test.ts`, and it goes when
+    // the TypeScript layout does.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 128,
+      production: 130,
     })
   })
 

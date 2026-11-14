@@ -1,10 +1,10 @@
 import { nodeFile, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
-import type { CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 
@@ -79,17 +79,22 @@ export function canvasLayoutRequest(
     measure,
     mode,
     expand,
-    ...(options.geometry === undefined ? {} : { geometry: options.geometry }),
-    ...(options.lockedNodeIds === undefined ? {} : { lockedNodeIds: options.lockedNodeIds }),
-    ...(options.suppressedBodyNodeIds === undefined
-      ? {}
-      : { suppressedBodyNodeIds: options.suppressedBodyNodeIds }),
-    ...(options.edgeSideOverrides === undefined
-      ? {}
-      : { sideOverrides: [...options.edgeSideOverrides] }),
-    ...(options.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
-    ...(options.embedPath === undefined ? {} : { embedPath: options.embedPath }),
+    ...dataOptions(options),
     ...(wire === undefined ? {} : { references: wire as CanvasLayoutRequest['references'] }),
+  }
+}
+
+/** The options that are data already, each present only when the caller set it. */
+function dataOptions(options: SpatialLayoutOptions): Partial<CanvasLayoutRequest> {
+  const { geometry, lockedNodeIds, suppressedBodyNodeIds, edgeSideOverrides } = options
+  const { tagLibrary, embedPath } = options
+  return {
+    ...(geometry === undefined ? {} : { geometry }),
+    ...(lockedNodeIds === undefined ? {} : { lockedNodeIds }),
+    ...(suppressedBodyNodeIds === undefined ? {} : { suppressedBodyNodeIds }),
+    ...(edgeSideOverrides === undefined ? {} : { sideOverrides: [...edgeSideOverrides] }),
+    ...(tagLibrary === undefined ? {} : { tagLibrary }),
+    ...(embedPath === undefined ? {} : { embedPath }),
   }
 }
 

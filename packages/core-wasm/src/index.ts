@@ -28,6 +28,12 @@ import {
   serializeSpatial,
 } from './json-canvas.js'
 import {
+  type LayoutAnswer,
+  type LayoutGlue,
+  type LayoutRequest,
+  layoutSpatialCanvas,
+} from './layout.js'
+import {
   type OkfDocument,
   type OkfErrors,
   type OkfGlue,
@@ -36,19 +42,11 @@ import {
   serializeOkf,
 } from './okf.js'
 import type { UnwritableIssue } from './okf-unsafe.js'
-import {
-  type LayoutAnswer,
-  type LayoutGlue,
-  type LayoutRequest,
-  layoutSpatialCanvas,
-} from './layout.js'
 import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
 
 /** The glue surface the shim calls: the `#glue` module's own type. */
 export type CoreGlue = typeof import('#glue')
-
-export { encodeLayoutRequest, type LayoutRequest } from './layout.js'
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
 export const EXPECTED_ABI = '21'

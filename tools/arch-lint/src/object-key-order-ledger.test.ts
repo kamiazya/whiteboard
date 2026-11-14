@@ -29,6 +29,10 @@ interface LedgerEntry {
 }
 
 const LEDGER: Readonly<Record<string, LedgerEntry>> = {
+  'packages/canvas-render/src/layout/canvas-switch.ts': {
+    uses: 1,
+    why: "the whole layout's differential walking two answers in step: the walk only finds the first path they part at, which reaches a mismatch report and never a scene, so an edge id that looks like an integer moves which difference is named first, not whether one is",
+  },
   'packages/canvas-render/src/references/seams.ts': {
     uses: 1,
     why: 'an emptiness check on the resolved seams, where the count is read and the order never is',

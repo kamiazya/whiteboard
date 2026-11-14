@@ -1,5 +1,5 @@
-import { encodeLayoutRequest } from '@kamiazya/whiteboard-core-wasm'
-import type { CoreDegradation } from '../../canvas-core.js'
+import { type CoreGlue, coreFrom, EXPECTED_ABI } from '@kamiazya/whiteboard-core-wasm'
+import type { CanvasLayoutRequest, CoreDegradation } from '../../canvas-core.js'
 import { canvasLayoutRequest } from '../../layout/canvas-switch.js'
 import type { SpatialLayoutDegradation } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
@@ -35,6 +35,25 @@ function answerText(value: unknown): string | undefined {
   return Array.isArray(value) ? `[${parts.join(',')}]` : `{${parts.join(',')}}`
 }
 
+/**
+ * The request text exactly as the shim sends it: a core over a glue that keeps
+ * what it is handed and declines, so the recording cannot drift from the shim's
+ * encoding.
+ */
+function shimRequest(request: CanvasLayoutRequest): string | undefined {
+  let sent: string | undefined
+  const glue = {
+    initSync: () => undefined,
+    abi_version: () => EXPECTED_ABI,
+    layout_spatial_canvas: (text: string) => {
+      sent = text
+      return '["declined","recorded"]'
+    },
+  } as unknown as CoreGlue
+  coreFrom(glue, new Uint8Array()).layoutSpatialCanvas(request)
+  return sent
+}
+
 function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
   return event.kind === 'body-parse-failed' ? { kind: event.kind, nodeId: event.nodeId } : event
 }
@@ -47,8 +66,8 @@ function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
 export function layoutRecords(): LayoutRecord[] {
   return layoutCases(8).flatMap(({ name, canvas, options }) => {
     const request = canvasLayoutRequest(canvas, options)
-    const encoded = request === undefined ? undefined : encodeLayoutRequest(request)
-    if (encoded === undefined) return []
+    const sent = request === undefined ? undefined : shimRequest(request)
+    if (sent === undefined) return []
     const events: CoreDegradation[] = []
     const laid = layoutSpatialCanvasWithAnchors(canvas, {
       ...options,
@@ -63,6 +82,6 @@ export function layoutRecords(): LayoutRecord[] {
       declined === undefined
         ? (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')
         : JSON.stringify(['declined', declined])
-    return [{ id: name, request: encoded.text, answer }]
+    return [{ id: name, request: sent, answer }]
   })
 }

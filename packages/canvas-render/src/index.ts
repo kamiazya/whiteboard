@@ -39,6 +39,12 @@ export type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from '@kamiazya/whiteboard-scene'
+export type {
+  CanvasLayoutCore,
+  CanvasLayoutMismatch,
+  CanvasLayoutRequest,
+  CoreDegradation,
+} from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
@@ -66,13 +72,6 @@ export type {
   RoutingCore,
 } from './layout/edges/layout-core.js'
 export { routeLayout } from './layout/edges/layout-core.js'
-export type {
-  CanvasLayoutAnswer,
-  CanvasLayoutCore,
-  CanvasLayoutMismatch,
-  CanvasLayoutRequest,
-  CoreDegradation,
-} from './canvas-core.js'
 export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'

@@ -1,15 +1,15 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { EdgeAnchorOverride, EdgeAnchorPair } from './layout/edges/edge-sides.js'
 import type { MeasureSpec } from './measure.js'
 import type { LoadedReference } from './references/loaded-reference.js'
 import type { ReferenceExtra } from './references/wire.js'
-import type { SpatialThemeMode } from './theme/spatial-theme.js'
 import type { SpatialGeometry } from './theme/spatial-geometry.js'
-import type { EdgeAnchorOverride, EdgeAnchorPair } from './layout/edges/edge-sides.js'
+import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
 /** A reference's surface extras as the core takes them: data only, no body or canvas. */
-export type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
+type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
 
 /**
  * One layout asked of the Rust core (ADR-0054 step 7), every option as data:
@@ -55,7 +55,7 @@ export type CoreDegradation =
  * the parser's bounds, a shortcode, a coloured fence, a fragment, a request
  * past its caps), which the TypeScript then answers.
  */
-export type CanvasLayoutAnswer =
+type CanvasLayoutAnswer =
   | {
       readonly scene: Scene
       readonly anchors: ReadonlyMap<string, EdgeAnchorPair>

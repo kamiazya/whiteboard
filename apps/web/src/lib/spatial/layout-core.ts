@@ -38,7 +38,8 @@ export interface CoreLog {
 }
 
 function summarize(mismatch: CoreMismatch) {
-  if (mismatch.kind !== 'differs') return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
+  if (mismatch.kind !== 'differs')
+    return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   // The page never switches the whole layout on (it measures with a canvas
   // context, which the core cannot repeat), so only a routing difference
   // reaches here; the whole layout's is read for the type's sake.

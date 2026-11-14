@@ -6,12 +6,13 @@ import { wireOf } from './value-wire.js'
 // The whole layout over the artifact (`crates/bindings/wasm/src/spatial_layout`).
 //
 // The request and the answer are typed here structurally, as canvas-render's
-// `CanvasLayoutRequest` and `CanvasLayoutAnswer`, which `layout.rust.test.ts`
-// in canvas-render holds assignable both ways: this package may not import
-// canvas-render, which takes this one through its composition roots.
+// `CanvasLayoutRequest` and `CanvasLayoutAnswer`: this package may not import
+// canvas-render, which takes this one through its composition roots. Each
+// root hands a `Core` over as canvas-render's `LayoutCore`, so the compiler
+// holds the two shapes together wherever one is installed.
 
 /** The faces a font-table measurer reads, by family and slot. */
-export interface LayoutFace {
+interface LayoutFace {
   readonly family: string
   readonly bold: boolean
   readonly italic: boolean
@@ -30,7 +31,7 @@ export interface LayoutRequest {
 }
 
 /** One degradation, as the layout reports it. */
-export type LayoutEvent =
+type LayoutEvent =
   | { readonly kind: 'body-parse-failed'; readonly nodeId: string }
   | { readonly kind: 'unknown-theme'; readonly theme: string }
   | { readonly kind: 'font-missing'; readonly family: string }
@@ -61,7 +62,7 @@ export interface LayoutErrors {
 }
 
 /** The request's wire and the fonts argument its faces point into; undefined when the wire cannot carry it. */
-export function encodeLayoutRequest(
+function encodeLayoutRequest(
   request: LayoutRequest,
 ): { text: string; fonts: Uint8Array } | undefined {
   const faces = request.measure.kind === 'fonts' ? request.measure.faces : []

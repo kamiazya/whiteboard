@@ -1,9 +1,9 @@
 import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
+import type { CanvasLayoutCore, CanvasLayoutMismatch } from '../../canvas-core.js'
 import type { Rect } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
-import type { CanvasLayoutCore, CanvasLayoutMismatch } from '../../canvas-core.js'
 import type { RoutingBudget } from './routing-budget.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
 

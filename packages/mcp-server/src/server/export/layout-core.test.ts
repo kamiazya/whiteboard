@@ -187,7 +187,10 @@ describe('the daemon layout core', () => {
       const counting = {
         ...core,
         layout: {
-          layoutSpatialCanvas: (r: never) => ((asked += 1), layout.layoutSpatialCanvas(r)),
+          layoutSpatialCanvas: (r: never) => {
+            asked += 1
+            return layout.layoutSpatialCanvas(r)
+          },
         },
       }
       const themed = { ...options, appearance: createSpatialTheme({ mode: 'light' }) }

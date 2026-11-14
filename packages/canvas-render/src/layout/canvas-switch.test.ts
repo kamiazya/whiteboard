@@ -1,7 +1,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import type { CanvasLayoutAnswer, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
+import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
 import { describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { referenceSeamsFromWire } from '../references/wire.js'
@@ -36,7 +36,7 @@ const canvas: SpatialCanvas = {
 const base: SpatialLayoutOptions = { measure, appearance }
 const reference = layoutSpatialCanvasWithAnchors(canvas, base)
 
-type Answering = (request: CanvasLayoutRequest) => CanvasLayoutAnswer
+type Answering = CanvasLayoutCore['layoutSpatialCanvas']
 
 /** A core answering as `answer` says, keeping each request it was handed. */
 function coreOf(impl: CoreImpl, answer: Answering) {
@@ -238,7 +238,11 @@ describe('what the core can be handed', () => {
     const asked = (policy: (node: SpatialNode) => boolean) =>
       canvasLayoutRequest(withFiles, { ...base, references, expandFileNode: policy })?.expand
     const seen: string[] = []
-    expect(asked((node) => (seen.push(node.id), true))).toBe(true)
+    const noting = (node: SpatialNode) => {
+      seen.push(node.id)
+      return true
+    }
+    expect(asked(noting)).toBe(true)
     expect(seen).toEqual(['f1', 'f2'])
     expect(asked(() => false)).toBe(false)
     expect(asked((node) => node.id === 'f1')).toBeUndefined()

@@ -5,8 +5,8 @@ import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wir
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import {
   boards,
-  CHILD_ID,
   type CaseSpec,
+  CHILD_ID,
   caseSpecs,
   REFERENCES,
   TAG_LIBRARY,
@@ -34,7 +34,7 @@ export interface LayoutCase {
 const CHILD = REFERENCES['boards/child.canvas']
 
 /** The composer recordings' references as a keeper's wire: each canvas by path, the child by id. */
-export const WIRE: ReferenceWire = {
+const WIRE: ReferenceWire = {
   entries: [
     ...Object.entries(REFERENCES).map(
       ([ref, nested]) => [ref, { name: nested.title, canvas: nested.canvas }] as const,
