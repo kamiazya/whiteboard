@@ -39,13 +39,19 @@ pub struct ColourChannels {
     pub edges: ChannelUse,
 }
 
-/// A declared distinction: its name, and its population's indices by class.
+/// A declared distinction: its name, and the population indices of each
+/// LISTED class. Sparse, as `facet-score.ts`'s is: a scoped-tag key is
+/// carried by the few elements naming it while a board may hold many keys, so
+/// listing every element per key made the reading keys × elements. The
+/// unlisted class (the untagged, `""`) is still a class, read as the
+/// population less what is listed.
 struct Partition {
     name: String,
     classes: Vec<Vec<usize>>,
 }
 
-/// The classes of a population, in order of first appearance.
+/// The classes of a population, in order of first appearance, every member
+/// listed.
 fn partition<C: PartialEq>(name: &str, classes: impl IntoIterator<Item = C>) -> Partition {
     let mut seen: Vec<(C, Vec<usize>)> = Vec::new();
     for (at, class) in classes.into_iter().enumerate() {
@@ -61,8 +67,8 @@ fn partition<C: PartialEq>(name: &str, classes: impl IntoIterator<Item = C>) -> 
 const BUILT_IN: [&str; 3] = ["frame", "kind", "stencil"];
 
 /// One partition per scoped-tag key, in key order: an element carrying none is
-/// the `""` class, and a key some element carries twice (even one value twice)
-/// partitions nothing.
+/// in the unlisted `""` class, and a key some element carries twice (even one
+/// value twice) partitions nothing. Only the tagged elements are listed.
 fn tag_partitions(tags: &[Option<&[String]>]) -> Vec<Partition> {
     let mut by_key: BTreeMap<&str, Vec<(usize, &str)>> = BTreeMap::new();
     for (at, written) in tags.iter().enumerate() {
@@ -75,15 +81,14 @@ fn tag_partitions(tags: &[Option<&[String]>]) -> Vec<Partition> {
     by_key
         .into_iter()
         .filter_map(|(key, placed)| {
-            let mut classes = vec![""; tags.len()];
-            for (at, value) in placed {
-                let slot = classes.get_mut(at)?;
-                if !slot.is_empty() {
-                    return None;
-                }
-                *slot = value;
+            if placed.windows(2).any(|pair| matches!(pair, [a, b] if a.0 == b.0)) {
+                return None;
             }
-            Some(partition(key, classes))
+            let mut by_value: BTreeMap<&str, Vec<usize>> = BTreeMap::new();
+            for &(at, value) in &placed {
+                by_value.entry(value).or_default().push(at);
+            }
+            Some(Partition { name: key.to_owned(), classes: by_value.into_values().collect() })
         })
         .collect()
 }
@@ -158,21 +163,60 @@ fn box_partitions(
     out
 }
 
-/// Whether every class of `p` shows one value.
-fn constant_within(p: &Partition, values: &[Option<&CanvasColor>]) -> bool {
-    p.classes.iter().all(|members| {
-        let first = members.first().and_then(|&at| values.get(at));
-        members.iter().all(|&at| values.get(at) == first)
+/// A colour as `==` tells colours apart: a preset's numeral or a hex
+/// string, which no preset spells.
+fn colour_key(colour: Option<&CanvasColor>) -> Option<&str> {
+    colour.map(|c| match c {
+        CanvasColor::CanvasColorPreset(preset) => preset.as_str(),
+        CanvasColor::CanvasColorHex(hex) => hex.as_str(),
     })
 }
 
-fn channel_use(values: &[Option<&CanvasColor>], partitions: &[Partition]) -> ChannelUse {
-    let first = values.first();
-    if values.iter().all(|value| Some(value) == first) {
+/// How many elements of a population show each value.
+type Totals<'v> = BTreeMap<Option<&'v str>, usize>;
+
+fn bump<'v>(counts: &mut Totals<'v>, value: Option<&'v str>) {
+    let n = counts.entry(value).or_default();
+    *n = n.saturating_add(1);
+}
+
+/// Whether every class of `p`, the unlisted one included, shows one value.
+/// The unlisted class shows a value exactly when the population shows it
+/// more often than the listed classes do.
+fn constant_within(p: &Partition, values: &[Option<&str>], totals: &Totals) -> bool {
+    let mut listed: Totals = BTreeMap::new();
+    for members in &p.classes {
+        let first = members.first().and_then(|&at| values.get(at));
+        if !members.iter().all(|&at| values.get(at) == first) {
+            return false;
+        }
+        for &at in members {
+            bump(&mut listed, values.get(at).copied().flatten());
+        }
+    }
+    let in_rest = totals.iter().filter(|(value, n)| listed.get(*value).unwrap_or(&0) < n);
+    in_rest.count() <= 1
+}
+
+/// One value everywhere is `unused`, answered before any partition is built:
+/// an uncoloured board pays for none.
+fn channel_use(
+    colours: &[Option<&CanvasColor>],
+    partitions: impl FnOnce() -> Vec<Partition>,
+) -> ChannelUse {
+    let values: Vec<Option<&str>> = colours.iter().map(|c| colour_key(*c)).collect();
+    let mut totals: Totals = BTreeMap::new();
+    for value in &values {
+        bump(&mut totals, *value);
+    }
+    if totals.len() <= 1 {
         return ChannelUse::Unused;
     }
-    let carried: Vec<String> =
-        partitions.iter().filter(|p| constant_within(p, values)).map(|p| p.name.clone()).collect();
+    let carried: Vec<String> = partitions()
+        .into_iter()
+        .filter(|p| constant_within(p, &values, &totals))
+        .map(|p| p.name)
+        .collect();
     if carried.is_empty() { ChannelUse::Contested } else { ChannelUse::Carried(carried) }
 }
 
@@ -186,15 +230,16 @@ pub fn colour_channels(canvas: &SpatialCanvas, registry: &Registry) -> ColourCha
     let edge_tags: Vec<Option<&[String]>> =
         canvas.edges.iter().map(|e| e.tags.as_deref()).collect();
     ColourChannels {
-        boxes: channel_use(&box_colours, &box_partitions(canvas, &boxes, registry)),
-        edges: channel_use(&edge_colours, &tag_partitions(&edge_tags)),
+        boxes: channel_use(&box_colours, || box_partitions(canvas, &boxes, registry)),
+        edges: channel_use(&edge_colours, || tag_partitions(&edge_tags)),
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::canonical;
+    use super::{ChannelUse, canonical, channel_use, tag_partitions};
     use whiteboard_model::Value;
+    use whiteboard_model::spatial::{CanvasColor, CanvasColorPreset};
 
     #[cfg(target_arch = "wasm32")]
     use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -217,5 +262,41 @@ mod tests {
             canonical(&written),
             canonical(&map(&[("z", Value::Seq(vec![inner(2.0, 1.0)])), ("y", Value::Null)]))
         );
+    }
+
+    #[test]
+    fn a_tag_partition_lists_its_tagged_members_and_no_one_else() {
+        let tags: Vec<Vec<String>> = (0..300).map(|at| vec![format!("k{at}:v")]).collect();
+        let written: Vec<Option<&[String]>> = tags.iter().map(|t| Some(t.as_slice())).collect();
+        let partitions = tag_partitions(&written);
+        assert_eq!(partitions.len(), 300);
+        let listed: usize = partitions.iter().flat_map(|p| &p.classes).map(Vec::len).sum();
+        assert_eq!(listed, 300);
+    }
+
+    #[test]
+    fn the_untagged_class_must_hold_one_colour_too() {
+        let red = CanvasColor::CanvasColorPreset(CanvasColorPreset::V1);
+        let hex = |written: &str| CanvasColor::CanvasColorHex(written.to_owned());
+        let (blue, green) = (hex("#0000ff"), hex("#00ff00"));
+        let colours = [Some(&red), Some(&blue), Some(&blue), Some(&green)];
+        let one = [String::from("k:a")];
+        let two = [String::from("k:b")];
+        let untagged_differ = [Some(&one[..]), None, None, None];
+        let untagged_agree = [Some(&one[..]), None, None, Some(&two[..])];
+        assert_eq!(
+            channel_use(&colours, || tag_partitions(&untagged_differ)),
+            ChannelUse::Contested
+        );
+        assert_eq!(
+            channel_use(&colours, || tag_partitions(&untagged_agree)),
+            ChannelUse::Carried(vec!["k".to_owned()])
+        );
+    }
+
+    #[test]
+    fn one_colour_everywhere_builds_no_partition() {
+        let colours = [None, None];
+        assert_eq!(channel_use(&colours, || unreachable!()), ChannelUse::Unused);
     }
 }
