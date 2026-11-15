@@ -128,7 +128,7 @@ describe('the faces a font-table measurer reads', () => {
     expect(registered).toHaveLength(2)
   })
 
-  it('decline a layout past the caps of a registration, and throw on faces that are no fonts', () => {
+  it('decline a layout past the caps of a registration or over a font the core cannot read', () => {
     const refusing = (answer: string) => ({
       ...glueOf().glue,
       register_layout_fonts: () => answer,
@@ -147,7 +147,20 @@ describe('the faces a font-table measurer reads', () => {
     ).toEqual({
       declined: 'held',
     })
-    const bad = refusing('["refused","malformed","font"]')
+    // The shim places every range itself, so `malformed font` names bytes the
+    // core's reader does not read (a WOFF opentype.js inflates), not a defect.
+    const unread = refusing('["refused","malformed","font"]')
+    expect(
+      layoutSpatialCanvas(
+        unread,
+        errors,
+        request,
+        undefined,
+        new FenceTokenMemo(),
+        new FontHandles(unread, errors),
+      ),
+    ).toEqual({ declined: 'font' })
+    const bad = refusing('["refused","malformed","faces"]')
     expect(() =>
       layoutSpatialCanvas(
         bad,
@@ -157,7 +170,7 @@ describe('the faces a font-table measurer reads', () => {
         new FenceTokenMemo(),
         new FontHandles(bad, errors),
       ),
-    ).toThrow('register_layout_fonts malformed font')
+    ).toThrow('register_layout_fonts malformed faces')
     const garbled = refusing('["ok","7"]')
     expect(() =>
       layoutSpatialCanvas(
@@ -187,6 +200,26 @@ describe('the faces a font-table measurer reads', () => {
       declined: 'too-large',
     })
     expect(registered).toEqual([])
+  })
+
+  it('remember a decline the measurer cannot outgrow, and register again after one it can', () => {
+    const answers = [
+      '["refused","malformed","font"]',
+      '["refused","input-too-large","face"]',
+      '["refused","input-too-large","held"]',
+      '["refused","input-too-large","handles"]',
+    ]
+    let asked = 0
+    const glue = { ...glueOf().glue, register_layout_fonts: () => answers[asked++ % 4] }
+    const fonts = new FontHandles(glue, errors)
+    const [unread, past, full, many] = [facesOf(), facesOf(), facesOf(), facesOf()]
+    const declines = () => [unread, past, full, many].map((faces) => fonts.handleOf(faces))
+    const reasons = [{ declined: 'font' }, { declined: 'face' }]
+    expect(declines()).toEqual([...reasons, { declined: 'held' }, { declined: 'handles' }])
+    expect(asked).toBe(4)
+    // The faces and the reader are fixed; how much an instance holds is not.
+    expect(declines().slice(0, 2)).toEqual(reasons)
+    expect(asked).toBe(6)
   })
 
   it('are the handles a caller holds, never a cache one layout makes for itself', () => {

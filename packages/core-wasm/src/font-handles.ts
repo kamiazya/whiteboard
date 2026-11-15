@@ -39,8 +39,14 @@ export interface Finalizer {
 
 const OPERATION = 'register_layout_fonts'
 
-/** A handle, or the class of a registration past the core's caps. */
+/** A handle, or the class of a registration the core will not hold. */
 type Registered = { readonly handle: number } | { readonly declined: string }
+
+/**
+ * The declines that depend on what the instance holds rather than on the
+ * faces, so a later registration of the same faces may succeed.
+ */
+const OUTGROWN = new Set(['held', 'handles'])
 
 /**
  * The handles one core holds, by the measurer each names: a measurer is
@@ -48,6 +54,9 @@ type Registered = { readonly handle: number } | { readonly declined: string }
  */
 export class FontHandles {
   readonly #held = new WeakMap<LayoutFaces, number>()
+  // Asking again would copy every face in again to hear the same answer, on
+  // every layout a daemon with such a face installed makes.
+  readonly #declined = new WeakMap<LayoutFaces, string>()
   readonly #glue: FontsGlue
   readonly #errors: FontsErrors
   readonly #collected: Finalizer
@@ -67,10 +76,14 @@ export class FontHandles {
   handleOf(faces: LayoutFaces): Registered {
     const held = this.#held.get(faces)
     if (held !== undefined) return { handle: held }
+    const declined = this.#declined.get(faces)
+    if (declined !== undefined) return { declined }
     const registered = this.#register(faces)
     if ('handle' in registered) {
       this.#held.set(faces, registered.handle)
       this.#collected.register(faces, registered.handle, faces)
+    } else if (!OUTGROWN.has(registered.declined)) {
+      this.#declined.set(faces, registered.declined)
     }
     return registered
   }
@@ -104,6 +117,9 @@ export class FontHandles {
     if (kind === 'refused' && a === 'input-too-large' && typeof b === 'string') {
       return { declined: b }
     }
+    // Every range was placed above, so this names bytes the core's reader does
+    // not read (a WOFF that opentype.js inflates), which the TypeScript lays out.
+    if (kind === 'refused' && a === 'malformed' && b === 'font') return { declined: 'font' }
     const detail = kind === 'refused' && typeof b === 'string' ? b : 'answer'
     throw this.#errors.refused(OPERATION, 'malformed', detail)
   }
