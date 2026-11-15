@@ -2,9 +2,14 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
-import { overlayReferences, referenceSeams } from './seams.js'
+import { referenceSeams } from './seams.js'
 import { imageTargets, REFERENCE_BUDGET, referenceTargets } from './targets.js'
-import { referenceSeamsFromWire, referenceWire, referenceWireFor } from './wire.js'
+import {
+  overlayReferences,
+  referenceSeamsFromWire,
+  referenceWire,
+  referenceWireFor,
+} from './wire.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const BOARD_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -351,16 +356,25 @@ describe('referenceWire', () => {
 })
 
 describe('overlayReferences', () => {
-  it('layers labels and dangling marks over content, and is absent when nothing is supplied', () => {
-    expect(overlayReferences({})).toBeUndefined()
-    const seam = overlayReferences({
-      content: (ref) => (ref === 'a' ? { canvas: board } : undefined),
+  it('layers labels and dangling marks over what the wire resolves, as extras that cross as data', () => {
+    const empty = referenceWire(new Map())
+    expect(overlayReferences(empty, {})).toBe(empty)
+    const wire = referenceWire(graphOf({ a: { name: 'From the record', canvas: board } }), {
+      extras: new Map([['a', { image: { href: 'blob:a' } }]]),
+    })
+    const overlaid = overlayReferences(wire, {
       labels: new Map([['a', 'Alpha']]),
       missing: new Set(['gone']),
     })
-    expect(seam?.('a')).toEqual({ canvas: board, label: 'Alpha' })
-    expect(seam?.('gone')).toEqual({ missing: true })
-    expect(seam?.('other')).toBeUndefined()
+    // Plain data: survives a structured clone, which is what a worker and the core receive.
+    const seams = referenceSeamsFromWire(structuredClone(overlaid))
+    expect(seams.resolveReference('a')).toEqual({
+      canvas: board,
+      image: { href: 'blob:a' },
+      label: 'Alpha',
+    })
+    expect(seams.resolveReference('gone')).toEqual({ missing: true })
+    expect(seams.resolveReference('other')).toBeUndefined()
   })
 })
 

@@ -6,8 +6,18 @@
  * number instead of a mounted editor.
  */
 
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type CanvasLayoutRequest,
+  constantRatioMeasureText,
+  type LayoutCore,
+  layoutSpatialCanvasWithAnchors,
+  type MeasureText,
+  type ResolvedReference,
+  referenceSeamsFromWire,
+  referenceWire,
+  referenceWireFor,
+  type SpatialLayoutOptions,
+} from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
@@ -17,10 +27,11 @@ import {
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
+import { editorLayoutBase } from '../../lib/spatial/scene-render-core.js'
 import { useFileSeamScene } from './use-file-seam-scene.js'
 
 const measure: MeasureText = () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
-const references = referenceSeams(new Map())
+const references = referenceWire(new Map())
 const fixedMeasure = createFixedMeasure({
   advance: (text) => text.length * 6,
   ascent: 10,
@@ -140,5 +151,244 @@ describe('useFileSeamScene fragments', () => {
     await waitFor(() => expect(draw()).toContain('typeset-math'))
     expect(math).toHaveBeenCalledTimes(1)
     expect(result.current.wire.fragments).toEqual([['math:x^2', fragment]])
+  })
+})
+
+/**
+ * What the editor composed before the chrome rode the wire: the host's
+ * `resolveReference` with the label table and the dangling set layered over
+ * it as a function. Restated here as the BEFORE half, since that function
+ * could never reach a worker's request gate or the core.
+ */
+function overlayAsFunction(
+  content: (ref: string) => ResolvedReference | undefined,
+  labels: ReadonlyMap<string, string>,
+  missing: ReadonlySet<string>,
+): (ref: string) => ResolvedReference | undefined {
+  return (ref) => {
+    const resolved = content(ref)
+    const label = labels.get(ref)
+    if (resolved === undefined && label === undefined && !missing.has(ref)) return undefined
+    return {
+      ...resolved,
+      ...(label !== undefined ? { label } : {}),
+      ...(missing.has(ref) ? { missing: true } : {}),
+    }
+  }
+}
+
+describe('useFileSeamScene reference chrome', () => {
+  const inner: SpatialCanvas = canvasOf([
+    buildTextNode({ id: 'i', x: 0, y: 0, width: 120, height: 60, text: 'inside' }),
+  ])
+  const board = canvasOf([
+    buildFileNode({ id: 'fa', file: 'doc-a', x: 0, y: 0, width: 260, height: 180 }),
+    buildFileNode({ id: 'fb', file: 'doc-b', x: 300, y: 0, width: 160, height: 80 }),
+    buildFileNode({ id: 'fg', file: 'doc-gone', x: 0, y: 220, width: 160, height: 80 }),
+    buildFileNode({ id: 'fc', file: 'doc-c', x: 300, y: 220, width: 160, height: 80 }),
+  ])
+  const wire = referenceWire(
+    new Map([
+      ['doc-a', { name: 'Stored A', canvas: inner }],
+      ['doc-b', { name: 'Stored B', body: '# B\n\nprose' }],
+      ['doc-gone', null],
+    ]),
+    { extras: new Map([['doc-b', { label: 'Extra B' }]]) },
+  )
+  const fileRefOptions = [
+    { file: 'doc-a', label: 'Alpha' },
+    { file: 'doc-b', label: 'Beta' },
+    { file: 'doc-elsewhere', label: 'Not on this board' },
+  ]
+  const missingFileRef = (file: string) => file === 'doc-gone'
+
+  it('draws labelled, resolved and dangling file nodes as the function overlay did, from a wire alone', async () => {
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: board,
+        zoom: 1,
+        references: wire,
+        fileRefOptions,
+        missingFileRef,
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fa']))
+    const { fileSeamOptions } = result.current
+    // No function seam: the bundle is rebuilt from a wire the request gate can hand on.
+    expect(fileSeamOptions).not.toHaveProperty('resolveReference')
+
+    const seams = referenceSeamsFromWire(referenceWireFor(wire, { canvases: [board] }))
+    const labels = new Map(fileRefOptions.map((option) => [option.file, option.label]))
+    const before = renderCanvasToSvg(board, {
+      measure: fixedMeasure,
+      references: seams,
+      resolveReference: overlayAsFunction(seams.resolveReference, labels, new Set(['doc-gone'])),
+      expandFileNode: fileSeamOptions.expandFileNode,
+    })
+    const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
+    expect(after.scene).toEqual(before.scene)
+    expect(after.svg).toBe(before.svg)
+
+    // The chrome is what this board is about: without it the board draws otherwise.
+    const bare = renderCanvasToSvg(board, {
+      measure: fixedMeasure,
+      references: seams,
+      expandFileNode: fileSeamOptions.expandFileNode,
+    })
+    expect(bare.svg).not.toBe(before.svg)
+    expect(after.svg).toContain('Beta')
+    expect(after.svg).not.toContain('Extra B')
+  })
+
+  it('draws the chrome a host hands without a wire, as the function overlay did', () => {
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: board,
+        zoom: 1,
+        references: undefined,
+        fileRefOptions,
+        missingFileRef,
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    const { fileSeamOptions } = result.current
+    expect(fileSeamOptions.expandFileNode).toBeUndefined()
+    const labels = new Map(fileRefOptions.map((option) => [option.file, option.label]))
+    const before = renderCanvasToSvg(board, {
+      measure: fixedMeasure,
+      resolveReference: overlayAsFunction(() => undefined, labels, new Set(['doc-gone'])),
+    })
+    const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
+    expect(after.svg).toBe(before.svg)
+    expect(after.svg).toContain('Alpha')
+  })
+
+  it('keeps the chrome of file nodes past the loading budget, which bounds content only', () => {
+    // 256 is the walk's loading budget (REFERENCE_BUDGET): two more distinct
+    // references than that, the last two labelled and dangling.
+    const many = canvasOf(
+      Array.from({ length: 258 }, (_, i) =>
+        buildFileNode({
+          id: `n${i}`,
+          file: `doc-${i}`,
+          x: (i % 20) * 60,
+          y: Math.floor(i / 20) * 40,
+          width: 50,
+          height: 30,
+        }),
+      ),
+    )
+    const options = [{ file: 'doc-256', label: 'Past the budget' }]
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: many,
+        zoom: 1,
+        references: referenceWire(new Map()),
+        fileRefOptions: options,
+        missingFileRef: (file) => file === 'doc-257',
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    const extras = Object.fromEntries(result.current.wire.references?.extras ?? [])
+    expect(extras['doc-256']).toEqual({ label: 'Past the budget' })
+    expect(extras['doc-257']).toEqual({ missing: true })
+    const seams = referenceSeamsFromWire(referenceWire(new Map()))
+    const before = renderCanvasToSvg(many, {
+      measure: fixedMeasure,
+      references: seams,
+      expandFileNode: result.current.fileSeamOptions.expandFileNode,
+      resolveReference: overlayAsFunction(
+        seams.resolveReference,
+        new Map([['doc-256', 'Past the budget']]),
+        new Set(['doc-257']),
+      ),
+    })
+    const after = renderCanvasToSvg(many, {
+      measure: fixedMeasure,
+      ...result.current.fileSeamOptions,
+    })
+    expect(after.svg).toBe(before.svg)
+  })
+
+  it('labels a file node inside a canvas the board loads, as the function overlay did', async () => {
+    const nested = canvasOf([
+      buildFileNode({ id: 'inner-f', file: 'doc-deep', x: 0, y: 0, width: 160, height: 80 }),
+    ])
+    const outer = canvasOf([
+      buildFileNode({ id: 'fo', file: 'doc-outer', x: 0, y: 0, width: 400, height: 300 }),
+    ])
+    const loaded = referenceWire(new Map([['doc-outer', { canvas: nested }]]))
+    const options = [{ file: 'doc-deep', label: 'Deep label' }]
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: outer,
+        zoom: 1,
+        references: loaded,
+        fileRefOptions: options,
+        missingFileRef: undefined,
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fo']))
+    const after = renderCanvasToSvg(outer, {
+      measure: fixedMeasure,
+      ...result.current.fileSeamOptions,
+    })
+    expect(after.svg).toContain('Deep label')
+  })
+
+  it("hands the core the editor's own layout options as a request, labels and dangling marks as extras", async () => {
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: board,
+        zoom: 1,
+        references: wire,
+        fileRefOptions,
+        missingFileRef,
+        resolvedMeasure: constantRatioMeasureText,
+        theme: 'light',
+      }),
+    )
+    await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fa']))
+    const { renderMath, renderDiagram, ...referenceOptions } = result.current.fileSeamOptions
+    const ask = (options: Partial<SpatialLayoutOptions>) => {
+      const asked: CanvasLayoutRequest[] = []
+      const skipped: string[] = []
+      const core: LayoutCore = {
+        routing: { routeLayout: () => ({ declined: 'unused' }) as never },
+        layout: {
+          layoutSpatialCanvas: (request) => {
+            asked.push(request)
+            return { declined: 'recording' } as never
+          },
+        },
+        impl: { routeLayout: 'ts', layoutSpatialCanvas: 'differential' },
+        onMismatch: (mismatch) => {
+          if (mismatch.kind === 'skipped') skipped.push(mismatch.reason)
+        },
+      }
+      const base = editorLayoutBase({ measure: constantRatioMeasureText })
+      layoutSpatialCanvasWithAnchors(board, { ...base, ...options, core })
+      return { asked, skipped }
+    }
+    // The fragment seams are this surface's other function (typeset math and
+    // diagrams); with them set aside, nothing about references holds it back.
+    const { asked, skipped } = ask(referenceOptions)
+    expect(skipped).toEqual([])
+    expect(asked).toHaveLength(1)
+    expect(asked[0]?.expand).toEqual(['fa'])
+    expect(Object.fromEntries(asked[0]?.references?.extras ?? [])).toEqual({
+      'doc-a': { label: 'Alpha' },
+      'doc-b': { label: 'Beta' },
+      'doc-gone': { missing: true },
+    })
+    expect(ask({ ...referenceOptions, renderMath, renderDiagram }).skipped).toEqual([
+      'seam:renderMath',
+    ])
   })
 })

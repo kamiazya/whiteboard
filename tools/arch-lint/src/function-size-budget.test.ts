@@ -246,7 +246,7 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   // precedent, and a press-side module beside it is the cut that brings this
   // down rather than a ceiling that keeps rising.
   'apps/web/src/components/spatial-editor/use-editor-pointer.ts#useEditorPointer': 585, // +37: the hand tool's double click, armed at the press and resolved at the release; a frame-interior drag becoming a band
-  'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 93,
+  'apps/web/src/components/spatial-editor/use-file-seam-scene.ts#useFileSeamScene': 61,
   'apps/web/src/components/spatial-editor/use-interaction-state.ts#useInteractionState': 139,
   'apps/web/src/components/spatial-editor/use-keyboard-avoidance.ts#useKeyboardAvoidance': 98, // +3: the lift is recorded, and taken back once nothing is being typed into
   'apps/web/src/components/spatial-editor/use-lock-policy.ts#useLockPolicy': 72,

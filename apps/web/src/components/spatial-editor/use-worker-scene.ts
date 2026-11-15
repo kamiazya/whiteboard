@@ -32,11 +32,7 @@ import type {
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  type FileRefLabel,
-  FONT_DEGRADED,
-  type LayoutRequest,
-} from '../../lib/layout-worker-protocol.js'
+import { FONT_DEGRADED, type LayoutRequest } from '../../lib/layout-worker-protocol.js'
 import { type RenderCanvasOptions, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import type { RenderedCanvas } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -96,15 +92,13 @@ function createLayoutWorker(): Worker | null {
 }
 
 /**
- * The plain-data twins of the seams in `fileSeamOptions`: the label table,
- * the refs the host resolved as dangling in THIS canvas, the reference graph
- * with its tables, the ids the LOD gate expanded, and the fragments rendered
+ * The plain-data twins of the seams in `fileSeamOptions`: the reference graph
+ * with its tables (labels and dangling marks among its extras), the ids the
+ * LOD gate expanded, and the fragments rendered
  * so far. The composed seams serve the synchronous path; only this can cross
  * to the worker, which rebuilds the same seams from it.
  */
 interface WorkerSceneWire {
-  readonly fileRefLabels?: readonly FileRefLabel[]
-  readonly missingFileRefs?: readonly string[]
   readonly references?: ReferenceWire
   /** Changes exactly when `references` does (`useCanvasReferences`). */
   readonly referencesRevision?: number
@@ -118,8 +112,6 @@ interface WorkerSceneWire {
 type SceneInputs = Pick<
   LayoutRequest,
   | 'theme'
-  | 'fileRefLabels'
-  | 'missingFileRefs'
   | 'references'
   | 'referencesRevision'
   | 'expandedFileIds'
@@ -184,8 +176,6 @@ export function useWorkerScene(
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme' | 'commentObstacles'>,
   wire?: WorkerSceneWire,
 ): RenderedCanvas & { readonly sceneCurrent: boolean } {
-  const fileRefLabels = wire?.fileRefLabels
-  const missingFileRefs = wire?.missingFileRefs
   const references = wire?.references
   const referencesRevision = wire?.referencesRevision
   const expandedFileIds = wire?.expandedFileIds
@@ -233,8 +223,6 @@ export function useWorkerScene(
     (): SceneInputs => ({
       canvas,
       theme: options.theme,
-      fileRefLabels,
-      missingFileRefs,
       references,
       referencesRevision,
       expandedFileIds,
@@ -250,8 +238,6 @@ export function useWorkerScene(
     [
       canvas,
       options.theme,
-      fileRefLabels,
-      missingFileRefs,
       references,
       referencesRevision,
       expandedFileIds,

@@ -10,7 +10,7 @@ import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../
 import { highlightCode } from '../highlight/lowlight.js'
 import { describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
-import { referenceSeamsFromWire } from '../references/wire.js'
+import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { canvasLayoutRequest, firstDifference } from './canvas-switch.js'
@@ -349,6 +349,33 @@ describe('what the core can be handed', () => {
         skip: 'reference-content',
       })
     }
+  })
+
+  it("hands a surface's labels and dangling marks over as extras, where a composed function was skipped", () => {
+    const withFiles = {
+      ...canvas,
+      nodes: [...canvas.nodes, fileNode('fa', 'doc-a'), fileNode('fg', 'doc-gone')],
+    }
+    const wire = referenceWire(new Map([['doc-a', { name: 'Stored' }]]))
+    const chrome = { labels: new Map([['doc-a', 'Alpha']]), missing: new Set(['doc-gone']) }
+    const seams = referenceSeamsFromWire(wire)
+    const composed = (ref: string) => {
+      const label = chrome.labels.get(ref)
+      return { ...seams.resolveReference(ref), ...(label === undefined ? {} : { label }) }
+    }
+    expect(
+      canvasLayoutRequest(withFiles, { ...base, references: seams, resolveReference: composed }),
+    ).toEqual({ skip: 'seam:resolveReference' })
+    const overlaid = overlayReferences(wire, chrome)
+    const asked = canvasLayoutRequest(withFiles, {
+      ...base,
+      references: referenceSeamsFromWire(overlaid),
+    })
+    expect(asked).toMatchObject({ references: overlaid })
+    expect(overlaid.extras).toEqual([
+      ['doc-a', { label: 'Alpha' }],
+      ['doc-gone', { missing: true }],
+    ])
   })
 
   it('settles the expansion policy over every file node it could be asked', () => {

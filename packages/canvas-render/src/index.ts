@@ -161,7 +161,6 @@ export type {
   ResolvedReference,
 } from './references/resolved.js'
 export {
-  overlayReferences,
   type ReferenceSeams,
   type ReferenceSeamsOptions,
   referenceSeams,
@@ -175,6 +174,7 @@ export {
   walkReferencesSync,
 } from './references/targets.js'
 export {
+  overlayReferences,
   type ReferenceExtra,
   type ReferenceWire,
   referenceSeamsFromWire,

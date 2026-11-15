@@ -73,6 +73,37 @@ export function referenceWire(
   }
 }
 
+/**
+ * A wire with a surface's chrome layered over what it resolves: a readable
+ * label for a reference a keeper knows only by id, and the references it
+ * holds as dangling. Both become extras, merged over the one a reference
+ * already carries, so the label wins over a record's name exactly as it
+ * would over any other — and so they reach a worker and the Rust core as the
+ * same bytes as the rest of the wire, where a composed function could reach
+ * neither. Hands the wire back unchanged when there is nothing to layer.
+ */
+export function overlayReferences(
+  wire: ReferenceWire,
+  chrome: {
+    readonly labels?: ReadonlyMap<string, string>
+    readonly missing?: ReadonlySet<string>
+  },
+): ReferenceWire {
+  const labels = chrome.labels ?? new Map<string, string>()
+  const missing = chrome.missing ?? new Set<string>()
+  if (labels.size === 0 && missing.size === 0) return wire
+  const extras = new Map(wire.extras)
+  for (const ref of new Set([...labels.keys(), ...missing])) {
+    const label = labels.get(ref)
+    extras.set(ref, {
+      ...extras.get(ref),
+      ...(label !== undefined ? { label } : {}),
+      ...(missing.has(ref) ? { missing: true } : {}),
+    })
+  }
+  return { ...wire, extras: [...extras] }
+}
+
 const WIRES = new WeakMap<ReferenceSeams, ReferenceWire>()
 
 /** The bundle again, from the wire — the same on both sides of it. */
