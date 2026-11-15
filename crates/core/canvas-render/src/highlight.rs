@@ -93,10 +93,10 @@ fn run_cost(value: &str, in_run: impl Fn(char) -> bool, cap: u64) -> u64 {
     let mut run = 0_u64;
     for c in value.chars().chain(std::iter::once('\n')) {
         if in_run(c) {
-            run += if c.len_utf16() == 2 { 2 } else { 1 };
+            run = run.saturating_add(if c.len_utf16() == 2 { 2 } else { 1 });
             continue;
         }
-        total += run * run;
+        total = total.saturating_add(run.saturating_mul(run));
         run = 0;
         if total > cap {
             return total;

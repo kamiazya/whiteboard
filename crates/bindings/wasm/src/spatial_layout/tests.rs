@@ -229,9 +229,12 @@ fn a_request_at_each_cap_is_read() {
     assert_eq!(answer(&request(at_cap, &[]), &[]).get(0), Some(&json!("ok")));
 }
 
+/// A token's text and its role, if any.
+type Token<'a> = (&'a str, Option<&'a str>);
+
 /// The value wire of `[lang, value, lines]`, each line a list of `{text, role?}`.
-fn fence(lang: &str, value: &str, lines: Option<&[&[(&str, Option<&str>)]]>) -> Json {
-    let token = |(text, role): &(&str, Option<&str>)| {
+fn fence(lang: &str, value: &str, lines: Option<&[&[Token<'_>]]>) -> Json {
+    let token = |(text, role): &Token<'_>| {
         let mut fields = vec![("text", json!(text))];
         fields.extend(role.map(|r| ("role", json!(r))));
         m(&fields)
@@ -249,8 +252,7 @@ fn a_fence_the_highlighter_colours_is_asked_for_until_its_tokens_are_sent() {
     let needs = answer(&request(board(JS), &[]), &[]);
     let asked = json!(["needs", {"code": [["js", "let x = 1"], ["JS", "let x = 1"]]}]);
     assert_eq!(needs, asked);
-    let words: &[(&str, Option<&str>)] =
-        &[("let", Some("keyword")), (" x = ", None), ("1", Some("number"))];
+    let words: &[Token<'_>] = &[("let", Some("keyword")), (" x = ", None), ("1", Some("number"))];
     let sent = s(vec![fence("js", "let x = 1", Some(&[words])), fence("JS", "let x = 1", None)]);
     let runs = |body: &str, sent: &Json| -> Vec<String> {
         let got = answer(&request(board(body), &[("codeTokens", sent.clone())]), &[]);

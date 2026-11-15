@@ -19,6 +19,16 @@ mod code;
 mod embed;
 mod inline;
 
+/// A fence as `(lang, value)`.
+type Fence = (String, String);
+
+/// The fences a layout asked for, in the order met and as a set.
+#[derive(Default)]
+struct Asked {
+    order: Vec<Fence>,
+    seen: BTreeSet<Fence>,
+}
+
 /// The seams over one wire, and what one layout through them reported.
 pub struct WireHost<'w> {
     wire: &'w ReferenceWire,
@@ -32,7 +42,7 @@ pub struct WireHost<'w> {
     code: BTreeMap<(&'w str, &'w str), &'w Option<CodeTokenLines>>,
     /// Each fence the highlighter colours whose tokens were not sent, in the
     /// order met, and the same as a set so a fence is asked for once.
-    needs: RefCell<(Vec<(String, String)>, BTreeSet<(String, String)>)>,
+    needs: RefCell<Asked>,
     refused: Cell<Option<Refused>>,
     degradations: RefCell<Vec<Degradation>>,
 }
@@ -60,7 +70,7 @@ impl<'w> WireHost<'w> {
             aliases,
             expand,
             code: BTreeMap::new(),
-            needs: RefCell::new((Vec::new(), BTreeSet::new())),
+            needs: RefCell::new(Asked::default()),
             refused: Cell::new(None),
             degradations: RefCell::new(Vec::new()),
         }
@@ -78,7 +88,7 @@ impl<'w> WireHost<'w> {
     /// TypeScript draws it, in the order they were met.
     #[must_use]
     pub fn needs(&self) -> Vec<(String, String)> {
-        self.needs.borrow().0.clone()
+        self.needs.borrow().order.clone()
     }
 
     /// Why the layout through this host must be refused, the first reason noted.

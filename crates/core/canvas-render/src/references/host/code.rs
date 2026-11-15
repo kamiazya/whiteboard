@@ -20,9 +20,9 @@ impl CodeTokenizer for WireHost<'_> {
             return (*lines).clone();
         }
         let fence = (lang.to_owned(), value.to_owned());
-        let (order, seen) = &mut *self.needs.borrow_mut();
-        if seen.insert(fence.clone()) {
-            order.push(fence);
+        let asked = &mut *self.needs.borrow_mut();
+        if asked.seen.insert(fence.clone()) {
+            asked.order.push(fence);
         }
         // The body drawn plain for want of these tokens is this call's alone,
         // so a content cache must not keep it.

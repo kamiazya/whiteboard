@@ -249,8 +249,8 @@ impl NestedLayoutBudget {
             self.refuse();
             return false;
         }
-        self.word_runs.set(self.word_runs.get() - word_runs);
-        self.line_runs.set(self.line_runs.get() - line_runs);
+        self.word_runs.set(self.word_runs.get().saturating_sub(word_runs));
+        self.line_runs.set(self.line_runs.get().saturating_sub(line_runs));
         true
     }
 
