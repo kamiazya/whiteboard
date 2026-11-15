@@ -115,12 +115,18 @@ fn expanded_ids(request: &Request) -> usize {
     }
 }
 
-/// The most proposals, and the most changes across them, a proposal layer may
-/// hold: the element cap. Each change is looked up against every element and
-/// each bubble is placed against every box, every outline and every earlier
-/// bubble, so what a layer costs grows with their product, which bytes do not
-/// bound.
-pub const MAX_PROPOSAL_ITEMS: usize = MAX_ELEMENTS;
+/// The most changes a proposal layer may hold across its proposals: the
+/// element cap. Each is looked up against every element and its outline
+/// joins what every later bubble is placed against, so what the layer costs
+/// grows with their product, which bytes do not bound.
+pub const MAX_PROPOSAL_CHANGES: usize = MAX_ELEMENTS;
+
+/// The most proposals a layer may hold: half the element cap. Each draws a
+/// bubble placed against every box, outline and earlier bubble, which is
+/// where the layer's cost is: 4096 proposals over a hub of 2047 edges took
+/// 31.4 s on Node wasm, 2048 took 24.7 s and the hub alone 16.5 s, while one
+/// proposal adding 4096 boxes took 0.2 s.
+pub const MAX_PROPOSALS: usize = MAX_ELEMENTS / 2;
 
 /// The most mapping entries the facets of the priors may hold, at every depth
 /// together: the element cap. A prior's facets agree with the element's in
@@ -156,8 +162,8 @@ fn prior_facets(change: &ProposedChange) -> Option<&Map> {
 fn past_proposal_caps(proposals: &[Proposal]) -> bool {
     let changes = proposals.iter().flat_map(|proposal| &proposal.changes);
     let facets = changes.clone().filter_map(prior_facets).map(map_entries);
-    proposals.len() > MAX_PROPOSAL_ITEMS
-        || changes.count() > MAX_PROPOSAL_ITEMS
+    proposals.len() > MAX_PROPOSALS
+        || changes.count() > MAX_PROPOSAL_CHANGES
         || facets.fold(0, usize::saturating_add) > MAX_PRIOR_FACET_ENTRIES
 }
 

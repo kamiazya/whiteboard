@@ -1,7 +1,7 @@
 use serde_json::{Value as Json, json};
 
 use super::tests::{answer, m, request, s};
-use super::{MAX_PRIOR_FACET_ENTRIES, MAX_PROPOSAL_ITEMS};
+use super::{MAX_PRIOR_FACET_ENTRIES, MAX_PROPOSAL_CHANGES, MAX_PROPOSALS};
 
 /// A plain JSON value on the value wire: an object a mapping in its written
 /// order, an array a list, a number that is no safe integer its bits.
@@ -233,10 +233,10 @@ fn facet_prior(entries: usize) -> Json {
 #[test]
 fn a_proposal_layer_past_its_caps_is_refused() {
     let past = json!(["refused", "input-too-large", "proposals"]);
-    assert_eq!(lay_out(&patches(MAX_PROPOSAL_ITEMS, 1)).get(0), Some(&json!("ok")));
-    assert_eq!(lay_out(&patches(MAX_PROPOSAL_ITEMS + 1, 0)), past);
-    assert_eq!(lay_out(&patches(1, MAX_PROPOSAL_ITEMS)).get(0), Some(&json!("ok")));
-    assert_eq!(lay_out(&patches(1, MAX_PROPOSAL_ITEMS + 1)), past);
+    assert_eq!(lay_out(&patches(MAX_PROPOSALS, 2)).get(0), Some(&json!("ok")));
+    assert_eq!(lay_out(&patches(MAX_PROPOSALS + 1, 0)), past);
+    assert_eq!(lay_out(&patches(1, MAX_PROPOSAL_CHANGES)).get(0), Some(&json!("ok")));
+    assert_eq!(lay_out(&patches(2, MAX_PROPOSAL_CHANGES / 2 + 1)), past);
     // The bucket's own key counts, and each of its entries with the one it holds.
     let at = MAX_PRIOR_FACET_ENTRIES / 2 - 1;
     assert_eq!(lay_out(&facet_prior(at)).get(0), Some(&json!("ok")));
