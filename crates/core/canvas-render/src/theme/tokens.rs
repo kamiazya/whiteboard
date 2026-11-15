@@ -129,3 +129,26 @@ pub fn theme_table(namespace: &str, text: &str) -> Option<Vec<(String, ThemeToke
         entries.iter().map(|(name, value)| (format!("{namespace}.{name}"), theme_tokens(value)));
     Some(table.collect())
 }
+
+#[cfg(test)]
+mod tests {
+    #[cfg(target_arch = "wasm32")]
+    use wasm_bindgen_test::wasm_bindgen_test as test;
+    use whiteboard_facet_engine::engine::Fill;
+    use whiteboard_plugin_visual::host::THEMES;
+
+    use super::theme_table;
+
+    #[test]
+    fn a_fill_of_none_reads_as_no_fill_and_a_colour_as_one() {
+        let table = theme_table("visual", THEMES).unwrap_or_default();
+        let ids: Vec<&str> = table.iter().map(|(id, _)| id.as_str()).collect();
+        assert_eq!(ids, ["visual.sketch", "visual.neon"]);
+        for (_, tokens) in &table {
+            let node = &tokens.palette.light.node;
+            assert_eq!(node.group.fill, Fill::NoFill("none".to_owned()));
+            assert_eq!(node.text.fill, Fill::HexColor("#ffffff".to_owned()));
+        }
+        assert_eq!(theme_table("visual", "[]"), None);
+    }
+}
