@@ -4,13 +4,13 @@
 // two calls, and one in the steady state).
 
 /** One highlighted token, as canvas-render's `CodeToken`. */
-export interface FenceToken {
+interface FenceToken {
   readonly text: string
   readonly role?: 'keyword' | 'string' | 'number' | 'comment'
 }
 
 /** One array per source line, as canvas-render's `CodeTokenLines`. */
-export type FenceTokenLines = readonly (readonly FenceToken[])[]
+type FenceTokenLines = readonly (readonly FenceToken[])[]
 
 /** A host's highlighter over one fence; undefined when it would draw it plain. */
 export type FenceHighlighter = (lang: string, value: string) => FenceTokenLines | undefined
