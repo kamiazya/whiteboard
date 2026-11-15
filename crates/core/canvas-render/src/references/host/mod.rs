@@ -10,7 +10,7 @@ use whiteboard_det::utf16::is_js_whitespace;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 
-use super::{LoadedReference, ReferenceWire, Refused};
+use super::{FenceTokens, LoadedReference, ReferenceWire, Refused};
 use crate::compose_node::{ComposeHost, Degradation, ParseFailed};
 use crate::node_box::{ReferenceImage, ResolvedReference};
 
@@ -26,6 +26,10 @@ pub struct WireHost<'w> {
     aliases: BTreeMap<String, String>,
     /// Whether a file node's resolved canvas is drawn open.
     expand: bool,
+    /// The fences' tokens the caller sent, a later row answering first.
+    code: &'w [FenceTokens],
+    /// Each fence the highlighter colours whose tokens were not sent, once.
+    needs: RefCell<Vec<(String, String)>>,
     refused: Cell<Option<Refused>>,
     degradations: RefCell<Vec<Degradation>>,
 }
@@ -52,9 +56,26 @@ impl<'w> WireHost<'w> {
             wire,
             aliases,
             expand,
+            code: &[],
+            needs: RefCell::new(Vec::new()),
             refused: Cell::new(None),
             degradations: RefCell::new(Vec::new()),
         }
+    }
+
+    /// This host answering a fence's tokens from `code`.
+    #[must_use]
+    pub const fn with_code_tokens(mut self, code: &'w [FenceTokens]) -> Self {
+        self.code = code;
+        self
+    }
+
+    /// The fences, as `[lang, value]`, the highlighter colours and whose
+    /// tokens the caller must send before this layout can be drawn as the
+    /// TypeScript draws it, in the order they were met.
+    #[must_use]
+    pub fn needs(&self) -> Vec<(String, String)> {
+        self.needs.borrow().clone()
     }
 
     /// Why the layout through this host must be refused, the first reason noted.

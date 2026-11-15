@@ -5,12 +5,15 @@ use whiteboard_codec::references::resolve_references;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{CanvasLine, LineEnd, LineEndPoint, SpatialCanvas, SpatialNode};
 
-use super::{ExtraImage, LoadedReference, ReferenceExtra, ReferenceWire, Refused, WireHost};
+use super::{
+    ExtraImage, FenceTokens, LoadedReference, ReferenceExtra, ReferenceWire, Refused, WireHost,
+};
 use crate::canvas_fragment::select_canvas_fragment;
 use crate::compose_node::{ComposeHost, Degradation};
 use crate::node_box::{FacetCard, FacetRow, ReferenceImage, ResolvedReference};
 use crate::typeset::{
-    CanvasSummary, CodeTokenizer, EmbedResolver, Embedded, ImageRef, InlineSeams,
+    CanvasSummary, CodeToken, CodeTokenLines, CodeTokenizer, EmbedResolver, Embedded, ImageRef,
+    InlineSeams, NestedLayoutBudget, TokenRole,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -182,18 +185,12 @@ fn what_only_the_typescript_can_answer_refuses_the_layout_keeping_the_first_reas
     assert_eq!(shortcode.refused(), None);
     assert_eq!(shortcode.expand_emoji("a :rocket: b"), "a :rocket: b");
     assert_eq!(shortcode.refused(), Some(Refused::Shortcode));
-    assert_eq!(shortcode.tokenize("rust", "fn"), None);
+    assert_eq!(shortcode.tokenize("rust", "fn", None), None);
     assert_eq!(shortcode.refused(), Some(Refused::Shortcode));
 
     let icons = WireHost::new(&wire, true);
     assert!(icons.icon_ranges(":a: :b:").is_empty());
     assert_eq!(icons.refused(), Some(Refused::Shortcode));
-
-    let code = WireHost::new(&wire, true);
-    assert_eq!(code.tokenize("", "fn"), None);
-    assert_eq!(code.refused(), None);
-    assert_eq!(code.tokenize("rust", "fn"), None);
-    assert_eq!(code.refused(), Some(Refused::Highlight));
 
     let section = WireHost::new(&wire, true);
     assert!(section.resolve_embed("D1", Some("f")).is_some());
@@ -289,6 +286,61 @@ fn degradations_are_kept_in_order() {
 
 #[test]
 fn each_refusal_names_its_class() {
-    let classes = [Refused::Body, Refused::Shortcode, Refused::Highlight].map(Refused::class);
-    assert_eq!(classes, ["body", "shortcode", "highlight"]);
+    let classes = [Refused::Body, Refused::Shortcode].map(Refused::class);
+    assert_eq!(classes, ["body", "shortcode"]);
+}
+
+fn lines(text: &str) -> CodeTokenLines {
+    vec![vec![CodeToken { text: text.to_owned(), role: Some(TokenRole::Keyword) }]]
+}
+
+fn fence(lang: &str, value: &str, lines: Option<CodeTokenLines>) -> FenceTokens {
+    FenceTokens { lang: lang.to_owned(), value: value.to_owned(), lines }
+}
+
+#[test]
+fn a_fence_the_highlighter_colours_answers_its_tokens_as_the_host_sent_them() {
+    let wire = wire();
+    let table = [
+        fence("js", "let", Some(lines("old"))),
+        fence("js", "let", Some(lines("let"))),
+        fence("ts", "y", None),
+    ];
+    let host = WireHost::new(&wire, true).with_code_tokens(&table);
+    let budget = NestedLayoutBudget::new();
+    assert_eq!(host.tokenize("js", "let", Some(&budget)), Some(lines("let")));
+    assert_eq!(budget.tokenizer_remaining().0, NestedLayoutBudget::WORD_RUNS - 9);
+    assert_eq!(host.tokenize("ts", "y", Some(&budget)), None);
+    assert_eq!(host.tokenize("JS", "let", None), None);
+    assert_eq!(host.needs(), vec![("JS".to_owned(), "let".to_owned())]);
+    assert_eq!(budget.refused(), 0);
+    assert_eq!(host.refused(), None);
+}
+
+#[test]
+fn a_fence_with_no_tokens_is_asked_for_once_and_no_cache_keeps_its_body() {
+    let wire = wire();
+    let host = WireHost::new(&wire, true);
+    let budget = NestedLayoutBudget::new();
+    for _ in 0..2 {
+        assert_eq!(host.tokenize("python", "z", Some(&budget)), None);
+    }
+    assert_eq!(host.tokenize("yaml", "a: 1", Some(&budget)), None);
+    let asked = [("python", "z"), ("yaml", "a: 1")].map(|(l, v)| (l.to_owned(), v.to_owned()));
+    assert_eq!(host.needs(), asked.to_vec());
+    assert_eq!(budget.refused(), 3);
+    assert_eq!(host.refused(), None);
+}
+
+#[test]
+fn a_fence_the_highlighter_would_leave_plain_is_neither_asked_for_nor_refused() {
+    let wire = wire();
+    let host = WireHost::new(&wire, true);
+    let budget = NestedLayoutBudget::new();
+    for (lang, value) in [("", "fn"), ("rust", "fn"), ("js", &"a".repeat(4097))] {
+        assert_eq!(host.tokenize(lang, value, Some(&budget)), None);
+    }
+    assert!(host.needs().is_empty());
+    assert_eq!(budget.refused(), 0);
+    assert_eq!(host.refused(), None);
 }

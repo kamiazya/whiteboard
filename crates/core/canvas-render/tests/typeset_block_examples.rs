@@ -162,7 +162,12 @@ fn a_fence_line_is_cut_to_the_panel_and_never_wrapped() {
 struct Lines(Option<CodeTokenLines>);
 
 impl CodeTokenizer for Lines {
-    fn tokenize(&self, _: &str, _: &str) -> Option<CodeTokenLines> {
+    fn tokenize(
+        &self,
+        _: &str,
+        _: &str,
+        _: Option<&whiteboard_canvas_render::typeset::NestedLayoutBudget>,
+    ) -> Option<CodeTokenLines> {
         self.0.clone()
     }
 }

@@ -67,11 +67,17 @@ pub struct CodeToken {
 /// One list of tokens per SOURCE line.
 pub type CodeTokenLines = Vec<Vec<CodeToken>>;
 
-/// Tokenises a fenced block (`highlightCode`). Its work budget is the host's:
-/// a host that has spent it answers `None`, and so does one that does not know
-/// the language, fails, or has nothing to say.
+/// Tokenises a fenced block (`highlightCode`), spending from the render's
+/// tokenizer account in `budget`: a host whose account cannot cover a fence
+/// answers `None`, and so does one that does not know the language, fails, or
+/// has nothing to say.
 pub trait CodeTokenizer {
-    fn tokenize(&self, lang: &str, value: &str) -> Option<CodeTokenLines>;
+    fn tokenize(
+        &self,
+        lang: &str,
+        value: &str,
+        budget: Option<&NestedLayoutBudget>,
+    ) -> Option<CodeTokenLines>;
 }
 
 /// What a math or diagram renderer answers: markup alone, or markup with the
@@ -184,12 +190,16 @@ pub trait CanvasMiniature {
 }
 
 /// The nested-layout account an embed spends from, shared by every embed of one
-/// render: a count of layouts and a count of canvas elements, and how often
-/// something was declined for want of them.
+/// render: a count of layouts and a count of canvas elements, the tokenizer's
+/// squared runs (`TokenizerBudget`), since a fence inside an embedded document
+/// is tokenised by the same render, and how often something was declined for
+/// want of any of them.
 #[derive(Debug)]
 pub struct NestedLayoutBudget {
     layouts: std::cell::Cell<usize>,
     elements: std::cell::Cell<usize>,
+    word_runs: std::cell::Cell<u64>,
+    line_runs: std::cell::Cell<u64>,
     refused: std::cell::Cell<usize>,
 }
 
@@ -199,6 +209,11 @@ impl NestedLayoutBudget {
     /// Canvas elements one render may nest: a full canvas's nodes, and its
     /// edges and lines.
     pub const ELEMENTS: usize = 4000;
+    /// Squared identifier-run characters one render may tokenise: four fences
+    /// at the per-fence price.
+    pub const WORD_RUNS: u64 = 4 * 4096 * 4096;
+    /// Squared line characters one render may tokenise, yaml's quantity.
+    pub const LINE_RUNS: u64 = 4 * 8192 * 8192;
 
     #[must_use]
     pub fn new() -> Self {
@@ -211,8 +226,38 @@ impl NestedLayoutBudget {
         Self {
             layouts: std::cell::Cell::new(layouts),
             elements: std::cell::Cell::new(elements),
+            word_runs: std::cell::Cell::new(Self::WORD_RUNS),
+            line_runs: std::cell::Cell::new(Self::LINE_RUNS),
             refused: std::cell::Cell::new(0),
         }
+    }
+
+    /// This account with `word_runs` and `line_runs` left to tokenise and
+    /// `refused` refusals so far.
+    #[must_use]
+    pub fn with_tokenizer(self, word_runs: u64, line_runs: u64, refused: usize) -> Self {
+        self.word_runs.set(word_runs);
+        self.line_runs.set(line_runs);
+        self.refused.set(refused);
+        self
+    }
+
+    /// Spends one fence's price; false, spending nothing, when either
+    /// account cannot cover it (`spendTokenizer`).
+    pub(crate) fn spend_tokenizer(&self, word_runs: u64, line_runs: u64) -> bool {
+        if word_runs > self.word_runs.get() || line_runs > self.line_runs.get() {
+            self.refuse();
+            return false;
+        }
+        self.word_runs.set(self.word_runs.get() - word_runs);
+        self.line_runs.set(self.line_runs.get() - line_runs);
+        true
+    }
+
+    /// The squared identifier-run and line characters left to tokenise.
+    #[must_use]
+    pub fn tokenizer_remaining(&self) -> (u64, u64) {
+        (self.word_runs.get(), self.line_runs.get())
     }
 
     /// Spends one layout and `elements`; false, spending nothing, once either is out.

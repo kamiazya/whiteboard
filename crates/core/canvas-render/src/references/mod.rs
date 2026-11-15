@@ -9,17 +9,24 @@
 //! its canvas; a file node draws an empty canvas as its card.
 //!
 //! Where an answer would need something the core does not hold (the visual
-//! plugin's emoji and icon shortcode tables, the code highlighter) or a body
-//! is past the parser's bounds, the host answers as if it had none and notes a [`Refused`]: the layout it was asked
-//! for is then refused whole, and the caller's TypeScript draws it (owner
-//! decision q72, option c), so no scene differs from the TypeScript's for a
-//! reason the core cannot see.
+//! plugin's emoji and icon shortcode tables) or a body is past the parser's
+//! bounds, the host answers as if it had none and notes a [`Refused`]: the
+//! layout it was asked for is then refused whole, and the caller's TypeScript
+//! draws it (owner decision q72, option c), so no scene differs from the
+//! TypeScript's for a reason the core cannot see.
+//!
+//! A fence's tokens are the one answer that arrives as data AFTER the core has
+//! asked for it (owner decision q75): the host colours a fence the
+//! highlighter's gate passes from the [`FenceTokens`] the caller sent, and
+//! collects each one it finds missing, which the caller tokenises before
+//! asking again.
 
 mod host;
 
 use whiteboard_model::spatial::SpatialCanvas;
 
 use crate::node_box::FacetCard;
+use crate::typeset::CodeTokenLines;
 
 pub use host::WireHost;
 
@@ -71,6 +78,16 @@ pub struct ReferenceWire {
     pub extras: Vec<(String, ReferenceExtra)>,
 }
 
+/// One fence's tokens as the host's highlighter answered them, keyed by the
+/// language and the source as the fence holds them; `None` when it answered
+/// nothing, and the fence is drawn plain.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct FenceTokens {
+    pub lang: String,
+    pub value: String,
+    pub lines: Option<CodeTokenLines>,
+}
+
 /// Why the host could not answer as the TypeScript would, so the layout it
 /// served is refused.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -79,8 +96,6 @@ pub enum Refused {
     Body,
     /// A text that may hold an emoji or icon shortcode.
     Shortcode,
-    /// A fenced block the highlighter would colour.
-    Highlight,
 }
 
 impl Refused {
@@ -90,7 +105,6 @@ impl Refused {
         match self {
             Self::Body => "body",
             Self::Shortcode => "shortcode",
-            Self::Highlight => "highlight",
         }
     }
 }

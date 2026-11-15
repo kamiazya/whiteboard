@@ -36,6 +36,7 @@ pub mod fake_measure;
 pub mod finite_box;
 pub mod font_measure;
 pub mod glow;
+pub mod highlight;
 pub mod ink;
 pub mod inline_junction;
 pub mod legend;
