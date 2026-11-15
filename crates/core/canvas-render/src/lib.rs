@@ -23,6 +23,7 @@
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
 pub mod budoux;
+pub mod canvas_fragment;
 pub mod comments;
 pub mod compose_canvas;
 pub mod compose_edges;
