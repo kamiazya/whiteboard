@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { createTokenizerBudget } from '../highlight/tokenizer-budget.js'
 import {
   type HighlightGateRecord,
   highlightGateAnswer,
@@ -31,15 +32,22 @@ describe('the recorded highlight gate oracle', () => {
     const coloured = records.filter((r) => r.colours)
     expect(coloured.length, 'coloured').toBeGreaterThan(150)
     expect(records.length - coloured.length, 'plain').toBeGreaterThan(150)
-    const spent = (r: HighlightGateRecord) =>
-      r.budget !== null && r.after !== null && r.after.word !== r.budget.word
-    const lineSpent = (r: HighlightGateRecord) =>
-      r.budget !== null && r.after !== null && r.after.line !== r.budget.line
-    const refusedByAccount = (r: HighlightGateRecord) =>
-      r.budget !== null && r.after !== null && r.after.refused !== r.budget.refused
-    expect(records.filter(spent).length, 'word runs spent').toBeGreaterThan(20)
-    expect(records.filter(lineSpent).length, 'line runs spent').toBeGreaterThan(10)
-    expect(records.filter(refusedByAccount).length, 'refused by the account').toBeGreaterThan(20)
+    const opened = createTokenizerBudget()
+    const before = (r: HighlightGateRecord) =>
+      r.budget === 'fresh'
+        ? { word: opened.wordRunsRemaining, line: opened.lineRunsRemaining, refused: 0 }
+        : r.budget
+    const moved = (key: 'word' | 'line' | 'refused') => (r: HighlightGateRecord) => {
+      const start = before(r)
+      return start !== null && r.after !== null && r.after[key] !== start[key]
+    }
+    expect(records.filter(moved('word')).length, 'word runs spent').toBeGreaterThan(20)
+    expect(records.filter(moved('line')).length, 'line runs spent').toBeGreaterThan(10)
+    expect(records.filter(moved('refused')).length, 'refused by the account').toBeGreaterThan(20)
+    const fresh = records.filter((r) => r.budget === 'fresh')
+    expect(fresh.filter(moved('line')).length, 'a layout account spending a line').toBeGreaterThan(
+      3,
+    )
   })
 
   it('equals what the TypeScript answers today', () => {

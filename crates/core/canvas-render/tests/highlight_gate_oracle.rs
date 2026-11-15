@@ -18,13 +18,27 @@ struct Account {
     refused: usize,
 }
 
+/// The account a call is made against: one a layout opens, or one left as recorded.
+#[derive(Deserialize, Debug, Clone, Copy)]
+#[serde(untagged)]
+enum Budget {
+    Fresh(Fresh),
+    Left(Account),
+}
+
+#[derive(Deserialize, Debug, Clone, Copy)]
+#[serde(rename_all = "lowercase")]
+enum Fresh {
+    Fresh,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Record {
     id: String,
     lang: String,
     value: Vec<(String, usize)>,
-    budget: Option<Account>,
+    budget: Option<Budget>,
     colours: bool,
     after: Option<Account>,
 }
@@ -37,8 +51,10 @@ fn account_of(budget: &NestedLayoutBudget) -> Account {
 /// What differs for one record, or nothing.
 fn replay(record: &Record) -> Result<(), String> {
     let value: String = record.value.iter().map(|(piece, n)| piece.repeat(*n)).collect();
-    let budget =
-        record.budget.map(|a| NestedLayoutBudget::new().with_tokenizer(a.word, a.line, a.refused));
+    let budget = record.budget.map(|budget| match budget {
+        Budget::Fresh(Fresh::Fresh) => NestedLayoutBudget::new(),
+        Budget::Left(a) => NestedLayoutBudget::new().with_tokenizer(a.word, a.line, a.refused),
+    });
     let colours = would_colour(&record.lang, &value, budget.as_ref());
     let after = budget.as_ref().map(account_of);
     if (colours, after) == (record.colours, record.after) {

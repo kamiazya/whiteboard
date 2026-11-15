@@ -9,7 +9,7 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { highlightCode } from '../highlight/lowlight.js'
-import type { TokenizerBudget } from '../highlight/tokenizer-budget.js'
+import { createTokenizerBudget, type TokenizerBudget } from '../highlight/tokenizer-budget.js'
 
 /**
  * Inputs and answers of `highlightCode`'s gate: whether the default
@@ -24,8 +24,12 @@ export interface HighlightGateRecord {
   readonly id: string
   readonly lang: string
   readonly value: readonly (readonly [string, number])[]
-  /** The account before the call; null calls without one. */
-  readonly budget: Account | null
+  /**
+   * The account before the call: null calls without one, and `fresh` with
+   * the one a layout opens (`createTokenizerBudget`), so the replay opens its
+   * own the same way and the defaults are judged too.
+   */
+  readonly budget: Account | 'fresh' | null
   readonly colours: boolean
   readonly after: Account | null
 }
@@ -123,12 +127,10 @@ function values(): (readonly [string, number])[][] {
   ]
 }
 
-const fresh = (): Account => ({ word: 4 * 4096 * 4096, line: 4 * 8192 * 8192, refused: 0 })
-
 /** The accounts a call is made against: none, a fresh one, and ones a fence nearly or fully spent. */
-const ACCOUNTS: readonly (Account | null)[] = [
+const ACCOUNTS: readonly (Account | 'fresh' | null)[] = [
   null,
-  fresh(),
+  'fresh',
   { word: 4096 * 4096, line: 8192 * 8192, refused: 2 },
   { word: 4096 * 4096 - 1, line: 8192 * 8192, refused: 0 },
   { word: 4096 * 4096, line: 8192 * 8192 - 1, refused: 1 },
@@ -164,11 +166,13 @@ export function highlightGateAnswer(input: Input): HighlightGateRecord {
   const budget: TokenizerBudget | undefined =
     input.budget === null
       ? undefined
-      : {
-          wordRunsRemaining: input.budget.word,
-          lineRunsRemaining: input.budget.line,
-          refused: input.budget.refused,
-        }
+      : input.budget === 'fresh'
+        ? createTokenizerBudget()
+        : {
+            wordRunsRemaining: input.budget.word,
+            lineRunsRemaining: input.budget.line,
+            refused: input.budget.refused,
+          }
   let colours: boolean
   try {
     colours = highlightCode(input.lang, textOf(input.value), budget) !== undefined
