@@ -1,7 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   answerUnhandled,
   apiErrorBodySchema,
@@ -38,7 +37,6 @@ type MockHeadlessArgs = {
   path: string
   scope: StoreScope
   options?: { padding?: number; scale?: number; theme?: 'light' | 'dark' }
-  layoutCore?: () => Promise<LayoutCore | undefined>
 }
 const mockExportCanvasHeadless =
   vi.fn<
@@ -86,10 +84,7 @@ const exportUrl = (documentId: string, workspaceId = 's1') =>
   `/api/workspaces/${workspaceId}/documents/${documentId}/export`
 const EXPORT_URL = exportUrl(CANVAS_A)
 
-function makeApp(
-  scope: StoreScope = testStoreScope(tempDir),
-  layoutCore?: () => Promise<LayoutCore | undefined>,
-) {
+function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   const app = new Hono()
   resolvingDocumentIds(
     app,
@@ -100,7 +95,6 @@ function makeApp(
     createExportRouter({
       liveDocuments: { exists: mockDocumentExists },
       scope,
-      ...(layoutCore === undefined ? {} : { layoutCore }),
     }),
   )
   return app
@@ -146,20 +140,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/export - error
 
     const written = await readFile(body.filePath)
     expect(written.equals(fakePng)).toBe(true)
-  })
-
-  it('hands the export the layout core factory it was built with', async () => {
-    mockExportCanvasHeadless.mockResolvedValue({
-      png: Buffer.from('png'),
-      width: 1,
-      height: 1,
-      undrawable: [],
-      unresolvedFamilies: [],
-    })
-    const layoutCore = async () => undefined
-    const res = await makeApp(undefined, layoutCore).request(EXPORT_URL, { method: 'POST' })
-    expect(res.status).toBe(200)
-    expect(mockExportCanvasHeadless).toHaveBeenCalledWith(expect.objectContaining({ layoutCore }))
   })
 
   it('writes the default export under the layout it is handed, not the process data dir', async () => {
