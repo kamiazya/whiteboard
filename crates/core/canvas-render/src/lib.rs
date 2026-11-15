@@ -55,7 +55,6 @@ pub mod scene_extent;
 pub mod scene_walk;
 pub mod scene_wire;
 pub mod seed;
-pub mod segment_joins;
 pub mod sfnt;
 pub mod svg;
 pub mod theme;

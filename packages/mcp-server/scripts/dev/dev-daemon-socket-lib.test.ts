@@ -683,9 +683,9 @@ describe("the liveness verdict against the daemon's own", () => {
     await fc.assert(
       fc.asyncProperty(
         fc.constantFrom(true, true, true, false),
-        // The start time relative to the record: before it, inside the slack,
-        // or past it as a stepped clock or a reused pid makes it.
-        fc.option(fc.integer({ min: -10_000, max: 20_000 }), { nil: null, freq: 8 }),
+        // The start time relative to the record: before it, inside the slack, or past it as a
+        // stepped clock or reused pid makes it — mostly past, as only there is the socket asked.
+        fc.option(fc.integer({ min: -10_000, max: 50_000 }), { nil: null, freq: 8 }),
         fc.integer({ min: 0, max: 20_000 }),
         fc.option(fc.constant('/daemon.sock'), { nil: undefined, freq: 8 }),
         fc.option(fc.string({ minLength: 1, maxLength: 8 }), { nil: undefined }),

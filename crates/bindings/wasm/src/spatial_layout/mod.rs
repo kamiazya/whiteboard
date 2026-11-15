@@ -15,9 +15,8 @@
 //!   is not a request;
 //! - `["declined", class]`: a request the core cannot answer exactly as the
 //!   TypeScript would (a body past the parser's bounds, a fence the
-//!   highlighter colours, a canvas narrowed to a fragment, a text the
-//!   font measurer cannot measure as the host's does, a number the answer
-//!   cannot spell).
+//!   highlighter colours, a canvas narrowed to a fragment, a number the
+//!   answer cannot spell).
 //!
 //! A host answers the last two from the TypeScript.
 
@@ -30,6 +29,7 @@ use std::sync::OnceLock;
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::compose_canvas::{self, LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::BodySeams;
+use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::references::WireHost;
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
@@ -42,7 +42,7 @@ use whiteboard_scene::NodeDecoration;
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, refused};
-use measure::{Measurer, measurer};
+use measure::measurer;
 use request::{Request, request_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
@@ -97,7 +97,7 @@ fn registry() -> Option<&'static Registry> {
 }
 
 /// The request laid out, as the answer's JSON text.
-fn lay_out(request: &Request, measure: &Measurer<'_>, registry: &Registry) -> String {
+fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand);
@@ -133,7 +133,6 @@ fn lay_out(request: &Request, measure: &Measurer<'_>, registry: &Registry) -> St
     let laid = compose_canvas::layout_spatial_canvas(&request.canvas, &options);
     match host.refused() {
         Some(why) => declined(why.class()),
-        None if measure.inexact() => declined("measure"),
         None => laid_out(&laid, &host.degradations()),
     }
 }
@@ -161,7 +160,7 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
         return refused("malformed", "font");
     };
     match registry() {
-        Some(registry) => lay_out(&request, &measure, registry),
+        Some(registry) => lay_out(&request, measure.as_ref(), registry),
         None => refused("malformed", "registry"),
     }
 }
