@@ -13,10 +13,10 @@ use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use super::{LoadedReference, ReferenceWire, Refused};
 use crate::compose_node::{ComposeHost, Degradation, ParseFailed};
 use crate::node_box::{ReferenceImage, ResolvedReference};
-use crate::typeset::{
-    CanvasSummary, CodeTokenLines, CodeTokenizer, EmbedResolver, Embedded, IconRange, ImageRef,
-    InlineSeams,
-};
+
+mod code;
+mod embed;
+mod inline;
 
 /// The seams over one wire, and what one layout through them reported.
 pub struct WireHost<'w> {
@@ -34,16 +34,6 @@ pub struct WireHost<'w> {
 /// line terminator, which is what `\s` matches.
 fn is_blank(text: &str) -> bool {
     text.chars().all(|c| u16::try_from(u32::from(c)).is_ok_and(is_js_whitespace))
-}
-
-/// A name between two colons, which only the plugin's tables can read.
-fn may_hold_shortcode(text: &str) -> bool {
-    text.matches(':').nth(1).is_some()
-}
-
-fn element_count(canvas: &SpatialCanvas) -> usize {
-    let lines = canvas.lines.as_ref().map_or(0, Vec::len);
-    canvas.nodes.len().saturating_add(canvas.edges.len()).saturating_add(lines)
 }
 
 impl<'w> WireHost<'w> {
@@ -140,28 +130,6 @@ impl<'w> WireHost<'w> {
         }
         (resolved != ResolvedReference::default()).then_some(resolved)
     }
-
-    /// `resolveEmbed`: a body as its parsed root, else a canvas; with the
-    /// record's name, else the title table's.
-    fn embedded(&self, id: &str) -> Option<(Option<String>, Result<Root, &'w SpatialCanvas>)> {
-        let entry = self.by_id(id)?;
-        let title = entry.name.clone().or_else(|| self.title(id));
-        let content = match &entry.body {
-            Some(body) => Ok(self.root_of(body)?),
-            None => Err(entry.canvas.as_ref()?),
-        };
-        Some((title, content))
-    }
-
-    /// The canvas a fragment-free embed of `id` names; a fragment narrows it,
-    /// which the core does not, so the layout is refused.
-    fn whole_canvas(&self, id: &str, fragment: Option<&str>) -> Option<&'w SpatialCanvas> {
-        if fragment.is_some() {
-            self.refuse(Refused::Fragment);
-            return None;
-        }
-        self.embedded(id)?.1.err()
-    }
 }
 
 impl ComposeHost for WireHost<'_> {
@@ -187,65 +155,5 @@ impl ComposeHost for WireHost<'_> {
 
     fn degrade(&self, event: Degradation) {
         self.degradations.borrow_mut().push(event);
-    }
-}
-
-impl InlineSeams for WireHost<'_> {
-    fn expand_emoji(&self, text: &str) -> String {
-        if may_hold_shortcode(text) {
-            self.refuse(Refused::Shortcode);
-        }
-        text.to_owned()
-    }
-
-    fn icon_ranges(&self, text: &str) -> Vec<IconRange> {
-        if may_hold_shortcode(text) {
-            self.refuse(Refused::Shortcode);
-        }
-        Vec::new()
-    }
-
-    fn document_title(&self, document_id: &str) -> Option<String> {
-        self.by_id(document_id)
-            .and_then(|entry| entry.name.clone())
-            .or_else(|| self.title(document_id))
-    }
-
-    fn embed_name(&self, document_id: &str) -> Option<String> {
-        self.embedded(document_id)?.0
-    }
-
-    fn embed_pending(&self, _: &str) -> bool {
-        false
-    }
-
-    fn image_reference(&self, url: &str) -> Option<ImageRef> {
-        let extra = self.wire.extras.iter().rev().find(|(key, _)| key == url)?;
-        let image = extra.1.image.as_ref()?;
-        Some(ImageRef { href: image.href.clone(), width: image.width, height: image.height })
-    }
-}
-
-impl EmbedResolver for WireHost<'_> {
-    fn resolve_embed(&self, document_id: &str, fragment: Option<&str>) -> Option<Embedded> {
-        let (title, content) = self.embedded(document_id)?;
-        if let Ok(root) = content {
-            return Some(Embedded::Document { title, root });
-        }
-        let canvas = self.whole_canvas(document_id, fragment)?;
-        let elements = element_count(canvas);
-        let summary = CanvasSummary { elements, empty: elements == 0 };
-        Some(Embedded::Canvas { title, canvas: Some(summary) })
-    }
-}
-
-impl CodeTokenizer for WireHost<'_> {
-    /// A fence with no language is plain to the TypeScript's highlighter too;
-    /// any other is the highlighter's to colour.
-    fn tokenize(&self, lang: &str, _: &str) -> Option<CodeTokenLines> {
-        if !lang.is_empty() {
-            self.refuse(Refused::Highlight);
-        }
-        None
     }
 }

@@ -1,6 +1,12 @@
 import { nodeFile, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import type { CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
+import type {
+  CanvasLayoutCore,
+  CanvasLayoutRequest,
+  CanvasLayoutSeam,
+  CanvasLayoutSkip,
+  CoreDegradation,
+} from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
@@ -33,30 +39,38 @@ function expansion(
 const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
 
-/** The options no request can carry, since each is a function or a choice the core does not make. */
-function carriesOnlyData(options: SpatialLayoutOptions): boolean {
-  const passed = [
-    options.parseBody,
-    options.renderContributions,
-    options.renderMath,
-    options.renderDiagram,
-    options.resolveEmbed,
-    options.resolveTitle,
-    options.resolveAlias,
-    options.resolveReference,
-    options.nestedLayoutBudget,
-  ]
-  const highlighter = options.highlightCode === undefined || options.highlightCode === highlightCode
-  const style = options.style === undefined || options.style === 'clean'
-  const threads = options.commentLayer === false || (options.threads ?? []).length === 0
-  const proposals = (options.proposals ?? []).length === 0
-  return passed.every((seam) => seam === undefined) && highlighter && style && threads && proposals
+const SEAMS = [
+  'parseBody',
+  'renderContributions',
+  'renderMath',
+  'renderDiagram',
+  'resolveEmbed',
+  'resolveTitle',
+  'resolveAlias',
+  'resolveReference',
+  'nestedLayoutBudget',
+] as const satisfies readonly CanvasLayoutSeam[]
+
+/** The first option no request can carry, since it is a function or a choice the core does not make. */
+function optionSkip(options: SpatialLayoutOptions): CanvasLayoutSkip | undefined {
+  const seam = SEAMS.find((name) => options[name] !== undefined)
+  if (seam !== undefined) return `seam:${seam}`
+  if (options.highlightCode !== undefined && options.highlightCode !== highlightCode) {
+    return 'highlighter'
+  }
+  if (options.style !== undefined && options.style !== 'clean') return 'style'
+  if (options.commentLayer !== false && (options.threads ?? []).length > 0) return 'comments'
+  if ((options.proposals ?? []).length > 0) return 'proposals'
+  return undefined
 }
+
+/** A request the core can be handed, or why the options cannot be. */
+export type CanvasLayoutAsk = CanvasLayoutRequest | { readonly skip: CanvasLayoutSkip }
 
 /**
  * `options` as a request the core answers exactly as the TypeScript would,
- * or undefined when they hold something it cannot be handed: a seam that is
- * a function, a measurer or an appearance nobody named, a theme to draw, an
+ * or the first reason they cannot be one (`CanvasLayoutSkip`): a measurer or
+ * an appearance nobody named, a seam that is a function, a theme to draw, an
  * annotation or proposal layer, a reference bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
  * some nodes open and others closed.
@@ -64,16 +78,21 @@ function carriesOnlyData(options: SpatialLayoutOptions): boolean {
 export function canvasLayoutRequest(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
-): CanvasLayoutRequest | undefined {
+): CanvasLayoutAsk {
   const measure = measureSpecOf(options.measure)
+  if (measure === undefined) return { skip: 'measure' }
   const mode = bundledThemeModeOf(options.appearance)
+  if (mode === undefined) return { skip: 'appearance' }
+  const skip = optionSkip(options)
+  if (skip !== undefined) return { skip }
   const wire = options.references === undefined ? undefined : wireOfSeams(options.references)
-  if (measure === undefined || mode === undefined || !carriesOnlyData(options)) return undefined
-  if (options.references !== undefined && wire === undefined) return undefined
-  if (wire !== undefined && !wire.extras.every(([, extra]) => hasData(extra))) return undefined
+  if (options.references !== undefined && wire === undefined) return { skip: 'references' }
+  if (wire !== undefined && !wire.extras.every(([, extra]) => hasData(extra))) {
+    return { skip: 'reference-content' }
+  }
   const nested = (wire?.entries ?? []).flatMap(([, entry]) => entry?.canvas ?? [])
   const expand = expansion(options.expandFileNode, [canvas, ...nested])
-  if (expand === undefined) return undefined
+  if (expand === undefined) return { skip: 'expansion' }
   return {
     canvas,
     measure,
@@ -154,7 +173,9 @@ const valueAt = (root: unknown, path: string): unknown =>
  * the core cannot be handed; under `rust` by the core, its degradations
  * reported as the TypeScript's would be; under `differential` by the
  * TypeScript with the core run beside it and any difference reported. What the
- * core declines, and a core that throws (reported), the TypeScript answers.
+ * request gate skips and what the core declines (each reported by its class,
+ * so a run can count them), and a core that throws (reported), the
+ * TypeScript answers.
  */
 export function layoutThroughCore(
   stored: SpatialCanvas,
@@ -165,7 +186,10 @@ export function layoutThroughCore(
   const impl = core?.impl.layoutSpatialCanvas ?? 'ts'
   if (core?.layout === undefined || impl === 'ts') return ts(options)
   const request = canvasLayoutRequest(stored, options)
-  if (request === undefined) return ts(options)
+  if ('skip' in request) {
+    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'skipped', reason: request.skip })
+    return ts(options)
+  }
   let answer: ReturnType<typeof core.layout.layoutSpatialCanvas>
   try {
     answer = core.layout.layoutSpatialCanvas(request)
@@ -173,12 +197,24 @@ export function layoutThroughCore(
     core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'refused', err, repro: request })
     return ts(options)
   }
-  if ('declined' in answer) return ts(options)
-  const rust = { scene: answer.scene, anchors: answer.anchors }
+  if ('declined' in answer) {
+    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: answer.declined })
+    return ts(options)
+  }
   if (impl === 'rust') {
     for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
-    return rust
+    return { scene: answer.scene, anchors: answer.anchors }
   }
+  return compared(answer, request, options, ts)
+}
+
+/** `differential`'s answer: the TypeScript's, with the core's compared beside it and a difference reported. */
+function compared(
+  answer: Exclude<ReturnType<CanvasLayoutCore['layoutSpatialCanvas']>, { declined: string }>,
+  request: CanvasLayoutRequest,
+  options: SpatialLayoutOptions,
+  ts: (options: SpatialLayoutOptions) => LaidOutCanvas,
+): LaidOutCanvas {
   const events: CoreDegradation[] = []
   const laid = ts({
     ...options,
@@ -188,10 +224,10 @@ export function layoutThroughCore(
     },
   })
   const tsValue = comparable(laid, events)
-  const rustValue = comparable(rust, answer.degradations)
+  const rustValue = comparable(answer, answer.degradations)
   const at = firstDifference(tsValue, rustValue)
   if (at !== undefined) {
-    core.onMismatch?.({
+    options.core?.onMismatch?.({
       fn: 'layoutSpatialCanvas',
       kind: 'differs',
       at,

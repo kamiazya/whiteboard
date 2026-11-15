@@ -1,4 +1,8 @@
-import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  CanvasLayoutTally,
+  CoreMismatch,
+  LayoutCore,
+} from '@kamiazya/whiteboard-canvas-render'
 // Types only: this module is on the page's critical path, and a value import
 // of codec would carry its readers (the schemas) into the boot bundle.
 // Installing the OKF and JSON Canvas cores into codec is `codec-cores.ts`'s,
@@ -37,7 +41,7 @@ export interface CoreLog {
   debug(message: string, data?: unknown): void
 }
 
-function summarize(mismatch: CoreMismatch) {
+function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally>) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   // The page never switches the whole layout on (it measures with a canvas
@@ -59,6 +63,11 @@ function summarize(mismatch: CoreMismatch) {
 
 function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMismatch) => void {
   return (mismatch) => {
+    // A whole layout the core did not answer is a count, never a failure.
+    if (mismatch.kind === 'skipped' || mismatch.kind === 'declined') {
+      log.debug('the Rust core did not answer this layout', mismatch)
+      return
+    }
     const summary = summarize(mismatch)
     log.warn('the Rust core and the TypeScript disagree', summary)
     log.debug('what reproduces it', mismatch.repro)

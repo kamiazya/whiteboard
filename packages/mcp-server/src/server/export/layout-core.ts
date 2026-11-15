@@ -2,7 +2,11 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  CanvasLayoutTally,
+  CoreMismatch,
+  LayoutCore,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   installOkfCore,
   installSpatialCore,
@@ -94,7 +98,7 @@ export function artifactDirectory(
 }
 
 /** What one line of the log says of a mismatch: where the answers part, never the whole request. */
-function summarize(mismatch: CoreMismatch) {
+function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally>) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   if (mismatch.fn === 'layoutSpatialCanvas') {
@@ -111,9 +115,22 @@ function summarize(mismatch: CoreMismatch) {
   }
 }
 
-/** A mismatch reported, or thrown when the settings ask a test run to fail on one. */
+/**
+ * A mismatch reported, or thrown when the settings ask a test run to fail on
+ * one. A whole layout the core did not answer is no mismatch: it is counted
+ * by its class and logged at debug with the count so far, never thrown.
+ */
 function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => void {
+  const tally = new Map<string, number>()
   return (mismatch) => {
+    if (mismatch.kind === 'skipped' || mismatch.kind === 'declined') {
+      const key = `${mismatch.kind}:${mismatch.reason}`
+      const count = (tally.get(key) ?? 0) + 1
+      tally.set(key, count)
+      const { fn, kind, reason } = mismatch
+      log.debug({ fn, kind, reason, count }, 'the Rust core did not answer this layout')
+      return
+    }
     const summary = summarize(mismatch)
     log.warning(summary, 'the Rust core and the TypeScript disagree')
     log.debug({ repro: mismatch.repro }, 'what reproduces it')

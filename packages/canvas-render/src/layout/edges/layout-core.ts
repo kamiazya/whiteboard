@@ -1,6 +1,10 @@
 import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { CanvasLayoutCore, CanvasLayoutMismatch } from '../../canvas-core.js'
+import type {
+  CanvasLayoutCore,
+  CanvasLayoutMismatch,
+  CanvasLayoutTally,
+} from '../../canvas-core.js'
 import type { Rect } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
@@ -52,9 +56,12 @@ interface RouteLayoutRepro {
  * A difference `differential` mode found, or a core that refused a call.
  * `at` is the first position the two canonical answers part at; the
  * answers are given whole so the report needs nothing else to be read.
+ * A whole layout the core did not answer is reported on the same sink as a
+ * `CanvasLayoutTally`, which is a count rather than a difference.
  */
 export type CoreMismatch =
   | CanvasLayoutMismatch
+  | CanvasLayoutTally
   | {
       readonly fn: 'routeLayout'
       readonly kind: 'differs'

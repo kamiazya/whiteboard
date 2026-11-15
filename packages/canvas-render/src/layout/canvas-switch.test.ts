@@ -2,6 +2,7 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
+import { highlightCode } from '../highlight/lowlight.js'
 import { describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { referenceSeamsFromWire } from '../references/wire.js'
@@ -104,12 +105,25 @@ describe('the whole layout through the core switch', () => {
     expect(mismatches).toEqual([])
   })
 
-  it('answers from the TypeScript what the core declines, unreported', () => {
+  it('answers from the TypeScript what the core declines, reporting its class', () => {
     const { laid, mismatches, requests, events } = run('rust', () => ({ declined: 'shortcode' }))
     expect(requests).toHaveLength(1)
     expect(laid.scene).toEqual(reference.scene)
-    expect(mismatches).toEqual([])
+    expect(mismatches).toEqual([
+      { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'shortcode' },
+    ])
     expect(events.map((e) => e.kind)).toEqual(['unknown-node-kind'])
+  })
+
+  it('reports a layout the request gate skips by its class, asking the core nothing', () => {
+    for (const impl of ['rust', 'differential'] as const) {
+      const { laid, mismatches, requests } = run(impl, agreeing, { style: 'document' })
+      expect(requests).toEqual([])
+      expect(laid.scene).toEqual(
+        layoutSpatialCanvasWithAnchors(canvas, { ...base, style: 'document' }).scene,
+      )
+      expect(mismatches).toEqual([{ fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'style' }])
+    }
   })
 
   it('reports a core that throws and answers from the TypeScript', () => {
@@ -186,29 +200,50 @@ describe('what the core can be handed', () => {
     })
   })
 
-  it('declines what is a function, a choice the core does not make, or an unnamed value', () => {
-    const declined: Partial<SpatialLayoutOptions>[] = [
-      { measure: () => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }) },
-      { appearance: createSpatialTheme({ mode: 'light', palette: undefined as never }) },
-      { appearance: { ...appearance } },
-      { parseBody: () => ({ type: 'root', children: [] }) },
-      { renderContributions: [] },
-      { renderMath: () => undefined },
-      { renderDiagram: () => undefined },
-      { resolveEmbed: () => undefined },
-      { resolveTitle: () => undefined },
-      { resolveAlias: () => null },
-      { resolveReference: () => undefined },
-      { nestedLayoutBudget: { remaining: 1 } as never },
-      { highlightCode: () => undefined },
-      { style: 'document' },
-      { threads: [{} as never] },
-      { proposals: [{} as never] },
-      { references: referenceSeams(new Map()) },
+  it('names why it cannot hand over a function, a choice the core does not make, or an unnamed value', () => {
+    const skipped: [Partial<SpatialLayoutOptions>, string][] = [
+      [{ measure: () => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }) }, 'measure'],
+      [{ appearance: { ...appearance } }, 'appearance'],
+      [{ parseBody: () => ({ type: 'root', children: [] }) }, 'seam:parseBody'],
+      [{ renderContributions: [] }, 'seam:renderContributions'],
+      [{ renderMath: () => undefined }, 'seam:renderMath'],
+      [{ renderDiagram: () => undefined }, 'seam:renderDiagram'],
+      [{ resolveEmbed: () => undefined }, 'seam:resolveEmbed'],
+      [{ resolveTitle: () => undefined }, 'seam:resolveTitle'],
+      [{ resolveAlias: () => null }, 'seam:resolveAlias'],
+      [{ resolveReference: () => undefined }, 'seam:resolveReference'],
+      [{ nestedLayoutBudget: { remaining: 1 } as never }, 'seam:nestedLayoutBudget'],
+      [{ highlightCode: () => undefined }, 'highlighter'],
+      [{ style: 'document' }, 'style'],
+      [{ style: 'visual.neon' }, 'style'],
+      [{ threads: [{} as never] }, 'comments'],
+      [{ proposals: [{} as never] }, 'proposals'],
+      [{ references: referenceSeams(new Map()) }, 'references'],
     ]
-    const kept = declined.filter((options) => request(options) !== undefined)
-    // A bundled theme built afresh is still the bundled theme.
-    expect(kept).toEqual([declined[1]])
+    for (const [options, reason] of skipped) {
+      expect(request(options), reason).toEqual({ skip: reason })
+    }
+    // A bundled theme built afresh is still the bundled theme, and the
+    // default highlighter is no seam.
+    const kept = [
+      { appearance: createSpatialTheme({ mode: 'light', palette: undefined as never }) },
+      { highlightCode },
+      { style: 'clean' as const },
+      { commentLayer: false, threads: [{} as never] },
+    ]
+    for (const options of kept) expect(request(options)).not.toHaveProperty('skip')
+  })
+
+  it('names the first reason when several hold, the measurer before the rest', () => {
+    expect(
+      request({
+        measure: () => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }),
+        style: 'document',
+      }),
+    ).toEqual({ skip: 'measure' })
+    expect(request({ renderMath: () => undefined, style: 'document' })).toEqual({
+      skip: 'seam:renderMath',
+    })
   })
 
   it('carries a wire-built reference bundle, unless an extra carries content', () => {
@@ -218,10 +253,14 @@ describe('what the core can be handed', () => {
       titles: [['n', 'Note']] as const,
       extras: [['n', { label: 'L', missing: true }]] as const,
     }
-    expect(request({ references: referenceSeamsFromWire(wire) })?.references).toEqual(wire)
+    expect(request({ references: referenceSeamsFromWire(wire) })).toMatchObject({
+      references: wire,
+    })
     for (const extra of [{ canvas }, { markdown: { type: 'root', children: [] } }]) {
       const content = { ...wire, extras: [['n', extra]] as never }
-      expect(request({ references: referenceSeamsFromWire(content) })).toBeUndefined()
+      expect(request({ references: referenceSeamsFromWire(content) })).toEqual({
+        skip: 'reference-content',
+      })
     }
   })
 
@@ -235,8 +274,10 @@ describe('what the core can be handed', () => {
       extras: [],
     }
     const references = referenceSeamsFromWire(wire)
-    const asked = (policy: (node: SpatialNode) => boolean) =>
-      canvasLayoutRequest(withFiles, { ...base, references, expandFileNode: policy })?.expand
+    const asked = (policy: (node: SpatialNode) => boolean) => {
+      const built = canvasLayoutRequest(withFiles, { ...base, references, expandFileNode: policy })
+      return 'skip' in built ? built : built.expand
+    }
     const seen: string[] = []
     const noting = (node: SpatialNode) => {
       seen.push(node.id)
@@ -245,14 +286,14 @@ describe('what the core can be handed', () => {
     expect(asked(noting)).toBe(true)
     expect(seen).toEqual(['f1', 'f2'])
     expect(asked(() => false)).toBe(false)
-    expect(asked((node) => node.id === 'f1')).toBeUndefined()
+    expect(asked((node) => node.id === 'f1')).toEqual({ skip: 'expansion' })
   })
 
   it('takes a measurer by the name its maker gave it', () => {
     const named = describeMeasure(() => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }), {
       kind: 'ratio',
     })
-    expect(request({ measure: named })?.measure).toEqual({ kind: 'ratio' })
+    expect(request({ measure: named })).toMatchObject({ measure: { kind: 'ratio' } })
   })
 })
 

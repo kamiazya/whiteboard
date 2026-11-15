@@ -71,6 +71,51 @@ export interface CanvasLayoutCore {
   layoutSpatialCanvas(request: CanvasLayoutRequest): CanvasLayoutAnswer
 }
 
+/** The function seams no request can carry, by their option's name. */
+export type CanvasLayoutSeam =
+  | 'parseBody'
+  | 'renderContributions'
+  | 'renderMath'
+  | 'renderDiagram'
+  | 'resolveEmbed'
+  | 'resolveTitle'
+  | 'resolveAlias'
+  | 'resolveReference'
+  | 'nestedLayoutBudget'
+
+/**
+ * Why a layout's options could not be handed to the core (the request gate,
+ * `canvasLayoutRequest`): a measurer or an appearance nobody named, a
+ * function seam, a highlighter other than the default, a drawn style, an
+ * annotation or proposal layer, a reference bundle not rebuilt from a wire
+ * or one whose extras carry content, and an expansion policy that answers
+ * some file nodes open and others closed.
+ */
+export type CanvasLayoutSkip =
+  | 'measure'
+  | 'appearance'
+  | `seam:${CanvasLayoutSeam}`
+  | 'highlighter'
+  | 'style'
+  | 'comments'
+  | 'proposals'
+  | 'references'
+  | 'reference-content'
+  | 'expansion'
+
+/**
+ * A layout the core did not answer, by class, reported so a run can count
+ * them: `skipped` by the request gate before the core was asked, `declined`
+ * by the core itself (the class it answered). Neither is a difference.
+ */
+export type CanvasLayoutTally =
+  | {
+      readonly fn: 'layoutSpatialCanvas'
+      readonly kind: 'skipped'
+      readonly reason: CanvasLayoutSkip
+    }
+  | { readonly fn: 'layoutSpatialCanvas'; readonly kind: 'declined'; readonly reason: string }
+
 /**
  * A difference `differential` found in a whole layout, or a core that threw
  * on one: `at` is the path to the first value the two answers part at.

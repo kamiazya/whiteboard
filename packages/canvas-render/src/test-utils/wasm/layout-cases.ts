@@ -25,7 +25,16 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * TypeScript can draw exactly; every reference crosses as a wire.
  */
 
+/**
+ * What a case is aimed at. Each topic is recorded in its own file
+ * (`oracle/layout-spatial-canvas.<topic>.jsonl`), so a slice that teaches the
+ * core something new adds a topic and a recording rather than re-recording
+ * the others.
+ */
+export type LayoutTopic = 'composer' | 'bodies' | 'declined' | 'routing'
+
 export interface LayoutCase {
+  readonly topic: LayoutTopic
   readonly name: string
   readonly canvas: SpatialCanvas
   readonly options: SpatialLayoutOptions
@@ -133,8 +142,8 @@ function optionsOf(spec: CaseSpec): SpatialLayoutOptions | undefined {
   }
 }
 
-/** Every layout case; `synthetic` draws that many generated routing boards too. */
-export function layoutCases(synthetic: number): LayoutCase[] {
+/** The composer recordings' boards under the clean style, each with file nodes drawn open and closed. */
+function composerCases(): LayoutCase[] {
   const cases: LayoutCase[] = []
   const byName = new Map(boards().map((b) => [b.name, b.canvas]))
   for (const [at, spec] of caseSpecs().entries()) {
@@ -143,6 +152,7 @@ export function layoutCases(synthetic: number): LayoutCase[] {
     if (options === undefined || canvas === undefined) continue
     for (const expand of [true, false]) {
       cases.push({
+        topic: 'composer',
         name: `${spec.board}#${at} expand=${expand}`,
         canvas,
         options: {
@@ -153,20 +163,34 @@ export function layoutCases(synthetic: number): LayoutCase[] {
       })
     }
   }
+  return cases
+}
+
+/** Every layout case; `synthetic` draws that many generated routing boards too. */
+export function layoutCases(synthetic: number): LayoutCase[] {
+  const cases = composerCases()
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
-  cases.push({
-    name: 'bodies',
-    canvas: bodiesBoard(),
-    options: { ...light, references: referenceSeamsFromWire(WIRE), expandFileNode: () => true },
-  })
-  cases.push({ name: 'bodies, nothing resolved', canvas: bodiesBoard(), options: light })
+  cases.push(
+    {
+      topic: 'bodies',
+      name: 'bodies',
+      canvas: bodiesBoard(),
+      options: { ...light, references: referenceSeamsFromWire(WIRE), expandFileNode: () => true },
+    },
+    {
+      topic: 'bodies',
+      name: 'bodies, nothing resolved',
+      canvas: bodiesBoard(),
+      options: light,
+    },
+  )
   // What only the TypeScript can draw exactly: a fence its highlighter colours, a shortcode.
   for (const text of ['```js\nlet x = 1\n```', 'ship it :rocket:']) {
     const canvas = {
       nodes: [textNode({ id: 'd', x: 0, y: 0, width: 200, height: 100, text })],
       edges: [],
     }
-    cases.push({ name: `declined: ${text}`, canvas, options: light })
+    cases.push({ topic: 'declined', name: `declined: ${text}`, canvas, options: light })
   }
   for (const board of [...ROUTING_CORPUS, ...syntheticLayouts(synthetic)]) {
     for (const routing of ['straight', 'orthogonal'] as const) {
@@ -175,7 +199,7 @@ export function layoutCases(synthetic: number): LayoutCase[] {
         edges: [...board.edges],
         facets: { 'visual.edges/v0': { routing } },
       } as SpatialCanvas
-      cases.push({ name: `${board.name} ${routing}`, canvas, options: light })
+      cases.push({ topic: 'routing', name: `${board.name} ${routing}`, canvas, options: light })
     }
   }
 
