@@ -1,7 +1,15 @@
 use serde_json::{Value as Json, json};
 
 use super::tests::{answer, m, request, s};
-use super::{MAX_PRIOR_FACET_ENTRIES, MAX_PROPOSAL_CHANGES, MAX_PROPOSALS};
+use whiteboard_model::proposal::{
+    ChangeOp, ChangeStatus, ElementPatchFields, Proposal, ProposedChange, SpatialChange,
+};
+use whiteboard_model::spatial::{
+    CanvasEdge, CanvasLine, EdgeEnd, LineEnd, LineEndNode, SpatialNode,
+};
+use whiteboard_model::{Map, Value};
+
+use super::{MAX_PRIOR_FACET_ENTRIES, MAX_PROPOSAL_CHANGES, MAX_PROPOSALS, past_proposal_caps};
 
 /// A plain JSON value on the value wire: an object a mapping in its written
 /// order, an array a list, a number that is no safe integer its bits.
@@ -209,11 +217,11 @@ fn a_proposal_that_is_not_one_is_no_request() {
     assert_eq!(lay_out(&read).get(0), Some(&json!("ok")));
 }
 
-fn patches(proposals: usize, each: usize) -> Json {
-    let change = |i: usize| {
-        json!({"id": format!("c{i}"), "status": "dismissed", "op": "node.patch",
-            "nodeId": "a", "patch": {"x": 1}, "assumed": {}})
-    };
+/// Proposals of passage changes, which outline nothing and so anchor no
+/// bubble whatever their verdict: a layer that costs nothing to draw, so a
+/// cap that let it through would still answer at once.
+fn passages(proposals: usize, each: usize) -> Json {
+    let change = |i: usize| json!({"id": format!("c{i}"), "status": "open", "op": "body.replace"});
     let proposal = |p: usize| {
         json!({"id": format!("p{p}"), "changes":
         (0..each).map(|i| change(p * each + i)).collect::<Vec<_>>()})
@@ -233,10 +241,10 @@ fn facet_prior(entries: usize) -> Json {
 #[test]
 fn a_proposal_layer_past_its_caps_is_refused() {
     let past = json!(["refused", "input-too-large", "proposals"]);
-    assert_eq!(lay_out(&patches(MAX_PROPOSALS, 2)).get(0), Some(&json!("ok")));
-    assert_eq!(lay_out(&patches(MAX_PROPOSALS + 1, 0)), past);
-    assert_eq!(lay_out(&patches(1, MAX_PROPOSAL_CHANGES)).get(0), Some(&json!("ok")));
-    assert_eq!(lay_out(&patches(2, MAX_PROPOSAL_CHANGES / 2 + 1)), past);
+    assert_eq!(lay_out(&passages(MAX_PROPOSALS, 2)).get(0), Some(&json!("ok")));
+    assert_eq!(lay_out(&passages(MAX_PROPOSALS + 1, 0)), past);
+    assert_eq!(lay_out(&passages(1, MAX_PROPOSAL_CHANGES)).get(0), Some(&json!("ok")));
+    assert_eq!(lay_out(&passages(1, MAX_PROPOSAL_CHANGES + 1)), past);
     // The bucket's own key counts, and each of its entries with the one it holds.
     let at = MAX_PRIOR_FACET_ENTRIES / 2 - 1;
     assert_eq!(lay_out(&facet_prior(at)).get(0), Some(&json!("ok")));
@@ -290,4 +298,120 @@ fn every_prior_s_facets_count_toward_the_cap() {
         assert_eq!(at.get(0), Some(&json!("ok")), "{name}");
         assert_eq!(lay_out(&change(MAX_PRIOR_FACET_ENTRIES - 1)), past, "{name}");
     }
+}
+
+fn passage(i: usize) -> ProposedChange {
+    ProposedChange { id: format!("c{i}"), status: ChangeStatus::Open, op: ChangeOp::BodyReplace }
+}
+
+fn layer(proposals: usize, each: usize) -> Vec<Proposal> {
+    let proposal = |p: usize| Proposal {
+        id: format!("p{p}"),
+        changes: (0..each).map(|i| passage(p * each + i)).collect(),
+    };
+    (0..proposals).map(proposal).collect()
+}
+
+#[test]
+fn the_proposal_and_change_caps_are_each_inclusive() {
+    assert!(!past_proposal_caps(&[]));
+    assert!(!past_proposal_caps(&layer(MAX_PROPOSALS, 2)));
+    assert!(past_proposal_caps(&layer(MAX_PROPOSALS + 1, 0)));
+    assert!(!past_proposal_caps(&layer(1, MAX_PROPOSAL_CHANGES)));
+    assert!(past_proposal_caps(&layer(1, MAX_PROPOSAL_CHANGES + 1)));
+}
+
+/// A bucket of `n` keys, each holding a list with a one-entry mapping in it:
+/// `2n` entries in all, since the mapping inside the list is counted too.
+fn bucket(n: usize) -> Map {
+    let item = |i: usize| Value::Map(vec![(format!("v{i}"), Value::Number(0.0))]);
+    (0..n).map(|i| (format!("k{i}"), Value::Seq(vec![item(i), Value::Null]))).collect()
+}
+
+fn ends<End: Clone>(end: &End) -> ElementPatchFields<End> {
+    ElementPatchFields {
+        from: Some(end.clone()),
+        to: None,
+        color: None,
+        label: None,
+        bends: None,
+        facets: None,
+    }
+}
+
+/// One change of each arm whose prior can carry facets, `facets` on its prior.
+fn priors(facets: &Map) -> [SpatialChange; 5] {
+    let f = Some(facets.clone());
+    let edge_end = EdgeEnd { node: "a".to_owned(), side: None, end: None };
+    let line_end =
+        LineEnd::LineEndNode(LineEndNode { node: "a".to_owned(), side: None, end: None });
+    let edge = CanvasEdge {
+        id: "e".to_owned(),
+        from: edge_end.clone(),
+        to: edge_end.clone(),
+        color: None,
+        label: None,
+        bends: None,
+        facets: f.clone(),
+        tags: None,
+    };
+    let line = CanvasLine {
+        id: "k".to_owned(),
+        from: line_end.clone(),
+        to: line_end.clone(),
+        color: None,
+        label: None,
+        bends: None,
+        facets: f.clone(),
+    };
+    let node = SpatialNode { id: "a".to_owned(), facets: f.clone(), ..SpatialNode::default() };
+    [
+        SpatialChange::NodeRemove { node_id: "a".to_owned(), assumed: node },
+        SpatialChange::EdgeRemove { edge_id: "e".to_owned(), assumed: edge },
+        SpatialChange::LineRemove { line_id: "k".to_owned(), assumed: line },
+        SpatialChange::EdgePatch {
+            edge_id: "e".to_owned(),
+            patch: ends(&edge_end),
+            assumed: ElementPatchFields { facets: f.clone(), ..ends(&edge_end) },
+        },
+        SpatialChange::LinePatch {
+            line_id: "k".to_owned(),
+            patch: ends(&line_end),
+            assumed: ElementPatchFields { facets: f, ..ends(&line_end) },
+        },
+    ]
+}
+
+fn spatial(change: SpatialChange) -> Vec<Proposal> {
+    let op = ChangeOp::Spatial(Box::new(change));
+    let change = ProposedChange { id: "c".to_owned(), status: ChangeStatus::Open, op };
+    vec![Proposal { id: "p".to_owned(), changes: vec![change, passage(1)] }]
+}
+
+/// Facets of exactly `total` entries: lists of mappings, and plain keys for the rest.
+fn sized(total: usize) -> Map {
+    let mut facets = bucket(total / 2);
+    facets.extend((0..total % 2).map(|i| (format!("x{i}"), Value::Null)));
+    facets
+}
+
+#[test]
+fn every_prior_s_facets_are_counted_at_every_depth() {
+    for change in priors(&sized(MAX_PRIOR_FACET_ENTRIES)) {
+        assert!(!past_proposal_caps(&spatial(change)), "at the cap");
+    }
+    for change in priors(&sized(MAX_PRIOR_FACET_ENTRIES + 1)) {
+        assert!(past_proposal_caps(&spatial(change.clone())), "past it: {change:?}");
+    }
+    // Two priors are judged against one total.
+    let two = |first: usize, second: usize| {
+        let [a, ..] = priors(&sized(first));
+        let [_, b, ..] = priors(&sized(second));
+        let mut both = spatial(a);
+        both.extend(spatial(b));
+        past_proposal_caps(&both)
+    };
+    let half = MAX_PRIOR_FACET_ENTRIES / 2;
+    assert!(!two(half, MAX_PRIOR_FACET_ENTRIES - half));
+    assert!(two(half, MAX_PRIOR_FACET_ENTRIES - half + 1));
 }
