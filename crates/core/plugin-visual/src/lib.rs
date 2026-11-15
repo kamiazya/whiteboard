@@ -15,6 +15,7 @@ pub mod checks;
 pub mod host;
 pub mod read;
 pub mod render;
+pub mod shortcode;
 pub mod tag_library;
 #[path = "generated/visual.rs"]
 pub mod visual;

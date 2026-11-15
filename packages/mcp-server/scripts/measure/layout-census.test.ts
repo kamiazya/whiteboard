@@ -38,7 +38,7 @@ describe('the layout census', () => {
       }
       const cases = [
         { canvas: board('plain words'), options },
-        { canvas: board('ship it :rocket:'), options },
+        { canvas: board('```js\nlet x = 1\n```'), options },
         { canvas: board('plain words'), options: { ...options, style: 'document' as const } },
         { canvas: board('more plain words'), options },
       ]
@@ -46,7 +46,7 @@ describe('the layout census', () => {
       expect(layouts).toBe(4)
       expect(Object.fromEntries(counts)).toEqual({
         answered: 2,
-        'declined:shortcode': 1,
+        'declined:highlight': 1,
         'skipped:style': 1,
       })
     },

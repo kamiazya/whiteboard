@@ -77,9 +77,15 @@ fn a_canvas_is_answered_with_its_scene_anchors_and_degradations() {
 }
 
 #[test]
+fn a_shortcode_is_answered_from_the_plugin_tables() {
+    let shortcode = answer(&request(board("a :rocket: b :icon-star:"), &[]), &[]);
+    assert_eq!(shortcode.get(0), Some(&json!("ok")), "{shortcode}");
+    let scene = shortcode.to_string();
+    assert!(scene.contains('🚀') && scene.contains("\"icon\""), "{shortcode}");
+}
+
+#[test]
 fn what_the_core_cannot_answer_as_the_typescript_would_is_declined() {
-    let shortcode = answer(&request(board("a :rocket: b"), &[]), &[]);
-    assert_eq!(shortcode, json!(["declined", "shortcode"]));
     let fence = answer(&request(board("```rust\nfn x() {}\n```"), &[]), &[]);
     assert_eq!(fence, json!(["declined", "highlight"]));
     let at_cap = answer(&request(board(&"a".repeat(MAX_BODY_BYTES)), &[]), &[]);

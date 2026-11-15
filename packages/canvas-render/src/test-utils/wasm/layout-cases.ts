@@ -21,8 +21,8 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * are the composer recordings' (frames, locks, suppression, geometry
  * overrides, pinned sides, an embed path, a tag library, file nodes drawing
  * canvases three deep, a body embedding a canvas) under the clean style, the
- * routing corpus, bodies aimed at the typesetter, and two layouts only the
- * TypeScript can draw exactly; every reference crosses as a wire.
+ * routing corpus, bodies aimed at the typesetter, bodies dense in shortcodes,
+ * and a layout only the TypeScript can draw exactly; every reference crosses as a wire.
  */
 
 /**
@@ -31,7 +31,7 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * core something new adds a topic and a recording rather than re-recording
  * the others.
  */
-export type LayoutTopic = 'composer' | 'bodies' | 'declined' | 'routing'
+export type LayoutTopic = 'composer' | 'bodies' | 'shortcode' | 'declined' | 'routing'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -117,6 +117,64 @@ function bodiesBoard(): SpatialCanvas {
   }
 }
 
+/**
+ * Bodies dense in both shortcode vocabularies: names that resolve, names one
+ * off, colon pairs that are prose, icons next to characters outside the Basic
+ * Multilingual Plane, and shortcodes inside every inline and block container
+ * the typesetter walks.
+ */
+const SHORTCODE_BODIES = [
+  'ship it :rocket:',
+  ':star: and :icon-star: and :icon-lock: at 10:30: today',
+  '# :icon-database: Storage\n\n- :white_check_mark: is not CLDR\n- :check_mark_button: done\n- **:fire: hot** and *:icon-server:*',
+  '| :icon-user: | :thumbs_up: |\n|---|---|\n| 😀:icon-link:𝒳 | :flag_japan: |',
+  'http://example.com:8080/a:b:c and `:rocket:` in code',
+  '[:rocket: launch](https://example.com) :keycap_hash: ~~:icon-file:~~',
+  '> :warning: careful\n\n:icon-no-such: :not_an_emoji: ::icon-star::',
+  ':icon-layers::icon-network::icon-file::icon-image:',
+  ':rocket: '.repeat(24),
+]
+
+/** A keeper's wire whose referenced body holds shortcodes too. */
+const SHORTCODE_WIRE: ReferenceWire = {
+  entries: [
+    [
+      'launch',
+      { documentId: 'D-LAUNCH', name: 'Launch', body: '# :rocket: Launch\n\nsee :icon-star:' },
+    ],
+  ],
+  aliases: [],
+  titles: [],
+  extras: [],
+}
+
+function shortcodeBoard(): SpatialCanvas {
+  const text = SHORTCODE_BODIES.map((body, i) =>
+    textNode({
+      id: `s${i}`,
+      x: (i % 3) * 260,
+      y: Math.floor(i / 3) * 220,
+      width: 240,
+      height: 200,
+      text: body,
+    }),
+  )
+  return {
+    nodes: [
+      ...text,
+      {
+        id: 'sf',
+        x: 0,
+        y: 700,
+        width: 240,
+        height: 160,
+        resource: { mimeType: 'application/octet-stream', location: 'launch' },
+      },
+    ],
+    edges: [],
+  }
+}
+
 const measure = createFakeMeasure()
 
 function optionsOf(spec: CaseSpec): SpatialLayoutOptions | undefined {
@@ -166,6 +224,21 @@ function composerCases(): LayoutCase[] {
   return cases
 }
 
+/** The shortcode board in both modes, its file node reading a body that holds shortcodes too. */
+function shortcodeCases(): LayoutCase[] {
+  return (['light', 'dark'] as const).map((mode) => ({
+    topic: 'shortcode',
+    name: `shortcodes ${mode}`,
+    canvas: shortcodeBoard(),
+    options: {
+      measure,
+      appearance: createSpatialTheme({ mode }),
+      references: referenceSeamsFromWire(SHORTCODE_WIRE),
+      expandFileNode: () => true,
+    },
+  }))
+}
+
 /** Every layout case; `synthetic` draws that many generated routing boards too. */
 export function layoutCases(synthetic: number): LayoutCase[] {
   const cases = composerCases()
@@ -184,14 +257,18 @@ export function layoutCases(synthetic: number): LayoutCase[] {
       options: light,
     },
   )
-  // What only the TypeScript can draw exactly: a fence its highlighter colours, a shortcode.
-  for (const text of ['```js\nlet x = 1\n```', 'ship it :rocket:']) {
-    const canvas = {
-      nodes: [textNode({ id: 'd', x: 0, y: 0, width: 200, height: 100, text })],
+  cases.push(...shortcodeCases())
+  // What only the TypeScript can draw exactly: a fence its highlighter colours.
+  const fence = '```js\nlet x = 1\n```'
+  cases.push({
+    topic: 'declined',
+    name: `declined: ${fence}`,
+    canvas: {
+      nodes: [textNode({ id: 'd', x: 0, y: 0, width: 200, height: 100, text: fence })],
       edges: [],
-    }
-    cases.push({ topic: 'declined', name: `declined: ${text}`, canvas, options: light })
-  }
+    },
+    options: light,
+  })
   for (const board of [...ROUTING_CORPUS, ...syntheticLayouts(synthetic)]) {
     for (const routing of ['straight', 'orthogonal'] as const) {
       const canvas = {

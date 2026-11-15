@@ -289,7 +289,7 @@ describe('the daemon layout core', () => {
       try {
         const tallies = [
           { kind: 'skipped', reason: 'style' },
-          { kind: 'declined', reason: 'shortcode' },
+          { kind: 'declined', reason: 'highlight' },
           { kind: 'skipped', reason: 'style' },
         ] as const
         for (const tally of tallies) {
@@ -301,7 +301,7 @@ describe('the daemon layout core', () => {
             .map((r) => r.data),
         ).toMatchObject([
           { kind: 'skipped', reason: 'style', count: 1 },
-          { kind: 'declined', reason: 'shortcode', count: 1 },
+          { kind: 'declined', reason: 'highlight', count: 1 },
           { kind: 'skipped', reason: 'style', count: 2 },
         ])
         expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
