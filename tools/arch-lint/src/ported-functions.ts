@@ -97,8 +97,10 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   {
     name: 'layoutSpatialCanvas',
-    // Defaults to `ts` (S16 moves it); `differential` holds it to the
-    // TypeScript in canvas-render-rust and the crate replays the recording.
+    // The daemon defaults to `rust` (S16a) and the web app to `ts` until
+    // S16b; `differential` holds it to the TypeScript in canvas-render-rust,
+    // CI's mcp-node step and the dev daemon, and the crate replays the
+    // recording. Stays 2 for routing's reason: stage 3 deletes the rollback.
     stage: 2,
     ts: {
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
