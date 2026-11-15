@@ -57,3 +57,11 @@ export const LAYOUT_SPATIAL_CANVAS_CAPS = Object.freeze({
   maxMillis: 60000,
   maxNodes: 4096,
 } as const)
+
+/** The caps of `whiteboard-wasm::spatial_layout::register_layout_fonts`. */
+export const REGISTER_LAYOUT_FONTS_CAPS = Object.freeze({
+  maxBytes: 67108864,
+  maxDepth: 128,
+  maxMillis: 2000,
+  maxNodes: 64,
+} as const)
