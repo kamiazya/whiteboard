@@ -119,9 +119,22 @@ fn an_instance_holds_a_bounded_count_of_faces_registrations_and_bytes() {
     assert!(fonts.release(3));
     assert!(fonts.measurer(3).is_none());
     assert!(fonts.measurer(4).is_some());
-    let past = MAX_HELD_BYTES - ROBOTO.len() + 1;
+    // Handle 1 holds Roboto and its one face's family, "F".
+    let past = MAX_HELD_BYTES - (ROBOTO.len() + 1) + 1;
     assert_eq!(fonts.register(&vec![0; past], Vec::new()), Err(("input-too-large", "held")));
     assert!(fonts.register(&vec![0; past - 1], Vec::new()).is_ok());
+}
+
+#[test]
+fn a_faces_family_is_held_with_the_bytes() {
+    let mut fonts = Fonts::new();
+    let named = |len: usize| Face { family: "F".repeat(len), ..face(0, ROBOTO.len()) };
+    let room = MAX_HELD_BYTES - ROBOTO.len();
+    assert_eq!(fonts.register(ROBOTO, vec![named(room + 1)]), Err(("input-too-large", "held")));
+    assert_eq!(fonts.register(ROBOTO, vec![named(room)]), Ok(0));
+    assert_eq!(fonts.register(&[0], Vec::new()), Err(("input-too-large", "held")));
+    assert!(fonts.release(0));
+    assert_eq!(fonts.register(&[0], Vec::new()), Ok(1));
 }
 
 #[test]

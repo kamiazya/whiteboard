@@ -40,8 +40,9 @@ pub const MAX_FACES: usize = match REGISTER_LAYOUT_FONTS.max_nodes {
 /// set of faces per measurer it lays out with, so this is far above any root.
 pub const MAX_HANDLES: usize = 64;
 
-/// The most font bytes an instance holds across its registrations: one
-/// registration's own `maxBytes`, so a second as large waits for a release.
+/// The most an instance holds across its registrations, the faces' bytes and
+/// their family names together: one registration's own `maxBytes`, so a second
+/// as large waits for a release.
 pub const MAX_HELD_BYTES: usize = REGISTER_LAYOUT_FONTS.max_bytes;
 
 /// Why a registration was refused: a code and a class, as the answer spells them.
@@ -74,13 +75,19 @@ fn measurer<'b>(bytes: &'b [u8], faces: &[Face]) -> Result<FontTableMeasurer<'b>
     Ok(measurer)
 }
 
+/// What a registration holds: its bytes, and each face's family, which is
+/// kept beside them and whose length the wire alone bounds.
+fn cost(bytes: &[u8], faces: &[Face]) -> usize {
+    faces.iter().fold(bytes.len(), |sum, face| sum.saturating_add(face.family.len()))
+}
+
 impl Fonts {
     pub(crate) const fn new() -> Self {
         Self { next: 0, held: Vec::new() }
     }
 
     fn held_bytes(&self) -> usize {
-        self.held.iter().fold(0, |sum, held| sum.saturating_add(held.bytes.len()))
+        self.held.iter().fold(0, |sum, held| sum.saturating_add(cost(&held.bytes, &held.faces)))
     }
 
     /// Holds `faces` over a copy of `bytes`, answering the handle that names them.
@@ -99,7 +106,7 @@ impl Fonts {
         if self.held.len() >= MAX_HANDLES {
             return Err(("input-too-large", "handles"));
         }
-        if self.held_bytes().saturating_add(bytes.len()) > MAX_HELD_BYTES {
+        if self.held_bytes().saturating_add(cost(bytes, &faces)) > MAX_HELD_BYTES {
             return Err(("input-too-large", "held"));
         }
         measurer(bytes, &faces)?;
