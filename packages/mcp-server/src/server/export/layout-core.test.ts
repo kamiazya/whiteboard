@@ -256,7 +256,10 @@ describe('the daemon layout core', () => {
         const capture = captureLogsForTests('warning')
         try {
           const { core, answers, reports, themed } = await defaultCore()
-          const declined = { ...core, layout: { layoutSpatialCanvas: () => ({ declined: 'body' }) } }
+          const declined = {
+            ...core,
+            layout: { layoutSpatialCanvas: () => ({ declined: 'body' }) },
+          }
           expect(layoutSpatialCanvas(board, { ...themed, core: declined as never })).toEqual(
             layoutSpatialCanvas(board, themed),
           )
