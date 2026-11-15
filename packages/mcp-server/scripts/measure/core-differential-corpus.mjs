@@ -215,11 +215,11 @@ async function main() {
 }
 
 if (isRunAsScript(import.meta.url)) {
-  main().then(
-    (code) => process.exit(code),
-    (err) => {
-      console.error(err)
-      process.exit(1)
-    },
-  )
+  let code = 1
+  try {
+    code = await main()
+  } catch (err) {
+    console.error(err)
+  }
+  process.exit(code)
 }
