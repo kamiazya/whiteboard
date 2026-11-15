@@ -41,8 +41,6 @@ describe('LayoutRequest', () => {
       theme: 'light',
       references: wire,
       expandedFileIds: ['f'],
-      fileRefLabels: [{ file: 'doc-1', label: 'Doc one' }],
-      missingFileRefs: [],
     }
     const crossed = structuredClone(request)
     expect(crossed).toEqual(request)

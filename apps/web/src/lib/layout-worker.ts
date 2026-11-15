@@ -1,4 +1,4 @@
-import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
+import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { describeThrown } from '@kamiazya/whiteboard-model'
 /**
  * Lays a spatial canvas out off the main thread.
@@ -306,8 +306,6 @@ function referencesIdentity(request: LayoutRequest): unknown {
 async function handleLayout(request: LayoutRequest): Promise<void> {
   try {
     if (!(await measurable(request.id))) return
-    const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
-    const missingRefs = new Set(request.missingFileRefs ?? [])
     // A corrupt snapshot lands in the catch below as a `failed` reply (the row's kind icon),
     // never taking the worker down: every request queued behind it is another document's.
     const canvas = request.canvas ?? (await decodeSpatialSnapshot(request.snapshot))
@@ -324,11 +322,6 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       measure,
       theme: request.theme,
       references,
-      resolveReference: overlayReferences({
-        content: references?.resolveReference,
-        labels,
-        missing: missingRefs,
-      }),
       expandFileNode: references === undefined ? undefined : fileNodeExpansion(request),
       contentCache: contentCacheFor({
         theme: request.theme,

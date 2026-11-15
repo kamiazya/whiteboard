@@ -169,40 +169,6 @@ function withLoading(
 }
 
 /**
- * The file-reference seam with plain-data chrome layered over what the
- * graph resolved: readable labels for references a keeper knows only by
- * name, and the dangling ones. ONE producer for every thread — a layout
- * worker rebuilds it from the two lists that crossed as data, the main
- * thread builds it from the seams it has — because two hand-written
- * compositions of "label overrides content" is how the offloaded and the
- * synchronous render of one canvas start disagreeing about what it says.
- *
- * `undefined` when nothing is supplied, so a host that wires none leaves
- * the layout exactly as it was.
- */
-export function overlayReferences(parts: {
-  readonly content?: (ref: string) => ResolvedReference | undefined
-  readonly labels?: ReadonlyMap<string, string>
-  readonly missing?: ReadonlySet<string>
-}): ((ref: string) => ResolvedReference | undefined) | undefined {
-  const { content, labels, missing } = parts
-  const hasLabels = labels !== undefined && labels.size > 0
-  const hasMissing = missing !== undefined && missing.size > 0
-  if (content === undefined && !hasLabels && !hasMissing) return undefined
-  return (ref) => {
-    const resolved = content?.(ref)
-    const label = hasLabels ? labels.get(ref) : undefined
-    const isMissing = hasMissing && missing.has(ref)
-    if (resolved === undefined && label === undefined && !isMissing) return undefined
-    return {
-      ...resolved,
-      ...(label !== undefined ? { label } : {}),
-      ...(isMissing ? { missing: true } : {}),
-    }
-  }
-}
-
-/**
  * Layout options with the bundle's markdown seams applied — an individual
  * seam a caller set wins, so a test can still probe one in isolation. The
  * entry points call this once, which is what makes `references` the only

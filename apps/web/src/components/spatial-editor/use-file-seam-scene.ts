@@ -1,8 +1,4 @@
-import {
-  type MeasureText,
-  overlayReferences,
-  type ReferenceSeams,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import {
   compareCodeUnit,
   nodeFile,
@@ -16,6 +12,7 @@ import { createSpatialContentCache } from '../../lib/content-cache.js'
 import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { type ReferenceChrome, useCanvasReferences } from './use-canvas-references.js'
 
 /**
  * The LOD gate (embed spec v2, user decision 2026-08-08): a file node
@@ -40,8 +37,8 @@ export interface FileSeamSceneInputs {
   readonly canvas: SpatialCanvas
   /** The live viewport zoom — the LOD gate compares on-screen pixel size. */
   readonly zoom: number
-  /** The host's reference seams, absent when the host resolves nothing. */
-  readonly references: ReferenceSeams | undefined
+  /** The host's reference wire, absent when the host resolves nothing. */
+  readonly references: ReferenceWire | undefined
   readonly fileRefOptions: readonly FileRefOption[] | undefined
   readonly missingFileRef: ((file: string) => boolean) | undefined
   readonly resolvedMeasure: MeasureText
@@ -58,11 +55,9 @@ export interface FileSeamSceneInputs {
  * copies is how a seam ends up wired into the committed render and missing
  * from the drag overlay, which reads as content vanishing mid-gesture.
  *
- * The host's `resolveReference` rides along UNCOMPOSED so the worker gate can
- * still tell content (which cannot be serialized) from label/missing
- * (which already cross as data). `missingFileRefs` is the plain-data twin
- * of the seam's `missing` field for the same reason: the worker path
- * cannot take a function.
+ * The host's labels and dangling references ride the wire as extras
+ * (`useCanvasReferences`), so every thread — and the Rust core — builds the
+ * same bundle from the same bytes and no function seam is composed here.
  */
 export function useFileSeamScene({
   canvas,
@@ -74,11 +69,15 @@ export function useFileSeamScene({
   theme,
   fragmentLoaders,
 }: FileSeamSceneInputs) {
-  const resolveReference = references?.resolveReference
-  const body = useBodySeams(resolvedMeasure, theme, references, fragmentLoaders)
+  const chrome = useReferenceChrome(canvas, fileRefOptions, missingFileRef)
+  const { wire: canvasWire, seams, revision } = useCanvasReferences(canvas, references, chrome)
+  // The gate opens only for a host that resolves content: chrome alone rides
+  // an empty wire and has nothing to expand into.
+  const resolvesContent = references !== undefined
+  const body = useBodySeams(resolvedMeasure, theme, seams, fragmentLoaders)
   const [expandedFileIds, setExpandedFileIds] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => {
-    if (resolveReference === undefined) return
+    if (!resolvesContent) return
     const candidates = canvas.nodes
       .filter((node) => nodeKind(node) === 'file')
       .filter((node) => {
@@ -94,49 +93,15 @@ export function useFileSeamScene({
     const unchanged =
       next.size === expandedFileIds.size && [...next].every((id) => expandedFileIds.has(id))
     if (!unchanged) setExpandedFileIds(next)
-  }, [canvas, zoom, resolveReference, expandedFileIds])
+  }, [canvas, zoom, resolvesContent, expandedFileIds])
   const expandFileNode = useMemo(
-    () =>
-      resolveReference === undefined
-        ? undefined
-        : (node: SpatialNode) => expandedFileIds.has(node.id),
-    [resolveReference, expandedFileIds],
+    () => (resolvesContent ? (node: SpatialNode) => expandedFileIds.has(node.id) : undefined),
+    [resolvesContent, expandedFileIds],
   )
 
-  // Opaque file references (canvas ids minted in the browser) become readable
-  // card labels through the host-supplied options list.
-  const fileRefLabelMap = useMemo(
-    () =>
-      fileRefOptions === undefined
-        ? undefined
-        : new Map(fileRefOptions.map((option) => [option.file, option.label])),
-    [fileRefOptions],
-  )
-  const missingRefSet = useMemo(() => {
-    if (missingFileRef === undefined) return undefined
-    const refs = new Set<string>()
-    for (const node of canvas.nodes) {
-      const file = nodeFile(node)
-      if (file !== undefined && missingFileRef(file)) refs.add(file)
-    }
-    return refs.size === 0 ? undefined : refs
-  }, [canvas, missingFileRef])
-  const missingFileRefs = useMemo(
-    () => (missingRefSet === undefined ? undefined : [...missingRefSet]),
-    [missingRefSet],
-  )
   const fileSeamOptions = useMemo(
-    () => ({
-      references,
-      resolveReference: overlayReferences({
-        content: resolveReference,
-        labels: fileRefLabelMap,
-        missing: missingRefSet,
-      }),
-      expandFileNode,
-      ...body.options,
-    }),
-    [references, resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, body.options],
+    () => ({ references: seams, expandFileNode, ...body.options }),
+    [seams, expandFileNode, body.options],
   )
   // The gate's decision as data, for the worker: it reads the viewport,
   // which the worker does not have.
@@ -146,8 +111,43 @@ export function useFileSeamScene({
   )
 
   // The plain-data twins of `fileSeamOptions`, for `useWorkerScene`'s wire.
-  const wire = { missingFileRefs, expandedFileIds: expandedFileIdList, ...body.wire }
+  const wire = {
+    references: canvasWire,
+    referencesRevision: revision,
+    expandedFileIds: expandedFileIdList,
+    ...body.wire,
+  }
   return { fileSeamOptions, wire }
+}
+
+/**
+ * Opaque file references (canvas ids minted in the browser) become readable
+ * card labels through the host-supplied options list, and the ones the host
+ * resolves as dangling on THIS canvas are marked — both as data, layered
+ * over the wire.
+ */
+function useReferenceChrome(
+  canvas: SpatialCanvas,
+  fileRefOptions: readonly FileRefOption[] | undefined,
+  missingFileRef: ((file: string) => boolean) | undefined,
+): ReferenceChrome {
+  const labels = useMemo(
+    () =>
+      fileRefOptions === undefined
+        ? undefined
+        : new Map(fileRefOptions.map((option) => [option.file, option.label])),
+    [fileRefOptions],
+  )
+  const missing = useMemo(() => {
+    if (missingFileRef === undefined) return undefined
+    const refs = new Set<string>()
+    for (const node of canvas.nodes) {
+      const file = nodeFile(node)
+      if (file !== undefined && missingFileRef(file)) refs.add(file)
+    }
+    return refs
+  }, [canvas, missingFileRef])
+  return useMemo(() => ({ labels, missing }), [labels, missing])
 }
 
 /**

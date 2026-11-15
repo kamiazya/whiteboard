@@ -4,10 +4,10 @@
  * Everything here is structured-cloneable BY CONSTRUCTION, which is the
  * constraint that shapes it: a layout reads FUNCTION seams, and a function
  * cannot cross a `postMessage`. So what crosses is what the seams are a
- * function OF — the reference graph and its tables as `ReferenceWire`, the
- * label table, the dangling-ref list, the ids the LOD gate expanded — and
- * the worker rebuilds the same seams from the same bytes
- * (`referenceSeamsFromWire`, `overlayReferences`). The main thread builds
+ * function OF — the reference graph and its tables as `ReferenceWire`, a
+ * file node's label and dangling mark among its extras, the ids the LOD gate
+ * expanded — and the worker rebuilds the same seams from the same bytes
+ * (`referenceSeamsFromWire`). The main thread builds
  * its canvas seams from that wire too, which is what makes the two renders
  * agree by construction; `layout-worker-parity.browser.test.tsx` asserts it
  * anyway.
@@ -42,9 +42,6 @@ import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-
 import type { FaviconRect } from './favicon.js'
 import type { FragmentAsk, FragmentEntry } from './fragment-requests.js'
 import type { ResolvedTheme } from './theme.js'
-
-/** Opaque file reference -> readable label, the plain-data form of the seam. */
-export type FileRefLabel = { readonly file: string; readonly label: string }
 
 /**
  * A canvas the worker should lay out, in one of two shapes.
@@ -82,10 +79,10 @@ export type LayoutRequest = LayoutSubject & {
   /** Echoed back so a late reply for a superseded canvas can be dropped. */
   readonly id: number
   readonly theme: ResolvedTheme
-  readonly fileRefLabels?: readonly FileRefLabel[]
   /**
    * What the canvas points at, as data: the loaded graph and the alias,
-   * title and extras tables evaluated over it. The worker rebuilds the
+   * title and extras tables evaluated over it — a file node's readable label
+   * and its dangling mark among the extras. The worker rebuilds the
    * reference bundle from this, so a text node's `![[note]]` and a file
    * node's content draw here exactly as on the main thread.
    */
@@ -117,10 +114,6 @@ export type LayoutRequest = LayoutSubject & {
    * fallback and is reported back as `fragmentsAsked`.
    */
   readonly fragments?: readonly FragmentEntry[]
-  /** File refs the host resolved as dangling — the plain-data form of the
-   * seam's `missing` field, precomputed against THIS canvas's file nodes
-   * (a function cannot cross the wire; a small ref list can). */
-  readonly missingFileRefs?: readonly string[]
   /** Node ids whose body an editor overlay owns — plain data, like the refs. */
   readonly suppressedBodyNodeIds?: readonly string[]
   /** Node ids that wear a padlock — plain data, like the above. */

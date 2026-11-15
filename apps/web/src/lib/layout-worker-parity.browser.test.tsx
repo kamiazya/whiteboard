@@ -111,26 +111,29 @@ it('the worker scene is deeply equal to the main-thread scene', async () => {
   expect([...fromWorker.anchors.entries()]).toEqual([...onMain.anchors.entries()])
 }, 60_000)
 
-it('carries the file-label seam across the wire', async () => {
+it('carries file labels and dangling marks across the wire as extras', async () => {
   const withFile: SpatialCanvas = {
-    nodes: [fileNode({ id: 'f', x: 0, y: 0, width: 200, height: 100, file: 'doc-1' })],
+    nodes: [
+      fileNode({ id: 'f', x: 0, y: 0, width: 200, height: 100, file: 'doc-1' }),
+      fileNode({ id: 'g', x: 0, y: 150, width: 200, height: 100, file: 'doc-gone' }),
+    ],
     edges: [],
   } as SpatialCanvas
-  const labels = [{ file: 'doc-1', label: 'Readable name' }]
+  const wire = overlayReferences(referenceWire(new Map([['doc-gone', null]])), {
+    labels: new Map([['doc-1', 'Readable name']]),
+    missing: new Set(['doc-gone']),
+  })
   const onMain = renderCanvasToSvg(withFile, {
     measure: createBrowserMeasureText(),
     theme: 'light',
-    resolveReference: (ref) => {
-      const label = labels.find((l) => l.file === ref)?.label
-      return label === undefined ? undefined : { label }
-    },
+    references: referenceSeamsFromWire(wire),
   })
   const fromWorker = await layoutInWorker({
     type: 'layout',
     id: 2,
     canvas: withFile,
     theme: 'light',
-    fileRefLabels: labels,
+    references: wire,
   })
   expect(fromWorker.type).toBe('laid-out')
   if (fromWorker.type !== 'laid-out') return
@@ -160,7 +163,6 @@ it('draws what a text node embeds and what a file node shows from one wire on bo
     measure: createBrowserMeasureText(),
     theme: 'light',
     references: seams,
-    resolveReference: overlayReferences({ content: seams.resolveReference }),
     expandFileNode: () => true,
   })
   const fromWorker = await layoutInWorker({

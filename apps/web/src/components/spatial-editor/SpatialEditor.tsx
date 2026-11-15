@@ -166,7 +166,6 @@ import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPale
 import { toolAnnouncement } from './tool-announcement.js'
 import { useRemoveAbandonedNote } from './use-abandoned-note.js'
 import { useCanvasFocusReturn } from './use-canvas-focus-return.js'
-import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useCommentReveal } from './use-comment-reveal.js'
@@ -511,20 +510,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         containerSizeOf,
         memoryKey: viewportKey,
       })
-    // What THIS canvas can read of the host's wider wire, by identity.
-    const {
-      wire: canvasWire,
-      seams,
-      revision: referencesRevision,
-    } = useCanvasReferences(canvas, references)
-    // The file-reference seam — the LOD gate, label/missing resolution and
-    // the content cache — built once in useFileSeamScene and spread into
+    // The file-reference seam — what THIS canvas can read of the host's
+    // wider wire with its labels and dangling marks layered on, the LOD gate
+    // and the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
     // drag-static backdrop, resize preview).
     const { fileSeamOptions, wire: seamWire } = useFileSeamScene({
       canvas,
       zoom: viewport.zoom,
-      references: seams,
+      references,
       fileRefOptions,
       missingFileRef,
       resolvedMeasure,
@@ -591,12 +585,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         fontsGeneration,
       },
       fileSeamOptions,
-      {
-        ...seamWire,
-        fileRefLabels: fileRefOptions,
-        references: canvasWire,
-        referencesRevision,
-      },
+      seamWire,
     )
     const {
       keyed,
