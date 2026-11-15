@@ -14,8 +14,8 @@
 //! - `["refused", code, class]`: an input past this entry's caps, or one that
 //!   is not a request;
 //! - `["declined", class]`: a request the core cannot answer exactly as the
-//!   TypeScript would (a body past the parser's bounds, a shortcode, a fence
-//!   the highlighter colours, a canvas narrowed to a fragment, a number the
+//!   TypeScript would (a body past the parser's bounds, a fence the
+//!   highlighter colours, a canvas narrowed to a fragment, a number the
 //!   answer cannot spell).
 //!
 //! A host answers the last two from the TypeScript.

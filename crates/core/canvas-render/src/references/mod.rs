@@ -8,9 +8,9 @@
 //! markdown document whatever else it carries; only a bodiless record offers
 //! its canvas; a file node draws an empty canvas as its card.
 //!
-//! Where an answer would need something the core does not hold (the visual
-//! plugin's emoji and icon shortcode tables, the code highlighter) or a body
-//! is past the parser's bounds, the host answers as if it had none and notes a [`Refused`]: the layout it was asked
+//! Where an answer would need something the core does not hold (the code
+//! highlighter) or a body is past the parser's bounds, the host answers as if
+//! it had none and notes a [`Refused`]: the layout it was asked
 //! for is then refused whole, and the caller's TypeScript draws it (owner
 //! decision q72, option c), so no scene differs from the TypeScript's for a
 //! reason the core cannot see.
@@ -77,8 +77,6 @@ pub struct ReferenceWire {
 pub enum Refused {
     /// A body past the markdown parser's bounds.
     Body,
-    /// A text that may hold an emoji or icon shortcode.
-    Shortcode,
     /// A fenced block the highlighter would colour.
     Highlight,
 }
@@ -89,7 +87,6 @@ impl Refused {
     pub const fn class(self) -> &'static str {
         match self {
             Self::Body => "body",
-            Self::Shortcode => "shortcode",
             Self::Highlight => "highlight",
         }
     }

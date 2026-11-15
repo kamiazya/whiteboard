@@ -56,7 +56,10 @@ describe('the recorded whole-layout oracle', () => {
     ]) {
       expect(requests, field).toContain(field)
     }
-    expect(all.filter((r) => r.answer.startsWith('["declined"'))).toHaveLength(2)
+    expect(all.filter((r) => r.answer.startsWith('["declined"'))).toHaveLength(1)
+    const shortcodes = (recorded.get('shortcode') ?? []).map((r) => r.answer).join('\n')
+    expect(shortcodes, 'an emoji expanded').toContain('🚀')
+    expect(shortcodes, 'an icon drawn').toContain('{"kind":"icon","name":"star"}')
     expect(
       all.filter((r) => r.answer.includes('"kind":"unknown-node-kind"')).length,
     ).toBeGreaterThan(0)
