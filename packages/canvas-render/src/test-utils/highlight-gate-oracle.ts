@@ -85,18 +85,40 @@ function values(): (readonly [string, number])[][] {
     [word(4095)],
     [word(4096)],
     [word(4097)],
-    [['_$9', 1365], ['Z', 1]],
+    [
+      ['_$9', 1365],
+      ['Z', 1],
+    ],
     [['_$9', 1366]],
     [word(2896), [' ', 1], word(2896)],
     [word(2897), [' ', 1], word(2897)],
     [word(4096), ['é', 1], word(1)],
     [word(3000), ['-', 1], word(3000)],
-    [['ab ', 2730], ['ab', 1]],
+    [
+      ['ab ', 2730],
+      ['ab', 1],
+    ],
     [['ab ', 2731]],
-    [['ab ', 2730], ['ab', 1], ['\n', 1], ['ab ', 2731]],
-    [['ab ', 2730], ['😀', 1]],
-    [['ab ', 2730], ['😀', 1], ['a', 1]],
-    [['ab ', 2730], ['\r', 2], ['a', 1]],
+    [
+      ['ab ', 2730],
+      ['ab', 1],
+      ['\n', 1],
+      ['ab ', 2731],
+    ],
+    [
+      ['ab ', 2730],
+      ['😀', 1],
+    ],
+    [
+      ['ab ', 2730],
+      ['😀', 1],
+      ['a', 1],
+    ],
+    [
+      ['ab ', 2730],
+      ['\r', 2],
+      ['a', 1],
+    ],
     [['x: 1\n', 3000]],
   ]
 }
@@ -117,7 +139,12 @@ const ACCOUNTS: readonly (Account | null)[] = [
 export function highlightGateInputs(): Input[] {
   const inputs: Input[] = []
   for (const lang of langs()) {
-    inputs.push({ id: `lang ${JSON.stringify(lang)}`, lang, value: [['let x = 1', 1]], budget: null })
+    inputs.push({
+      id: `lang ${JSON.stringify(lang)}`,
+      lang,
+      value: [['let x = 1', 1]],
+      budget: null,
+    })
   }
   for (const lang of ['js', 'yaml', 'YML', 'json', 'css', 'nope']) {
     for (const [v, value] of values().entries()) {
@@ -152,5 +179,12 @@ export function highlightGateAnswer(input: Input): HighlightGateRecord {
     budget === undefined
       ? null
       : { word: budget.wordRunsRemaining, line: budget.lineRunsRemaining, refused: budget.refused }
-  return { id: input.id, lang: input.lang, value: input.value, budget: input.budget, colours, after }
+  return {
+    id: input.id,
+    lang: input.lang,
+    value: input.value,
+    budget: input.budget,
+    colours,
+    after,
+  }
 }

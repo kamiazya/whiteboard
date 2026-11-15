@@ -42,6 +42,7 @@ type Answering = CanvasLayoutCore['layoutSpatialCanvas']
 /** A core answering as `answer` says, keeping each request it was handed. */
 function coreOf(impl: CoreImpl, answer: Answering) {
   const requests: CanvasLayoutRequest[] = []
+  const highlighters: unknown[] = []
   const mismatches: CoreMismatch[] = []
   const core: LayoutCore = {
     routing: {
@@ -50,15 +51,16 @@ function coreOf(impl: CoreImpl, answer: Answering) {
       },
     },
     layout: {
-      layoutSpatialCanvas: (request) => {
+      layoutSpatialCanvas: (request, highlight) => {
         requests.push(request)
-        return answer(request)
+        highlighters.push(highlight)
+        return answer(request, highlight)
       },
     },
     impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
     onMismatch: (mismatch) => mismatches.push(mismatch),
   }
-  return { core, requests, mismatches }
+  return { core, requests, highlighters, mismatches }
 }
 
 const agreeing: Answering = () => ({
@@ -103,6 +105,12 @@ describe('the whole layout through the core switch', () => {
       { kind: 'body-parse-failed', nodeId: 'a', err: undefined },
     ])
     expect(mismatches).toEqual([])
+  })
+
+  it('hands the core the default highlighter to tokenise the fences it asks for', () => {
+    const { core, highlighters } = coreOf('rust', agreeing)
+    layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
+    expect(highlighters).toEqual([highlightCode])
   })
 
   it('answers from the TypeScript what the core declines, reporting its class', () => {
@@ -155,7 +163,7 @@ describe('the whole layout through the core switch', () => {
     const events = run('differential', () => ({ ...reference, degradations: [] }))
     expect(events.mismatches).toMatchObject([{ kind: 'differs', at: '/events/0' }])
     const anchors = run('differential', () => ({
-      ...agreeing(undefined as never),
+      ...agreeing(undefined as never, highlightCode),
       anchors: new Map(),
     }))
     expect(anchors.mismatches).toMatchObject([{ kind: 'differs', at: '/anchors/e1' }])

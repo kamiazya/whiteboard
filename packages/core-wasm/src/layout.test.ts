@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FenceTokenMemo } from './fence-tokens.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS } from './generated/input-caps.js'
 import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas } from './layout.js'
 
@@ -108,5 +109,144 @@ describe('the whole layout over the artifact', () => {
         `layout_spatial_canvas malformed ${detail}`,
       )
     }
+  })
+})
+
+/** A glue answering each call in turn, keeping each request's `codeTokens`. */
+function glueAnswering(...answers: string[]) {
+  const sent: unknown[] = []
+  const glue: LayoutGlue = {
+    layout_spatial_canvas(request) {
+      const wire = JSON.parse(request) as unknown[]
+      const at = wire.indexOf('codeTokens')
+      sent.push(at === -1 ? undefined : wire[at + 1])
+      return answers[sent.length - 1] ?? '[]'
+    },
+  }
+  return { glue, sent }
+}
+
+const OK = '["ok",{"nodes":[]},[],[]]'
+const NEEDS = '["needs",{"code":[["js","let x"],["py","a\\nb"]]}]'
+const withBody = { ...fake, body: '```js\nlet x\n```\n```py\na\nb\n```' } as LayoutRequest
+const tokens = (lang: string, value: string) =>
+  lang === 'js' ? [[{ text: value, role: 'keyword' as const }]] : undefined
+
+describe('a fence the core asks for', () => {
+  it('is tokenised by the host and sent on one more call', () => {
+    const { glue, sent } = glueAnswering(NEEDS, OK)
+    const asked: string[] = []
+    const highlight = (lang: string, value: string) => {
+      asked.push(lang)
+      return tokens(lang, value)
+    }
+    const answer = layoutSpatialCanvas(glue, errors, withBody, highlight)
+    expect(answer).toEqual({ scene: { nodes: [] }, anchors: new Map(), degradations: [] })
+    expect(asked).toEqual(['js', 'py'])
+    expect(sent).toEqual([
+      undefined,
+      [
+        's',
+        ['s', 'js', 'let x', ['s', ['s', ['m', 'text', 'let x', 'role', 'keyword']]]],
+        ['s', 'py', 'a\nb', null],
+      ],
+    ])
+  })
+
+  it('declines the layout with no highlighter, or when the core asks twice', () => {
+    expect(layoutSpatialCanvas(glueAnswering(NEEDS, OK).glue, errors, withBody)).toEqual({
+      declined: 'highlight',
+    })
+    const twice = glueAnswering(NEEDS, NEEDS, OK)
+    expect(layoutSpatialCanvas(twice.glue, errors, withBody, tokens)).toEqual({
+      declined: 'highlight',
+    })
+    expect(twice.sent).toHaveLength(2)
+  })
+
+  it('draws a fence the highlighter throws on plain', () => {
+    const { glue, sent } = glueAnswering('["needs",{"code":[["js","x"]]}]', OK)
+    const throwing = () => {
+      throw new Error('grammar')
+    }
+    layoutSpatialCanvas(glue, errors, withBody, throwing)
+    expect(sent[1]).toEqual(['s', ['s', 'js', 'x', null]])
+  })
+
+  it('reads a needs answer that is not one as no answer', () => {
+    for (const bad of ['["needs",{"code":[["js"]]}]', '["needs",{"code":3}]', '["needs",[]]']) {
+      expect(
+        () => layoutSpatialCanvas(glueAnswering(bad).glue, errors, withBody, tokens),
+        bad,
+      ).toThrow('layout_spatial_canvas malformed answer')
+    }
+  })
+
+  it('declines a second call the tokens carry past the cap', () => {
+    const big = { ...fake, body: 'x'.repeat(LAYOUT_SPATIAL_CANVAS_CAPS.maxBytes - 200) }
+    const { glue, sent } = glueAnswering(`["needs",{"code":[["js","${'y'.repeat(300)}"]]}]`, OK)
+    expect(layoutSpatialCanvas(glue, errors, big as LayoutRequest, tokens)).toEqual({
+      declined: 'too-large',
+    })
+    expect(sent).toHaveLength(1)
+  })
+})
+
+describe('the fence tokens a core keeps', () => {
+  it('sends a fence it holds on the first call, so the layout is one call', () => {
+    const memo = new FenceTokenMemo()
+    layoutSpatialCanvas(glueAnswering(NEEDS, OK).glue, errors, withBody, tokens, memo)
+    const again = glueAnswering(OK)
+    const asked: string[] = []
+    const highlight = (lang: string, value: string) => {
+      asked.push(lang)
+      return tokens(lang, value)
+    }
+    layoutSpatialCanvas(again.glue, errors, withBody, highlight, memo)
+    expect(asked).toEqual([])
+    expect(again.sent).toEqual([
+      [
+        's',
+        ['s', 'js', 'let x', ['s', ['s', ['m', 'text', 'let x', 'role', 'keyword']]]],
+        ['s', 'py', 'a\nb', null],
+      ],
+    ])
+    const other = glueAnswering(OK)
+    layoutSpatialCanvas(
+      other.glue,
+      errors,
+      { ...fake, body: 'let x' } as LayoutRequest,
+      tokens,
+      memo,
+    )
+    expect(other.sent).toEqual([
+      ['s', ['s', 'js', 'let x', ['s', ['s', ['m', 'text', 'let x', 'role', 'keyword']]]]],
+    ])
+  })
+
+  it('answers a fence it holds without the highlighter', () => {
+    const memo = new FenceTokenMemo()
+    memo.answer([['js', 'v']], tokens)
+    expect(memo.answer([['js', 'v']], () => undefined)).toEqual([
+      ['js', 'v', [[{ text: 'v', role: 'keyword' }]]],
+    ])
+  })
+
+  it('forgets the fence used least recently past its count or its size', () => {
+    const memo = new FenceTokenMemo(2, 10)
+    memo.answer(
+      [
+        ['a', '1'],
+        ['b', '2'],
+        ['c', '3'],
+      ],
+      () => undefined,
+    )
+    expect(memo.within('1 2 3').map(([lang]) => lang)).toEqual(['b', 'c'])
+    memo.within('2')
+    memo.answer([['d', '4']], () => undefined)
+    expect(memo.within('1 2 3 4').map(([lang]) => lang)).toEqual(['b', 'd'])
+    memo.answer([['e', '1234567890']], () => undefined)
+    expect(memo.within('2 4 1234567890').map(([lang]) => lang)).toEqual(['e'])
   })
 })

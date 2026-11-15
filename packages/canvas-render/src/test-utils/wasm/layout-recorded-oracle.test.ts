@@ -56,7 +56,10 @@ describe('the recorded whole-layout oracle', () => {
     ]) {
       expect(requests, field).toContain(field)
     }
-    expect(all.filter((r) => r.answer.startsWith('["declined"'))).toHaveLength(2)
+    expect(all.filter((r) => r.answer.startsWith('["declined"'))).toHaveLength(1)
+    const asked = all.filter((r) => r.answer.startsWith('["needs"'))
+    expect(asked.length, 'layouts asking for fences').toBeGreaterThan(2)
+    expect(all.filter((r) => r.request.includes('"codeTokens"'))).toHaveLength(asked.length)
     expect(
       all.filter((r) => r.answer.includes('"kind":"unknown-node-kind"')).length,
     ).toBeGreaterThan(0)

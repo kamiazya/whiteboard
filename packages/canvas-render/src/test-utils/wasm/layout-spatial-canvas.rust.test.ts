@@ -19,8 +19,8 @@ describe.runIf(built)('the whole layout through the real core', () => {
   const real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
   const answered = { compared: 0, declined: [] as string[] }
   const counting: CanvasLayoutCore = {
-    layoutSpatialCanvas(request: CanvasLayoutRequest) {
-      const answer = real.layoutSpatialCanvas(request)
+    layoutSpatialCanvas(request: CanvasLayoutRequest, highlight) {
+      const answer = real.layoutSpatialCanvas(request, highlight)
       if ('declined' in answer) answered.declined.push(answer.declined)
       else answered.compared += 1
       return answer
@@ -57,9 +57,9 @@ describe.runIf(built)('the whole layout through the real core', () => {
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
     }
-    // Every layout but the two built to be declined is compared: the core is judged, not skipped.
-    expect(answered.compared).toBe(2 * (cases.length - 2))
-    expect(answered.declined).toEqual(['highlight', 'highlight', 'shortcode', 'shortcode'])
+    // Every layout but the one built to be declined is compared: the core is judged, not skipped.
+    expect(answered.compared).toBe(2 * (cases.length - 1))
+    expect(answered.declined).toEqual(['shortcode', 'shortcode'])
     // Each decline reaches the sink by its class, and no case is skipped by the gate.
     expect(tallies).toEqual(answered.declined.map((reason) => `declined:${reason}`))
   })

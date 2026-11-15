@@ -1,6 +1,7 @@
 import { type CoreGlue, coreFrom, EXPECTED_ABI } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { CanvasLayoutRequest, CoreDegradation } from '../../canvas-core.js'
+import { highlightCode } from '../../highlight/lowlight.js'
 import { canvasLayoutRequest } from '../../layout/canvas-switch.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
@@ -37,22 +38,45 @@ function answerText(value: unknown): string | undefined {
 }
 
 /**
- * The request text exactly as the shim sends it: a core over a glue that keeps
- * what it is handed and declines, so the recording cannot drift from the shim's
- * encoding.
+ * The request texts exactly as the shim sends them: a core over a glue that
+ * keeps what it is handed, answers the first call with the fences `needs`
+ * names when there are any, and declines, so the recording cannot drift from
+ * the shim's encoding of a request or of the tokens it sends on a second call.
  */
-function shimRequest(request: CanvasLayoutRequest): string | undefined {
-  let sent: string | undefined
+function shimRequests(request: CanvasLayoutRequest, needs: readonly Fence[]): string[] {
+  const sent: string[] = []
   const glue = {
     initSync: () => undefined,
     abi_version: () => EXPECTED_ABI,
     layout_spatial_canvas: (text: string) => {
-      sent = text
-      return '["declined","recorded"]'
+      sent.push(text)
+      const asks = sent.length === 1 && needs.length > 0
+      return asks ? needsAnswer(needs) : '["declined","recorded"]'
     },
   } as unknown as CoreGlue
-  coreFrom(glue, new Uint8Array()).layoutSpatialCanvas(request)
+  coreFrom(glue, new Uint8Array()).layoutSpatialCanvas(request, highlightCode)
   return sent
+}
+
+type Fence = readonly [string, string]
+
+const needsAnswer = (needs: readonly Fence[]): string => JSON.stringify(['needs', { code: needs }])
+
+/**
+ * The fences the TypeScript colours in this layout, as `[lang, value]` in the
+ * order it met them, each once: what the core is held to ask for.
+ */
+function colouredFences(canvas: SpatialCanvas, options: SpatialLayoutOptions): Fence[] {
+  const met = new Map<string, Fence>()
+  layoutSpatialCanvasWithAnchors(canvas, {
+    ...options,
+    highlightCode: (lang, value, budget) => {
+      const lines = highlightCode(lang, value, budget)
+      if (lines !== undefined) met.set(JSON.stringify([lang, value]), [lang, value])
+      return lines
+    },
+  })
+  return [...met.values()]
 }
 
 function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
@@ -61,43 +85,44 @@ function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
 
 /**
  * Every layout case the core can be handed, each as the TypeScript answers
- * it, grouped by the topic file it is recorded in. The two cases only the
- * TypeScript draws exactly are recorded with the answer the core gives them,
- * a decline.
+ * it, grouped by the topic file it is recorded in. A layout the TypeScript
+ * colours a fence in is recorded twice: as first asked, answered with the
+ * fences the core must ask for, and as asked again with their tokens. The
+ * case only the TypeScript draws exactly is recorded with the answer the core
+ * gives it, a decline.
  */
 export function layoutRecords(): Map<LayoutTopic, LayoutRecord[]> {
   const byTopic = new Map<LayoutTopic, LayoutRecord[]>()
   for (const { topic, name, canvas, options } of layoutCases(8)) {
-    const record = layoutRecord(name, canvas, options)
-    if (record === undefined) continue
-    byTopic.set(topic, [...(byTopic.get(topic) ?? []), record])
+    const records = layoutRecord(name, canvas, options)
+    byTopic.set(topic, [...(byTopic.get(topic) ?? []), ...records])
   }
   return byTopic
 }
 
-/** The class the core declines a case built to be declined with: a fence, else a shortcode. */
-function declinedClass(name: string): string {
-  return name.includes('```') ? 'highlight' : 'shortcode'
-}
-
-/** One case as the TypeScript answers it, or undefined when the core cannot be handed it. */
+/** One case as the TypeScript answers it, or none when the core cannot be handed it. */
 function layoutRecord(
   name: string,
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
-): LayoutRecord | undefined {
+): LayoutRecord[] {
   const request = canvasLayoutRequest(canvas, options)
-  const sent = 'skip' in request ? undefined : shimRequest(request)
-  if (sent === undefined) return undefined
+  if ('skip' in request) return []
+  const needs = colouredFences(canvas, options)
+  const sent = shimRequests(request, needs)
   const events: CoreDegradation[] = []
   const laid = layoutSpatialCanvasWithAnchors(canvas, {
     ...options,
     onDegrade: (event) => events.push(coreEvent(event)),
   })
-  const declined = name.startsWith('declined: ') ? declinedClass(name) : undefined
-  const answer =
-    declined === undefined
-      ? (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')
-      : JSON.stringify(['declined', declined])
-  return { id: name, request: sent, answer }
+  const answer = name.startsWith('declined: ')
+    ? JSON.stringify(['declined', 'shortcode'])
+    : (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')
+  const [first, second] = sent
+  if (first === undefined) return []
+  if (second === undefined) return [{ id: name, request: first, answer }]
+  return [
+    { id: `${name}, asked`, request: first, answer: needsAnswer(needs) },
+    { id: name, request: second, answer },
+  ]
 }
