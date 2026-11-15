@@ -237,6 +237,19 @@ fn a_request_at_each_cap_is_read() {
     assert_eq!(answer(&request(at_cap, &[]), &[]).get(0), Some(&json!("ok")));
 }
 
+#[test]
+fn an_expansion_id_list_is_held_to_the_element_cap() {
+    let listing = |n: usize| {
+        let ids: Vec<Json> = (0..n).map(|i| json!(format!("f{i}"))).collect();
+        answer(&request(board("x"), &[("expand", s(ids))]), &[])
+    };
+    assert_eq!(listing(MAX_ELEMENTS).get(0), Some(&json!("ok")));
+    assert_eq!(
+        listing(MAX_ELEMENTS + 1),
+        json!(["refused", "input-too-large", "too-many-elements"])
+    );
+}
+
 fn file_node(id: &str, x: f64) -> SpatialNode {
     SpatialNode {
         id: id.to_owned(),

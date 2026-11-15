@@ -30,7 +30,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::compose_canvas::{self, LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::BodySeams;
 use whiteboard_canvas_render::measure::Measure;
-use whiteboard_canvas_render::references::WireHost;
+use whiteboard_canvas_render::references::{Expansion, WireHost};
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_facet_engine::registry::Registry;
@@ -88,6 +88,17 @@ fn element_total(request: &Request) -> usize {
         Some(elements(canvas))
     });
     referenced.fold(elements(&request.canvas), usize::saturating_add)
+}
+
+/// How many file-node ids the expansion policy lists. Each names a file node
+/// of the request, so an honest list is no longer than the element cap; past
+/// it the list is refused with the elements, since every file node is asked
+/// against every listed id.
+fn expanded_ids(request: &Request) -> usize {
+    match &request.expand {
+        Expansion::Every(_) => 0,
+        Expansion::Only(ids) => ids.len(),
+    }
 }
 
 /// The bundled visual plugin, built once per instance.
@@ -150,7 +161,7 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     let Some(request) = request_of(&request) else {
         return refused("malformed", "request");
     };
-    if element_total(&request) > MAX_ELEMENTS {
+    if element_total(&request) > MAX_ELEMENTS || expanded_ids(&request) > MAX_ELEMENTS {
         return refused("input-too-large", "too-many-elements");
     }
     if body_total(&request) > MAX_BODY_BYTES {
