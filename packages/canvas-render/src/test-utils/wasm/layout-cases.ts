@@ -11,6 +11,10 @@ import {
   REFERENCES,
   TAG_LIBRARY,
 } from '../compose-canvas-oracle/corpus.js'
+import {
+  boards as commentBoards,
+  caseSpecs as commentSpecs,
+} from '../compose-comments-oracle/corpus.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
 
@@ -22,8 +26,9 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * overrides, pinned sides, an embed path, a tag library, file nodes drawing
  * canvases three deep, a body embedding a canvas) under the clean style, the
  * routing corpus, bodies aimed at the typesetter, bodies dense in shortcodes,
- * fences the default highlighter colours or leaves plain, and the composer
- * boards under the document's own theme and under named ones; every reference
+ * fences the default highlighter colours or leaves plain, the composer
+ * boards under the document's own theme and under named ones, and the boards
+ * carrying comment threads with their annotation layer; every reference
  * crosses as a wire.
  */
 
@@ -42,6 +47,7 @@ export type LayoutTopic =
   | 'highlight'
   | 'routing'
   | 'theme'
+  | 'comments'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -449,6 +455,54 @@ function themeCases(): LayoutCase[] {
   })
 }
 
+/** Boxes a bubble keeps clear of: one over the first quadrant a pin tries, one beside it. */
+const COMMENT_OBSTACLES = [
+  { x: 170, y: -40, w: 300, h: 300 },
+  { x: -400, y: -400, w: 380, h: 900 },
+]
+
+/**
+ * The compose-comments boards (every anchor arm, a crowd forced onto the
+ * ring, settled bodies cut to their first line, quoted passages) laid out
+ * whole with their annotation layer: each with settled threads hidden and
+ * shown and with and without obstacles; the recording's dark and drawn-style
+ * specs with their own obstacles; and one board with the layer switched off.
+ */
+function commentCases(): LayoutCase[] {
+  const layered = commentBoards().filter((board) => board.proposals === undefined)
+  const byName = new Map(layered.map((board) => [board.name, board]))
+  const light = createSpatialTheme({ mode: 'light' })
+  const sweep = layered.flatMap((board) =>
+    [false, true].flatMap((showResolved) =>
+      [undefined, COMMENT_OBSTACLES].map((commentObstacles) => ({
+        name: `${board.name} resolved=${showResolved}${commentObstacles ? ' obstacles' : ''}`,
+        board,
+        options: { appearance: light, showResolved, ...(commentObstacles && { commentObstacles }) },
+      })),
+    ),
+  )
+  const specs = commentSpecs().flatMap((spec, at) => {
+    const board = byName.get(spec.board)
+    if (board === undefined || spec.appearance === 'bare') return []
+    const obstacles = spec.obstacles?.map(([x, y, w, h]) => ({ x, y, w, h }))
+    const options: Partial<SpatialLayoutOptions> = {
+      appearance: createSpatialTheme({ mode: spec.appearance }),
+      ...(spec.style && { style: spec.style }),
+      ...(spec.showResolved !== undefined && { showResolved: spec.showResolved }),
+      ...(obstacles && { commentObstacles: obstacles }),
+    }
+    return [{ name: `${spec.board}#${at}`, board, options }]
+  })
+  const arms = byName.get('arms')
+  const off = arms && { name: 'arms, layer off', board: arms, options: { commentLayer: false } }
+  return [...sweep, ...specs, ...(off ? [off] : [])].map(({ name, board, options }) => ({
+    topic: 'comments' as const,
+    name,
+    canvas: board.canvas,
+    options: { measure, appearance: light, threads: board.threads, ...options },
+  }))
+}
+
 /** The shortcode board in both modes, its file node reading a body that holds shortcodes too. */
 function shortcodeCases(): LayoutCase[] {
   return (['light', 'dark'] as const).map((mode) => ({
@@ -466,7 +520,7 @@ function shortcodeCases(): LayoutCase[] {
 
 /** Every layout case; `synthetic` draws that many generated routing boards too. */
 export function layoutCases(synthetic: number): LayoutCase[] {
-  const cases = [...composerCases(), ...expansionCases(), ...themeCases()]
+  const cases = [...composerCases(), ...expansionCases(), ...themeCases(), ...commentCases()]
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
   cases.push(
     {

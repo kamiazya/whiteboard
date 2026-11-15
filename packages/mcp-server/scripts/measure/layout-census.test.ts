@@ -73,4 +73,26 @@ describe('the layout census', () => {
     expect(layouts).toBe(2)
     expect(Object.fromEntries(counts)).toEqual({ answered: 2 })
   })
+
+  it.runIf(built)('a board carrying threads is answered by the core, not skipped', async () => {
+    const base = await coreLoaders(
+      layoutCoreSettingsFrom({ WHITEBOARD_CORE_LAYOUT: 'differential' }),
+    ).layoutCore()
+    if (base === undefined) throw new Error('the core did not load')
+    const threads = [
+      {
+        id: 't',
+        anchor: { kind: 'spatial', nodeId: 'n', x: 0, y: 0 },
+        status: 'open',
+        messages: [{ id: 'm', body: 'about n' }],
+      },
+    ] as const
+    const options = {
+      measure: createFakeMeasure(),
+      appearance: createSpatialTheme({ mode: 'light' }),
+      threads,
+    }
+    const { counts } = censusOf(tallyingCore(base), [{ canvas: board('commented'), options }])
+    expect(Object.fromEntries(counts)).toEqual({ answered: 1 })
+  })
 })

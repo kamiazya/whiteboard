@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { FenceTokenMemo } from './fence-tokens.js'
 import { type Finalizer, FontHandles, type FontsGlue } from './font-handles.js'
 import { REGISTER_LAYOUT_FONTS_CAPS } from './generated/input-caps.js'
 import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas } from './layout.js'
@@ -72,8 +73,8 @@ describe('the faces a font-table measurer reads', () => {
     const { glue, registered, handles } = glueOf()
     const fonts = new FontHandles(glue, errors)
     const request = { measure: facesOf() } as LayoutRequest
-    layoutSpatialCanvas(glue, errors, request, undefined, undefined, fonts)
-    layoutSpatialCanvas(glue, errors, request, undefined, undefined, fonts)
+    layoutSpatialCanvas(glue, errors, request, undefined, new FenceTokenMemo(), fonts)
+    layoutSpatialCanvas(glue, errors, request, undefined, new FenceTokenMemo(), fonts)
     expect(registered).toEqual([
       {
         bytes: [1, 2, 3, 4, 5],
@@ -85,7 +86,14 @@ describe('the faces a font-table measurer reads', () => {
       },
     ])
     expect(handles).toEqual([7, 7])
-    layoutSpatialCanvas(glue, errors, { measure: facesOf() }, undefined, undefined, fonts)
+    layoutSpatialCanvas(
+      glue,
+      errors,
+      { measure: facesOf() },
+      undefined,
+      new FenceTokenMemo(),
+      fonts,
+    )
     expect(registered, 'another measurer registers its own').toHaveLength(2)
     expect(handles[2]).toBe(8)
   })
@@ -94,12 +102,19 @@ describe('the faces a font-table measurer reads', () => {
     const { glue, registered, handles } = glueOf(OK, LOST, OK)
     const fonts = new FontHandles(glue, errors)
     const request = { measure: facesOf() } as LayoutRequest
-    layoutSpatialCanvas(glue, errors, request, undefined, undefined, fonts)
-    const answer = layoutSpatialCanvas(glue, errors, request, undefined, undefined, fonts)
+    layoutSpatialCanvas(glue, errors, request, undefined, new FenceTokenMemo(), fonts)
+    const answer = layoutSpatialCanvas(
+      glue,
+      errors,
+      request,
+      undefined,
+      new FenceTokenMemo(),
+      fonts,
+    )
     expect(answer).toEqual({ scene: { nodes: [] }, anchors: new Map(), degradations: [] })
     expect(registered).toHaveLength(2)
     expect(handles).toEqual([7, 7, 8])
-    layoutSpatialCanvas(glue, errors, request, undefined, undefined, fonts)
+    layoutSpatialCanvas(glue, errors, request, undefined, new FenceTokenMemo(), fonts)
     expect(handles[3]).toBe(8)
   })
 
@@ -107,9 +122,9 @@ describe('the faces a font-table measurer reads', () => {
     const { glue, registered } = glueOf(LOST, LOST, OK)
     const fonts = new FontHandles(glue, errors)
     const request = { measure: facesOf() } as LayoutRequest
-    expect(() => layoutSpatialCanvas(glue, errors, request, undefined, undefined, fonts)).toThrow(
-      'layout_spatial_canvas malformed font-handle',
-    )
+    expect(() =>
+      layoutSpatialCanvas(glue, errors, request, undefined, new FenceTokenMemo(), fonts),
+    ).toThrow('layout_spatial_canvas malformed font-handle')
     expect(registered).toHaveLength(2)
   })
 
@@ -126,7 +141,7 @@ describe('the faces a font-table measurer reads', () => {
         errors,
         request,
         undefined,
-        undefined,
+        new FenceTokenMemo(),
         new FontHandles(full, errors),
       ),
     ).toEqual({
@@ -134,7 +149,14 @@ describe('the faces a font-table measurer reads', () => {
     })
     const bad = refusing('["refused","malformed","font"]')
     expect(() =>
-      layoutSpatialCanvas(bad, errors, request, undefined, undefined, new FontHandles(bad, errors)),
+      layoutSpatialCanvas(
+        bad,
+        errors,
+        request,
+        undefined,
+        new FenceTokenMemo(),
+        new FontHandles(bad, errors),
+      ),
     ).toThrow('register_layout_fonts malformed font')
     const garbled = refusing('["ok","7"]')
     expect(() =>
@@ -143,7 +165,7 @@ describe('the faces a font-table measurer reads', () => {
         errors,
         request,
         undefined,
-        undefined,
+        new FenceTokenMemo(),
         new FontHandles(garbled, errors),
       ),
     ).toThrow('register_layout_fonts malformed answer')
@@ -158,7 +180,7 @@ describe('the faces a font-table measurer reads', () => {
         errors,
         huge as LayoutRequest,
         undefined,
-        undefined,
+        new FenceTokenMemo(),
         new FontHandles(glue, errors),
       ),
     ).toEqual({
@@ -189,9 +211,9 @@ describe('the faces a font-table measurer reads', () => {
     const finalizer = finalizerOf()
     const fonts = new FontHandles(glue, errors, finalizer.make)
     const kept = facesOf()
-    layoutSpatialCanvas(glue, errors, { measure: kept }, undefined, undefined, fonts)
+    layoutSpatialCanvas(glue, errors, { measure: kept }, undefined, new FenceTokenMemo(), fonts)
     expect(finalizer.handles()).toEqual([7])
-    layoutSpatialCanvas(glue, errors, { measure: kept }, undefined, undefined, fonts)
+    layoutSpatialCanvas(glue, errors, { measure: kept }, undefined, new FenceTokenMemo(), fonts)
     expect(finalizer.handles(), 'the lost handle is no longer watched').toEqual([8])
     finalizer.collect(kept)
     expect(released).toEqual([8])

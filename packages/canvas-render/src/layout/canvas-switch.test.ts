@@ -1,4 +1,4 @@
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
@@ -168,6 +168,28 @@ describe('the whole layout through the core switch', () => {
   })
 })
 
+const thread: CommentThread = {
+  id: 't',
+  anchor: { kind: 'text', nodeId: 'a', quote: { exact: 'a', prefix: '' }, start: 0, end: 1 },
+  status: 'resolved',
+  createdAt: '2026-11-15T00:00:00Z',
+  messages: [
+    { id: 'm1', body: 'first', author: 'ann', createdAt: '2026-11-15T00:00:00Z' },
+    { id: 'm2', body: 'second', editedAt: '2026-11-15T00:00:01Z' },
+  ],
+}
+
+/** The thread as the core takes it: the author and the timestamps left off. */
+const coreThread = {
+  id: 't',
+  anchor: thread.anchor,
+  status: 'resolved',
+  messages: [
+    { id: 'm1', body: 'first' },
+    { id: 'm2', body: 'second' },
+  ],
+}
+
 describe('what the core can be handed', () => {
   const request = (options: Partial<SpatialLayoutOptions>) =>
     canvasLayoutRequest(canvas, { ...base, ...options })
@@ -184,7 +206,9 @@ describe('what the core can be handed', () => {
       embedPath: ['d'],
       style: 'clean',
       commentLayer: false,
-      threads: [{} as never],
+      showResolved: true,
+      commentObstacles: [{ x: 1, y: 2, w: 3, h: 4 }],
+      threads: [thread],
     })
     expect(full).toEqual({
       canvas,
@@ -197,6 +221,10 @@ describe('what the core can be handed', () => {
       sideOverrides: [['e1', { fromSide: 'right', toSide: 'left' }]],
       tagLibrary: { k: {} },
       embedPath: ['d'],
+      threads: [coreThread],
+      commentLayer: false,
+      showResolved: true,
+      commentObstacles: [{ x: 1, y: 2, w: 3, h: 4 }],
     })
     expect(request({})).toEqual({
       canvas,
@@ -220,7 +248,6 @@ describe('what the core can be handed', () => {
       [{ resolveReference: () => undefined }, 'seam:resolveReference'],
       [{ nestedLayoutBudget: { remaining: 1 } as never }, 'seam:nestedLayoutBudget'],
       [{ highlightCode: () => undefined }, 'highlighter'],
-      [{ threads: [{} as never] }, 'comments'],
       [{ proposals: [{} as never] }, 'proposals'],
       [{ references: referenceSeams(new Map()) }, 'references'],
     ]
@@ -233,7 +260,8 @@ describe('what the core can be handed', () => {
       { appearance: createSpatialTheme({ mode: 'light', palette: undefined as never }) },
       { highlightCode },
       { style: 'clean' as const },
-      { commentLayer: false, threads: [{} as never] },
+      { threads: [thread] },
+      { threads: [thread], showResolved: true, commentObstacles: [] },
     ]
     for (const options of kept) expect(request(options)).not.toHaveProperty('skip')
   })
