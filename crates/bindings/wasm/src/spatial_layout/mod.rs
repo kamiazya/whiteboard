@@ -39,6 +39,7 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::theme::tokens::theme_table;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::annotation::{AnnotationAnchor, CommentThread};
 use whiteboard_model::spatial::SpatialCanvas;
 use whiteboard_plugin_visual::host::{THEMES, visual_registry};
 use whiteboard_plugin_visual::render::StencilBadge;
@@ -48,7 +49,7 @@ use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, needs, refused};
 use measure::measurer;
-use request::{Request, Style, request_of};
+use request::{Comments, Request, Style, request_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
 /// own canvas and every canvas it references together: this entry's
@@ -73,9 +74,17 @@ fn content_bytes(canvas: &SpatialCanvas) -> usize {
         .fold(0, |sum, content| sum.saturating_add(content.len()))
 }
 
+/// The bodies a comment layer lays out: each thread's opening message.
+fn opening_bytes(threads: &[CommentThread]) -> usize {
+    let openings = threads.iter().filter_map(|thread| thread.messages.first());
+    openings.fold(0, |sum, message| sum.saturating_add(message.body.len()))
+}
+
 fn body_total(request: &Request) -> usize {
     let referenced = request.references.entries.iter().filter_map(|(_, entry)| entry.as_ref());
-    referenced.fold(content_bytes(&request.canvas), |sum, entry| {
+    let own =
+        content_bytes(&request.canvas).saturating_add(opening_bytes(&request.comments.threads));
+    referenced.fold(own, |sum, entry| {
         let body = entry.body.as_ref().map_or(0, String::len);
         let canvas = entry.canvas.as_ref().map_or(0, content_bytes);
         sum.saturating_add(body).saturating_add(canvas)
@@ -104,6 +113,27 @@ fn expanded_ids(request: &Request) -> usize {
         Expansion::Every(_) => 0,
         Expansion::Only(ids) => ids.len(),
     }
+}
+
+/// The most threads, the most obstacles, and the most node ids the node-set
+/// anchors name together, that a comment layer may hold: the element cap.
+/// Each thread's bubble is placed against every box and every earlier bubble,
+/// and each node-set id is looked up against every node, so what a layer costs
+/// grows with their product, which bytes do not bound.
+pub const MAX_COMMENT_ITEMS: usize = MAX_ELEMENTS;
+
+fn node_set_ids(threads: &[CommentThread]) -> usize {
+    let sets = threads.iter().filter_map(|thread| match &thread.anchor {
+        AnnotationAnchor::Spatial(anchor) => anchor.node_ids.as_ref().map(Vec::len),
+        _ => None,
+    });
+    sets.fold(0, usize::saturating_add)
+}
+
+fn past_comment_caps(comments: &Comments) -> bool {
+    comments.threads.len() > MAX_COMMENT_ITEMS
+        || comments.obstacles.len() > MAX_COMMENT_ITEMS
+        || node_set_ids(&comments.threads) > MAX_COMMENT_ITEMS
 }
 
 /// The bundled visual plugin, built once per instance.
@@ -154,7 +184,7 @@ fn lay_out(
         locked: &request.locked,
         side_overrides: request.overrides.as_deref(),
         host: &host,
-        comments: whiteboard_canvas_render::comments::CommentOptions::default(),
+        comments: request.comments.options(),
         proposals: &[],
         content_cache: None,
         body: BodySeams {
@@ -191,6 +221,9 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     };
     if element_total(&request) > MAX_ELEMENTS || expanded_ids(&request) > MAX_ELEMENTS {
         return refused("input-too-large", "too-many-elements");
+    }
+    if past_comment_caps(&request.comments) {
+        return refused("input-too-large", "comments");
     }
     if body_total(&request) > MAX_BODY_BYTES {
         return refused("input-too-large", "bodies");
