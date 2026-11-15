@@ -31,5 +31,5 @@ fn every_recorded_text_is_scanned_as_the_typescript_scanned_it() {
         replayed += 1;
     }
     assert!(failures.is_empty(), "{} differ:\n{}", failures.len(), failures.join("\n"));
-    assert_eq!(replayed, 1534, "every recorded line replayed");
+    assert_eq!(replayed, 1539, "every recorded line replayed");
 }

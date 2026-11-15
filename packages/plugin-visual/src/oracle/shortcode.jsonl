@@ -20,6 +20,11 @@
 {"in":"::icon-star::","emoji":"::icon-star::","icons":[[1,12,"star"]]}
 {"in":":icon-icon-star:","emoji":":icon-icon-star:","icons":[]}
 {"in":":icon-Star:","emoji":":icon-Star:","icons":[]}
+{"in":":icon-Star:icon-star:","emoji":":icon-Star:icon-star:","icons":[[10,21,"star"]]}
+{"in":":icon-a b:icon-lock:","emoji":":icon-a b:icon-lock:","icons":[[9,20,"lock"]]}
+{"in":":icon-lock.:icon-user:","emoji":":icon-lock.:icon-user:","icons":[[11,22,"user"]]}
+{"in":":Rocket:fire:","emoji":":Rocket🔥","icons":[]}
+{"in":":ro cket:fire:","emoji":":ro cket🔥","icons":[]}
 {"in":":icon_star:","emoji":":icon_star:","icons":[]}
 {"in":"😀 :icon-database: 😀 :rocket:","emoji":"😀 :icon-database: 😀 🚀","icons":[[3,18,"database"]]}
 {"in":"𝒳:icon-link:𝒳:keycap_hash:","emoji":"𝒳:icon-link:𝒳#️⃣","icons":[[2,13,"link"]]}
