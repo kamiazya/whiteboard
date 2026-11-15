@@ -17,6 +17,7 @@ import {
   facetBucketCheck,
   type StoredStencilLibrary,
 } from './facet-write.js'
+import { type FenceHighlighter, FenceTokenMemos } from './fence-tokens.js'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
 import {
   parseSpatial,
@@ -194,11 +195,14 @@ export interface Core {
    * `layoutSpatialCanvasWithAnchors` of a request canvas-render built: the
    * scene, the anchors and the degradations, or the class of what the core
    * declined (an input past its caps, or one it cannot answer exactly as the
-   * TypeScript would), which a root answers from the TypeScript. Throws
+   * TypeScript would), which a root answers from the TypeScript. A fence the
+   * default highlighter would colour is tokenised by `highlight` and sent on a
+   * second call; the tokens are kept per core, so a layout of fences already
+   * seen is one call. With no `highlight` such a layout is declined. Throws
    * `CoreInputRefused` for a request the wire does not carry or an answer
    * that is not one.
    */
-  layoutSpatialCanvas(request: LayoutRequest): LayoutAnswer
+  layoutSpatialCanvas(request: LayoutRequest, highlight?: FenceHighlighter): LayoutAnswer
 }
 
 const ends = ['none', 'arrow'] as const
@@ -304,6 +308,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   const spatial: SpatialGlue = glue
   const facets: FacetGlue = glue
   const layout: LayoutGlue = glue
+  const fences = new FenceTokenMemos()
   const errors: OkfErrors & SpatialErrors & FacetErrors = {
     refused: (operation, code, detail) => new CoreInputRefused(operation, code, detail),
     unwritable: (issues) => new CoreOkfUnwritable(issues),
@@ -314,7 +319,8 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
-    layoutSpatialCanvas: (request) => layoutSpatialCanvas(layout, errors, request),
+    layoutSpatialCanvas: (request, highlight) =>
+      layoutSpatialCanvas(layout, errors, request, highlight, fences.for(highlight)),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
