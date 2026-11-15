@@ -41,14 +41,16 @@ const log = getLogger('layout-core')
  * at boot (`installRustCoresAtBoot`) and refuses to start without it.
  *
  * `WHITEBOARD_CORE_LAYOUT` is the whole layout's own switch
- * (`layoutSpatialCanvasWithAnchors` in one core call), `ts` unless something
- * sets it; CI's test jobs set `differential`. It answers only a layout whose
+ * (`layoutSpatialCanvasWithAnchors` in one core call), `rust` unless something
+ * sets it, like routing's; the dev scripts and CI's test jobs set
+ * `differential`, and `ts` is its rollback. It answers only a layout whose
  * every option the core can be handed as data, and the TypeScript answers the
- * rest under any setting.
+ * rest, and any layout the core declines, under every setting. Rolling the
+ * whole core back takes both switches at `ts`: either one alone still loads it.
  */
 const layoutCoreSettingsSchema = z.object({
   WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_LAYOUT: z.enum(['ts', 'differential', 'rust']).default('ts'),
+  WHITEBOARD_CORE_LAYOUT: z.enum(['ts', 'differential', 'rust']).default('rust'),
   WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })

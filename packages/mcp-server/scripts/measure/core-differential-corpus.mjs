@@ -111,6 +111,10 @@ export function collectingCore(base) {
 async function measureDeps(serverDeps, coreDir) {
   const settings = layoutCoreSettingsFrom({
     WHITEBOARD_CORE: 'differential',
+    // Routing alone is measured here: a whole layout the core answered would
+    // route inside it, out of this tally's sight. `layout-census.mjs` measures
+    // the whole layout.
+    WHITEBOARD_CORE_LAYOUT: 'ts',
     // `throw` makes an unloadable artifact fail loudly instead of degrading
     // to the TypeScript; the reporter that would throw is replaced below.
     WHITEBOARD_CORE_MISMATCH: 'throw',
