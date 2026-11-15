@@ -169,14 +169,14 @@ fn roboto() -> Json {
 }
 
 #[test]
-fn a_font_measures_what_it_holds_and_declines_a_mark_it_would_combine() {
+fn a_font_measures_what_it_holds_marks_and_joiners_included() {
     let by_font = answer(&request(board("hello"), &[("measure", roboto())]), ROBOTO);
     let by_ratio =
         answer(&request(board("hello"), &[("measure", m(&[("kind", json!("ratio"))]))]), &[]);
     assert_eq!(by_font.get(0), Some(&json!("ok")));
     assert_ne!(by_font, by_ratio);
     let marked = request(board("cafe\u{301} \u{200d}"), &[("measure", roboto())]);
-    assert_eq!(answer(&marked, ROBOTO), json!(["declined", "measure"]));
+    assert_eq!(answer(&marked, ROBOTO).get(0), Some(&json!("ok")));
     let estimated = request(board("cafe\u{301}"), &[("measure", m(&[("kind", json!("ratio"))]))]);
     assert_eq!(answer(&estimated, &[]).get(0), Some(&json!("ok")));
 }

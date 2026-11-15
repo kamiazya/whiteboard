@@ -216,7 +216,7 @@ describe('the daemon layout core', () => {
       }
     })
 
-    it('lays out with the vendored faces in the core, and answers a mark from the TypeScript', async () => {
+    it('lays out with the vendored faces in the core, a mark the face would compose included', async () => {
       const core = await layoutCore(
         layoutCoreSettingsFrom({
           WHITEBOARD_CORE_LAYOUT: 'differential',
@@ -239,7 +239,9 @@ describe('the daemon layout core', () => {
       const { measure } = await createExportTextMeasurer({ fontsDir: emptyDir() })
       const themed = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
       const marked: SpatialCanvas = {
-        nodes: [textNode({ id: 'm', x: 0, y: 0, width: 200, height: 80, text: 'cafe\u0301' })],
+        nodes: [
+          textNode({ id: 'm', x: 0, y: 0, width: 200, height: 80, text: 'cafe\u0301 i\u0307' }),
+        ],
         edges: [],
       }
       for (const canvas of [board, marked]) {
@@ -247,7 +249,7 @@ describe('the daemon layout core', () => {
           layoutSpatialCanvas(canvas, themed),
         )
       }
-      expect(answers).toEqual(['laid out', 'measure'])
+      expect(answers).toEqual(['laid out', 'laid out'])
     })
 
     it('summarizes a whole-layout difference by the path it parts at', async () => {
