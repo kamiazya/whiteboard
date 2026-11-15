@@ -51,7 +51,16 @@ describe('the recorded highlight gate oracle', () => {
   })
 
   it('equals what the TypeScript answers today', () => {
-    expect(records.map((r) => r.id)).toEqual(highlightGateInputs().map((i) => i.id))
+    type Inputs = Pick<HighlightGateRecord, 'id' | 'lang' | 'value' | 'budget'>
+    const inputOf = ({ id, lang, value, budget }: Inputs) => ({
+      id,
+      lang,
+      value,
+      budget,
+    })
+    expect(records.map(inputOf), "the recorded inputs are today's").toEqual(
+      highlightGateInputs().map(inputOf),
+    )
     const parted = records.findIndex(
       (r) => JSON.stringify(highlightGateAnswer(r)) !== JSON.stringify(r),
     )
