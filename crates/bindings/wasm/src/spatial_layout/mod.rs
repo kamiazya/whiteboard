@@ -122,6 +122,16 @@ fn expanded_ids(request: &Request) -> usize {
 /// grows with their product, which bytes do not bound.
 pub const MAX_COMMENT_ITEMS: usize = MAX_ELEMENTS;
 
+/// The most passages a comment layer may anchor: a quarter of the element
+/// cap. Each is looked for through the whole text of the node it names, so
+/// what they cost is their count times the bodies, which the bodies' own cap
+/// bounds only once.
+pub const MAX_PASSAGES: usize = MAX_COMMENT_ITEMS / 4;
+
+fn passages(threads: &[CommentThread]) -> usize {
+    threads.iter().filter(|thread| matches!(thread.anchor, AnnotationAnchor::Text(_))).count()
+}
+
 fn node_set_ids(threads: &[CommentThread]) -> usize {
     let sets = threads.iter().filter_map(|thread| match &thread.anchor {
         AnnotationAnchor::Spatial(anchor) => anchor.node_ids.as_ref().map(Vec::len),
@@ -134,6 +144,7 @@ fn past_comment_caps(comments: &Comments) -> bool {
     comments.threads.len() > MAX_COMMENT_ITEMS
         || comments.obstacles.len() > MAX_COMMENT_ITEMS
         || node_set_ids(&comments.threads) > MAX_COMMENT_ITEMS
+        || passages(&comments.threads) > MAX_PASSAGES
 }
 
 /// The bundled visual plugin, built once per instance.

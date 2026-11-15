@@ -1,7 +1,7 @@
 use serde_json::{Value as Json, json};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 
-use super::{MAX_BODY_BYTES, MAX_COMMENT_ITEMS, MAX_ELEMENTS, layout_spatial_canvas};
+use super::{MAX_BODY_BYTES, MAX_COMMENT_ITEMS, MAX_ELEMENTS, MAX_PASSAGES, layout_spatial_canvas};
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::canvas_json;
 
@@ -615,6 +615,22 @@ fn a_comment_layer_is_held_to_its_caps() {
     // The ids are counted across threads, and only node sets' are.
     assert_eq!(on_a(&[("threads", set(MAX_COMMENT_ITEMS - 2 * per))]).get(0), Some(&json!("ok")));
     assert_eq!(on_a(&[("threads", set(MAX_COMMENT_ITEMS - 2 * per + 1))]), refused);
+    // A passage is looked for through its node's whole text, so passages are held apart.
+    let quote = m(&[("exact", json!("h"))]);
+    let passage = m(&[
+        ("kind", json!("text")),
+        ("nodeId", json!("a")),
+        ("quote", quote),
+        ("start", json!(0)),
+        ("end", json!(1)),
+    ]);
+    let mixed = |n: usize| {
+        let mut all = vec![thread("p", spatial(&[]), "open", &["x"])];
+        all.extend((0..n).map(|i| thread(&format!("p{i}"), passage.clone(), "open", &["x"])));
+        s(all)
+    };
+    assert_eq!(on_a(&[("threads", mixed(MAX_PASSAGES))]).get(0), Some(&json!("ok")));
+    assert_eq!(on_a(&[("threads", mixed(MAX_PASSAGES + 1))]), refused);
     // Only the opening message is laid out, so only its body counts with the bodies.
     let half = "a".repeat(MAX_BODY_BYTES / 2 + 1);
     let long = |bodies: &[&str]| s(vec![thread("t", spatial(&[]), "open", bodies)]);
