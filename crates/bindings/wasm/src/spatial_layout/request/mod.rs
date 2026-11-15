@@ -17,8 +17,8 @@ use whiteboard_plugin_visual::visual::TagLibrary;
 
 use crate::json_canvas_wire::{Fields, canvas_of, items_of, string_of};
 use code::code_tokens_of;
-pub(crate) use measure::MeasureSpec;
 use measure::measure_of;
+pub(crate) use measure::{Face, MeasureSpec, face_of};
 pub(crate) use options::Style;
 use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key_of};
 use references::references_of;

@@ -5,8 +5,11 @@
 // bytes are the TypeScript's, in both export modes.
 
 import { existsSync } from 'node:fs'
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -111,5 +114,32 @@ describe.runIf(built)('the file export through the layout core', () => {
     })
     expect(seen).toEqual({ layouts: 0, reports: [] })
     expect(rolledBack.svg).toBe(ts.svg)
+  })
+
+  it('repeated exports hand the core the vendored faces once', async () => {
+    const dir = stagedArtifacts()
+    const glue = (await import(pathToFileURL(join(dir, 'whiteboard_wasm.js')).href)) as CoreGlue
+    const registered: number[] = []
+    const counted: CoreGlue = {
+      ...glue,
+      register_layout_fonts: (bytes, faces) => {
+        registered.push(bytes.byteLength)
+        return glue.register_layout_fonts(bytes, faces)
+      },
+    }
+    const layout = coreFrom(counted, await readFile(join(dir, 'whiteboard_wasm_bg.wasm')))
+    const reports: CoreMismatch[] = []
+    const core: LayoutCore = {
+      routing: layout,
+      layout,
+      impl: { routeLayout: 'ts', layoutSpatialCanvas: 'rust' },
+      onMismatch: (mismatch) => reports.push(mismatch),
+    }
+    for (const theme of ['light', 'dark', 'light'] as const) {
+      await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme, core })
+    }
+    expect(reports).toEqual([])
+    expect(registered).toHaveLength(1)
+    expect(registered[0]).toBeGreaterThan(1_000_000)
   })
 })

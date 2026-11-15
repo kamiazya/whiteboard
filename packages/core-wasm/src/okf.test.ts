@@ -17,6 +17,8 @@ function coreAnswering(answer: unknown) {
     abi_version: () => EXPECTED_ABI,
     edge_route_layout: () => new Float64Array(),
     layout_spatial_canvas: () => '[]',
+    register_layout_fonts: () => '[]',
+    release_layout_fonts: () => false,
     facet_bucket_check: () => '["declined","malformed","wire"]',
     okf_parse: reply,
     okf_serialize: reply,

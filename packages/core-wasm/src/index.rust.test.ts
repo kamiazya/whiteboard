@@ -8,8 +8,11 @@ import {
   initSync,
   json_canvas_parse,
   json_canvas_serialize,
+  layout_spatial_canvas,
   okf_parse,
   okf_serialize,
+  register_layout_fonts,
+  release_layout_fonts,
 } from '#glue'
 import { loadCore } from './load.js'
 import type { RoutingBudget } from './types.js'
@@ -42,8 +45,11 @@ describe('the core-wasm shim over the built artifact', () => {
         json_canvas_parse,
         json_canvas_serialize,
         facet_bucket_check,
+        layout_spatial_canvas,
+        register_layout_fonts,
+        release_layout_fonts,
       ].map((f) => typeof f),
-    ).toEqual(Array(8).fill('function'))
+    ).toEqual(Array(11).fill('function'))
   })
 
   it('routes a layout from the bytes, and again from a compiled module', async () => {

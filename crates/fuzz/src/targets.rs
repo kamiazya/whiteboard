@@ -609,33 +609,80 @@ pub fn sfnt_parse(data: &[u8]) {
     }
 }
 
-/// The whole layout's export: a request and the faces it measures in, split at
-/// the first NUL. Every answer is one of the four outcomes (laid out, refused,
-/// declined, or the fences whose tokens the host must send), and a call past
-/// the caps is refused before it is read.
+/// The whole layout's export: a request, read up to the first NUL. Every
+/// answer is one of the four outcomes (laid out, refused, declined, or the
+/// fences whose tokens the host must send), and a call past the cap is refused
+/// before it is read.
 ///
 /// # Panics
 ///
-/// On an answer that is none of the four, or an input past the caps that is
+/// On an answer that is none of the four, or an input past the cap that is
 /// not refused.
 pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
     use whiteboard_wasm::spatial_layout::layout_spatial_canvas;
 
     let at = data.iter().position(|&b| b == 0).unwrap_or(data.len());
-    let (request, fonts) = data.split_at(at);
-    let Ok(request) = std::str::from_utf8(request) else {
+    let Ok(request) = std::str::from_utf8(data.get(..at).unwrap_or_default()) else {
         return;
     };
-    let fonts = fonts.get(1..).unwrap_or_default();
-    let answer = layout_spatial_canvas(request, fonts);
-    if request.len() + fonts.len() > LAYOUT_SPATIAL_CANVAS.max_bytes {
+    let answer = layout_spatial_canvas(request);
+    if request.len() > LAYOUT_SPATIAL_CANVAS.max_bytes {
         assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
         return;
     }
+    assert_layout_answer(&answer);
+}
+
+fn assert_layout_answer(answer: &str) {
     let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && answer.ends_with("]]");
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
     let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
     let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
     assert!(laid || refused || declined || needs, "{answer:.120} is not an answer");
+}
+
+/// The font registration's export: the faces' wire and the bytes they point
+/// into, split at the first NUL. Every answer is a handle or a refusal, a call
+/// past the cap is refused before it is read, and a handle measures a layout
+/// (whatever the fuzzed faces hold) until it is released, after which the
+/// layout names the handle unknown.
+///
+/// # Panics
+///
+/// On an answer that is neither, an input past the cap that is not refused,
+/// a layout over the handle that is not an answer or names the handle unknown,
+/// or a release that does not forget it.
+pub fn register_layout_fonts_wasm(data: &[u8]) {
+    use whiteboard_wasm::input_caps::REGISTER_LAYOUT_FONTS;
+    use whiteboard_wasm::spatial_layout::{
+        layout_spatial_canvas, register_layout_fonts, release_layout_fonts,
+    };
+
+    let at = data.iter().position(|&b| b == 0).unwrap_or(data.len());
+    let (faces, bytes) = data.split_at(at);
+    let Ok(faces) = std::str::from_utf8(faces) else {
+        return;
+    };
+    let bytes = bytes.get(1..).unwrap_or_default();
+    let answer = register_layout_fonts(bytes, faces);
+    if faces.len() + bytes.len() > REGISTER_LAYOUT_FONTS.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
+        return;
+    }
+    let handle = answer.strip_prefix("[\"ok\",").and_then(|rest| rest.strip_suffix(']'));
+    let Some(handle) = handle.and_then(|h| h.parse::<u32>().ok()) else {
+        let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
+        assert!(refused, "{answer:.120} is not an answer");
+        return;
+    };
+    let request = format!(
+        "[\"m\",\"canvas\",[\"m\",\"nodes\",[\"s\",[\"m\",\"id\",\"a\",\"x\",0,\"y\",0,\"width\",160,\"height\",80,\"resource\",[\"m\",\"mimeType\",\"text/markdown\",\"content\",\"Hamburgefonstiv \\u00e9\"]]],\"edges\",[\"s\"]],\"measure\",[\"m\",\"kind\",\"fonts\",\"handle\",{handle}],\"mode\",\"light\",\"expand\",true]"
+    );
+    let lost = "[\"refused\",\"malformed\",\"font-handle\"]";
+    let held = layout_spatial_canvas(&request);
+    assert_layout_answer(&held);
+    assert_ne!(held, lost, "{handle} was answered but names no faces");
+    assert!(release_layout_fonts(handle), "{handle} was not held");
+    assert_eq!(layout_spatial_canvas(&request), lost);
 }

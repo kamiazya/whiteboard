@@ -129,6 +129,14 @@ bench = false
 required-features = ["libfuzzer"]
 
 [[bin]]
+name = "register_layout_fonts_wasm"
+path = "fuzz_targets/register_layout_fonts_wasm.rs"
+test = false
+doc = false
+bench = false
+required-features = ["libfuzzer"]
+
+[[bin]]
 name = "sfnt_parse"
 path = "fuzz_targets/sfnt_parse.rs"
 test = false

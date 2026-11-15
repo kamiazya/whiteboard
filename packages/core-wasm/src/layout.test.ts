@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
+import { FontHandles } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS } from './generated/input-caps.js'
 import { type CoreGlue, coreFrom, EXPECTED_ABI } from './index.js'
-import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas } from './layout.js'
+import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas as layoutWith } from './layout.js'
 
 const errors = {
   refused: (operation: string, code: string, detail?: string) =>
@@ -11,53 +12,50 @@ const errors = {
 
 /** A glue answering `answer`, keeping what it was handed. */
 function glueOf(answer: string) {
-  const calls: { request: unknown; fonts: number[] }[] = []
+  const calls: { request: unknown }[] = []
   const glue: LayoutGlue = {
-    layout_spatial_canvas(request, fonts) {
-      calls.push({ request: JSON.parse(request), fonts: [...fonts] })
+    layout_spatial_canvas(request) {
+      calls.push({ request: JSON.parse(request) })
       return answer
     },
+    register_layout_fonts: () => '["ok",3]',
+    release_layout_fonts: () => true,
   }
   return { glue, calls }
+}
+
+/** The layout over `glue` as a core makes it, with that core's own memo and font handles. */
+function layoutSpatialCanvas(
+  glue: LayoutGlue,
+  layoutErrors: typeof errors,
+  request: LayoutRequest,
+  highlight?: FenceHighlighter,
+  memo = new FenceTokenMemo(),
+) {
+  return layoutWith(
+    glue,
+    layoutErrors,
+    request,
+    highlight,
+    memo,
+    new FontHandles(glue, layoutErrors),
+  )
 }
 
 const fake: LayoutRequest = { measure: { kind: 'fake', factor: 0.5 } }
 
 describe('the whole layout over the artifact', () => {
-  it('sends the request on the value wire and the faces as one array they point into', () => {
+  it('sends the request on the value wire, a font-table measurer by its handle', () => {
     const { glue, calls } = glueOf('["declined","x"]')
-    const faces = [
-      { family: 'A', bold: false, italic: false, bytes: new Uint8Array([1, 2]) },
-      { family: 'A', bold: true, italic: true, bytes: new Uint8Array([3, 4, 5]) },
-    ]
+    const faces = [{ family: 'A', bold: false, italic: false, bytes: new Uint8Array([1, 2]) }]
     const request = { measure: { kind: 'fonts', faces }, mode: 'light' } as LayoutRequest
     layoutSpatialCanvas(glue, errors, request)
     expect(calls).toEqual([
-      {
-        request: [
-          'm',
-          'measure',
-          [
-            'm',
-            'kind',
-            'fonts',
-            'faces',
-            [
-              's',
-              ['m', 'family', 'A', 'bold', false, 'italic', false, 'from', 0, 'to', 2],
-              ['m', 'family', 'A', 'bold', true, 'italic', true, 'from', 2, 'to', 5],
-            ],
-          ],
-          'mode',
-          'light',
-        ],
-        fonts: [1, 2, 3, 4, 5],
-      },
+      { request: ['m', 'measure', ['m', 'kind', 'fonts', 'handle', 3], 'mode', 'light'] },
     ])
     layoutSpatialCanvas(glue, errors, fake)
     expect(calls[1]).toEqual({
       request: ['m', 'measure', ['m', 'kind', 'fake', 'factor', ['f', '3fe0000000000000']]],
-      fonts: [],
     })
   })
 
@@ -123,6 +121,8 @@ function glueAnswering(...answers: string[]) {
       sent.push(at === -1 ? undefined : wire[at + 1])
       return answers[sent.length - 1] ?? '[]'
     },
+    register_layout_fonts: () => '[]',
+    release_layout_fonts: () => false,
   }
   return { glue, sent }
 }
@@ -262,7 +262,9 @@ describe('the fence tokens a core keeps', () => {
       json_canvas_parse: () => '',
       json_canvas_serialize: () => '',
       facet_bucket_check: () => '',
-      layout_spatial_canvas: (request, fonts) => layout.layout_spatial_canvas(request, fonts),
+      layout_spatial_canvas: (request) => layout.layout_spatial_canvas(request),
+      register_layout_fonts: () => '[]',
+      release_layout_fonts: () => false,
     }
     const core = coreFrom(glue, new Uint8Array())
     core.layoutSpatialCanvas(withBody, tokens)
