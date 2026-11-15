@@ -11,7 +11,11 @@
 //! - `["ok", scene, anchors, degradations]`: the scene as the TypeScript holds
 //!   it ([`whiteboard_canvas_render::scene_wire`]), the anchors as
 //!   `[id, pair]` rows in the order the routing settled them, and what the
-//!   layout reported instead of failing, as the TypeScript's events;
+//!   layout reported instead of failing, as the TypeScript's events; for a
+//!   request carrying `fragments` (rendered math blocks and fences by key), a
+//!   fifth element: the sources the table did not hold, each drawn as its
+//!   fallback, as `FragmentAsk`s once each in the order asked, which the host
+//!   renders and lays out again with;
 //! - `["refused", code, class]`: an input past this entry's caps, or one that
 //!   is not a request; `["refused", "malformed", "font-handle"]` names a
 //!   handle this instance holds no faces under, and the host registers again;
@@ -21,29 +25,32 @@
 //!   asks once more with them (owner decision q75);
 //! - `["declined", class]`: a request the core cannot answer exactly as the
 //!   TypeScript would (a body past the parser's bounds, a number the answer
-//!   cannot spell).
+//!   cannot spell, more fragment markup placed than [`MAX_PLACED_BYTES`]).
 //!
 //! A host answers a refusal and a decline from the TypeScript.
 
 mod answer;
 mod fonts;
+mod fragments;
 mod measure;
 mod request;
 
 pub use fonts::{
     MAX_FACES, MAX_HANDLES, MAX_HELD_BYTES, register_layout_fonts, release_layout_fonts,
 };
+pub use fragments::{MAX_FRAGMENTS, MAX_PLACED_BYTES};
 
 use std::sync::OnceLock;
 
 use wasm_bindgen::prelude::wasm_bindgen;
-use whiteboard_canvas_render::compose_canvas::{self, LayoutOptions, RenderStyle};
+use whiteboard_canvas_render::compose_canvas::{self, LaidOut, LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::BodySeams;
 use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::references::{Expansion, WireHost};
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::theme::tokens::theme_table;
+use whiteboard_canvas_render::typeset::{DiagramRenderer, MathRenderer};
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::annotation::{AnnotationAnchor, CommentThread};
@@ -57,6 +64,7 @@ use whiteboard_scene::NodeDecoration;
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, needs, refused};
+use fragments::FragmentTable;
 use measure::with_measurer;
 use request::{Comments, Request, Style, request_of};
 
@@ -249,6 +257,7 @@ fn lay_out(
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand.clone())
         .with_code_tokens(&request.code_tokens);
+    let fragments = request.fragments.as_deref().map(FragmentTable::new);
     let badge = StencilBadge { registry };
     let decorations: [&dyn NodeDecoration; 1] = [&badge];
     let options = LayoutOptions {
@@ -271,19 +280,25 @@ fn lay_out(
         body: BodySeams {
             inline: &host,
             highlight: Some(&host),
-            math: None,
-            diagram: None,
+            math: fragments.as_ref().map(|table| table as &dyn MathRenderer),
+            diagram: fragments.as_ref().map(|table| table as &dyn DiagramRenderer),
             embeds: Some(&host),
         },
         budget: None,
         embed_path: &request.embed_path,
     };
     let laid = compose_canvas::layout_spatial_canvas(&request.canvas, &options);
+    outcome(&laid, &host, fragments.as_ref())
+}
+
+/// What a layout through `host` and `fragments` answers.
+fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable<'_>>) -> String {
     let asked = host.needs();
     match host.refused() {
         Some(why) => declined(why.class()),
+        None if fragments.is_some_and(FragmentTable::over) => declined("fragments"),
         None if !asked.is_empty() => needs(&asked),
-        None => laid_out(&laid, &host.degradations()),
+        None => laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked)),
     }
 }
 
@@ -302,6 +317,9 @@ pub fn layout_spatial_canvas(request: &str) -> String {
     };
     if element_total(&request) > MAX_ELEMENTS || expanded_ids(&request) > MAX_ELEMENTS {
         return refused("input-too-large", "too-many-elements");
+    }
+    if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
+        return refused("input-too-large", "fragments");
     }
     if past_comment_caps(&request.comments) {
         return refused("input-too-large", "comments");

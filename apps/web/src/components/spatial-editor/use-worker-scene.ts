@@ -23,11 +23,15 @@
  * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
 
-import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  FragmentAsk,
+  FragmentEntry,
+  MeasureText,
+  ReferenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { FragmentAsk, FragmentEntry } from '../../lib/fragment-requests.js'
 import { FONT_DEGRADED, type LayoutRequest } from '../../lib/layout-worker-protocol.js'
 import { type RenderCanvasOptions, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import type { RenderedCanvas } from '../../lib/spatial/scene-render-core.js'

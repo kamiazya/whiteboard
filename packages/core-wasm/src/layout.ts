@@ -36,12 +36,19 @@ type LayoutEvent =
       readonly style: 'repeat'
     }
 
+/** A math block or fence the request's `fragments` table did not hold. */
+type FragmentAsk =
+  | { readonly kind: 'math'; readonly value: string }
+  | { readonly kind: 'diagram'; readonly lang: string; readonly value: string }
+
 /** The artifact's answer: the layout, or what it declined to answer. */
 export type LayoutAnswer =
   | {
       readonly scene: Scene
       readonly anchors: ReadonlyMap<string, AnchorPair>
       readonly degradations: readonly LayoutEvent[]
+      /** For a request carrying `fragments`: what the table did not hold. */
+      readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | { readonly declined: string }
 
@@ -154,16 +161,25 @@ function layoutOnce(
 }
 
 /** The answer one call gave, read. */
-function answerOf([kind, a, b, c]: unknown[], errors: LayoutErrors): LayoutAnswer {
+function answerOf([kind, a, b, c, d]: unknown[], errors: LayoutErrors): LayoutAnswer {
   if (kind === 'declined' && typeof a === 'string') return { declined: a }
   if (kind === 'refused' && a === 'input-too-large' && typeof b === 'string') {
     return { declined: b }
   }
-  if (kind === 'ok' && isRecord(a) && Array.isArray(a.nodes) && isAnchors(b) && Array.isArray(c)) {
+  const asked = d === undefined || isAsks(d)
+  if (
+    kind === 'ok' &&
+    isRecord(a) &&
+    Array.isArray(a.nodes) &&
+    isAnchors(b) &&
+    Array.isArray(c) &&
+    asked
+  ) {
     return {
       scene: a as unknown as Scene,
       anchors: new Map(b),
       degradations: c as LayoutEvent[],
+      ...(d === undefined ? {} : { fragmentsAsked: d }),
     }
   }
   const detail = kind === 'refused' && typeof b === 'string' ? b : 'answer'
@@ -178,6 +194,15 @@ const isFences = (v: unknown): v is [string, string][] =>
       row.length === 2 &&
       typeof row[0] === 'string' &&
       typeof row[1] === 'string',
+  )
+
+const isAsks = (v: unknown): v is FragmentAsk[] =>
+  Array.isArray(v) &&
+  v.every(
+    (ask) =>
+      isRecord(ask) &&
+      typeof ask.value === 'string' &&
+      (ask.kind === 'math' || (ask.kind === 'diagram' && typeof ask.lang === 'string')),
   )
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>

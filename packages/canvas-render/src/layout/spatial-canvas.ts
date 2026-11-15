@@ -71,6 +71,7 @@ import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import { routeLayout } from './edges/layout-core.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
 import { weighStroke } from './edges/stroke-weight.js'
+import { withFragmentTable } from './fragment-table.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { labelOf, labelRuns } from './node-box.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
@@ -303,7 +304,9 @@ export function layoutSpatialCanvasWithAnchors(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  return layoutThroughCore(stored, options, (asked) => layoutInTypeScript(stored, asked))
+  return layoutThroughCore(stored, options, (asked) =>
+    withFragmentTable(asked, (tabled) => layoutInTypeScript(stored, tabled)),
+  )
 }
 
 /** The whole layout in this package: what the core switch answers with under `ts`. */
@@ -350,6 +353,15 @@ function layoutInTypeScript(
  * label placed ABOVE the frame — that is not content in the box.
  */
 export function naturalNodeContentSize(
+  node: SpatialNode,
+  options: SpatialLayoutOptions,
+): { readonly w: number; readonly h: number } {
+  // A table of rendered fragments answers here as in a layout, or a node
+  // would be sized by the source its layout no longer draws.
+  return withFragmentTable(options, (tabled) => naturalSize(node, tabled))
+}
+
+function naturalSize(
   node: SpatialNode,
   options: SpatialLayoutOptions,
 ): { readonly w: number; readonly h: number } {

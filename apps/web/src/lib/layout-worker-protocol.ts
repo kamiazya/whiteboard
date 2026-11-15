@@ -34,13 +34,14 @@
 import type {
   BoundingBox,
   EdgeAnchorPair,
+  FragmentAsk,
+  FragmentEntry,
   ReferenceWire,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary, VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { FaviconRect } from './favicon.js'
-import type { FragmentAsk, FragmentEntry } from './fragment-requests.js'
 import type { ResolvedTheme } from './theme.js'
 
 /**

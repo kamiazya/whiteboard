@@ -24,7 +24,9 @@ import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
+import { usesFragmentTable } from './fragment-table.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
+import type { FragmentAsk } from './nodes/fragment-ask.js'
 
 // The whole layout's switch (ADR-0054 step 7): which requests the Rust core
 // can be handed, and who answers one under `ts`, `differential` and `rust`.
@@ -135,6 +137,7 @@ export function canvasLayoutRequest(
     ...styleOptions(options),
     ...dataOptions(options),
     ...commentOptions(options),
+    ...(usesFragmentTable(options) ? { fragments: options.fragments ?? [] } : {}),
     ...(options.proposals === undefined ? {} : { proposals: options.proposals.map(coreProposal) }),
     ...(wire === undefined ? {} : { references: wire as CanvasLayoutRequest['references'] }),
   }
@@ -210,9 +213,21 @@ export function firstDifference(a: unknown, b: unknown, at = ''): string | undef
   return undefined
 }
 
-/** What a reader compares: the scene, the anchors by edge id, the events without a thrown value. */
-function comparable(laid: LaidOutCanvas, events: readonly CoreDegradation[]) {
-  return { scene: laid.scene, anchors: Object.fromEntries(laid.anchors), events }
+/**
+ * What a reader compares: the scene, the anchors by edge id, the events
+ * without a thrown value, and the fragment sources asked for.
+ */
+function comparable(
+  laid: LaidOutCanvas,
+  events: readonly CoreDegradation[],
+  asks: readonly FragmentAsk[] | undefined,
+) {
+  return {
+    scene: laid.scene,
+    anchors: Object.fromEntries(laid.anchors),
+    events,
+    fragmentsAsked: asks ?? [],
+  }
 }
 
 function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
@@ -266,6 +281,7 @@ export function layoutThroughCore(
   }
   if (impl === 'rust') {
     for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
+    if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
     return { scene: answer.scene, anchors: answer.anchors }
   }
   return compared(answer, request, options, ts)
@@ -279,15 +295,22 @@ function compared(
   ts: (options: SpatialLayoutOptions) => LaidOutCanvas,
 ): LaidOutCanvas {
   const events: CoreDegradation[] = []
+  let asks: readonly FragmentAsk[] | undefined
   const laid = ts({
     ...options,
     onDegrade: (event) => {
       events.push(coreEvent(event))
       options.onDegrade?.(event)
     },
+    ...(usesFragmentTable(options) && {
+      onFragmentsAsked: (asked: readonly FragmentAsk[]) => {
+        asks = asked
+        options.onFragmentsAsked?.(asked)
+      },
+    }),
   })
-  const tsValue = comparable(laid, events)
-  const rustValue = comparable(answer, answer.degradations)
+  const tsValue = comparable(laid, events, asks)
+  const rustValue = comparable(answer, answer.degradations, answer.fragmentsAsked)
   const at = firstDifference(tsValue, rustValue)
   if (at !== undefined) {
     options.core?.onMismatch?.({

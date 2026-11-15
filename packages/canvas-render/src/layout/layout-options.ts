@@ -37,6 +37,7 @@ import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
 import type { LayoutCore } from './edges/layout-core.js'
 import type { NestedLayoutBudget } from './nodes/embed-budget.js'
+import type { FragmentAsk, FragmentEntry } from './nodes/fragment-ask.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
 import type { ShapeTable } from './nodes/node-outline.js'
@@ -201,6 +202,21 @@ export interface SpatialLayoutOptions {
    */
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /**
+   * The same two seams as DATA (`layout/fragment-table.ts`): what the caller
+   * rendered ahead, by `fragmentAskKey`, answering every math block and fence
+   * the seams above leave unset. Unlike a function, a table is something the
+   * Rust core can be handed. What it could not answer is drawn as the seams'
+   * fallback and handed to `onFragmentsAsked`, which a caller answers by
+   * rendering those and laying out again.
+   */
+  readonly fragments?: readonly FragmentEntry[]
+  /**
+   * The sources a layout asked for that `fragments` could not answer, once
+   * each in the order asked; called only when there is one. A listener with
+   * no table asks for every source.
+   */
+  readonly onFragmentsAsked?: (asks: readonly FragmentAsk[]) => void
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /**
@@ -349,6 +365,14 @@ export interface SpatialContentCache {
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /**
+   * How often a math or diagram seam has been asked in a layout given
+   * `fragments` (`withFragmentTable`); absent without one. The content cache's
+   * key cannot carry the table, so a body laid out with one is kept only when
+   * no seam was asked, and the key says whether there was a table, so a body
+   * laid out without one is never served to a layout with one.
+   */
+  readonly fragmentTableReads?: { readonly count: number }
   /**
    * The frames that hold nothing, derived from the canvas being laid out. An
    * empty frame is its own outline and nothing else, so it is tinted to stay

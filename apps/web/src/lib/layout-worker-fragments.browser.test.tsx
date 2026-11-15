@@ -4,10 +4,10 @@
 // cache included, since a body memoised while its fragment was missing
 // must not keep drawing the fallback.
 
+import type { FragmentEntry } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, expect, it } from 'vitest'
-import type { FragmentEntry } from './fragment-requests.js'
 import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'
 
 const board: SpatialCanvas = {

@@ -14,23 +14,15 @@
  * themselves stay behind `markdown-fragment-renderers.ts`'s dynamic imports.
  */
 
-import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
-import { z } from 'zod'
+import {
+  type FragmentAsk,
+  fragmentAskKey,
+  type RenderedSvgFragment,
+} from '@kamiazya/whiteboard-canvas-render'
 
-/**
- * One source a layout asked a fragment seam for. Plain data: it crosses to and
- * from the worker, and the render store persists it as JSON — so the stored
- * reply parses it with this schema, and a kind added here reaches both.
- */
-export const fragmentAskSchema = z.discriminatedUnion('kind', [
-  z.object({ kind: z.literal('math'), value: z.string() }),
-  z.object({ kind: z.literal('diagram'), lang: z.string(), value: z.string() }),
-])
-
-export type FragmentAsk = Readonly<z.infer<typeof fragmentAskSchema>>
-
-/** A rendered fragment by its key, as it crosses to the layout worker. */
-export type FragmentEntry = readonly [key: string, fragment: RenderedSvgFragment]
+// The vocabulary (`FragmentAsk`, `FragmentEntry`, `fragmentAskKey`) is
+// canvas-render's: the Rust core rebuilds the same keys from a layout
+// request's table, so the key format has one definition.
 
 /** The async engines behind the two seams. */
 export interface FragmentLoaders {
@@ -42,17 +34,6 @@ export interface FragmentLoaders {
 export interface FragmentSeams {
   readonly renderMath: (value: string) => RenderedSvgFragment | undefined
   readonly renderDiagram: (lang: string, value: string) => RenderedSvgFragment | undefined
-}
-
-/**
- * The cache key of a rendered math block and of a rendered fence. The kind
- * prefix keeps a `$$` block and a same-source ```math fence in separate rows.
- */
-const mathFragmentKey = (value: string): string => `math:${value}`
-const fenceFragmentKey = (lang: string, value: string): string => `fence:${lang}:${value}`
-
-export function fragmentAskKey(ask: FragmentAsk): string {
-  return ask.kind === 'math' ? mathFragmentKey(ask.value) : fenceFragmentKey(ask.lang, ask.value)
 }
 
 export function loadFragment(

@@ -86,6 +86,12 @@ export {
   sketchShape,
 } from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
+export {
+  type FragmentAsk,
+  type FragmentEntry,
+  fragmentAskKey,
+  fragmentAskSchema,
+} from './layout/nodes/fragment-ask.js'
 export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
 export {
   BODY_FONT_SIZE_PX,
