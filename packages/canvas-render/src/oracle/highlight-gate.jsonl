@@ -1,0 +1,873 @@
+{"id":"lang \"bash\"","lang":"bash","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"sh\"","lang":"sh","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"zsh\"","lang":"zsh","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"css\"","lang":"css","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"javascript\"","lang":"javascript","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"js\"","lang":"js","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"jsx\"","lang":"jsx","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"mjs\"","lang":"mjs","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"cjs\"","lang":"cjs","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"json\"","lang":"json","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"jsonc\"","lang":"jsonc","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"json5\"","lang":"json5","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"markdown\"","lang":"markdown","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"md\"","lang":"md","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"mkdown\"","lang":"mkdown","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"mkd\"","lang":"mkd","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"python\"","lang":"python","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"py\"","lang":"py","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"gyp\"","lang":"gyp","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"ipython\"","lang":"ipython","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"typescript\"","lang":"typescript","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"ts\"","lang":"ts","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"tsx\"","lang":"tsx","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"mts\"","lang":"mts","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"cts\"","lang":"cts","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"xml\"","lang":"xml","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"html\"","lang":"html","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"xhtml\"","lang":"xhtml","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"rss\"","lang":"rss","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"atom\"","lang":"atom","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"xjb\"","lang":"xjb","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"xsd\"","lang":"xsd","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"xsl\"","lang":"xsl","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"plist\"","lang":"plist","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"wsf\"","lang":"wsf","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"svg\"","lang":"svg","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"yaml\"","lang":"yaml","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"yml\"","lang":"yml","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"ts\"","lang":"ts","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"tsx\"","lang":"tsx","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"js\"","lang":"js","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"jsx\"","lang":"jsx","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"mjs\"","lang":"mjs","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"sh\"","lang":"sh","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"shell\"","lang":"shell","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"zsh\"","lang":"zsh","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"py\"","lang":"py","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"md\"","lang":"md","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"html\"","lang":"html","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"svg\"","lang":"svg","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"yml\"","lang":"yml","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"BASH\"","lang":"BASH","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"SH\"","lang":"SH","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"ZSH\"","lang":"ZSH","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"CSS\"","lang":"CSS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JAVASCRIPT\"","lang":"JAVASCRIPT","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JS\"","lang":"JS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JSX\"","lang":"JSX","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MJS\"","lang":"MJS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"CJS\"","lang":"CJS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JSON\"","lang":"JSON","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JSONC\"","lang":"JSONC","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JSON5\"","lang":"JSON5","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MARKDOWN\"","lang":"MARKDOWN","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MD\"","lang":"MD","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MKDOWN\"","lang":"MKDOWN","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MKD\"","lang":"MKD","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"PYTHON\"","lang":"PYTHON","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"PY\"","lang":"PY","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"GYP\"","lang":"GYP","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"IPYTHON\"","lang":"IPYTHON","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"TYPESCRIPT\"","lang":"TYPESCRIPT","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"TS\"","lang":"TS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"TSX\"","lang":"TSX","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MTS\"","lang":"MTS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"CTS\"","lang":"CTS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"XML\"","lang":"XML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"HTML\"","lang":"HTML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"XHTML\"","lang":"XHTML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"RSS\"","lang":"RSS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"ATOM\"","lang":"ATOM","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"XJB\"","lang":"XJB","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"XSD\"","lang":"XSD","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"XSL\"","lang":"XSL","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"PLIST\"","lang":"PLIST","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"WSF\"","lang":"WSF","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"SVG\"","lang":"SVG","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"YAML\"","lang":"YAML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"YML\"","lang":"YML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"TS\"","lang":"TS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"TSX\"","lang":"TSX","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JS\"","lang":"JS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"JSX\"","lang":"JSX","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MJS\"","lang":"MJS","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"SH\"","lang":"SH","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"SHELL\"","lang":"SHELL","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"ZSH\"","lang":"ZSH","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"PY\"","lang":"PY","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"MD\"","lang":"MD","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"HTML\"","lang":"HTML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"SVG\"","lang":"SVG","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"YML\"","lang":"YML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"Shell\"","lang":"Shell","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"YmL\"","lang":"YmL","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"marKdown\"","lang":"marKdown","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"lang \"İ\"","lang":"İ","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"\"","lang":"","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \" js\"","lang":" js","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"js \"","lang":"js ","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"text\"","lang":"text","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"rust\"","lang":"rust","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"mermaid\"","lang":"mermaid","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"c++\"","lang":"c++","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"constructor\"","lang":"constructor","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"__proto__\"","lang":"__proto__","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"hasOwnProperty\"","lang":"hasOwnProperty","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"lang \"toString\"","lang":"toString","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"js value 0 account 0","lang":"js","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"js value 0 account 1","lang":"js","value":[["let x = 1",1]],"budget":"fresh","colours":true,"after":{"word":67108853,"line":268435456,"refused":0}}
+{"id":"js value 0 account 2","lang":"js","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777205,"line":67108864,"refused":2}}
+{"id":"js value 0 account 3","lang":"js","value":[["let x = 1",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777204,"line":67108864,"refused":0}}
+{"id":"js value 0 account 4","lang":"js","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777205,"line":67108863,"refused":1}}
+{"id":"js value 0 account 5","lang":"js","value":[["let x = 1",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 0 account 6","lang":"js","value":[["let x = 1",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 1 account 0","lang":"js","value":[],"budget":null,"colours":true,"after":null}
+{"id":"js value 1 account 1","lang":"js","value":[],"budget":"fresh","colours":true,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"js value 1 account 2","lang":"js","value":[],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"js value 1 account 3","lang":"js","value":[],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"js value 1 account 4","lang":"js","value":[],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"js value 1 account 5","lang":"js","value":[],"budget":{"word":8,"line":1,"refused":0},"colours":true,"after":{"word":8,"line":1,"refused":0}}
+{"id":"js value 1 account 6","lang":"js","value":[],"budget":{"word":0,"line":0,"refused":5},"colours":true,"after":{"word":0,"line":0,"refused":5}}
+{"id":"js value 2 account 0","lang":"js","value":[["a",4095]],"budget":null,"colours":true,"after":null}
+{"id":"js value 2 account 1","lang":"js","value":[["a",4095]],"budget":"fresh","colours":true,"after":{"word":50339839,"line":268435456,"refused":0}}
+{"id":"js value 2 account 2","lang":"js","value":[["a",4095]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":8191,"line":67108864,"refused":2}}
+{"id":"js value 2 account 3","lang":"js","value":[["a",4095]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":8190,"line":67108864,"refused":0}}
+{"id":"js value 2 account 4","lang":"js","value":[["a",4095]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":8191,"line":67108863,"refused":1}}
+{"id":"js value 2 account 5","lang":"js","value":[["a",4095]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 2 account 6","lang":"js","value":[["a",4095]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 3 account 0","lang":"js","value":[["a",4096]],"budget":null,"colours":true,"after":null}
+{"id":"js value 3 account 1","lang":"js","value":[["a",4096]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":268435456,"refused":0}}
+{"id":"js value 3 account 2","lang":"js","value":[["a",4096]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":67108864,"refused":2}}
+{"id":"js value 3 account 3","lang":"js","value":[["a",4096]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"js value 3 account 4","lang":"js","value":[["a",4096]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":67108863,"refused":1}}
+{"id":"js value 3 account 5","lang":"js","value":[["a",4096]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 3 account 6","lang":"js","value":[["a",4096]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 4 account 0","lang":"js","value":[["a",4097]],"budget":null,"colours":false,"after":null}
+{"id":"js value 4 account 1","lang":"js","value":[["a",4097]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"js value 4 account 2","lang":"js","value":[["a",4097]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"js value 4 account 3","lang":"js","value":[["a",4097]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"js value 4 account 4","lang":"js","value":[["a",4097]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"js value 4 account 5","lang":"js","value":[["a",4097]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"js value 4 account 6","lang":"js","value":[["a",4097]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"js value 5 account 0","lang":"js","value":[["_$9",1365],["Z",1]],"budget":null,"colours":true,"after":null}
+{"id":"js value 5 account 1","lang":"js","value":[["_$9",1365],["Z",1]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":268435456,"refused":0}}
+{"id":"js value 5 account 2","lang":"js","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":67108864,"refused":2}}
+{"id":"js value 5 account 3","lang":"js","value":[["_$9",1365],["Z",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"js value 5 account 4","lang":"js","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":67108863,"refused":1}}
+{"id":"js value 5 account 5","lang":"js","value":[["_$9",1365],["Z",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 5 account 6","lang":"js","value":[["_$9",1365],["Z",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 6 account 0","lang":"js","value":[["_$9",1366]],"budget":null,"colours":false,"after":null}
+{"id":"js value 6 account 1","lang":"js","value":[["_$9",1366]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"js value 6 account 2","lang":"js","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"js value 6 account 3","lang":"js","value":[["_$9",1366]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"js value 6 account 4","lang":"js","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"js value 6 account 5","lang":"js","value":[["_$9",1366]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"js value 6 account 6","lang":"js","value":[["_$9",1366]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"js value 7 account 0","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":null,"colours":true,"after":null}
+{"id":"js value 7 account 1","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":"fresh","colours":true,"after":{"word":50335232,"line":268435456,"refused":0}}
+{"id":"js value 7 account 2","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":3584,"line":67108864,"refused":2}}
+{"id":"js value 7 account 3","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":3583,"line":67108864,"refused":0}}
+{"id":"js value 7 account 4","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":3584,"line":67108863,"refused":1}}
+{"id":"js value 7 account 5","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 7 account 6","lang":"js","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 8 account 0","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":null,"colours":false,"after":null}
+{"id":"js value 8 account 1","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"js value 8 account 2","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"js value 8 account 3","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"js value 8 account 4","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"js value 8 account 5","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"js value 8 account 6","lang":"js","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"js value 9 account 0","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"js value 9 account 1","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"js value 9 account 2","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"js value 9 account 3","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"js value 9 account 4","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"js value 9 account 5","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"js value 9 account 6","lang":"js","value":[["a",4096],["é",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"js value 10 account 0","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":null,"colours":false,"after":null}
+{"id":"js value 10 account 1","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"js value 10 account 2","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"js value 10 account 3","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"js value 10 account 4","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"js value 10 account 5","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"js value 10 account 6","lang":"js","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"js value 11 account 0","lang":"js","value":[["ab ",2730],["ab",1]],"budget":null,"colours":true,"after":null}
+{"id":"js value 11 account 1","lang":"js","value":[["ab ",2730],["ab",1]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":268435456,"refused":0}}
+{"id":"js value 11 account 2","lang":"js","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":67108864,"refused":2}}
+{"id":"js value 11 account 3","lang":"js","value":[["ab ",2730],["ab",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":67108864,"refused":0}}
+{"id":"js value 11 account 4","lang":"js","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766292,"line":67108863,"refused":1}}
+{"id":"js value 11 account 5","lang":"js","value":[["ab ",2730],["ab",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 11 account 6","lang":"js","value":[["ab ",2730],["ab",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 12 account 0","lang":"js","value":[["ab ",2731]],"budget":null,"colours":true,"after":null}
+{"id":"js value 12 account 1","lang":"js","value":[["ab ",2731]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":268435456,"refused":0}}
+{"id":"js value 12 account 2","lang":"js","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":67108864,"refused":2}}
+{"id":"js value 12 account 3","lang":"js","value":[["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":67108864,"refused":0}}
+{"id":"js value 12 account 4","lang":"js","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766292,"line":67108863,"refused":1}}
+{"id":"js value 12 account 5","lang":"js","value":[["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 12 account 6","lang":"js","value":[["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 13 account 0","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":null,"colours":true,"after":null}
+{"id":"js value 13 account 1","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":"fresh","colours":true,"after":{"word":67087016,"line":268435456,"refused":0}}
+{"id":"js value 13 account 2","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16755368,"line":67108864,"refused":2}}
+{"id":"js value 13 account 3","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16755367,"line":67108864,"refused":0}}
+{"id":"js value 13 account 4","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16755368,"line":67108863,"refused":1}}
+{"id":"js value 13 account 5","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 13 account 6","lang":"js","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 14 account 0","lang":"js","value":[["ab ",2730],["😀",1]],"budget":null,"colours":true,"after":null}
+{"id":"js value 14 account 1","lang":"js","value":[["ab ",2730],["😀",1]],"budget":"fresh","colours":true,"after":{"word":67097944,"line":268435456,"refused":0}}
+{"id":"js value 14 account 2","lang":"js","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766296,"line":67108864,"refused":2}}
+{"id":"js value 14 account 3","lang":"js","value":[["ab ",2730],["😀",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766295,"line":67108864,"refused":0}}
+{"id":"js value 14 account 4","lang":"js","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766296,"line":67108863,"refused":1}}
+{"id":"js value 14 account 5","lang":"js","value":[["ab ",2730],["😀",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 14 account 6","lang":"js","value":[["ab ",2730],["😀",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 15 account 0","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":null,"colours":true,"after":null}
+{"id":"js value 15 account 1","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":"fresh","colours":true,"after":{"word":67097943,"line":268435456,"refused":0}}
+{"id":"js value 15 account 2","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766295,"line":67108864,"refused":2}}
+{"id":"js value 15 account 3","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766294,"line":67108864,"refused":0}}
+{"id":"js value 15 account 4","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766295,"line":67108863,"refused":1}}
+{"id":"js value 15 account 5","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 15 account 6","lang":"js","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 16 account 0","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":null,"colours":true,"after":null}
+{"id":"js value 16 account 1","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":"fresh","colours":true,"after":{"word":67097943,"line":268435456,"refused":0}}
+{"id":"js value 16 account 2","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766295,"line":67108864,"refused":2}}
+{"id":"js value 16 account 3","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766294,"line":67108864,"refused":0}}
+{"id":"js value 16 account 4","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766295,"line":67108863,"refused":1}}
+{"id":"js value 16 account 5","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 16 account 6","lang":"js","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"js value 17 account 0","lang":"js","value":[["x: 1\n",3000]],"budget":null,"colours":true,"after":null}
+{"id":"js value 17 account 1","lang":"js","value":[["x: 1\n",3000]],"budget":"fresh","colours":true,"after":{"word":67102864,"line":268435456,"refused":0}}
+{"id":"js value 17 account 2","lang":"js","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16771216,"line":67108864,"refused":2}}
+{"id":"js value 17 account 3","lang":"js","value":[["x: 1\n",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16771215,"line":67108864,"refused":0}}
+{"id":"js value 17 account 4","lang":"js","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16771216,"line":67108863,"refused":1}}
+{"id":"js value 17 account 5","lang":"js","value":[["x: 1\n",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"js value 17 account 6","lang":"js","value":[["x: 1\n",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 0 account 0","lang":"yaml","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 0 account 1","lang":"yaml","value":[["let x = 1",1]],"budget":"fresh","colours":true,"after":{"word":67108853,"line":268435375,"refused":0}}
+{"id":"yaml value 0 account 2","lang":"yaml","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777205,"line":67108783,"refused":2}}
+{"id":"yaml value 0 account 3","lang":"yaml","value":[["let x = 1",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777204,"line":67108783,"refused":0}}
+{"id":"yaml value 0 account 4","lang":"yaml","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777205,"line":67108782,"refused":1}}
+{"id":"yaml value 0 account 5","lang":"yaml","value":[["let x = 1",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 0 account 6","lang":"yaml","value":[["let x = 1",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 1 account 0","lang":"yaml","value":[],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 1 account 1","lang":"yaml","value":[],"budget":"fresh","colours":true,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 1 account 2","lang":"yaml","value":[],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 1 account 3","lang":"yaml","value":[],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 1 account 4","lang":"yaml","value":[],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 1 account 5","lang":"yaml","value":[],"budget":{"word":8,"line":1,"refused":0},"colours":true,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 1 account 6","lang":"yaml","value":[],"budget":{"word":0,"line":0,"refused":5},"colours":true,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 2 account 0","lang":"yaml","value":[["a",4095]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 2 account 1","lang":"yaml","value":[["a",4095]],"budget":"fresh","colours":true,"after":{"word":50339839,"line":251666431,"refused":0}}
+{"id":"yaml value 2 account 2","lang":"yaml","value":[["a",4095]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":8191,"line":50339839,"refused":2}}
+{"id":"yaml value 2 account 3","lang":"yaml","value":[["a",4095]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":8190,"line":50339839,"refused":0}}
+{"id":"yaml value 2 account 4","lang":"yaml","value":[["a",4095]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":8191,"line":50339838,"refused":1}}
+{"id":"yaml value 2 account 5","lang":"yaml","value":[["a",4095]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 2 account 6","lang":"yaml","value":[["a",4095]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 3 account 0","lang":"yaml","value":[["a",4096]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 3 account 1","lang":"yaml","value":[["a",4096]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":251658240,"refused":0}}
+{"id":"yaml value 3 account 2","lang":"yaml","value":[["a",4096]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":50331648,"refused":2}}
+{"id":"yaml value 3 account 3","lang":"yaml","value":[["a",4096]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"yaml value 3 account 4","lang":"yaml","value":[["a",4096]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":50331647,"refused":1}}
+{"id":"yaml value 3 account 5","lang":"yaml","value":[["a",4096]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 3 account 6","lang":"yaml","value":[["a",4096]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 4 account 0","lang":"yaml","value":[["a",4097]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 4 account 1","lang":"yaml","value":[["a",4097]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 4 account 2","lang":"yaml","value":[["a",4097]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 4 account 3","lang":"yaml","value":[["a",4097]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 4 account 4","lang":"yaml","value":[["a",4097]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 4 account 5","lang":"yaml","value":[["a",4097]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 4 account 6","lang":"yaml","value":[["a",4097]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 5 account 0","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 5 account 1","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":251658240,"refused":0}}
+{"id":"yaml value 5 account 2","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":50331648,"refused":2}}
+{"id":"yaml value 5 account 3","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"yaml value 5 account 4","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":50331647,"refused":1}}
+{"id":"yaml value 5 account 5","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 5 account 6","lang":"yaml","value":[["_$9",1365],["Z",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 6 account 0","lang":"yaml","value":[["_$9",1366]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 6 account 1","lang":"yaml","value":[["_$9",1366]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 6 account 2","lang":"yaml","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 6 account 3","lang":"yaml","value":[["_$9",1366]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 6 account 4","lang":"yaml","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 6 account 5","lang":"yaml","value":[["_$9",1366]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 6 account 6","lang":"yaml","value":[["_$9",1366]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 7 account 0","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 7 account 1","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":"fresh","colours":true,"after":{"word":50335232,"line":234876607,"refused":0}}
+{"id":"yaml value 7 account 2","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":3584,"line":33550015,"refused":2}}
+{"id":"yaml value 7 account 3","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":3583,"line":33550015,"refused":0}}
+{"id":"yaml value 7 account 4","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":3584,"line":33550014,"refused":1}}
+{"id":"yaml value 7 account 5","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 7 account 6","lang":"yaml","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 8 account 0","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 8 account 1","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 8 account 2","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 8 account 3","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 8 account 4","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 8 account 5","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 8 account 6","lang":"yaml","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 9 account 0","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 9 account 1","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 9 account 2","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 9 account 3","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 9 account 4","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 9 account 5","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 9 account 6","lang":"yaml","value":[["a",4096],["é",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 10 account 0","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 10 account 1","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 10 account 2","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 10 account 3","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 10 account 4","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 10 account 5","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 10 account 6","lang":"yaml","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 11 account 0","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 11 account 1","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":201326592,"refused":0}}
+{"id":"yaml value 11 account 2","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":0,"refused":2}}
+{"id":"yaml value 11 account 3","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":0,"refused":0}}
+{"id":"yaml value 11 account 4","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":2}}
+{"id":"yaml value 11 account 5","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 11 account 6","lang":"yaml","value":[["ab ",2730],["ab",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 12 account 0","lang":"yaml","value":[["ab ",2731]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 12 account 1","lang":"yaml","value":[["ab ",2731]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 12 account 2","lang":"yaml","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 12 account 3","lang":"yaml","value":[["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 12 account 4","lang":"yaml","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 12 account 5","lang":"yaml","value":[["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 12 account 6","lang":"yaml","value":[["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 13 account 0","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 13 account 1","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 13 account 2","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 13 account 3","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 13 account 4","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 13 account 5","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 13 account 6","lang":"yaml","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 14 account 0","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 14 account 1","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":"fresh","colours":true,"after":{"word":67097944,"line":201326592,"refused":0}}
+{"id":"yaml value 14 account 2","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766296,"line":0,"refused":2}}
+{"id":"yaml value 14 account 3","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766295,"line":0,"refused":0}}
+{"id":"yaml value 14 account 4","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":2}}
+{"id":"yaml value 14 account 5","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 14 account 6","lang":"yaml","value":[["ab ",2730],["😀",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"yaml value 15 account 0","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 15 account 1","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 15 account 2","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 15 account 3","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 15 account 4","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 15 account 5","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 15 account 6","lang":"yaml","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 16 account 0","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"yaml value 16 account 1","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"yaml value 16 account 2","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"yaml value 16 account 3","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"yaml value 16 account 4","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"yaml value 16 account 5","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"yaml value 16 account 6","lang":"yaml","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"yaml value 17 account 0","lang":"yaml","value":[["x: 1\n",3000]],"budget":null,"colours":true,"after":null}
+{"id":"yaml value 17 account 1","lang":"yaml","value":[["x: 1\n",3000]],"budget":"fresh","colours":true,"after":{"word":67102864,"line":268387456,"refused":0}}
+{"id":"yaml value 17 account 2","lang":"yaml","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16771216,"line":67060864,"refused":2}}
+{"id":"yaml value 17 account 3","lang":"yaml","value":[["x: 1\n",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16771215,"line":67060864,"refused":0}}
+{"id":"yaml value 17 account 4","lang":"yaml","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16771216,"line":67060863,"refused":1}}
+{"id":"yaml value 17 account 5","lang":"yaml","value":[["x: 1\n",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"yaml value 17 account 6","lang":"yaml","value":[["x: 1\n",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 0 account 0","lang":"YML","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 0 account 1","lang":"YML","value":[["let x = 1",1]],"budget":"fresh","colours":true,"after":{"word":67108853,"line":268435375,"refused":0}}
+{"id":"YML value 0 account 2","lang":"YML","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777205,"line":67108783,"refused":2}}
+{"id":"YML value 0 account 3","lang":"YML","value":[["let x = 1",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777204,"line":67108783,"refused":0}}
+{"id":"YML value 0 account 4","lang":"YML","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777205,"line":67108782,"refused":1}}
+{"id":"YML value 0 account 5","lang":"YML","value":[["let x = 1",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 0 account 6","lang":"YML","value":[["let x = 1",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 1 account 0","lang":"YML","value":[],"budget":null,"colours":true,"after":null}
+{"id":"YML value 1 account 1","lang":"YML","value":[],"budget":"fresh","colours":true,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 1 account 2","lang":"YML","value":[],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 1 account 3","lang":"YML","value":[],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 1 account 4","lang":"YML","value":[],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 1 account 5","lang":"YML","value":[],"budget":{"word":8,"line":1,"refused":0},"colours":true,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 1 account 6","lang":"YML","value":[],"budget":{"word":0,"line":0,"refused":5},"colours":true,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 2 account 0","lang":"YML","value":[["a",4095]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 2 account 1","lang":"YML","value":[["a",4095]],"budget":"fresh","colours":true,"after":{"word":50339839,"line":251666431,"refused":0}}
+{"id":"YML value 2 account 2","lang":"YML","value":[["a",4095]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":8191,"line":50339839,"refused":2}}
+{"id":"YML value 2 account 3","lang":"YML","value":[["a",4095]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":8190,"line":50339839,"refused":0}}
+{"id":"YML value 2 account 4","lang":"YML","value":[["a",4095]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":8191,"line":50339838,"refused":1}}
+{"id":"YML value 2 account 5","lang":"YML","value":[["a",4095]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 2 account 6","lang":"YML","value":[["a",4095]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 3 account 0","lang":"YML","value":[["a",4096]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 3 account 1","lang":"YML","value":[["a",4096]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":251658240,"refused":0}}
+{"id":"YML value 3 account 2","lang":"YML","value":[["a",4096]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":50331648,"refused":2}}
+{"id":"YML value 3 account 3","lang":"YML","value":[["a",4096]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"YML value 3 account 4","lang":"YML","value":[["a",4096]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":50331647,"refused":1}}
+{"id":"YML value 3 account 5","lang":"YML","value":[["a",4096]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 3 account 6","lang":"YML","value":[["a",4096]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 4 account 0","lang":"YML","value":[["a",4097]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 4 account 1","lang":"YML","value":[["a",4097]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 4 account 2","lang":"YML","value":[["a",4097]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 4 account 3","lang":"YML","value":[["a",4097]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 4 account 4","lang":"YML","value":[["a",4097]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 4 account 5","lang":"YML","value":[["a",4097]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 4 account 6","lang":"YML","value":[["a",4097]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 5 account 0","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 5 account 1","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":251658240,"refused":0}}
+{"id":"YML value 5 account 2","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":50331648,"refused":2}}
+{"id":"YML value 5 account 3","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"YML value 5 account 4","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":50331647,"refused":1}}
+{"id":"YML value 5 account 5","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 5 account 6","lang":"YML","value":[["_$9",1365],["Z",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 6 account 0","lang":"YML","value":[["_$9",1366]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 6 account 1","lang":"YML","value":[["_$9",1366]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 6 account 2","lang":"YML","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 6 account 3","lang":"YML","value":[["_$9",1366]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 6 account 4","lang":"YML","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 6 account 5","lang":"YML","value":[["_$9",1366]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 6 account 6","lang":"YML","value":[["_$9",1366]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 7 account 0","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 7 account 1","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":"fresh","colours":true,"after":{"word":50335232,"line":234876607,"refused":0}}
+{"id":"YML value 7 account 2","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":3584,"line":33550015,"refused":2}}
+{"id":"YML value 7 account 3","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":3583,"line":33550015,"refused":0}}
+{"id":"YML value 7 account 4","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":3584,"line":33550014,"refused":1}}
+{"id":"YML value 7 account 5","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 7 account 6","lang":"YML","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 8 account 0","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 8 account 1","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 8 account 2","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 8 account 3","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 8 account 4","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 8 account 5","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 8 account 6","lang":"YML","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 9 account 0","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 9 account 1","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 9 account 2","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 9 account 3","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 9 account 4","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 9 account 5","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 9 account 6","lang":"YML","value":[["a",4096],["é",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 10 account 0","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 10 account 1","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 10 account 2","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 10 account 3","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 10 account 4","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 10 account 5","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 10 account 6","lang":"YML","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 11 account 0","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 11 account 1","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":201326592,"refused":0}}
+{"id":"YML value 11 account 2","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":0,"refused":2}}
+{"id":"YML value 11 account 3","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":0,"refused":0}}
+{"id":"YML value 11 account 4","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":2}}
+{"id":"YML value 11 account 5","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 11 account 6","lang":"YML","value":[["ab ",2730],["ab",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 12 account 0","lang":"YML","value":[["ab ",2731]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 12 account 1","lang":"YML","value":[["ab ",2731]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 12 account 2","lang":"YML","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 12 account 3","lang":"YML","value":[["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 12 account 4","lang":"YML","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 12 account 5","lang":"YML","value":[["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 12 account 6","lang":"YML","value":[["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 13 account 0","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 13 account 1","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 13 account 2","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 13 account 3","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 13 account 4","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 13 account 5","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 13 account 6","lang":"YML","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 14 account 0","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 14 account 1","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":"fresh","colours":true,"after":{"word":67097944,"line":201326592,"refused":0}}
+{"id":"YML value 14 account 2","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766296,"line":0,"refused":2}}
+{"id":"YML value 14 account 3","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766295,"line":0,"refused":0}}
+{"id":"YML value 14 account 4","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":2}}
+{"id":"YML value 14 account 5","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 14 account 6","lang":"YML","value":[["ab ",2730],["😀",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"YML value 15 account 0","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 15 account 1","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 15 account 2","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 15 account 3","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 15 account 4","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 15 account 5","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 15 account 6","lang":"YML","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 16 account 0","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"YML value 16 account 1","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"YML value 16 account 2","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"YML value 16 account 3","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"YML value 16 account 4","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"YML value 16 account 5","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"YML value 16 account 6","lang":"YML","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"YML value 17 account 0","lang":"YML","value":[["x: 1\n",3000]],"budget":null,"colours":true,"after":null}
+{"id":"YML value 17 account 1","lang":"YML","value":[["x: 1\n",3000]],"budget":"fresh","colours":true,"after":{"word":67102864,"line":268387456,"refused":0}}
+{"id":"YML value 17 account 2","lang":"YML","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16771216,"line":67060864,"refused":2}}
+{"id":"YML value 17 account 3","lang":"YML","value":[["x: 1\n",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16771215,"line":67060864,"refused":0}}
+{"id":"YML value 17 account 4","lang":"YML","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16771216,"line":67060863,"refused":1}}
+{"id":"YML value 17 account 5","lang":"YML","value":[["x: 1\n",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"YML value 17 account 6","lang":"YML","value":[["x: 1\n",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 0 account 0","lang":"json","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"json value 0 account 1","lang":"json","value":[["let x = 1",1]],"budget":"fresh","colours":true,"after":{"word":67108853,"line":268435456,"refused":0}}
+{"id":"json value 0 account 2","lang":"json","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777205,"line":67108864,"refused":2}}
+{"id":"json value 0 account 3","lang":"json","value":[["let x = 1",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777204,"line":67108864,"refused":0}}
+{"id":"json value 0 account 4","lang":"json","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777205,"line":67108863,"refused":1}}
+{"id":"json value 0 account 5","lang":"json","value":[["let x = 1",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 0 account 6","lang":"json","value":[["let x = 1",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 1 account 0","lang":"json","value":[],"budget":null,"colours":true,"after":null}
+{"id":"json value 1 account 1","lang":"json","value":[],"budget":"fresh","colours":true,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"json value 1 account 2","lang":"json","value":[],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"json value 1 account 3","lang":"json","value":[],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"json value 1 account 4","lang":"json","value":[],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"json value 1 account 5","lang":"json","value":[],"budget":{"word":8,"line":1,"refused":0},"colours":true,"after":{"word":8,"line":1,"refused":0}}
+{"id":"json value 1 account 6","lang":"json","value":[],"budget":{"word":0,"line":0,"refused":5},"colours":true,"after":{"word":0,"line":0,"refused":5}}
+{"id":"json value 2 account 0","lang":"json","value":[["a",4095]],"budget":null,"colours":true,"after":null}
+{"id":"json value 2 account 1","lang":"json","value":[["a",4095]],"budget":"fresh","colours":true,"after":{"word":50339839,"line":268435456,"refused":0}}
+{"id":"json value 2 account 2","lang":"json","value":[["a",4095]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":8191,"line":67108864,"refused":2}}
+{"id":"json value 2 account 3","lang":"json","value":[["a",4095]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":8190,"line":67108864,"refused":0}}
+{"id":"json value 2 account 4","lang":"json","value":[["a",4095]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":8191,"line":67108863,"refused":1}}
+{"id":"json value 2 account 5","lang":"json","value":[["a",4095]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 2 account 6","lang":"json","value":[["a",4095]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 3 account 0","lang":"json","value":[["a",4096]],"budget":null,"colours":true,"after":null}
+{"id":"json value 3 account 1","lang":"json","value":[["a",4096]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":268435456,"refused":0}}
+{"id":"json value 3 account 2","lang":"json","value":[["a",4096]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":67108864,"refused":2}}
+{"id":"json value 3 account 3","lang":"json","value":[["a",4096]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"json value 3 account 4","lang":"json","value":[["a",4096]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":67108863,"refused":1}}
+{"id":"json value 3 account 5","lang":"json","value":[["a",4096]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 3 account 6","lang":"json","value":[["a",4096]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 4 account 0","lang":"json","value":[["a",4097]],"budget":null,"colours":false,"after":null}
+{"id":"json value 4 account 1","lang":"json","value":[["a",4097]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"json value 4 account 2","lang":"json","value":[["a",4097]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"json value 4 account 3","lang":"json","value":[["a",4097]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"json value 4 account 4","lang":"json","value":[["a",4097]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"json value 4 account 5","lang":"json","value":[["a",4097]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"json value 4 account 6","lang":"json","value":[["a",4097]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"json value 5 account 0","lang":"json","value":[["_$9",1365],["Z",1]],"budget":null,"colours":true,"after":null}
+{"id":"json value 5 account 1","lang":"json","value":[["_$9",1365],["Z",1]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":268435456,"refused":0}}
+{"id":"json value 5 account 2","lang":"json","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":67108864,"refused":2}}
+{"id":"json value 5 account 3","lang":"json","value":[["_$9",1365],["Z",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"json value 5 account 4","lang":"json","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":67108863,"refused":1}}
+{"id":"json value 5 account 5","lang":"json","value":[["_$9",1365],["Z",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 5 account 6","lang":"json","value":[["_$9",1365],["Z",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 6 account 0","lang":"json","value":[["_$9",1366]],"budget":null,"colours":false,"after":null}
+{"id":"json value 6 account 1","lang":"json","value":[["_$9",1366]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"json value 6 account 2","lang":"json","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"json value 6 account 3","lang":"json","value":[["_$9",1366]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"json value 6 account 4","lang":"json","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"json value 6 account 5","lang":"json","value":[["_$9",1366]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"json value 6 account 6","lang":"json","value":[["_$9",1366]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"json value 7 account 0","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":null,"colours":true,"after":null}
+{"id":"json value 7 account 1","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":"fresh","colours":true,"after":{"word":50335232,"line":268435456,"refused":0}}
+{"id":"json value 7 account 2","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":3584,"line":67108864,"refused":2}}
+{"id":"json value 7 account 3","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":3583,"line":67108864,"refused":0}}
+{"id":"json value 7 account 4","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":3584,"line":67108863,"refused":1}}
+{"id":"json value 7 account 5","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 7 account 6","lang":"json","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 8 account 0","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":null,"colours":false,"after":null}
+{"id":"json value 8 account 1","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"json value 8 account 2","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"json value 8 account 3","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"json value 8 account 4","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"json value 8 account 5","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"json value 8 account 6","lang":"json","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"json value 9 account 0","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"json value 9 account 1","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"json value 9 account 2","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"json value 9 account 3","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"json value 9 account 4","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"json value 9 account 5","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"json value 9 account 6","lang":"json","value":[["a",4096],["é",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"json value 10 account 0","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":null,"colours":false,"after":null}
+{"id":"json value 10 account 1","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"json value 10 account 2","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"json value 10 account 3","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"json value 10 account 4","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"json value 10 account 5","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"json value 10 account 6","lang":"json","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"json value 11 account 0","lang":"json","value":[["ab ",2730],["ab",1]],"budget":null,"colours":true,"after":null}
+{"id":"json value 11 account 1","lang":"json","value":[["ab ",2730],["ab",1]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":268435456,"refused":0}}
+{"id":"json value 11 account 2","lang":"json","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":67108864,"refused":2}}
+{"id":"json value 11 account 3","lang":"json","value":[["ab ",2730],["ab",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":67108864,"refused":0}}
+{"id":"json value 11 account 4","lang":"json","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766292,"line":67108863,"refused":1}}
+{"id":"json value 11 account 5","lang":"json","value":[["ab ",2730],["ab",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 11 account 6","lang":"json","value":[["ab ",2730],["ab",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 12 account 0","lang":"json","value":[["ab ",2731]],"budget":null,"colours":true,"after":null}
+{"id":"json value 12 account 1","lang":"json","value":[["ab ",2731]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":268435456,"refused":0}}
+{"id":"json value 12 account 2","lang":"json","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":67108864,"refused":2}}
+{"id":"json value 12 account 3","lang":"json","value":[["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":67108864,"refused":0}}
+{"id":"json value 12 account 4","lang":"json","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766292,"line":67108863,"refused":1}}
+{"id":"json value 12 account 5","lang":"json","value":[["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 12 account 6","lang":"json","value":[["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 13 account 0","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":null,"colours":true,"after":null}
+{"id":"json value 13 account 1","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":"fresh","colours":true,"after":{"word":67087016,"line":268435456,"refused":0}}
+{"id":"json value 13 account 2","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16755368,"line":67108864,"refused":2}}
+{"id":"json value 13 account 3","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16755367,"line":67108864,"refused":0}}
+{"id":"json value 13 account 4","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16755368,"line":67108863,"refused":1}}
+{"id":"json value 13 account 5","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 13 account 6","lang":"json","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 14 account 0","lang":"json","value":[["ab ",2730],["😀",1]],"budget":null,"colours":true,"after":null}
+{"id":"json value 14 account 1","lang":"json","value":[["ab ",2730],["😀",1]],"budget":"fresh","colours":true,"after":{"word":67097944,"line":268435456,"refused":0}}
+{"id":"json value 14 account 2","lang":"json","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766296,"line":67108864,"refused":2}}
+{"id":"json value 14 account 3","lang":"json","value":[["ab ",2730],["😀",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766295,"line":67108864,"refused":0}}
+{"id":"json value 14 account 4","lang":"json","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766296,"line":67108863,"refused":1}}
+{"id":"json value 14 account 5","lang":"json","value":[["ab ",2730],["😀",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 14 account 6","lang":"json","value":[["ab ",2730],["😀",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 15 account 0","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":null,"colours":true,"after":null}
+{"id":"json value 15 account 1","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":"fresh","colours":true,"after":{"word":67097943,"line":268435456,"refused":0}}
+{"id":"json value 15 account 2","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766295,"line":67108864,"refused":2}}
+{"id":"json value 15 account 3","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766294,"line":67108864,"refused":0}}
+{"id":"json value 15 account 4","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766295,"line":67108863,"refused":1}}
+{"id":"json value 15 account 5","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 15 account 6","lang":"json","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 16 account 0","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":null,"colours":true,"after":null}
+{"id":"json value 16 account 1","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":"fresh","colours":true,"after":{"word":67097943,"line":268435456,"refused":0}}
+{"id":"json value 16 account 2","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766295,"line":67108864,"refused":2}}
+{"id":"json value 16 account 3","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766294,"line":67108864,"refused":0}}
+{"id":"json value 16 account 4","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766295,"line":67108863,"refused":1}}
+{"id":"json value 16 account 5","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 16 account 6","lang":"json","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"json value 17 account 0","lang":"json","value":[["x: 1\n",3000]],"budget":null,"colours":true,"after":null}
+{"id":"json value 17 account 1","lang":"json","value":[["x: 1\n",3000]],"budget":"fresh","colours":true,"after":{"word":67102864,"line":268435456,"refused":0}}
+{"id":"json value 17 account 2","lang":"json","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16771216,"line":67108864,"refused":2}}
+{"id":"json value 17 account 3","lang":"json","value":[["x: 1\n",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16771215,"line":67108864,"refused":0}}
+{"id":"json value 17 account 4","lang":"json","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16771216,"line":67108863,"refused":1}}
+{"id":"json value 17 account 5","lang":"json","value":[["x: 1\n",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"json value 17 account 6","lang":"json","value":[["x: 1\n",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 0 account 0","lang":"css","value":[["let x = 1",1]],"budget":null,"colours":true,"after":null}
+{"id":"css value 0 account 1","lang":"css","value":[["let x = 1",1]],"budget":"fresh","colours":true,"after":{"word":67108853,"line":268435456,"refused":0}}
+{"id":"css value 0 account 2","lang":"css","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777205,"line":67108864,"refused":2}}
+{"id":"css value 0 account 3","lang":"css","value":[["let x = 1",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777204,"line":67108864,"refused":0}}
+{"id":"css value 0 account 4","lang":"css","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777205,"line":67108863,"refused":1}}
+{"id":"css value 0 account 5","lang":"css","value":[["let x = 1",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 0 account 6","lang":"css","value":[["let x = 1",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 1 account 0","lang":"css","value":[],"budget":null,"colours":true,"after":null}
+{"id":"css value 1 account 1","lang":"css","value":[],"budget":"fresh","colours":true,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"css value 1 account 2","lang":"css","value":[],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"css value 1 account 3","lang":"css","value":[],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"css value 1 account 4","lang":"css","value":[],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"css value 1 account 5","lang":"css","value":[],"budget":{"word":8,"line":1,"refused":0},"colours":true,"after":{"word":8,"line":1,"refused":0}}
+{"id":"css value 1 account 6","lang":"css","value":[],"budget":{"word":0,"line":0,"refused":5},"colours":true,"after":{"word":0,"line":0,"refused":5}}
+{"id":"css value 2 account 0","lang":"css","value":[["a",4095]],"budget":null,"colours":true,"after":null}
+{"id":"css value 2 account 1","lang":"css","value":[["a",4095]],"budget":"fresh","colours":true,"after":{"word":50339839,"line":268435456,"refused":0}}
+{"id":"css value 2 account 2","lang":"css","value":[["a",4095]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":8191,"line":67108864,"refused":2}}
+{"id":"css value 2 account 3","lang":"css","value":[["a",4095]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":8190,"line":67108864,"refused":0}}
+{"id":"css value 2 account 4","lang":"css","value":[["a",4095]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":8191,"line":67108863,"refused":1}}
+{"id":"css value 2 account 5","lang":"css","value":[["a",4095]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 2 account 6","lang":"css","value":[["a",4095]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 3 account 0","lang":"css","value":[["a",4096]],"budget":null,"colours":true,"after":null}
+{"id":"css value 3 account 1","lang":"css","value":[["a",4096]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":268435456,"refused":0}}
+{"id":"css value 3 account 2","lang":"css","value":[["a",4096]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":67108864,"refused":2}}
+{"id":"css value 3 account 3","lang":"css","value":[["a",4096]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"css value 3 account 4","lang":"css","value":[["a",4096]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":67108863,"refused":1}}
+{"id":"css value 3 account 5","lang":"css","value":[["a",4096]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 3 account 6","lang":"css","value":[["a",4096]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 4 account 0","lang":"css","value":[["a",4097]],"budget":null,"colours":false,"after":null}
+{"id":"css value 4 account 1","lang":"css","value":[["a",4097]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"css value 4 account 2","lang":"css","value":[["a",4097]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"css value 4 account 3","lang":"css","value":[["a",4097]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"css value 4 account 4","lang":"css","value":[["a",4097]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"css value 4 account 5","lang":"css","value":[["a",4097]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"css value 4 account 6","lang":"css","value":[["a",4097]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"css value 5 account 0","lang":"css","value":[["_$9",1365],["Z",1]],"budget":null,"colours":true,"after":null}
+{"id":"css value 5 account 1","lang":"css","value":[["_$9",1365],["Z",1]],"budget":"fresh","colours":true,"after":{"word":50331648,"line":268435456,"refused":0}}
+{"id":"css value 5 account 2","lang":"css","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":0,"line":67108864,"refused":2}}
+{"id":"css value 5 account 3","lang":"css","value":[["_$9",1365],["Z",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":1}}
+{"id":"css value 5 account 4","lang":"css","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":0,"line":67108863,"refused":1}}
+{"id":"css value 5 account 5","lang":"css","value":[["_$9",1365],["Z",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 5 account 6","lang":"css","value":[["_$9",1365],["Z",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 6 account 0","lang":"css","value":[["_$9",1366]],"budget":null,"colours":false,"after":null}
+{"id":"css value 6 account 1","lang":"css","value":[["_$9",1366]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"css value 6 account 2","lang":"css","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"css value 6 account 3","lang":"css","value":[["_$9",1366]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"css value 6 account 4","lang":"css","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"css value 6 account 5","lang":"css","value":[["_$9",1366]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"css value 6 account 6","lang":"css","value":[["_$9",1366]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"css value 7 account 0","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":null,"colours":true,"after":null}
+{"id":"css value 7 account 1","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":"fresh","colours":true,"after":{"word":50335232,"line":268435456,"refused":0}}
+{"id":"css value 7 account 2","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":3584,"line":67108864,"refused":2}}
+{"id":"css value 7 account 3","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":3583,"line":67108864,"refused":0}}
+{"id":"css value 7 account 4","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":3584,"line":67108863,"refused":1}}
+{"id":"css value 7 account 5","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 7 account 6","lang":"css","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 8 account 0","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":null,"colours":false,"after":null}
+{"id":"css value 8 account 1","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"css value 8 account 2","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"css value 8 account 3","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"css value 8 account 4","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"css value 8 account 5","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"css value 8 account 6","lang":"css","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"css value 9 account 0","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"css value 9 account 1","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"css value 9 account 2","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"css value 9 account 3","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"css value 9 account 4","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"css value 9 account 5","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"css value 9 account 6","lang":"css","value":[["a",4096],["é",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"css value 10 account 0","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":null,"colours":false,"after":null}
+{"id":"css value 10 account 1","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"css value 10 account 2","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"css value 10 account 3","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"css value 10 account 4","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"css value 10 account 5","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"css value 10 account 6","lang":"css","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"css value 11 account 0","lang":"css","value":[["ab ",2730],["ab",1]],"budget":null,"colours":true,"after":null}
+{"id":"css value 11 account 1","lang":"css","value":[["ab ",2730],["ab",1]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":268435456,"refused":0}}
+{"id":"css value 11 account 2","lang":"css","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":67108864,"refused":2}}
+{"id":"css value 11 account 3","lang":"css","value":[["ab ",2730],["ab",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":67108864,"refused":0}}
+{"id":"css value 11 account 4","lang":"css","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766292,"line":67108863,"refused":1}}
+{"id":"css value 11 account 5","lang":"css","value":[["ab ",2730],["ab",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 11 account 6","lang":"css","value":[["ab ",2730],["ab",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 12 account 0","lang":"css","value":[["ab ",2731]],"budget":null,"colours":true,"after":null}
+{"id":"css value 12 account 1","lang":"css","value":[["ab ",2731]],"budget":"fresh","colours":true,"after":{"word":67097940,"line":268435456,"refused":0}}
+{"id":"css value 12 account 2","lang":"css","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766292,"line":67108864,"refused":2}}
+{"id":"css value 12 account 3","lang":"css","value":[["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766291,"line":67108864,"refused":0}}
+{"id":"css value 12 account 4","lang":"css","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766292,"line":67108863,"refused":1}}
+{"id":"css value 12 account 5","lang":"css","value":[["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 12 account 6","lang":"css","value":[["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 13 account 0","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":null,"colours":true,"after":null}
+{"id":"css value 13 account 1","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":"fresh","colours":true,"after":{"word":67087016,"line":268435456,"refused":0}}
+{"id":"css value 13 account 2","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16755368,"line":67108864,"refused":2}}
+{"id":"css value 13 account 3","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16755367,"line":67108864,"refused":0}}
+{"id":"css value 13 account 4","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16755368,"line":67108863,"refused":1}}
+{"id":"css value 13 account 5","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 13 account 6","lang":"css","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 14 account 0","lang":"css","value":[["ab ",2730],["😀",1]],"budget":null,"colours":true,"after":null}
+{"id":"css value 14 account 1","lang":"css","value":[["ab ",2730],["😀",1]],"budget":"fresh","colours":true,"after":{"word":67097944,"line":268435456,"refused":0}}
+{"id":"css value 14 account 2","lang":"css","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766296,"line":67108864,"refused":2}}
+{"id":"css value 14 account 3","lang":"css","value":[["ab ",2730],["😀",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766295,"line":67108864,"refused":0}}
+{"id":"css value 14 account 4","lang":"css","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766296,"line":67108863,"refused":1}}
+{"id":"css value 14 account 5","lang":"css","value":[["ab ",2730],["😀",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 14 account 6","lang":"css","value":[["ab ",2730],["😀",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 15 account 0","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":null,"colours":true,"after":null}
+{"id":"css value 15 account 1","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":"fresh","colours":true,"after":{"word":67097943,"line":268435456,"refused":0}}
+{"id":"css value 15 account 2","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766295,"line":67108864,"refused":2}}
+{"id":"css value 15 account 3","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766294,"line":67108864,"refused":0}}
+{"id":"css value 15 account 4","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766295,"line":67108863,"refused":1}}
+{"id":"css value 15 account 5","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 15 account 6","lang":"css","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 16 account 0","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":null,"colours":true,"after":null}
+{"id":"css value 16 account 1","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":"fresh","colours":true,"after":{"word":67097943,"line":268435456,"refused":0}}
+{"id":"css value 16 account 2","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16766295,"line":67108864,"refused":2}}
+{"id":"css value 16 account 3","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16766294,"line":67108864,"refused":0}}
+{"id":"css value 16 account 4","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16766295,"line":67108863,"refused":1}}
+{"id":"css value 16 account 5","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 16 account 6","lang":"css","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"css value 17 account 0","lang":"css","value":[["x: 1\n",3000]],"budget":null,"colours":true,"after":null}
+{"id":"css value 17 account 1","lang":"css","value":[["x: 1\n",3000]],"budget":"fresh","colours":true,"after":{"word":67102864,"line":268435456,"refused":0}}
+{"id":"css value 17 account 2","lang":"css","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":true,"after":{"word":16771216,"line":67108864,"refused":2}}
+{"id":"css value 17 account 3","lang":"css","value":[["x: 1\n",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":true,"after":{"word":16771215,"line":67108864,"refused":0}}
+{"id":"css value 17 account 4","lang":"css","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":true,"after":{"word":16771216,"line":67108863,"refused":1}}
+{"id":"css value 17 account 5","lang":"css","value":[["x: 1\n",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":1}}
+{"id":"css value 17 account 6","lang":"css","value":[["x: 1\n",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":6}}
+{"id":"nope value 0 account 0","lang":"nope","value":[["let x = 1",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 0 account 1","lang":"nope","value":[["let x = 1",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 0 account 2","lang":"nope","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 0 account 3","lang":"nope","value":[["let x = 1",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 0 account 4","lang":"nope","value":[["let x = 1",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 0 account 5","lang":"nope","value":[["let x = 1",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 0 account 6","lang":"nope","value":[["let x = 1",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 1 account 0","lang":"nope","value":[],"budget":null,"colours":false,"after":null}
+{"id":"nope value 1 account 1","lang":"nope","value":[],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 1 account 2","lang":"nope","value":[],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 1 account 3","lang":"nope","value":[],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 1 account 4","lang":"nope","value":[],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 1 account 5","lang":"nope","value":[],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 1 account 6","lang":"nope","value":[],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 2 account 0","lang":"nope","value":[["a",4095]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 2 account 1","lang":"nope","value":[["a",4095]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 2 account 2","lang":"nope","value":[["a",4095]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 2 account 3","lang":"nope","value":[["a",4095]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 2 account 4","lang":"nope","value":[["a",4095]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 2 account 5","lang":"nope","value":[["a",4095]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 2 account 6","lang":"nope","value":[["a",4095]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 3 account 0","lang":"nope","value":[["a",4096]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 3 account 1","lang":"nope","value":[["a",4096]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 3 account 2","lang":"nope","value":[["a",4096]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 3 account 3","lang":"nope","value":[["a",4096]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 3 account 4","lang":"nope","value":[["a",4096]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 3 account 5","lang":"nope","value":[["a",4096]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 3 account 6","lang":"nope","value":[["a",4096]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 4 account 0","lang":"nope","value":[["a",4097]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 4 account 1","lang":"nope","value":[["a",4097]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 4 account 2","lang":"nope","value":[["a",4097]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 4 account 3","lang":"nope","value":[["a",4097]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 4 account 4","lang":"nope","value":[["a",4097]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 4 account 5","lang":"nope","value":[["a",4097]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 4 account 6","lang":"nope","value":[["a",4097]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 5 account 0","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 5 account 1","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 5 account 2","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 5 account 3","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 5 account 4","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 5 account 5","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 5 account 6","lang":"nope","value":[["_$9",1365],["Z",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 6 account 0","lang":"nope","value":[["_$9",1366]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 6 account 1","lang":"nope","value":[["_$9",1366]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 6 account 2","lang":"nope","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 6 account 3","lang":"nope","value":[["_$9",1366]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 6 account 4","lang":"nope","value":[["_$9",1366]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 6 account 5","lang":"nope","value":[["_$9",1366]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 6 account 6","lang":"nope","value":[["_$9",1366]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 7 account 0","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 7 account 1","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 7 account 2","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 7 account 3","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 7 account 4","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 7 account 5","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 7 account 6","lang":"nope","value":[["a",2896],[" ",1],["a",2896]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 8 account 0","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 8 account 1","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 8 account 2","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 8 account 3","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 8 account 4","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 8 account 5","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 8 account 6","lang":"nope","value":[["a",2897],[" ",1],["a",2897]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 9 account 0","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 9 account 1","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 9 account 2","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 9 account 3","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 9 account 4","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 9 account 5","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 9 account 6","lang":"nope","value":[["a",4096],["é",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 10 account 0","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 10 account 1","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 10 account 2","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 10 account 3","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 10 account 4","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 10 account 5","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 10 account 6","lang":"nope","value":[["a",3000],["-",1],["a",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 11 account 0","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 11 account 1","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 11 account 2","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 11 account 3","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 11 account 4","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 11 account 5","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 11 account 6","lang":"nope","value":[["ab ",2730],["ab",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 12 account 0","lang":"nope","value":[["ab ",2731]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 12 account 1","lang":"nope","value":[["ab ",2731]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 12 account 2","lang":"nope","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 12 account 3","lang":"nope","value":[["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 12 account 4","lang":"nope","value":[["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 12 account 5","lang":"nope","value":[["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 12 account 6","lang":"nope","value":[["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 13 account 0","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 13 account 1","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 13 account 2","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 13 account 3","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 13 account 4","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 13 account 5","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 13 account 6","lang":"nope","value":[["ab ",2730],["ab",1],["\n",1],["ab ",2731]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 14 account 0","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 14 account 1","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 14 account 2","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 14 account 3","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 14 account 4","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 14 account 5","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 14 account 6","lang":"nope","value":[["ab ",2730],["😀",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 15 account 0","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 15 account 1","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 15 account 2","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 15 account 3","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 15 account 4","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 15 account 5","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 15 account 6","lang":"nope","value":[["ab ",2730],["😀",1],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 16 account 0","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 16 account 1","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 16 account 2","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 16 account 3","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 16 account 4","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 16 account 5","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 16 account 6","lang":"nope","value":[["ab ",2730],["\r",2],["a",1]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}
+{"id":"nope value 17 account 0","lang":"nope","value":[["x: 1\n",3000]],"budget":null,"colours":false,"after":null}
+{"id":"nope value 17 account 1","lang":"nope","value":[["x: 1\n",3000]],"budget":"fresh","colours":false,"after":{"word":67108864,"line":268435456,"refused":0}}
+{"id":"nope value 17 account 2","lang":"nope","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108864,"refused":2},"colours":false,"after":{"word":16777216,"line":67108864,"refused":2}}
+{"id":"nope value 17 account 3","lang":"nope","value":[["x: 1\n",3000]],"budget":{"word":16777215,"line":67108864,"refused":0},"colours":false,"after":{"word":16777215,"line":67108864,"refused":0}}
+{"id":"nope value 17 account 4","lang":"nope","value":[["x: 1\n",3000]],"budget":{"word":16777216,"line":67108863,"refused":1},"colours":false,"after":{"word":16777216,"line":67108863,"refused":1}}
+{"id":"nope value 17 account 5","lang":"nope","value":[["x: 1\n",3000]],"budget":{"word":8,"line":1,"refused":0},"colours":false,"after":{"word":8,"line":1,"refused":0}}
+{"id":"nope value 17 account 6","lang":"nope","value":[["x: 1\n",3000]],"budget":{"word":0,"line":0,"refused":5},"colours":false,"after":{"word":0,"line":0,"refused":5}}

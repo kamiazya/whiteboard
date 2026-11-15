@@ -26,6 +26,15 @@ pub(super) fn declined(class: &str) -> String {
     outcome("declined", vec![text(class)])
 }
 
+/// The fences, as `[lang, value]`, whose tokens the caller must send.
+pub(super) fn needs(code: &[(String, String)]) -> String {
+    let fence = |(lang, value): &(String, String)| Tree::List(vec![text(lang), text(value)]);
+    outcome(
+        "needs",
+        vec![Tree::Object(vec![("code", Tree::List(code.iter().map(fence).collect()))])],
+    )
+}
+
 const fn side_name(side: Side) -> &'static str {
     match side {
         Side::Top => "top",

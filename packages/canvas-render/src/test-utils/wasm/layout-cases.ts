@@ -22,7 +22,8 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * overrides, pinned sides, an embed path, a tag library, file nodes drawing
  * canvases three deep, a body embedding a canvas) under the clean style, the
  * routing corpus, bodies aimed at the typesetter, bodies dense in shortcodes,
- * and a layout only the TypeScript can draw exactly; every reference crosses as a wire.
+ * and fences the default highlighter colours or leaves plain; every reference
+ * crosses as a wire.
  */
 
 /**
@@ -35,9 +36,9 @@ export type LayoutTopic =
   | 'composer'
   | 'bodies'
   | 'shortcode'
-  | 'declined'
   | 'expansion'
   | 'fragment'
+  | 'highlight'
   | 'routing'
 
 export interface LayoutCase {
@@ -295,6 +296,90 @@ function composerCases(): LayoutCase[] {
   return cases
 }
 
+const fence = (lang: string, value: string) => `\`\`\`${lang}\n${value}\n\`\`\``
+
+/**
+ * Fences in a registered language, through an alias of this package's and one
+ * of a grammar's own and in another case, a fence repeated, a fence left plain
+ * for its language, for none, and for its price.
+ */
+const FENCES = [
+  fence('ts', 'const x: number = 1 // one'),
+  fence('JS', 'let s = "two"'),
+  fence('yml', 'key: value\nlist:\n  - 3'),
+  fence('sh', 'echo $HOME'),
+  fence('jsonc', '{"a": [1, true, null]}'),
+  fence('rust', 'fn plain() {}'),
+  fence('', 'no language'),
+  fence('ts', 'const x: number = 1 // one'),
+  fence('html', '<b class="x">tag</b>'),
+  fence('python', 'a'.repeat(4097)),
+]
+
+/** A row of text nodes, one per body. */
+function bodiesOf(bodies: readonly string[], height = 120): SpatialCanvas {
+  return {
+    nodes: bodies.map((text, i) =>
+      textNode({
+        id: `h${i}`,
+        x: (i % 4) * 260,
+        y: Math.floor(i / 4) * 260,
+        width: 240,
+        height,
+        text,
+      }),
+    ),
+    edges: [],
+  }
+}
+
+const NOTE_WIRE: ReferenceWire = {
+  entries: [
+    ['note', { documentId: 'D-NOTE', name: 'Note', body: fence('py', 'def f(): return 2') }],
+  ],
+  aliases: [],
+  titles: [],
+  extras: [],
+}
+
+/**
+ * Fences the core asks the host to tokenise: one board of each kind; five
+ * fences each at the per-fence price, so the layout's account colours four
+ * and leaves the fifth plain; and a fence inside an embedded document, which
+ * spends from the same account.
+ */
+function highlightCases(light: SpatialLayoutOptions): LayoutCase[] {
+  const priced = ['b', 'c', 'd', 'e', 'f'].map((letter) => fence('js', letter.repeat(4096)))
+  const embedded = bodiesOf(['![[note]]', fence('ts', 'let y = 2')], 200)
+  embedded.nodes.push({
+    id: 'file',
+    x: 0,
+    y: 300,
+    width: 240,
+    height: 160,
+    resource: { mimeType: 'application/octet-stream', location: 'note' },
+  })
+  return [
+    { topic: 'highlight', name: 'fences', canvas: bodiesOf(FENCES), options: light },
+    {
+      topic: 'highlight',
+      name: 'fences past the layout account',
+      canvas: bodiesOf(priced),
+      options: light,
+    },
+    {
+      topic: 'highlight',
+      name: 'a fence in an embedded document',
+      canvas: embedded,
+      options: {
+        ...light,
+        references: referenceSeamsFromWire(NOTE_WIRE),
+        expandFileNode: () => true,
+      },
+    },
+  ]
+}
+
 /**
  * The nesting board under policies that open some file nodes and not others,
  * at the root and down the nested canvases: each one only, and all but each.
@@ -341,8 +426,6 @@ function shortcodeCases(): LayoutCase[] {
 export function layoutCases(synthetic: number): LayoutCase[] {
   const cases = [...composerCases(), ...expansionCases()]
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
-  // What only the TypeScript can draw exactly: a fence its highlighter colours.
-  const fence = '```js\nlet x = 1\n```'
   cases.push(
     {
       topic: 'bodies',
@@ -356,23 +439,15 @@ export function layoutCases(synthetic: number): LayoutCase[] {
       canvas: bodiesBoard(),
       options: light,
     },
-    ...shortcodeCases(),
-    {
-      topic: 'fragment',
-      name: 'fragments',
-      canvas: fragmentBoard(),
-      options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
-    },
-    {
-      topic: 'declined',
-      name: `declined: ${fence}`,
-      canvas: {
-        nodes: [textNode({ id: 'd', x: 0, y: 0, width: 200, height: 100, text: fence })],
-        edges: [],
-      },
-      options: light,
-    },
   )
+  cases.push(...shortcodeCases())
+  cases.push({
+    topic: 'fragment',
+    name: 'fragments',
+    canvas: fragmentBoard(),
+    options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
+  })
+  cases.push(...highlightCases(light))
   for (const board of [...ROUTING_CORPUS, ...syntheticLayouts(synthetic)]) {
     for (const routing of ['straight', 'orthogonal'] as const) {
       const canvas = {

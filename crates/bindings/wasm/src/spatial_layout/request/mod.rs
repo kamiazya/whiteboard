@@ -3,11 +3,12 @@
 //! options as data. Read strictly, as the canvas is: a key the request does
 //! not name, a field of another kind or a missing required one is no request.
 
+mod code;
 mod measure;
 mod options;
 mod references;
 
-use whiteboard_canvas_render::references::{Expansion, ReferenceWire};
+use whiteboard_canvas_render::references::{Expansion, FenceTokens, ReferenceWire};
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorOverride;
 use whiteboard_model::Value;
@@ -15,6 +16,7 @@ use whiteboard_model::spatial::SpatialCanvas;
 use whiteboard_plugin_visual::visual::TagLibrary;
 
 use crate::json_canvas_wire::{Fields, canvas_of, items_of, string_of};
+use code::code_tokens_of;
 pub(crate) use measure::MeasureSpec;
 use measure::measure_of;
 use options::{dark_of, expansion_of, geometry_of, override_of, tag_key_of};
@@ -34,6 +36,7 @@ pub(crate) struct Request {
     pub(crate) embed_path: Vec<String>,
     pub(crate) references: ReferenceWire,
     pub(crate) expand: Expansion,
+    pub(crate) code_tokens: Vec<FenceTokens>,
 }
 
 fn flag_of(value: &Value) -> Option<bool> {
@@ -91,6 +94,7 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         embed_path: f.field("embedPath", strings_of)?.unwrap_or_default(),
         references: f.field("references", references_of)?.unwrap_or_default(),
         expand: f.field("expand", expansion_of)??,
+        code_tokens: f.field("codeTokens", code_tokens_of)?.unwrap_or_default(),
     };
     f.all_named().then_some(request)
 }

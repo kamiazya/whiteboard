@@ -1,6 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { CodeTokenLines } from './highlight/code-token.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './layout/edges/edge-sides.js'
 import type { MeasureSpec } from './measure.js'
 import type { LoadedReference } from './references/loaded-reference.js'
@@ -53,8 +54,8 @@ export type CoreDegradation =
 /**
  * The core's answer: the layout, or the class of what it declined to answer
  * because it could not answer it exactly as the TypeScript would (a body past
- * the parser's bounds, a coloured fence, a fragment, a request
- * past its caps), which the TypeScript then answers.
+ * the parser's bounds, a request past its caps), which the TypeScript then
+ * answers.
  */
 type CanvasLayoutAnswer =
   | {
@@ -69,7 +70,14 @@ type CanvasLayoutAnswer =
  * `Core` answers it; declared here, structurally, as `RoutingCore` is.
  */
 export interface CanvasLayoutCore {
-  layoutSpatialCanvas(request: CanvasLayoutRequest): CanvasLayoutAnswer
+  /**
+   * `highlight` tokenises exactly the fences the core finds the default
+   * highlighter would colour: the core holds the gate, never the grammars.
+   */
+  layoutSpatialCanvas(
+    request: CanvasLayoutRequest,
+    highlight: (lang: string, value: string) => CodeTokenLines | undefined,
+  ): CanvasLayoutAnswer
 }
 
 /** The function seams no request can carry, by their option's name. */
