@@ -124,6 +124,7 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
   } else {
     const budget = options.nestedLayoutBudget
     const before = { remaining: budget.remaining, refused: budget.refused }
+    const readsBefore = options.fragmentTableReads?.count
     try {
       const laid = typesetMdastBlocks(
         resolveReferences(options.parseBody(text), options.resolveAlias),
@@ -134,10 +135,12 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
       // whose embed was refused holds a placeholder only because THIS render
       // ran out; one whose embed was drawn spent from the account, and a hit
       // would skip that charge, handing later embeds budget they do not have.
+      // Nor is one that read a fragment table, which its key does not carry.
       if (
         cacheKey !== undefined &&
         budget.remaining === before.remaining &&
-        budget.refused === before.refused
+        budget.refused === before.refused &&
+        options.fragmentTableReads?.count === readsBefore
       ) {
         options.contentCache?.set(cacheKey, body)
       }

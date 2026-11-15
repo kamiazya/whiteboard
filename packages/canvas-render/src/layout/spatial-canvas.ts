@@ -356,6 +356,15 @@ export function naturalNodeContentSize(
   node: SpatialNode,
   options: SpatialLayoutOptions,
 ): { readonly w: number; readonly h: number } {
+  // A table of rendered fragments answers here as in a layout, or a node
+  // would be sized by the source its layout no longer draws.
+  return withFragmentTable(options, (tabled) => naturalSize(node, tabled))
+}
+
+function naturalSize(
+  node: SpatialNode,
+  options: SpatialLayoutOptions,
+): { readonly w: number; readonly h: number } {
   const single: SpatialCanvas = { nodes: [node], edges: [] }
   // Through the same theme resolution a layout applies: a theme's font
   // changes what fits, and a caller sizing a node under a theme passes its

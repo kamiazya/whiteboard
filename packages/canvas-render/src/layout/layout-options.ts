@@ -366,6 +366,12 @@ export interface SpatialContentCache {
 /** Internal: options with geometry resolved exactly once per layout call. */
 export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   /**
+   * How often the seams have read `fragments` in this layout
+   * (`withFragmentTable`). The content cache's key cannot carry the table, so
+   * a body that read it, drawing a row or asking for one, is not kept.
+   */
+  readonly fragmentTableReads?: { readonly count: number }
+  /**
    * The frames that hold nothing, derived from the canvas being laid out. An
    * empty frame is its own outline and nothing else, so it is tinted to stay
    * findable; one with members stays unfilled, since a fill emitted ahead of

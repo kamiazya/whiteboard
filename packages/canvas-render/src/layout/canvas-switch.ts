@@ -215,18 +215,19 @@ export function firstDifference(a: unknown, b: unknown, at = ''): string | undef
 
 /**
  * What a reader compares: the scene, the anchors by edge id, the events
- * without a thrown value, and the fragment sources asked for. Not the asks
- * under a content cache: a body it answers asks for nothing, and the core
- * keeps no cache, so the two would part where the picture does not.
+ * without a thrown value, and the fragment sources asked for.
  */
 function comparable(
   laid: LaidOutCanvas,
   events: readonly CoreDegradation[],
   asks: readonly FragmentAsk[] | undefined,
-  options: SpatialLayoutOptions,
 ) {
-  const fragmentsAsked = options.contentCache === undefined ? (asks ?? []) : undefined
-  return { scene: laid.scene, anchors: Object.fromEntries(laid.anchors), events, fragmentsAsked }
+  return {
+    scene: laid.scene,
+    anchors: Object.fromEntries(laid.anchors),
+    events,
+    fragmentsAsked: asks ?? [],
+  }
 }
 
 function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
@@ -308,8 +309,8 @@ function compared(
       },
     }),
   })
-  const tsValue = comparable(laid, events, asks, options)
-  const rustValue = comparable(answer, answer.degradations, answer.fragmentsAsked, options)
+  const tsValue = comparable(laid, events, asks)
+  const rustValue = comparable(answer, answer.degradations, answer.fragmentsAsked)
   const at = firstDifference(tsValue, rustValue)
   if (at !== undefined) {
     options.core?.onMismatch?.({

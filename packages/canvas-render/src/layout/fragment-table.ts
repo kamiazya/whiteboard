@@ -1,4 +1,4 @@
-import type { SpatialLayoutOptions } from './layout-options.js'
+import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { type FragmentAsk, fragmentAskKey } from './nodes/fragment-ask.js'
 import type { RenderedSvgFragment } from './nodes/mdast-layout-options.js'
 
@@ -18,12 +18,14 @@ export function usesFragmentTable(options: SpatialLayoutOptions): boolean {
  */
 export function withFragmentTable<T>(
   options: SpatialLayoutOptions,
-  layout: (options: SpatialLayoutOptions) => T,
+  layout: (options: SpatialLayoutOptions & Pick<ResolvedLayoutOptions, 'fragmentTableReads'>) => T,
 ): T {
   if (!usesFragmentTable(options)) return layout(options)
   const rendered = new Map(options.fragments ?? [])
   const asked = new Map<string, FragmentAsk>()
+  const reads = { count: 0 }
   const answer = (ask: FragmentAsk): RenderedSvgFragment | undefined => {
+    reads.count += 1
     const key = fragmentAskKey(ask)
     const found = rendered.get(key)
     if (found === undefined && !asked.has(key)) asked.set(key, ask)
@@ -34,6 +36,7 @@ export function withFragmentTable<T>(
     renderMath: options.renderMath ?? ((value) => answer({ kind: 'math', value })),
     renderDiagram:
       options.renderDiagram ?? ((lang, value) => answer({ kind: 'diagram', lang, value })),
+    fragmentTableReads: reads,
   })
   if (asked.size > 0) options.onFragmentsAsked?.([...asked.values()])
   return laid
