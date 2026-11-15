@@ -94,17 +94,23 @@ function priorProposals(canvas: SpatialCanvas): Proposal[] {
 export function proposalCases(): ProposalCase[] {
   const measure = createFakeMeasure()
   const boards = proposalBoards()
-  const styles: [string, Partial<SpatialLayoutOptions>][] = [
-    ['light', { appearance: createSpatialTheme({ mode: 'light' }) }],
-    ['dark', { appearance: createSpatialTheme({ mode: 'dark' }) }],
-    ['dark sketch', { appearance: createSpatialTheme({ mode: 'dark' }), style: 'visual.sketch' }],
-    ['document', { appearance: createSpatialTheme({ mode: 'light' }), style: 'document' }],
-  ]
+  const styles = [
+    ['light', 'light', undefined],
+    ['dark', 'dark', undefined],
+    ['dark sketch', 'dark', 'visual.sketch'],
+    ['document', 'light', 'document'],
+  ] as const
   const swept = boards.flatMap((board) =>
-    styles.map(([label, style]) => ({
+    styles.map(([label, mode, style]) => ({
       name: `${board.name} ${label}`,
       canvas: board.canvas,
-      options: { measure, ...style, proposals: board.proposals, commentLayer: false },
+      options: {
+        measure,
+        appearance: createSpatialTheme({ mode }),
+        ...(style === undefined ? {} : { style }),
+        proposals: board.proposals,
+        commentLayer: false,
+      },
     })),
   )
   const arms = boards[0]
