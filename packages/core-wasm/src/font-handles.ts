@@ -82,7 +82,11 @@ export class FontHandles {
   }
 
   #register({ faces }: LayoutFaces): Registered {
-    const bytes = new Uint8Array(faces.reduce((n, face) => n + face.bytes.byteLength, 0))
+    // Faces may share one array, so their summed length is checked before the
+    // copy is sized: it could otherwise be more than can be allocated.
+    const length = faces.reduce((n, face) => n + face.bytes.byteLength, 0)
+    if (length > REGISTER_LAYOUT_FONTS_CAPS.maxBytes) return { declined: 'too-large' }
+    const bytes = new Uint8Array(length)
     let at = 0
     const placed = faces.map(({ bytes: face, ...rest }) => {
       bytes.set(face, at)

@@ -167,6 +167,16 @@ describe('the faces a font-table measurer reads', () => {
     expect(registered).toEqual([])
   })
 
+  it('decline faces whose lengths add up past the cap before copying them', () => {
+    const { glue, registered } = glueOf()
+    const shared = new Uint8Array(REGISTER_LAYOUT_FONTS_CAPS.maxBytes / 2)
+    const face = { family: 'A', bold: false, italic: false, bytes: shared }
+    // 128 GiB summed: a copy sized before the cap is checked cannot be allocated at all.
+    const faces = { kind: 'fonts', faces: Array.from({ length: 4096 }, () => face) } as const
+    expect(new FontHandles(glue, errors).handleOf(faces)).toEqual({ declined: 'too-large' })
+    expect(registered).toEqual([])
+  })
+
   it('are released once the measurer naming them is collected, and not when it was lost', () => {
     const { glue, released } = glueOf(OK, LOST, OK)
     const finalizer = finalizerOf()
