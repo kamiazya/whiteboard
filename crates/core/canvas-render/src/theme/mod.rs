@@ -4,10 +4,8 @@
 //! a registered theme asset onto all of it. Held to the recorded `theme.jsonl`
 //! (`tests/theme_oracle.rs`).
 //!
-//! Not ported: the layout's reads of a canvas's `visual.theme/v0` facet. They go
-//! through the plugin's resolvers and the composer, neither of which is in Rust
-//! yet; `markdown_theme` and `create_themed_appearance` take the tokens a caller
-//! has already resolved, which is also all the TypeScript functions take.
+//! `tokens` reads a plugin's theme assets into the table a layout resolves a
+//! theme id against.
 //!
 //! One difference from the TypeScript, on purpose: nothing here is a global.
 //! `createSpatialTheme`'s frozen per-mode singletons and `createThemedAppearance`'s
@@ -25,3 +23,4 @@ pub mod markdown;
 pub mod mode;
 pub mod palette;
 pub mod spatial_theme;
+pub mod tokens;

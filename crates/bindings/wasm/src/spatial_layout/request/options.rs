@@ -1,5 +1,6 @@
-//! The layout options that are data already: the theme mode, the geometry,
-//! the pinned edge sides, the tag library and the settled expansion policy.
+//! The layout options that are data already: the theme mode, the style, the
+//! geometry, the pinned edge sides, the tag library and the settled expansion
+//! policy.
 
 use whiteboard_canvas_render::references::Expansion;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
@@ -19,6 +20,25 @@ pub(super) fn dark_of(value: &Value) -> Option<bool> {
         "dark" => Some(true),
         _ => None,
     }
+}
+
+/// Which look a render draws (`SpatialRenderStyle`), owned for the request.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub(crate) enum Style {
+    #[default]
+    Clean,
+    Document,
+    Theme(String),
+}
+
+/// `style`: `clean`, `document`, or any other text as the theme id it names.
+pub(super) fn style_of(value: &Value) -> Option<Style> {
+    let text = string_of(value)?;
+    Some(match text.as_str() {
+        "clean" => Style::Clean,
+        "document" => Style::Document,
+        _ => Style::Theme(text),
+    })
 }
 
 pub(super) fn geometry_of(value: &Value) -> Option<SpatialGeometry> {

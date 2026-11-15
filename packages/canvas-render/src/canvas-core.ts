@@ -24,6 +24,10 @@ export interface CanvasLayoutRequest {
   readonly canvas: SpatialCanvas
   readonly measure: MeasureSpec
   readonly mode: SpatialThemeMode
+  /** `'document'` or a theme id; absent, the clean style. */
+  readonly style?: string
+  /** The families a bundled theme names that the surface holds a face for. */
+  readonly fontFamilies?: readonly string[]
   readonly geometry?: SpatialGeometry
   readonly lockedNodeIds?: readonly string[]
   readonly suppressedBodyNodeIds?: readonly string[]
@@ -95,7 +99,7 @@ export type CanvasLayoutSeam =
 /**
  * Why a layout's options could not be handed to the core (the request gate,
  * `canvasLayoutRequest`): a measurer or an appearance nobody named, a
- * function seam, a highlighter other than the default, a drawn style, an
+ * function seam, a highlighter other than the default, an
  * annotation or proposal layer, a reference bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
  * some file nodes open and others closed.
@@ -105,7 +109,6 @@ export type CanvasLayoutSkip =
   | 'appearance'
   | `seam:${CanvasLayoutSeam}`
   | 'highlighter'
-  | 'style'
   | 'comments'
   | 'proposals'
   | 'references'

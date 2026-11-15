@@ -50,7 +50,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '26'
+export const EXPECTED_ABI = '27'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus

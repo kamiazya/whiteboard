@@ -39,10 +39,10 @@ pub mod spatial_layout;
 /// reports a different value: a test lane handed the shipped artifact, or a
 /// shim handed the oracle one, is refused at init.
 #[cfg(not(feature = "oracle-surface"))]
-pub const ABI_VERSION: &str = "26";
+pub const ABI_VERSION: &str = "27";
 /// See the default build's constant.
 #[cfg(feature = "oracle-surface")]
-pub const ABI_VERSION: &str = "26+oracle-surface";
+pub const ABI_VERSION: &str = "27+oracle-surface";
 
 /// The ABI identifier the shim compares against its own.
 #[wasm_bindgen]

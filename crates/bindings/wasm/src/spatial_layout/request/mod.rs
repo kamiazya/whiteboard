@@ -19,7 +19,8 @@ use crate::json_canvas_wire::{Fields, canvas_of, items_of, string_of};
 use code::code_tokens_of;
 pub(crate) use measure::MeasureSpec;
 use measure::measure_of;
-use options::{dark_of, expansion_of, geometry_of, override_of, tag_key_of};
+pub(crate) use options::Style;
+use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key_of};
 use references::references_of;
 
 /// A layout request.
@@ -28,6 +29,9 @@ pub(crate) struct Request {
     pub(crate) canvas: SpatialCanvas,
     pub(crate) measure: MeasureSpec,
     pub(crate) dark: bool,
+    pub(crate) style: Style,
+    /// The families a theme may name that this surface holds a face for.
+    pub(crate) font_families: Vec<String>,
     pub(crate) geometry: Option<SpatialGeometry>,
     pub(crate) locked: Vec<String>,
     pub(crate) suppressed: Vec<String>,
@@ -86,6 +90,12 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         canvas: f.field("canvas", canvas_of)??,
         measure: f.field("measure", measure_of)??,
         dark: f.field("mode", dark_of)??,
+        style: f.field("style", style_of)?.unwrap_or_default(),
+        font_families: f
+            .field("fontFamilies", strings_of)?
+            .unwrap_or_default()
+            .into_iter()
+            .collect(),
         geometry: f.field("geometry", geometry_of)?,
         locked: f.field("lockedNodeIds", strings_of)?.unwrap_or_default(),
         suppressed: f.field("suppressedBodyNodeIds", strings_of)?.unwrap_or_default(),
