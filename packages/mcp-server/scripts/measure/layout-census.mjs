@@ -18,6 +18,10 @@
  *             style, no comment layer) over the composer recordings' boards,
  *             the drawing corpus, the canvases under docs/assets, and every
  *             Markdown file under docs/ and skills/ as one text node.
+ *   comments  what `wb_scene_render` hands the layout with `comments: true`
+ *             (the daemon profile's options, the document's threads in place
+ *             of `commentLayer: false`) over the compose-comments boards,
+ *             which carry threads on every anchor arm.
  *   export    what the PNG/SVG file export (`/export`, `/export-svg`) hands
  *             the layout, in its light and its dark mode, over the daemon
  *             profile's corpora: the options are the export's own
@@ -39,6 +43,7 @@ import { installSpatialCore, parseSpatial, spatialCoreInstalled } from '@kamiazy
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs'
 import { boards } from '../../../canvas-render/src/test-utils/compose-canvas-oracle/corpus.ts'
+import { boards as commentBoards } from '../../../canvas-render/src/test-utils/compose-comments-oracle/corpus.ts'
 import { DRAWING_CORPUS } from '../../../canvas-render/src/test-utils/drawing-corpus.ts'
 import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-cases.ts'
 import { exportLayoutOptions } from '../../src/server/export/headless-renderer.ts'
@@ -138,6 +143,13 @@ async function daemonCorpora(options) {
   }
 }
 
+/** The boards carrying threads, each laid out as `wb_scene_render` lays one out with `comments: true`. */
+function commentCorpus({ commentLayer: _off, ...daemon }) {
+  return commentBoards()
+    .filter((board) => board.proposals === undefined)
+    .map(({ name, canvas, threads }) => ({ name, canvas, options: { ...daemon, threads } }))
+}
+
 /** The census of every corpus, or undefined when the core did not load. */
 async function measureCensus() {
   const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_MISMATCH: 'throw' })
@@ -166,6 +178,7 @@ async function measureCensus() {
     const corpora = {
       recorded: layoutCases(20),
       ...(await daemonCorpora(daemon)),
+      'comments: comment boards': commentCorpus(daemon),
       ...(await exportCorpora('light')),
       ...(await exportCorpora('dark')),
     }
