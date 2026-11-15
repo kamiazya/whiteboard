@@ -91,7 +91,7 @@ describe('createLayoutCoreHost', () => {
     const log = silent()
     const host = createLayoutCoreHost(settings('differential', 'throw'), async () => routing, log)
     const core = await host.ready()
-    const skipped = { fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'comments' } as const
+    const skipped = { fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'proposals' } as const
     expect(() => core?.onMismatch?.(skipped)).not.toThrow()
     expect(log.warn).not.toHaveBeenCalled()
     expect(log.debug).toHaveBeenCalledWith('the Rust core did not answer this layout', skipped)
