@@ -3,6 +3,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { CanvasLayoutRequest, CoreDegradation } from '../../canvas-core.js'
 import { highlightCode } from '../../highlight/lowlight.js'
 import { canvasLayoutRequest } from '../../layout/canvas-switch.js'
+import type { FragmentAsk } from '../../layout/fragment-ask.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { type LayoutTopic, layoutCases } from './layout-cases.js'
@@ -109,12 +110,21 @@ function layoutRecord(
   const needs = colouredFences(canvas, options)
   const sent = shimRequests(request, needs)
   const events: CoreDegradation[] = []
+  let asked: readonly FragmentAsk[] = []
   const laid = layoutSpatialCanvasWithAnchors(canvas, {
     ...options,
     onDegrade: (event) => events.push(coreEvent(event)),
+    ...(request.fragments !== undefined && {
+      onFragmentsAsked: (asks: readonly FragmentAsk[]) => {
+        asked = asks
+      },
+    }),
   })
+  // The core answers the sources a table lacked only for a request carrying one.
+  const asks = request.fragments === undefined ? [] : [asked]
   const answer =
-    answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]'
+    answerText(['ok', laid.scene, [...laid.anchors], events, ...asks]) ??
+    '["declined","non-finite"]'
   const [first, second] = sent
   if (first === undefined) return []
   if (second === undefined) return [{ id: name, request: first, answer }]

@@ -72,6 +72,17 @@ describe('the whole layout over the artifact', () => {
     })
   })
 
+  it('reads the fragment sources a table did not hold, when the answer carries them', () => {
+    const asks = [
+      { kind: 'math', value: 'x' },
+      { kind: 'diagram', lang: 'mermaid', value: 'g' },
+    ]
+    const { glue } = glueOf(JSON.stringify(['ok', { nodes: [] }, [], [], asks]))
+    expect(layoutSpatialCanvas(glue, errors, fake)).toMatchObject({ fragmentsAsked: asks })
+    const none = layoutSpatialCanvas(glueOf('["ok",{"nodes":[]},[],[]]').glue, errors, fake)
+    expect(none).not.toHaveProperty('fragmentsAsked')
+  })
+
   it('declines what the core declined and a request past the cap', () => {
     expect(layoutSpatialCanvas(glueOf('["declined","highlight"]').glue, errors, fake)).toEqual({
       declined: 'highlight',
@@ -100,6 +111,11 @@ describe('the whole layout over the artifact', () => {
       ['["ok",{"nodes":[]},[[1,{}]],[]]', 'answer'],
       ['["ok",{"nodes":[]},{},[]]', 'answer'],
       ['["ok",{"nodes":[]},[],{}]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],{}]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],[{"kind":"math"}]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],[{"kind":"diagram","value":"v"}]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],[{"kind":"code","value":"v"}]]', 'answer'],
+      ['["ok",{"nodes":[]},[],[],[1]]', 'answer'],
       ['["declined",1]', 'answer'],
       ['{}', 'answer'],
     ] as const

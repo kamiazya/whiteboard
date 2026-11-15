@@ -71,6 +71,7 @@ import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import { routeLayout } from './edges/layout-core.js'
 import { createRoutingBudget } from './edges/routing-budget.js'
 import { weighStroke } from './edges/stroke-weight.js'
+import { withFragmentTable } from './fragment-table.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { labelOf, labelRuns } from './node-box.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
@@ -303,7 +304,9 @@ export function layoutSpatialCanvasWithAnchors(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  return layoutThroughCore(stored, options, (asked) => layoutInTypeScript(stored, asked))
+  return layoutThroughCore(stored, options, (asked) =>
+    withFragmentTable(asked, (tabled) => layoutInTypeScript(stored, tabled)),
+  )
 }
 
 /** The whole layout in this package: what the core switch answers with under `ts`. */

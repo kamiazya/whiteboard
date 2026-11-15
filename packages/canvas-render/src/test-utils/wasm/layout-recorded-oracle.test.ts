@@ -80,6 +80,17 @@ describe('the recorded whole-layout oracle', () => {
     for (const part of ['/pin"', '/bubble"', '/leader"', '/region"', '/passage-0"', '"Resolved"']) {
       expect(comments, part).toContain(part)
     }
+    const tabled = recorded.get('fragments') ?? []
+    expect(
+      tabled.every((r) => r.request.includes('"fragments"')),
+      'a table on every request',
+    ).toBe(true)
+    const drawn = tabled.map((r) => r.answer).join('\n')
+    for (const part of ['<g data-sum/>', '<g data-graph/>', '<g data-euler/>', '<g data-q/>']) {
+      expect(drawn, part).toContain(part)
+    }
+    expect(drawn, 'a source the table lacked').toContain('{"kind":"diagram","lang":"mermaid"')
+    expect(drawn, 'inline math is never asked for').not.toContain('"value":"a+b"')
     expect(
       all.filter((r) => r.answer.includes('"kind":"unknown-node-kind"')).length,
     ).toBeGreaterThan(0)

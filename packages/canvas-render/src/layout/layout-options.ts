@@ -36,6 +36,7 @@ import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
 import type { LayoutCore } from './edges/layout-core.js'
+import type { FragmentAsk, FragmentEntry } from './fragment-ask.js'
 import type { NestedLayoutBudget } from './nodes/embed-budget.js'
 import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
@@ -201,6 +202,21 @@ export interface SpatialLayoutOptions {
    */
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /**
+   * The same two seams as DATA (`layout/fragment-table.ts`): what the caller
+   * rendered ahead, by `fragmentAskKey`, answering every math block and fence
+   * the seams above leave unset. Unlike a function, a table is something the
+   * Rust core can be handed. What it could not answer is drawn as the seams'
+   * fallback and handed to `onFragmentsAsked`, which a caller answers by
+   * rendering those and laying out again.
+   */
+  readonly fragments?: readonly FragmentEntry[]
+  /**
+   * The sources a layout asked for that `fragments` could not answer, once
+   * each in the order asked; called only when there is one. A listener with
+   * no table asks for every source.
+   */
+  readonly onFragmentsAsked?: (asks: readonly FragmentAsk[]) => void
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /**
