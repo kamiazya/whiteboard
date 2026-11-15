@@ -6,6 +6,7 @@ use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{CanvasLine, LineEnd, LineEndPoint, SpatialCanvas, SpatialNode};
 
 use super::{ExtraImage, LoadedReference, ReferenceExtra, ReferenceWire, Refused, WireHost};
+use crate::canvas_fragment::select_canvas_fragment;
 use crate::compose_node::{ComposeHost, Degradation};
 use crate::node_box::{FacetCard, FacetRow, ReferenceImage, ResolvedReference};
 use crate::typeset::{
@@ -183,15 +184,49 @@ fn what_only_the_typescript_can_answer_refuses_the_layout_keeping_the_first_reas
     assert_eq!(code.embedded_canvas("board", Some("f")), None);
     assert_eq!(code.refused(), Some(Refused::Highlight));
 
-    let fragment = WireHost::new(&wire, true);
-    assert_eq!(fragment.embedded_canvas("board", Some("f")), None);
-    assert_eq!(fragment.refused(), Some(Refused::Fragment));
-    let fragment = WireHost::new(&wire, true);
-    assert_eq!(fragment.resolve_embed("board", Some("f")), None);
-    assert_eq!(fragment.refused(), Some(Refused::Fragment));
     let section = WireHost::new(&wire, true);
     assert!(section.resolve_embed("D1", Some("f")).is_some());
     assert_eq!(section.refused(), None);
+}
+
+/// Two frames apart and a line: `^n1` selects one frame and keeps the line.
+fn apart() -> (SpatialCanvas, ReferenceWire) {
+    let mut board = canvas(2, 1);
+    if let Some(n1) = board.nodes.get_mut(1) {
+        n1.x = 100.0;
+    }
+    let entry = LoadedReference { canvas: Some(board.clone()), ..LoadedReference::default() };
+    let wire = ReferenceWire {
+        entries: vec![("board".to_owned(), Some(entry))],
+        ..ReferenceWire::default()
+    };
+    (board, wire)
+}
+
+#[test]
+fn a_canvas_embed_is_narrowed_to_the_part_its_fragment_names() {
+    let (board, wire) = apart();
+    let host = WireHost::new(&wire, true);
+    let part = select_canvas_fragment(&board, "^n1");
+    assert!(part.as_ref().is_some_and(|p| p.nodes.len() == 1), "the fixture selects one node");
+    assert_eq!(host.embedded_canvas("board", Some(" ^n1 ")), part);
+    let summary = CanvasSummary { elements: 2, empty: false };
+    let want = Embedded::Canvas { title: None, canvas: Some(summary) };
+    assert_eq!(host.resolve_embed("board", Some("^n1")), Some(want));
+    assert_eq!(host.embedded_canvas("board", None), Some(board));
+    assert_eq!(host.refused(), None);
+}
+
+#[test]
+fn a_fragment_naming_nothing_is_a_canvas_with_no_part_not_a_refusal() {
+    let wire = wire();
+    let host = WireHost::new(&wire, true);
+    assert_eq!(host.embedded_canvas("board", Some("Nope")), None);
+    let want = Embedded::Canvas { title: None, canvas: None };
+    assert_eq!(host.resolve_embed("board", Some("^missing")), Some(want));
+    assert_eq!(host.embedded_canvas("gone", Some("^n0")), None);
+    assert_eq!(host.resolve_embed("gone", Some("^n0")), None);
+    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -253,6 +288,6 @@ fn degradations_are_kept_in_order() {
 
 #[test]
 fn each_refusal_names_its_class() {
-    let classes = [Refused::Body, Refused::Highlight, Refused::Fragment].map(Refused::class);
-    assert_eq!(classes, ["body", "highlight", "fragment"]);
+    let classes = [Refused::Body, Refused::Highlight].map(Refused::class);
+    assert_eq!(classes, ["body", "highlight"]);
 }

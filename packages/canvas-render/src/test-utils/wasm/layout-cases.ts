@@ -1,5 +1,5 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wire.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
@@ -31,7 +31,7 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * core something new adds a topic and a recording rather than re-recording
  * the others.
  */
-export type LayoutTopic = 'composer' | 'bodies' | 'shortcode' | 'declined' | 'routing'
+export type LayoutTopic = 'composer' | 'bodies' | 'shortcode' | 'declined' | 'fragment' | 'routing'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -148,6 +148,49 @@ const SHORTCODE_WIRE: ReferenceWire = {
   extras: [],
 }
 
+/**
+ * A board a fragment narrows: two groups labelled alike but for case, one
+ * nested in the other, a card outside both, edges inside, across and out of
+ * a group, and a line.
+ */
+function fragmentTarget(): SpatialCanvas {
+  const card = (id: string, x: number, y: number) =>
+    textNode({ id, x, y, width: 80, height: 40, text: `card ${id}` })
+  return {
+    nodes: [
+      groupNode({ id: 'g-plan', x: 0, y: 0, width: 400, height: 300, label: 'plan' }),
+      card('a', 20, 40),
+      groupNode({ id: 'g-inner', x: 160, y: 100, width: 220, height: 180, label: 'Inner' }),
+      card('b', 200, 160),
+      groupNode({ id: 'g-Plan', x: 500, y: 0, width: 300, height: 200, label: 'Plan' }),
+      card('c', 540, 60),
+      card('out', 900, 60),
+    ],
+    edges: [
+      { id: 'ab', from: { node: 'a' }, to: { node: 'b' }, label: 'in' },
+      { id: 'ac', from: { node: 'a' }, to: { node: 'c' } },
+      { id: 'c-out', from: { node: 'c' }, to: { node: 'out' } },
+    ],
+    lines: [
+      {
+        id: 'ink',
+        from: { kind: 'node', node: 'b' },
+        to: { kind: 'point', point: { x: 0, y: 320 } },
+      },
+    ],
+  }
+}
+
+const FRAGMENT_WIRE: ReferenceWire = {
+  entries: [
+    ['board', { documentId: 'D-BOARD', name: 'Board', canvas: fragmentTarget() }],
+    ['note', { documentId: 'D-NOTE', name: 'Note', body: '# Note\n\nbody\n\n## Part\n\npart' }],
+  ],
+  aliases: [],
+  titles: [],
+  extras: [],
+}
+
 function shortcodeBoard(): SpatialCanvas {
   const text = SHORTCODE_BODIES.map((body, i) =>
     textNode({
@@ -171,6 +214,27 @@ function shortcodeBoard(): SpatialCanvas {
         resource: { mimeType: 'application/octet-stream', location: 'launch' },
       },
     ],
+    edges: [],
+  }
+}
+
+/** What a body's `![[board#…]]` can name: a label exactly or by case, a nested group, `^id`, a card, nothing. */
+const FRAGMENTS = ['Plan', 'plan', 'PLAN', 'Inner', '^g-inner', '^a', '^out', 'Nope', '^missing']
+
+/** One text node per fragment, each embedding the board narrowed to it, and the whole board once. */
+function fragmentBoard(): SpatialCanvas {
+  const bodies = [...FRAGMENTS.map((f) => `![[board#${f}]]`), '![[board]]', '![[note#Part]]']
+  return {
+    nodes: bodies.map((text, i) =>
+      textNode({
+        id: `f${i}`,
+        x: (i % 4) * 260,
+        y: Math.floor(i / 4) * 260,
+        width: 240,
+        height: 240,
+        text,
+      }),
+    ),
     edges: [],
   }
 }
@@ -258,6 +322,12 @@ export function layoutCases(synthetic: number): LayoutCase[] {
     },
   )
   cases.push(...shortcodeCases())
+  cases.push({
+    topic: 'fragment',
+    name: 'fragments',
+    canvas: fragmentBoard(),
+    options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
+  })
   // What only the TypeScript can draw exactly: a fence its highlighter colours.
   const fence = '```js\nlet x = 1\n```'
   cases.push({

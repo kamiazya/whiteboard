@@ -9,8 +9,8 @@
 //! its canvas; a file node draws an empty canvas as its card.
 //!
 //! Where an answer would need something the core does not hold (the code
-//! highlighter, a canvas narrowed to a fragment) or a body is past the parser's bounds, the host
-//! answers as if it had none and notes a [`Refused`]: the layout it was asked
+//! highlighter) or a body is past the parser's bounds, the host answers as if
+//! it had none and notes a [`Refused`]: the layout it was asked
 //! for is then refused whole, and the caller's TypeScript draws it (owner
 //! decision q72, option c), so no scene differs from the TypeScript's for a
 //! reason the core cannot see.
@@ -79,8 +79,6 @@ pub enum Refused {
     Body,
     /// A fenced block the highlighter would colour.
     Highlight,
-    /// A canvas embed narrowed to a fragment.
-    Fragment,
 }
 
 impl Refused {
@@ -90,7 +88,6 @@ impl Refused {
         match self {
             Self::Body => "body",
             Self::Highlight => "highlight",
-            Self::Fragment => "fragment",
         }
     }
 }
