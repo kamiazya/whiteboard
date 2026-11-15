@@ -1,4 +1,6 @@
 import {
+  type CanvasLayoutCore,
+  type CoreMismatch,
   describeMeasure,
   type FontDescriptor,
   type LayoutCore,
@@ -11,6 +13,7 @@ import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/mea
 import { describe, expect, it } from 'vitest'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { editorLayoutBase } from './scene-render-core.js'
+import type { WebCore } from './web-core.js'
 
 /**
  * What the Rust core's whole layout would pay to measure through the browser
@@ -190,8 +193,37 @@ describe.runIf(RUN)('the browser measurer as a host import: what it would cost',
   })
 })
 
-/** Medians of `rounds` interleaved TypeScript and core layouts of `board`, and the host calls one core layout made. */
-function timedAgainstCore(board: WebLayoutBoard, core: LayoutCore, rounds = 15) {
+/**
+ * `real` switched to `rust` for the whole layout, counting the layouts the
+ * core itself answered and keeping every report the switch made: a layout it
+ * skipped, declined or refused is drawn by the TypeScript with the same
+ * measurer, so its time would otherwise read as the core's.
+ */
+function countedCore(real: WebCore) {
+  const tally = { answered: 0, reports: [] as CoreMismatch[] }
+  const layout: CanvasLayoutCore = {
+    layoutSpatialCanvas(request, highlight, measure) {
+      const answer = real.layoutSpatialCanvas(request, highlight, measure)
+      if (!('declined' in answer)) tally.answered += 1
+      return answer
+    },
+  }
+  const core: LayoutCore = {
+    routing: real,
+    layout,
+    impl: { routeLayout: 'rust', layoutSpatialCanvas: 'rust' },
+    onMismatch: (report) => tally.reports.push(report),
+  }
+  return { core, tally }
+}
+
+/**
+ * Medians of `rounds` interleaved TypeScript and core layouts of `board`, and
+ * the host calls one core layout made. Every timed core round must be one the
+ * core answered, with nothing reported, or the round timed the TypeScript.
+ */
+function timedAgainstCore(board: WebLayoutBoard, real: WebCore, rounds = 15) {
+  const { core, tally } = countedCore(real)
   const browser = createBrowserMeasureText()
   let asked = 0
   const counted = describeMeasure(
@@ -207,6 +239,7 @@ function timedAgainstCore(board: WebLayoutBoard, core: LayoutCore, rounds = 15) 
   }
   const ts: number[] = []
   const rust: number[] = []
+  const answeredBefore = tally.answered
   for (let i = 0; i < rounds; i += 1) {
     let start = performance.now()
     layOut(board, browser)
@@ -216,7 +249,14 @@ function timedAgainstCore(board: WebLayoutBoard, core: LayoutCore, rounds = 15) 
     layOut(board, counted, core)
     rust.push(performance.now() - start)
   }
-  return { tsMs: median(ts), rustMs: median(rust), asked }
+  expect(tally.reports, board.name).toEqual([])
+  expect(tally.answered - answeredBefore, board.name).toBe(rounds)
+  return {
+    tsMs: median(ts),
+    rustMs: median(rust),
+    asked,
+    answered: tally.answered - answeredBefore,
+  }
 }
 
 describe.runIf(RUN)('the browser measurer as a host import: what it costs, built', () => {
@@ -226,16 +266,12 @@ describe.runIf(RUN)('the browser measurer as a host import: what it costs, built
     // lazy-import: the module names the artifact, which a person without the Rust toolchain has not built
     const { loadWebCore } = await import('./layout-core-source.js')
     const real = await loadWebCore(fetch)
-    const core: LayoutCore = {
-      routing: real,
-      layout: real,
-      impl: { routeLayout: 'rust', layoutSpatialCanvas: 'rust' },
-    }
     await ensureViewerFontLoaded()
     const rows = webLayoutBoards().map((board) => {
-      const { tsMs, rustMs, asked } = timedAgainstCore(board, core)
+      const { tsMs, rustMs, asked, answered } = timedAgainstCore(board, real)
       return {
         board: board.name,
+        'core answers': answered,
         'host calls': asked,
         'ts ms': tsMs.toFixed(2),
         'core ms': rustMs.toFixed(2),
