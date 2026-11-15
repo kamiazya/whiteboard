@@ -20,14 +20,27 @@ import { z } from 'zod'
  * An unknown value is refused rather than defaulted: a typo that fell back
  * to `ts` would compare nothing and read as a pass.
  */
+const coreImplSchema = z.enum(['ts', 'differential', 'rust'])
+
 const coreSettingsSchema = z.object({
-  impl: z.enum(['ts', 'differential', 'rust']),
+  impl: coreImplSchema,
+  /**
+   * The whole layout's own switch (`VITE_WHITEBOARD_CORE_LAYOUT`, the
+   * daemon's `WHITEBOARD_CORE_LAYOUT`): the core lays a canvas out measuring
+   * through the page's own measurer, asked mid-layout. It runs beside the
+   * TypeScript wherever routing runs `differential` and stays TypeScript
+   * elsewhere, a production build included, until the web's default moves
+   * to the core (ADR-0054 step 7, S16b). It needs a loaded core, so under
+   * `impl: 'ts'` it compares nothing whatever it reads.
+   */
+  layout: coreImplSchema,
   mismatch: z.enum(['log', 'throw']),
 })
 export type CoreSettings = z.infer<typeof coreSettingsSchema>
 
 interface CoreEnv {
   readonly VITE_WHITEBOARD_CORE?: string
+  readonly VITE_WHITEBOARD_CORE_LAYOUT?: string
   readonly VITE_WHITEBOARD_CORE_MISMATCH?: string
   readonly DEV?: boolean
   readonly MODE?: string
@@ -35,8 +48,10 @@ interface CoreEnv {
 
 export function coreSettingsFrom(env: CoreEnv): CoreSettings {
   const devDefault = env.MODE === 'test' ? 'ts' : env.DEV === true ? 'differential' : 'rust'
+  const impl = coreImplSchema.parse(env.VITE_WHITEBOARD_CORE || devDefault)
   return coreSettingsSchema.parse({
-    impl: env.VITE_WHITEBOARD_CORE || devDefault,
+    impl,
+    layout: env.VITE_WHITEBOARD_CORE_LAYOUT || (impl === 'differential' ? 'differential' : 'ts'),
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',
   })
 }

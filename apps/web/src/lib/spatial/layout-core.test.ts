@@ -8,7 +8,8 @@ const routing = {} as WebCore
 const settings = (
   impl: CoreSettings['impl'],
   mismatch: CoreSettings['mismatch'] = 'log',
-): CoreSettings => ({ impl, mismatch })
+  layout: CoreSettings['layout'] = 'ts',
+): CoreSettings => ({ impl, layout, mismatch })
 const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const differs: CoreMismatch = {
@@ -42,7 +43,7 @@ describe('createLayoutCoreHost', () => {
     expect(host.current()).toBeUndefined()
     const core = await host.ready()
     expect(core?.routing).toBe(routing)
-    expect(core?.impl).toEqual({ routeLayout: 'differential' })
+    expect(core?.impl).toEqual({ routeLayout: 'differential', layoutSpatialCanvas: 'ts' })
     expect(host.current()).toBe(core)
     await host.ready()
     expect(load).toHaveBeenCalledTimes(1)
@@ -51,6 +52,17 @@ describe('createLayoutCoreHost', () => {
   it('carries the impl it was set to', async () => {
     const host = createLayoutCoreHost(settings('rust'), async () => routing, silent())
     expect((await host.ready())?.impl.routeLayout).toBe('rust')
+  })
+
+  it('hands the whole layout to the same instance, under its own switch', async () => {
+    const host = createLayoutCoreHost(
+      settings('rust', 'log', 'differential'),
+      async () => routing,
+      silent(),
+    )
+    const core = await host.ready()
+    expect(core?.layout).toBe(routing)
+    expect(core?.impl).toEqual({ routeLayout: 'rust', layoutSpatialCanvas: 'differential' })
   })
 
   it('warns and routes in TypeScript when the artifact cannot load', async () => {

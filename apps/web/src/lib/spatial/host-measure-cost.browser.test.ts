@@ -1,5 +1,7 @@
 import {
+  describeMeasure,
   type FontDescriptor,
+  type LayoutCore,
   layoutSpatialCanvasWithAnchors,
   type MeasureText,
   type TextMetrics,
@@ -22,6 +24,10 @@ import { editorLayoutBase } from './scene-render-core.js'
  * both strings from linear memory, find the descriptor by its key, measure,
  * write four doubles back — timed with the measurer stubbed (the crossing
  * alone) and with the real one.
+ *
+ * The second measurement is the import itself, once built: each board laid
+ * out by the real core under `rust`, the browser's measurer asked through
+ * the import, against the TypeScript's layout, interleaved round by round.
  *
  * A measurement, not a guard: it asserts only that it measured something,
  * and runs when `VITE_MEASURE_HOST_COST=1` (a timing loop has no place in
@@ -79,10 +85,10 @@ const median = (values: number[]): number => {
   return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN
 }
 
-function layOut(board: WebLayoutBoard, measure: MeasureText): void {
+function layOut(board: WebLayoutBoard, measure: MeasureText, core?: LayoutCore): void {
   layoutSpatialCanvasWithAnchors(board.canvas, {
     ...editorLayoutBase({ measure }),
-    core: undefined,
+    core,
     threads: board.threads,
     proposals: board.proposals,
   })
@@ -179,6 +185,64 @@ describe.runIf(RUN)('the browser measurer as a host import: what it would cost',
       })
       expect(calls.length).toBeGreaterThan(0)
     }
+    console.table(rows)
+    console.info(JSON.stringify(rows))
+  })
+})
+
+/** Medians of `rounds` interleaved TypeScript and core layouts of `board`, and the host calls one core layout made. */
+function timedAgainstCore(board: WebLayoutBoard, core: LayoutCore, rounds = 15) {
+  const browser = createBrowserMeasureText()
+  let asked = 0
+  const counted = describeMeasure(
+    (text, font) => {
+      asked += 1
+      return browser(text, font)
+    },
+    { kind: 'host' },
+  )
+  for (let i = 0; i < 3; i += 1) {
+    layOut(board, browser)
+    layOut(board, counted, core)
+  }
+  const ts: number[] = []
+  const rust: number[] = []
+  for (let i = 0; i < rounds; i += 1) {
+    let start = performance.now()
+    layOut(board, browser)
+    ts.push(performance.now() - start)
+    asked = 0
+    start = performance.now()
+    layOut(board, counted, core)
+    rust.push(performance.now() - start)
+  }
+  return { tsMs: median(ts), rustMs: median(rust), asked }
+}
+
+describe.runIf(RUN)('the browser measurer as a host import: what it costs, built', () => {
+  it('times each board through the real core against the TypeScript', {
+    timeout: 120_000,
+  }, async () => {
+    // lazy-import: the module names the artifact, which a person without the Rust toolchain has not built
+    const { loadWebCore } = await import('./layout-core-source.js')
+    const real = await loadWebCore(fetch)
+    const core: LayoutCore = {
+      routing: real,
+      layout: real,
+      impl: { routeLayout: 'rust', layoutSpatialCanvas: 'rust' },
+    }
+    await ensureViewerFontLoaded()
+    const rows = webLayoutBoards().map((board) => {
+      const { tsMs, rustMs, asked } = timedAgainstCore(board, core)
+      return {
+        board: board.name,
+        'host calls': asked,
+        'ts ms': tsMs.toFixed(2),
+        'core ms': rustMs.toFixed(2),
+        'core / ts': (rustMs / tsMs).toFixed(2),
+      }
+    })
+    expect(rows.every((row) => row['host calls'] > 0)).toBe(true)
     console.table(rows)
     console.info(JSON.stringify(rows))
   })

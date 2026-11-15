@@ -60,10 +60,10 @@ async function recordingCore() {
   const recording = {
     ...core,
     layout: {
-      layoutSpatialCanvas: (request: never, highlight: never) => {
+      layoutSpatialCanvas: (request: never, highlight: never, own: never) => {
         const { measure } = request as { measure: { faces?: Record<string, unknown>[] } }
         faces.push((measure.faces ?? []).map((f) => `${f.family} ${f.bold} ${f.italic}`))
-        const answer = layout.layoutSpatialCanvas(request, highlight)
+        const answer = layout.layoutSpatialCanvas(request, highlight, own)
         answers.push('declined' in answer ? `declined:${answer.declined}` : 'laid out')
         return answer
       },

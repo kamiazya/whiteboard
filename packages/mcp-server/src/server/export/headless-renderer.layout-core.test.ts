@@ -60,9 +60,9 @@ async function countedCore(env: Record<string, string>) {
       ? {}
       : {
           layout: {
-            layoutSpatialCanvas: (request, highlight) => {
+            layoutSpatialCanvas: (request, highlight, measure) => {
               seen.layouts += 1
-              return layout.layoutSpatialCanvas(request, highlight)
+              return layout.layoutSpatialCanvas(request, highlight, measure)
             },
           },
         }),

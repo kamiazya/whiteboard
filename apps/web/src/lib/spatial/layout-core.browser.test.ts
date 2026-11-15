@@ -74,7 +74,7 @@ describe('the real Rust core in a browser', () => {
       const { routing } = real
       let calls = 0
       const host = createLayoutCoreHost(
-        { impl: 'differential', mismatch: 'throw' },
+        { impl: 'differential', layout: 'ts', mismatch: 'throw' },
         async () => ({
           ...routing,
           routeLayout: (...args) => {
