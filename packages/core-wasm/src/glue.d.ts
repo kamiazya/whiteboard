@@ -22,4 +22,5 @@ declare module '#glue' {
   ): string
   export function register_layout_fonts(bytes: Uint8Array, faces: string): string
   export function release_layout_fonts(handle: number): boolean
+  export function release_layout_cache(surface: number): boolean
 }

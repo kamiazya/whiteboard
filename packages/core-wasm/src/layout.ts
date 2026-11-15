@@ -3,6 +3,7 @@ import type { FenceHighlighter, FenceRow, FenceTokenMemo } from './fence-tokens.
 import type { FontHandles, FontsGlue, LayoutFaces } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS, type RefusalCode } from './generated/input-caps.js'
 import { type HostMeasure, type HostMeasurer, hostMeasurerOf } from './host-measure.js'
+import type { CachesGlue } from './layout-caches.js'
 import type { AnchorPair } from './types.js'
 import { wireOf } from './value-wire.js'
 
@@ -55,7 +56,7 @@ export type LayoutAnswer =
   | { readonly declined: string }
 
 /** The glue calls this module makes. */
-export interface LayoutGlue extends FontsGlue {
+export interface LayoutGlue extends FontsGlue, CachesGlue {
   layout_spatial_canvas(request: string, host?: HostMeasurer): string
 }
 
@@ -64,10 +65,18 @@ export interface LayoutErrors {
   refused(operation: string, code: RefusalCode, detail?: string): Error
 }
 
-/** The request's wire, its measurer named by `handle` when it reads faces; undefined when the wire cannot carry it. */
-function encodeLayoutRequest(request: LayoutRequest, handle?: number): string | undefined {
+/**
+ * The request's wire, its measurer named by `handle` when it reads faces and
+ * its content cache by `surface`; undefined when the wire cannot carry it.
+ */
+function encodeLayoutRequest(
+  request: LayoutRequest,
+  handle: number | undefined,
+  surface: number | undefined,
+): string | undefined {
   const measure = handle === undefined ? request.measure : { kind: 'fonts', handle }
-  const wire = wireOf({ ...request, measure }, 0, true)
+  const cache = surface === undefined ? {} : { cache: surface }
+  const wire = wireOf({ ...request, measure, ...cache }, 0, true)
   return wire === undefined ? undefined : JSON.stringify(wire)
 }
 
@@ -101,7 +110,8 @@ function call(glue: LayoutGlue, text: string, host: HostMeasurer | undefined): R
  * faces are registered once per measurer in `fonts`, the handles the core
  * holds (one per core, never one per call), and registered again
  * when the core answers that it holds nothing under the handle (an instance
- * recreated since); the layout is then asked once more. A fence the core
+ * recreated since); the layout is then asked once more. `surface` names the
+ * content cache the core reads and keeps laid-out bodies in. A fence the core
  * finds the default highlighter would colour is tokenised by `highlight` and
  * sent on a second call (at most two); `memo` sends the tokens it holds for
  * the request's fences on the first. A request naming the host's measurer is
@@ -121,6 +131,7 @@ export function layoutSpatialCanvas(
   memo: FenceTokenMemo,
   fonts: FontHandles,
   hostMeasure?: HostMeasure,
+  surface?: number,
 ): LayoutAnswer {
   const { measure } = request
   const host =
@@ -128,7 +139,8 @@ export function layoutSpatialCanvas(
   const once = (): LayoutAnswer | 'lost' => {
     const named = measure.kind === 'fonts' ? fonts.handleOf(measure) : undefined
     if (named !== undefined && 'declined' in named) return named
-    return layoutOnce(glue, errors, request, { handle: named?.handle, host }, highlight, memo)
+    const measurer = { handle: named?.handle, host, surface }
+    return layoutOnce(glue, errors, request, measurer, highlight, memo)
   }
   const first = once()
   if (first !== 'lost') return first
@@ -138,10 +150,11 @@ export function layoutSpatialCanvas(
   return again
 }
 
-/** How a call measures: the faces' handle, or the host's measurer. */
+/** How a call measures: the faces' handle, or the host's measurer; and the surface it caches under. */
 interface Measurer {
   readonly handle: number | undefined
   readonly host: HostMeasurer | undefined
+  readonly surface: number | undefined
 }
 
 /** One layout over `measurer`, the fences asked for included; `lost` when the core holds no faces under its handle. */
@@ -149,11 +162,11 @@ function layoutOnce(
   glue: LayoutGlue,
   errors: LayoutErrors,
   request: LayoutRequest,
-  { handle, host }: Measurer,
+  { handle, host, surface }: Measurer,
   highlight: FenceHighlighter | undefined,
   memo: FenceTokenMemo,
 ): LayoutAnswer | 'lost' {
-  const encoded = encodeLayoutRequest(request, handle)
+  const encoded = encodeLayoutRequest(request, handle, surface)
   if (encoded === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')
   const send = (rows: readonly FenceRow[]): Raw | { declined: string } => {
     const text = withTokens(encoded, rows)

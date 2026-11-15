@@ -25,8 +25,8 @@ use code::code_tokens_of;
 pub(crate) use comments::Comments;
 use comments::comments_of;
 use fragments::fragments_of;
-use measure::measure_of;
 pub(crate) use measure::{Face, MeasureSpec, face_of};
+use measure::{measure_of, surface_of};
 pub(crate) use options::Style;
 use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key_of};
 use proposals::proposals_of;
@@ -56,6 +56,9 @@ pub(crate) struct Request {
     /// handed none, so the layout draws every one as its fallback and asks
     /// for nothing.
     pub(crate) fragments: Option<Vec<(String, Rendered)>>,
+    /// The surface whose content cache the layout reads and keeps bodies in
+    /// ([`super::cache`]); `None` keeps nothing across layouts.
+    pub(crate) cache: Option<u32>,
 }
 
 fn flag_of(value: &Value) -> Option<bool> {
@@ -123,6 +126,7 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         proposals: f.field("proposals", proposals_of)?.unwrap_or_default(),
         comments: comments_of(&mut f)?,
         fragments: f.field("fragments", fragments_of)?,
+        cache: f.field("cache", surface_of)?,
     };
     f.all_named().then_some(request)
 }

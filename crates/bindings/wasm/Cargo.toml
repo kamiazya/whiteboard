@@ -35,3 +35,4 @@ workspace = true
 # which `serde_json`'s default number parser can read one ulp off.
 [dev-dependencies]
 serde_json = { workspace = true, features = ["float_roundtrip"] }
+whiteboard-proptest = { path = "../../testing/proptest" }

@@ -17,6 +17,7 @@ function coreAnswering(answer: unknown) {
     layout_spatial_canvas: () => '[]',
     register_layout_fonts: () => '[]',
     release_layout_fonts: () => false,
+    release_layout_cache: () => false,
     facet_bucket_check: (target, bucket, library) => {
       sent.push([target, bucket, library])
       return raw

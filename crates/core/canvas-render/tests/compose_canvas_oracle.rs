@@ -204,6 +204,7 @@ impl<'c> Setup<'c> {
             comments: CommentOptions::default(),
             proposals: &[],
             content_cache: cache.as_ref().map(|c| c as &dyn ContentCache),
+            fragment_table_reads: None,
             body: BodySeams {
                 inline: &host,
                 highlight: None,

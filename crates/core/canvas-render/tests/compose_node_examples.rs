@@ -156,6 +156,7 @@ fn layout_of<'a>(
         comments: CommentOptions { threads, ..CommentOptions::default() },
         proposals: &[],
         content_cache: None,
+        fragment_table_reads: None,
         body: BodySeams { inline: host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
         embed_path: &[],

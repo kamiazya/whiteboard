@@ -38,6 +38,11 @@ fn offset_of(value: &Value) -> Option<usize> {
     format!("{}", number_of(value)?).parse().ok()
 }
 
+/// A surface id, or a font handle: a whole number a `u32` holds.
+pub(super) fn surface_of(value: &Value) -> Option<u32> {
+    u32::try_from(offset_of(value)?).ok()
+}
+
 pub(crate) fn face_of(value: &Value) -> Option<Face> {
     let mut f = Fields::of(value)?;
     let face = Face {
@@ -56,7 +61,7 @@ pub(super) fn measure_of(value: &Value) -> Option<MeasureSpec> {
         "fake" => MeasureSpec::Fake(f.field("factor", number_of)??),
         "ratio" => MeasureSpec::Ratio,
         "host" => MeasureSpec::Host,
-        "fonts" => MeasureSpec::Fonts(f.field("handle", |v| u32::try_from(offset_of(v)?).ok())??),
+        "fonts" => MeasureSpec::Fonts(f.field("handle", surface_of)??),
         _ => return None,
     };
     f.all_named().then_some(spec)

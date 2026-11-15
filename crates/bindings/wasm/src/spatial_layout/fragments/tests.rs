@@ -117,3 +117,15 @@ fn a_layout_placing_more_markup_than_its_cap_is_declined() {
     let twice = answer(&request(board(&thrice[..thrice.len() - 9]), &[("fragments", table)]));
     assert_eq!(twice.get(0), Some(&json!("ok")));
 }
+
+#[test]
+fn every_ask_is_counted_answered_or_not() {
+    let rows = [row("math:x", "<g/>")];
+    let table = FragmentTable::new(&rows);
+    assert_eq!(table.reads().get(), 0);
+    table.render_math("x");
+    table.render_math("y");
+    table.render_math("y");
+    table.render_diagram("m", "v");
+    assert_eq!(table.reads().get(), 4);
+}

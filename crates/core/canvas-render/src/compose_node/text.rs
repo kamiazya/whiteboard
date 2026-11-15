@@ -1,6 +1,8 @@
 //! The text node: its chrome and its markdown body, laid out at the node's
 //! content width, cut to its box, and kept in the content cache.
 
+use std::cell::Cell;
+
 use whiteboard_model::spatial::SpatialNode;
 use whiteboard_scene::SceneNode;
 
@@ -84,7 +86,10 @@ fn push_nullable(key: &mut String, value: Option<&str>) {
 /// The content cache's key: `JSON.stringify` of everything a body's layout
 /// depends on but its position, since the value is origin-relative. The
 /// silhouette is part of it (a shaped node lays out against its inscribed box),
-/// and so are the label family, the theme's id and the embed path.
+/// and so are the label family, the theme's id and the embed path; and, for a
+/// layout given a fragment table, a `"fragments"` marker, since a body drawn
+/// without one shows a fallback the table may now replace. Only then, so every
+/// other key is the one canvas-render's `contentCacheKey` builds.
 fn cache_key(node: &SpatialNode, text: &str, options: &ComposeOptions<'_>) -> String {
     let nb = &options.node_box;
     let mut key = String::from("[");
@@ -108,7 +113,11 @@ fn cache_key(node: &SpatialNode, text: &str, options: &ComposeOptions<'_>) -> St
         }
         quote(&mut key, entered);
     }
-    key.push_str("]]");
+    key.push(']');
+    if options.layout.fragment_table_reads.is_some() {
+        key.push_str(",\"fragments\"");
+    }
+    key.push(']');
     key
 }
 
@@ -125,7 +134,8 @@ fn fit_text_body(
 /// The body laid out and fitted, or its text as one line when it does not
 /// parse. Only a body that left the render's account untouched is cached: one
 /// refused something is degraded only because THIS render ran out, and one that
-/// drew an embed spent from the account, a charge a hit would skip.
+/// drew an embed spent from the account, a charge a hit would skip. Nor is one
+/// that asked a renderer beside a fragment table, which its key does not carry.
 fn lay_out_body(
     node: &SpatialNode,
     text: &str,
@@ -134,7 +144,8 @@ fn lay_out_body(
     options: &ComposeOptions<'_>,
 ) -> FittedBlocks {
     let nb = &options.node_box;
-    let before = (options.budget.layouts_remaining(), options.budget.refused());
+    let reads = || options.layout.fragment_table_reads.map(Cell::get);
+    let before = (options.budget.layouts_remaining(), options.budget.refused(), reads());
     let Ok(root) = options.layout.host.parse_body(text) else {
         options.layout.host.degrade(Degradation::BodyParseFailed { node_id: node.id.clone() });
         let line = SceneNode::TextRun(Box::new(label_run(text, nb, max_width)));
@@ -144,7 +155,7 @@ fn lay_out_body(
     let laid = typeset_mdast_blocks(&root, &style.options(max_width, options));
     let body = fit_text_body(&laid.nodes, node, nb);
     if let (Some(cache), Some(key)) = (options.layout.content_cache, key)
-        && (options.budget.layouts_remaining(), options.budget.refused()) == before
+        && (options.budget.layouts_remaining(), options.budget.refused(), reads()) == before
     {
         cache.set(key, &body);
     }

@@ -60,11 +60,25 @@ pub(crate) struct FragmentTable<'r> {
     asked: RefCell<Asked>,
     placed: Cell<usize>,
     over: Cell<bool>,
+    /// Every ask, answered or not: what the content cache reads to keep no
+    /// body that asked the table (`fragmentTableReads`).
+    reads: Cell<usize>,
 }
 
 impl<'r> FragmentTable<'r> {
     pub(crate) fn new(rows: &'r [(String, Rendered)]) -> Self {
-        Self { rows, asked: RefCell::default(), placed: Cell::new(0), over: Cell::new(false) }
+        Self {
+            rows,
+            asked: RefCell::default(),
+            placed: Cell::new(0),
+            over: Cell::new(false),
+            reads: Cell::new(0),
+        }
+    }
+
+    /// How often the layout has asked the table so far.
+    pub(crate) const fn reads(&self) -> &Cell<usize> {
+        &self.reads
     }
 
     /// What the layout asked for and the table did not hold.
@@ -78,6 +92,7 @@ impl<'r> FragmentTable<'r> {
     }
 
     fn answer(&self, ask: Ask) -> Option<Rendered> {
+        self.reads.set(self.reads.get().saturating_add(1));
         let key = ask.key();
         let Some((_, found)) = self.rows.iter().rev().find(|(row, _)| *row == key) else {
             let mut asked = self.asked.borrow_mut();
