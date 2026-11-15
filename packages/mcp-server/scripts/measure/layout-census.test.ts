@@ -38,7 +38,13 @@ describe('the layout census', () => {
       }
       const cases = [
         { canvas: board('plain words'), options },
-        { canvas: board('```js\nlet x = 1\n```'), options },
+        {
+          canvas: {
+            nodes: [textNode({ id: 'n', x: Infinity, y: 0, width: 200, height: 100, text: 'x' })],
+            edges: [],
+          },
+          options,
+        },
         { canvas: board('plain words'), options: { ...options, renderMath: () => undefined } },
         { canvas: board('more plain words'), options },
       ]
@@ -46,7 +52,7 @@ describe('the layout census', () => {
       expect(layouts).toBe(4)
       expect(Object.fromEntries(counts)).toEqual({
         answered: 2,
-        'declined:highlight': 1,
+        'declined:non-finite': 1,
         'skipped:seam:renderMath': 1,
       })
     },

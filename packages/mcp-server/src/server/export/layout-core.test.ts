@@ -187,9 +187,9 @@ describe('the daemon layout core', () => {
       const counting = {
         ...core,
         layout: {
-          layoutSpatialCanvas: (r: never) => {
+          layoutSpatialCanvas: (r: never, highlight: never) => {
             asked += 1
-            return layout.layoutSpatialCanvas(r)
+            return layout.layoutSpatialCanvas(r, highlight)
           },
         },
       }
@@ -229,8 +229,8 @@ describe('the daemon layout core', () => {
       const counting = {
         ...core,
         layout: {
-          layoutSpatialCanvas: (r: never) => {
-            const answer = layout.layoutSpatialCanvas(r)
+          layoutSpatialCanvas: (r: never, highlight: never) => {
+            const answer = layout.layoutSpatialCanvas(r, highlight)
             answers.push('declined' in answer ? answer.declined : 'laid out')
             return answer
           },
@@ -291,7 +291,7 @@ describe('the daemon layout core', () => {
       try {
         const tallies = [
           { kind: 'skipped', reason: 'comments' },
-          { kind: 'declined', reason: 'highlight' },
+          { kind: 'declined', reason: 'body' },
           { kind: 'skipped', reason: 'comments' },
         ] as const
         for (const tally of tallies) {
@@ -303,7 +303,7 @@ describe('the daemon layout core', () => {
             .map((r) => r.data),
         ).toMatchObject([
           { kind: 'skipped', reason: 'comments', count: 1 },
-          { kind: 'declined', reason: 'highlight', count: 1 },
+          { kind: 'declined', reason: 'body', count: 1 },
           { kind: 'skipped', reason: 'comments', count: 2 },
         ])
         expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])

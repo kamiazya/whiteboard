@@ -2,7 +2,7 @@
 //! seams, answered in the core.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use whiteboard_codec::markdown::parse_markdown_body;
 use whiteboard_codec::references::resolve_references;
@@ -10,13 +10,24 @@ use whiteboard_det::utf16::is_js_whitespace;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 
-use super::{Expansion, LoadedReference, ReferenceWire, Refused};
+use super::{Expansion, FenceTokens, LoadedReference, ReferenceWire, Refused};
 use crate::compose_node::{ComposeHost, Degradation, ParseFailed};
 use crate::node_box::{ReferenceImage, ResolvedReference};
+use crate::typeset::CodeTokenLines;
 
 mod code;
 mod embed;
 mod inline;
+
+/// A fence as `(lang, value)`.
+type Fence = (String, String);
+
+/// The fences a layout asked for, in the order met and as a set.
+#[derive(Default)]
+struct Asked {
+    order: Vec<Fence>,
+    seen: BTreeSet<Fence>,
+}
 
 /// The seams over one wire, and what one layout through them reported.
 pub struct WireHost<'w> {
@@ -26,6 +37,12 @@ pub struct WireHost<'w> {
     aliases: BTreeMap<String, String>,
     /// Which file nodes draw their resolved canvas open.
     expand: Expansion,
+    /// The fences' tokens the caller sent by `(lang, value)`, a later row
+    /// answering first: indexed once, since a body may hold many fences.
+    code: BTreeMap<(&'w str, &'w str), &'w Option<CodeTokenLines>>,
+    /// Each fence the highlighter colours whose tokens were not sent, in the
+    /// order met, and the same as a set so a fence is asked for once.
+    needs: RefCell<Asked>,
     refused: Cell<Option<Refused>>,
     degradations: RefCell<Vec<Degradation>>,
 }
@@ -52,9 +69,30 @@ impl<'w> WireHost<'w> {
             wire,
             aliases,
             expand: expand.into(),
+            code: BTreeMap::new(),
+            needs: RefCell::new(Asked::default()),
             refused: Cell::new(None),
             degradations: RefCell::new(Vec::new()),
         }
+    }
+
+    /// This host answering a fence's tokens from `code`.
+    #[must_use]
+    pub fn with_code_tokens(mut self, code: &'w [FenceTokens]) -> Self {
+        // Inserted one by one: `collect` builds a map in bulk through a stable
+        // sort, which links several kilobytes for no gain on a table this size.
+        for fence in code {
+            self.code.insert((fence.lang.as_str(), fence.value.as_str()), &fence.lines);
+        }
+        self
+    }
+
+    /// The fences, as `[lang, value]`, the highlighter colours and whose
+    /// tokens the caller must send before this layout can be drawn as the
+    /// TypeScript draws it, in the order they were met.
+    #[must_use]
+    pub fn needs(&self) -> Vec<(String, String)> {
+        self.needs.borrow().order.clone()
     }
 
     /// Why the layout through this host must be refused, the first reason noted.

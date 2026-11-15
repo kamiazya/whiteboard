@@ -610,12 +610,13 @@ pub fn sfnt_parse(data: &[u8]) {
 }
 
 /// The whole layout's export: a request and the faces it measures in, split at
-/// the first NUL. Every answer is one of the three outcomes, and a call past the
-/// caps is refused before it is read.
+/// the first NUL. Every answer is one of the four outcomes (laid out, refused,
+/// declined, or the fences whose tokens the host must send), and a call past
+/// the caps is refused before it is read.
 ///
 /// # Panics
 ///
-/// On an answer that is none of the three, or an input past the caps that is
+/// On an answer that is none of the four, or an input past the caps that is
 /// not refused.
 pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
@@ -635,5 +636,6 @@ pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && answer.ends_with("]]");
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
     let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
-    assert!(laid || refused || declined, "{answer:.120} is not an answer");
+    let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
+    assert!(laid || refused || declined || needs, "{answer:.120} is not an answer");
 }

@@ -36,7 +36,7 @@ fn tokenize(
             .map(|text| vec![CodeToken { text: text.to_owned(), role: None }])
             .collect()
     };
-    match opts.highlight.and_then(|h| h.tokenize(lang, value)) {
+    match opts.highlight.and_then(|h| h.tokenize(lang, value, opts.budget)) {
         Some(lines) if lines.len() == line_count => lines,
         _ => plain(),
     }

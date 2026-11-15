@@ -155,7 +155,12 @@ impl InlineSeams for Seams {
 }
 
 impl CodeTokenizer for Seams {
-    fn tokenize(&self, lang: &str, value: &str) -> Option<CodeTokenLines> {
+    fn tokenize(
+        &self,
+        lang: &str,
+        value: &str,
+        _: Option<&whiteboard_canvas_render::typeset::NestedLayoutBudget>,
+    ) -> Option<CodeTokenLines> {
         let found = self.held(&self.highlight, "highlight", &key(lang, value));
         let lines = found.and_then(Option::as_ref)?;
         let role = |name: &Option<String>| {
