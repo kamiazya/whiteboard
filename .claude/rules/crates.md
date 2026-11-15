@@ -227,12 +227,10 @@ steps and cache paths to the scripts.
   `measure-text.oracle.test.ts`, which sits in mcp-server because the measurer is a
   composition root's and canvas-render may not import it) holds opentype.js over the
   vendored Roboto and `constantRatioMeasureText`; `crates/core/canvas-render/tests/font_measure_oracle.rs`
-  replays it bit for bit, reading the faces itself. Each record's `class` says how far the
-  TypeScript is a per-glyph sum: `exact` (bit for bit, opentype's 64-code-point segment sums
-  included, with the joining table `segment-joins.json` held equal to the Rust one) and
-  `substituted` by the face's GSUB `ccmp`, which the port does not run. That class is a
-  tolerated gap held both ways: within 0.1 em, and a record the port reproduces exactly
-  fails, so the entry cannot go stale. The faces are read by an in-house sfnt reader
+  replays it bit for bit, reading the faces itself. Neither side runs the face's GSUB: the
+  Node measurer sums each code point's own `hmtx` advance (owner decision q74), so a mark
+  after its base measures as its code points do, and the recorder holds every font record
+  equal to an independent per-glyph sum. The faces are read by an in-house sfnt reader
   (`crates/core/canvas-render/src/sfnt/`: directory, head, hhea, maxp, hmtx and a cmap in
   formats 4 and 12, chosen as opentype.js chooses; no dependency, because the maintained
   crates carry unsafe or f32 and `ttf-parser` is unmaintained). It reads fonts users install, so it

@@ -13,37 +13,23 @@
 //! The vertical metrics are the `hhea` table's, which is the table opentype.js
 //! reads, never OS/2's typographic ones.
 //!
-//! Two things the TypeScript does that this does not, and a third it does that
-//! this repeats:
+//! What the TypeScript does, which this repeats:
 //!
-//! - opentype.js applies the face's `GSUB` `ccmp` and `liga` lookups before it
-//!   sums, so a base glyph that the face replaces when a mark follows (an `i`
-//!   under U+0307) is measured as the replacement there. Here each code point
-//!   is its own glyph. Bold, italic and regular Roboto differ from the plain
-//!   sum only for such sequences. This is a TOLERATED gap, not a bit-exact
-//!   one: `font-measure.jsonl` classes those records `substituted`, and the
-//!   replay holds them to a tenth of an em and fails one the port reproduces
-//!   exactly, so the entry cannot outlive the gap.
+//! - no `GSUB`: each code point is its own glyph, so a base the face would
+//!   replace when a mark follows (an `i` under U+0307) and a sequence it would
+//!   ligate measure as their code points do. The Node measurer sums the same
+//!   way rather than shaping, so the two agree bit for bit; resvg paints the
+//!   shaped glyphs either way.
 //! - the family a descriptor NAMES wins, then the measurer's first family;
 //!   `FontDescriptor::fallback_chain` is not consulted, as in the TypeScript,
 //!   whose CSS chains match no loaded face.
-//! - a run longer than 64 UTF-16 units is measured in segments whose sums are
-//!   added ([`carried_run`](FontTableMeasurer)), which moves the last bits;
-//!   the cuts and the additions are ported, so those records are exact.
 
 use crate::constant_ratio::{estimate_advance, estimate_vertical};
 use crate::measure::{FontDescriptor, FontStyle, Measure, VerticalMetrics, clamp_advance};
-use crate::segment_joins::joins_preceding;
 use crate::sfnt::{Sfnt, SfntError};
 
 /// The weight at which CSS selects the bold face.
 const BOLD_FROM: f64 = 600.0;
-
-/// Code points per segment of a long run, and the ceiling on a segment where no
-/// cut is safe; opentype.js is quadratic in the run it is handed, so the
-/// TypeScript bounds it, and the additions' order is part of the answer.
-const SEGMENT_CODE_POINTS: usize = 64;
-const SEGMENT_CODE_POINTS_MAX: usize = 256;
 
 /// The bytes did not parse as a font, and why.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -82,39 +68,8 @@ impl Loaded<'_> {
         x
     }
 
-    /// A carried run's advance, cut into segments whose sums are added once the
-    /// run passes [`SEGMENT_CODE_POINTS`] UTF-16 units, as `measureCarriedRun`
-    /// does: the same additions in the same order, so the last bits agree. A
-    /// cut is never made before a joining code point (`segment_joins`) until a
-    /// segment reaches [`SEGMENT_CODE_POINTS_MAX`].
-    fn carried_run(&self, run: &str, size_px: f64) -> f64 {
-        if run.encode_utf16().count() <= SEGMENT_CODE_POINTS {
-            return self.run_advance(run, size_px);
-        }
-        let cuts: Vec<(usize, char)> = run.char_indices().collect();
-        let mut advance = 0.0_f64;
-        let mut start = 0_usize;
-        for i in SEGMENT_CODE_POINTS..cuts.len() {
-            let length = i.saturating_sub(start);
-            if length < SEGMENT_CODE_POINTS {
-                continue;
-            }
-            let Some(&(at, ch)) = cuts.get(i) else { continue };
-            if length < SEGMENT_CODE_POINTS_MAX && joins_preceding(ch) {
-                continue;
-            }
-            advance += self.run_advance(slice(run, &cuts, start, at), size_px);
-            start = i;
-        }
-        let tail = cuts.get(start).map_or(run.len(), |&(at, _)| at);
-        advance + self.run_advance(run.get(tail..).unwrap_or(""), size_px)
-    }
-
     /// The text's advance with every code point the face lacks estimated.
     fn advance(&self, text: &str, size_px: f64, descriptor_size: f64) -> f64 {
-        if text.chars().all(|ch| self.carries(ch)) {
-            return self.carried_run(text, size_px);
-        }
         let mut advance = 0.0_f64;
         let mut run = String::new();
         for ch in text.chars() {
@@ -123,14 +78,14 @@ impl Loaded<'_> {
                 continue;
             }
             if !run.is_empty() {
-                advance += self.carried_run(&run, size_px);
+                advance += self.run_advance(&run, size_px);
                 run.clear();
             }
             let mut buf = [0_u8; 4];
             advance += estimate_advance(ch.encode_utf8(&mut buf), descriptor_size);
         }
         if !run.is_empty() {
-            advance += self.carried_run(&run, size_px);
+            advance += self.run_advance(&run, size_px);
         }
         advance
     }
@@ -144,11 +99,6 @@ impl Loaded<'_> {
             line_gap: clamp_advance(f64::from(line_gap) * scale),
         }
     }
-}
-
-fn slice<'t>(run: &'t str, cuts: &[(usize, char)], start: usize, end: usize) -> &'t str {
-    let from = cuts.get(start).map_or(run.len(), |&(at, _)| at);
-    run.get(from..end).unwrap_or("")
 }
 
 /// The four faces CSS weight and style select among, by the slot that

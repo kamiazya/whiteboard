@@ -237,6 +237,28 @@ describe('a code point the vendored face does not carry', () => {
   })
 })
 
+// The measurer is the plain sum of each code point's own advance: no GSUB, so
+// a mark the face would compose onto its base (`ccmp`) and a sequence it would
+// ligate (`liga`) measure as their code points do. That is what the Rust core's
+// font-table measurer computes, so a layout holding them is one it can answer
+// exactly; resvg paints the shaped glyphs either way.
+describe('a sequence the face would substitute', () => {
+  const at16 = font(16)
+  const sumOf = (measure: (text: string) => number, text: string): number =>
+    Array.from(text).reduce((sum, char) => sum + measure(char), 0)
+
+  it.each([
+    ['a mark composed onto a dotted base', 'i̇'],
+    ['a mark on a j and an l', 'j̈ĺ'],
+    ['a ligature candidate', 'ffi fl'],
+    ['a joiner between letters', 'a‍b'],
+  ])('measures %s as the sum of its code points', async (_, text) => {
+    const measure = await opentypeMeasureText()
+    const advance = (t: string) => measure(t, at16).advanceWidth
+    expect(advance(text)).toBe(sumOf(advance, text))
+  })
+})
+
 // A theme names a font family (ADR-0030), the export declares it only where
 // it can measure it, and an installed face (ADR-0012) is what makes that
 // true. The declared family and the measured face are ONE decision: a

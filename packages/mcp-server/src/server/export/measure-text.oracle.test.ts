@@ -18,26 +18,16 @@ import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
  * import it. Every double is the hex of its IEEE bits, so a size JSON cannot
  * hold (NaN, infinity, -0) is an input like any other.
  *
- * A font record carries a `class`, judged by a plain per-glyph sum written
- * below that shares nothing with the measurer under test:
- *
- * - `exact`: the measurer answers that sum within a part in 1e9, so the Rust
- *   port owes its bits exactly (the measurer's 64-code-point segment sums
- *   included, which move the last bits and are ported);
- * - `substituted`: opentype.js replaced glyphs through the face's GSUB `ccmp`
- *   before summing (an `i` under a combining dot), which the port does not
- *   run. The replay holds these to a tenth of an em and fails one it
- *   reproduces exactly, so the class cannot outlive the gap.
- *
- * `segment-joins.json` records which code points keep a segment from being cut
- * before them (`\p{M}` and `\p{Cf}` under this Node's Unicode), the table
- * the port carries.
+ * Every font record also equals a plain per-glyph sum written below that
+ * shares nothing with the measurer under test (hmtx advances left to right,
+ * `.notdef` estimated): the measurer applies no GSUB, so a mark after a base
+ * the face would replace, a ligature candidate and a joiner are all held to
+ * the same bits the port owes.
  *
  * Re-record after a deliberate change with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project mcp-node measure-text.oracle`.
  */
 const FILE = new URL('./oracle/font-measure.jsonl', import.meta.url)
-const JOINS_FILE = new URL('./oracle/segment-joins.json', import.meta.url)
 
 interface FontWire {
   readonly family: string
@@ -48,7 +38,6 @@ interface FontWire {
 }
 
 type Measurer = 'font' | 'constant-ratio'
-type Class = 'exact' | 'substituted'
 
 interface Input {
   readonly id: string
@@ -62,7 +51,6 @@ interface Recorded extends Input {
   readonly ascent: string
   readonly descent: string
   readonly lineGap: string
-  readonly class: Class
 }
 
 const view = new DataView(new ArrayBuffer(8))
@@ -293,32 +281,6 @@ async function loadFace(path: string): Promise<opentype.Font> {
   return parsed
 }
 
-function classify(input: Input, advance: number, model: number): Class {
-  if (Object.is(advance, model) || (Number.isNaN(advance) && Number.isNaN(model))) return 'exact'
-  const clamped = Number.isFinite(model) && model >= 0 ? model : 0
-  if (Math.abs(advance - clamped) <= 1e-9 * Math.max(1, Math.abs(clamped))) return 'exact'
-  return input.text.length > 0 ? 'substituted' : 'exact'
-}
-
-/** The code points the measurer never cuts a segment before, as inclusive ranges. */
-function joinRanges(): readonly (readonly [number, number])[] {
-  const joins = /[\p{M}\p{Cf}]/u
-  const ranges: [number, number][] = []
-  let low = -1
-  for (let code = 0; code <= 0x10ffff + 1; code++) {
-    const on =
-      code <= 0x10ffff &&
-      !(code >= 0xd800 && code <= 0xdfff) &&
-      joins.test(String.fromCodePoint(code))
-    if (on && low < 0) low = code
-    if (!on && low >= 0) {
-      ranges.push([low, code - 1])
-      low = -1
-    }
-  }
-  return ranges
-}
-
 async function answer(input: Input): Promise<Recorded> {
   const descriptor: FontDescriptor = { ...input.font, sizePx: fromHex(input.font.sizePx) }
   if (input.measurer === 'constant-ratio') {
@@ -329,22 +291,16 @@ async function answer(input: Input): Promise<Recorded> {
       ascent: f64Hex(m.ascent),
       descent: f64Hex(m.descent),
       lineGap: f64Hex(m.lineGap),
-      class: 'exact',
     }
   }
   const { measure } = await createExportTextMeasurer({ fontsDir: NO_INSTALLED_FONTS })
   const m = measure(input.text, descriptor)
-  const model = await modelAdvance(input)
-  const clampedModel = Number.isFinite(model) && model >= 0 ? model : 0
-  const size = fromHex(input.font.sizePx)
-  const shortCircuit = !(size > 0) || input.text.length === 0
   return {
     ...input,
     advanceWidth: f64Hex(m.advanceWidth),
     ascent: f64Hex(m.ascent),
     descent: f64Hex(m.descent),
     lineGap: f64Hex(m.lineGap),
-    class: shortCircuit ? 'exact' : classify(input, m.advanceWidth, clampedModel),
   }
 }
 
@@ -359,12 +315,6 @@ const encode = (records: readonly unknown[]): string =>
 
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
   writeFileSync(FILE, encode(await answers(inputs())))
-  writeFileSync(
-    JOINS_FILE,
-    `[\n${joinRanges()
-      .map(([low, high]) => `  [${low}, ${high}]`)
-      .join(',\n')}\n]\n`,
-  )
 }
 
 describe('the recorded font measurer', () => {
@@ -384,17 +334,18 @@ describe('the recorded font measurer', () => {
     expect(recorded.length).toBeGreaterThan(1100)
   })
 
-  it('is exact for nearly all of it, so the gaps stay named', () => {
-    const count = (c: Class) => recorded.filter((r) => r.class === c).length
-    expect(count('substituted')).toBeGreaterThan(0)
-    expect(count('substituted')).toBeLessThan(recorded.length / 40)
-    expect(count('exact')).toBeGreaterThan(recorded.length * 0.9)
-  })
-
-  it('records the joining table the measurer is held to', () => {
-    const ranges = JSON.parse(readFileSync(JOINS_FILE, 'utf8')) as number[][]
-    expect(ranges).toEqual(joinRanges())
-    expect(ranges.length).toBeGreaterThan(300)
+  it('is the plain per-glyph sum for every font record', async () => {
+    const fonts = recorded.filter((r) => r.measurer === 'font')
+    const parted: string[] = []
+    for (const record of fonts) {
+      const model = await modelAdvance(record)
+      const size = fromHex(record.font.sizePx)
+      const shortCircuit = !(size > 0) || record.text.length === 0
+      const want = shortCircuit || !(Number.isFinite(model) && model >= 0) ? 0 : model
+      if (!Object.is(fromHex(record.advanceWidth), want)) parted.push(record.id)
+    }
+    expect(fonts.length).toBeGreaterThan(500)
+    expect(parted).toEqual([])
   })
 
   it('measures a missing glyph by estimate and a carried one by the face', () => {

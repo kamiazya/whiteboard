@@ -2,12 +2,12 @@
  * A long run of text costs the measurer time in proportion to its length.
  *
  * opentype.js's `getAdvanceWidth` is quadratic in the string it is handed: its
- * ccmp pass slices the whole context once per glyph. Text layout hands the
- * measurer a whole paragraph, so one long paragraph in a text node held the
- * daemon for tens of seconds. The measurer therefore hands opentype bounded
- * segments and sums them — which is only correct while no substitution spans
- * a cut, and that is what the property below holds it to, against the font
- * measuring the whole string in one call.
+ * ccmp pass slices the whole context once per glyph, and layout hands the
+ * measurer a whole paragraph, so one long paragraph in a text node once held
+ * the daemon for tens of seconds. The measurer sums each code point's own
+ * advance instead and never asks opentype to shape, so it is additive over any
+ * cut — which is what the property below holds it to, over runs dense in the
+ * marks the face's GSUB would have composed.
  */
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor } from '@kamiazya/whiteboard-canvas-render'
@@ -39,53 +39,26 @@ afterAll(() => _resetExportMeasureTextCacheForTests())
 describe('a paragraph far longer than a line', () => {
   afterEach(() => vi.restoreAllMocks())
 
-  it('reaches opentype only as bounded segments', async () => {
+  it.each([
+    ['prose with no paragraph break', paragraphOfLength(4096)],
+    ['one base under marks up to a node text', `a${'\u0301'.repeat(NODE_TEXT_MAX_CHARS - 1)}`],
+  ])('measures %s without asking opentype to shape it', async (_, text) => {
     const measure = await opentypeMeasureText()
     const spy = vi.spyOn(opentypeApi.Font.prototype, 'getAdvanceWidth')
 
-    measure(paragraphOfLength(4096), descriptor(16))
+    const { advanceWidth } = measure(text, descriptor(16))
 
-    const lengths = spy.mock.calls.map(([text]) => text.length)
-    // Present before bounded: no call at all would satisfy the bound.
-    expect(lengths.length).toBeGreaterThan(0)
-    expect(Math.max(...lengths)).toBeLessThanOrEqual(256)
-  })
-
-  it('bounds a segment whose whole tail joins its base', async () => {
-    const measure = await opentypeMeasureText()
-    const spy = vi.spyOn(opentypeApi.Font.prototype, 'getAdvanceWidth')
-    // One base and combining acute accents up to a node text's ceiling: no
-    // code point after the first is a safe place to cut.
-    const cluster = `a${String.fromCodePoint(0x301).repeat(NODE_TEXT_MAX_CHARS - 1)}`
-
-    measure(cluster, descriptor(16))
-
-    const lengths = spy.mock.calls.map(([text]) => text.length)
-    expect(lengths.length).toBeGreaterThan(0)
-    expect(Math.max(...lengths)).toBeLessThanOrEqual(256)
-    expect(lengths.reduce((sum, length) => sum + length, 0)).toBe(cluster.length)
-  })
-
-  it('measures a capped cluster as one whole-run call does', async () => {
-    const path = (await resolveExportFontFaces()).regular
-    if (path === null) throw new Error('the vendored Regular face did not resolve')
-    const font = opentypeApi.parse((await readFile(path)).buffer)
-    const measure = await opentypeMeasureText()
-    // The forced cuts land deep in the mark tail, where this face's ccmp no
-    // longer reaches back to the dotted base, so the sum stays exact here.
-    const cluster = `i${String.fromCodePoint(0x307).repeat(1023)}`
-    const whole = font.getAdvanceWidth(cluster, 16, { kerning: false })
-
-    expect(measure(cluster, descriptor(16)).advanceWidth).toBeCloseTo(whole, 9)
+    // Present before absent: a measurer answering nothing would also call nothing.
+    expect(advanceWidth).toBeGreaterThan(0)
+    expect(spy).not.toHaveBeenCalled()
   })
 })
 
 /**
- * Code points the font substitutes together with what precedes them: the
- * combining marks its ccmp composes onto `i`, `j` and `l` (dropping the dot,
- * 0.07-1.7px at 16px when the mark is measured apart from its base) and a
- * joiner. Written as numbers because each is invisible in source. The face
- * carries no variation selector, so one never reaches opentype in a run.
+ * Code points the face's GSUB substitutes together with what precedes them:
+ * the combining marks its ccmp composes onto `i`, `j` and `l` (dropping the
+ * dot, 0.07-1.7px at 16px against the plain sum) and a joiner. Written as
+ * numbers because each is invisible in source.
  */
 const JOINING = [0x300, 0x301, 0x302, 0x307, 0x308, 0x323, 0x327, 0x200d].map((cp) =>
   String.fromCodePoint(cp),
@@ -94,9 +67,9 @@ const DOTTED = ['i', 'j', 'l', String.fromCodePoint(0x12f)]
 const PLAIN = [...'abcdefghmnoxyzIJ0123456789 .,-?']
 
 /**
- * Dense in joining code points, so a cut placed without regard to them lands
- * on one in most runs — the careless cut below is what proves that, rather
- * than the density being assumed.
+ * Dense in those code points, so a cut lands beside one in most runs and
+ * shaping would move most runs' width — the floor below is what proves that,
+ * rather than the density being assumed.
  */
 const runArbitrary = fc
   .array(
@@ -111,44 +84,42 @@ const runArbitrary = fc
 
 const NUM_RUNS = 60
 
-describe('segmenting a run against measuring it whole', () => {
+describe('cutting a run anywhere', () => {
   let font: opentype.Font
-  let carelessCutsCaught = 0
+  let shapingDiffered = 0
 
   beforeAll(async () => {
     const path = (await resolveExportFontFaces()).regular
     if (path === null) throw new Error('the vendored Regular face did not resolve')
     font = opentypeApi.parse((await readFile(path)).buffer)
-    // A code point the face lacks never reaches opentype as part of a run.
+    // A code point the face lacks never reaches the face's advances as part of a run.
     for (const char of [...JOINING, ...DOTTED, ...PLAIN]) {
       expect(font.charToGlyphIndex(char), char.codePointAt(0)?.toString(16)).not.toBe(0)
     }
   })
 
-  afterAllFloor(['sums to what one opentype call measures for the whole run'], () => {
-    // Reachability: a cut every 32 code points regardless of what follows
-    // must be WRONG in a good share of runs, or the property passes whatever
-    // rule the measurer cuts by. Over 300 samples of 60 runs it caught 16-38
-    // (5th percentile 19); a 64-point cut caught as few as 6, the floor's own
-    // edge, and failed it on CI once.
-    expect(carelessCutsCaught).toBeGreaterThan(NUM_RUNS / 10)
+  afterAllFloor(['measures the run as the sum of its two pieces'], () => {
+    // Reachability: opentype's shaping must measure a good share of these runs
+    // otherwise, or the property holds over text no substitution reaches and
+    // says nothing about marks. It differs in nearly every run of this density.
+    expect(shapingDiffered).toBeGreaterThan(NUM_RUNS / 2)
   })
 
   fcTest.prop(
-    [runArbitrary, fc.constantFrom(11, 13.5, 16, 21)],
+    [runArbitrary, fc.nat(), fc.constantFrom(11, 13.5, 16, 21)],
     withDefaults({ numRuns: NUM_RUNS }),
-  )('sums to what one opentype call measures for the whole run', async (text, sizePx) => {
+  )('measures the run as the sum of its two pieces', async (text, at, sizePx) => {
     const measure = await opentypeMeasureText()
-    const advanceOf = (run: string) => font.getAdvanceWidth(run, sizePx, { kerning: false })
-    const whole = advanceOf(text)
-
+    const advance = (run: string) => measure(run, descriptor(sizePx)).advanceWidth
     const codePoints = Array.from(text)
-    let careless = 0
-    for (let start = 0; start < codePoints.length; start += 32) {
-      careless += advanceOf(codePoints.slice(start, start + 32).join(''))
+    const cut = at % (codePoints.length + 1)
+    const whole = advance(text)
+    if (Math.abs(font.getAdvanceWidth(text, sizePx, { kerning: false }) - whole) > 1e-9) {
+      shapingDiffered++
     }
-    if (Math.abs(careless - whole) > 1e-9) carelessCutsCaught++
 
-    expect(measure(text, descriptor(sizePx)).advanceWidth).toBeCloseTo(whole, 9)
+    const pieces =
+      advance(codePoints.slice(0, cut).join('')) + advance(codePoints.slice(cut).join(''))
+    expect(whole).toBeCloseTo(pieces, 9)
   })
 })
