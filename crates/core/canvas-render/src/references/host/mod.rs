@@ -10,7 +10,7 @@ use whiteboard_det::utf16::is_js_whitespace;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 
-use super::{FenceTokens, LoadedReference, ReferenceWire, Refused};
+use super::{Expansion, FenceTokens, LoadedReference, ReferenceWire, Refused};
 use crate::compose_node::{ComposeHost, Degradation, ParseFailed};
 use crate::node_box::{ReferenceImage, ResolvedReference};
 use crate::typeset::CodeTokenLines;
@@ -35,8 +35,8 @@ pub struct WireHost<'w> {
     /// The wire's own alias table over the graph's ids: a written target to
     /// the id it names (`resolveAlias`).
     aliases: BTreeMap<String, String>,
-    /// Whether a file node's resolved canvas is drawn open.
-    expand: bool,
+    /// Which file nodes draw their resolved canvas open.
+    expand: Expansion,
     /// The fences' tokens the caller sent by `(lang, value)`, a later row
     /// answering first: indexed once, since a body may hold many fences.
     code: BTreeMap<(&'w str, &'w str), &'w Option<CodeTokenLines>>,
@@ -54,10 +54,10 @@ fn is_blank(text: &str) -> bool {
 }
 
 impl<'w> WireHost<'w> {
-    /// The host over `wire`, drawing every resolved canvas of a file node open
-    /// when `expand` says so (the caller's policy, settled ahead as one answer).
+    /// The host over `wire`, drawing a file node's resolved canvas open when
+    /// `expand` (the caller's policy, settled ahead) names it.
     #[must_use]
-    pub fn new(wire: &'w ReferenceWire, expand: bool) -> Self {
+    pub fn new(wire: &'w ReferenceWire, expand: impl Into<Expansion>) -> Self {
         let mut aliases: BTreeMap<String, String> = wire
             .entries
             .iter()
@@ -68,7 +68,7 @@ impl<'w> WireHost<'w> {
         Self {
             wire,
             aliases,
-            expand,
+            expand: expand.into(),
             code: BTreeMap::new(),
             needs: RefCell::new(Asked::default()),
             refused: Cell::new(None),
@@ -179,8 +179,8 @@ impl ComposeHost for WireHost<'_> {
         self.reference(reference)
     }
 
-    fn expand_file_node(&self, _: &SpatialNode) -> bool {
-        self.expand
+    fn expand_file_node(&self, node: &SpatialNode) -> bool {
+        self.expand.opens(node)
     }
 
     fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas> {

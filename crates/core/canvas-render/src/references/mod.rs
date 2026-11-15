@@ -19,6 +19,7 @@
 //! collects each one it finds missing, which the caller tokenises before
 //! asking again.
 
+mod expansion;
 mod host;
 
 use whiteboard_model::spatial::SpatialCanvas;
@@ -26,6 +27,7 @@ use whiteboard_model::spatial::SpatialCanvas;
 use crate::node_box::FacetCard;
 use crate::typeset::CodeTokenLines;
 
+pub use expansion::Expansion;
 pub use host::WireHost;
 
 /// One referenced document as a keeper loaded it (`LoadedReference`): every

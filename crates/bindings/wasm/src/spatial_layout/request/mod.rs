@@ -8,7 +8,7 @@ mod measure;
 mod options;
 mod references;
 
-use whiteboard_canvas_render::references::{FenceTokens, ReferenceWire};
+use whiteboard_canvas_render::references::{Expansion, FenceTokens, ReferenceWire};
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorOverride;
 use whiteboard_model::Value;
@@ -19,7 +19,7 @@ use crate::json_canvas_wire::{Fields, canvas_of, items_of, string_of};
 use code::code_tokens_of;
 pub(crate) use measure::MeasureSpec;
 use measure::measure_of;
-use options::{dark_of, geometry_of, override_of, tag_key_of};
+use options::{dark_of, expansion_of, geometry_of, override_of, tag_key_of};
 use references::references_of;
 
 /// A layout request.
@@ -35,7 +35,7 @@ pub(crate) struct Request {
     pub(crate) tags: Option<TagLibrary>,
     pub(crate) embed_path: Vec<String>,
     pub(crate) references: ReferenceWire,
-    pub(crate) expand: bool,
+    pub(crate) expand: Expansion,
     pub(crate) code_tokens: Vec<FenceTokens>,
 }
 
@@ -93,7 +93,7 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         tags: f.field("tagLibrary", |v| entries_of(v, tag_key_of))?,
         embed_path: f.field("embedPath", strings_of)?.unwrap_or_default(),
         references: f.field("references", references_of)?.unwrap_or_default(),
-        expand: f.field("expand", flag_of)??,
+        expand: f.field("expand", expansion_of)??,
         code_tokens: f.field("codeTokens", code_tokens_of)?.unwrap_or_default(),
     };
     f.all_named().then_some(request)

@@ -6,7 +6,8 @@ use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{CanvasLine, LineEnd, LineEndPoint, SpatialCanvas, SpatialNode};
 
 use super::{
-    ExtraImage, FenceTokens, LoadedReference, ReferenceExtra, ReferenceWire, Refused, WireHost,
+    Expansion, ExtraImage, FenceTokens, LoadedReference, ReferenceExtra, ReferenceWire, Refused,
+    WireHost,
 };
 use crate::canvas_fragment::select_canvas_fragment;
 use crate::compose_node::{ComposeHost, Degradation};
@@ -344,4 +345,17 @@ fn a_fence_the_highlighter_would_leave_plain_is_neither_asked_for_nor_refused() 
     assert!(host.needs().is_empty());
     assert_eq!(budget.refused(), 0);
     assert_eq!(host.refused(), None);
+}
+
+#[test]
+fn a_file_node_opens_when_the_settled_policy_names_its_id() {
+    let wire = wire();
+    let ids = vec!["f1".to_owned(), "f3".to_owned()];
+    let host = WireHost::new(&wire, Expansion::Only(ids));
+    assert!(host.expand_file_node(&node("f1")));
+    assert!(host.expand_file_node(&node("f3")));
+    assert!(!host.expand_file_node(&node("f2")));
+    assert!(!WireHost::new(&wire, Expansion::Only(Vec::new())).expand_file_node(&node("f1")));
+    assert!(WireHost::new(&wire, Expansion::Every(true)).expand_file_node(&node("f2")));
+    assert!(!WireHost::new(&wire, Expansion::Every(false)).expand_file_node(&node("f2")));
 }

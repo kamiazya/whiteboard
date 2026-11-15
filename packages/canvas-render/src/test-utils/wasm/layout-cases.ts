@@ -32,7 +32,14 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * core something new adds a topic and a recording rather than re-recording
  * the others.
  */
-export type LayoutTopic = 'composer' | 'bodies' | 'shortcode' | 'fragment' | 'highlight' | 'routing'
+export type LayoutTopic =
+  | 'composer'
+  | 'bodies'
+  | 'shortcode'
+  | 'expansion'
+  | 'fragment'
+  | 'highlight'
+  | 'routing'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -373,6 +380,33 @@ function highlightCases(light: SpatialLayoutOptions): LayoutCase[] {
   ]
 }
 
+/**
+ * The nesting board under policies that open some file nodes and not others,
+ * at the root and down the nested canvases: each one only, and all but each.
+ */
+const EXPANSIONS: readonly (readonly [string, (node: SpatialNode) => boolean])[] = [
+  ...['f-child', 'f-deep', 'loop', 'deeper', 'down2'].map(
+    (id) => [`only ${id}`, (node: SpatialNode) => node.id === id] as const,
+  ),
+  ...['f-child', 'loop', 'down1', 'down3'].map(
+    (id) => [`all but ${id}`, (node: SpatialNode) => node.id !== id] as const,
+  ),
+  ['the root only', (node) => node.id.startsWith('f-')],
+]
+
+function expansionCases(): LayoutCase[] {
+  const canvas = boards().find((b) => b.name === 'nesting')?.canvas
+  if (canvas === undefined) return []
+  const references = referenceSeamsFromWire(WIRE)
+  const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
+  return EXPANSIONS.map(([name, expandFileNode]) => ({
+    topic: 'expansion',
+    name: `nesting, ${name}`,
+    canvas,
+    options: { ...light, references, expandFileNode },
+  }))
+}
+
 /** The shortcode board in both modes, its file node reading a body that holds shortcodes too. */
 function shortcodeCases(): LayoutCase[] {
   return (['light', 'dark'] as const).map((mode) => ({
@@ -390,7 +424,7 @@ function shortcodeCases(): LayoutCase[] {
 
 /** Every layout case; `synthetic` draws that many generated routing boards too. */
 export function layoutCases(synthetic: number): LayoutCase[] {
-  const cases = composerCases()
+  const cases = [...composerCases(), ...expansionCases()]
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
   cases.push(
     {
