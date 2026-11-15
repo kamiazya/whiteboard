@@ -2,7 +2,7 @@
 //! seams, answered in the core.
 
 use std::cell::{Cell, RefCell};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use whiteboard_codec::markdown::parse_markdown_body;
 use whiteboard_codec::references::resolve_references;
@@ -13,6 +13,7 @@ use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 use super::{FenceTokens, LoadedReference, ReferenceWire, Refused};
 use crate::compose_node::{ComposeHost, Degradation, ParseFailed};
 use crate::node_box::{ReferenceImage, ResolvedReference};
+use crate::typeset::CodeTokenLines;
 
 mod code;
 mod embed;
@@ -26,10 +27,12 @@ pub struct WireHost<'w> {
     aliases: BTreeMap<String, String>,
     /// Whether a file node's resolved canvas is drawn open.
     expand: bool,
-    /// The fences' tokens the caller sent, a later row answering first.
-    code: &'w [FenceTokens],
-    /// Each fence the highlighter colours whose tokens were not sent, once.
-    needs: RefCell<Vec<(String, String)>>,
+    /// The fences' tokens the caller sent by `(lang, value)`, a later row
+    /// answering first: indexed once, since a body may hold many fences.
+    code: BTreeMap<(&'w str, &'w str), &'w Option<CodeTokenLines>>,
+    /// Each fence the highlighter colours whose tokens were not sent, in the
+    /// order met, and the same as a set so a fence is asked for once.
+    needs: RefCell<(Vec<(String, String)>, BTreeSet<(String, String)>)>,
     refused: Cell<Option<Refused>>,
     degradations: RefCell<Vec<Degradation>>,
 }
@@ -56,8 +59,8 @@ impl<'w> WireHost<'w> {
             wire,
             aliases,
             expand,
-            code: &[],
-            needs: RefCell::new(Vec::new()),
+            code: BTreeMap::new(),
+            needs: RefCell::new((Vec::new(), BTreeSet::new())),
             refused: Cell::new(None),
             degradations: RefCell::new(Vec::new()),
         }
@@ -65,8 +68,8 @@ impl<'w> WireHost<'w> {
 
     /// This host answering a fence's tokens from `code`.
     #[must_use]
-    pub const fn with_code_tokens(mut self, code: &'w [FenceTokens]) -> Self {
-        self.code = code;
+    pub fn with_code_tokens(mut self, code: &'w [FenceTokens]) -> Self {
+        self.code = code.iter().map(|f| ((f.lang.as_str(), f.value.as_str()), &f.lines)).collect();
         self
     }
 
@@ -75,7 +78,7 @@ impl<'w> WireHost<'w> {
     /// TypeScript draws it, in the order they were met.
     #[must_use]
     pub fn needs(&self) -> Vec<(String, String)> {
-        self.needs.borrow().clone()
+        self.needs.borrow().0.clone()
     }
 
     /// Why the layout through this host must be refused, the first reason noted.

@@ -16,13 +16,13 @@ impl CodeTokenizer for WireHost<'_> {
         if !would_colour(lang, value, budget) {
             return None;
         }
-        let sent = self.code.iter().rev().find(|fence| fence.lang == lang && fence.value == value);
-        if let Some(fence) = sent {
-            return fence.lines.clone();
+        if let Some(lines) = self.code.get(&(lang, value)) {
+            return (*lines).clone();
         }
-        let mut needs = self.needs.borrow_mut();
-        if !needs.iter().any(|(l, v)| l == lang && v == value) {
-            needs.push((lang.to_owned(), value.to_owned()));
+        let fence = (lang.to_owned(), value.to_owned());
+        let (order, seen) = &mut *self.needs.borrow_mut();
+        if seen.insert(fence.clone()) {
+            order.push(fence);
         }
         // The body drawn plain for want of these tokens is this call's alone,
         // so a content cache must not keep it.

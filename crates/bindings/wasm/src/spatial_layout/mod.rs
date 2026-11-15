@@ -13,12 +13,15 @@
 //!   layout reported instead of failing, as the TypeScript's events;
 //! - `["refused", code, class]`: an input past this entry's caps, or one that
 //!   is not a request;
+//! - `["needs", {code}]`: the fences, as `[lang, value]` rows in the order the
+//!   layout met them, that the default highlighter colours and whose tokens the
+//!   request's `codeTokens` did not carry; the host tokenises exactly those and
+//!   asks once more with them (owner decision q75);
 //! - `["declined", class]`: a request the core cannot answer exactly as the
-//!   TypeScript would (a body past the parser's bounds, a shortcode, a fence
-//!   the highlighter colours, a canvas narrowed to a fragment, a number the
-//!   answer cannot spell).
+//!   TypeScript would (a body past the parser's bounds, a shortcode, a number
+//!   the answer cannot spell).
 //!
-//! A host answers the last two from the TypeScript.
+//! A host answers a refusal and a decline from the TypeScript.
 
 mod answer;
 mod measure;
@@ -41,7 +44,7 @@ use whiteboard_scene::NodeDecoration;
 
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
-use answer::{declined, laid_out, refused};
+use answer::{declined, laid_out, needs, refused};
 use measure::measurer;
 use request::{Request, request_of};
 
@@ -100,7 +103,8 @@ fn registry() -> Option<&'static Registry> {
 fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let appearance = create_spatial_theme(mode, None);
-    let host = WireHost::new(&request.references, request.expand);
+    let host =
+        WireHost::new(&request.references, request.expand).with_code_tokens(&request.code_tokens);
     let badge = StencilBadge { registry };
     let decorations: [&dyn NodeDecoration; 1] = [&badge];
     let options = LayoutOptions {
@@ -131,8 +135,10 @@ fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> Str
         embed_path: &request.embed_path,
     };
     let laid = compose_canvas::layout_spatial_canvas(&request.canvas, &options);
+    let asked = host.needs();
     match host.refused() {
         Some(why) => declined(why.class()),
+        None if !asked.is_empty() => needs(&asked),
         None => laid_out(&laid, &host.degradations()),
     }
 }
