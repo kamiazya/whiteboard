@@ -1,7 +1,7 @@
 // The file export lays a board out through the same core switch as
 // `wb_scene_render` (ADR-0054 step 7): under `rust` the Rust core answers the
-// layout, a layout the request gate skips is drawn by the TypeScript, and
-// `WHITEBOARD_CORE_LAYOUT=ts` never asks the core for a layout. Either way the
+// layout, a document style included, and `WHITEBOARD_CORE_LAYOUT=ts` never
+// asks the core for a layout. Either way the
 // bytes are the TypeScript's, in both export modes.
 
 import { existsSync } from 'node:fs'
@@ -93,17 +93,13 @@ describe.runIf(built)('the file export through the layout core', () => {
     })
   }
 
-  it('a layout the gate skips (a non-clean style) is drawn by the TypeScript', async () => {
+  it("under rust the core lays a document-style export out, to the TypeScript's bytes", async () => {
     const { core, seen } = await countedCore(RUST)
     const options = { style: 'document' as const, theme: 'dark' as const }
     const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, options)
-    const fallback = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, {
-      ...options,
-      core,
-    })
-    expect(seen.layouts).toBe(0)
-    expect(seen.reports).toEqual([{ fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'style' }])
-    expect(fallback.svg).toBe(ts.svg)
+    const rust = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { ...options, core })
+    expect(seen).toEqual({ layouts: 1, reports: [] })
+    expect(rust.svg).toBe(ts.svg)
   })
 
   it('WHITEBOARD_CORE_LAYOUT=ts never asks the core for a layout', async () => {
