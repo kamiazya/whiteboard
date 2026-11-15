@@ -579,6 +579,10 @@ fn a_comment_layer_that_is_not_one_is_no_request() {
             "{not_threads}"
         );
     }
+}
+
+#[test]
+fn a_comment_option_that_is_not_one_is_no_request() {
     let not_box = s(vec![m(&[("x", json!(0)), ("y", json!(0)), ("w", json!(1))])]);
     for (key, value) in
         [("commentObstacles", not_box), ("showResolved", json!(1)), ("commentLayer", json!("no"))]
