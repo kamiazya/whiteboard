@@ -12,7 +12,9 @@ use crate::checks;
 
 const MANIFEST: &str = include_str!("../../../../packages/plugin-visual/src/visual.manifest.json");
 const CONTRACT: &str = include_str!("../../../../contracts/facets/visual/visual.schema.json");
-const THEMES: &str = include_str!("../../../../packages/plugin-visual/src/assets/themes.json");
+/// The plugin's theme assets by bare name, which the registry holds by id
+/// only; a layout reads their tokens from this text.
+pub const THEMES: &str = include_str!("../../../../packages/plugin-visual/src/assets/themes.json");
 const STENCILS: &str = include_str!("../../../../packages/plugin-visual/src/assets/stencils.json");
 const LUCIDE: &str =
     include_str!("../../../../packages/plugin-visual/src/assets/icons-lucide.json");

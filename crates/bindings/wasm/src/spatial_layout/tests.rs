@@ -297,3 +297,34 @@ fn a_file_node_opens_when_the_request_names_it() {
         assert_eq!(answer(&asking, &[]), json!(["refused", "malformed", "request"]));
     }
 }
+
+#[test]
+fn a_style_draws_the_theme_it_names_in_a_family_the_surface_holds() {
+    let drawn = |extra: &[(&str, Json)]| answer(&request(board("hello"), extra), &[]);
+    let clean = drawn(&[]);
+    assert_eq!(drawn(&[("style", json!("clean"))]), clean);
+    // The board names no theme, so the document's own look is the clean one.
+    assert_eq!(drawn(&[("style", json!("document"))]), clean);
+    let gone = drawn(&[("style", json!("visual.gone"))]);
+    assert_eq!(gone.get(3), Some(&json!([{ "kind": "unknown-theme", "theme": "visual.gone" }])));
+    assert_eq!(gone.get(1), clean.get(1));
+    let sketch = drawn(&[("style", json!("visual.sketch"))]);
+    assert_eq!(sketch.get(3), Some(&json!([{ "kind": "font-missing", "family": "Yomogi" }])));
+    assert_ne!(sketch.get(1), clean.get(1));
+    let family = |answer: &Json| answer.pointer("/1/nodes/1/runs/0/appearance/fontFamily").cloned();
+    assert_eq!(family(&sketch), Some(json!("Roboto")), "{sketch}");
+    let held = s(vec![json!("Other"), json!("Yomogi")]);
+    let yomogi = drawn(&[("style", json!("visual.sketch")), ("fontFamilies", held)]);
+    assert_eq!(yomogi.get(3), Some(&json!([])));
+    assert_eq!(family(&yomogi), Some(json!("Yomogi")), "{yomogi}");
+    let neon = drawn(&[("style", json!("visual.neon"))]);
+    assert_eq!(neon.get(3), Some(&json!([])));
+    assert_ne!(neon.get(1), clean.get(1));
+    assert_ne!(neon.get(1), sketch.get(1));
+    for not_a_style in [json!(1), s(Vec::new())] {
+        let asking = request(board("x"), &[("style", not_a_style)]);
+        assert_eq!(answer(&asking, &[]), json!(["refused", "malformed", "request"]));
+    }
+    let not_families = request(board("x"), &[("fontFamilies", s(vec![json!(1)]))]);
+    assert_eq!(answer(&not_families, &[]), json!(["refused", "malformed", "request"]));
+}

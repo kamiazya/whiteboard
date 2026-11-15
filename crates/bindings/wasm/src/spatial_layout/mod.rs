@@ -33,9 +33,11 @@ use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::references::{Expansion, WireHost};
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
+use whiteboard_canvas_render::theme::tokens::theme_table;
+use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::spatial::SpatialCanvas;
-use whiteboard_plugin_visual::host::visual_registry;
+use whiteboard_plugin_visual::host::{THEMES, visual_registry};
 use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_scene::NodeDecoration;
 
@@ -43,7 +45,7 @@ use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, refused};
 use measure::measurer;
-use request::{Request, request_of};
+use request::{Request, Style, request_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
 /// own canvas and every canvas it references together: this entry's
@@ -107,9 +109,29 @@ fn registry() -> Option<&'static Registry> {
     REGISTRY.get_or_init(|| visual_registry().ok()).as_ref()
 }
 
+/// The bundled plugin's themes by namespaced id, read once per instance.
+fn themes() -> Option<&'static [(String, ThemeTokens)]> {
+    static THEME_TABLE: OnceLock<Option<Vec<(String, ThemeTokens)>>> = OnceLock::new();
+    THEME_TABLE.get_or_init(|| theme_table("visual", THEMES)).as_deref()
+}
+
+fn render_style(style: &Style) -> RenderStyle<'_> {
+    match style {
+        Style::Clean => RenderStyle::Clean,
+        Style::Document => RenderStyle::Document,
+        Style::Theme(id) => RenderStyle::Theme(id),
+    }
+}
+
 /// The request laid out, as the answer's JSON text.
-fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> String {
+fn lay_out(
+    request: &Request,
+    measure: &dyn Measure,
+    registry: &Registry,
+    themes: &[(String, ThemeTokens)],
+) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
+    let held = |family: &str| request.font_families.contains(family);
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand.clone());
     let badge = StencilBadge { registry };
@@ -118,9 +140,9 @@ fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> Str
         measure,
         appearance: &appearance,
         geometry: request.geometry,
-        style: RenderStyle::Clean,
-        themes: &[],
-        font_available: None,
+        style: render_style(&request.style),
+        themes,
+        font_available: Some(&held),
         registry,
         decorations: &decorations,
         tag_library: request.tags.as_ref(),
@@ -170,9 +192,9 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     let Some(measure) = measurer(&request.measure, fonts) else {
         return refused("malformed", "font");
     };
-    match registry() {
-        Some(registry) => lay_out(&request, measure.as_ref(), registry),
-        None => refused("malformed", "registry"),
+    match (registry(), themes()) {
+        (Some(registry), Some(themes)) => lay_out(&request, measure.as_ref(), registry, themes),
+        _ => refused("malformed", "registry"),
     }
 }
 
