@@ -1,5 +1,6 @@
 import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { describeThrown } from '@kamiazya/whiteboard-model'
+
 /**
  * Lays a spatial canvas out off the main thread.
  *
@@ -29,6 +30,7 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
 // `document` on evaluation, and a worker has none — importing it throws
 // `document is not defined` before a single message is handled.
 
+import type { FragmentAsk } from '@kamiazya/whiteboard-canvas-render'
 import {
   ensureViewerFontLoaded,
   registerFontBytes,
@@ -40,7 +42,7 @@ import { decodeSpatialSnapshot } from './decode-spatial-snapshot.js'
 import { outlineFromSpatial } from './document-outline.js'
 import { unhandledKind } from './exhaustive.js'
 import { resolveRectColor } from './favicon.js'
-import { type FragmentAsk, recordingFragmentSeams } from './fragment-requests.js'
+import { recordingFragmentSeams } from './fragment-requests.js'
 import { createContentCacheStore } from './layout-content-caches.js'
 import {
   FONT_DEGRADED,

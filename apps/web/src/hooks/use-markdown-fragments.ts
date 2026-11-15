@@ -16,14 +16,16 @@
  * every layout.
  */
 
-import type { RenderedSvgFragment } from '@kamiazya/whiteboard-canvas-render'
-import { useCallback, useMemo, useState } from 'react'
 import {
   type FragmentAsk,
   type FragmentEntry,
+  fragmentAskKey,
+  type RenderedSvgFragment,
+} from '@kamiazya/whiteboard-canvas-render'
+import { useCallback, useMemo, useState } from 'react'
+import {
   type FragmentLoaders,
   type FragmentSeams,
-  fragmentAskKey,
   loadFragment,
   recordingFragmentSeams,
 } from '../lib/fragment-requests.js'

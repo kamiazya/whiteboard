@@ -34,8 +34,8 @@
  * it reads.
  */
 import type { EdgeAnchorPair } from '@kamiazya/whiteboard-canvas-render'
+import { fragmentAskSchema } from '@kamiazya/whiteboard-canvas-render'
 import { z } from 'zod'
-import { fragmentAskSchema } from './fragment-requests.js'
 
 const boundsSchema = z
   .object({
