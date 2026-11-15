@@ -132,11 +132,16 @@ export const constantRatioMeasureText: MeasureText = (text, font) => {
 /**
  * A measurer named as data, so the Rust core can measure as it does
  * (ADR-0054 step 7): the deterministic test measurer at its factor, the
- * ratio estimate above, or a font-table measurer over these faces' bytes.
+ * ratio estimate above, a font-table measurer over these faces' bytes, or
+ * the measurer itself, which the core asks mid-layout through its one host
+ * import (the browser's canvas context, which no table of font bytes
+ * repeats). A layout naming `host` hands the core its `measure` beside the
+ * request.
  */
 export type MeasureSpec =
   | { readonly kind: 'fake'; readonly factor: number }
   | { readonly kind: 'ratio' }
+  | { readonly kind: 'host' }
   | {
       readonly kind: 'fonts'
       readonly faces: readonly {

@@ -48,6 +48,7 @@ type Answering = CanvasLayoutCore['layoutSpatialCanvas']
 function coreOf(impl: CoreImpl, answer: Answering) {
   const requests: CanvasLayoutRequest[] = []
   const highlighters: unknown[] = []
+  const measurers: unknown[] = []
   const mismatches: CoreMismatch[] = []
   const core: LayoutCore = {
     routing: {
@@ -56,16 +57,17 @@ function coreOf(impl: CoreImpl, answer: Answering) {
       },
     },
     layout: {
-      layoutSpatialCanvas: (request, highlight) => {
+      layoutSpatialCanvas: (request, highlight, measure) => {
         requests.push(request)
         highlighters.push(highlight)
-        return answer(request, highlight)
+        measurers.push(measure)
+        return answer(request, highlight, measure)
       },
     },
     impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
     onMismatch: (mismatch) => mismatches.push(mismatch),
   }
-  return { core, requests, highlighters, mismatches }
+  return { core, requests, highlighters, measurers, mismatches }
 }
 
 const agreeing: Answering = () => ({
@@ -166,7 +168,7 @@ describe('the whole layout through the core switch', () => {
     const events = run('differential', () => ({ ...reference, degradations: [] }))
     expect(events.mismatches).toMatchObject([{ kind: 'differs', at: '/events/0' }])
     const anchors = run('differential', () => ({
-      ...agreeing(undefined as never, highlightCode),
+      ...agreeing(undefined as never, highlightCode, measure),
       anchors: new Map(),
     }))
     expect(anchors.mismatches).toMatchObject([{ kind: 'differs', at: '/anchors/e1' }])
@@ -434,6 +436,17 @@ describe('what the core can be handed', () => {
       kind: 'ratio',
     })
     expect(request({ measure: named })).toMatchObject({ measure: { kind: 'ratio' } })
+  })
+
+  it('hands the core the measurer a host-named request leaves it to ask', () => {
+    const host = describeMeasure(() => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }), {
+      kind: 'host',
+    })
+    expect(request({ measure: host })).toMatchObject({ measure: { kind: 'host' } })
+    const { core, requests, measurers } = coreOf('rust', agreeing)
+    layoutSpatialCanvasWithAnchors(canvas, { ...base, measure: host, core })
+    expect(requests).toMatchObject([{ measure: { kind: 'host' } }])
+    expect(measurers).toEqual([host])
   })
 })
 

@@ -5,6 +5,7 @@ import type { CanvasLayoutCore, CanvasLayoutRequest } from '../../canvas-core.js
 import type { CoreImpl, CoreMismatch, LayoutCore } from '../../layout/edges/layout-core.js'
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
+import { describeMeasure, type MeasureText } from '../../measure.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { layoutCases } from './layout-cases.js'
 
@@ -19,8 +20,8 @@ describe.runIf(built)('the whole layout through the real core', () => {
   const real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
   const answered = { compared: 0, declined: [] as string[] }
   const counting: CanvasLayoutCore = {
-    layoutSpatialCanvas(request: CanvasLayoutRequest, highlight) {
-      const answer = real.layoutSpatialCanvas(request, highlight)
+    layoutSpatialCanvas(request: CanvasLayoutRequest, highlight, measure) {
+      const answer = real.layoutSpatialCanvas(request, highlight, measure)
       if ('declined' in answer) answered.declined.push(answer.declined)
       else answered.compared += 1
       return answer
@@ -61,5 +62,34 @@ describe.runIf(built)('the whole layout through the real core', () => {
     expect(answered.compared).toBe(2 * cases.length)
     expect(answered.declined).toEqual([])
     expect(tallies).toEqual([])
+  })
+
+  it('draws what the TypeScript draws when the core asks the measurer itself', () => {
+    answered.compared = 0
+    const tallies: string[] = []
+    let asked = 0
+    for (const { name, canvas, options } of cases) {
+      const own = options.measure
+      const host: MeasureText = describeMeasure(
+        (text, font) => {
+          asked += 1
+          return own(text, font)
+        },
+        { kind: 'host' },
+      )
+      const hosted = { ...options, measure: host }
+      const reference = layoutSpatialCanvasWithAnchors(canvas, options)
+      const differential = lay(canvas, hosted, 'differential')
+      expect(differential.mismatches, name).toEqual([])
+      const rust = lay(canvas, hosted, 'rust')
+      expect(rust.mismatches, name).toEqual([])
+      tallies.push(...differential.tallies, ...rust.tallies)
+      expect(rust.scene, name).toEqual(reference.scene)
+      expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
+    }
+    expect(answered.compared).toBe(2 * cases.length)
+    expect(answered.declined).toEqual([])
+    expect(tallies).toEqual([])
+    expect(asked).toBeGreaterThan(cases.length)
   })
 })
