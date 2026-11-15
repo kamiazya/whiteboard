@@ -236,3 +236,64 @@ fn a_request_at_each_cap_is_read() {
     });
     assert_eq!(answer(&request(at_cap, &[]), &[]).get(0), Some(&json!("ok")));
 }
+
+#[test]
+fn an_expansion_id_list_is_held_to_the_element_cap() {
+    let listing = |n: usize| {
+        let ids: Vec<Json> = (0..n).map(|i| json!(format!("f{i}"))).collect();
+        answer(&request(board("x"), &[("expand", s(ids))]), &[])
+    };
+    assert_eq!(listing(MAX_ELEMENTS).get(0), Some(&json!("ok")));
+    assert_eq!(
+        listing(MAX_ELEMENTS + 1),
+        json!(["refused", "input-too-large", "too-many-elements"])
+    );
+}
+
+fn file_node(id: &str, x: f64) -> SpatialNode {
+    SpatialNode {
+        id: id.to_owned(),
+        x,
+        y: 0.0,
+        width: 240.0,
+        height: 160.0,
+        resource: Some(NodeResource {
+            mime_type: "application/octet-stream".to_owned(),
+            location: Some("c".to_owned()),
+            ..NodeResource::default()
+        }),
+        ..SpatialNode::default()
+    }
+}
+
+#[test]
+fn a_file_node_opens_when_the_request_names_it() {
+    let canvas = canvas_json(&SpatialCanvas {
+        nodes: vec![file_node("f1", 0.0), file_node("f2", 300.0)],
+        ..SpatialCanvas::default()
+    });
+    let entries = s(vec![s(vec![json!("c"), m(&[("canvas", board("inside"))])])]);
+    let references = m(&[
+        ("entries", entries),
+        ("aliases", s(Vec::new())),
+        ("titles", s(Vec::new())),
+        ("extras", s(Vec::new())),
+    ]);
+    let opened = |expand: Json| {
+        let got = answer(
+            &request(canvas.clone(), &[("references", references.clone()), ("expand", expand)]),
+            &[],
+        );
+        assert_eq!(got.get(0), Some(&json!("ok")), "{got}");
+        got.to_string().matches("\"inside\"").count()
+    };
+    assert_eq!(opened(json!(false)), 0);
+    assert_eq!(opened(json!(true)), 2);
+    assert_eq!(opened(s(vec![json!("f2")])), 1);
+    assert_eq!(opened(s(vec![json!("f1"), json!("f2")])), 2);
+    assert_eq!(opened(s(Vec::new())), 0);
+    for not_ids in [s(vec![json!(1)]), json!("f1"), Json::Null] {
+        let asking = request(canvas.clone(), &[("expand", not_ids)]);
+        assert_eq!(answer(&asking, &[]), json!(["refused", "malformed", "request"]));
+    }
+}

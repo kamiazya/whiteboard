@@ -5,7 +5,9 @@ use whiteboard_codec::references::resolve_references;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{CanvasLine, LineEnd, LineEndPoint, SpatialCanvas, SpatialNode};
 
-use super::{ExtraImage, LoadedReference, ReferenceExtra, ReferenceWire, Refused, WireHost};
+use super::{
+    Expansion, ExtraImage, LoadedReference, ReferenceExtra, ReferenceWire, Refused, WireHost,
+};
 use crate::canvas_fragment::select_canvas_fragment;
 use crate::compose_node::{ComposeHost, Degradation};
 use crate::node_box::{FacetCard, FacetRow, ReferenceImage, ResolvedReference};
@@ -290,4 +292,17 @@ fn degradations_are_kept_in_order() {
 fn each_refusal_names_its_class() {
     let classes = [Refused::Body, Refused::Highlight].map(Refused::class);
     assert_eq!(classes, ["body", "highlight"]);
+}
+
+#[test]
+fn a_file_node_opens_when_the_settled_policy_names_its_id() {
+    let wire = wire();
+    let ids = vec!["f1".to_owned(), "f3".to_owned()];
+    let host = WireHost::new(&wire, Expansion::Only(ids));
+    assert!(host.expand_file_node(&node("f1")));
+    assert!(host.expand_file_node(&node("f3")));
+    assert!(!host.expand_file_node(&node("f2")));
+    assert!(!WireHost::new(&wire, Expansion::Only(Vec::new())).expand_file_node(&node("f1")));
+    assert!(WireHost::new(&wire, Expansion::Every(true)).expand_file_node(&node("f2")));
+    assert!(!WireHost::new(&wire, Expansion::Every(false)).expand_file_node(&node("f2")));
 }

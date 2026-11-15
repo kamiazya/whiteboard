@@ -15,8 +15,9 @@ type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
  * One layout asked of the Rust core (ADR-0054 step 7), every option as data:
  * the measurer and the appearance by name, the references as the tables
  * their seams were rebuilt from, and the caller's expansion policy settled
- * ahead into one answer. Built only for a layout the core draws exactly as
- * the TypeScript does (`canvasLayoutRequest`).
+ * ahead: one answer for every file node, or the ids of the ones drawn open.
+ * Built only for a layout the core draws exactly as the TypeScript does
+ * (`canvasLayoutRequest`).
  */
 export interface CanvasLayoutRequest {
   readonly canvas: SpatialCanvas
@@ -34,7 +35,7 @@ export interface CanvasLayoutRequest {
     readonly titles: readonly (readonly [string, string])[]
     readonly extras: readonly (readonly [string, CoreExtra])[]
   }
-  readonly expand: boolean
+  readonly expand: boolean | readonly string[]
 }
 
 /** The degradations a layout reports, as the core can report them: no thrown value rides along. */
@@ -101,7 +102,7 @@ export type CanvasLayoutSkip =
   | 'proposals'
   | 'references'
   | 'reference-content'
-  | 'expansion'
+  | 'expand-collision'
 
 /**
  * A layout the core did not answer, by class, reported so a run can count

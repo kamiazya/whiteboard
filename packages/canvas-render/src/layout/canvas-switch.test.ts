@@ -264,7 +264,7 @@ describe('what the core can be handed', () => {
     }
   })
 
-  it('settles the expansion policy over every file node it could be asked, or declines', () => {
+  it('settles the expansion policy over every file node it could be asked', () => {
     const nested: SpatialCanvas = { nodes: [fileNode('f2', 'other')], edges: [] }
     const withFiles = { ...canvas, nodes: [...canvas.nodes, fileNode('f1', 'board')] }
     const wire = {
@@ -286,7 +286,33 @@ describe('what the core can be handed', () => {
     expect(asked(noting)).toBe(true)
     expect(seen).toEqual(['f1', 'f2'])
     expect(asked(() => false)).toBe(false)
-    expect(asked((node) => node.id === 'f1')).toEqual({ skip: 'expansion' })
+    expect(asked((node) => node.id === 'f1')).toEqual(['f1'])
+    expect(asked((node) => node.id === 'f2')).toEqual(['f2'])
+  })
+
+  it('skips a policy that answers one id open in one canvas and closed in another', () => {
+    const twin = (x: number) => ({ ...fileNode('f', 'board'), x })
+    const nested: SpatialCanvas = { nodes: [twin(500), fileNode('g', 'other')], edges: [] }
+    const deeper: SpatialCanvas = { nodes: [{ ...fileNode('g', 'other'), x: 900 }], edges: [] }
+    const wire = {
+      entries: [
+        ['board', { canvas: nested }],
+        ['other', { canvas: deeper }],
+      ] as const,
+      aliases: [],
+      titles: [],
+      extras: [],
+    }
+    const withFiles = { ...canvas, nodes: [...canvas.nodes, twin(0)] }
+    const asked = (policy: (node: SpatialNode) => boolean) => {
+      const references = referenceSeamsFromWire(wire)
+      const built = canvasLayoutRequest(withFiles, { ...base, references, expandFileNode: policy })
+      return 'skip' in built ? built : built.expand
+    }
+    expect(asked((node) => node.x < 100)).toEqual({ skip: 'expand-collision' })
+    expect(asked((node) => node.x > 800)).toEqual({ skip: 'expand-collision' })
+    expect(asked((node) => node.id === 'g')).toEqual(['g'])
+    expect(asked((node) => node.id === 'f' && node.x < 1000)).toEqual(['f'])
   })
 
   it('takes a measurer by the name its maker gave it', () => {

@@ -56,6 +56,8 @@ describe('the recorded whole-layout oracle', () => {
     ]) {
       expect(requests, field).toContain(field)
     }
+    // A per-node expansion policy crosses as the ids it opens.
+    expect(requests).toMatch(/"expand",\["s","/)
     expect(all.filter((r) => r.answer.startsWith('["declined"'))).toHaveLength(1)
     const shortcodes = (recorded.get('shortcode') ?? []).map((r) => r.answer).join('\n')
     expect(shortcodes, 'an emoji expanded').toContain('🚀')
