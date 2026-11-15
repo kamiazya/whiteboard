@@ -146,7 +146,7 @@ impl ComposeHost for WireHost<'_> {
     }
 
     fn embedded_canvas(&self, document_id: &str, fragment: Option<&str>) -> Option<SpatialCanvas> {
-        self.whole_canvas(document_id, fragment).cloned()
+        self.canvas_part(document_id, fragment)
     }
 
     fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed> {
