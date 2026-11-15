@@ -78,11 +78,22 @@ describe.runIf(built)('the whole layout through the real core', () => {
         { kind: 'host' },
       )
       const hosted = { ...options, measure: host }
-      const reference = layoutSpatialCanvasWithAnchors(canvas, options)
+      let tsAsked = 0
+      const reference = layoutSpatialCanvasWithAnchors(canvas, {
+        ...options,
+        measure: (text, font) => {
+          tsAsked += 1
+          return own(text, font)
+        },
+      })
       const differential = lay(canvas, hosted, 'differential')
       expect(differential.mismatches, name).toEqual([])
+      const before = asked
       const rust = lay(canvas, hosted, 'rust')
       expect(rust.mismatches, name).toEqual([])
+      // Under `rust` only the core measures, so a layout the TypeScript
+      // measured in must have asked the host through the import.
+      if (tsAsked > 0) expect(asked, name).toBeGreaterThan(before)
       tallies.push(...differential.tallies, ...rust.tallies)
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
@@ -91,5 +102,22 @@ describe.runIf(built)('the whole layout through the real core', () => {
     expect(answered.declined).toEqual([])
     expect(tallies).toEqual([])
     expect(asked).toBeGreaterThan(cases.length)
+  })
+
+  it('declines a layout whose host answers a number that is not finite', () => {
+    answered.declined.length = 0
+    const [first] = cases
+    if (first === undefined) throw new Error('no layout cases')
+    for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
+      const own = first.options.measure
+      const host: MeasureText = describeMeasure(
+        (text, font) => ({ ...own(text, font), ascent: bad }),
+        { kind: 'host' },
+      )
+      const rust = lay(first.canvas, { ...first.options, measure: host }, 'rust')
+      expect(rust.tallies).toEqual(['declined:host-measure'])
+      expect(rust.mismatches).toEqual([])
+    }
+    expect(answered.declined).toEqual(['host-measure', 'host-measure'])
   })
 })

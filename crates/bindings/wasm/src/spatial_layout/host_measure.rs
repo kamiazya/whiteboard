@@ -24,7 +24,8 @@ use whiteboard_canvas_render::scene_wire::Tree;
 
 /// What measures for a layout named `{kind: 'host'}`: the four numbers of
 /// `TextMetrics` (advance, ascent, descent, line gap) for `text` in the font
-/// `font` keys ([`font_key`]), or nothing when it cannot answer.
+/// `font` keys ([`font_key`]), or nothing when it cannot answer. An answer
+/// holding a number that is not finite is taken as nothing.
 pub trait Host {
     fn measure(&self, text: &str, font: &str) -> Option<[f64; 4]>;
 }
@@ -117,8 +118,12 @@ impl<'a> HostMeasure<'a> {
         if let Some(hit) = held.texts.get(text) {
             return answers.get(*hit).copied();
         }
-        let [advance_width, ascent, descent, line_gap] =
-            self.host.measure(text, held.key.as_deref()?)?;
+        // A number that is not finite is no answer: the TypeScript's measurer
+        // clamps its own, so laying one out would part from it silently.
+        let [advance_width, ascent, descent, line_gap] = self
+            .host
+            .measure(text, held.key.as_deref()?)
+            .filter(|numbers| numbers.iter().all(|n| n.is_finite()))?;
         let metrics = TextMetrics { advance_width, ascent, descent, line_gap };
         held.texts.insert(text.to_owned(), answers.len());
         answers.push(metrics);

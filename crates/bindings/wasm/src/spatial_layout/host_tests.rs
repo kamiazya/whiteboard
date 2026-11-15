@@ -160,3 +160,30 @@ fn a_failed_answer_measures_nothing_and_is_remembered() {
     assert_eq!((got.advance_width, got.ascent, got.descent, got.line_gap), (0.0, 0.0, 0.0, 0.0));
     assert!(measure.failed());
 }
+
+/// A host answering every text with the same four numbers.
+struct Fixed([f64; 4]);
+
+impl Host for Fixed {
+    fn measure(&self, _: &str, _: &str) -> Option<[f64; 4]> {
+        Some(self.0)
+    }
+}
+
+#[test]
+fn a_number_that_is_not_finite_is_no_answer() {
+    let hosted = request(board("hello"), &[("measure", host())]);
+    for bad in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+        for at in 0..4 {
+            let mut metrics = [10.0, 8.0, 2.0, 0.0];
+            metrics[at] = bad;
+            let host = Fixed(metrics);
+            assert_eq!(answer(&hosted, Some(&host)), json!(["declined", "host-measure"]), "{at}");
+            let measure = HostMeasure::new(&host);
+            measure.measure("word", &font("Roboto", 10.0));
+            assert!(measure.failed(), "{bad} at {at}");
+        }
+    }
+    let finite = Fixed([10.0, 8.0, 2.0, -0.0]);
+    assert_eq!(answer(&hosted, Some(&finite)).get(0), Some(&json!("ok")));
+}
