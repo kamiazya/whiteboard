@@ -128,7 +128,7 @@ fn the_fragment_seeds_are_layouts_the_export_draws_a_table_for() {
     for (name, drawn) in [("fragments", "<g data-sum/>"), ("fragments-asked", "\"kind\":\"math\"")]
     {
         let request = std::fs::read_to_string(seeds.join(name)).unwrap();
-        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, None);
         assert!(
             answer.starts_with("[\"ok\"")
                 && answer.contains(drawn)
