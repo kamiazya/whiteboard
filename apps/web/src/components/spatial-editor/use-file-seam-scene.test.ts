@@ -266,6 +266,82 @@ describe('useFileSeamScene reference chrome', () => {
     expect(after.svg).toContain('Alpha')
   })
 
+  it('keeps the chrome of file nodes past the loading budget, which bounds content only', () => {
+    // 256 is the walk's loading budget (REFERENCE_BUDGET): two more distinct
+    // references than that, the last two labelled and dangling.
+    const many = canvasOf(
+      Array.from({ length: 258 }, (_, i) =>
+        buildFileNode({
+          id: `n${i}`,
+          file: `doc-${i}`,
+          x: (i % 20) * 60,
+          y: Math.floor(i / 20) * 40,
+          width: 50,
+          height: 30,
+        }),
+      ),
+    )
+    const options = [{ file: 'doc-256', label: 'Past the budget' }]
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: many,
+        zoom: 1,
+        references: referenceWire(new Map()),
+        fileRefOptions: options,
+        missingFileRef: (file) => file === 'doc-257',
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    const extras = Object.fromEntries(result.current.wire.references?.extras ?? [])
+    expect(extras['doc-256']).toEqual({ label: 'Past the budget' })
+    expect(extras['doc-257']).toEqual({ missing: true })
+    const seams = referenceSeamsFromWire(referenceWire(new Map()))
+    const before = renderCanvasToSvg(many, {
+      measure: fixedMeasure,
+      references: seams,
+      expandFileNode: result.current.fileSeamOptions.expandFileNode,
+      resolveReference: overlayAsFunction(
+        seams.resolveReference,
+        new Map([['doc-256', 'Past the budget']]),
+        new Set(['doc-257']),
+      ),
+    })
+    const after = renderCanvasToSvg(many, {
+      measure: fixedMeasure,
+      ...result.current.fileSeamOptions,
+    })
+    expect(after.svg).toBe(before.svg)
+  })
+
+  it('labels a file node inside a canvas the board loads, as the function overlay did', async () => {
+    const nested = canvasOf([
+      buildFileNode({ id: 'inner-f', file: 'doc-deep', x: 0, y: 0, width: 160, height: 80 }),
+    ])
+    const outer = canvasOf([
+      buildFileNode({ id: 'fo', file: 'doc-outer', x: 0, y: 0, width: 400, height: 300 }),
+    ])
+    const loaded = referenceWire(new Map([['doc-outer', { canvas: nested }]]))
+    const options = [{ file: 'doc-deep', label: 'Deep label' }]
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: outer,
+        zoom: 1,
+        references: loaded,
+        fileRefOptions: options,
+        missingFileRef: undefined,
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fo']))
+    const after = renderCanvasToSvg(outer, {
+      measure: fixedMeasure,
+      ...result.current.fileSeamOptions,
+    })
+    expect(after.svg).toContain('Deep label')
+  })
+
   it("hands the core the editor's own layout options as a request, labels and dangling marks as extras", async () => {
     const { result } = renderHook(() =>
       useFileSeamScene({

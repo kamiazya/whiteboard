@@ -19,7 +19,7 @@ import { built, requireWasm, wasmBytes } from './glue.js'
 /**
  * A surface's file-node chrome — the readable label it knows a reference by
  * and the references it holds as dangling — laid over a keeper's wire the way
- * the web editor does (`overlayReferences`, then the cut to the canvas),
+ * the web editor does (the cut to the canvas, then `overlayReferences`),
  * through the REAL core: under `differential` the core is compared on every
  * board, never skipped or declined, and its scene is the TypeScript's.
  */
@@ -49,8 +49,9 @@ const chrome = {
     ['doc-b', 'Beta'],
     ['doc-unloaded', 'Named only by the surface'],
     ['doc-elsewhere', 'Not on any board'],
+    ['doc-256', 'Past the budget'],
   ]),
-  missing: new Set(['doc-gone', 'doc-unloaded']),
+  missing: new Set(['doc-gone', 'doc-unloaded', 'doc-257']),
 }
 
 const boards: readonly { name: string; canvas: SpatialCanvas; expanded: readonly string[] }[] = [
@@ -88,6 +89,25 @@ const boards: readonly { name: string; canvas: SpatialCanvas; expanded: readonly
     },
     expanded: ['fg'],
   },
+  {
+    // Two more distinct references than the walk's loading budget (256): the
+    // budget bounds what loads, never which card keeps its chrome.
+    name: 'past the loading budget',
+    canvas: {
+      nodes: Array.from({ length: 258 }, (_, i) =>
+        fileNode({
+          id: `n${i}`,
+          file: `doc-${i}`,
+          x: (i % 20) * 60,
+          y: Math.floor(i / 20) * 40,
+          width: 50,
+          height: 30,
+        }),
+      ),
+      edges: [],
+    },
+    expanded: [],
+  },
 ]
 
 describe.runIf(built)("a surface's reference chrome through the real core", () => {
@@ -114,7 +134,7 @@ describe.runIf(built)("a surface's reference chrome through the real core", () =
 
   it('reports no difference under differential, and rust draws what the TypeScript draws', () => {
     for (const { name, canvas, expanded } of boards) {
-      const wire = referenceWireFor(overlayReferences(keeper, chrome), { canvases: [canvas] })
+      const wire = overlayReferences(referenceWireFor(keeper, { canvases: [canvas] }), chrome)
       const options: SpatialLayoutOptions = {
         measure: createFakeMeasure(),
         appearance: createSpatialTheme({ mode: 'light' }),
