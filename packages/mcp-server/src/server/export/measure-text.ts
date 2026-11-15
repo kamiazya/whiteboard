@@ -196,8 +196,18 @@ function logFallbackOnce(reason: string): void {
 
 async function parseFace(path: string | null): Promise<opentype.Font | null> {
   if (path === null) return null
+  return (await readFace(path)).font
+}
+
+/** One installed face: the parsed font and the bytes it was parsed from. */
+interface ReadFace {
+  readonly font: opentype.Font
+  readonly bytes: Uint8Array
+}
+
+async function readFace(path: string): Promise<ReadFace> {
   const buffer = await readFile(path)
-  return opentypeApi.parse(buffer)
+  return { font: opentypeApi.parse(buffer), bytes: new Uint8Array(buffer) }
 }
 
 /**
@@ -244,17 +254,14 @@ export async function loadExportFonts(
  * `loadExportFonts` skips one: it cannot draw anything, so it measures
  * nothing, and a corrupt file in the directory must not take the export down.
  */
-async function loadInstalledFamilies(
-  fontsDir: string,
-): Promise<ReadonlyMap<string, opentype.Font>> {
-  const families = new Map<string, opentype.Font>()
+async function loadInstalledFamilies(fontsDir: string): Promise<ReadonlyMap<string, ReadFace>> {
+  const families = new Map<string, ReadFace>()
   for (const path of await installedFontFiles(fontsDir)) {
     try {
-      const font = await parseFace(path)
-      if (font === null) continue
-      const family = readFontFamilyName(font)
+      const face = await readFace(path)
+      const family = readFontFamilyName(face.font)
       if (family === undefined || family === EXPORT_FONT_FAMILY || families.has(family)) continue
-      families.set(family, font)
+      families.set(family, face)
     } catch {
       // Skipped on purpose — see above.
     }
@@ -270,16 +277,19 @@ const BUNDLED_ONLY: ReadonlySet<string> = new Set([EXPORT_FONT_FAMILY])
 const FACE_SLOTS = ['regular', 'bold', 'italic', 'boldItalic'] as const
 
 /**
- * Names the measurer as the vendored family's four faces, so the Rust core
- * can lay a canvas out measuring as this does (ADR-0054 step 7, a whole
- * layout's `layoutSpatialCanvas` switch). Only for the vendored set alone: an
- * installed family is measured by the name a descriptor gives, which the core
- * is not handed, so a measurer with one stays unnamed and the TypeScript lays
- * its canvases out.
+ * Names the measurer by its faces, so the Rust core can lay a canvas out
+ * measuring as this does (ADR-0054 step 7, a whole layout's
+ * `layoutSpatialCanvas` switch): the vendored family's four first, the family
+ * a descriptor naming no held one is measured in, then one face per installed
+ * family, which the core's measurer answers every weight and style with as
+ * `buildOpentypeMeasurer` does. A face the core's reader cannot read (a WOFF
+ * opentype.js inflates) or one past its caps is the core's to decline, and
+ * the TypeScript then lays the canvas out.
  */
-async function describeVendoredFaces(
+async function describeFaces(
   measure: MeasureText,
   paths: Record<ExportFontFace, string | null>,
+  installed: ReadonlyMap<string, ReadFace>,
 ): Promise<void> {
   const slots = FACE_SLOTS.flatMap((slot) => {
     const path = paths[slot]
@@ -294,7 +304,13 @@ async function describeVendoredFaces(
       bytes: new Uint8Array(await readFile(path)),
     })),
   )
-  describeMeasure(measure, { kind: 'fonts', faces })
+  const families = [...installed].map(([family, { bytes }]) => ({
+    family,
+    bold: false,
+    italic: false,
+    bytes,
+  }))
+  describeMeasure(measure, { kind: 'fonts', faces: [...faces, ...families] })
 }
 
 async function loadRealMeasurer(
@@ -320,9 +336,13 @@ async function loadRealMeasurer(
       }
     }
     const installed = await loadInstalledFamilies(fontsDir)
-    const measure = buildOpentypeMeasurer(regular, faces, installed)
-    if (installed.size === 0 && Object.keys(faces).length === FACE_SLOTS.length) {
-      await describeVendoredFaces(measure, paths)
+    const measure = buildOpentypeMeasurer(
+      regular,
+      faces,
+      new Map([...installed].map(([family, { font }]) => [family, font])),
+    )
+    if (Object.keys(faces).length === FACE_SLOTS.length) {
+      await describeFaces(measure, paths, installed)
     }
     return {
       measure,

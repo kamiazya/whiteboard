@@ -9,7 +9,7 @@
  * Run (from packages/mcp-server, which carries tsx):
  *   node --import tsx/esm scripts/measure/layout-census.mjs [--json=path]
  *
- * The profiles, each bounded:
+ * Every profile is bounded:
  *   recorded  the whole-layout recordings' cases (`layout-cases.ts`: the
  *             composer recordings' boards, bodies aimed at the typesetter,
  *             the routing corpus), each under its own options.
@@ -35,6 +35,10 @@
  *             profile's corpora: the options are the export's own
  *             (`exportLayoutOptions`), so the dark appearance and the
  *             measurer's `fontAvailable` are the ones the export passes.
+ *   installed the export's light options under the `document` style, over the
+ *             daemon profile's corpora drawn in the sketch theme, from a fonts
+ *             directory holding that theme's family: the core measures with
+ *             the installed face beside the vendored ones.
  *
  * The web root is not run: it measures with a canvas context the core
  * cannot repeat, so every web layout skips as `measure` by construction.
@@ -58,6 +62,7 @@ import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-c
 import { exportLayoutOptions } from '../../src/server/export/headless-renderer.ts'
 import { coreLoaders, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
 import { createExportTextMeasurer } from '../../src/server/export/measure-text.ts'
+import { syntheticFont } from '../../src/shared/test-utils/synthetic-font.ts'
 
 const REPO = resolve(fileURLToPath(new URL('.', import.meta.url)), '../../../..')
 
@@ -172,6 +177,30 @@ function proposalCorpus({ commentLayer: _off, ...options }) {
   }))
 }
 
+/** Printable ASCII, one glyph per code point: a face the core's reader reads. */
+const PRINTABLE = String.fromCodePoint(...Array.from({ length: 95 }, (_, i) => 0x20 + i))
+
+const SKETCH = { theme: 'visual.sketch' }
+
+/** The installed profile's corpora, from `fontsDir`, where it installs the sketch theme's family. */
+async function installedCorpora(fontsDir) {
+  await writeFile(join(fontsDir, 'yomogi.ttf'), syntheticFont(PRINTABLE, 'Yomogi'))
+  const { measure, measurableFamilies } = await createExportTextMeasurer({ fontsDir })
+  const available = (family) => measurableFamilies.has(family)
+  const options = exportLayoutOptions(measure, 'light', 'document', available)
+  const sketched = (cases) =>
+    cases.map(({ canvas, ...rest }) => ({
+      ...rest,
+      canvas: { ...canvas, facets: { ...canvas.facets, 'visual.theme/v0': SKETCH } },
+    }))
+  return Object.fromEntries(
+    Object.entries(await daemonCorpora(options)).map(([name, cases]) => [
+      `installed: ${name}`,
+      sketched(cases),
+    ]),
+  )
+}
+
 /** The census of every corpus, or undefined when the core did not load. */
 async function measureCensus() {
   const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_MISMATCH: 'throw' })
@@ -183,6 +212,7 @@ async function measureCensus() {
   if (!spatialCoreInstalled()) installSpatialCore(base.routing)
   const tallying = tallyingCore(base)
   const fontsDir = await mkdtemp(join(tmpdir(), 'wb-census-fonts-'))
+  const installedDir = await mkdtemp(join(tmpdir(), 'wb-census-installed-'))
   try {
     const { measure, measurableFamilies } = await createExportTextMeasurer({ fontsDir })
     const daemon = {
@@ -207,12 +237,14 @@ async function measureCensus() {
       ),
       ...(await exportCorpora('light')),
       ...(await exportCorpora('dark')),
+      ...(await installedCorpora(installedDir)),
     }
     return Object.fromEntries(
       Object.entries(corpora).map(([name, cases]) => [name, censusOf(tallying, cases)]),
     )
   } finally {
     await rm(fontsDir, { recursive: true, force: true })
+    await rm(installedDir, { recursive: true, force: true })
   }
 }
 
