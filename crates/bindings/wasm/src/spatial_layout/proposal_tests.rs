@@ -242,3 +242,52 @@ fn a_proposal_layer_past_its_caps_is_refused() {
     assert_eq!(lay_out(&facet_prior(at)).get(0), Some(&json!("ok")));
     assert_eq!(lay_out(&facet_prior(at + 1)), past);
 }
+
+/// Facets holding `n` entries besides their bucket's own key and its list's:
+/// one mapping per list item, so the entries inside a list are counted too.
+fn listed_facets(n: usize) -> Json {
+    let items: Vec<Json> = (0..n).map(|i| json!({format!("k{i}"): i})).collect();
+    json!({"x.k/v0": {"s": items}})
+}
+
+/// A change of one arm, its prior carrying the facets it is handed.
+type Arm = fn(Json) -> Json;
+
+#[test]
+fn every_prior_s_facets_count_toward_the_cap() {
+    let arms: [(&str, Arm); 5] = [
+        ("node.remove", |f| {
+            json!({"op": "node.remove", "nodeId": "a",
+            "assumed": {"id": "a", "x": 0, "y": 0, "width": 140, "height": 70, "facets": f}})
+        }),
+        ("edge.remove", |f| {
+            json!({"op": "edge.remove", "edgeId": "e",
+            "assumed": {"id": "e", "from": {"node": "a"}, "to": {"node": "b"}, "facets": f}})
+        }),
+        ("line.remove", |f| {
+            json!({"op": "line.remove", "lineId": "k",
+            "assumed": {"id": "k", "from": {"kind": "node", "node": "a"},
+                "to": {"kind": "node", "node": "c"}, "facets": f}})
+        }),
+        ("edge.patch", |f| {
+            json!({"op": "edge.patch", "edgeId": "e",
+            "patch": {"facets": {}}, "assumed": {"facets": f}})
+        }),
+        ("line.patch", |f| {
+            json!({"op": "line.patch", "lineId": "k",
+            "patch": {"facets": {}}, "assumed": {"facets": f}})
+        }),
+    ];
+    let past = json!(["refused", "input-too-large", "proposals"]);
+    for (name, arm) in arms {
+        let change = |n: usize| {
+            let mut change = arm(listed_facets(n));
+            change["id"] = json!("c");
+            change["status"] = json!("open");
+            one(&change)
+        };
+        let at = lay_out(&change(MAX_PRIOR_FACET_ENTRIES - 2));
+        assert_eq!(at.get(0), Some(&json!("ok")), "{name}");
+        assert_eq!(lay_out(&change(MAX_PRIOR_FACET_ENTRIES - 1)), past, "{name}");
+    }
+}
