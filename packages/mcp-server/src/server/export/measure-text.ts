@@ -37,58 +37,26 @@ function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
 }
 
 /**
- * Code points per opentype call. opentype.js's `getAdvanceWidth` is QUADRATIC
- * in the string it is handed — its ccmp pass slices the whole context once per
- * glyph — and layout hands this measurer whole paragraphs, so one unbroken
- * 16 Ki-character paragraph cost ~47 CPU-seconds measured in a single call
- * (`scripts/measure/text-node-layout-cost.mjs`). Bounded segments make the
- * cost linear in the run.
- */
-const SEGMENT_CODE_POINTS = 64
-
-/**
- * A code point the font's ccmp substitutes together with what PRECEDES it — a
- * combining mark, a joiner, a variation selector. A run is only cut before a
- * code point that is none of these, so no substitution spans a cut and the
- * segments sum to the whole run's width. `measure-text.long-run.test.ts`
- * holds that sum to one whole-run call over an alphabet dense in exactly
- * these.
- */
-const JOINS_PRECEDING = /[\p{M}\p{Cf}]/u
-
-/**
- * The ceiling on a segment, which holds even where no cut is safe. A run whose
- * tail is ALL joining code points — one base under thousands of combining
- * marks — offers no cut above, and would otherwise reach opentype whole:
- * 2.8s for one 8 Ki-code-point node text. Past this many code points the run
- * is cut regardless, measuring the marks after the cut apart from their base,
- * which can move the sum by a sub-pixel amount at each forced cut on a face
- * whose substitutions reach that far back (the vendored face's do not; its
- * ccmp only changes the first mark's base). No real grapheme cluster
- * approaches this length, so ordinary text never reaches it and measures
- * exactly as before.
- */
-const SEGMENT_CODE_POINTS_MAX = 256
-
-/**
- * One call into the font for a short run, bounded segments summed for a long
- * one. Kerning is off, which is what makes the sum exact (see
- * `measureWithFont`).
+ * A run of code points the face carries, as the sum of each one's own `hmtx`
+ * advance, left to right in opentype.js's own arithmetic. No GSUB: `ccmp` and
+ * `liga` would replace a dotted base under a mark, or a ligating sequence, by
+ * another glyph, and the Rust core's font-table measurer reads no lookups, so
+ * measuring them here would make every layout holding a mark one the core
+ * cannot answer. resvg still paints the shaped glyphs; on the vendored face the
+ * two part by a fraction of a pixel, and only where a mark follows its base.
+ * Kerning is left out for the same additivity (see `measureWithFont`).
+ *
+ * Linear in the run, so a whole paragraph is one pass; opentype's own
+ * `getAdvanceWidth` is quadratic in the string it shapes.
  */
 function measureCarriedRun(font: opentype.Font, run: string, sizePx: number): number {
-  const advanceOf = (text: string): number => font.getAdvanceWidth(text, sizePx, { kerning: false })
-  if (run.length <= SEGMENT_CODE_POINTS) return advanceOf(run)
-  const codePoints = Array.from(run)
+  const scale = (1 / font.unitsPerEm) * sizePx
   let advance = 0
-  let start = 0
-  for (let i = SEGMENT_CODE_POINTS; i < codePoints.length; i++) {
-    const length = i - start
-    if (length < SEGMENT_CODE_POINTS) continue
-    if (length < SEGMENT_CODE_POINTS_MAX && JOINS_PRECEDING.test(codePoints[i] ?? '')) continue
-    advance += advanceOf(codePoints.slice(start, i).join(''))
-    start = i
+  for (const char of run) {
+    const units = font.glyphs.get(font.charToGlyphIndex(char)).advanceWidth
+    if (units) advance += units * scale
   }
-  return advance + advanceOf(codePoints.slice(start).join(''))
+  return advance
 }
 
 /**
@@ -115,15 +83,6 @@ function measureAdvance(
   sizePx: number,
 ): number {
   const carried = (char: string): boolean => font.charToGlyphIndex(char) !== 0
-  let allCarried = true
-  for (const char of text) {
-    if (!carried(char)) {
-      allCarried = false
-      break
-    }
-  }
-  if (allCarried) return measureCarriedRun(font, text, sizePx)
-
   let advance = 0
   let run = ''
   const flush = (): void => {
