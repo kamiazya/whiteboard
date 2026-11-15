@@ -7,6 +7,8 @@ use whiteboard_edge_routing::edge_geometry::Side;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorPair;
 use whiteboard_edge_routing::geometry::Point;
 
+use super::fragments::Ask;
+
 fn text(value: &str) -> Tree {
     Tree::Text(value.to_owned())
 }
@@ -90,15 +92,28 @@ fn event(event: &Degradation) -> Tree {
     Tree::Object(f)
 }
 
-/// The layout as the `ok` answer, or declined when it holds a number JSON
+/// One fragment source as the TypeScript's `FragmentAsk`.
+fn ask(ask: &Ask) -> Tree {
+    Tree::Object(match ask {
+        Ask::Math(value) => vec![("kind", text("math")), ("value", text(value))],
+        Ask::Diagram { lang, value } => {
+            vec![("kind", text("diagram")), ("lang", text(lang)), ("value", text(value))]
+        }
+    })
+}
+
+/// The layout as the `ok` answer, the fragment sources it asked for last when
+/// the request carried a table, or declined when it holds a number JSON
 /// cannot spell.
-pub(super) fn laid_out(laid: &LaidOut, events: &[Degradation]) -> String {
+pub(super) fn laid_out(laid: &LaidOut, events: &[Degradation], asked: Option<Vec<Ask>>) -> String {
     let anchors = laid.anchors.iter().map(|(id, pair)| Tree::List(vec![text(id), anchor(pair)]));
-    let answer = Tree::List(vec![
+    let mut items = vec![
         text("ok"),
         scene_tree(&laid.scene),
         Tree::List(anchors.collect()),
         Tree::List(events.iter().map(event).collect()),
-    ]);
+    ];
+    items.extend(asked.map(|asked| Tree::List(asked.iter().map(ask).collect())));
+    let answer = Tree::List(items);
     answer.to_json().unwrap_or_else(|_| declined("non-finite"))
 }
