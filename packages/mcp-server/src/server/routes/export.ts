@@ -1,6 +1,6 @@
 import { messageOf } from '@kamiazya/whiteboard-model'
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
-import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
+import type { ApiErrorBody, LiveDocuments, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { ContentfulStatusCode } from 'hono/utils/http-status'
 import type { z } from 'zod'
@@ -28,12 +28,12 @@ async function renderedExport(
   workspaceId: string,
   path: string,
   body: z.infer<typeof exportRequestSchema>,
-  scope: StoreScope,
+  options: Pick<ExportRouterOptions, 'scope' | 'layoutCore'>,
 ): Promise<
   Awaited<ReturnType<typeof renderHeadless>> | { error: ApiErrorBody; status: ContentfulStatusCode }
 > {
   try {
-    return await renderHeadless(workspaceId, path, body, scope)
+    return await renderHeadless(workspaceId, path, body, options)
   } catch (err) {
     // Matched by name: an adapter reaches the export mechanics only through
     // `headless-export`, and the refusal is the renderer's `ExportTooLargeError`.
@@ -73,6 +73,8 @@ export interface ExportRouterOptions {
   scope: StoreScope
   /** Defaults to `absolute`, the local daemon's answer. */
   exportPaths?: ExportPathAnswer
+  /** The deps' core switch, so the file export lays out as `wb_scene_render` does. */
+  layoutCore?: ServerDeps['layoutCore']
 }
 
 export function createExportRouter(options: ExportRouterOptions) {
@@ -102,7 +104,7 @@ export function createExportRouter(options: ExportRouterOptions) {
       return c.json(documentMissingBody(workspaceId, path), 404)
     }
 
-    const rendered = await renderedExport(workspaceId, path, body, options.scope)
+    const rendered = await renderedExport(workspaceId, path, body, options)
     if ('error' in rendered) return c.json(rendered.error, rendered.status)
     return c.json(
       await writeExportAnswer(
@@ -121,7 +123,7 @@ async function renderHeadless(
   workspaceId: string,
   path: string,
   body: z.infer<typeof exportRequestSchema>,
-  scope: StoreScope,
+  { scope, layoutCore }: Pick<ExportRouterOptions, 'scope' | 'layoutCore'>,
 ): Promise<{
   png: Buffer
   undrawable: readonly string[]
@@ -131,6 +133,7 @@ async function renderHeadless(
     workspaceId,
     path,
     scope,
+    ...(layoutCore === undefined ? {} : { layoutCore }),
     options: {
       padding: body.padding,
       scale: body.scale,
