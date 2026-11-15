@@ -447,7 +447,13 @@ production build, `ts` in a vitest run unless the job sets it; an unknown value
 throws). Each realm installs its own host through `startLayoutCore()` (the
 page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
 reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
-it routes in TypeScript. `layout-core-source.ts` is the one module that names
+it routes in TypeScript. The whole layout rides the same instance under its own
+switch, `VITE_WHITEBOARD_CORE_LAYOUT` (`differential` wherever routing is, `ts`
+in a production build until S16b): the core measures through the page's own
+measurer, which canvas-viewer's `createBrowserMeasureText` names `{kind:
+'host'}` and the core asks mid-layout through its one import. Under CI's
+`differential` + `throw` every browser test that lays a board out is therefore
+a whole-layout differential too. `layout-core-source.ts` is the one module that names
 the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
 `worker.plugins`): every build carries the wasm, because OKF and JSON Canvas have no TypeScript left here. A CI job
 that builds or tests the app restores the artifact with `.github/actions/core-wasm`.
