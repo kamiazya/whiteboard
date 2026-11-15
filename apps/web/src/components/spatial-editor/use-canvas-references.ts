@@ -1,10 +1,12 @@
 import {
+  overlayReferences,
   type ReferenceSeams,
   type ReferenceWire,
   referenceSeamsFromWire,
+  referenceWire,
   referenceWireFor,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { nodeFile, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo, useRef } from 'react'
 
 export interface CanvasReferences {
@@ -20,6 +22,36 @@ export interface CanvasReferences {
 }
 
 const NOTHING: CanvasReferences = { wire: undefined, seams: undefined, revision: undefined }
+
+/** What a surface layers over the wire: readable labels, and the references it holds as dangling. */
+export interface ReferenceChrome {
+  readonly labels?: ReadonlyMap<string, string>
+  readonly missing?: ReadonlySet<string>
+}
+
+const NO_CHROME: ReferenceChrome = {}
+
+const EMPTY_WIRE: ReferenceWire = referenceWire(new Map())
+
+/** The chrome of the file nodes `canvas` and every canvas `wire` loaded draw, and no more. */
+function chromeDrawnBy(
+  chrome: ReferenceChrome,
+  canvas: SpatialCanvas,
+  wire: ReferenceWire,
+): ReferenceChrome {
+  if (!hasChrome(chrome)) return chrome
+  const loaded = wire.entries.flatMap(([, entry]) => entry?.canvas ?? [])
+  const drawn = new Set(
+    [canvas, ...loaded].flatMap((c) => c.nodes.flatMap((node) => nodeFile(node) ?? [])),
+  )
+  return {
+    labels: new Map([...(chrome.labels ?? [])].filter(([ref]) => drawn.has(ref))),
+    missing: new Set([...(chrome.missing ?? [])].filter((ref) => drawn.has(ref))),
+  }
+}
+
+const hasChrome = (chrome: ReferenceChrome): boolean =>
+  (chrome.labels?.size ?? 0) > 0 || (chrome.missing?.size ?? 0) > 0
 
 let nextRevision = 0
 
@@ -55,15 +87,25 @@ function samePlainData(a: unknown, b: unknown): boolean {
  * object, or every completed link in a draft would re-lay out the whole
  * canvas. The two forms travel together because they are one decision: the
  * bundle a thread reads has to be built from the bytes the other one gets.
+ *
+ * `chrome` rides the wire as extras, layered AFTER the cut and kept to the
+ * file nodes this canvas and the canvases it loaded draw: the cut stops at
+ * the loading budget, which bounds what is fetched, never which card keeps
+ * its label or its dangling mark. A host that hands
+ * chrome and no wire gets an empty one to carry it, since a wire is the only
+ * form both threads and the core read.
  */
 export function useCanvasReferences(
   canvas: SpatialCanvas,
   references: ReferenceWire | undefined,
+  chrome: ReferenceChrome = NO_CHROME,
 ): CanvasReferences {
   const last = useRef<CanvasReferences | null>(null)
   return useMemo(() => {
-    if (references === undefined) return NOTHING
-    const wire = referenceWireFor(references, { canvases: [canvas] })
+    const base = references ?? (hasChrome(chrome) ? EMPTY_WIRE : undefined)
+    if (base === undefined) return NOTHING
+    const cut = referenceWireFor(base, { canvases: [canvas] })
+    const wire = overlayReferences(cut, chromeDrawnBy(chrome, canvas, cut))
     if (last.current !== null && samePlainData(last.current.wire, wire)) return last.current
     nextRevision += 1
     const own: CanvasReferences = {
@@ -73,5 +115,5 @@ export function useCanvasReferences(
     }
     last.current = own
     return own
-  }, [canvas, references])
+  }, [canvas, references, chrome])
 }
