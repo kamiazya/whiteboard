@@ -6,6 +6,7 @@
 // while the doc cache read the process's data dir and a separate file loader
 // took an explicit one; tying both ends to the same scope closes that.
 
+import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import { readFacets, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { readTagLibrary, type TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
@@ -68,6 +69,18 @@ interface HeadlessCanvasExportArgs {
   /** Which data directory the document is read from. */
   scope: StoreScope
   options?: HeadlessCanvasExportOptions
+  /**
+   * The composition root's `ServerDeps.layoutCore`, so the file export lays
+   * out through the same switch, and the same loaded core, as
+   * `wb_scene_render`. Absent, or answering nothing under `ts`, the layout is
+   * the TypeScript's.
+   */
+  layoutCore?: () => Promise<LayoutCore | undefined>
+}
+
+async function coreOf(args: HeadlessCanvasExportArgs): Promise<{ core?: LayoutCore }> {
+  const core = await args.layoutCore?.()
+  return core === undefined ? {} : { core }
 }
 
 export async function exportCanvasHeadless(
@@ -81,6 +94,7 @@ export async function exportCanvasHeadless(
     theme: args.options?.theme,
     style: args.options?.style,
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
+    ...(await coreOf(args)),
   })
 }
 
@@ -94,5 +108,6 @@ export async function exportCanvasHeadlessSvg(
     theme: args.options?.theme,
     style: args.options?.style,
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
+    ...(await coreOf(args)),
   })
 }

@@ -18,6 +18,11 @@
  *             style, no comment layer) over the composer recordings' boards,
  *             the drawing corpus, the canvases under docs/assets, and every
  *             Markdown file under docs/ and skills/ as one text node.
+ *   export    what the PNG/SVG file export (`/export`, `/export-svg`) hands
+ *             the layout, in its light and its dark mode, over the daemon
+ *             profile's corpora: the options are the export's own
+ *             (`exportLayoutOptions`), so the dark appearance and the
+ *             measurer's `fontAvailable` are the ones the export passes.
  *
  * The web root is not run: it measures with a canvas context the core
  * cannot repeat, so every web layout skips as `measure` by construction.
@@ -36,6 +41,7 @@ import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs
 import { boards } from '../../../canvas-render/src/test-utils/compose-canvas-oracle/corpus.ts'
 import { DRAWING_CORPUS } from '../../../canvas-render/src/test-utils/drawing-corpus.ts'
 import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-cases.ts'
+import { exportLayoutOptions } from '../../src/server/export/headless-renderer.ts'
 import { coreLoaders, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
 import { createExportTextMeasurer } from '../../src/server/export/measure-text.ts'
 
@@ -144,13 +150,25 @@ async function measureCensus() {
   const tallying = tallyingCore(base)
   const fontsDir = await mkdtemp(join(tmpdir(), 'wb-census-fonts-'))
   try {
-    const { measure } = await createExportTextMeasurer({ fontsDir })
+    const { measure, measurableFamilies } = await createExportTextMeasurer({ fontsDir })
     const daemon = {
       measure,
       appearance: createSpatialTheme({ mode: 'light' }),
       commentLayer: false,
     }
-    const corpora = { recorded: layoutCases(20), ...(await daemonCorpora(daemon)) }
+    const fontAvailable = (family) => measurableFamilies.has(family)
+    const exportCorpora = async (mode) =>
+      Object.fromEntries(
+        Object.entries(
+          await daemonCorpora(exportLayoutOptions(measure, mode, undefined, fontAvailable)),
+        ).map(([name, cases]) => [`export ${mode}: ${name}`, cases]),
+      )
+    const corpora = {
+      recorded: layoutCases(20),
+      ...(await daemonCorpora(daemon)),
+      ...(await exportCorpora('light')),
+      ...(await exportCorpora('dark')),
+    }
     return Object.fromEntries(
       Object.entries(corpora).map(([name, cases]) => [name, censusOf(tallying, cases)]),
     )

@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   writeDocumentKind,
   writeFacets,
@@ -194,5 +195,44 @@ describe('exportCanvasHeadlessSvg', () => {
     expect(result.svg).toBe('<svg><rect/></svg>')
     const [canvas] = renderSvgSpy.mock.calls[0]!
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n1'])
+  })
+})
+
+describe('the layout core reaches the renderer', () => {
+  // A stand-in: the renderer is mocked, so what matters is that the core the
+  // factory answers is the one the renderer is handed.
+  const core = { routing: {}, impl: { routeLayout: 'rust' } } as unknown as LayoutCore
+
+  it('hands the PNG renderer the core its factory answers', async () => {
+    await saveDocument('01KR4HFA5KRXT4QEFYG44FX0A1', 'design', spatialTextDoc('n1', 'hello'))
+    await exportCanvasHeadless({
+      scope: testStoreScope(),
+      workspaceId: '01KR4HFA5KRXT4QEFYG44FX0A1',
+      path: 'design',
+      layoutCore: async () => core,
+    })
+    expect(renderSpy.mock.calls[0]?.[2]?.core).toBe(core)
+  })
+
+  it('hands the SVG renderer the core its factory answers', async () => {
+    await saveDocument('01KR4HFA5KRXT4QEFYG44FX0A2', 'design', spatialTextDoc('n1', 'hello'))
+    await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: '01KR4HFA5KRXT4QEFYG44FX0A2',
+      path: 'design',
+      layoutCore: async () => core,
+    })
+    expect(renderSvgSpy.mock.calls[0]?.[2]?.core).toBe(core)
+  })
+
+  it('hands no core when the factory answers none (the `ts` switch)', async () => {
+    await saveDocument('01KR4HFA5KRXT4QEFYG44FX0A3', 'design', spatialTextDoc('n1', 'hello'))
+    await exportCanvasHeadlessSvg({
+      scope: testStoreScope(),
+      workspaceId: '01KR4HFA5KRXT4QEFYG44FX0A3',
+      path: 'design',
+      layoutCore: async () => undefined,
+    })
+    expect(renderSvgSpy.mock.calls[0]?.[2]).not.toHaveProperty('core')
   })
 })

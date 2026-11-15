@@ -4,6 +4,7 @@ import { createSpatialTheme } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { exportLayoutOptions } from '../../src/server/export/headless-renderer.js'
 import {
   coreLoaders,
   layoutCoreSettingsFrom,
@@ -57,4 +58,19 @@ describe('the layout census', () => {
       })
     },
   )
+
+  it.runIf(built)("the file export's options are answered by the core in both modes", async () => {
+    const base = await coreLoaders(
+      layoutCoreSettingsFrom({ WHITEBOARD_CORE_LAYOUT: 'differential' }),
+    ).layoutCore()
+    if (base === undefined) throw new Error('the core did not load')
+    const measure = createFakeMeasure()
+    const cases = (['light', 'dark'] as const).map((mode) => ({
+      canvas: board('exported words'),
+      options: exportLayoutOptions(measure, mode, undefined, () => true),
+    }))
+    const { layouts, counts } = censusOf(tallyingCore(base), cases)
+    expect(layouts).toBe(2)
+    expect(Object.fromEntries(counts)).toEqual({ answered: 2 })
+  })
 })
