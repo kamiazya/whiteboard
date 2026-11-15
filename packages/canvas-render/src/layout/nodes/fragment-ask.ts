@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import type { RenderedSvgFragment } from './nodes/mdast-layout-options.js'
+import type { RenderedSvgFragment } from './mdast-layout-options.js'
 
 // Rendered math blocks and diagram fences as DATA. The engines behind the
 // `renderMath` / `renderDiagram` seams (MathJax, mermaid) are asynchronous and

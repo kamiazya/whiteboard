@@ -21,9 +21,9 @@ import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
-import type { FragmentAsk } from './fragment-ask.js'
 import { usesFragmentTable } from './fragment-table.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
+import type { FragmentAsk } from './nodes/fragment-ask.js'
 
 // The whole layout's switch (ADR-0054 step 7): which requests the Rust core
 // can be handed, and who answers one under `ts`, `differential` and `rust`.

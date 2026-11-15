@@ -77,12 +77,6 @@ export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
-export {
-  type FragmentAsk,
-  type FragmentEntry,
-  fragmentAskKey,
-  fragmentAskSchema,
-} from './layout/fragment-ask.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
 export {
   SKETCH_INK_REACH_PX,
@@ -92,6 +86,12 @@ export {
   sketchShape,
 } from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
+export {
+  type FragmentAsk,
+  type FragmentEntry,
+  fragmentAskKey,
+  fragmentAskSchema,
+} from './layout/nodes/fragment-ask.js'
 export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
 export {
   BODY_FONT_SIZE_PX,

@@ -6,8 +6,8 @@ import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { canvasLayoutRequest } from './canvas-switch.js'
 import type { CoreImpl, CoreMismatch, LayoutCore } from './edges/layout-core.js'
-import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from './fragment-ask.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
+import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from './nodes/fragment-ask.js'
 import { layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
 
 const base: SpatialLayoutOptions = {
