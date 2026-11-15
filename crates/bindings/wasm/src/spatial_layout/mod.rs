@@ -4,15 +4,17 @@
 //! back mid-layout.
 //!
 //! In: the request (the value wire of [`crate::json_canvas_wire`], read by
-//! [`request`]) and the bytes of the faces a font-table measurer reads. Out:
-//! one JSON text whose first element names the outcome:
+//! [`request`]), whose font-table measurer names faces registered beforehand
+//! by [`register_layout_fonts`]. Out: one JSON text whose first element names
+//! the outcome:
 //!
 //! - `["ok", scene, anchors, degradations]`: the scene as the TypeScript holds
 //!   it ([`whiteboard_canvas_render::scene_wire`]), the anchors as
 //!   `[id, pair]` rows in the order the routing settled them, and what the
 //!   layout reported instead of failing, as the TypeScript's events;
 //! - `["refused", code, class]`: an input past this entry's caps, or one that
-//!   is not a request;
+//!   is not a request; `["refused", "malformed", "font-handle"]` names a
+//!   handle this instance holds no faces under, and the host registers again;
 //! - `["needs", {code}]`: the fences, as `[lang, value]` rows in the order the
 //!   layout met them, that the default highlighter colours and whose tokens the
 //!   request's `codeTokens` did not carry; the host tokenises exactly those and
@@ -24,8 +26,13 @@
 //! A host answers a refusal and a decline from the TypeScript.
 
 mod answer;
+mod fonts;
 mod measure;
 mod request;
+
+pub use fonts::{
+    MAX_FACES, MAX_HANDLES, MAX_HELD_BYTES, register_layout_fonts, release_layout_fonts,
+};
 
 use std::sync::OnceLock;
 
@@ -48,7 +55,7 @@ use whiteboard_scene::NodeDecoration;
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, needs, refused};
-use measure::measurer;
+use measure::with_measurer;
 use request::{Comments, Request, Style, request_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
@@ -220,8 +227,8 @@ fn lay_out(
 /// A whole canvas laid out; see the module's documentation for the wire.
 #[wasm_bindgen]
 #[must_use]
-pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
-    if request.len().saturating_add(fonts.len()) > LAYOUT_SPATIAL_CANVAS.max_bytes {
+pub fn layout_spatial_canvas(request: &str) -> String {
+    if request.len() > LAYOUT_SPATIAL_CANVAS.max_bytes {
         return refused("input-too-large", "too-large");
     }
     let Some(request) = serde_json::from_str(request).ok().as_ref().and_then(json_value) else {
@@ -239,9 +246,6 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     if body_total(&request) > MAX_BODY_BYTES {
         return refused("input-too-large", "bodies");
     }
-    let Some(measure) = measurer(&request.measure, fonts) else {
-        return refused("malformed", "font");
-    };
     let (Some(registry), Some(themes)) = (registry(), themes()) else {
         return refused("malformed", "registry");
     };
@@ -250,7 +254,8 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     if request.font_families.len() > themes.len() {
         return refused("input-too-large", "font-families");
     }
-    lay_out(&request, measure.as_ref(), registry, themes)
+    with_measurer(&request.measure, |measure| lay_out(&request, measure, registry, themes))
+        .unwrap_or_else(|| refused("malformed", "font-handle"))
 }
 
 #[cfg(test)]

@@ -16,5 +16,7 @@ declare module '#glue' {
   export function json_canvas_parse(text: string): string
   export function json_canvas_serialize(canvas: string, strict: boolean): string
   export function facet_bucket_check(target: string, bucket: string, library: string): string
-  export function layout_spatial_canvas(request: string, fonts: Uint8Array): string
+  export function layout_spatial_canvas(request: string): string
+  export function register_layout_fonts(bytes: Uint8Array, faces: string): string
+  export function release_layout_fonts(handle: number): boolean
 }

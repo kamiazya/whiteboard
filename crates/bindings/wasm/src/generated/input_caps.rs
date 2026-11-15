@@ -43,3 +43,7 @@ pub const EDGE_ROUTE_LAYOUT: InputCaps =
 /// The caps of `whiteboard-wasm::spatial_layout::layout_spatial_canvas`.
 pub const LAYOUT_SPATIAL_CANVAS: InputCaps =
     InputCaps { max_bytes: 4_194_304, max_depth: 128, max_millis: 60_000, max_nodes: Some(4096) };
+
+/// The caps of `whiteboard-wasm::spatial_layout::register_layout_fonts`.
+pub const REGISTER_LAYOUT_FONTS: InputCaps =
+    InputCaps { max_bytes: 67_108_864, max_depth: 128, max_millis: 2000, max_nodes: Some(64) };

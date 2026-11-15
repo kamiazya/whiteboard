@@ -112,10 +112,38 @@ fn the_comment_seeds_are_layouts_the_export_draws_a_comment_layer_for() {
     let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
     for name in ["comments", "comment-passages"] {
         let request = std::fs::read_to_string(seeds.join(name)).unwrap();
-        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, &[]);
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
         assert!(
             answer.starts_with("[\"ok\"") && answer.contains("/pin\""),
             "{name}: {answer:.120}"
         );
     }
+}
+
+#[test]
+fn the_font_seeds_are_faces_the_export_registers() {
+    // A seed refused at its wire or its faces teaches the fuzzer nothing about
+    // the measurer a handle builds; only the ones named for a refusal may be.
+    let mut held = 0usize;
+    for input in std::fs::read_dir(root().join("seeds").join("register_layout_fonts_wasm")).unwrap()
+    {
+        let input = input.unwrap().path();
+        let bytes = std::fs::read(&input).unwrap();
+        let at = bytes.iter().position(|&b| b == 0).unwrap();
+        let faces = std::str::from_utf8(&bytes[..at]).unwrap();
+        let answer =
+            whiteboard_wasm::spatial_layout::register_layout_fonts(&bytes[at + 1..], faces);
+        let handle = answer.strip_prefix("[\"ok\",").and_then(|h| h.strip_suffix(']'));
+        let refused = handle.is_none();
+        assert_eq!(
+            refused,
+            input.file_name().is_some_and(|f| f == "outside"),
+            "{input:?}: {answer}"
+        );
+        if let Some(handle) = handle.and_then(|h| h.parse().ok()) {
+            assert!(whiteboard_wasm::spatial_layout::release_layout_fonts(handle));
+            held += 1;
+        }
+    }
+    assert!(held >= 5, "only {held} font seeds register");
 }

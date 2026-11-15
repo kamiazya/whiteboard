@@ -4,25 +4,24 @@
 
 use whiteboard_canvas_render::constant_ratio::ConstantRatioMeasure;
 use whiteboard_canvas_render::fake_measure::FakeMeasure;
-use whiteboard_canvas_render::font_measure::FontTableMeasurer;
-use whiteboard_canvas_render::measure::{FontStyle, Measure};
+use whiteboard_canvas_render::measure::Measure;
 
+use super::fonts::held;
 use super::request::MeasureSpec;
 
-/// The measurer `spec` names over `fonts`; `None` when a face is not where it
-/// says or does not parse.
-pub(super) fn measurer<'f>(spec: &MeasureSpec, fonts: &'f [u8]) -> Option<Box<dyn Measure + 'f>> {
-    Some(match spec {
-        MeasureSpec::Fake(factor) => Box::new(FakeMeasure::new(*factor)),
-        MeasureSpec::Ratio => Box::new(ConstantRatioMeasure),
-        MeasureSpec::Fonts(faces) => {
-            let mut measurer = FontTableMeasurer::new();
-            for face in faces {
-                let style = if face.italic { FontStyle::Italic } else { FontStyle::Normal };
-                let bytes = fonts.get(face.from..face.to)?;
-                measurer = measurer.with_face(&face.family, face.bold, style, bytes).ok()?;
-            }
-            Box::new(measurer)
+/// `then` over the measurer `spec` names; `None` when it names a handle no
+/// registration holds.
+pub(super) fn with_measurer<R>(
+    spec: &MeasureSpec,
+    then: impl FnOnce(&dyn Measure) -> R,
+) -> Option<R> {
+    match spec {
+        MeasureSpec::Fake(factor) => Some(then(&FakeMeasure::new(*factor))),
+        MeasureSpec::Ratio => Some(then(&ConstantRatioMeasure)),
+        MeasureSpec::Fonts(handle) => {
+            let fonts = held();
+            let measurer = fonts.measurer(*handle)?;
+            Some(then(&measurer))
         }
-    })
+    }
 }

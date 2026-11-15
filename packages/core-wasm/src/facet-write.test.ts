@@ -15,6 +15,8 @@ function coreAnswering(answer: unknown) {
     json_canvas_parse: () => '',
     json_canvas_serialize: () => '',
     layout_spatial_canvas: () => '[]',
+    register_layout_fonts: () => '[]',
+    release_layout_fonts: () => false,
     facet_bucket_check: (target, bucket, library) => {
       sent.push([target, bucket, library])
       return raw

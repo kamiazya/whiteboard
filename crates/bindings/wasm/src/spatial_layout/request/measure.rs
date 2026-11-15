@@ -1,12 +1,14 @@
 //! The measurer a request names: the fake measurer at its factor, the ratio
-//! estimate, or the font-table measurer over faces placed in the fonts argument.
+//! estimate, or the font-table measurer over faces registered beforehand
+//! ([`super::super::fonts`]), named by the handle registering them answered.
 
 use whiteboard_model::Value;
 
 use super::flag_of;
-use crate::json_canvas_wire::{Fields, items_of, number_of, string_of};
+use crate::json_canvas_wire::{Fields, number_of, string_of};
 
-/// One face of a font-table measurer: where its bytes sit in the fonts argument.
+/// One face of a font-table measurer: where its bytes sit in the bytes
+/// registered with it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Face {
     pub(crate) family: String,
@@ -23,17 +25,17 @@ pub(crate) enum MeasureSpec {
     Fake(f64),
     /// `constantRatioMeasureText`, the estimate with no font.
     Ratio,
-    /// The Node measurer over these faces.
-    Fonts(Vec<Face>),
+    /// The Node measurer over the faces registered under this handle.
+    Fonts(u32),
 }
 
-/// A whole number that indexes the fonts argument: a fraction, a sign, an
+/// A whole number that indexes the registered bytes: a fraction, a sign, an
 /// exponent or a non-finite number spells no index, so its text does not parse.
 fn offset_of(value: &Value) -> Option<usize> {
     format!("{}", number_of(value)?).parse().ok()
 }
 
-fn face_of(value: &Value) -> Option<Face> {
+pub(crate) fn face_of(value: &Value) -> Option<Face> {
     let mut f = Fields::of(value)?;
     let face = Face {
         family: f.field("family", string_of)??,
@@ -50,7 +52,7 @@ pub(super) fn measure_of(value: &Value) -> Option<MeasureSpec> {
     let spec = match f.field("kind", string_of)??.as_str() {
         "fake" => MeasureSpec::Fake(f.field("factor", number_of)??),
         "ratio" => MeasureSpec::Ratio,
-        "fonts" => MeasureSpec::Fonts(f.field("faces", |v| items_of(v, face_of))??),
+        "fonts" => MeasureSpec::Fonts(f.field("handle", |v| u32::try_from(offset_of(v)?).ok())??),
         _ => return None,
     };
     f.all_named().then_some(spec)
