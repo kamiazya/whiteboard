@@ -1,6 +1,6 @@
 import { nodeFile, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Scene } from '@kamiazya/whiteboard-scene'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import type {
   CanvasLayoutCore,
   CanvasLayoutRequest,
