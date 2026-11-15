@@ -123,12 +123,12 @@ describe('the whole layout through the core switch', () => {
 
   it('reports a layout the request gate skips by its class, asking the core nothing', () => {
     for (const impl of ['rust', 'differential'] as const) {
-      const { laid, mismatches, requests } = run(impl, agreeing, { style: 'document' })
+      const { laid, mismatches, requests } = run(impl, agreeing, { renderMath: () => undefined })
       expect(requests).toEqual([])
-      expect(laid.scene).toEqual(
-        layoutSpatialCanvasWithAnchors(canvas, { ...base, style: 'document' }).scene,
-      )
-      expect(mismatches).toEqual([{ fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'style' }])
+      expect(laid.scene).toEqual(reference.scene)
+      expect(mismatches).toEqual([
+        { fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'seam:renderMath' },
+      ])
     }
   })
 
@@ -220,8 +220,6 @@ describe('what the core can be handed', () => {
       [{ resolveReference: () => undefined }, 'seam:resolveReference'],
       [{ nestedLayoutBudget: { remaining: 1 } as never }, 'seam:nestedLayoutBudget'],
       [{ highlightCode: () => undefined }, 'highlighter'],
-      [{ style: 'document' }, 'style'],
-      [{ style: 'visual.neon' }, 'style'],
       [{ threads: [{} as never] }, 'comments'],
       [{ proposals: [{} as never] }, 'proposals'],
       [{ references: referenceSeams(new Map()) }, 'references'],
@@ -238,6 +236,27 @@ describe('what the core can be handed', () => {
       { commentLayer: false, threads: [{} as never] },
     ]
     for (const options of kept) expect(request(options)).not.toHaveProperty('skip')
+  })
+
+  it('carries a drawn style, and the families its themes name that this surface holds', () => {
+    for (const style of ['document', 'visual.neon', 'visual.gone']) {
+      expect(request({ style })).toEqual({ ...request({}), style })
+    }
+    expect(request({ style: 'clean', fontAvailable: () => true })).toEqual(request({}))
+    const asked: string[] = []
+    const held = request({
+      style: 'document',
+      fontAvailable: (family) => {
+        asked.push(family)
+        return true
+      },
+    })
+    expect(held).toEqual({ ...request({}), style: 'document', fontFamilies: ['Yomogi'] })
+    // Only a family a theme names is asked about, which is all the layout asks.
+    expect(asked).toEqual(['Yomogi'])
+    expect(request({ style: 'visual.sketch', fontAvailable: () => false })).not.toHaveProperty(
+      'fontFamilies',
+    )
   })
 
   it('names the first reason when several hold, the measurer before the rest', () => {

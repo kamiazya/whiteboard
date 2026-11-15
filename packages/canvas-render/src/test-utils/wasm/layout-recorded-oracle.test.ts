@@ -53,6 +53,8 @@ describe('the recorded whole-layout oracle', () => {
       'embedPath',
       'references',
       '"dark"',
+      '"style"',
+      '"fontFamilies"',
     ]) {
       expect(requests, field).toContain(field)
     }
@@ -65,6 +67,11 @@ describe('the recorded whole-layout oracle', () => {
     const shortcodes = (recorded.get('shortcode') ?? []).map((r) => r.answer).join('\n')
     expect(shortcodes, 'an emoji expanded').toContain('🚀')
     expect(shortcodes, 'an icon drawn').toContain('{"kind":"icon","name":"star"}')
+    const themed = (recorded.get('theme') ?? []).map((r) => r.answer).join('\n')
+    expect(themed, 'a theme nobody registered').toContain('"kind":"unknown-theme"')
+    expect(themed, 'a family the surface lacks').toContain('"kind":"font-missing"')
+    expect(themed, 'a family the surface holds').toContain('"fontFamily":"Yomogi"')
+    expect(themed, 'sketch ink').toContain('"style":"sketch"')
     expect(
       all.filter((r) => r.answer.includes('"kind":"unknown-node-kind"')).length,
     ).toBeGreaterThan(0)
