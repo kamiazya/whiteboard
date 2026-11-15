@@ -6,5 +6,5 @@ use whiteboard_facet_engine::engine::ThemeTokens;
 
 pub(crate) fn theme_tokens(value: &Value) -> Result<ThemeTokens, String> {
     let read = whiteboard_model::json::parse(&value.to_string()).map_err(|e| format!("{e:?}"))?;
-    whiteboard_canvas_render::theme::tokens::theme_tokens(&read).ok_or_else(|| format!("{value}"))
+    Ok(whiteboard_canvas_render::theme::tokens::theme_tokens(&read))
 }

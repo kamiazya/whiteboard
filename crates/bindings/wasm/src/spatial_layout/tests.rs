@@ -327,4 +327,7 @@ fn a_style_draws_the_theme_it_names_in_a_family_the_surface_holds() {
     }
     let not_families = request(board("x"), &[("fontFamilies", s(vec![json!(1)]))]);
     assert_eq!(answer(&not_families, &[]), json!(["refused", "malformed", "request"]));
+    let three = s(vec![json!("A"), json!("B"), json!("Yomogi")]);
+    let past = request(board("x"), &[("style", json!("visual.sketch")), ("fontFamilies", three)]);
+    assert_eq!(answer(&past, &[]), json!(["refused", "input-too-large", "font-families"]));
 }

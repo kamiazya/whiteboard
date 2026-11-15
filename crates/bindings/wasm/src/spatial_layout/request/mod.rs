@@ -7,8 +7,6 @@ mod measure;
 mod options;
 mod references;
 
-use std::collections::BTreeSet;
-
 use whiteboard_canvas_render::references::{Expansion, ReferenceWire};
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorOverride;
@@ -31,7 +29,7 @@ pub(crate) struct Request {
     pub(crate) dark: bool,
     pub(crate) style: Style,
     /// The families a theme may name that this surface holds a face for.
-    pub(crate) font_families: BTreeSet<String>,
+    pub(crate) font_families: Vec<String>,
     pub(crate) geometry: Option<SpatialGeometry>,
     pub(crate) locked: Vec<String>,
     pub(crate) suppressed: Vec<String>,

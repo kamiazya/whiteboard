@@ -131,7 +131,7 @@ fn lay_out(
     themes: &[(String, ThemeTokens)],
 ) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
-    let held = |family: &str| request.font_families.contains(family);
+    let held = |family: &str| request.font_families.iter().any(|held| held == family);
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand.clone());
     let badge = StencilBadge { registry };
@@ -192,10 +192,15 @@ pub fn layout_spatial_canvas(request: &str, fonts: &[u8]) -> String {
     let Some(measure) = measurer(&request.measure, fonts) else {
         return refused("malformed", "font");
     };
-    match (registry(), themes()) {
-        (Some(registry), Some(themes)) => lay_out(&request, measure.as_ref(), registry, themes),
-        _ => refused("malformed", "registry"),
+    let (Some(registry), Some(themes)) = (registry(), themes()) else {
+        return refused("malformed", "registry");
+    };
+    // Each family names one a bundled theme names, so an honest list is no
+    // longer than the theme table; it is searched once per theme a canvas draws.
+    if request.font_families.len() > themes.len() {
+        return refused("input-too-large", "font-families");
     }
+    lay_out(&request, measure.as_ref(), registry, themes)
 }
 
 #[cfg(test)]
