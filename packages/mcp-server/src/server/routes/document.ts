@@ -181,6 +181,7 @@ export function createDocumentRouter(options: DocumentRouterOptions) {
     createDocumentSvgExportRouter({
       liveDocuments: options.serverDeps.liveDocuments,
       scope: options.scope,
+      layoutCore: options.serverDeps.layoutCore,
       ...(options.exportPaths === undefined ? {} : { exportPaths: options.exportPaths }),
     }),
   )

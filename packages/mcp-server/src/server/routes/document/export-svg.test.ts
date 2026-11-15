@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   answerUnhandled,
   apiErrorBodySchema,
@@ -44,6 +45,7 @@ const mockExportCanvasHeadlessSvg =
       workspaceId: string
       path: string
       options?: { padding?: number; theme?: 'light' | 'dark' }
+      layoutCore?: () => Promise<LayoutCore | undefined>
     }) => Promise<{
       svg: string
       undrawable: readonly string[]
@@ -73,7 +75,10 @@ const svgUrl = (documentId: string, workspaceId = 's1') =>
   `/api/workspaces/${workspaceId}/documents/${documentId}/export-svg`
 const SVG_URL = svgUrl(CANVAS_A)
 
-function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
+function makeApp(
+  scope: StoreScope = testStoreScope(tempDir),
+  layoutCore?: () => Promise<LayoutCore | undefined>,
+) {
   const app = new Hono()
   resolvingDocumentIds(app, { [CANVAS_A]: { path: 'canvas-a' } })
   app.route(
@@ -81,6 +86,7 @@ function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
     createDocumentSvgExportRouter({
       liveDocuments: { exists: mockDocumentExists },
       scope,
+      ...(layoutCore === undefined ? {} : { layoutCore }),
     }),
   )
   return app
@@ -123,6 +129,15 @@ describe('POST /api/workspaces/:workspaceId/documents/:documentId/export-svg', (
   // characters as `<text>`, so a viewer whose system has the face reads them
   // — only rasterising is lossy. A caller relaying this to a person owes them
   // that distinction.
+  it('hands the export the layout core factory it was built with', async () => {
+    const layoutCore = async () => undefined
+    const res = await makeApp(undefined, layoutCore).request(SVG_URL, { method: 'POST' })
+    expect(res.status).toBe(200)
+    expect(mockExportCanvasHeadlessSvg).toHaveBeenCalledWith(
+      expect.objectContaining({ layoutCore }),
+    )
+  })
+
   it('writes the default export under the layout it is handed, not the process data dir', async () => {
     const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-svg-layout-'))
     try {

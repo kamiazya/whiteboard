@@ -1,5 +1,5 @@
 import { isDatabaseBusy } from '@kamiazya/whiteboard-ports'
-import type { ApiErrorBody, LiveDocuments } from '@kamiazya/whiteboard-server-core'
+import type { ApiErrorBody, LiveDocuments, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import {
   type ExportSvgRequest,
@@ -37,6 +37,8 @@ export interface DocumentSvgExportRouterOptions {
   scope: StoreScope
   /** Defaults to `absolute`, the local daemon's answer. */
   exportPaths?: ExportPathAnswer
+  /** The deps' core switch, so the file export lays out as `wb_scene_render` does. */
+  layoutCore?: ServerDeps['layoutCore']
 }
 
 export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOptions) {
@@ -66,6 +68,7 @@ export function createDocumentSvgExportRouter(options: DocumentSvgExportRouterOp
         workspaceId,
         path,
         scope: options.scope,
+        ...(options.layoutCore === undefined ? {} : { layoutCore: options.layoutCore }),
         options: { padding: body.padding, theme: body.theme, style: body.style },
       })
       svg = result.svg

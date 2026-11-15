@@ -25,6 +25,7 @@
 // one gets an exporter of its own.
 
 import type {
+  LayoutCore,
   MeasureText,
   Scene,
   SpatialLayoutDegradation,
@@ -88,6 +89,12 @@ export interface HeadlessExportOptions {
    * stored.
    */
   tagLibrary?: TagLibrary
+  /**
+   * The Rust core and its switch (`ServerDeps.layoutCore`, resolved by the
+   * caller), so a file export is laid out by whatever lays out
+   * `wb_scene_render`. Absent, the layout is the TypeScript's.
+   */
+  core?: LayoutCore
 }
 
 const DEFAULT_PADDING_PX = 10
@@ -212,6 +219,7 @@ export function buildSpatialScene(
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
   tagLibrary?: TagLibrary,
+  core?: LayoutCore,
 ): Scene {
   return layoutSpatialCanvas(canvas, {
     measure,
@@ -222,6 +230,7 @@ export function buildSpatialScene(
     ...(style === undefined ? {} : { style }),
     ...(fontAvailable === undefined ? {} : { fontAvailable }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
+    ...(core === undefined ? {} : { core }),
   })
 }
 
@@ -248,6 +257,7 @@ function buildSvg(
     options.style,
     fontAvailable,
     options.tagLibrary,
+    options.core,
   )
   const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,

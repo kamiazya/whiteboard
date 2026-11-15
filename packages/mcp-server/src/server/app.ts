@@ -523,8 +523,8 @@ export function createApp(options: AppOptions) {
     }),
   )
   app.route('/', createFilesRouter({ versionStore, scope }))
-  const { liveDocuments } = options.serverDeps
-  app.route('/', createExportRouter({ liveDocuments, scope, exportPaths }))
+  const { liveDocuments, layoutCore } = options.serverDeps
+  app.route('/', createExportRouter({ liveDocuments, scope, exportPaths, layoutCore }))
   app.route('/', fontsRouter(options, scope))
   app.route('/', createSyncSseRouter(syncSseOptions(options, admit)))
   app.route('/', createDebugRouter({ scope }))
