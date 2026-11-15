@@ -87,6 +87,6 @@ pub(super) fn tag_key_of(value: &Value) -> Option<TagKeyDeclaration> {
 pub(super) fn expansion_of(value: &Value) -> Option<Expansion> {
     match value {
         Value::Bool(open) => Some(Expansion::Every(*open)),
-        _ => Some(Expansion::Only(strings_of(value)?.into_iter().collect())),
+        _ => strings_of(value).map(Expansion::Only),
     }
 }

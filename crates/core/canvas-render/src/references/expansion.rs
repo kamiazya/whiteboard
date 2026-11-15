@@ -3,8 +3,6 @@
 //! node of the canvas and of each canvas it could nest, so the core asks a
 //! table where the TypeScript calls a function.
 
-use std::collections::BTreeSet;
-
 use whiteboard_model::spatial::SpatialNode;
 
 /// The settled policy. A node is asked by its id alone, which is why the
@@ -13,8 +11,10 @@ use whiteboard_model::spatial::SpatialNode;
 pub enum Expansion {
     /// Every file node alike.
     Every(bool),
-    /// Only the file nodes with these ids.
-    Only(BTreeSet<String>),
+    /// Only the file nodes with these ids. A list searched in order: a
+    /// request holds at most its element cap of them, and a sorted set's
+    /// construction cost the shipped module ~17 KB, more than the search costs a layout.
+    Only(Vec<String>),
 }
 
 impl Expansion {

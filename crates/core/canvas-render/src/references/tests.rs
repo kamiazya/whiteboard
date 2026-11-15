@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeMap;
 
 use whiteboard_codec::markdown::parse_markdown_body;
 use whiteboard_codec::references::resolve_references;
@@ -298,12 +298,12 @@ fn each_refusal_names_its_class() {
 #[test]
 fn a_file_node_opens_when_the_settled_policy_names_its_id() {
     let wire = wire();
-    let ids = ["f1".to_owned(), "f3".to_owned()].into_iter().collect();
+    let ids = vec!["f1".to_owned(), "f3".to_owned()];
     let host = WireHost::new(&wire, Expansion::Only(ids));
     assert!(host.expand_file_node(&node("f1")));
     assert!(host.expand_file_node(&node("f3")));
     assert!(!host.expand_file_node(&node("f2")));
-    assert!(!WireHost::new(&wire, Expansion::Only(BTreeSet::new())).expand_file_node(&node("f1")));
+    assert!(!WireHost::new(&wire, Expansion::Only(Vec::new())).expand_file_node(&node("f1")));
     assert!(WireHost::new(&wire, Expansion::Every(true)).expand_file_node(&node("f2")));
     assert!(!WireHost::new(&wire, Expansion::Every(false)).expand_file_node(&node("f2")));
 }
