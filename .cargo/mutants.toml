@@ -23,6 +23,19 @@ exclude_re = [
   # tested `parse_args`, `default_dir_for` and `wasm_build_args`; the rest is
   # judged by running `dist` in CI's rust job and `repro-check`.
   '^crates/xtask/src/dist\.rs:\d+:\d+: replace (build|bindgen|run_task) -> ',
+  # The host measurer's import body: it calls the JavaScript `measure` the
+  # wasm-bindgen glue hands over, which only exists inside a wasm host, so no
+  # native test can call it. Judged through the real artifact by
+  # canvas-render-rust's host-measured whole-layout differential (no answer
+  # declines every layout; a wrong one differs) and by apps/web's
+  # host-measure-layout.browser.test.ts in Chromium.
+  '^crates/bindings/wasm/src/spatial_layout/host_measure\.rs:\d+:\d+: replace <impl Host for HostMeasurer>::measure -> ',
+  # `cargo xtask wasm-imports`' process plumbing: `run` builds every core
+  # crate and the bindings to wasm32 and scans each artifact. Its decisions
+  # are the tested `scan`, `disallowed_imports` and `host_import_drift`; the
+  # rest is judged by running it in `pnpm rust:check`, and emptying
+  # HOST_IMPORTS there fails it against the real artifact.
+  '^crates/xtask/src/wasm_imports\.rs:\d+:\d+: (replace run -> |.* in run$)',
   # config_score: `j` is filtered to `j != i` before these comparisons, so
   # `i <= j` is `i < j` (both `<` in apply_pair_costs and the one in
   # contribution).

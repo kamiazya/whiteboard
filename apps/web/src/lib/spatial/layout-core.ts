@@ -44,9 +44,6 @@ export interface CoreLog {
 function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally>) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
-  // The page never switches the whole layout on (it measures with a canvas
-  // context, which the core cannot repeat), so only a routing difference
-  // reaches here; the whole layout's is read for the type's sake.
   if (mismatch.fn === 'layoutSpatialCanvas') {
     const { fn, kind, at, ts, rust } = mismatch
     return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
@@ -77,13 +74,18 @@ function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMi
   }
 }
 
-/** What one loaded instance answers for routing: nothing for a switch that reads `ts`. */
+/**
+ * What one loaded instance answers: routing, and the whole layout under its
+ * own switch, measured by the page's measurer through the core's host import;
+ * nothing for a routing switch that reads `ts`.
+ */
 function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): LayoutCore | undefined {
   return settings.impl === 'ts'
     ? undefined
     : {
         routing: core,
-        impl: { routeLayout: settings.impl },
+        layout: core,
+        impl: { routeLayout: settings.impl, layoutSpatialCanvas: settings.layout },
         onMismatch: layoutReporter(settings, log),
       }
 }

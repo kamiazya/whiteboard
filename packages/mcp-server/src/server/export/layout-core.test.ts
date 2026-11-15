@@ -206,8 +206,8 @@ describe('the daemon layout core', () => {
         const recording = {
           ...core,
           layout: {
-            layoutSpatialCanvas: (r: never, highlight: never) => {
-              const answer = layout.layoutSpatialCanvas(r, highlight)
+            layoutSpatialCanvas: (r: never, highlight: never, measure: never) => {
+              const answer = layout.layoutSpatialCanvas(r, highlight, measure)
               answers.push('declined' in answer ? answer.declined : 'laid out')
               return answer
             },
@@ -283,9 +283,9 @@ describe('the daemon layout core', () => {
       const counting = {
         ...core,
         layout: {
-          layoutSpatialCanvas: (r: never, highlight: never) => {
+          layoutSpatialCanvas: (r: never, highlight: never, measure: never) => {
             asked += 1
-            return layout.layoutSpatialCanvas(r, highlight)
+            return layout.layoutSpatialCanvas(r, highlight, measure)
           },
         },
       }
@@ -325,8 +325,8 @@ describe('the daemon layout core', () => {
       const counting = {
         ...core,
         layout: {
-          layoutSpatialCanvas: (r: never, highlight: never) => {
-            const answer = layout.layoutSpatialCanvas(r, highlight)
+          layoutSpatialCanvas: (r: never, highlight: never, measure: never) => {
+            const answer = layout.layoutSpatialCanvas(r, highlight, measure)
             answers.push('declined' in answer ? answer.declined : 'laid out')
             return answer
           },

@@ -20,6 +20,12 @@
       "reason": "the same count-from-f64 reads as cast_possible_truncation: checked non-negative first"
     },
     {
+      "crate": "crates/bindings/wasm",
+      "lint": "clippy::needless_pass_by_value",
+      "count": 1,
+      "reason": "a wasm-bindgen export takes an imported JS object by value, which is the only way the glue hands one over; the layout borrows it"
+    },
+    {
       "crate": "crates/core/canvas-render",
       "lint": "clippy::cast_precision_loss",
       "count": 1,

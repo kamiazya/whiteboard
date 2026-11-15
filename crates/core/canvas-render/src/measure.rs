@@ -83,6 +83,12 @@ impl<M: Measure + ?Sized> Measure for &M {
     fn vertical_metrics(&self, font: &FontDescriptor) -> VerticalMetrics {
         (**self).vertical_metrics(font)
     }
+
+    // Forwarded rather than rebuilt from the two halves, so a measurer that
+    // answers whole metrics per text keeps doing so behind a reference.
+    fn measure(&self, text: &str, font: &FontDescriptor) -> TextMetrics {
+        (**self).measure(text, font)
+    }
 }
 
 /// Clamps a measurer's advance to a finite, non-negative value, as
@@ -119,5 +125,35 @@ mod tests {
     #[test]
     fn negative_zero_survives_the_clamp_as_typescript_leaves_it() {
         same(clamp_advance(-0.0), -0.0);
+    }
+
+    /// A measurer whose whole answer is not its two halves put together.
+    struct Whole;
+
+    impl Measure for Whole {
+        fn advance_width(&self, _: &str, _: &FontDescriptor) -> f64 {
+            1.0
+        }
+        fn vertical_metrics(&self, _: &FontDescriptor) -> VerticalMetrics {
+            VerticalMetrics { ascent: 2.0, descent: 3.0, line_gap: 4.0 }
+        }
+        fn measure(&self, _: &str, _: &FontDescriptor) -> TextMetrics {
+            TextMetrics { advance_width: 5.0, ascent: 6.0, descent: 7.0, line_gap: 8.0 }
+        }
+    }
+
+    #[test]
+    fn a_reference_answers_its_measurers_whole_metrics() {
+        let font = FontDescriptor {
+            family: "Roboto".to_owned(),
+            fallback_chain: Vec::new(),
+            weight: 400.0,
+            style: FontStyle::Normal,
+            size_px: 10.0,
+        };
+        let by_ref: &dyn Measure = &&Whole;
+        assert_eq!(by_ref.measure("x", &font), Whole.measure("x", &font));
+        assert_eq!(by_ref.advance_width("x", &font).to_bits(), 1.0_f64.to_bits());
+        assert_eq!(by_ref.vertical_metrics(&font), Whole.vertical_metrics(&font));
     }
 }

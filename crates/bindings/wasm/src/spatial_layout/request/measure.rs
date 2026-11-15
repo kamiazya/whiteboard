@@ -1,6 +1,7 @@
 //! The measurer a request names: the fake measurer at its factor, the ratio
-//! estimate, or the font-table measurer over faces registered beforehand
-//! ([`super::super::fonts`]), named by the handle registering them answered.
+//! estimate, the font-table measurer over faces registered beforehand
+//! ([`super::super::fonts`]), named by the handle registering them answered,
+//! or the host's own measurer, handed to the call beside the request.
 
 use whiteboard_model::Value;
 
@@ -27,6 +28,8 @@ pub(crate) enum MeasureSpec {
     Ratio,
     /// The Node measurer over the faces registered under this handle.
     Fonts(u32),
+    /// The host's measurer, asked mid-layout ([`super::super::host_measure`]).
+    Host,
 }
 
 /// A whole number that indexes the registered bytes: a fraction, a sign, an
@@ -52,6 +55,7 @@ pub(super) fn measure_of(value: &Value) -> Option<MeasureSpec> {
     let spec = match f.field("kind", string_of)??.as_str() {
         "fake" => MeasureSpec::Fake(f.field("factor", number_of)??),
         "ratio" => MeasureSpec::Ratio,
+        "host" => MeasureSpec::Host,
         "fonts" => MeasureSpec::Fonts(f.field("handle", |v| u32::try_from(offset_of(v)?).ok())??),
         _ => return None,
     };

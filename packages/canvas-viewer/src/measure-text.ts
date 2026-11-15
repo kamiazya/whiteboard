@@ -1,5 +1,5 @@
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
-import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText, describeMeasure } from '@kamiazya/whiteboard-canvas-render'
 
 function fontCss(font: FontDescriptor): string {
   const family = [font.family, ...font.fallbackChain].filter((name) => name.length > 0).join(', ')
@@ -94,6 +94,10 @@ function createMeasuringContext(): MeasuringContext | null {
  * (D3: canvas-render stays DOM-free, canvas-viewer supplies the browser
  * implementation). Lazily creates a single offscreen <canvas> 2D context
  * and reuses it across calls.
+ *
+ * Named `host` (ADR-0054 step 7): a canvas context is nothing the Rust core
+ * can repeat, so a layout the core answers asks this function itself,
+ * mid-layout, through its one host import.
  */
 export function createBrowserMeasureText(): MeasureText {
   let context: MeasuringContext | null | undefined
@@ -103,8 +107,11 @@ export function createBrowserMeasureText(): MeasureText {
     return context
   }
 
-  return (text: string, font: FontDescriptor): TextMetrics => {
-    const ctx = getContext()
-    return ctx ? measureWithContext(ctx, text, font) : constantRatioMeasureText(text, font)
-  }
+  return describeMeasure(
+    (text: string, font: FontDescriptor): TextMetrics => {
+      const ctx = getContext()
+      return ctx ? measureWithContext(ctx, text, font) : constantRatioMeasureText(text, font)
+    },
+    { kind: 'host' },
+  )
 }

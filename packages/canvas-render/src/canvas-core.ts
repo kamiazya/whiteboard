@@ -10,7 +10,7 @@ import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './layout/edges/edge-sides.js'
 import type { FragmentAsk, FragmentEntry } from './layout/nodes/fragment-ask.js'
-import type { MeasureSpec } from './measure.js'
+import type { MeasureSpec, MeasureText } from './measure.js'
 import type { LoadedReference } from './references/loaded-reference.js'
 import type { ReferenceExtra } from './references/wire.js'
 import type { SpatialGeometry } from './theme/spatial-geometry.js'
@@ -112,10 +112,13 @@ export interface CanvasLayoutCore {
   /**
    * `highlight` tokenises exactly the fences the core finds the default
    * highlighter would colour: the core holds the gate, never the grammars.
+   * `measure` is the layout's own measurer, which the core asks mid-layout
+   * when the request names it `host`.
    */
   layoutSpatialCanvas(
     request: CanvasLayoutRequest,
     highlight: (lang: string, value: string) => CodeTokenLines | undefined,
+    measure: MeasureText,
   ): CanvasLayoutAnswer
 }
 

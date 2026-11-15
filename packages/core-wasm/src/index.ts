@@ -20,6 +20,7 @@ import {
 import { type FenceHighlighter, FenceTokenMemos } from './fence-tokens.js'
 import { FontHandles } from './font-handles.js'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
+import type { HostMeasure } from './host-measure.js'
 import {
   parseSpatial,
   type SpatialErrors,
@@ -51,7 +52,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '31'
+export const EXPECTED_ABI = '32'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -201,11 +202,16 @@ export interface Core {
    * second call; the tokens are kept per core, so a layout of fences already
    * seen is one call. With no `highlight` such a layout is declined. A
    * font-table measurer's faces cross once per measurer and core, and a layout
-   * names them by handle. Throws
+   * names them by handle. A request naming the host's measurer is measured
+   * by `measure` through the core's one import, mid-layout. Throws
    * `CoreInputRefused` for a request the wire does not carry or an answer
    * that is not one.
    */
-  layoutSpatialCanvas(request: LayoutRequest, highlight?: FenceHighlighter): LayoutAnswer
+  layoutSpatialCanvas(
+    request: LayoutRequest,
+    highlight?: FenceHighlighter,
+    measure?: HostMeasure,
+  ): LayoutAnswer
 }
 
 const ends = ['none', 'arrow'] as const
@@ -323,8 +329,16 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
-    layoutSpatialCanvas: (request, highlight) =>
-      layoutSpatialCanvas(layout, errors, request, highlight, fences.for(highlight), fonts),
+    layoutSpatialCanvas: (request, highlight, measure) =>
+      layoutSpatialCanvas(
+        layout,
+        errors,
+        request,
+        highlight,
+        fences.for(highlight),
+        fonts,
+        measure,
+      ),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {

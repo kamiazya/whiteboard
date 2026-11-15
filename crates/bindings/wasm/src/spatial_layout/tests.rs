@@ -60,7 +60,7 @@ pub(super) fn request(canvas: Json, extra: &[(&str, Json)]) -> String {
 }
 
 pub(super) fn answer(request: &str) -> Json {
-    serde_json::from_str(&layout_spatial_canvas(request)).unwrap_or(Json::Null)
+    serde_json::from_str(&layout_spatial_canvas(request, None)).unwrap_or(Json::Null)
 }
 
 #[test]
