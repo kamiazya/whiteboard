@@ -59,6 +59,7 @@ describe('the recorded whole-layout oracle', () => {
       '"commentLayer"',
       '"showResolved"',
       '"commentObstacles"',
+      '"proposals"',
     ]) {
       expect(requests, field).toContain(field)
     }
@@ -91,6 +92,10 @@ describe('the recorded whole-layout oracle', () => {
     }
     expect(drawn, 'a source the table lacked').toContain('{"kind":"diagram","lang":"mermaid"')
     expect(drawn, 'inline math is never asked for').not.toContain('"value":"a+b"')
+    const proposed = (recorded.get('proposals') ?? []).map((r) => r.answer).join('\n')
+    for (const part of ['/outline"', '/bubble"', '/leader"', '"proposalChrome"', 'needs a']) {
+      expect(proposed, part).toContain(part)
+    }
     expect(
       all.filter((r) => r.answer.includes('"kind":"unknown-node-kind"')).length,
     ).toBeGreaterThan(0)

@@ -18,6 +18,7 @@ import {
 import { createFakeMeasure } from '../fake-measure.js'
 import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
 import { mathCases } from './layout-math-cases.js'
+import { proposalCases } from './layout-proposal-cases.js'
 
 /**
  * The layouts the whole-layout core is held to (ADR-0054 step 7), by the
@@ -29,9 +30,9 @@ import { mathCases } from './layout-math-cases.js'
  * routing corpus, bodies aimed at the typesetter, bodies dense in shortcodes,
  * fences the default highlighter colours or leaves plain, the composer
  * boards under the document's own theme and under named ones, and the boards
- * carrying comment threads with their annotation layer, and math and
- * diagrams answered from a table of rendered fragments; every reference
- * crosses as a wire.
+ * carrying comment threads with their annotation layer, the boards carrying
+ * proposals with their proposal layer, and math and diagrams answered from a
+ * table of rendered fragments; every reference crosses as a wire.
  */
 
 /**
@@ -51,6 +52,7 @@ export type LayoutTopic =
   | 'theme'
   | 'comments'
   | 'fragments'
+  | 'proposals'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -538,16 +540,17 @@ export function layoutCases(synthetic: number): LayoutCase[] {
       canvas: bodiesBoard(),
       options: light,
     },
+    ...shortcodeCases(),
+    {
+      topic: 'fragment',
+      name: 'fragments',
+      canvas: fragmentBoard(),
+      options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
+    },
+    ...highlightCases(light),
+    ...mathCases(light).map((c) => ({ topic: 'fragments' as const, ...c })),
+    ...proposalCases().map((c) => ({ topic: 'proposals' as const, ...c })),
   )
-  cases.push(...shortcodeCases())
-  cases.push({
-    topic: 'fragment',
-    name: 'fragments',
-    canvas: fragmentBoard(),
-    options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
-  })
-  cases.push(...highlightCases(light))
-  cases.push(...mathCases(light).map((c) => ({ topic: 'fragments' as const, ...c })))
   for (const board of [...ROUTING_CORPUS, ...syntheticLayouts(synthetic)]) {
     for (const routing of ['straight', 'orthogonal'] as const) {
       const canvas = {

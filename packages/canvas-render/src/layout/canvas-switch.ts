@@ -1,6 +1,7 @@
 import {
   type CommentThread,
   nodeFile,
+  type Proposal,
   type SpatialCanvas,
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
@@ -11,7 +12,9 @@ import type {
   CanvasLayoutRequest,
   CanvasLayoutSeam,
   CanvasLayoutSkip,
+  CoreChange,
   CoreDegradation,
+  CoreProposal,
   CoreThread,
 } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
@@ -77,7 +80,6 @@ function optionSkip(options: SpatialLayoutOptions): CanvasLayoutSkip | undefined
   if (options.highlightCode !== undefined && options.highlightCode !== highlightCode) {
     return 'highlighter'
   }
-  if ((options.proposals ?? []).length > 0) return 'proposals'
   return undefined
 }
 
@@ -104,8 +106,8 @@ export type CanvasLayoutAsk = CanvasLayoutRequest | { readonly skip: CanvasLayou
 /**
  * `options` as a request the core answers exactly as the TypeScript would,
  * or the first reason they cannot be one (`CanvasLayoutSkip`): a measurer or
- * an appearance nobody named, a seam that is a function, a
- * proposal layer, a reference bundle not rebuilt from a wire
+ * an appearance nobody named, a seam that is a function, a reference
+ * bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
  * one node id open in one canvas and closed in another.
  */
@@ -136,6 +138,7 @@ export function canvasLayoutRequest(
     ...dataOptions(options),
     ...commentOptions(options),
     ...(usesFragmentTable(options) ? { fragments: options.fragments ?? [] } : {}),
+    ...(options.proposals === undefined ? {} : { proposals: options.proposals.map(coreProposal) }),
     ...(wire === undefined ? {} : { references: wire as CanvasLayoutRequest['references'] }),
   }
 }
@@ -171,6 +174,14 @@ function commentOptions(options: SpatialLayoutOptions): Partial<CanvasLayoutRequ
     ...(commentObstacles === undefined ? {} : { commentObstacles }),
   }
 }
+
+const coreChange = (change: Proposal['changes'][number]): CoreChange =>
+  change.op === 'body.replace' ? { id: change.id, status: change.status, op: change.op } : change
+
+const coreProposal = ({ id, changes }: Proposal): CoreProposal => ({
+  id,
+  changes: changes.map(coreChange),
+})
 
 /** A laid-out canvas and the anchors its routing settled. */
 export interface LaidOutCanvas {

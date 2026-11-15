@@ -1,4 +1,9 @@
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CommentThread,
+  Proposal,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
@@ -190,6 +195,32 @@ const coreThread = {
   ],
 }
 
+const proposal: Proposal = {
+  id: 'p',
+  author: 'ann',
+  createdAt: '2026-11-15T00:00:00Z',
+  changes: [
+    { id: 'c1', status: 'open', op: 'node.patch', nodeId: 'a', patch: { x: 1 }, assumed: {} },
+    {
+      id: 'c2',
+      status: 'dismissed',
+      op: 'body.replace',
+      anchor: { kind: 'text', quote: { exact: 'a' }, start: 0, end: 1 },
+      text: 'b',
+      assumed: 'a',
+    },
+  ],
+}
+
+/** The proposal as the core takes it: no author or timestamp, a passage change by its identity and verdict. */
+const coreProposal = {
+  id: 'p',
+  changes: [
+    { id: 'c1', status: 'open', op: 'node.patch', nodeId: 'a', patch: { x: 1 }, assumed: {} },
+    { id: 'c2', status: 'dismissed', op: 'body.replace' },
+  ],
+}
+
 describe('what the core can be handed', () => {
   const request = (options: Partial<SpatialLayoutOptions>) =>
     canvasLayoutRequest(canvas, { ...base, ...options })
@@ -209,6 +240,7 @@ describe('what the core can be handed', () => {
       showResolved: true,
       commentObstacles: [{ x: 1, y: 2, w: 3, h: 4 }],
       threads: [thread],
+      proposals: [proposal],
     })
     expect(full).toEqual({
       canvas,
@@ -225,6 +257,7 @@ describe('what the core can be handed', () => {
       commentLayer: false,
       showResolved: true,
       commentObstacles: [{ x: 1, y: 2, w: 3, h: 4 }],
+      proposals: [coreProposal],
     })
     expect(request({})).toEqual({
       canvas,
@@ -248,7 +281,6 @@ describe('what the core can be handed', () => {
       [{ resolveReference: () => undefined }, 'seam:resolveReference'],
       [{ nestedLayoutBudget: { remaining: 1 } as never }, 'seam:nestedLayoutBudget'],
       [{ highlightCode: () => undefined }, 'highlighter'],
-      [{ proposals: [{} as never] }, 'proposals'],
       [{ references: referenceSeams(new Map()) }, 'references'],
     ]
     for (const [options, reason] of skipped) {
@@ -262,6 +294,8 @@ describe('what the core can be handed', () => {
       { style: 'clean' as const },
       { threads: [thread] },
       { threads: [thread], showResolved: true, commentObstacles: [] },
+      { proposals: [proposal] },
+      { proposals: [] },
     ]
     for (const options of kept) expect(request(options)).not.toHaveProperty('skip')
   })

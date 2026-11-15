@@ -8,6 +8,7 @@ mod comments;
 mod fragments;
 mod measure;
 mod options;
+mod proposals;
 mod references;
 
 use whiteboard_canvas_render::references::{Expansion, FenceTokens, ReferenceWire};
@@ -15,6 +16,7 @@ use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::typeset::Rendered;
 use whiteboard_edge_routing::edge_sides::EdgeAnchorOverride;
 use whiteboard_model::Value;
+use whiteboard_model::proposal::Proposal;
 use whiteboard_model::spatial::SpatialCanvas;
 use whiteboard_plugin_visual::visual::TagLibrary;
 
@@ -27,6 +29,7 @@ use measure::measure_of;
 pub(crate) use measure::{Face, MeasureSpec, face_of};
 pub(crate) use options::Style;
 use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key_of};
+use proposals::proposals_of;
 use references::references_of;
 
 /// A layout request.
@@ -47,6 +50,7 @@ pub(crate) struct Request {
     pub(crate) references: ReferenceWire,
     pub(crate) expand: Expansion,
     pub(crate) code_tokens: Vec<FenceTokens>,
+    pub(crate) proposals: Vec<Proposal>,
     pub(crate) comments: Comments,
     /// The rendered math blocks and fences by key; `None` when the caller
     /// handed none, so the layout draws every one as its fallback and asks
@@ -116,6 +120,7 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         references: f.field("references", references_of)?.unwrap_or_default(),
         expand: f.field("expand", expansion_of)??,
         code_tokens: f.field("codeTokens", code_tokens_of)?.unwrap_or_default(),
+        proposals: f.field("proposals", proposals_of)?.unwrap_or_default(),
         comments: comments_of(&mut f)?,
         fragments: f.field("fragments", fragments_of)?,
     };
