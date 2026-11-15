@@ -112,7 +112,7 @@ fn the_comment_seeds_are_layouts_the_export_draws_a_comment_layer_for() {
     let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
     for name in ["comments", "comment-passages"] {
         let request = std::fs::read_to_string(seeds.join(name)).unwrap();
-        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, None);
         assert!(
             answer.starts_with("[\"ok\"") && answer.contains("/pin\""),
             "{name}: {answer:.120}"
@@ -155,10 +155,24 @@ fn the_proposal_seeds_are_layouts_the_export_draws_a_proposal_layer_for() {
     let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
     for name in ["proposals", "proposal-priors"] {
         let request = std::fs::read_to_string(seeds.join(name)).unwrap();
-        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, None);
         assert!(
             answer.starts_with("[\"ok\"") && answer.contains("/outline\""),
             "{name}: {answer:.120}"
         );
     }
+}
+
+#[test]
+fn the_host_seed_is_a_layout_the_stand_in_measures() {
+    // The fuzzer reaches the host's measurer only through the stand-in, so a
+    // seed the stand-in cannot answer would leave that path unexplored.
+    use whiteboard_fuzz::targets::StandInHost;
+    use whiteboard_wasm::spatial_layout::layout_with_host;
+    let seed = root().join("seeds").join("layout_spatial_canvas_wasm").join("host-measure");
+    let request = std::fs::read_to_string(seed).unwrap();
+    let answer = layout_with_host(&request, Some(&StandInHost));
+    assert!(answer.starts_with("[\"ok\""), "{answer:.120}");
+    let unmeasured = layout_with_host(&request, None);
+    assert_eq!(unmeasured, "[\"declined\",\"host-measure\"]");
 }

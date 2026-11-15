@@ -609,10 +609,26 @@ pub fn sfnt_parse(data: &[u8]) {
     }
 }
 
-/// The whole layout's export: a request, read up to the first NUL. Every
-/// answer is one of the four outcomes (laid out, refused, declined, or the
-/// fences whose tokens the host must send), and a call past the cap is refused
-/// before it is read.
+/// A deterministic stand-in for the browser's measurer, which a native build
+/// cannot reach: every number a function of the text and the font key, the
+/// empty text with no ascent (as the browser answers it), and a key that does
+/// not name a font left unanswered, so both of the host's outcomes are driven.
+pub struct StandInHost;
+
+impl whiteboard_wasm::spatial_layout::Host for StandInHost {
+    fn measure(&self, text: &str, font: &str) -> Option<[f64; 4]> {
+        // A key ends in the font's size: `[..., sizePx]`.
+        let size: f64 = font.strip_suffix(']')?.rsplit(',').next()?.parse().ok()?;
+        let units = f64::from(u32::try_from(text.chars().count()).unwrap_or(u32::MAX));
+        let ascent = if text.is_empty() { 0.0 } else { size * 0.8 };
+        Some([units * size * 0.55, ascent, size * 0.2, 0.0])
+    }
+}
+
+/// The whole layout's export: a request, read up to the first NUL, a
+/// host-measured one measured by [`StandInHost`]. Every answer is one of the
+/// four outcomes (laid out, refused, declined, or the fences whose tokens the
+/// host must send), and a call past the cap is refused before it is read.
 ///
 /// # Panics
 ///
@@ -620,13 +636,13 @@ pub fn sfnt_parse(data: &[u8]) {
 /// not refused.
 pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
-    use whiteboard_wasm::spatial_layout::layout_spatial_canvas;
+    use whiteboard_wasm::spatial_layout::layout_with_host;
 
     let at = data.iter().position(|&b| b == 0).unwrap_or(data.len());
     let Ok(request) = std::str::from_utf8(data.get(..at).unwrap_or_default()) else {
         return;
     };
-    let answer = layout_spatial_canvas(request);
+    let answer = layout_with_host(request, Some(&StandInHost));
     if request.len() > LAYOUT_SPATIAL_CANVAS.max_bytes {
         assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
         return;
@@ -680,9 +696,9 @@ pub fn register_layout_fonts_wasm(data: &[u8]) {
         "[\"m\",\"canvas\",[\"m\",\"nodes\",[\"s\",[\"m\",\"id\",\"a\",\"x\",0,\"y\",0,\"width\",160,\"height\",80,\"resource\",[\"m\",\"mimeType\",\"text/markdown\",\"content\",\"Hamburgefonstiv \\u00e9\"]]],\"edges\",[\"s\"]],\"measure\",[\"m\",\"kind\",\"fonts\",\"handle\",{handle}],\"mode\",\"light\",\"expand\",true]"
     );
     let lost = "[\"refused\",\"malformed\",\"font-handle\"]";
-    let held = layout_spatial_canvas(&request);
+    let held = layout_spatial_canvas(&request, None);
     assert_layout_answer(&held);
     assert_ne!(held, lost, "{handle} was answered but names no faces");
     assert!(release_layout_fonts(handle), "{handle} was not held");
-    assert_eq!(layout_spatial_canvas(&request), lost);
+    assert_eq!(layout_spatial_canvas(&request, None), lost);
 }

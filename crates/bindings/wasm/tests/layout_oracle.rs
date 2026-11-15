@@ -61,8 +61,8 @@ fn every_recorded_layout_is_answered_as_the_typescript_answered_it() {
     for line in files.iter().flat_map(|text| text.lines()) {
         let record: Value = serde_json::from_str(line).unwrap_or_else(|e| panic!("a record: {e}"));
         let field = |key: &str| record.get(key).and_then(Value::as_str).unwrap_or_default();
-        let got: Value =
-            serde_json::from_str(&layout_spatial_canvas(field("request"))).unwrap_or(Value::Null);
+        let got: Value = serde_json::from_str(&layout_spatial_canvas(field("request"), None))
+            .unwrap_or(Value::Null);
         let want: Value = serde_json::from_str(field("answer")).unwrap_or(Value::Null);
         compared += usize::from(want.get(0) == Some(&Value::from("ok")));
         if let Some(at) = first_difference(&got, &want, "") {

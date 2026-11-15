@@ -1,11 +1,13 @@
 //! `layoutSpatialCanvasWithAnchors` in one call (ADR-0054 step 7): a whole
 //! canvas laid out by the composer, with the documents it points at, the
 //! measurer and the caller's options handed over as DATA, so nothing crosses
-//! back mid-layout.
+//! back mid-layout but the host's own measurer, when the request names it
+//! ([`host_measure`]: the browser's canvas context, which nothing here repeats).
 //!
 //! In: the request (the value wire of [`crate::json_canvas_wire`], read by
 //! [`request`]), whose font-table measurer names faces registered beforehand
-//! by [`register_layout_fonts`]. Out: one JSON text whose first element names
+//! by [`register_layout_fonts`], and the host's measurer when the request
+//! names `{kind: 'host'}`. Out: one JSON text whose first element names
 //! the outcome:
 //!
 //! - `["ok", scene, anchors, degradations]`: the scene as the TypeScript holds
@@ -21,18 +23,21 @@
 //!   asks once more with them (owner decision q75);
 //! - `["declined", class]`: a request the core cannot answer exactly as the
 //!   TypeScript would (a body past the parser's bounds, a number the answer
-//!   cannot spell).
+//!   cannot spell, a host measurer not handed over or one that did not
+//!   answer: `host-measure`).
 //!
 //! A host answers a refusal and a decline from the TypeScript.
 
 mod answer;
 mod fonts;
+mod host_measure;
 mod measure;
 mod request;
 
 pub use fonts::{
     MAX_FACES, MAX_HANDLES, MAX_HELD_BYTES, register_layout_fonts, release_layout_fonts,
 };
+pub use host_measure::{Host, HostMeasurer, font_key};
 
 use std::sync::OnceLock;
 
@@ -57,7 +62,7 @@ use whiteboard_scene::NodeDecoration;
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, needs, refused};
-use measure::with_measurer;
+use measure::{Unmeasured, with_measurer};
 use request::{Comments, Request, Style, request_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
@@ -288,9 +293,21 @@ fn lay_out(
 }
 
 /// A whole canvas laid out; see the module's documentation for the wire.
+/// `host` measures a request that names `{kind: 'host'}`.
 #[wasm_bindgen]
 #[must_use]
-pub fn layout_spatial_canvas(request: &str) -> String {
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "wasm-bindgen hands an imported object over by value"
+)]
+pub fn layout_spatial_canvas(request: &str, host: Option<HostMeasurer>) -> String {
+    layout_with_host(request, host.as_ref().map(|host| host as &dyn Host))
+}
+
+/// [`layout_spatial_canvas`] over any [`Host`]: a native caller's stand-in,
+/// since the import answers only inside a wasm host.
+#[must_use]
+pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     if request.len() > LAYOUT_SPATIAL_CANVAS.max_bytes {
         return refused("input-too-large", "too-large");
     }
@@ -320,10 +337,17 @@ pub fn layout_spatial_canvas(request: &str) -> String {
     if request.font_families.len() > themes.len() {
         return refused("input-too-large", "font-families");
     }
-    with_measurer(&request.measure, |measure| lay_out(&request, measure, registry, themes))
-        .unwrap_or_else(|| refused("malformed", "font-handle"))
+    match with_measurer(&request.measure, host, |measure| {
+        lay_out(&request, measure, registry, themes)
+    }) {
+        Ok(answer) => answer,
+        Err(Unmeasured::FontHandle) => refused("malformed", "font-handle"),
+        Err(Unmeasured::Host) => declined("host-measure"),
+    }
 }
 
+#[cfg(test)]
+mod host_tests;
 #[cfg(test)]
 mod proposal_tests;
 #[cfg(test)]

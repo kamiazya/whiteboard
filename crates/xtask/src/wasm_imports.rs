@@ -16,7 +16,10 @@
 //! any, because an artifact holding only std passes vacuously.
 //!
 //! The bindings artifact may import only wasm-bindgen's own placeholder
-//! modules, which `wasm-bindgen` rewrites into the JS glue.
+//! modules, which `wasm-bindgen` rewrites into the JS glue, and of what those
+//! carry, wasm-bindgen's intrinsics and exactly the host imports
+//! [`HOST_IMPORTS`] declares: a hand-written `extern` is a call back into the
+//! host mid-operation, which ADR-0054 admits one at a time.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,6 +31,13 @@ use crate::metadata::{self, WASM_TARGET};
 
 /// The import modules wasm-bindgen emits and then replaces with its glue.
 const WASM_BINDGEN_MODULES: &[&str] = &["__wbindgen_placeholder__", "__wbindgen_externref_xform__"];
+
+/// The JavaScript functions the bindings call back into, by the name
+/// wasm-bindgen gives their import (`__wbg_<name>_<hash>`). `measure` is the
+/// host's measurer a host-measured layout asks mid-layout (ADR-0054 step 7,
+/// owner decision q77: the browser measures with a canvas context nothing in
+/// the core repeats, and the crossing measured under 1.3% of a layout).
+const HOST_IMPORTS: &[&str] = &["measure"];
 
 /// The bindings crates built as a wasm cdylib in their own right.
 pub(crate) const WASM_BINDINGS: &[&str] = &["whiteboard-wasm"];
@@ -91,6 +101,26 @@ pub(crate) fn disallowed_imports(scan: &Scan, allowed_modules: &[&str]) -> Vec<S
         .collect()
 }
 
+/// The JavaScript function a wasm-bindgen import calls, when it is one a
+/// binding declared rather than one of wasm-bindgen's intrinsics.
+fn host_import(import: &str) -> Option<&str> {
+    let name = import.strip_prefix("__wbindgen_placeholder__::__wbg_")?;
+    let (name, hash) = name.rsplit_once('_')?;
+    (hash.len() == 16 && hash.bytes().all(|b| b.is_ascii_hexdigit())).then_some(name)
+}
+
+/// What differs between the host imports `scan` makes and `declared`, both
+/// ways: one nothing declared, and one declared that no longer exists.
+pub(crate) fn host_import_drift(scan: &Scan, declared: &[&str]) -> Vec<String> {
+    let made: Vec<&str> = scan.imports.iter().filter_map(|i| host_import(i)).collect();
+    let undeclared = made.iter().filter(|m| !declared.contains(m));
+    let unmade = declared.iter().filter(|d| !made.contains(d));
+    undeclared
+        .map(|m| format!("calls back into the host's `{m}`, which HOST_IMPORTS does not declare"))
+        .chain(unmade.map(|d| format!("declares the host import `{d}`, which it no longer makes")))
+        .collect()
+}
+
 /// Where cargo leaves `crate_name`'s wasm for `profile`.
 pub(crate) fn artifact(target_dir: &Path, profile: &str, crate_name: &str) -> PathBuf {
     target_dir
@@ -125,27 +155,32 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
     let mut report = Vec::new();
     let mut violations = Vec::new();
     let mut own_total = 0;
-    let mut check = |name: &str, profile: &str, allowed: &[&str]| -> Result<(), Vec<String>> {
-        let path = artifact(&metadata.target_directory, profile, name);
-        let bytes = std::fs::read(&path)
-            .map_err(|e| vec![format!("cannot read {}: {e}", path.display())])?;
-        let scan = scan(&bytes).map_err(|e| vec![format!("{name}: {e}")])?;
-        if scan.defined_functions == 0 {
-            violations
-                .push(format!("{name}: the artifact defines no function, so the scan saw nothing"));
-        }
-        for import in disallowed_imports(&scan, allowed) {
-            violations.push(format!("{name}: imports {import}"));
-        }
-        let own = scan.own_functions(&name.replace('-', "_"));
-        own_total += own;
-        report.push(format!(
-            "  {name}: {} functions ({own} its own), {} imports",
-            scan.defined_functions,
-            scan.imports.len()
-        ));
-        Ok(())
-    };
+    let mut check =
+        |name: &str, profile: &str, allowed: &[&str], host: &[&str]| -> Result<(), Vec<String>> {
+            let path = artifact(&metadata.target_directory, profile, name);
+            let bytes = std::fs::read(&path)
+                .map_err(|e| vec![format!("cannot read {}: {e}", path.display())])?;
+            let scan = scan(&bytes).map_err(|e| vec![format!("{name}: {e}")])?;
+            if scan.defined_functions == 0 {
+                violations.push(format!(
+                    "{name}: the artifact defines no function, so the scan saw nothing"
+                ));
+            }
+            for import in disallowed_imports(&scan, allowed) {
+                violations.push(format!("{name}: imports {import}"));
+            }
+            for drift in host_import_drift(&scan, host) {
+                violations.push(format!("{name}: {drift}"));
+            }
+            let own = scan.own_functions(&name.replace('-', "_"));
+            own_total += own;
+            report.push(format!(
+                "  {name}: {} functions ({own} its own), {} imports",
+                scan.defined_functions,
+                scan.imports.len()
+            ));
+            Ok(())
+        };
     for name in &core {
         build(&[
             "rustc",
@@ -164,11 +199,11 @@ pub(crate) fn run() -> Result<Vec<String>, Vec<String>> {
             "-C",
             "link-dead-code",
         ])?;
-        check(name, SCAN_PROFILE, &[])?;
+        check(name, SCAN_PROFILE, &[], &[])?;
     }
     for name in WASM_BINDINGS {
         build(&["build", "--quiet", "--package", name, "--target", WASM_TARGET, "--release"])?;
-        check(name, "release", WASM_BINDGEN_MODULES)?;
+        check(name, "release", WASM_BINDGEN_MODULES, HOST_IMPORTS)?;
     }
     if core.is_empty() {
         violations.push("no present core crate targets wasm32, so nothing was scanned".to_owned());
@@ -246,6 +281,39 @@ mod tests {
         };
         assert_eq!(s.own_functions("whiteboard_det"), 1);
         assert_eq!(s.own_functions("whiteboard_log"), 0);
+    }
+
+    fn importing(imports: &[&str]) -> Scan {
+        Scan {
+            imports: imports.iter().map(|i| (*i).to_owned()).collect(),
+            defined_functions: 1,
+            function_names: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn a_binding_calls_back_into_exactly_the_host_imports_it_declares() {
+        let measure = "__wbindgen_placeholder__::__wbg_measure_0c4558f2c27659b4";
+        let intrinsic = "__wbindgen_placeholder__::__wbindgen_object_drop_ref";
+        assert!(host_import_drift(&importing(&[intrinsic, measure]), &["measure"]).is_empty());
+        let unmade = host_import_drift(&importing(&[intrinsic]), &["measure"]);
+        assert_eq!(unmade, vec!["declares the host import `measure`, which it no longer makes"]);
+        let now = "__wbindgen_placeholder__::__wbg_now_00000000000000ff";
+        let undeclared = host_import_drift(&importing(&[measure, now]), &["measure"]);
+        assert_eq!(undeclared.len(), 1);
+        assert!(undeclared[0].contains("`now`"), "{undeclared:?}");
+    }
+
+    #[test]
+    fn only_a_wasm_bindgen_import_with_its_hash_names_a_host_function() {
+        assert_eq!(
+            host_import("__wbindgen_placeholder__::__wbg_get_item_0123456789abcdef"),
+            Some("get_item")
+        );
+        assert_eq!(host_import("__wbindgen_placeholder__::__wbg_measure_0c4558f2"), None);
+        assert_eq!(host_import("__wbindgen_placeholder__::__wbg_measure_0c4558f2c27659bz"), None);
+        assert_eq!(host_import("env::__wbg_measure_0c4558f2c27659b4"), None);
+        assert_eq!(host_import("__wbindgen_placeholder__::__wbindgen_describe"), None);
     }
 
     #[test]
