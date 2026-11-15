@@ -93,6 +93,34 @@ describe('rendered fragments as a table', () => {
     expect(plain.size).toBe(1)
   })
 
+  it('serves no body cached without a table to a layout with one', () => {
+    const contentCache = new Map()
+    expect(drawn({ ...base, contentCache })).not.toContain('<g data-x2/>')
+    expect(asked({ fragments: [], contentCache })[0]?.[0]).toEqual({ kind: 'math', value: 'x^2' })
+    expect(drawn({ ...base, fragments: [X2], contentCache })).toContain('<g data-x2/>')
+    // Nor one a caller's own function drew, with or without a table beside
+    // it, on a board whose only seam is the one that function answers.
+    const fn = () => ({ svg: '<g data-fn/>' })
+    const kinds = [
+      ['$$\nx^2\n$$', { renderMath: fn }, X2],
+      ['```mermaid\ng\n```', { renderDiagram: fn }, ['fence:mermaid:g', { svg: '<g data-x2/>' }]],
+    ] as const
+    for (const [text, seam, row] of kinds) {
+      const board: SpatialCanvas = {
+        nodes: [textNode({ id: 'x', x: 0, y: 0, width: 300, height: 200, text })],
+        edges: [],
+      }
+      const svgs = (options: SpatialLayoutOptions) =>
+        JSON.stringify(layoutSpatialCanvasWithAnchors(board, options).scene)
+      for (const first of [{}, { fragments: [] }] as const) {
+        const cache = new Map()
+        expect(svgs({ ...base, ...first, ...seam, contentCache: cache })).toContain('data-fn')
+        const later = svgs({ ...base, fragments: [row], contentCache: cache })
+        expect(later, `${text} ${JSON.stringify(first)}`).toContain('data-x2')
+      }
+    }
+  })
+
   it('sizes a node by the fragment the table holds, as its layout draws it', () => {
     const node = textNode({ id: 'n', x: 0, y: 0, width: 300, height: 40, text: '$$\nx^2\n$$' })
     const tall: FragmentEntry = ['math:x^2', { svg: '<g/>', width: 250, height: 120 }]

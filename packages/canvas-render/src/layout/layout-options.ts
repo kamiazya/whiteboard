@@ -366,9 +366,11 @@ export interface SpatialContentCache {
 /** Internal: options with geometry resolved exactly once per layout call. */
 export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   /**
-   * How often the seams have read `fragments` in this layout
-   * (`withFragmentTable`). The content cache's key cannot carry the table, so
-   * a body that read it, drawing a row or asking for one, is not kept.
+   * How often a math or diagram seam has been asked in a layout given
+   * `fragments` (`withFragmentTable`); absent without one. The content cache's
+   * key cannot carry the table, so a body laid out with one is kept only when
+   * no seam was asked, and the key says whether there was a table, so a body
+   * laid out without one is never served to a layout with one.
    */
   readonly fragmentTableReads?: { readonly count: number }
   /**

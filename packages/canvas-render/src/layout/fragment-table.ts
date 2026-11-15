@@ -31,11 +31,21 @@ export function withFragmentTable<T>(
     if (found === undefined && !asked.has(key)) asked.set(key, ask)
     return found
   }
+  const { renderMath, renderDiagram } = options
+  // A caller's own seam is counted too: a body it drew beside a table would
+  // otherwise be kept and served to a layout whose table answers that seam.
   const laid = layout({
     ...options,
-    renderMath: options.renderMath ?? ((value) => answer({ kind: 'math', value })),
-    renderDiagram:
-      options.renderDiagram ?? ((lang, value) => answer({ kind: 'diagram', lang, value })),
+    renderMath: (value) => {
+      if (renderMath === undefined) return answer({ kind: 'math', value })
+      reads.count += 1
+      return renderMath(value)
+    },
+    renderDiagram: (lang, value) => {
+      if (renderDiagram === undefined) return answer({ kind: 'diagram', lang, value })
+      reads.count += 1
+      return renderDiagram(lang, value)
+    },
     fragmentTableReads: reads,
   })
   if (asked.size > 0) options.onFragmentsAsked?.([...asked.values()])
