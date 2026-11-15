@@ -4,7 +4,7 @@
 //! each in the order asked, for the answer to carry back.
 
 use std::cell::{Cell, RefCell};
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 
 use whiteboard_canvas_render::typeset::{DiagramRenderer, MathRenderer, Rendered};
 
@@ -53,20 +53,17 @@ struct Asked {
 
 /// The renderers over one table, and what one layout through them asked.
 pub(crate) struct FragmentTable<'r> {
-    /// The rows by key, a later row answering first.
-    rows: BTreeMap<&'r str, &'r Rendered>,
+    /// The rows, a later one answering first. Searched rather than indexed:
+    /// at most [`MAX_FRAGMENTS`] of them, and a map's own code costs more of
+    /// the artifact than the search costs a layout at the caps.
+    rows: &'r [(String, Rendered)],
     asked: RefCell<Asked>,
     placed: Cell<usize>,
     over: Cell<bool>,
 }
 
 impl<'r> FragmentTable<'r> {
-    pub(crate) fn new(table: &'r [(String, Rendered)]) -> Self {
-        let mut rows = BTreeMap::new();
-        // One by one, as `WireHost`'s code table: a later row overwrites.
-        for (key, fragment) in table {
-            rows.insert(key.as_str(), fragment);
-        }
+    pub(crate) fn new(rows: &'r [(String, Rendered)]) -> Self {
         Self { rows, asked: RefCell::default(), placed: Cell::new(0), over: Cell::new(false) }
     }
 
@@ -82,7 +79,7 @@ impl<'r> FragmentTable<'r> {
 
     fn answer(&self, ask: Ask) -> Option<Rendered> {
         let key = ask.key();
-        let Some(&found) = self.rows.get(key.as_str()) else {
+        let Some((_, found)) = self.rows.iter().rev().find(|(row, _)| *row == key) else {
             let mut asked = self.asked.borrow_mut();
             if asked.seen.insert(key) {
                 asked.order.push(ask);
