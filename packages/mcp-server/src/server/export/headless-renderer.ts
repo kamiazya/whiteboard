@@ -29,6 +29,7 @@ import type {
   MeasureText,
   Scene,
   SpatialLayoutDegradation,
+  SpatialLayoutOptions,
   SpatialRenderStyle,
   SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -222,6 +223,24 @@ export function buildSpatialScene(
   core?: LayoutCore,
 ): Scene {
   return layoutSpatialCanvas(canvas, {
+    ...exportLayoutOptions(measure, mode, style, fontAvailable, tagLibrary),
+    ...(core === undefined ? {} : { core }),
+  })
+}
+
+/**
+ * What the file export hands the layout, short of the core: the one
+ * definition the export and the layout census (`layout-census.mjs`) both
+ * read, so the census measures the export's profile rather than a copy of it.
+ */
+export function exportLayoutOptions(
+  measure: MeasureText,
+  mode: ExportThemeMode = 'light',
+  style?: SpatialRenderStyle,
+  fontAvailable?: (family: string) => boolean,
+  tagLibrary?: TagLibrary,
+): SpatialLayoutOptions {
+  return {
     measure,
     appearance: EXPORT_APPEARANCE_BY_MODE[mode],
     onDegrade,
@@ -230,8 +249,7 @@ export function buildSpatialScene(
     ...(style === undefined ? {} : { style }),
     ...(fontAvailable === undefined ? {} : { fontAvailable }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
-    ...(core === undefined ? {} : { core }),
-  })
+  }
 }
 
 /**
