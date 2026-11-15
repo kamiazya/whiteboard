@@ -1,5 +1,5 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import { type FenceHighlighter, type FenceRow, FenceTokenMemo } from './fence-tokens.js'
+import type { FenceHighlighter, FenceRow, FenceTokenMemo } from './fence-tokens.js'
 import type { FontHandles, FontsGlue, LayoutFaces } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS, type RefusalCode } from './generated/input-caps.js'
 import type { AnchorPair } from './types.js'
@@ -107,7 +107,7 @@ export function layoutSpatialCanvas(
   errors: LayoutErrors,
   request: LayoutRequest,
   highlight: FenceHighlighter | undefined,
-  memo: FenceTokenMemo = new FenceTokenMemo(),
+  memo: FenceTokenMemo,
   fonts: FontHandles,
 ): LayoutAnswer {
   const { measure } = request
