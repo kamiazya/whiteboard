@@ -726,6 +726,27 @@ fn a_long_more_indented_line_is_folded_at_a_space_as_serialize_okf_does() {
 }
 
 #[test]
+fn a_more_indented_line_holding_a_unicode_line_separator_keeps_one_line_break() {
+    // JavaScript's `.` stops at U+2028 and U+2029, so `yaml`'s folded writer
+    // took such a line's end for the separator and doubled the line break
+    // after it: the value came back with a blank line it never had. A YAML
+    // reader breaks lines at LF and CR only.
+    for separator in ['\u{2028}', '\u{2029}'] {
+        let value = map(&[("a", s(&format!("{}\n  x{separator}y\nz", prose())))]);
+        let written = write(&value);
+        assert_eq!(read(&written), value, "{written:?}");
+    }
+    // The counterexample the property found, as it shrank.
+    let (a, b, c) = ("k".repeat(234), "k".repeat(345), "k".repeat(446));
+    let found = format!(
+        "? {a}\t{b}>{c}\n: - - \" \\n \"\n  - \"{{\u{2de0}⁰a ຆa00Σஜ\u{c55}0Σ𐖗🠀🌀\"\n\"\":\n  - \"𐕯￼𝒻𝄀A𐣴0aa a¡𑙠꩜a\u{ec8}Σ𐧒:\"\n  - \"`0অ\\\\AꙀ®ந🂠𞹴®𐵀a ကa \": >\n      aaaaaaaaaa aaaaaaaa aaa aaaaaaaaaa aaaaaaaaaa aaaa aaaaaa aaaaaaaaaaaa\n      bpusqflo llwnyp pl iqebrful csalfiynwp tzqeysualwp y yzdcjcm{{hd fz\n      rbrushzmlntc lghijmi akd\n        aaaaaaaaaa aaaaaaaa aaa aaaaaaaaaa aaaaaaaaaa aaaa aaaaaa aaaaaaaaaaaa bpusqflo llwnyp pl iqebrful csalfiynwp tzqeysualwp y yzdcjcmhd fz rbrushzmlntc lghijmi akd#    \"a😀\\u0001,Za---\u{2028} \": |-\n      -]a{{`%\n      ...\n  - {{}}"
+    );
+    let value = read(&found);
+    let written = write(&value);
+    assert_eq!(read(&written), value, "{written:?}");
+}
+
+#[test]
 fn writes_a_block_scalar_at_the_root_as_yaml_does() {
     for (text, expected) in [
         (" a\nb", "|1-\n a\nb"),

@@ -436,9 +436,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // reason: a dispatch, a request built from options and a comparison,
     // every branch driven by `layout/canvas-switch.test.ts`, and it goes when
     // the TypeScript layout does.
+    // 132 with `layout/nodes/fragment-ask.ts` (a schema and one key) and
+    // `layout/fragment-table.ts`, rendered math and diagrams as a table.
+    // Outside the lane for the same reason: one wrapper and the switch's
+    // handling of what it asked, every branch driven by
+    // `layout/fragment-table.test.ts` and mutation-checked by hand.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 130,
+      production: 132,
     })
   })
 

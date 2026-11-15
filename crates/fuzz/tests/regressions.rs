@@ -121,6 +121,24 @@ fn the_comment_seeds_are_layouts_the_export_draws_a_comment_layer_for() {
 }
 
 #[test]
+fn the_fragment_seeds_are_layouts_the_export_draws_a_table_for() {
+    // Taken from the recorded fragment-table layouts: one drawing rows of its
+    // table and asking for the rest, one whose empty table asks for every source.
+    let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
+    for (name, drawn) in [("fragments", "<g data-sum/>"), ("fragments-asked", "\"kind\":\"math\"")]
+    {
+        let request = std::fs::read_to_string(seeds.join(name)).unwrap();
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
+        assert!(
+            answer.starts_with("[\"ok\"")
+                && answer.contains(drawn)
+                && answer.contains("\"diagram\""),
+            "{name}: {answer:.120}"
+        );
+    }
+}
+
+#[test]
 fn the_font_seeds_are_faces_the_export_registers() {
     // A seed refused at its wire or its faces teaches the fuzzer nothing about
     // the measurer a handle builds; only the ones named for a refusal may be.

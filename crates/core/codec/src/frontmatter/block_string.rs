@@ -57,13 +57,12 @@ fn double_newline_runs(text: &[u16]) -> Units {
     out
 }
 
-fn is_line_terminator(unit: u16) -> bool {
-    matches!(unit, 0x0a | 0x0d | 0x2028 | 0x2029)
-}
-
 /// `.replace(/(?:^|\n)([\t ].*)(?:([\n\t ]*)\n(?![\n\t ]))?/g, '$1$2')`: a
 /// line that starts with a blank is kept as it is, with the empty lines that
-/// close its indented run.
+/// close its indented run. The line runs to a line feed, not to where
+/// JavaScript's `.` stops: `.` also stops at U+2028 and U+2029, which a YAML
+/// reader takes as content, and the run left unclosed there doubled the line
+/// break after the line (CR never reaches a block scalar: it is quoted).
 fn keep_more_indented(text: &[u16]) -> Units {
     let blank = |i: usize| text.get(i).is_some_and(|&u| u == SPACE || u == TAB);
     let mut out = Units::new();
@@ -84,7 +83,7 @@ fn keep_more_indented(text: &[u16]) -> Units {
         let rest = text.get(first.saturating_add(1)..).unwrap_or_default();
         let line_end = first
             .saturating_add(1)
-            .saturating_add(rest.iter().take_while(|&&u| !is_line_terminator(u)).count());
+            .saturating_add(rest.iter().take_while(|&&u| u != NEWLINE).count());
         out.extend_from_slice(text.get(first..line_end).unwrap_or_default());
         let after = text.get(line_end..).unwrap_or_default();
         let run_end = line_end.saturating_add(after.iter().take_while(|&&u| is_blank(u)).count());

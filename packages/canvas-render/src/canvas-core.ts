@@ -9,6 +9,7 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './layout/edges/edge-sides.js'
+import type { FragmentAsk, FragmentEntry } from './layout/nodes/fragment-ask.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
 import type { LoadedReference } from './references/loaded-reference.js'
 import type { ReferenceExtra } from './references/wire.js'
@@ -67,6 +68,11 @@ export interface CanvasLayoutRequest {
   readonly commentLayer?: boolean
   readonly showResolved?: boolean
   readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * The rendered math blocks and fences by key; present, the answer carries
+   * the sources the table could not answer as `fragmentsAsked`.
+   */
+  readonly fragments?: readonly FragmentEntry[]
   readonly proposals?: readonly CoreProposal[]
 }
 
@@ -93,6 +99,8 @@ type CanvasLayoutAnswer =
       readonly scene: Scene
       readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
       readonly degradations: readonly CoreDegradation[]
+      /** For a request carrying `fragments`: the sources it could not answer, once each in the order asked. */
+      readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | { readonly declined: string }
 

@@ -19,7 +19,7 @@ export interface ProposalCase {
 }
 
 /** A copy that shares no object with what it was made from, as a prior read from the record. */
-const copy = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
+const copy = <T>(value: T): T => structuredClone(value)
 
 /** The same mapping with its keys in the reverse order, at every depth. */
 function reversed(value: unknown): unknown {

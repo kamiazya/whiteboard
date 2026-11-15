@@ -98,6 +98,10 @@ function contentCacheKey(
     // cycle on one path and drawn on another, and past the depth cap at
     // one depth only.
     [...options.activeEmbedPath],
+    // A layout given a fragment table: a body drawn without one shows a
+    // fallback the table may now replace. Only then, so every other key is
+    // the one the core's port (`compose_node::text::cache_key`) is held to.
+    ...(options.fragmentTableReads === undefined ? [] : ['fragments']),
   ])
 }
 
@@ -124,6 +128,7 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
   } else {
     const budget = options.nestedLayoutBudget
     const before = { remaining: budget.remaining, refused: budget.refused }
+    const readsBefore = options.fragmentTableReads?.count
     try {
       const laid = typesetMdastBlocks(
         resolveReferences(options.parseBody(text), options.resolveAlias),
@@ -134,10 +139,13 @@ function composeTextNode(node: SpatialNode, options: ResolvedLayoutOptions): rea
       // whose embed was refused holds a placeholder only because THIS render
       // ran out; one whose embed was drawn spent from the account, and a hit
       // would skip that charge, handing later embeds budget they do not have.
+      // Nor is one that asked a seam beside a fragment table, which its key
+      // does not carry.
       if (
         cacheKey !== undefined &&
         budget.remaining === before.remaining &&
-        budget.refused === before.refused
+        budget.refused === before.refused &&
+        options.fragmentTableReads?.count === readsBefore
       ) {
         options.contentCache?.set(cacheKey, body)
       }
