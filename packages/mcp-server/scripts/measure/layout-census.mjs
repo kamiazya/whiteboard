@@ -18,13 +18,18 @@
  *             style, no comment layer) over the composer recordings' boards,
  *             the drawing corpus, the canvases under docs/assets, and every
  *             Markdown file under docs/ and skills/ as one text node.
+ *   comments  what `wb_scene_render` hands the layout with `comments: true`
+ *             (the daemon profile's options, the document's threads in place
+ *             of `commentLayer: false`) over the compose-comments boards,
+ *             which carry threads on every anchor arm.
  *   proposals the daemon profile's options with each board's proposals drawn,
  *             over the compose-comments recording's proposal boards (every
  *             arm, a crowd, conflicts). No daemon path draws proposals
  *             today (`wb_scene_render` takes none); the web editor does,
  *             and measures with a canvas context, so this is the nearest
- *             profile that reaches the core with a proposal layer; run
- *             again with the export's dark options.
+ *             profile that reaches the core with a proposal layer; a
+ *             board's threads are drawn beside its proposals. Run again
+ *             with the export's dark options.
  *   export    what the PNG/SVG file export (`/export`, `/export-svg`) hands
  *             the layout, in its light and its dark mode, over the daemon
  *             profile's corpora: the options are the export's own
@@ -46,6 +51,7 @@ import { installSpatialCore, parseSpatial, spatialCoreInstalled } from '@kamiazy
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs'
 import { boards } from '../../../canvas-render/src/test-utils/compose-canvas-oracle/corpus.ts'
+import { boards as commentBoards } from '../../../canvas-render/src/test-utils/compose-comments-oracle/corpus.ts'
 import { DRAWING_CORPUS } from '../../../canvas-render/src/test-utils/drawing-corpus.ts'
 import { proposalBoards } from '../../../canvas-render/src/test-utils/proposal-oracle/layer-corpus.ts'
 import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-cases.ts'
@@ -146,12 +152,23 @@ async function daemonCorpora(options) {
   }
 }
 
-/** The boards carrying proposals, each laid out with the daemon profile's options and its proposals. */
-function proposalCorpus(daemon) {
-  return proposalBoards().map(({ name, canvas, proposals }) => ({
+/** The boards carrying threads, each laid out as `wb_scene_render` lays one out with `comments: true`. */
+function commentCorpus({ commentLayer: _off, ...daemon }) {
+  return commentBoards()
+    .filter((board) => board.proposals === undefined)
+    .map(({ name, canvas, threads }) => ({ name, canvas, options: { ...daemon, threads } }))
+}
+
+/**
+ * The boards carrying proposals, each laid out with `options` and its
+ * proposals, and with its threads where it carries any: the comment layer
+ * drawn too, as the web draws both.
+ */
+function proposalCorpus({ commentLayer: _off, ...options }) {
+  return proposalBoards().map(({ name, canvas, threads, proposals }) => ({
     name,
     canvas,
-    options: { ...daemon, proposals },
+    options: { ...options, threads, proposals },
   }))
 }
 
@@ -183,6 +200,7 @@ async function measureCensus() {
     const corpora = {
       recorded: layoutCases(20),
       ...(await daemonCorpora(daemon)),
+      'comments: comment boards': commentCorpus(daemon),
       'proposals: proposal boards': proposalCorpus(daemon),
       'proposals dark: proposal boards': proposalCorpus(
         exportLayoutOptions(measure, 'dark', undefined, fontAvailable),

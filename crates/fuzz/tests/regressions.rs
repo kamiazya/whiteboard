@@ -106,6 +106,21 @@ fn the_canvas_seeds_are_wires_the_export_decodes() {
 }
 
 #[test]
+fn the_comment_seeds_are_layouts_the_export_draws_a_comment_layer_for() {
+    // Taken from the recorded comment-layer layouts, so a wire change that
+    // leaves them refused would leave the fuzzer starting from nothing it reads.
+    let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
+    for name in ["comments", "comment-passages"] {
+        let request = std::fs::read_to_string(seeds.join(name)).unwrap();
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
+        assert!(
+            answer.starts_with("[\"ok\"") && answer.contains("/pin\""),
+            "{name}: {answer:.120}"
+        );
+    }
+}
+
+#[test]
 fn the_font_seeds_are_faces_the_export_registers() {
     // A seed refused at its wire or its faces teaches the fuzzer nothing about
     // the measurer a handle builds; only the ones named for a refusal may be.

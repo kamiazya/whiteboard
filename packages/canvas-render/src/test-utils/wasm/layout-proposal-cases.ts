@@ -87,7 +87,7 @@ function priorProposals(canvas: SpatialCanvas): Proposal[] {
  * The compose-comments recording's proposal boards (every arm outlined, the
  * arms that draw nothing, conflicts counted into a label, a crowd fanned
  * round one node) laid out whole in both modes and under a drawn style and
- * the document's own, the mixed board with its comment layer off, and the
+ * the document's own, the mixed board with its comment layer drawn too, and the
  * first board again with priors compared by value: agreeing copies and ones
  * a value off.
  */
@@ -109,7 +109,7 @@ export function proposalCases(): ProposalCase[] {
         appearance: createSpatialTheme({ mode }),
         ...(style === undefined ? {} : { style }),
         proposals: board.proposals,
-        commentLayer: false,
+        ...(board.threads.length > 0 ? { threads: board.threads } : { commentLayer: false }),
       },
     })),
   )

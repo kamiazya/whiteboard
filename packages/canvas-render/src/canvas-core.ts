@@ -1,6 +1,12 @@
-import type { Proposal, ProposedChange, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  CommentMessage,
+  CommentThread,
+  Proposal,
+  ProposedChange,
+  SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { Scene } from '@kamiazya/whiteboard-scene'
+import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './layout/edges/edge-sides.js'
 import type { MeasureSpec } from './measure.js'
@@ -11,6 +17,11 @@ import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
 /** A reference's surface extras as the core takes them: data only, no body or canvas. */
 type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
+
+/** A thread as the core takes it: what a layout reads of one, no author or timestamp. */
+export type CoreThread = Pick<CommentThread, 'id' | 'anchor' | 'status'> & {
+  readonly messages: readonly Pick<CommentMessage, 'id' | 'body'>[]
+}
 
 /**
  * A change as the core takes it: a passage change by its identity and verdict
@@ -52,6 +63,10 @@ export interface CanvasLayoutRequest {
     readonly extras: readonly (readonly [string, CoreExtra])[]
   }
   readonly expand: boolean | readonly string[]
+  readonly threads?: readonly CoreThread[]
+  readonly commentLayer?: boolean
+  readonly showResolved?: boolean
+  readonly commentObstacles?: readonly BoundingBox[]
   readonly proposals?: readonly CoreProposal[]
 }
 
@@ -111,9 +126,8 @@ export type CanvasLayoutSeam =
 /**
  * Why a layout's options could not be handed to the core (the request gate,
  * `canvasLayoutRequest`): a measurer or an appearance nobody named, a
- * function seam, a highlighter other than the default, an
- * annotation layer, a reference bundle not rebuilt from a wire
- * or one whose extras carry content, and an expansion policy that answers
+ * function seam, a highlighter other than the default, a reference bundle
+ * not rebuilt from a wire or one whose extras carry content, and an expansion policy that answers
  * some file nodes open and others closed.
  */
 export type CanvasLayoutSkip =
@@ -121,7 +135,6 @@ export type CanvasLayoutSkip =
   | 'appearance'
   | `seam:${CanvasLayoutSeam}`
   | 'highlighter'
-  | 'comments'
   | 'references'
   | 'reference-content'
   | 'expand-collision'

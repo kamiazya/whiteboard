@@ -9,7 +9,9 @@ use whiteboard_model::spatial::{
 };
 use whiteboard_model::{Map, Value};
 
-use super::{MAX_PRIOR_FACET_ENTRIES, MAX_PROPOSAL_CHANGES, MAX_PROPOSALS, past_proposal_caps};
+use super::{
+    MAX_BUBBLES, MAX_PRIOR_FACET_ENTRIES, MAX_PROPOSAL_CHANGES, MAX_PROPOSALS, past_proposal_caps,
+};
 
 /// A plain JSON value on the value wire: an object a mapping in its written
 /// order, an array a list, a number that is no safe integer its bits.
@@ -300,6 +302,43 @@ fn every_prior_s_facets_count_toward_the_cap() {
     }
 }
 
+fn past_proposal_caps_alone(proposals: &[Proposal]) -> bool {
+    past_proposal_caps(proposals, 0)
+}
+
+#[test]
+fn a_comment_layer_s_threads_and_the_proposals_share_one_bubble_cap() {
+    let room = MAX_BUBBLES - MAX_PROPOSALS;
+    assert!(!past_proposal_caps(&layer(MAX_PROPOSALS, 1), room));
+    assert!(past_proposal_caps(&layer(MAX_PROPOSALS, 1), room + 1));
+    assert!(!past_proposal_caps(&[], MAX_BUBBLES));
+    assert!(past_proposal_caps(&layer(1, 1), MAX_BUBBLES));
+}
+
+/// Settled threads, which draw nothing unless asked to: a comment layer that
+/// costs nothing to lay out, however many it holds.
+fn settled(count: usize) -> Json {
+    let thread = |i: usize| {
+        json!({"id": format!("t{i}"), "anchor": {"kind": "document"}, "status": "resolved",
+            "messages": [{"id": format!("m{i}"), "body": "x"}]})
+    };
+    Json::Array((0..count).map(thread).collect())
+}
+
+#[test]
+fn a_layer_past_the_bubbles_both_layers_share_is_refused() {
+    let room = MAX_BUBBLES - MAX_PROPOSALS;
+    let with = |threads: usize| {
+        let extra = [
+            ("proposals", wire(&passages(MAX_PROPOSALS, 1))),
+            ("threads", wire(&settled(threads))),
+        ];
+        answer(&request(wire(&canvas()), &extra))
+    };
+    assert_eq!(with(room).get(0), Some(&json!("ok")));
+    assert_eq!(with(room + 1), json!(["refused", "input-too-large", "proposals"]));
+}
+
 fn passage(i: usize) -> ProposedChange {
     ProposedChange { id: format!("c{i}"), status: ChangeStatus::Open, op: ChangeOp::BodyReplace }
 }
@@ -314,11 +353,11 @@ fn layer(proposals: usize, each: usize) -> Vec<Proposal> {
 
 #[test]
 fn the_proposal_and_change_caps_are_each_inclusive() {
-    assert!(!past_proposal_caps(&[]));
-    assert!(!past_proposal_caps(&layer(MAX_PROPOSALS, 2)));
-    assert!(past_proposal_caps(&layer(MAX_PROPOSALS + 1, 0)));
-    assert!(!past_proposal_caps(&layer(1, MAX_PROPOSAL_CHANGES)));
-    assert!(past_proposal_caps(&layer(1, MAX_PROPOSAL_CHANGES + 1)));
+    assert!(!past_proposal_caps_alone(&[]));
+    assert!(!past_proposal_caps_alone(&layer(MAX_PROPOSALS, 2)));
+    assert!(past_proposal_caps_alone(&layer(MAX_PROPOSALS + 1, 0)));
+    assert!(!past_proposal_caps_alone(&layer(1, MAX_PROPOSAL_CHANGES)));
+    assert!(past_proposal_caps_alone(&layer(1, MAX_PROPOSAL_CHANGES + 1)));
 }
 
 /// A bucket of `n` keys, each holding a list with a one-entry mapping in it:
@@ -398,10 +437,10 @@ fn sized(total: usize) -> Map {
 #[test]
 fn every_prior_s_facets_are_counted_at_every_depth() {
     for change in priors(&sized(MAX_PRIOR_FACET_ENTRIES)) {
-        assert!(!past_proposal_caps(&spatial(change)), "at the cap");
+        assert!(!past_proposal_caps_alone(&spatial(change)), "at the cap");
     }
     for change in priors(&sized(MAX_PRIOR_FACET_ENTRIES + 1)) {
-        assert!(past_proposal_caps(&spatial(change.clone())), "past it: {change:?}");
+        assert!(past_proposal_caps_alone(&spatial(change.clone())), "past it: {change:?}");
     }
     // Two priors are judged against one total.
     let two = |first: usize, second: usize| {
@@ -409,7 +448,7 @@ fn every_prior_s_facets_are_counted_at_every_depth() {
         let [_, b, ..] = priors(&sized(second));
         let mut both = spatial(a);
         both.extend(spatial(b));
-        past_proposal_caps(&both)
+        past_proposal_caps_alone(&both)
     };
     let half = MAX_PRIOR_FACET_ENTRIES / 2;
     assert!(!two(half, MAX_PRIOR_FACET_ENTRIES - half));

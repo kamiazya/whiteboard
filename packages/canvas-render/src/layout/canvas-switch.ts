@@ -1,4 +1,5 @@
 import {
+  type CommentThread,
   nodeFile,
   type Proposal,
   type SpatialCanvas,
@@ -14,6 +15,7 @@ import type {
   CoreChange,
   CoreDegradation,
   CoreProposal,
+  CoreThread,
 } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
@@ -76,7 +78,6 @@ function optionSkip(options: SpatialLayoutOptions): CanvasLayoutSkip | undefined
   if (options.highlightCode !== undefined && options.highlightCode !== highlightCode) {
     return 'highlighter'
   }
-  if (options.commentLayer !== false && (options.threads ?? []).length > 0) return 'comments'
   return undefined
 }
 
@@ -103,8 +104,8 @@ export type CanvasLayoutAsk = CanvasLayoutRequest | { readonly skip: CanvasLayou
 /**
  * `options` as a request the core answers exactly as the TypeScript would,
  * or the first reason they cannot be one (`CanvasLayoutSkip`): a measurer or
- * an appearance nobody named, a seam that is a function, an
- * annotation layer, a reference bundle not rebuilt from a wire
+ * an appearance nobody named, a seam that is a function, a reference
+ * bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
  * one node id open in one canvas and closed in another.
  */
@@ -133,6 +134,7 @@ export function canvasLayoutRequest(
     expand,
     ...styleOptions(options),
     ...dataOptions(options),
+    ...commentOptions(options),
     ...(options.proposals === undefined ? {} : { proposals: options.proposals.map(coreProposal) }),
     ...(wire === undefined ? {} : { references: wire as CanvasLayoutRequest['references'] }),
   }
@@ -149,6 +151,24 @@ function dataOptions(options: SpatialLayoutOptions): Partial<CanvasLayoutRequest
     ...(edgeSideOverrides === undefined ? {} : { sideOverrides: [...edgeSideOverrides] }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
     ...(embedPath === undefined ? {} : { embedPath }),
+  }
+}
+
+const coreThread = ({ id, anchor, status, messages }: CommentThread): CoreThread => ({
+  id,
+  anchor,
+  status,
+  messages: messages.map((message) => ({ id: message.id, body: message.body })),
+})
+
+/** The annotation layer's options, each present only when the caller set it. */
+function commentOptions(options: SpatialLayoutOptions): Partial<CanvasLayoutRequest> {
+  const { threads, commentLayer, showResolved, commentObstacles } = options
+  return {
+    ...(threads === undefined ? {} : { threads: threads.map(coreThread) }),
+    ...(commentLayer === undefined ? {} : { commentLayer }),
+    ...(showResolved === undefined ? {} : { showResolved }),
+    ...(commentObstacles === undefined ? {} : { commentObstacles }),
   }
 }
 
