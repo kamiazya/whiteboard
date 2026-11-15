@@ -79,7 +79,11 @@ impl<'w> WireHost<'w> {
     /// This host answering a fence's tokens from `code`.
     #[must_use]
     pub fn with_code_tokens(mut self, code: &'w [FenceTokens]) -> Self {
-        self.code = code.iter().map(|f| ((f.lang.as_str(), f.value.as_str()), &f.lines)).collect();
+        // Inserted one by one: `collect` builds a map in bulk through a stable
+        // sort, which links several kilobytes for no gain on a table this size.
+        for fence in code {
+            self.code.insert((fence.lang.as_str(), fence.value.as_str()), &fence.lines);
+        }
         self
     }
 
