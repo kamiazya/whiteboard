@@ -97,8 +97,8 @@ function call(glue: LayoutGlue, text: string): Raw {
  * sent on a second call (at most two); `memo` sends the tokens it holds for
  * the request's fences on the first. Answers `declined` for what the core
  * cannot answer exactly as the TypeScript would, a request or faces past
- * their caps and a fence there is no `highlight` for, which a root answers
- * from the TypeScript; throws `CoreInputRefused` for a request the wire does
+ * their caps, faces the core's reader cannot read and a fence there is no
+ * `highlight` for, which a root answers from the TypeScript; throws `CoreInputRefused` for a request the wire does
  * not carry or an answer that is not one, which for a request canvas-render
  * built is a defect.
  */
