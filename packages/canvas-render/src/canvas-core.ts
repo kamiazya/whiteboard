@@ -1,4 +1,4 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { Proposal, ProposedChange, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import type { CodeTokenLines } from './highlight/code-token.js'
@@ -11,6 +11,17 @@ import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
 /** A reference's surface extras as the core takes them: data only, no body or canvas. */
 type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
+
+/**
+ * A change as the core takes it: a passage change by its identity and verdict
+ * alone, since the canvas only counts one.
+ */
+export type CoreChange =
+  | Exclude<ProposedChange, { op: 'body.replace' }>
+  | Pick<Extract<ProposedChange, { op: 'body.replace' }>, 'id' | 'status' | 'op'>
+
+/** A proposal as the core takes it: what a layout reads of one, no author or timestamp. */
+export type CoreProposal = Pick<Proposal, 'id'> & { readonly changes: readonly CoreChange[] }
 
 /**
  * One layout asked of the Rust core (ADR-0054 step 7), every option as data:
@@ -41,6 +52,7 @@ export interface CanvasLayoutRequest {
     readonly extras: readonly (readonly [string, CoreExtra])[]
   }
   readonly expand: boolean | readonly string[]
+  readonly proposals?: readonly CoreProposal[]
 }
 
 /** The degradations a layout reports, as the core can report them: no thrown value rides along. */
@@ -100,7 +112,7 @@ export type CanvasLayoutSeam =
  * Why a layout's options could not be handed to the core (the request gate,
  * `canvasLayoutRequest`): a measurer or an appearance nobody named, a
  * function seam, a highlighter other than the default, an
- * annotation or proposal layer, a reference bundle not rebuilt from a wire
+ * annotation layer, a reference bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
  * some file nodes open and others closed.
  */
@@ -110,7 +122,6 @@ export type CanvasLayoutSkip =
   | `seam:${CanvasLayoutSeam}`
   | 'highlighter'
   | 'comments'
-  | 'proposals'
   | 'references'
   | 'reference-content'
   | 'expand-collision'
