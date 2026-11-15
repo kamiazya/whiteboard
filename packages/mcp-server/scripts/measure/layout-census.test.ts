@@ -73,4 +73,26 @@ describe('the layout census', () => {
     expect(layouts).toBe(2)
     expect(Object.fromEntries(counts)).toEqual({ answered: 2 })
   })
+
+  it.runIf(built)('a board carrying proposals is answered by the core, not skipped', async () => {
+    const base = await coreLoaders(
+      layoutCoreSettingsFrom({ WHITEBOARD_CORE_LAYOUT: 'differential' }),
+    ).layoutCore()
+    if (base === undefined) throw new Error('the core did not load')
+    const proposals = [
+      {
+        id: 'p',
+        changes: [
+          { id: 'c', status: 'open', op: 'node.patch', nodeId: 'n', patch: { x: 40 }, assumed: {} },
+        ],
+      },
+    ] as const
+    const options = {
+      measure: createFakeMeasure(),
+      appearance: createSpatialTheme({ mode: 'light' }),
+      proposals,
+    }
+    const { counts } = censusOf(tallyingCore(base), [{ canvas: board('proposed'), options }])
+    expect(Object.fromEntries(counts)).toEqual({ answered: 1 })
+  })
 })

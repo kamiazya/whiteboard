@@ -9,7 +9,7 @@
  * Run (from packages/mcp-server, which carries tsx):
  *   node --import tsx/esm scripts/measure/layout-census.mjs [--json=path]
  *
- * Two profiles, both bounded:
+ * The profiles, each bounded:
  *   recorded  the whole-layout recordings' cases (`layout-cases.ts`: the
  *             composer recordings' boards, bodies aimed at the typesetter,
  *             the routing corpus), each under its own options.
@@ -18,6 +18,13 @@
  *             style, no comment layer) over the composer recordings' boards,
  *             the drawing corpus, the canvases under docs/assets, and every
  *             Markdown file under docs/ and skills/ as one text node.
+ *   proposals the daemon profile's options with each board's proposals drawn,
+ *             over the compose-comments recording's proposal boards (every
+ *             arm, a crowd, conflicts). No daemon path draws proposals
+ *             today (`wb_scene_render` takes none); the web editor does,
+ *             and measures with a canvas context, so this is the nearest
+ *             profile that reaches the core with a proposal layer; run
+ *             again with the export's dark options.
  *   export    what the PNG/SVG file export (`/export`, `/export-svg`) hands
  *             the layout, in its light and its dark mode, over the daemon
  *             profile's corpora: the options are the export's own
@@ -40,6 +47,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs'
 import { boards } from '../../../canvas-render/src/test-utils/compose-canvas-oracle/corpus.ts'
 import { DRAWING_CORPUS } from '../../../canvas-render/src/test-utils/drawing-corpus.ts'
+import { proposalBoards } from '../../../canvas-render/src/test-utils/proposal-oracle/layer-corpus.ts'
 import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-cases.ts'
 import { exportLayoutOptions } from '../../src/server/export/headless-renderer.ts'
 import { coreLoaders, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
@@ -138,6 +146,15 @@ async function daemonCorpora(options) {
   }
 }
 
+/** The boards carrying proposals, each laid out with the daemon profile's options and its proposals. */
+function proposalCorpus(daemon) {
+  return proposalBoards().map(({ name, canvas, proposals }) => ({
+    name,
+    canvas,
+    options: { ...daemon, proposals },
+  }))
+}
+
 /** The census of every corpus, or undefined when the core did not load. */
 async function measureCensus() {
   const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_MISMATCH: 'throw' })
@@ -166,6 +183,10 @@ async function measureCensus() {
     const corpora = {
       recorded: layoutCases(20),
       ...(await daemonCorpora(daemon)),
+      'proposals: proposal boards': proposalCorpus(daemon),
+      'proposals dark: proposal boards': proposalCorpus(
+        exportLayoutOptions(measure, 'dark', undefined, fontAvailable),
+      ),
       ...(await exportCorpora('light')),
       ...(await exportCorpora('dark')),
     }
