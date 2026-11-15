@@ -1,6 +1,6 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { type FenceHighlighter, type FenceRow, FenceTokenMemo } from './fence-tokens.js'
-import { FontHandles, type FontsGlue, type LayoutFaces } from './font-handles.js'
+import type { FontHandles, FontsGlue, LayoutFaces } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS, type RefusalCode } from './generated/input-caps.js'
 import type { AnchorPair } from './types.js'
 import { wireOf } from './value-wire.js'
@@ -89,7 +89,8 @@ function call(glue: LayoutGlue, text: string): Raw {
 
 /**
  * `layoutSpatialCanvasWithAnchors` over the artifact. A font-table measurer's
- * faces are registered once per measurer in `fonts`, and registered again
+ * faces are registered once per measurer in `fonts`, the handles the core
+ * holds (one per core, never one per call), and registered again
  * when the core answers that it holds nothing under the handle (an instance
  * recreated since); the layout is then asked once more. A fence the core
  * finds the default highlighter would colour is tokenised by `highlight` and
@@ -105,9 +106,9 @@ export function layoutSpatialCanvas(
   glue: LayoutGlue,
   errors: LayoutErrors,
   request: LayoutRequest,
-  highlight?: FenceHighlighter,
+  highlight: FenceHighlighter | undefined,
   memo: FenceTokenMemo = new FenceTokenMemo(),
-  fonts: FontHandles = new FontHandles(glue, errors),
+  fonts: FontHandles,
 ): LayoutAnswer {
   const { measure } = request
   const once = (): LayoutAnswer | 'lost' => {

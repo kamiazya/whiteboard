@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
+import { FontHandles } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS } from './generated/input-caps.js'
 import { type CoreGlue, coreFrom, EXPECTED_ABI } from './index.js'
-import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas } from './layout.js'
+import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas as layoutWith } from './layout.js'
 
 const errors = {
   refused: (operation: string, code: string, detail?: string) =>
@@ -21,6 +22,24 @@ function glueOf(answer: string) {
     release_layout_fonts: () => true,
   }
   return { glue, calls }
+}
+
+/** The layout over `glue` as a core makes it, with that core's own memo and font handles. */
+function layoutSpatialCanvas(
+  glue: LayoutGlue,
+  layoutErrors: typeof errors,
+  request: LayoutRequest,
+  highlight?: FenceHighlighter,
+  memo = new FenceTokenMemo(),
+) {
+  return layoutWith(
+    glue,
+    layoutErrors,
+    request,
+    highlight,
+    memo,
+    new FontHandles(glue, layoutErrors),
+  )
 }
 
 const fake: LayoutRequest = { measure: { kind: 'fake', factor: 0.5 } }

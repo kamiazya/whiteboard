@@ -167,6 +167,13 @@ describe('the faces a font-table measurer reads', () => {
     expect(registered).toEqual([])
   })
 
+  it('are the handles a caller holds, never a cache one layout makes for itself', () => {
+    const { glue } = glueOf()
+    // @ts-expect-error a cache made per call would register a retained measurer's faces on every layout
+    const unheld = () => layoutSpatialCanvas(glue, errors, { measure: facesOf() })
+    expect(unheld).toBeTypeOf('function')
+  })
+
   it('decline faces whose lengths add up past the cap before copying them', () => {
     const { glue, registered } = glueOf()
     const shared = new Uint8Array(REGISTER_LAYOUT_FONTS_CAPS.maxBytes / 2)
