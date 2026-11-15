@@ -39,7 +39,7 @@ describe('the layout census', () => {
       const cases = [
         { canvas: board('plain words'), options },
         { canvas: board('```js\nlet x = 1\n```'), options },
-        { canvas: board('plain words'), options: { ...options, style: 'document' as const } },
+        { canvas: board('plain words'), options: { ...options, renderMath: () => undefined } },
         { canvas: board('more plain words'), options },
       ]
       const { layouts, counts } = censusOf(tallyingCore(base), cases)
@@ -47,7 +47,7 @@ describe('the layout census', () => {
       expect(Object.fromEntries(counts)).toEqual({
         answered: 2,
         'declined:highlight': 1,
-        'skipped:style': 1,
+        'skipped:seam:renderMath': 1,
       })
     },
   )
