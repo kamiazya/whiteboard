@@ -31,13 +31,7 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * core something new adds a topic and a recording rather than re-recording
  * the others.
  */
-export type LayoutTopic =
-  | 'composer'
-  | 'bodies'
-  | 'declined'
-  | 'expansion'
-  | 'fragment'
-  | 'routing'
+export type LayoutTopic = 'composer' | 'bodies' | 'declined' | 'expansion' | 'fragment' | 'routing'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
