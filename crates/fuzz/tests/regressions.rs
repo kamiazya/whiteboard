@@ -147,3 +147,18 @@ fn the_font_seeds_are_faces_the_export_registers() {
     }
     assert!(held >= 5, "only {held} font seeds register");
 }
+
+#[test]
+fn the_proposal_seeds_are_layouts_the_export_draws_a_proposal_layer_for() {
+    // Taken from the recorded proposal-layer layouts, so a wire change that
+    // leaves them refused would leave the fuzzer starting from nothing it reads.
+    let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
+    for name in ["proposals", "proposal-priors"] {
+        let request = std::fs::read_to_string(seeds.join(name)).unwrap();
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request);
+        assert!(
+            answer.starts_with("[\"ok\"") && answer.contains("/outline\""),
+            "{name}: {answer:.120}"
+        );
+    }
+}

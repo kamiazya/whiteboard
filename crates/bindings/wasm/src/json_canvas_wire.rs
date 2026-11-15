@@ -316,7 +316,7 @@ fn tags_of(value: &Value) -> Option<Vec<String>> {
     items_of(value, string_of)
 }
 
-fn color_of(value: &Value) -> Option<CanvasColor> {
+pub(crate) fn color_of(value: &Value) -> Option<CanvasColor> {
     let color = string_of(value)?;
     Some(match CanvasColorPreset::from_wire(&color) {
         Some(preset) => CanvasColor::CanvasColorPreset(preset),
@@ -338,7 +338,7 @@ fn point_of(value: &Value) -> Option<CanvasPoint> {
     f.all_named().then_some(CanvasPoint { x, y })
 }
 
-fn bends_of(value: &Value) -> Option<Vec<CanvasPoint>> {
+pub(crate) fn bends_of(value: &Value) -> Option<Vec<CanvasPoint>> {
     items_of(value, point_of)
 }
 
@@ -358,7 +358,7 @@ fn resource_of(value: &Value) -> Option<NodeResource> {
     f.all_named().then_some(NodeResource { mime_type, content, location, subpath })
 }
 
-fn node_of(value: &Value) -> Option<SpatialNode> {
+pub(crate) fn node_of(value: &Value) -> Option<SpatialNode> {
     let mut f = Fields::of(value)?;
     let node = SpatialNode {
         id: f.field("id", string_of)??,
@@ -379,7 +379,7 @@ fn node_of(value: &Value) -> Option<SpatialNode> {
     f.all_named().then_some(node)
 }
 
-fn edge_end_of(value: &Value) -> Option<EdgeEnd> {
+pub(crate) fn edge_end_of(value: &Value) -> Option<EdgeEnd> {
     let mut f = Fields::of(value)?;
     let end = EdgeEnd {
         node: f.field("node", string_of)??,
@@ -389,7 +389,7 @@ fn edge_end_of(value: &Value) -> Option<EdgeEnd> {
     f.all_named().then_some(end)
 }
 
-fn edge_of(value: &Value) -> Option<CanvasEdge> {
+pub(crate) fn edge_of(value: &Value) -> Option<CanvasEdge> {
     let mut f = Fields::of(value)?;
     let edge = CanvasEdge {
         id: f.field("id", string_of)??,
@@ -404,7 +404,7 @@ fn edge_of(value: &Value) -> Option<CanvasEdge> {
     f.all_named().then_some(edge)
 }
 
-fn line_end_of(value: &Value) -> Option<LineEnd> {
+pub(crate) fn line_end_of(value: &Value) -> Option<LineEnd> {
     let mut f = Fields::of(value)?;
     let kind = f.field("kind", string_of)??;
     let end = f.field("end", arrow_of)?;
@@ -420,7 +420,7 @@ fn line_end_of(value: &Value) -> Option<LineEnd> {
     f.all_named().then_some(ready)
 }
 
-fn line_of(value: &Value) -> Option<CanvasLine> {
+pub(crate) fn line_of(value: &Value) -> Option<CanvasLine> {
     let mut f = Fields::of(value)?;
     let line = CanvasLine {
         id: f.field("id", string_of)??,

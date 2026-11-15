@@ -22,6 +22,14 @@
  *             (the daemon profile's options, the document's threads in place
  *             of `commentLayer: false`) over the compose-comments boards,
  *             which carry threads on every anchor arm.
+ *   proposals the daemon profile's options with each board's proposals drawn,
+ *             over the compose-comments recording's proposal boards (every
+ *             arm, a crowd, conflicts). No daemon path draws proposals
+ *             today (`wb_scene_render` takes none); the web editor does,
+ *             and measures with a canvas context, so this is the nearest
+ *             profile that reaches the core with a proposal layer; a
+ *             board's threads are drawn beside its proposals. Run again
+ *             with the export's dark options.
  *   export    what the PNG/SVG file export (`/export`, `/export-svg`) hands
  *             the layout, in its light and its dark mode, over the daemon
  *             profile's corpora: the options are the export's own
@@ -49,6 +57,7 @@ import { isRunAsScript } from '../../../../tools/checks/src/is-run-as-script.mjs
 import { boards } from '../../../canvas-render/src/test-utils/compose-canvas-oracle/corpus.ts'
 import { boards as commentBoards } from '../../../canvas-render/src/test-utils/compose-comments-oracle/corpus.ts'
 import { DRAWING_CORPUS } from '../../../canvas-render/src/test-utils/drawing-corpus.ts'
+import { proposalBoards } from '../../../canvas-render/src/test-utils/proposal-oracle/layer-corpus.ts'
 import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-cases.ts'
 import { exportLayoutOptions } from '../../src/server/export/headless-renderer.ts'
 import { coreLoaders, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
@@ -155,6 +164,19 @@ function commentCorpus({ commentLayer: _off, ...daemon }) {
     .map(({ name, canvas, threads }) => ({ name, canvas, options: { ...daemon, threads } }))
 }
 
+/**
+ * The boards carrying proposals, each laid out with `options` and its
+ * proposals, and with its threads where it carries any: the comment layer
+ * drawn too, as the web draws both.
+ */
+function proposalCorpus({ commentLayer: _off, ...options }) {
+  return proposalBoards().map(({ name, canvas, threads, proposals }) => ({
+    name,
+    canvas,
+    options: { ...options, threads, proposals },
+  }))
+}
+
 /** Printable ASCII, one glyph per code point: a face the core's reader reads. */
 const PRINTABLE = String.fromCodePoint(...Array.from({ length: 95 }, (_, i) => 0x20 + i))
 
@@ -209,6 +231,10 @@ async function measureCensus() {
       recorded: layoutCases(20),
       ...(await daemonCorpora(daemon)),
       'comments: comment boards': commentCorpus(daemon),
+      'proposals: proposal boards': proposalCorpus(daemon),
+      'proposals dark: proposal boards': proposalCorpus(
+        exportLayoutOptions(measure, 'dark', undefined, fontAvailable),
+      ),
       ...(await exportCorpora('light')),
       ...(await exportCorpora('dark')),
       ...(await installedCorpora(installedDir)),

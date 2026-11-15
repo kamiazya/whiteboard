@@ -17,6 +17,7 @@ import {
 } from '../compose-comments-oracle/corpus.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
+import { proposalCases } from './layout-proposal-cases.js'
 
 /**
  * The layouts the whole-layout core is held to (ADR-0054 step 7), by the
@@ -28,8 +29,9 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * routing corpus, bodies aimed at the typesetter, bodies dense in shortcodes,
  * fences the default highlighter colours or leaves plain, the composer
  * boards under the document's own theme and under named ones, and the boards
- * carrying comment threads with their annotation layer; every reference
- * crosses as a wire.
+ * carrying comment threads with their annotation layer, and the boards
+ * carrying proposals with their proposal layer; every reference crosses as a
+ * wire.
  */
 
 /**
@@ -48,6 +50,7 @@ export type LayoutTopic =
   | 'routing'
   | 'theme'
   | 'comments'
+  | 'proposals'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -544,6 +547,7 @@ export function layoutCases(synthetic: number): LayoutCase[] {
     options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
   })
   cases.push(...highlightCases(light))
+  cases.push(...proposalCases().map((c) => ({ topic: 'proposals' as const, ...c })))
   for (const board of [...ROUTING_CORPUS, ...syntheticLayouts(synthetic)]) {
     for (const routing of ['straight', 'orthogonal'] as const) {
       const canvas = {

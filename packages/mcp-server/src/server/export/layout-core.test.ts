@@ -386,9 +386,9 @@ describe('the daemon layout core', () => {
       const capture = captureLogsForTests('debug')
       try {
         const tallies = [
-          { kind: 'skipped', reason: 'proposals' },
+          { kind: 'skipped', reason: 'highlighter' },
           { kind: 'declined', reason: 'body' },
-          { kind: 'skipped', reason: 'proposals' },
+          { kind: 'skipped', reason: 'highlighter' },
         ] as const
         for (const tally of tallies) {
           expect(() => strict?.onMismatch?.({ fn: 'layoutSpatialCanvas', ...tally })).not.toThrow()
@@ -398,9 +398,9 @@ describe('the daemon layout core', () => {
             .filter((r) => r.msg === 'the Rust core did not answer this layout')
             .map((r) => r.data),
         ).toMatchObject([
-          { kind: 'skipped', reason: 'proposals', count: 1 },
+          { kind: 'skipped', reason: 'highlighter', count: 1 },
           { kind: 'declined', reason: 'body', count: 1 },
-          { kind: 'skipped', reason: 'proposals', count: 2 },
+          { kind: 'skipped', reason: 'highlighter', count: 2 },
         ])
         expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
       } finally {

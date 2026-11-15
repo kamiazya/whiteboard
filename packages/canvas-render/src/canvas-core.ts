@@ -1,4 +1,10 @@
-import type { CommentMessage, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  CommentMessage,
+  CommentThread,
+  Proposal,
+  ProposedChange,
+  SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import type { CodeTokenLines } from './highlight/code-token.js'
@@ -16,6 +22,17 @@ type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
 export type CoreThread = Pick<CommentThread, 'id' | 'anchor' | 'status'> & {
   readonly messages: readonly Pick<CommentMessage, 'id' | 'body'>[]
 }
+
+/**
+ * A change as the core takes it: a passage change by its identity and verdict
+ * alone, since the canvas only counts one.
+ */
+export type CoreChange =
+  | Exclude<ProposedChange, { op: 'body.replace' }>
+  | Pick<Extract<ProposedChange, { op: 'body.replace' }>, 'id' | 'status' | 'op'>
+
+/** A proposal as the core takes it: what a layout reads of one, no author or timestamp. */
+export type CoreProposal = Pick<Proposal, 'id'> & { readonly changes: readonly CoreChange[] }
 
 /**
  * One layout asked of the Rust core (ADR-0054 step 7), every option as data:
@@ -50,6 +67,7 @@ export interface CanvasLayoutRequest {
   readonly commentLayer?: boolean
   readonly showResolved?: boolean
   readonly commentObstacles?: readonly BoundingBox[]
+  readonly proposals?: readonly CoreProposal[]
 }
 
 /** The degradations a layout reports, as the core can report them: no thrown value rides along. */
@@ -108,9 +126,8 @@ export type CanvasLayoutSeam =
 /**
  * Why a layout's options could not be handed to the core (the request gate,
  * `canvasLayoutRequest`): a measurer or an appearance nobody named, a
- * function seam, a highlighter other than the default, a
- * proposal layer, a reference bundle not rebuilt from a wire
- * or one whose extras carry content, and an expansion policy that answers
+ * function seam, a highlighter other than the default, a reference bundle
+ * not rebuilt from a wire or one whose extras carry content, and an expansion policy that answers
  * some file nodes open and others closed.
  */
 export type CanvasLayoutSkip =
@@ -118,7 +135,6 @@ export type CanvasLayoutSkip =
   | 'appearance'
   | `seam:${CanvasLayoutSeam}`
   | 'highlighter'
-  | 'proposals'
   | 'references'
   | 'reference-content'
   | 'expand-collision'

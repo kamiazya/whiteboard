@@ -47,7 +47,9 @@ use whiteboard_canvas_render::theme::tokens::theme_table;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
 use whiteboard_model::annotation::{AnnotationAnchor, CommentThread};
+use whiteboard_model::proposal::{ChangeOp, Proposal, ProposedChange, SpatialChange};
 use whiteboard_model::spatial::SpatialCanvas;
+use whiteboard_model::{Map, Value};
 use whiteboard_plugin_visual::host::{THEMES, visual_registry};
 use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_scene::NodeDecoration;
@@ -154,6 +156,67 @@ fn past_comment_caps(comments: &Comments) -> bool {
         || passages(&comments.threads) > MAX_PASSAGES
 }
 
+/// The most changes a proposal layer may hold across its proposals: the
+/// element cap. Each is looked up against every element and its outline
+/// joins what every later bubble is placed against, so what the layer costs
+/// grows with their product, which bytes do not bound.
+pub const MAX_PROPOSAL_CHANGES: usize = MAX_ELEMENTS;
+
+/// The most proposals a layer may hold: half the element cap. Each draws a
+/// bubble placed against every box, outline and earlier bubble, which is
+/// where the layer's cost is: 4096 proposals over a hub of 2047 edges took
+/// 31.4 s on Node wasm, 2048 took 24.7 s and the hub alone 16.5 s, while one
+/// proposal adding 4096 boxes took 0.2 s.
+pub const MAX_PROPOSALS: usize = MAX_ELEMENTS / 2;
+
+/// The most mapping entries the facets of the priors may hold, at every depth
+/// together: the element cap. A prior's facets agree with the element's in
+/// any key order, so each key is searched for through its mapping and the
+/// comparison costs the square of the entries, which bytes bound only loosely.
+pub const MAX_PRIOR_FACET_ENTRIES: usize = MAX_ELEMENTS;
+
+fn map_entries(map: &Map) -> usize {
+    map.iter().fold(map.len(), |sum, (_, item)| sum.saturating_add(entries(item)))
+}
+
+fn entries(value: &Value) -> usize {
+    match value {
+        Value::Map(map) => map_entries(map),
+        Value::Seq(items) => items.iter().map(entries).fold(0, usize::saturating_add),
+        _ => 0,
+    }
+}
+
+/// The facets a change's prior holds, which it is compared to the element by.
+fn prior_facets(change: &ProposedChange) -> Option<&Map> {
+    let ChangeOp::Spatial(spatial) = &change.op else { return None };
+    match spatial.as_ref() {
+        SpatialChange::NodeRemove { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::EdgeRemove { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::LineRemove { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::EdgePatch { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::LinePatch { assumed, .. } => assumed.facets.as_ref(),
+        _ => None,
+    }
+}
+
+/// The most bubbles the two layers may place together: the element cap.
+/// Each bubble is placed against every earlier one of either layer, so a
+/// layer at its own cap beside the other at its own costs more than either:
+/// over a hub of 2047 edges, 4096 threads with 2048 proposals took 45.6 s on
+/// Node wasm, the comment layer's own caps 40.2 s, and 2048 of each 31.8 s.
+pub const MAX_BUBBLES: usize = MAX_ELEMENTS;
+
+/// Whether `proposals`, beside a comment layer of `threads`, is past a cap.
+fn past_proposal_caps(proposals: &[Proposal], threads: usize) -> bool {
+    let changes = proposals.iter().flat_map(|proposal| &proposal.changes);
+    let facets = changes.clone().filter_map(prior_facets).map(map_entries);
+    proposals.len() > MAX_PROPOSALS
+        || proposals.len().saturating_add(threads) > MAX_BUBBLES
+        || changes.count() > MAX_PROPOSAL_CHANGES
+        || facets.fold(0, usize::saturating_add) > MAX_PRIOR_FACET_ENTRIES
+}
+
 /// The bundled visual plugin, built once per instance.
 fn registry() -> Option<&'static Registry> {
     static REGISTRY: OnceLock<Option<Registry>> = OnceLock::new();
@@ -203,7 +266,7 @@ fn lay_out(
         side_overrides: request.overrides.as_deref(),
         host: &host,
         comments: request.comments.options(),
-        proposals: &[],
+        proposals: &request.proposals,
         content_cache: None,
         body: BodySeams {
             inline: &host,
@@ -243,6 +306,9 @@ pub fn layout_spatial_canvas(request: &str) -> String {
     if past_comment_caps(&request.comments) {
         return refused("input-too-large", "comments");
     }
+    if past_proposal_caps(&request.proposals, request.comments.threads.len()) {
+        return refused("input-too-large", "proposals");
+    }
     if body_total(&request) > MAX_BODY_BYTES {
         return refused("input-too-large", "bodies");
     }
@@ -258,5 +324,7 @@ pub fn layout_spatial_canvas(request: &str) -> String {
         .unwrap_or_else(|| refused("malformed", "font-handle"))
 }
 
+#[cfg(test)]
+mod proposal_tests;
 #[cfg(test)]
 mod tests;
