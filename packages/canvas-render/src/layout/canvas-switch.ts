@@ -1,5 +1,6 @@
 import { nodeFile, type SpatialCanvas, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type {
   CanvasLayoutCore,
   CanvasLayoutRequest,
@@ -10,7 +11,9 @@ import type {
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
+import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
+import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 
@@ -66,10 +69,26 @@ function optionSkip(options: SpatialLayoutOptions): CanvasLayoutSkip | undefined
   if (options.highlightCode !== undefined && options.highlightCode !== highlightCode) {
     return 'highlighter'
   }
-  if (options.style !== undefined && options.style !== 'clean') return 'style'
   if (options.commentLayer !== false && (options.threads ?? []).length > 0) return 'comments'
   if ((options.proposals ?? []).length > 0) return 'proposals'
   return undefined
+}
+
+/**
+ * The style a request carries, absent when it draws clean; and under any
+ * other, the families the bundled themes name that this surface holds. The
+ * layout asks `fontAvailable` about a theme's family and nothing else, so
+ * this list answers every question it would.
+ */
+function styleOptions(options: SpatialLayoutOptions): Partial<CanvasLayoutRequest> {
+  const { style } = options
+  if (style === undefined || style === 'clean') return {}
+  const available = options.fontAvailable ?? ((family) => family === SPATIAL_THEME_FONT_FAMILY)
+  const named = Object.values(resolveThemeTable([visualRenderContribution])).flatMap(
+    (tokens) => tokens.fontFamily ?? [],
+  )
+  const fontFamilies = [...new Set(named)].filter((family) => available(family))
+  return { style, ...(fontFamilies.length === 0 ? {} : { fontFamilies }) }
 }
 
 /** A request the core can be handed, or why the options cannot be. */
@@ -78,7 +97,7 @@ export type CanvasLayoutAsk = CanvasLayoutRequest | { readonly skip: CanvasLayou
 /**
  * `options` as a request the core answers exactly as the TypeScript would,
  * or the first reason they cannot be one (`CanvasLayoutSkip`): a measurer or
- * an appearance nobody named, a seam that is a function, a theme to draw, an
+ * an appearance nobody named, a seam that is a function, an
  * annotation or proposal layer, a reference bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
  * one node id open in one canvas and closed in another.
@@ -106,6 +125,7 @@ export function canvasLayoutRequest(
     measure,
     mode,
     expand,
+    ...styleOptions(options),
     ...dataOptions(options),
     ...(wire === undefined ? {} : { references: wire as CanvasLayoutRequest['references'] }),
   }

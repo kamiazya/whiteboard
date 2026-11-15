@@ -22,6 +22,7 @@ import { ROUTING_CORPUS, syntheticLayouts } from '../routing-corpus.js'
  * overrides, pinned sides, an embed path, a tag library, file nodes drawing
  * canvases three deep, a body embedding a canvas) under the clean style, the
  * routing corpus, bodies aimed at the typesetter, bodies dense in shortcodes,
+ * the composer boards under the document's own theme and under named ones,
  * and a layout only the TypeScript can draw exactly; every reference crosses as a wire.
  */
 
@@ -39,6 +40,7 @@ export type LayoutTopic =
   | 'expansion'
   | 'fragment'
   | 'routing'
+  | 'theme'
 
 export interface LayoutCase {
   readonly topic: LayoutTopic
@@ -322,6 +324,46 @@ function expansionCases(): LayoutCase[] {
   }))
 }
 
+/**
+ * The composer boards drawn in a theme: the document's own (a board naming
+ * sketch, one naming a theme nobody registered, the nesting board whose
+ * canvases name their own and inherit), the bundled sketch and neon by id,
+ * and an id nobody registered; each with the surface holding only the
+ * bundled family and holding every family, so sketch's Yomogi is declared
+ * or replaced.
+ */
+function themeCases(): LayoutCase[] {
+  const byName = new Map(boards().map((b) => [b.name, b.canvas]))
+  const references = referenceSeamsFromWire(WIRE)
+  const runs: [string, string, 'light' | 'dark'][] = [
+    ...['themed', 'nesting', 'unknown', 'layered'].flatMap((board) =>
+      ['document', 'visual.sketch', 'visual.neon'].map(
+        (style) => [board, style, 'light'] as [string, string, 'light'],
+      ),
+    ),
+    ['themed', 'document', 'dark'],
+    ['nesting', 'visual.neon', 'dark'],
+    ['themed', 'visual.gone', 'light'],
+  ]
+  return runs.flatMap(([board, style, mode]) => {
+    const canvas = byName.get(board)
+    if (canvas === undefined) return []
+    return [false, true].map((held) => ({
+      topic: 'theme' as const,
+      name: `${board} ${style} ${mode}${held ? ' every family held' : ''}`,
+      canvas,
+      options: {
+        measure,
+        appearance: createSpatialTheme({ mode }),
+        style,
+        references,
+        expandFileNode: () => true,
+        ...(held ? { fontAvailable: () => true } : {}),
+      },
+    }))
+  })
+}
+
 /** The shortcode board in both modes, its file node reading a body that holds shortcodes too. */
 function shortcodeCases(): LayoutCase[] {
   return (['light', 'dark'] as const).map((mode) => ({
@@ -339,7 +381,7 @@ function shortcodeCases(): LayoutCase[] {
 
 /** Every layout case; `synthetic` draws that many generated routing boards too. */
 export function layoutCases(synthetic: number): LayoutCase[] {
-  const cases = [...composerCases(), ...expansionCases()]
+  const cases = [...composerCases(), ...expansionCases(), ...themeCases()]
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
   // What only the TypeScript can draw exactly: a fence its highlighter colours.
   const fence = '```js\nlet x = 1\n```'
