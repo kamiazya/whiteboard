@@ -46,7 +46,9 @@ use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::theme::tokens::theme_table;
 use whiteboard_facet_engine::engine::ThemeTokens;
 use whiteboard_facet_engine::registry::Registry;
+use whiteboard_model::proposal::{ChangeOp, Proposal, ProposedChange, SpatialChange};
 use whiteboard_model::spatial::SpatialCanvas;
+use whiteboard_model::{Map, Value};
 use whiteboard_plugin_visual::host::{THEMES, visual_registry};
 use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_scene::NodeDecoration;
@@ -113,6 +115,52 @@ fn expanded_ids(request: &Request) -> usize {
     }
 }
 
+/// The most proposals, and the most changes across them, a proposal layer may
+/// hold: the element cap. Each change is looked up against every element and
+/// each bubble is placed against every box, every outline and every earlier
+/// bubble, so what a layer costs grows with their product, which bytes do not
+/// bound.
+pub const MAX_PROPOSAL_ITEMS: usize = MAX_ELEMENTS;
+
+/// The most mapping entries the facets of the priors may hold, at every depth
+/// together: the element cap. A prior's facets agree with the element's in
+/// any key order, so each key is searched for through its mapping and the
+/// comparison costs the square of the entries, which bytes bound only loosely.
+pub const MAX_PRIOR_FACET_ENTRIES: usize = MAX_ELEMENTS;
+
+fn map_entries(map: &Map) -> usize {
+    map.iter().fold(map.len(), |sum, (_, item)| sum.saturating_add(entries(item)))
+}
+
+fn entries(value: &Value) -> usize {
+    match value {
+        Value::Map(map) => map_entries(map),
+        Value::Seq(items) => items.iter().map(entries).fold(0, usize::saturating_add),
+        _ => 0,
+    }
+}
+
+/// The facets a change's prior holds, which it is compared to the element by.
+fn prior_facets(change: &ProposedChange) -> Option<&Map> {
+    let ChangeOp::Spatial(spatial) = &change.op else { return None };
+    match spatial.as_ref() {
+        SpatialChange::NodeRemove { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::EdgeRemove { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::LineRemove { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::EdgePatch { assumed, .. } => assumed.facets.as_ref(),
+        SpatialChange::LinePatch { assumed, .. } => assumed.facets.as_ref(),
+        _ => None,
+    }
+}
+
+fn past_proposal_caps(proposals: &[Proposal]) -> bool {
+    let changes = proposals.iter().flat_map(|proposal| &proposal.changes);
+    let facets = changes.clone().filter_map(prior_facets).map(map_entries);
+    proposals.len() > MAX_PROPOSAL_ITEMS
+        || changes.count() > MAX_PROPOSAL_ITEMS
+        || facets.fold(0, usize::saturating_add) > MAX_PRIOR_FACET_ENTRIES
+}
+
 /// The bundled visual plugin, built once per instance.
 fn registry() -> Option<&'static Registry> {
     static REGISTRY: OnceLock<Option<Registry>> = OnceLock::new();
@@ -162,7 +210,7 @@ fn lay_out(
         side_overrides: request.overrides.as_deref(),
         host: &host,
         comments: whiteboard_canvas_render::comments::CommentOptions::default(),
-        proposals: &[],
+        proposals: &request.proposals,
         content_cache: None,
         body: BodySeams {
             inline: &host,
@@ -199,6 +247,9 @@ pub fn layout_spatial_canvas(request: &str) -> String {
     if element_total(&request) > MAX_ELEMENTS || expanded_ids(&request) > MAX_ELEMENTS {
         return refused("input-too-large", "too-many-elements");
     }
+    if past_proposal_caps(&request.proposals) {
+        return refused("input-too-large", "proposals");
+    }
     if body_total(&request) > MAX_BODY_BYTES {
         return refused("input-too-large", "bodies");
     }
@@ -214,5 +265,7 @@ pub fn layout_spatial_canvas(request: &str) -> String {
         .unwrap_or_else(|| refused("malformed", "font-handle"))
 }
 
+#[cfg(test)]
+mod proposal_tests;
 #[cfg(test)]
 mod tests;
