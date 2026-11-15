@@ -71,9 +71,9 @@ const FULL: readonly FragmentEntry[] = [
   ['fence:mermaid:graph TD\n  A --> B', { svg: '<g data-graph/>', width: 200, height: 140 }],
   ['fence:ts:const x = 1', { svg: '<g data-ts/>', width: 90 }],
   ['fence:math:x^2 + y^2', { svg: '<g data-fence/>', width: 2000, height: 50 }],
-  ['math:e^{i\\pi}', { svg: '<g data-euler/>', height: 24 }],
-  ['math:\\frac{1}{2}', { svg: '<g data-half/>' }],
-  ['math:\\sum', { svg: '<g data-sum-sign/>', width: 30, height: 30 }],
+  [String.raw`math:e^{i\pi}`, { svg: '<g data-euler/>', height: 24 }],
+  [String.raw`math:\frac{1}{2}`, { svg: '<g data-half/>' }],
+  [String.raw`math:\sum`, { svg: '<g data-sum-sign/>', width: 30, height: 30 }],
   ['math:q', { svg: '<g data-q/>', width: 10, height: 12 }],
 ]
 
