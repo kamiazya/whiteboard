@@ -536,19 +536,24 @@ fn a_comment_option_that_is_not_one_is_no_request() {
     }
 }
 
+/// Comment-layer inputs that draw nothing even when a layout accepts them, so a
+/// cap that stops refusing fails its assertion at once rather than laying a
+/// crowd out: a thread about the document has no place, a passage of no node
+/// is no highlight, and obstacles with no thread are never asked.
+fn unplaced(n: usize, anchor: &Json) -> Json {
+    s((0..n).map(|i| thread(&format!("t{i}"), anchor.clone(), "open", &["x"])).collect())
+}
+
 #[test]
 fn a_comment_layer_is_held_to_its_caps() {
     let refused = json!(["refused", "input-too-large", "comments"]);
-    let threads = |n: usize, anchor: &Json| {
-        s((0..n).map(|i| thread(&format!("t{i}"), anchor.clone(), "open", &["x"])).collect())
-    };
-    let point = spatial(&[]);
-    let at_cap = on_a(&[("threads", threads(MAX_COMMENT_ITEMS, &point))]);
-    assert_eq!(at_cap.get(0), Some(&json!("ok")));
-    assert_eq!(on_a(&[("threads", threads(MAX_COMMENT_ITEMS + 1, &point))]), refused);
+    let ok = |answer: Json| assert_eq!(answer.get(0), Some(&json!("ok")), "{answer:.200}");
+    let document = m(&[("kind", json!("document"))]);
+    ok(on_a(&[("threads", unplaced(MAX_COMMENT_ITEMS, &document))]));
+    assert_eq!(on_a(&[("threads", unplaced(MAX_COMMENT_ITEMS + 1, &document))]), refused);
     let cover = m(&[("x", json!(0)), ("y", json!(0)), ("w", json!(1)), ("h", json!(1))]);
     let boxes = |n: usize| s(vec![cover.clone(); n]);
-    assert_eq!(on_a(&[("commentObstacles", boxes(MAX_COMMENT_ITEMS))]).get(0), Some(&json!("ok")));
+    ok(on_a(&[("commentObstacles", boxes(MAX_COMMENT_ITEMS))]));
     assert_eq!(on_a(&[("commentObstacles", boxes(MAX_COMMENT_ITEMS + 1))]), refused);
     let ids =
         |n: usize| spatial(&[("nodeIds", s((0..n).map(|i| json!(format!("n{i}"))).collect()))]);
@@ -560,30 +565,34 @@ fn a_comment_layer_is_held_to_its_caps() {
             thread("c", ids(last), "open", &["x"]),
         ])
     };
-    // The ids are counted across threads, and only node sets' are.
-    assert_eq!(on_a(&[("threads", set(MAX_COMMENT_ITEMS - 2 * per))]).get(0), Some(&json!("ok")));
+    // The ids are counted across threads.
+    ok(on_a(&[("threads", set(MAX_COMMENT_ITEMS - 2 * per))]));
     assert_eq!(on_a(&[("threads", set(MAX_COMMENT_ITEMS - 2 * per + 1))]), refused);
-    // A passage is looked for through its node's whole text, so passages are held apart.
+    // A passage is looked for through its node's whole text, so passages are
+    // held apart, and only passages are: the threads beside them are not counted.
     let quote = m(&[("exact", json!("h"))]);
-    let passage = m(&[
-        ("kind", json!("text")),
-        ("nodeId", json!("a")),
-        ("quote", quote),
-        ("start", json!(0)),
-        ("end", json!(1)),
-    ]);
+    let passage =
+        m(&[("kind", json!("text")), ("quote", quote), ("start", json!(0)), ("end", json!(1))]);
     let mixed = |n: usize| {
-        let mut all = vec![thread("p", spatial(&[]), "open", &["x"])];
+        let mut all = vec![thread("d", document.clone(), "open", &["x"])];
         all.extend((0..n).map(|i| thread(&format!("p{i}"), passage.clone(), "open", &["x"])));
         s(all)
     };
-    assert_eq!(on_a(&[("threads", mixed(MAX_PASSAGES))]).get(0), Some(&json!("ok")));
+    ok(on_a(&[("threads", mixed(MAX_PASSAGES))]));
     assert_eq!(on_a(&[("threads", mixed(MAX_PASSAGES + 1))]), refused);
-    // Only the opening message is laid out, so only its body counts with the bodies.
-    let half = "a".repeat(MAX_BODY_BYTES / 2 + 1);
-    let long = |bodies: &[&str]| s(vec![thread("t", spatial(&[]), "open", bodies)]);
-    let opening = request(board(&half), &[("threads", long(&[&half]))]);
-    assert_eq!(answer(&opening), json!(["refused", "input-too-large", "bodies"]));
-    let reply = request(board(&half), &[("threads", long(&["x", &half]))]);
-    assert_eq!(answer(&reply).get(0), Some(&json!("ok")));
+}
+
+#[test]
+fn only_a_threads_opening_message_counts_with_the_bodies() {
+    // The board holds one byte, so an opening message of the rest is at the cap.
+    let rest = "a".repeat(MAX_BODY_BYTES - 1);
+    let document = m(&[("kind", json!("document"))]);
+    let asking = |bodies: &[&str]| {
+        let threads = s(vec![thread("t", document.clone(), "open", bodies)]);
+        answer(&request(board("x"), &[("threads", threads)]))
+    };
+    assert_eq!(asking(&[&rest]).get(0), Some(&json!("ok")));
+    let over = format!("{rest}a");
+    assert_eq!(asking(&[&over]), json!(["refused", "input-too-large", "bodies"]));
+    assert_eq!(asking(&["x", &over]).get(0), Some(&json!("ok")));
 }
