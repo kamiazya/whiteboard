@@ -74,8 +74,8 @@ describe('the whole layout over the artifact', () => {
   })
 
   it('declines what the core declined and a request past the cap', () => {
-    expect(layoutSpatialCanvas(glueOf('["declined","shortcode"]').glue, errors, fake)).toEqual({
-      declined: 'shortcode',
+    expect(layoutSpatialCanvas(glueOf('["declined","highlight"]').glue, errors, fake)).toEqual({
+      declined: 'highlight',
     })
     const tooMany = '["refused","input-too-large","too-many-elements"]'
     expect(layoutSpatialCanvas(glueOf(tooMany).glue, errors, fake)).toEqual({

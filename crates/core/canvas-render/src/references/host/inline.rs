@@ -1,27 +1,22 @@
-//! The inline seams over the wire: a document's title and an embed's name from
-//! the graph, a picture from the extras, and the shortcode decline.
+//! The inline seams over the wire: the visual plugin's shortcode tables, a
+//! document's title and an embed's name from the graph, a picture from the
+//! extras.
 
-use super::{Refused, WireHost};
+use whiteboard_plugin_visual::shortcode::{expand_emoji_shortcodes, icon_shortcode_ranges};
+
+use super::WireHost;
 use crate::typeset::{IconRange, ImageRef, InlineSeams};
-
-/// A name between two colons, which only the plugin's tables can read.
-fn may_hold_shortcode(text: &str) -> bool {
-    text.matches(':').nth(1).is_some()
-}
 
 impl InlineSeams for WireHost<'_> {
     fn expand_emoji(&self, text: &str) -> String {
-        if may_hold_shortcode(text) {
-            self.refuse(Refused::Shortcode);
-        }
-        text.to_owned()
+        expand_emoji_shortcodes(text)
     }
 
     fn icon_ranges(&self, text: &str) -> Vec<IconRange> {
-        if may_hold_shortcode(text) {
-            self.refuse(Refused::Shortcode);
-        }
-        Vec::new()
+        icon_shortcode_ranges(text)
+            .into_iter()
+            .map(|range| IconRange { from: range.from, to: range.to, name: range.name })
+            .collect()
     }
 
     fn document_title(&self, document_id: &str) -> Option<String> {

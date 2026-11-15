@@ -18,8 +18,8 @@
 //!   request's `codeTokens` did not carry; the host tokenises exactly those and
 //!   asks once more with them (owner decision q75);
 //! - `["declined", class]`: a request the core cannot answer exactly as the
-//!   TypeScript would (a body past the parser's bounds, a shortcode, a number
-//!   the answer cannot spell).
+//!   TypeScript would (a body past the parser's bounds, a number the answer
+//!   cannot spell).
 //!
 //! A host answers a refusal and a decline from the TypeScript.
 

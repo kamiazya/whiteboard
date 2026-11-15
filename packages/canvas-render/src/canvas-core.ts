@@ -53,8 +53,8 @@ export type CoreDegradation =
 /**
  * The core's answer: the layout, or the class of what it declined to answer
  * because it could not answer it exactly as the TypeScript would (a body past
- * the parser's bounds, a shortcode, a request past its caps), which the
- * TypeScript then answers.
+ * the parser's bounds, a request past its caps), which the TypeScript then
+ * answers.
  */
 type CanvasLayoutAnswer =
   | {

@@ -87,9 +87,7 @@ function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
  * Every layout case the core can be handed, each as the TypeScript answers
  * it, grouped by the topic file it is recorded in. A layout the TypeScript
  * colours a fence in is recorded twice: as first asked, answered with the
- * fences the core must ask for, and as asked again with their tokens. The
- * case only the TypeScript draws exactly is recorded with the answer the core
- * gives it, a decline.
+ * fences the core must ask for, and as asked again with their tokens.
  */
 export function layoutRecords(): Map<LayoutTopic, LayoutRecord[]> {
   const byTopic = new Map<LayoutTopic, LayoutRecord[]>()
@@ -115,9 +113,8 @@ function layoutRecord(
     ...options,
     onDegrade: (event) => events.push(coreEvent(event)),
   })
-  const answer = name.startsWith('declined: ')
-    ? JSON.stringify(['declined', 'shortcode'])
-    : (answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]')
+  const answer =
+    answerText(['ok', laid.scene, [...laid.anchors], events]) ?? '["declined","non-finite"]'
   const [first, second] = sent
   if (first === undefined) return []
   if (second === undefined) return [{ id: name, request: first, answer }]

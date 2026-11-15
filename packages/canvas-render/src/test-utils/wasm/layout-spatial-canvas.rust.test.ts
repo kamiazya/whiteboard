@@ -57,10 +57,9 @@ describe.runIf(built)('the whole layout through the real core', () => {
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
     }
-    // Every layout but the one built to be declined is compared: the core is judged, not skipped.
-    expect(answered.compared).toBe(2 * (cases.length - 1))
-    expect(answered.declined).toEqual(['shortcode', 'shortcode'])
-    // Each decline reaches the sink by its class, and no case is skipped by the gate.
-    expect(tallies).toEqual(answered.declined.map((reason) => `declined:${reason}`))
+    // Every layout is compared: the core is judged, never declined or skipped.
+    expect(answered.compared).toBe(2 * cases.length)
+    expect(answered.declined).toEqual([])
+    expect(tallies).toEqual([])
   })
 })
