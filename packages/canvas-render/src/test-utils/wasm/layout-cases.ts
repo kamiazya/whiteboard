@@ -341,6 +341,8 @@ function shortcodeCases(): LayoutCase[] {
 export function layoutCases(synthetic: number): LayoutCase[] {
   const cases = [...composerCases(), ...expansionCases()]
   const light = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
+  // What only the TypeScript can draw exactly: a fence its highlighter colours.
+  const fence = '```js\nlet x = 1\n```'
   cases.push(
     {
       topic: 'bodies',
@@ -354,25 +356,23 @@ export function layoutCases(synthetic: number): LayoutCase[] {
       canvas: bodiesBoard(),
       options: light,
     },
-  )
-  cases.push(...shortcodeCases())
-  cases.push({
-    topic: 'fragment',
-    name: 'fragments',
-    canvas: fragmentBoard(),
-    options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
-  })
-  // What only the TypeScript can draw exactly: a fence its highlighter colours.
-  const fence = '```js\nlet x = 1\n```'
-  cases.push({
-    topic: 'declined',
-    name: `declined: ${fence}`,
-    canvas: {
-      nodes: [textNode({ id: 'd', x: 0, y: 0, width: 200, height: 100, text: fence })],
-      edges: [],
+    ...shortcodeCases(),
+    {
+      topic: 'fragment',
+      name: 'fragments',
+      canvas: fragmentBoard(),
+      options: { ...light, references: referenceSeamsFromWire(FRAGMENT_WIRE) },
     },
-    options: light,
-  })
+    {
+      topic: 'declined',
+      name: `declined: ${fence}`,
+      canvas: {
+        nodes: [textNode({ id: 'd', x: 0, y: 0, width: 200, height: 100, text: fence })],
+        edges: [],
+      },
+      options: light,
+    },
+  )
   for (const board of [...ROUTING_CORPUS, ...syntheticLayouts(synthetic)]) {
     for (const routing of ['straight', 'orthogonal'] as const) {
       const canvas = {
