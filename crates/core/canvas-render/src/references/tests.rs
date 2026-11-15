@@ -12,7 +12,7 @@ use crate::canvas_fragment::select_canvas_fragment;
 use crate::compose_node::{ComposeHost, Degradation};
 use crate::node_box::{FacetCard, FacetRow, ReferenceImage, ResolvedReference};
 use crate::typeset::{
-    CanvasSummary, CodeTokenizer, EmbedResolver, Embedded, ImageRef, InlineSeams,
+    CanvasSummary, CodeTokenizer, EmbedResolver, Embedded, IconRange, ImageRef, InlineSeams,
 };
 
 #[cfg(target_arch = "wasm32")]
@@ -178,23 +178,12 @@ fn a_picture_is_the_surface_extra_with_its_natural_size() {
 #[test]
 fn what_only_the_typescript_can_answer_refuses_the_layout_keeping_the_first_reason() {
     let wire = wire();
-    let shortcode = WireHost::new(&wire, true);
-    assert_eq!(shortcode.expand_emoji("a :x"), "a :x");
-    assert!(shortcode.icon_ranges("one: colon").is_empty());
-    assert_eq!(shortcode.refused(), None);
-    assert_eq!(shortcode.expand_emoji("a :rocket: b"), "a :rocket: b");
-    assert_eq!(shortcode.refused(), Some(Refused::Shortcode));
-    assert_eq!(shortcode.tokenize("rust", "fn"), None);
-    assert_eq!(shortcode.refused(), Some(Refused::Shortcode));
-
-    let icons = WireHost::new(&wire, true);
-    assert!(icons.icon_ranges(":a: :b:").is_empty());
-    assert_eq!(icons.refused(), Some(Refused::Shortcode));
-
     let code = WireHost::new(&wire, true);
     assert_eq!(code.tokenize("", "fn"), None);
     assert_eq!(code.refused(), None);
     assert_eq!(code.tokenize("rust", "fn"), None);
+    assert_eq!(code.refused(), Some(Refused::Highlight));
+    assert_eq!(code.embedded_canvas("board", Some("f")), None);
     assert_eq!(code.refused(), Some(Refused::Highlight));
 
     let section = WireHost::new(&wire, true);
@@ -279,6 +268,16 @@ fn unreachable() -> crate::compose_node::ParseFailed {
 }
 
 #[test]
+fn shortcodes_are_answered_from_the_plugin_tables_without_a_refusal() {
+    let wire = ReferenceWire::default();
+    let host = WireHost::new(&wire, true);
+    assert_eq!(host.expand_emoji("a :rocket: at 10:30: b"), "a 🚀 at 10:30: b");
+    let want = IconRange { from: 2, to: 13, name: "star".to_owned() };
+    assert_eq!(host.icon_ranges("😀:icon-star: :icon-nope:"), vec![want]);
+    assert_eq!(host.refused(), None);
+}
+
+#[test]
 fn degradations_are_kept_in_order() {
     let wire = ReferenceWire::default();
     let host = WireHost::new(&wire, true);
@@ -291,8 +290,8 @@ fn degradations_are_kept_in_order() {
 
 #[test]
 fn each_refusal_names_its_class() {
-    let classes = [Refused::Body, Refused::Shortcode, Refused::Highlight].map(Refused::class);
-    assert_eq!(classes, ["body", "shortcode", "highlight"]);
+    let classes = [Refused::Body, Refused::Highlight].map(Refused::class);
+    assert_eq!(classes, ["body", "highlight"]);
 }
 
 #[test]

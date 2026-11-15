@@ -106,11 +106,11 @@ describe('the whole layout through the core switch', () => {
   })
 
   it('answers from the TypeScript what the core declines, reporting its class', () => {
-    const { laid, mismatches, requests, events } = run('rust', () => ({ declined: 'shortcode' }))
+    const { laid, mismatches, requests, events } = run('rust', () => ({ declined: 'highlight' }))
     expect(requests).toHaveLength(1)
     expect(laid.scene).toEqual(reference.scene)
     expect(mismatches).toEqual([
-      { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'shortcode' },
+      { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'highlight' },
     ])
     expect(events.map((e) => e.kind)).toEqual(['unknown-node-kind'])
   })

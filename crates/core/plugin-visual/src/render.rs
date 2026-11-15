@@ -136,7 +136,7 @@ pub enum IconElement {
 }
 
 /// The vendored icon geometry, one file with the TypeScript package.
-const LUCIDE: &str =
+pub(crate) const LUCIDE: &str =
     include_str!("../../../../packages/plugin-visual/src/assets/icons-lucide.json");
 
 /// The coordinate space the vendored geometry is drawn in.

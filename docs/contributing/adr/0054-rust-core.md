@@ -1166,6 +1166,8 @@ BudouX reads UTF-16 units and can name a phrase boundary inside a surrogate pair
 TypeScript used to break there and leave half an emoji in a run, which was a defect. Both sides
 now join such a phrase to the next, so there is no deviation to ledger.
 
+S15b closes the shortcode decline (ABI 24): `whiteboard-plugin-visual::shortcode` scans `:[a-z0-9_]+:` and `:icon-[a-z0-9-]+:` exactly as the TypeScript's global regexes do, a candidate whose name resolves to nothing standing as written and still consuming its closing colon, and answers icon ranges in UTF-16 code units. The emoji table is `packages/plugin-visual/src/emoji/emoji-shortcodes.tsv`, one `slug<TAB>character` row per catalog row, written by the catalog generator through `emojiSlug` and held to `EMOJI_GROUPS` by `shortcode-table.test.ts`, so the slug rule has one implementation and the first row of a slug answers it in both realms; the nameable icons are the vendored lucide file's keys, `BUILT_IN_ICON_NAMES`. Both scans replay `shortcode.jsonl`, recorded from `expandEmojiShortcodes` and `iconShortcodeRanges` over hand-written and seeded colon-dense text, and the whole layout replays a `shortcode` topic. The cargo artifact grew by 46,338 bytes to 2,421,047, 40,168 of them the table, and the shipped module by 43,775 to 1,543,956; the ceiling was raised by hand to 2,423,000 (owner decision q73).
+
 #### The measure-seam spike (2026-11-11): the callback is cheap, the memo is what pays
 
 Step 7 moves layout behind the core, and layout never measures text itself:

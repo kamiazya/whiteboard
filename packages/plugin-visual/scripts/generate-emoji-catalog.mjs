@@ -27,6 +27,7 @@ import { execFileSync } from 'node:child_process'
 import { readFile, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { emojiSlug } from '../src/emoji/slug.ts'
 
 const SOURCE = 'https://unicode.org/Public/emoji/latest/emoji-test.txt'
 
@@ -43,6 +44,13 @@ const CLDR_DERIVED = `https://raw.githubusercontent.com/unicode-org/cldr/${CLDR_
 const EMOJI_DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'emoji')
 const OUT = join(EMOJI_DIR, 'catalog-data.ts')
 const OUT_JA = join(EMOJI_DIR, 'catalog-ja.ts')
+/**
+ * The emoji table the Rust core reads a shortcode through: `slug<TAB>char`
+ * per row, in catalog order, so the first row of a slug answers it. Written
+ * from the same rows through the same `emojiSlug`, so the slug rule keeps one
+ * implementation; `src/emoji/shortcode-table.test.ts` holds it to the catalog.
+ */
+const OUT_TSV = join(EMOJI_DIR, 'emoji-shortcodes.tsv')
 
 /**
  * Skin-tone sequences are dropped: they are 2030 of the 3944 fully-qualified
@@ -214,6 +222,18 @@ await writeFile(
 
 export const EMOJI_JA = ${JSON.stringify(japanese.join('\n'))}
 `,
+  'utf8',
+)
+
+await writeFile(
+  OUT_TSV,
+  `${[...groups.values()]
+    .flat()
+    .map((row) => {
+      const [char, name] = row.split('\t')
+      return `${emojiSlug(name)}\t${char}`
+    })
+    .join('\n')}\n`,
   'utf8',
 )
 
