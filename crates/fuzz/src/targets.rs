@@ -651,8 +651,8 @@ fn assert_layout_answer(answer: &str) {
 /// # Panics
 ///
 /// On an answer that is neither, an input past the cap that is not refused,
-/// a layout over the handle that is not an answer, or a release that does not
-/// forget it.
+/// a layout over the handle that is not an answer or names the handle unknown,
+/// or a release that does not forget it.
 pub fn register_layout_fonts_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::REGISTER_LAYOUT_FONTS;
     use whiteboard_wasm::spatial_layout::{
@@ -679,7 +679,10 @@ pub fn register_layout_fonts_wasm(data: &[u8]) {
     let request = format!(
         "[\"m\",\"canvas\",[\"m\",\"nodes\",[\"s\",[\"m\",\"id\",\"a\",\"x\",0,\"y\",0,\"width\",160,\"height\",80,\"resource\",[\"m\",\"mimeType\",\"text/markdown\",\"content\",\"Hamburgefonstiv \\u00e9\"]]],\"edges\",[\"s\"]],\"measure\",[\"m\",\"kind\",\"fonts\",\"handle\",{handle}],\"mode\",\"light\",\"expand\",true]"
     );
-    assert_layout_answer(&layout_spatial_canvas(&request));
+    let lost = "[\"refused\",\"malformed\",\"font-handle\"]";
+    let held = layout_spatial_canvas(&request);
+    assert_layout_answer(&held);
+    assert_ne!(held, lost, "{handle} was answered but names no faces");
     assert!(release_layout_fonts(handle), "{handle} was not held");
-    assert_eq!(layout_spatial_canvas(&request), "[\"refused\",\"malformed\",\"font-handle\"]");
+    assert_eq!(layout_spatial_canvas(&request), lost);
 }
