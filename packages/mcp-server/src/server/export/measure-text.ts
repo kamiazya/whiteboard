@@ -322,18 +322,19 @@ async function describeVendoredFaces(
   measure: MeasureText,
   paths: Record<ExportFontFace, string | null>,
 ): Promise<void> {
-  const faces = []
-  for (const slot of FACE_SLOTS) {
+  const slots = FACE_SLOTS.flatMap((slot) => {
     const path = paths[slot]
-    if (path === null) return
-    const bytes = new Uint8Array(await readFile(path))
-    faces.push({
+    return path === null ? [] : [{ slot, path }]
+  })
+  if (slots.length < FACE_SLOTS.length) return
+  const faces = await Promise.all(
+    slots.map(async ({ slot, path }) => ({
       family: EXPORT_FONT_FAMILY,
       bold: slot === 'bold' || slot === 'boldItalic',
       italic: slot === 'italic' || slot === 'boldItalic',
-      bytes,
-    })
-  }
+      bytes: new Uint8Array(await readFile(path)),
+    })),
+  )
   describeMeasure(measure, { kind: 'fonts', faces })
 }
 
