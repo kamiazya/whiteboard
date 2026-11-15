@@ -100,7 +100,7 @@ fn registry() -> Option<&'static Registry> {
 fn lay_out(request: &Request, measure: &dyn Measure, registry: &Registry) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let appearance = create_spatial_theme(mode, None);
-    let host = WireHost::new(&request.references, request.expand);
+    let host = WireHost::new(&request.references, request.expand.clone());
     let badge = StencilBadge { registry };
     let decorations: [&dyn NodeDecoration; 1] = [&badge];
     let options = LayoutOptions {

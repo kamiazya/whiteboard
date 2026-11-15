@@ -23,17 +23,25 @@ function fileNodes(canvases: readonly SpatialCanvas[]): SpatialNode[] {
 }
 
 /**
- * The caller's expansion policy as one answer over every node it could be
- * asked about, or undefined when it answers some open and some closed.
+ * The caller's expansion policy settled over every node it could be asked
+ * about: one answer when it answers them all alike, else the ids it opens; or
+ * undefined when it answers one id open on one node and closed on another,
+ * which a set of ids cannot carry.
  */
 function expansion(
   policy: ((node: SpatialNode) => boolean) | undefined,
   canvases: readonly SpatialCanvas[],
-): boolean | undefined {
+): boolean | string[] | undefined {
   if (policy === undefined) return false
-  const answers = new Set(fileNodes(canvases).map((node) => policy(node) === true))
-  if (answers.size > 1) return undefined
-  return answers.has(true)
+  const answers = new Map<string, boolean>()
+  for (const node of fileNodes(canvases)) {
+    const open = policy(node) === true
+    if (answers.get(node.id) === !open) return undefined
+    answers.set(node.id, open)
+  }
+  const kinds = new Set(answers.values())
+  if (kinds.size < 2) return kinds.has(true)
+  return [...answers].flatMap(([id, open]) => (open ? [id] : []))
 }
 
 const hasData = (extra: ReferenceExtra): boolean =>
@@ -73,7 +81,7 @@ export type CanvasLayoutAsk = CanvasLayoutRequest | { readonly skip: CanvasLayou
  * an appearance nobody named, a seam that is a function, a theme to draw, an
  * annotation or proposal layer, a reference bundle not rebuilt from a wire
  * or one whose extras carry content, and an expansion policy that answers
- * some nodes open and others closed.
+ * one node id open in one canvas and closed in another.
  */
 export function canvasLayoutRequest(
   canvas: SpatialCanvas,
@@ -92,7 +100,7 @@ export function canvasLayoutRequest(
   }
   const nested = (wire?.entries ?? []).flatMap(([, entry]) => entry?.canvas ?? [])
   const expand = expansion(options.expandFileNode, [canvas, ...nested])
-  if (expand === undefined) return { skip: 'expansion' }
+  if (expand === undefined) return { skip: 'expand-collision' }
   return {
     canvas,
     measure,

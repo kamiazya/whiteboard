@@ -16,12 +16,14 @@
 //! decision q72, option c), so no scene differs from the TypeScript's for a
 //! reason the core cannot see.
 
+mod expansion;
 mod host;
 
 use whiteboard_model::spatial::SpatialCanvas;
 
 use crate::node_box::FacetCard;
 
+pub use expansion::Expansion;
 pub use host::WireHost;
 
 /// One referenced document as a keeper loaded it (`LoadedReference`): every

@@ -1,6 +1,7 @@
 //! The layout options that are data already: the theme mode, the geometry,
-//! the pinned edge sides and the tag library.
+//! the pinned edge sides, the tag library and the settled expansion policy.
 
+use whiteboard_canvas_render::references::Expansion;
 use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_edge_routing::edge_geometry::Side;
 use whiteboard_edge_routing::edge_rules::SidePair;
@@ -9,7 +10,7 @@ use whiteboard_edge_routing::geometry::Point;
 use whiteboard_model::Value;
 use whiteboard_plugin_visual::visual::{TagKeyDeclaration, TagValueDeclaration};
 
-use super::{entries_of, flag_of};
+use super::{entries_of, flag_of, strings_of};
 use crate::json_canvas_wire::{Fields, number_of, string_of};
 
 pub(super) fn dark_of(value: &Value) -> Option<bool> {
@@ -80,4 +81,12 @@ pub(super) fn tag_key_of(value: &Value) -> Option<TagKeyDeclaration> {
         values: f.field("values", |v| entries_of(v, tag_value_of))?,
     };
     f.all_named().then_some(declaration)
+}
+
+/// `expand`: one answer for every file node, or the ids of the ones drawn open.
+pub(super) fn expansion_of(value: &Value) -> Option<Expansion> {
+    match value {
+        Value::Bool(open) => Some(Expansion::Every(*open)),
+        _ => Some(Expansion::Only(strings_of(value)?.into_iter().collect())),
+    }
 }
