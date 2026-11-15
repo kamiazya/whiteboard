@@ -27,7 +27,7 @@ export type FenceRow = readonly [string, string, FenceTokenLines | null]
 const MAX_FENCES = 128
 const MAX_UNITS = 1 << 21
 
-/** A least-recently-used table of fence tokens; one per core, so one per realm. */
+/** A least-recently-used table of fence tokens, for one highlighter of one core. */
 export class FenceTokenMemo {
   readonly #rows = new Map<string, FenceRow>()
   #units = 0
@@ -69,6 +69,24 @@ export class FenceTokenMemo {
       this.#rows.delete(oldest)
       this.#units -= held[1].length
     }
+  }
+}
+
+/**
+ * One table per highlighter: a fence's tokens are whatever the highlighter a
+ * call names answers, so tokens one highlighter gave are never sent on behalf
+ * of another. A call with no highlighter gets a fresh table and sends none.
+ */
+export class FenceTokenMemos {
+  readonly #byHighlighter = new WeakMap<FenceHighlighter, FenceTokenMemo>()
+
+  for(highlight: FenceHighlighter | undefined): FenceTokenMemo {
+    if (highlight === undefined) return new FenceTokenMemo()
+    const held = this.#byHighlighter.get(highlight)
+    if (held !== undefined) return held
+    const memo = new FenceTokenMemo()
+    this.#byHighlighter.set(highlight, memo)
+    return memo
   }
 }
 

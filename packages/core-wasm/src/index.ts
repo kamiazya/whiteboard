@@ -17,7 +17,7 @@ import {
   facetBucketCheck,
   type StoredStencilLibrary,
 } from './facet-write.js'
-import { type FenceHighlighter, FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, FenceTokenMemos } from './fence-tokens.js'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
 import {
   parseSpatial,
@@ -308,7 +308,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   const spatial: SpatialGlue = glue
   const facets: FacetGlue = glue
   const layout: LayoutGlue = glue
-  const fences = new FenceTokenMemo()
+  const fences = new FenceTokenMemos()
   const errors: OkfErrors & SpatialErrors & FacetErrors = {
     refused: (operation, code, detail) => new CoreInputRefused(operation, code, detail),
     unwritable: (issues) => new CoreOkfUnwritable(issues),
@@ -320,7 +320,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
     layoutSpatialCanvas: (request, highlight) =>
-      layoutSpatialCanvas(layout, errors, request, highlight, fences),
+      layoutSpatialCanvas(layout, errors, request, highlight, fences.for(highlight)),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FenceTokenMemo } from './fence-tokens.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS } from './generated/input-caps.js'
+import { type CoreGlue, coreFrom, EXPECTED_ABI } from './index.js'
 import { type LayoutGlue, type LayoutRequest, layoutSpatialCanvas } from './layout.js'
 
 const errors = {
@@ -248,5 +249,25 @@ describe('the fence tokens a core keeps', () => {
     expect(memo.within('1 2 3 4').map(([lang]) => lang)).toEqual(['b', 'd'])
     memo.answer([['e', '1234567890']], () => undefined)
     expect(memo.within('2 4 1234567890').map(([lang]) => lang)).toEqual(['e'])
+  })
+
+  it('keeps one table per highlighter, so a core draws a fence as the call highlights it', () => {
+    const { glue: layout, sent } = glueAnswering(NEEDS, OK, NEEDS, OK)
+    const glue: CoreGlue = {
+      initSync: () => undefined,
+      abi_version: () => EXPECTED_ABI,
+      edge_route_layout: () => new Float64Array(),
+      okf_parse: () => '',
+      okf_serialize: () => '',
+      json_canvas_parse: () => '',
+      json_canvas_serialize: () => '',
+      facet_bucket_check: () => '',
+      layout_spatial_canvas: (request, fonts) => layout.layout_spatial_canvas(request, fonts),
+    }
+    const core = coreFrom(glue, new Uint8Array())
+    core.layoutSpatialCanvas(withBody, tokens)
+    core.layoutSpatialCanvas(withBody, () => undefined)
+    expect(sent[2], 'the second highlighter is sent nothing the first answered').toBeUndefined()
+    expect(sent[3]).toEqual(['s', ['s', 'js', 'let x', null], ['s', 'py', 'a\nb', null]])
   })
 })
