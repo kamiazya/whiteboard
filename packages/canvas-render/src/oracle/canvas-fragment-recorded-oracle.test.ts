@@ -34,14 +34,20 @@ describe('the recorded canvas fragment oracle', () => {
     const byId = found.filter((r) => r.fragment.trim().startsWith('^'))
     expect(byId.length, 'a ^id fragment').toBeGreaterThan(50)
     expect(found.length - byId.length, 'a label fragment').toBeGreaterThan(50)
-    expect(found.filter((r) => (r.selected?.nodes.length ?? 0) > 2).length, 'groups with members')
-      .toBeGreaterThan(30)
-    expect(found.filter((r) => (r.selected?.edges.length ?? 0) > 0).length, 'edges kept')
-      .toBeGreaterThan(30)
+    expect(
+      found.filter((r) => (r.selected?.nodes.length ?? 0) > 2).length,
+      'groups with members',
+    ).toBeGreaterThan(30)
+    expect(
+      found.filter((r) => (r.selected?.edges.length ?? 0) > 0).length,
+      'edges kept',
+    ).toBeGreaterThan(30)
     const dropped = found.filter((r) => (r.selected?.edges.length ?? 0) < r.canvas.edges.length)
     expect(dropped.length, 'edges dropped').toBeGreaterThan(30)
-    expect(found.filter((r) => (r.selected?.lines?.length ?? 0) > 0).length, 'lines kept')
-      .toBeGreaterThan(30)
+    expect(
+      found.filter((r) => (r.selected?.lines?.length ?? 0) > 0).length,
+      'lines kept',
+    ).toBeGreaterThan(30)
   })
 
   it('equals what the TypeScript answers today', () => {

@@ -187,9 +187,13 @@ function generated(next: () => number, n: number): Input {
     }
   }
   const pick = () => `n${Math.floor(next() * (nodes.length + 1))}`
-  const edges = Array.from({ length: Math.floor(next() * 9) }, (_, i) => edge(`e${i}`, pick(), pick()))
+  const edges = Array.from({ length: Math.floor(next() * 9) }, (_, i) =>
+    edge(`e${i}`, pick(), pick()),
+  )
   const end = () => (next() < 0.5 ? onNode(pick()) : atPoint(at(), at()))
-  const lines = Array.from({ length: Math.floor(next() * 3) }, (_, i) => line(`l${i}`, end(), end()))
+  const lines = Array.from({ length: Math.floor(next() * 3) }, (_, i) =>
+    line(`l${i}`, end(), end()),
+  )
   const roll = next()
   // Half the labels asked for are ones the board holds, so groups are found often.
   const held = nodes.flatMap((node) => (node.label === undefined ? [] : [node.label]))
@@ -198,7 +202,13 @@ function generated(next: () => number, n: number): Input {
       ? (held[Math.floor(next() * held.length)] as string)
       : (TITLES[Math.floor(next() * TITLES.length)] as string)
   const fragment =
-    roll < 0.35 ? `^${pick()}` : roll < 0.7 ? title : roll < 0.85 ? title.toUpperCase() : ` ${title.toLowerCase()} `
+    roll < 0.35
+      ? `^${pick()}`
+      : roll < 0.7
+        ? title
+        : roll < 0.85
+          ? title.toUpperCase()
+          : ` ${title.toLowerCase()} `
   return {
     id: `gen/${n}`,
     canvas: { nodes, edges, ...(lines.length === 0 ? {} : { lines }) },
