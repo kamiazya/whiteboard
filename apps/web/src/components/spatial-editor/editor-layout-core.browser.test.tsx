@@ -10,8 +10,9 @@
  * typesets math, and requires none, with the core asked at least once per
  * board. Under the CI browser job's `differential` + `throw` a difference
  * fails the layout; where no core is loaded (a run under `ts`, which loads
- * none) the census skips, and a run that set `VITE_WHITEBOARD_CORE` fails
- * instead of skipping when the core did not load.
+ * none) the census skips, and a run that asked for one (`differential` or
+ * `rust`, `CORE_REQUIRED`) fails instead of skipping when the core did not
+ * load.
  */
 
 import type { CanvasLayoutCore, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
@@ -20,16 +21,16 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
+import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 
-const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 const loaded: LayoutCore | undefined = await layoutCoreReady()
 const LAYOUT = loaded?.impl.layoutSpatialCanvas ?? 'ts'
 
-it.runIf(REQUIRED)('loads the core the pipeline asked for before the editor lays out', () => {
+it.runIf(CORE_REQUIRED)('loads the core the pipeline asked for before the editor lays out', () => {
   expect(loaded).toBeDefined()
 })
 

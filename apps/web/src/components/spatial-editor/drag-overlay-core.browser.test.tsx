@@ -9,8 +9,8 @@
  * counts them over a real drag and requires none, with the core asked for an
  * edge layer at least once. Under the CI browser job's `differential` +
  * `throw` a difference fails the frame; where no core is loaded the test
- * skips, and a run that set `VITE_WHITEBOARD_CORE` fails instead of skipping
- * when the core did not load.
+ * skips, and a run that asked for one (`differential` or `rust`,
+ * `CORE_REQUIRED`) fails instead of skipping when the core did not load.
  */
 
 import type { LayoutCore, QueryLayoutCore, QueryRequest } from '@kamiazya/whiteboard-canvas-render'
@@ -19,16 +19,16 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
+import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
-const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 const loaded: LayoutCore | undefined = await layoutCoreReady()
 const QUERY = loaded?.impl.layoutQuery ?? 'ts'
 
-it.runIf(REQUIRED)('loads the core the pipeline asked for before the overlay asks it', () => {
+it.runIf(CORE_REQUIRED)('loads the core the pipeline asked for before the overlay asks it', () => {
   expect(loaded?.query).toBeDefined()
 })
 
