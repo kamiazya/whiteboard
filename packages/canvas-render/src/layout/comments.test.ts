@@ -16,20 +16,18 @@ import { describe, expect, it } from 'vitest'
 import { type CommentBoard, layoutBoard, threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
-import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import {
-  COMMENT_BUBBLE_OFFSET_PX,
-  layoutSpatialCanvas,
-  type SpatialLayoutOptions,
-} from './spatial-canvas.js'
+import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 /** The comment chrome the bundled light theme the core draws in gives every pin. */
 const THEME_COMMENT = createSpatialTheme({ mode: 'light' }).resolveComment?.()
 
 /** The pin's side, as the core draws it. */
 const COMMENT_PIN_SIZE_PX = 20
+
+/** The anchor-to-bubble gap the core places by (`COMMENT_BUBBLE_OFFSET_PX` in `comments/placement.rs`). */
+const COMMENT_BUBBLE_OFFSET_PX = 14
 
 const measure = createFakeMeasure()
 
@@ -686,5 +684,6 @@ it('draws a comment body as markdown at the bubble metrics, through the shared p
   expect(heading).toBeDefined()
   const run = (heading as { runs?: readonly TextRunNode[] }).runs?.[0]
   expect(run?.text).toBe('Heading')
-  expect(run?.appearance?.fontSize).toBe(MARKDOWN_THEME_NODE.headingFontSizePx[1])
+  // The node theme's h1 (`markdown-theme.ts`), which a comment bubble takes.
+  expect(run?.appearance?.fontSize).toBe(24)
 })

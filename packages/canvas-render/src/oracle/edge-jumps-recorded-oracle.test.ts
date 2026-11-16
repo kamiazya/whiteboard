@@ -1,21 +1,14 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { type EdgeJumpsRecord, edgeJumpsRecords } from '../test-utils/edge-jumps-oracle/oracle.js'
+import type { EdgeJumpsRecord } from '../test-utils/edge-jumps-oracle/oracle.js'
 
 /**
- * The committed recording of what `computeEdgeJumps`
- * (`layout/edges/edge-jumps.ts`) answers equals what it answers today, and
- * the Rust port replays it exactly (`tests/edge_jumps_oracle.rs` in
- * `crates/core/edge-routing`). Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node edge-jumps-recorded`.
+ * The committed recording of what the TypeScript line jumps answered before
+ * they were deleted (ADR-0054 step 7, S18h), which the Rust port replays
+ * exactly (`tests/edge_jumps_oracle.rs` in `crates/core/edge-routing`). This
+ * holds that the recording still reaches every way the jumps answer.
  */
 const FILE = new URL('./edge-jumps.jsonl', import.meta.url)
-
-const fresh = edgeJumpsRecords()
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${fresh.map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -41,14 +34,5 @@ describe('the recorded edge-jumps oracle', () => {
     expect(hopsOf(board('splits'), 'flat'), 'a crossing on the later edge’s split').toBe(1)
     expect(hopsOf(board('work-budget'), 'late-h'), 'nothing past the work budget').toBeUndefined()
     expect(hopsOf(board('work-budget'), 'early-h'), 'hops before the work budget').toBe(1)
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
-    expect(
-      records[parted]?.id,
-      'the first board the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
-    expect(records.length).toBe(fresh.length)
   })
 })

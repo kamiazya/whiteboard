@@ -3,27 +3,13 @@
 // never ambient RNG, never geometry. That is what keeps a styled canvas
 // rendering byte-identically twice, invariant under translate/scale (the
 // seed has no positional input by construction), and immune to edits of
-// unrelated nodes. This is the package's ONLY randomness; nothing here
-// touches Math.random.
-
-/**
- * FNV-1a over the UTF-16 code units of `id`, folded to an unsigned 32-bit seed. Chosen for determinism and
- * zero dependencies, not cryptography — collisions merely make two nodes
- * share a jitter pattern.
- */
-export function seedFromId(id: string): number {
-  let hash = 0x811c9dc5
-  for (let i = 0; i < id.length; i++) {
-    hash ^= id.charCodeAt(i)
-    // FNV prime 16777619, via shifts to stay in 32-bit integer math.
-    hash = (hash + ((hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24))) >>> 0
-  }
-  return hash >>> 0
-}
+// unrelated nodes. The seed itself is the core's (`seed_from_id` in
+// `crates/core/canvas-render`); this is the stream drawn from it, and the
+// package's ONLY randomness — nothing here touches Math.random.
 
 /**
  * A deterministic stream of floats in [0, 1) from a seed — mulberry32. A
- * seed is `seedFromId` of a node's identity, and is what a scene node carries
+ * seed is the core's hash of a node's identity, and is what a scene node carries
  * (`SceneInk.seed`), so the SVG backend and every other consumer of the ink
  * decomposition draw from the identical sequence without knowing the id. Each
  * call site takes its own stream, so consuming one node's stream can never

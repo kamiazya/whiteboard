@@ -8,23 +8,33 @@ import {
   type MetaRecord,
   type OracleRecord,
   type ResolverRecord,
-  recording,
 } from '../test-utils/theme-oracle/oracle.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 
 /**
  * The committed recording of the theme layer (palettes, the spatial theme's
- * resolvers, the markdown chrome) equals what the TypeScript answers today, and
- * the Rust port replays it exactly (`tests/theme_oracle.rs` in
- * `crates/core/canvas-render`). Re-record after a deliberate change with
+ * resolvers, the markdown chrome), which the Rust port replays exactly
+ * (`tests/theme_oracle.rs` in `crates/core/canvas-render`). What the
+ * TypeScript still answers equals what it answers today; the parts whose
+ * TypeScript is deleted are frozen (`answerOf` says which). Re-record the live
+ * parts after a deliberate change with
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node theme-recorded`.
  */
 const FILE = new URL('./theme.jsonl', import.meta.url)
 
+const read = () =>
+  readFileSync(FILE, 'utf8')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as OracleRecord)
+
 if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
+  const before = read()
+  const corpus = JSON.parse(JSON.stringify(themeCorpus())) as MetaRecord['corpus']
   writeFileSync(
     FILE,
-    `${recording()
+    `${before
+      .map((r) => (r.kind === 'meta' ? { ...r, corpus } : answerOf(corpus, r)))
       .map((r) => JSON.stringify(r))
       .join('\n')}\n`,
   )

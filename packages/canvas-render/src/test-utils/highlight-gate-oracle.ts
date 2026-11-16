@@ -9,13 +9,17 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { highlightCode } from '../highlight/lowlight.js'
-import { createTokenizerBudget, type TokenizerBudget } from '../highlight/tokenizer-budget.js'
 
 /**
  * Inputs and answers of `highlightCode`'s gate: whether the default
  * highlighter colours a fence, and what it spent of a layout's tokenizer
  * account doing so. The core decides which fences to ask the host for by
  * this gate, so it is held to the TypeScript's answer here, tokens aside.
+ *
+ * The layout's account is the core's alone now (`NestedLayoutBudget` in
+ * `typeset/seams.rs`): a record made against one was taken from the
+ * TypeScript account before it was deleted (ADR-0054 step 7, S18h3) and is
+ * frozen, and only a record made against none is still answered here.
  *
  * A value is written as pieces, each a text and how often it repeats, so a
  * fence at a budget's edge stays a short line in the recording.
@@ -26,8 +30,8 @@ export interface HighlightGateRecord {
   readonly value: readonly (readonly [string, number])[]
   /**
    * The account before the call: null calls without one, and `fresh` with
-   * the one a layout opens (`createTokenizerBudget`), so the replay opens its
-   * own the same way and the defaults are judged too.
+   * the one a layout opens, so the replay opens its own the same way and the
+   * defaults are judged too.
    */
   readonly budget: Account | 'fresh' | null
   readonly colours: boolean
@@ -161,34 +165,23 @@ export function highlightGateInputs(): Input[] {
 const textOf = (value: Input['value']): string =>
   value.map(([piece, repeat]) => piece.repeat(repeat)).join('')
 
+/** A record made against no layout account: the only kind the TypeScript still answers. */
+type UnbudgetedInput = Input & { readonly budget: null }
+
 /** What the TypeScript answers for one input. A throw is a fence drawn plain, as the layout draws it. */
-export function highlightGateAnswer(input: Input): HighlightGateRecord {
-  const budget: TokenizerBudget | undefined =
-    input.budget === null
-      ? undefined
-      : input.budget === 'fresh'
-        ? createTokenizerBudget()
-        : {
-            wordRunsRemaining: input.budget.word,
-            lineRunsRemaining: input.budget.line,
-            refused: input.budget.refused,
-          }
+export function highlightGateAnswer(input: UnbudgetedInput): HighlightGateRecord {
   let colours: boolean
   try {
-    colours = highlightCode(input.lang, textOf(input.value), budget) !== undefined
+    colours = highlightCode(input.lang, textOf(input.value)) !== undefined
   } catch {
     colours = false
   }
-  const after =
-    budget === undefined
-      ? null
-      : { word: budget.wordRunsRemaining, line: budget.lineRunsRemaining, refused: budget.refused }
   return {
     id: input.id,
     lang: input.lang,
     value: input.value,
-    budget: input.budget,
+    budget: null,
     colours,
-    after,
+    after: null,
   }
 }

@@ -1,6 +1,6 @@
 //! Where a run's crossings land and which of them draw an arc: `segmentCarrying`,
 //! `spacedHops`, `placeCrossings` and `handOverHop` in canvas-render's
-//! `layout/edges/edge-jumps.ts`.
+//! deleted TypeScript line jumps.
 
 use std::collections::BTreeMap;
 

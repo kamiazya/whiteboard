@@ -68,6 +68,35 @@ fcTest.prop(
   )
 })
 
+// The scored-occurrence cut (`SCORED_OCCURRENCES_MAX` in text-anchor.ts).
+const CUT = 1024
+
+fcTest.prop(
+  [
+    fc.integer({ min: 2200, max: 4000 }),
+    fc.nat({ max: 4000 }),
+    fc.integer({ min: CUT - 2, max: CUT + 1 }),
+    fc.boolean(),
+  ],
+  withDefaults({ numRuns: 40 }),
+)('keeps exactly the nearest CUT occurrences, the lower at a tie', (length, s, rank, miscount) => {
+  // `a` at every odd position; the remembered prefix `c` is planted before the
+  // occurrence of the drawn rank by (distance, position), so it decides the
+  // answer exactly when that rank is inside the cut. A start on an occurrence
+  // with a miscounted end reaches the cut with an occurrence AT the start.
+  const body0 = `b${'ab'.repeat(Math.ceil(length / 2))}`.slice(0, length)
+  const start = s % length
+  const occurrences = textOccurrences(body0, 'a')
+  const ranked = [...occurrences].sort((x, y) => Math.abs(x - start) - Math.abs(y - start) || x - y)
+  const planted = ranked[rank] as number
+  const body = `${body0.slice(0, planted - 1)}c${body0.slice(planted)}`
+  const anchor = { ...anchorOf('a', start, 'c', undefined), end: start + (miscount ? 2 : 1) }
+  if (body.slice(start, anchor.end) === 'a') return
+  const among = resolveTextAnchorAmong(body, anchor, textOccurrences(body, 'a'))
+  expect(among).toEqual(resolveTextAnchor(body, anchor))
+  expect(among.kind === 'placed' && among.start === planted).toBe(rank < CUT)
+})
+
 fcTest('the dense generator reaches repeated quotes and missed offsets', () => {
   // Read after the property above has run: a floor that proves it compared
   // something other than the stored-offset shortcut.

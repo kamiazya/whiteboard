@@ -11,7 +11,6 @@ import type { SpatialLayoutOptions } from './layout-options.js'
 import { edgesThroughCore, naturalSizeThroughCore } from './query-switch.js'
 
 export {
-  COMMENT_BUBBLE_OFFSET_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   COMMENT_TEXT_MAX_WIDTH_PX,

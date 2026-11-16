@@ -236,11 +236,8 @@ function nearestFirst(before: number[], after: number[], around: number, max: nu
  * (ascending, as found) holding the `max` nearest, the lower of two equally
  * near kept at the cut. The nearest of a sorted list are contiguous in it, so
  * a range says it exactly.
- *
- * Exported because the canvas scores occurrences it has already collected
- * from RENDERED text, and must bound them by this rule rather than a copy.
  */
-export function scoredOccurrenceRange(
+function scoredOccurrenceRange(
   sorted: readonly number[],
   around: number,
   max: number = SCORED_OCCURRENCES_MAX,

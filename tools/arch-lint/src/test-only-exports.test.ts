@@ -197,7 +197,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
  */
 const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
-  'packages/canvas-render/src/outline/node-outline.ts#outlineContains',
   'packages/canvas-render/src/measure.ts#isFullWidthCodePoint',
   'packages/canvas-render/src/quality/composition-score.ts#CompositionScore',
   'packages/canvas-render/src/quality/drawing-score.ts#DrawingScore',
@@ -236,8 +235,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the host a realm installs over the build's artifact (`installLayoutCore`); exported so its load-failure policy is driven with a fake source, which the real artifact cannot be made to fail within one run",
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
     'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
-  'packages/canvas-render/src/layout/edges/edge-jumps.ts#SegmentGrid':
-    "the line jumps' broad phase its Rust port is held to (test-utils/edge-jump-grid-oracle records edge-jump-grid.jsonl, ADR-0054 step 7); computeEdgeJumps is its production caller, in its own file",
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
     'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
   'packages/canvas-render/src/generated/geometry.zod.ts#rectSchema':
@@ -386,7 +383,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 135
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 10
+const PUBLISHED_CEILING = 9
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

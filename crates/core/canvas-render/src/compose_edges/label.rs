@@ -1,4 +1,4 @@
-//! Where an edge's label sits (`edges/edge-label-anchor.ts`): the arc-length
+//! Where an edge's label sits (the deleted TypeScript's label anchor): the arc-length
 //! midpoint of the DRAWN line, slid clear of what it would cover. The one
 //! producer for the drawn label and the editor's inline label editor alike.
 

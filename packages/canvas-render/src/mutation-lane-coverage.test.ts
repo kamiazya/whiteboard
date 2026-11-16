@@ -326,9 +326,9 @@ describe('the mutation lane covers what it says it covers', () => {
     // its overlap, squash and end-offset branches were mutation-checked by
     // hand against it.
     //
-    // 111 with `layout/edges/segment-intersection.ts`, the line-jump narrow
-    // phase lifted out of `edge-jumps.ts` so its cost test can count calls.
-    // Outside the lane, as that file is: the edge-jumps tests pin its three
+    // 111 with the TypeScript line-jump narrow phase, lifted out of the
+    // TypeScript line jumps so its cost test could count calls.
+    // Outside the lane, as that file was: the line-jump tests pinned its three
     // rejection branches — a hit outside either segment, one too close to
     // an end for the arc, and a non-finite hit point.
     //
@@ -344,7 +344,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // weight, raster scale, clip, largest-first order and definition removal
     // were each mutation-checked by hand against it.
     //
-    // 114 with `highlight/tokenizer-budget.ts`, the per-layout tokeniser
+    // 114 with the TypeScript tokeniser budget, the per-layout tokeniser
     // account every fence the default highlighter colours spends from.
     // Outside the lane, as the TypeScript embed budget is: a constructor and one spend,
     // and the deleted highlight-budget test pins both accounts, the refusal
@@ -474,9 +474,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // the TypeScript comment-bubble placement) are the Rust ports' to hold now, by
     // cargo-mutants over the frozen recordings. Nothing that remained left
     // the lane.
+    // 107 since the dead exports they left were deleted (S18h3): the
+    // TypeScript tokeniser budget, line jumps, edge-label placement, and the
+    // line-jump narrow phase, which moved to `test-utils/wasm/` as the
+    // reference its Rust port is held to. None was in the lane.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 23,
-      production: 111,
+      production: 107,
     })
   })
 

@@ -277,9 +277,9 @@ export interface ShapeSceneNode {
 }
 
 /**
- * A style's ink assignment on a scene node. `seed` is `seedFromId` of the
- * node's or edge's id, so the same document draws the same strokes twice
- * and a moved node keeps its wobble. `fill: 'hatch'` asks for hatch lines
+ * A style's ink assignment on a scene node. `seed` is the core's hash of the
+ * node's or edge's id (`seed_from_id`), so the same document draws the same
+ * strokes twice and a moved node keeps its wobble. `fill: 'hatch'` asks for hatch lines
  * in place of the flat fill — what a coloured node gets under a pencil.
  */
 export interface SceneInk {
@@ -341,7 +341,7 @@ export interface HeadingBlockNode {
   readonly runs: readonly TextRunNode[]
 }
 
-export interface ParagraphBlockNode {
+interface ParagraphBlockNode {
   readonly kind: 'paragraph'
   readonly bbox: BoundingBox
   readonly runs: readonly TextRunNode[]

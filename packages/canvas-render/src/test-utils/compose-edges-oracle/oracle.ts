@@ -24,7 +24,7 @@ interface Answer {
   readonly scene: string
   /** The anchors, in the order the routing settled them; every number as its hex. */
   readonly anchors: readonly (readonly (string | null)[])[]
-  /** What `computeEdgeJumps` answers for the routed edges, when any element hops. */
+  /** What the line jumps answered for the routed edges, when any element hops. */
   readonly jumps: readonly (readonly [string, readonly (readonly string[])[]])[] | null
   readonly calls: number
 }

@@ -46,7 +46,6 @@ describe('PORTED_FUNCTIONS against the tree', () => {
       'labelObstacles',
       'frameTitleObstacles',
       'placeCommentBubble',
-      'outlineContentBox',
       'parseMarkdownBody',
       'resolveReferences',
       'parseOkf',
@@ -95,6 +94,9 @@ describe('the layout functions at stage 4', () => {
       ['layoutSpatialEdges', 4],
       ['naturalNodeContentSize', 4],
       ['fittedTextNodeHeight', 4],
+      ['edgeLabelPlacement', 4],
+      ['labelObstacles', 4],
+      ['frameTitleObstacles', 4],
       ['placeCommentBubble', 4],
     ])
     for (const f of handed) {

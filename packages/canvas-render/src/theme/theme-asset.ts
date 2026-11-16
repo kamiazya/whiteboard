@@ -1,6 +1,6 @@
-// A registered theme asset (the engine's token contract, ADR-0030 decision
-// 3) turned into the ONE thing a layout consumes: a `SpatialAppearanceResolver`
-// for a mode. The two shapes are meant to be one, and the contract lives in
+// A registered theme asset's palette (the engine's token contract, ADR-0030
+// decision 3) turned into the renderer's `SpatialPalette` for a mode. The two
+// shapes are meant to be one, and the contract lives in
 // the engine only so that ADR-0013 decision 8 can build on it without moving
 // anything. The mapping is explicit field by field rather than a cast, which
 // makes a REQUIRED field missing here a type error — and only that: a key
@@ -9,15 +9,8 @@
 // key-set type assertion in theme-asset.test.ts, which fails `tsc`; the
 // round-trips there catch a bundled value the contract would strip.
 
-import type { PaletteTokens, ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { isFrame } from '@kamiazya/whiteboard-model'
-import type { RoutableElement } from '@kamiazya/whiteboard-scene'
-import { MARKDOWN_THEME_NODE, type MarkdownTheme } from './markdown-theme.js'
-import type { SpatialAppearanceResolver, SpatialNodeAppearance } from './spatial-appearance.js'
+import type { PaletteTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialPalette } from './spatial-palette.js'
-import { createSpatialTheme } from './spatial-theme.js'
-import type { SpatialThemeMode } from './spatial-theme-mode.js'
 
 export function paletteFromTokens(tokens: PaletteTokens): SpatialPalette {
   return {
@@ -54,93 +47,4 @@ export function paletteFromTokens(tokens: PaletteTokens): SpatialPalette {
     // present-but-undefined key would make the two shapes differ by a key.
     ...(tokens.markdownChrome === undefined ? {} : { markdownChrome: tokens.markdownChrome }),
   }
-}
-
-/**
- * The markdown metrics a body inside a THEMED canvas is laid out with: the
- * node theme, with the theme's own neutral where its palette names one.
- *
- * A body is two-thirds furniture — the code panel, the blockquote rail, the
- * checkbox — and without this the prose took the theme while the furniture
- * around it stayed the bundled slate on every board.
- */
-export function markdownTheme(
-  tokens: ThemeTokens | undefined,
-  mode: SpatialThemeMode | undefined,
-): MarkdownTheme {
-  const chrome = tokens?.palette[mode ?? 'light'].markdownChrome
-  return chrome === undefined
-    ? MARKDOWN_THEME_NODE
-    : { ...MARKDOWN_THEME_NODE, chromeColor: chrome }
-}
-
-export interface ThemedAppearanceOptions {
-  readonly tokens: ThemeTokens
-  readonly mode: SpatialThemeMode
-  /**
-   * The family every label and body run DECLARES — already resolved by the
-   * caller against what its surface can measure, because the family named
-   * in the SVG must be the family the coordinates were measured with
-   * (font-family.ts). A theme's own family arrives here only when a face
-   * exists; otherwise the bundled one does, and the layout reports it.
-   */
-  readonly fontFamily: string
-}
-
-// Memoized per (tokens, mode, family) so a layout that resolves the same
-// theme on every frame hands the editor the SAME resolver object: the
-// per-mode defaults are frozen singletons for exactly this reason
-// (spatial-theme.ts), and a themed canvas must not lose that property.
-// Keyed weakly on the tokens object — an asset is a module-level constant in
-// its plugin, so identity is the right key and nothing is retained past it.
-const MEMO = new WeakMap<ThemeTokens, Map<string, SpatialAppearanceResolver>>()
-
-export function createThemedAppearance(
-  options: ThemedAppearanceOptions,
-): SpatialAppearanceResolver {
-  const { tokens, mode, fontFamily } = options
-  const perTokens = MEMO.get(tokens) ?? new Map<string, SpatialAppearanceResolver>()
-  MEMO.set(tokens, perTokens)
-  const key = `${mode}|${fontFamily}`
-  const hit = perTokens.get(key)
-  if (hit !== undefined) return hit
-
-  const base = createSpatialTheme({ mode, palette: paletteFromTokens(tokens.palette[mode]) })
-  const frame = tokens.defaults.groupFrame
-  // The halo rides node chrome and edges in the element's own paint. Not a
-  // label: a 12px glyph blurred at three deviations thickens into a smudge,
-  // and the label already sits on its halo pill. Not a group frame: the
-  // largest and least informative thing on the board to bloom. Comment and
-  // proposal chrome come from the base resolver untouched.
-  const glow = tokens.glow === undefined ? {} : { glow: { radiusPx: tokens.glow.radiusPx } }
-  // The theme's line weight reaches node chrome and edges — never a label,
-  // which is filled text — and a group frame's own width, when the theme
-  // declares one, wins over it below.
-  const weight = tokens.strokeWidthPx === undefined ? {} : { strokeWidth: tokens.strokeWidthPx }
-  const resolveNode = (node: SpatialNode): SpatialNodeAppearance => {
-    const resolved = base.resolveNode(node)
-    const framed =
-      isFrame(node) && frame !== undefined
-        ? {
-            ...(frame.strokeDasharray === undefined
-              ? {}
-              : { strokeDasharray: frame.strokeDasharray }),
-            ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
-          }
-        : {}
-    const halo = isFrame(node) ? {} : glow
-    return { ...resolved, appearance: { ...resolved.appearance, ...weight, ...framed, ...halo } }
-  }
-  const themed: SpatialAppearanceResolver = Object.freeze({
-    ...base,
-    mode,
-    resolveNode,
-    resolveEdge: (edge: RoutableElement) => {
-      const resolved = base.resolveEdge(edge)
-      return resolved === undefined ? undefined : { ...resolved, ...weight, ...glow }
-    },
-    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily }),
-  })
-  perTokens.set(key, themed)
-  return themed
 }

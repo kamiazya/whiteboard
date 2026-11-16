@@ -122,7 +122,7 @@ export function layoutMarkdownDocument(
 /**
  * A comment's prose as `CommentBody.tsx` lays it out: the measurer, the room
  * the surface has, and the core. The family is the bundled one and the
- * metrics are the density's (`MARKDOWN_THEME_COMPACT` or the comfortable
+ * metrics are the density's (the core's compact theme or the comfortable
  * comment theme).
  */
 export interface CommentDocumentOptions {

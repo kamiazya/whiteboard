@@ -1,18 +1,18 @@
-// The line-jump narrow phase on its own, so the broad phase in front of it
-// can be measured by counting its calls.
+// The TypeScript line jumps' narrow phase, kept as the reference the Rust
+// port (`crates/core/edge-routing/src/segment_intersection.rs`) is held to by
+// `edge-primitives.rust.test.ts`. The line jumps themselves are the core's
+// (ADR-0054 step 7, S18h); nothing in production calls this.
 
 import { hypot } from '../../det-math.js'
 import { EDGE_JUMP_RADIUS_PX } from '../../edge-path/edge-flatten.js'
-import type { Point } from './edge-geometry.js'
-
-export { EDGE_JUMP_RADIUS_PX }
+import type { Point } from '../../layout/edges/edge-geometry.js'
 
 /**
  * A hop needs `radius` of straight run on both sides to land back on the
  * segment; crossings closer than that to a segment end (junctions, corner
  * touches) are not drawn.
  */
-export const END_CLEARANCE_PX = EDGE_JUMP_RADIUS_PX + 1
+const END_CLEARANCE_PX = EDGE_JUMP_RADIUS_PX + 1
 
 /** Proper interior intersection of segments a1-a2 and b1-b2, or undefined. */
 export function segmentIntersection(a1: Point, a2: Point, b1: Point, b2: Point): Point | undefined {

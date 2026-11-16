@@ -11,8 +11,8 @@ import { parseSource } from './ast-helpers.js'
  * must be a re-export of the shim rather than an implementation. The layout's
  * per-function switch (`LayoutCore['impl']`) was retired in step 7's S18g: the
  * core answers every layout a root hands it. S18h2 deleted the composer and
- * the typesetter, moving the layout and its node queries to stage 4; the
- * routing TypeScript (`layout/edges`) is S18h3's.
+ * the typesetter, moving the layout and its node queries to stage 4; S18h3
+ * deleted the edge label's placement, moving its queries there too.
  *
  * Stage 4 has three shapes. A function whose callers can import the shim
  * re-exports it. One whose callers are synchronous and reach it by import from
@@ -107,6 +107,17 @@ const COMMENT_TYPESCRIPT = [
   'packages/canvas-render/src/layout/comment-body.ts',
 ] as const
 
+/**
+ * Where an edge label's placement and what it avoids lived, with their own
+ * suites (S18h3), which stage 4 requires gone.
+ */
+const LABEL_TYPESCRIPT = [
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.test.ts',
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.properties.test.ts',
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.cost.test.ts',
+] as const
+
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'routeLayout',
@@ -159,8 +170,8 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   // The layout pieces a root calls on their own (S18d): one export,
   // `layout_query`, with a tagged query per piece. Those the composer answered
-  // went to stage 4 with it (S18h2); those the routing still implements, and
-  // the outline the SVG and hit-testing draw by, stay 2.
+  // went to stage 4 with it (S18h2), and the edge label's with its own
+  // module (S18h3).
   {
     name: 'layoutSpatialEdges',
     stage: 4,
@@ -208,45 +219,39 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   {
     name: 'edgeLabelPlacement',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
-      export: 'edgeLabelPlacement',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryEdgeLabelPlacement' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: LABEL_TYPESCRIPT },
   },
   {
     name: 'labelObstacles',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
-      export: 'labelObstacles',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryLabelObstacles' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: LABEL_TYPESCRIPT },
   },
   {
     name: 'frameTitleObstacles',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
-      export: 'frameTitleObstacles',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryLabelObstacles' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: LABEL_TYPESCRIPT },
   },
   {
     name: 'placeCommentBubble',
@@ -260,20 +265,9 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     },
     handed: { deleted: COMMENT_TYPESCRIPT },
   },
-  {
-    name: 'outlineContentBox',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/outline/node-outline.ts',
-      export: 'outlineContentBox',
-    },
-    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
-    shim: {
-      module: '@kamiazya/whiteboard-core-wasm',
-      file: 'packages/core-wasm/src/index.ts',
-      member: 'layoutQuery',
-    },
-  },
+  // The outline content box query has no entry: its TypeScript was one
+  // function and the shape table's per-silhouette members, deleted from files
+  // that remain (S18h3), which none of stage 4's shapes can state.
   // A body's parse and its reference resolution have no entry of their own:
   // the core reaches them only through the whole layout, so that export is
   // the shim's member.

@@ -85,7 +85,7 @@ The "one renderer" half of that has a second caller now, and it is worth naming 
 obvious reuse was the wrong one. A COMMENT's body is markdown too (ADR-0026's 2026-09-06
 supplement), so `apps/web`'s comment card and rail draw it through canvas-render as well — but
 through `layoutCommentBody`, NOT through the preview renderer. The two differ in the markdown
-THEME: the preview passes `MARKDOWN_THEME_DOCUMENT` (30px h1, 16px block gap) and a comment
+THEME: the preview lays out at the core's DOCUMENT scale (30px h1, 16px block gap) and a comment
 takes the NODE theme the canvas bubble takes (24px, 12px). Reaching for "the markdown renderer"
 would have given a comment document typography and read as a design choice. There is still no
 markdown-to-HTML fallback anywhere, and adding one for comments was considered and refused for

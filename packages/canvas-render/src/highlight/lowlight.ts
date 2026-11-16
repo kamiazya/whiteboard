@@ -31,7 +31,6 @@ import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { createLowlight } from 'lowlight'
 import type { CodeTokenLines, CodeTokenRole } from './code-token.js'
-import { spendTokenizer, type TokenizerBudget } from './tokenizer-budget.js'
 
 // Registered eagerly and never on demand: a fence's language is only known
 // mid-layout, and layout is synchronous — an await there would either block
@@ -178,22 +177,17 @@ function runCost(value: string, run: RegExp, cap: number): number {
 
 /**
  * canvas-render's `highlightCode` seam. Total: an unregistered language, a
- * fence over the tokeniser's cost budget, a fence the layout's `budget`
- * cannot cover, or anything lowlight throws returns `undefined`, and the
- * fence renders plain.
+ * fence over the tokeniser's cost budget, or anything lowlight throws returns
+ * `undefined`, and the fence renders plain. What one layout may spend across
+ * its fences is the core's account, not this seam's.
  */
-export function highlightCode(
-  lang: string,
-  value: string,
-  budget?: TokenizerBudget,
-): CodeTokenLines | undefined {
+export function highlightCode(lang: string, value: string): CodeTokenLines | undefined {
   const name = ALIASES[lang.toLowerCase()] ?? lang.toLowerCase()
   if (name === '' || !lowlight.registered(name)) return undefined
   const words = runCost(value, WORD_RUN, WORD_RUN_BUDGET)
   if (words > WORD_RUN_BUDGET) return undefined
   const lines = LINE_PRICED.has(name) ? runCost(value, LINE_RUN, LINE_RUN_BUDGET) : 0
   if (lines > LINE_RUN_BUDGET) return undefined
-  if (budget !== undefined && !spendTokenizer(budget, words, lines)) return undefined
   try {
     return toLines(lowlight.highlight(name, value) as unknown as HastNode)
   } catch {

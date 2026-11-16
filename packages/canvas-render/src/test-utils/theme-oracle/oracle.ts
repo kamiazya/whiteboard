@@ -1,29 +1,24 @@
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge, CanvasLine, SpatialNode } from '@kamiazya/whiteboard-model'
 import { SPATIAL_THEME_FONT_FAMILY, SPATIAL_THEME_FONT_STACK } from '../../theme/font-family.js'
-import {
-  MARKDOWN_THEME_COMPACT,
-  MARKDOWN_THEME_DOCUMENT,
-  MARKDOWN_THEME_NODE,
-} from '../../theme/markdown-theme.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
 import { SPATIAL_THEME_GEOMETRY } from '../../theme/spatial-geometry.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '../../theme/spatial-palette.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { TEXT_HALO_PAD_PX } from '../../theme/text-halo.js'
-import {
-  createThemedAppearance,
-  markdownTheme,
-  paletteFromTokens,
-} from '../../theme/theme-asset.js'
+import { paletteFromTokens } from '../../theme/theme-asset.js'
 import { f64Hex } from '../render-oracle/scene-dump.js'
-import { type ResolverSpec, type ThemeCorpus, themeCorpus } from './corpus.js'
+import type { ResolverSpec, ThemeCorpus } from './corpus.js'
 
 /**
  * The recorded answers of the TypeScript theme layer, which the Rust port
  * (`crates/core/canvas-render/src/theme`) replays exactly. A record holds its
  * inputs by name into the `meta` record's corpus, and every double an answer
  * holds is the hex of its IEEE bits, so a last-bit difference fails.
+ *
+ * Part of the recording is frozen (ADR-0054 step 7, S18h): a themed
+ * resolver, the markdown chrome and the markdown themes were answered by TypeScript that is deleted, so only the core answers them
+ * now. `answerOf` re-answers the rest and hands a frozen part back as recorded.
  */
 
 export type Json = null | boolean | string | number | readonly Json[] | { [key: string]: Json }
@@ -95,21 +90,10 @@ function dump(value: unknown): Json {
 
 const orNull = (value: unknown): Json => (value === undefined ? null : dump(value))
 
-const fromJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
 function tokensOf(corpus: ThemeCorpus, theme: string): ThemeTokens {
   const tokens = corpus.themes[theme]
   if (tokens === undefined) throw new Error(`theme-oracle: no theme ${theme}`)
   return tokens
-}
-
-function resolverOf(corpus: ThemeCorpus, spec: ResolverSpec): SpatialAppearanceResolver {
-  if (spec.theme === null) return createSpatialTheme({ mode: spec.mode })
-  return createThemedAppearance({
-    tokens: tokensOf(corpus, spec.theme),
-    mode: spec.mode,
-    fontFamily: spec.family ?? SPATIAL_THEME_FONT_FAMILY,
-  })
 }
 
 function nodeOf(
@@ -132,8 +116,11 @@ function routable(base: object, color: string | null): CanvasEdge & CanvasLine {
     CanvasLine
 }
 
-function resolverAnswer(corpus: ThemeCorpus, spec: ResolverSpec): ResolverRecord['out'] {
-  const theme = resolverOf(corpus, spec)
+function resolverAnswer(
+  spec: ResolverSpec & { theme: null },
+  corpus: ThemeCorpus,
+): ResolverRecord['out'] {
+  const theme: SpatialAppearanceResolver = createSpatialTheme({ mode: spec.mode })
   const nodes: Json[] = []
   for (const kind of corpus.nodeKinds) {
     for (const color of corpus.colors)
@@ -158,75 +145,45 @@ function paletteAnswer(corpus: ThemeCorpus, theme: string | null, mode: 'light' 
   return dump(paletteFromTokens(tokensOf(corpus, theme).palette[mode]))
 }
 
-function markdownAnswer(corpus: ThemeCorpus, theme: string | null, mode: 'light' | 'dark' | null) {
-  const tokens = theme === null ? undefined : tokensOf(corpus, theme)
-  return dump(markdownTheme(tokens, mode ?? undefined))
+/** The live constants, with the frozen markdown themes read from the recording. */
+function constants(recorded: Json): Json {
+  const frozen = recorded as {
+    readonly markdownNode: Json
+    readonly markdownDocument: Json
+    readonly markdownCompact: Json
+  }
+  return {
+    ...(dump({
+      fontFamily: SPATIAL_THEME_FONT_FAMILY,
+      fontStack: SPATIAL_THEME_FONT_STACK,
+      haloPadPx: TEXT_HALO_PAD_PX,
+      geometry: SPATIAL_THEME_GEOMETRY,
+    }) as { [key: string]: Json }),
+    markdownNode: frozen.markdownNode,
+    markdownDocument: frozen.markdownDocument,
+    markdownCompact: frozen.markdownCompact,
+  }
 }
 
-function constants(): Json {
-  return dump({
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    fontStack: SPATIAL_THEME_FONT_STACK,
-    haloPadPx: TEXT_HALO_PAD_PX,
-    geometry: SPATIAL_THEME_GEOMETRY,
-    markdownNode: MARKDOWN_THEME_NODE,
-    markdownDocument: MARKDOWN_THEME_DOCUMENT,
-    markdownCompact: MARKDOWN_THEME_COMPACT,
-  })
-}
-
-const resolverId = (s: ResolverSpec) => `${s.theme ?? 'bundled'}/${s.mode}/${s.family ?? '-'}`
-
-/** The recording, from the corpus alone. */
-export function recording(): readonly OracleRecord[] {
-  const corpus = fromJson(themeCorpus())
-  const records: OracleRecord[] = [
-    { kind: 'meta', corpus },
-    { kind: 'constants', out: constants() },
-  ]
-  for (const mode of ['light', 'dark'] as const) {
-    for (const theme of [null, ...Object.keys(corpus.themes)]) {
-      records.push({
-        kind: 'palette',
-        id: `${theme ?? 'bundled'}/${mode}`,
-        theme,
-        mode,
-        out: paletteAnswer(corpus, theme, mode),
-      })
-    }
-  }
-  for (const [theme, mode] of corpus.markdown) {
-    records.push({
-      kind: 'markdown',
-      id: `${theme ?? 'none'}/${mode ?? '-'}`,
-      theme,
-      mode,
-      out: markdownAnswer(corpus, theme, mode),
-    })
-  }
-  for (const spec of corpus.resolvers) {
-    records.push({
-      kind: 'resolver',
-      id: resolverId(spec),
-      spec,
-      out: resolverAnswer(corpus, spec),
-    })
-  }
-  return records
-}
-
-/** Recomputes one recorded record from its own inputs; `meta` supplies the corpus. */
+/**
+ * Recomputes one recorded record from its own inputs, `meta` supplying the
+ * corpus; a frozen record, or a frozen part of one, is handed back as recorded.
+ */
 export function answerOf(corpus: ThemeCorpus, record: OracleRecord): OracleRecord {
   switch (record.kind) {
     case 'meta':
       return record
     case 'constants':
-      return { ...record, out: constants() }
+      return { ...record, out: constants(record.out) }
     case 'palette':
       return { ...record, out: paletteAnswer(corpus, record.theme, record.mode) }
     case 'markdown':
-      return { ...record, out: markdownAnswer(corpus, record.theme, record.mode) }
-    case 'resolver':
-      return { ...record, out: resolverAnswer(corpus, record.spec) }
+      return record
+    case 'resolver': {
+      const { spec } = record
+      return spec.theme === null
+        ? { ...record, out: resolverAnswer({ ...spec, theme: null }, corpus) }
+        : record
+    }
   }
 }

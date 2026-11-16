@@ -45,14 +45,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
       rx: box.w / 2,
       ry: box.h / 2,
     }),
-    // 0.15 rather than the exact (1 - 1/√2)/2 ≈ 0.1464: the exact value puts
-    // corners ON the rim, where float error flips containment, and content
-    // should not kiss the stroke anyway.
-    contentBox: (box) => {
-      const dx = box.w * 0.15
-      const dy = box.h * 0.15
-      return { x: box.x + dx, y: box.y + dy, w: box.w - 2 * dx, h: box.h - 2 * dy }
-    },
   },
   diamond: {
     // Edge-midpoint polygon, clockwise from the top vertex — the corner order
@@ -70,12 +62,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
         ],
       }
     },
-    contentBox: (box) => ({
-      x: box.x + box.w / 4,
-      y: box.y + box.h / 4,
-      w: box.w / 2,
-      h: box.h / 2,
-    }),
   },
   hexagon: {
     // Pointy-left-right six-gon, clockwise from the top-left corner. The
@@ -96,7 +82,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
         ],
       }
     },
-    contentBox: (box) => insetHorizontally(box),
   },
   parallelogram: {
     // Right-leaning skew, clockwise from the top-left vertex; same capped
@@ -113,7 +98,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
         ],
       }
     },
-    contentBox: (box) => insetHorizontally(box),
   },
   octagon: {
     // A rectangle with its four corners taken off — the polygon nearest to
@@ -143,13 +127,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
         ],
       }
     },
-    // Half the cut on every side puts each corner exactly ON its diagonal
-    // (`cut/2 / cut + cut/2 / cut = 1`), which counts as inside — the same
-    // exact-boundary inscription the diamond already uses.
-    contentBox: (box) => {
-      const half = octagonCut(box) / 2
-      return { x: box.x + half, y: box.y + half, w: box.w - 2 * half, h: box.h - 2 * half }
-    },
   },
   cylinder: {
     outline: (box) => ({
@@ -160,12 +137,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
       h: box.h,
       ry: Math.min(box.w * 0.1, box.h / 4),
     }),
-    // Gives up the lid (its drawn front rim dips to 2·ry) and the bottom
-    // bulge.
-    contentBox: (box) => {
-      const ry = Math.min(box.w * 0.1, box.h / 4)
-      return { x: box.x, y: box.y + 2 * ry, w: box.w, h: box.h - 3 * ry }
-    },
   },
 }
 
@@ -175,12 +146,6 @@ const shapes: Readonly<Record<string, ShapeContribution>> = {
  * corner and never large enough to make two cuts meet.
  */
 const octagonCut = (box: BoundingBox): number => Math.min(box.w, box.h) / 4
-
-/** Hexagon and parallelogram give up only their slanted horizontal margins. */
-function insetHorizontally(box: BoundingBox): BoundingBox {
-  const inset = Math.min(box.w / 4, box.h / 2)
-  return { x: box.x + inset, y: box.y, w: box.w - 2 * inset, h: box.h }
-}
 
 /** Edge of a stencil's badge, and its distance from the node's top edge. */
 const BADGE_SIZE_PX = 16

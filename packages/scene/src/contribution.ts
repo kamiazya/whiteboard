@@ -62,11 +62,6 @@ export type NodeOutline =
  * one implementation serves every shape, and nothing a contributor supplies
  * can make the drawn and the hit geometry disagree.
  *
- * `contentBox` is the exception, and is optional for a reason: it is a
- * per-shape judgement (how much of the box may text use) that no formula
- * derives from a polygon. A shape that omits it gets the bbox — content may
- * then cross the silhouette, exactly the degradation an unknown id gets.
- *
  * ponytail: a returned polygon must be CONVEX. The renderer answers
  * containment through a convex test and bisects assuming convexity along
  * the probed ray — true of every built-in, and a contract a contributor can
@@ -78,7 +73,6 @@ export type NodeOutline =
  */
 export interface ShapeContribution {
   readonly outline: (box: BoundingBox) => NodeOutline | null
-  readonly contentBox?: (box: BoundingBox) => BoundingBox
 }
 
 /**

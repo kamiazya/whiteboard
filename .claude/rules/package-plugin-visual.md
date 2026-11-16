@@ -442,7 +442,7 @@ computed routes and stored bends — is canvas-render's alone.
 
 What DID stay here, because it is a property of where a bend lives rather
 than of any facet: the midpoint of an edge run is already spoken for.
-`edgeLabelPlacement` draws an edge's label there and double-pressing there opens
+The core's label placement draws an edge's label there and double-pressing there opens
 its editor, so the add-a-bend ghosts sit at a third and two thirds of each
 run instead. Placed at the midpoint they swallowed the second press and
 failed every case in `edge-label-edit.browser.test.tsx` while the bend tests

@@ -1,5 +1,5 @@
 //! The line jumps' broad phase, `place` and `SegmentGrid` in canvas-render's
-//! `layout/edges/edge-jumps.ts`: a hierarchy of uniform grids, each straight
+//! deleted TypeScript line jumps: a hierarchy of uniform grids, each straight
 //! run filed at the level whose cell holds its extent, so it touches a
 //! handful of cells whatever its length and wherever on the number line it
 //! sits. Two runs that meet share a cell at the coarser of their two levels: a

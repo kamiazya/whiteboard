@@ -117,7 +117,7 @@ pub struct ThemedAppearance {
     frame_stroke_width: Option<f64>,
 }
 
-/// `createThemedAppearance`, unmemoised; see [`ThemedAppearanceCache`].
+/// The themed resolver the deleted TypeScript built, unmemoised; see [`ThemedAppearanceCache`].
 #[must_use]
 pub fn create_themed_appearance(
     tokens: &ThemeTokens,
@@ -192,7 +192,7 @@ impl SpatialAppearanceResolver for ThemedAppearance {
     }
 }
 
-/// `createThemedAppearance`'s memo, per call site. The TypeScript keeps a
+/// The themed resolver's memo, per call site. The TypeScript kept a
 /// module-level `WeakMap` keyed on the tokens object so an editor that resolves
 /// the same theme every frame is handed the SAME resolver; this is that identity
 /// without a global: a cache is bound to one token bundle, lives as long as the

@@ -274,7 +274,7 @@ export interface AnchorRect {
  * orphaned set is drawn from once every node is gone, the same role the
  * point plays for a deleted node's comment.
  */
-export function spatialAnchorRect(
+function spatialAnchorRect(
   anchor: SpatialAnchor,
   nodeById?: (id: string) => CommentTargetNode | undefined,
 ): AnchorRect | undefined {

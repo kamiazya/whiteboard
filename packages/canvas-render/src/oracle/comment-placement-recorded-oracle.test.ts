@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { COMMENT_BUBBLE_OFFSET_PX } from '../comment-geometry.js'
 import type { CommentPlacementRecord } from '../test-utils/comment-placement-oracle.js'
 import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
 
@@ -13,6 +12,9 @@ import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
  * `query-switch.rust.test.ts`; this test holds the recording to the cases it
  * must reach.
  */
+/** The anchor-to-bubble gap the recording was taken with; frozen with it, as the recording is. */
+const COMMENT_BUBBLE_OFFSET_PX = 14
+
 const FILE = new URL('./comment-placement.jsonl', import.meta.url)
 
 const records = readFileSync(FILE, 'utf8')

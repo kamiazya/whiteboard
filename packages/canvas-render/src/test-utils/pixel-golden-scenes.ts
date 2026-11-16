@@ -60,19 +60,17 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { resolveCanvasPalette } from '../layout/canvas-theme.js'
-import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
 import LOOK_SCENES from './look-scenes.json?raw'
 
 const EDGE_APPEARANCE = { stroke: '#1f2933', strokeWidth: 2 } as const
 
 /**
  * Two crossing edges: an earlier vertical edge and a later horizontal edge
- * that hops over it. `computeEdgeJumps` — the real edge pipeline's jump
- * producer, the same one `layoutSpatialCanvas` calls — derives the hop
- * point rather than a hand-authored jump, so this fixture exercises the
- * actual jump-detection geometry, not just the backend's drawing of one.
- * The crossing point (50, 20) is deliberately an intersection of two
- * integer-coordinate axis-aligned segments, so it lands on an integer too.
+ * that hops over it. The hop is the one the layout's line jumps place there
+ * (the core's, held to `oracle/edge-jumps.jsonl`): on the later edge's only
+ * segment, at the crossing. The crossing point (50, 20) is deliberately an
+ * intersection of two integer-coordinate axis-aligned segments, so it lands
+ * on an integer too.
  */
 export function buildJumpHopScene(): Scene {
   const earlier: ResolvedEdgeNode = {
@@ -88,7 +86,7 @@ export function buildJumpHopScene(): Scene {
     toEnd: 'none',
     appearance: EDGE_APPEARANCE,
   }
-  const laterDraft: ResolvedEdgeNode = {
+  const later: ResolvedEdgeNode = {
     kind: 'edge',
     id: 'horizontal',
     path: [
@@ -100,9 +98,8 @@ export function buildJumpHopScene(): Scene {
     fromEnd: 'none',
     toEnd: 'none',
     appearance: EDGE_APPEARANCE,
+    jumps: [{ segment: 0, x: 50, y: 20 }],
   }
-  const jumps = computeEdgeJumps([earlier, laterDraft]).get(laterDraft.id)
-  const later: ResolvedEdgeNode = jumps !== undefined ? { ...laterDraft, jumps } : laterDraft
   return { nodes: [earlier, later] }
 }
 

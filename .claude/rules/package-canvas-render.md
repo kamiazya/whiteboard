@@ -55,10 +55,10 @@ Shapes are now a TABLE keyed by namespaced id (`ShapeTable`,
 `SpatialLayoutOptions.shapes` and `SvgDocumentOptions.shapes`, exactly as
 `icons` already worked.
 
-It cost less than the old paragraph implies because three of the four outline
-functions never knew a shape's name: `outlineContains` switches on the
-returned `NodeOutline`'s kind and `outlineEntryPoint` bisects against that.
-Only the geometry and the content box are per-shape — which is the whole of
+It cost less than the old paragraph implies because the outline functions
+never knew a shape's name: containment switches on the returned
+`NodeOutline`'s kind and edge anchoring bisects against that, both the Rust
+core's now. Only the geometry is per-shape — which is the whole of
 `ShapeContribution`.
 
 **Decorations are the second contribution point, and the cheap one.** A
@@ -766,9 +766,7 @@ the table alone.
     answer ahead of any load. `referenceTargets` is what to load (no
     pictures), `walkReferences` its loop; `overlayReferences`
     layers chrome (labels, dangling marks) for the layout worker and the main thread
-    alike. Both layouts accept the bundle as `references` and apply it under
-    the individual seams (`withReferenceSeams`), which stay for a test
-    probing one alone. `ReferenceWire` is the bundle as DATA — the graph
+    alike. Both layouts accept the bundle as `references`. `ReferenceWire` is the bundle as DATA — the graph
     plus the alias, title and extras tables over what it names — and
     `referenceSeamsFromWire` rebuilds it across a `postMessage`;
     `apps/web`'s editor builds its seams from the wire it posts, so the two
@@ -810,7 +808,7 @@ the table alone.
     (never a group, which is a frame), `groupFrame` on group chrome.
     A body's FURNITURE is themed with its prose: the palette's optional
     `markdownChrome` becomes the `MarkdownTheme`'s `chromeColor` for every
-    body the typesetter-options builder composes (`markdownTheme` in `theme-asset.ts`), so
+    body the core lays out, so
     a code panel, an inline-code backdrop, a blockquote rail, a table's rules
     and a task checkbox belong to the theme rather than to one bundled slate
     — a palette naming none keeps `#818b98`, which is what leaves every
@@ -821,9 +819,7 @@ the table alone.
     must be the measured one, so it is its own slice, recorded as a
     `ponytail:` on `markdown-theme.ts`'s stack. An
     unknown id draws clean and reports `unknown-theme`; nothing throws.
-    `createThemedAppearance` is memoized per (tokens, mode, family) so a
-    themed canvas keeps the frozen-singleton property the editor's `useMemo`
-    relies on. The content cache key carries the label family, because two
+    The core caches a themed resolver per (tokens, mode, family). The content cache key carries the label family, because two
     themes on one cache must not hand each other the other's wrapped lines —
     AND the resolved theme id, because the family alone does not identify a
     theme: `visual.neon` names no `fontFamily`, so a clean render and a neon
@@ -852,7 +848,7 @@ the table alone.
     **Ink** (decision #10's geometry half, `ink/sketch.ts`): a theme
     whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
     every DOCUMENT shape and edge the layout composes — a kind plus
-    `seedFromId(id)`, never coordinates, so translate/scale carry it
+    the core's `seed_from_id(id)`, never coordinates, so translate/scale carry it
     untouched and `sceneDigest` sees nothing. Comment and proposal chrome
     are built elsewhere and stay crisp on purpose: the annotation layer has
     to keep reading as chrome. `sketchShape` (rect, ellipse, polygon, the
@@ -1451,9 +1447,9 @@ edge inside a frame as a loop under both boxes with no side pinned. The
 column exists so that a change to the side choice is judged by it.
 
 **An edge label that would lie over a box slides off the line** —
-`edgeLabelPlacement` in `edge-label-anchor.ts`, the ONE producer for the
-renderer's label box and the editor's inline label editor alike, as
-`edgeLabelPlacement` already was for the midpoint. The midpoint stays unless a
+the core's label placement (`queryEdgeLabelPlacement` asks it), the ONE
+producer for the renderer's label box and the editor's inline label editor
+alike, as it already was for the midpoint. The midpoint stays unless a
 label of that size centred there overlaps a non-container node (its own
 endpoints included); then the nearest clear offset along the segment's
 normal wins, above or left before below or right, 8px steps to 128px, and

@@ -247,11 +247,11 @@ steps and cache paths to the scripts.
   `DigestError::InvalidGrid`. Reading a recorded scene needs `serde_json`'s
   `float_roundtrip` (its default parser is one ulp off on some doubles).
 - **The theme layer is held to a recording**: `packages/canvas-render/src/oracle/theme.jsonl`
-  holds what `createSpatialTheme`, `createThemedAppearance`, `paletteFromTokens` and
-  `markdownTheme` answered over every bundled theme, token shapes they do not reach and a
+  holds what `createSpatialTheme` and `paletteFromTokens` answer, and what the deleted
+  TypeScript themed resolver and markdown chrome answered, over every bundled theme, token shapes they do not reach and a
   node-kind by colour matrix, each double as its IEEE bits, and
-  `crates/core/canvas-render/tests/theme_oracle.rs` replays it; `WHITEBOARD_RECORD_ORACLE=1`
-  re-records. Not ported: the layout's read of a canvas's `visual.theme/v0` facet (it waits for
+  `crates/core/canvas-render/tests/theme_oracle.rs` replays it; `WHITEBOARD_RECORD_ORACLE=1` re-records
+  the parts the TypeScript still answers. Not ported: the layout's read of a canvas's `visual.theme/v0` facet (it waits for
   the composer). The TypeScript's module-level memo is a `ThemedAppearanceCache` per call site.
 - **The BudouX phrase breaker is held to a recording and a model generated once**:
   `crates/core/canvas-render/src/budoux/model.rs` was written from the vendored

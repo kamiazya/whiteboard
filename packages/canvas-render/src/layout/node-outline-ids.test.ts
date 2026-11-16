@@ -4,7 +4,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { ParagraphBlockNode, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
+import type { SceneNode, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
@@ -39,7 +39,8 @@ describe('the silhouette table read by node id', () => {
     expect(chrome).toBeDefined()
     expect(chrome?.shape).toBeUndefined()
     const block = scene.nodes.find(
-      (n): n is ParagraphBlockNode => n.kind === 'paragraph' && n.bbox.y >= 300,
+      (n): n is Extract<SceneNode, { kind: 'paragraph' }> =>
+        n.kind === 'paragraph' && n.bbox.y >= 300,
     )
     expect(block?.bbox.y).toBe(300 + PADDING_PX)
   })
