@@ -56,7 +56,8 @@ function markingCore(answer: MarkdownLayoutCore['layoutMarkdown']) {
     },
     markdown: {
       layoutMarkdown: (request, highlight, measure) => {
-        requests.push(request)
+        // The daemon renders notes; a comment's request never reaches this tool.
+        if (request.kind === 'markdown') requests.push(request)
         return answer(request, highlight, measure)
       },
     },

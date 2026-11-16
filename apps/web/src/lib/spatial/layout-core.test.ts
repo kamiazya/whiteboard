@@ -43,7 +43,11 @@ describe('createLayoutCoreHost', () => {
     expect(host.current()).toBeUndefined()
     const core = await host.ready()
     expect(core?.routing).toBe(routing)
-    expect(core?.impl).toEqual({ routeLayout: 'differential', layoutSpatialCanvas: 'ts' })
+    expect(core?.impl).toEqual({
+      routeLayout: 'differential',
+      layoutSpatialCanvas: 'ts',
+      layoutMarkdown: 'ts',
+    })
     expect(host.current()).toBe(core)
     await host.ready()
     expect(load).toHaveBeenCalledTimes(1)
@@ -62,7 +66,22 @@ describe('createLayoutCoreHost', () => {
     )
     const core = await host.ready()
     expect(core?.layout).toBe(routing)
-    expect(core?.impl).toEqual({ routeLayout: 'rust', layoutSpatialCanvas: 'differential' })
+    expect(core?.impl).toEqual({
+      routeLayout: 'rust',
+      layoutSpatialCanvas: 'differential',
+      layoutMarkdown: 'differential',
+    })
+  })
+
+  it('hands a markdown note to the same instance, under the whole layout switch', async () => {
+    const host = createLayoutCoreHost(
+      settings('rust', 'log', 'rust'),
+      async () => routing,
+      silent(),
+    )
+    const core = await host.ready()
+    expect(core?.markdown).toBe(routing)
+    expect(core?.impl.layoutMarkdown).toBe('rust')
   })
 
   it('warns and routes in TypeScript when the artifact cannot load', async () => {

@@ -1,3 +1,11 @@
+import {
+  type CoreMismatch,
+  constantRatioMeasureText,
+  type LayoutCore,
+  layoutMarkdownDocument,
+  type MarkdownNoteRequest,
+  type ReferenceSeams,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
@@ -8,6 +16,31 @@ import { type ReferenceLoader, useReferenceSeams } from './use-reference-seams.j
 
 const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 const C = '01BX5ZZKBKACTAV9WEVGEMMVS0'
+
+/** What the markdown switch hands a core for `body` over `references`, and what it reported. */
+function askCore(body: string, references: ReferenceSeams) {
+  const asked: MarkdownNoteRequest[] = []
+  const reports: CoreMismatch[] = []
+  const core: LayoutCore = {
+    routing: { routeLayout: () => ({ routes: [], anchors: new Map() }) as never },
+    markdown: {
+      layoutMarkdown: (request) => {
+        // A note's layout only: a comment never reaches these surfaces.
+        if (request.kind === 'markdown') asked.push(request)
+        return { declined: 'recording' }
+      },
+    },
+    impl: { routeLayout: 'ts', layoutMarkdown: 'rust' },
+    onMismatch: (report) => reports.push(report),
+  }
+  layoutMarkdownDocument(body, {
+    measure: constantRatioMeasureText,
+    maxWidth: 400,
+    references,
+    core,
+  })
+  return { asked, reports }
+}
 
 describe('useReferenceSeams', () => {
   it('loads a directly embedded note and answers it through every seam', async () => {
@@ -244,5 +277,52 @@ describe('useReferenceSeams', () => {
       expect(JSON.stringify(result.current.resolveEmbed(B))).toContain('late but wanted')
     })
     expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  describe('the bundle the Rust core can be handed', () => {
+    it('is a wire once nothing is in flight: the note, its picture and its link titles', async () => {
+      const load = vi.fn<ReferenceLoader>(async (_target, id) =>
+        id === B ? { documentId: B, body: 'embedded body', name: 'Note B' } : undefined,
+      )
+      const body = `![[${B}]]\n\nsee [[notes/other]] and ![shot](asset:pic)\n`
+      const { result } = renderHook(() =>
+        useReferenceSeams({
+          body,
+          resolveAlias: (alias) => (alias === 'notes/other' ? C : null),
+          resolveTitle: (id) => (id === C ? 'Other note' : undefined),
+          load,
+          loadImage: async (ref) => `blob:${ref}`,
+        }),
+      )
+      await waitFor(() => {
+        expect(result.current.resolveEmbed(B)).toBeDefined()
+        expect(result.current.resolveReference('asset:pic')).toBeDefined()
+      })
+      const { asked, reports } = askCore(body, result.current)
+      expect(reports.filter((r) => r.kind === 'skipped')).toEqual([])
+      expect(asked).toHaveLength(1)
+      const wire = asked[0]?.references as {
+        entries: readonly (readonly [string, unknown])[]
+        aliases: readonly (readonly [string, string])[]
+        titles: readonly (readonly [string, string])[]
+        extras: readonly (readonly [string, unknown])[]
+      }
+      expect(wire.entries.map(([key]) => key)).toEqual(expect.arrayContaining([B, 'notes/other']))
+      expect(wire.aliases).toContainEqual(['notes/other', C])
+      expect(wire.titles).toContainEqual([C, 'Other note'])
+      expect(wire.extras).toContainEqual(['asset:pic', { image: { href: 'blob:asset:pic' } }])
+      // The same answers the page's own tables gave.
+      expect(result.current.resolveAlias('notes/other')).toBe(C)
+      expect(result.current.resolveTitle(C)).toBe('Other note')
+    })
+
+    it('is not a wire while a load is in flight, since a wire cannot say "loading"', () => {
+      const load = vi.fn<ReferenceLoader>(() => new Promise(() => undefined))
+      const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
+      expect(result.current.isLoading?.(B)).toBe(true)
+      const { asked, reports } = askCore(`![[${B}]]`, result.current)
+      expect(asked).toEqual([])
+      expect(reports).toEqual([{ fn: 'layoutMarkdown', kind: 'skipped', reason: 'references' }])
+    })
   })
 })

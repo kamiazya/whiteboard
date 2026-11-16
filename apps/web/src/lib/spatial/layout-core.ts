@@ -82,7 +82,9 @@ function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMi
 /**
  * What one loaded instance answers: routing, and the whole layout under its
  * own switch, measured by the page's measurer through the core's host import;
- * nothing for a routing switch that reads `ts`.
+ * nothing for a routing switch that reads `ts`. A markdown note rides the
+ * whole layout's switch, as the daemon's does: a note embeds boards, so a
+ * rollback of one is a rollback of both.
  */
 function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): LayoutCore | undefined {
   return settings.impl === 'ts'
@@ -90,7 +92,12 @@ function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): Layout
     : {
         routing: core,
         layout: core,
-        impl: { routeLayout: settings.impl, layoutSpatialCanvas: settings.layout },
+        markdown: core,
+        impl: {
+          routeLayout: settings.impl,
+          layoutSpatialCanvas: settings.layout,
+          layoutMarkdown: settings.layout,
+        },
         onMismatch: layoutReporter(settings, log),
       }
 }

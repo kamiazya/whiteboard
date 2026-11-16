@@ -240,8 +240,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "where the daemon reads the staged wasm by default; exported so layout-core.test.ts asserts CI staged it at the SAME path, rather than a second spelling of the path that could drift from the loader's",
   'apps/web/src/lib/spatial/layout-core.ts#createLayoutCoreHost':
     "the host a realm installs, built from the build's environment (`installLayoutCore`); exported so its load-failure and mismatch policy is driven with a fake source and each setting, which the baked-in environment cannot vary within one run",
-  'packages/canvas-render/src/layout/edges/layout-core.ts#CoreImpl':
-    "the switch a composition root sets per ported function in `SpatialLayoutOptions.core` (ADR-0054's CoreImpl); the roots set it in ADR-0054 step 5's next slice, and the switch's own tests drive each value",
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
     'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels':

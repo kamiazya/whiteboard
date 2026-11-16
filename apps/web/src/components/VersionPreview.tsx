@@ -61,7 +61,7 @@ export function VersionPreview({
   const measure = useMemo(() => createBrowserMeasureText(), [])
   // Typeset as the editor typesets: a formula drawn as source here would
   // read as a change in what the version holds.
-  const { seams } = useMarkdownFragments(fragmentLoaders)
+  const { seams, table } = useMarkdownFragments(fragmentLoaders)
   // The viewer lays out what it is given and knows no library; colour by
   // intent is applied to the canvas, as the layout itself applies it, so the
   // legend (derived from the tags and colours the canvas carries) follows.
@@ -80,7 +80,7 @@ export function VersionPreview({
           maxWidth={maxWidth}
           measure={measure}
           theme={theme}
-          {...seams}
+          fragments={table}
         />
       </div>
     )

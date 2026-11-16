@@ -167,8 +167,7 @@ export function PreviewColumn({
   measure,
   theme,
   references,
-  renderMath,
-  renderDiagram,
+  fragments,
   tagLibrary,
   onToggleTask,
 }: {
@@ -188,8 +187,7 @@ export function PreviewColumn({
   measure: Parameters<typeof PreviewPane>[0]['measure']
   theme: Parameters<typeof PreviewPane>[0]['theme']
   references: Parameters<typeof PreviewPane>[0]['references']
-  renderMath: Parameters<typeof PreviewPane>[0]['renderMath']
-  renderDiagram: Parameters<typeof PreviewPane>[0]['renderDiagram']
+  fragments: Parameters<typeof PreviewPane>[0]['fragments']
   tagLibrary: Parameters<typeof PreviewPane>[0]['tagLibrary']
   onToggleTask: Parameters<typeof PreviewPane>[0]['onToggleTask']
 }) {
@@ -227,8 +225,7 @@ export function PreviewColumn({
             measure={measure}
             theme={printing ? 'light' : theme}
             references={references}
-            renderMath={renderMath}
-            renderDiagram={renderDiagram}
+            fragments={fragments}
             tagLibrary={tagLibrary}
             anchorsRef={anchorsRef}
             blocksRef={blocksRef}
