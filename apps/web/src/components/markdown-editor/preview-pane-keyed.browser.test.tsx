@@ -1,15 +1,16 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
+import { hostMeasure } from '../../test-utils/fake-measure.js'
 import { PreviewPane } from './PreviewPane'
 
 afterEach(cleanup)
 
-const measure = (text: string) => ({
+const measure = hostMeasure((text: string) => ({
   advanceWidth: text.length * 6,
   ascent: 10,
   descent: 3,
   lineGap: 3,
-})
+}))
 
 it('editing one block patches only that block: the untouched group keeps its DOM element', async () => {
   const { container, rerender } = render(

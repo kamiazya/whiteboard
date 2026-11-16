@@ -182,9 +182,7 @@ it('a hand-tool press pans from any point on the canvas, at any pan and zoom', a
         size: { width: ROOT_W, height: ROOT_H },
         editorProps: {
           fileRefOptions: [{ file: 'ref-1', label: 'Referenced canvas' }],
-          references: referenceWire(new Map(), {
-            extras: new Map([['ref-1', { canvas: referenced }]]),
-          }),
+          references: referenceWire(new Map([['ref-1', { canvas: referenced }]])),
         },
       })
       const { container } = render(<Host />)

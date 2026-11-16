@@ -7,7 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { fakeMeasure } from '../../test-utils/fake-measure.js'
+import { fakeMeasure, hostMeasure } from '../../test-utils/fake-measure.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -112,7 +112,7 @@ it('drops the live layers and commits the resize on release', async () => {
 })
 
 it('perf invariant: resize moves after the first re-invoke measure zero times', async () => {
-  const measure = vi.fn(fakeMeasure)
+  const measure = hostMeasure(vi.fn(fakeMeasure))
   const { Host } = makeEditorHost({
     initial: start,
     size: { width: 900, height: 700 },

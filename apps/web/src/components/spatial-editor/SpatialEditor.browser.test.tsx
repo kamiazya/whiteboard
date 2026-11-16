@@ -18,10 +18,11 @@ import '../../index.css'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { ZOOM_WHEEL_FACTOR } from '../../lib/spatial/viewport.js'
+import { hostMeasure } from '../../test-utils/fake-measure.js'
 import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
-const fakeMeasure = createFixedMeasure({ advance: 30, ascent: 10, descent: 2 })
+const fakeMeasure = hostMeasure(createFixedMeasure({ advance: 30, ascent: 10, descent: 2 }))
 
 function twoNodeCanvas(): SpatialCanvas {
   return {
@@ -993,7 +994,7 @@ describe('SpatialEditor (browser)', () => {
 
   it('perf invariant: pointer moves re-invoke neither measure nor the committed layout', async () => {
     const onChange = vi.fn()
-    const measure = vi.fn(fakeMeasure)
+    const measure = hostMeasure(vi.fn(fakeMeasure))
     const { container } = render(
       <div style={{ width: 600, height: 400 }}>
         <SpatialEditor

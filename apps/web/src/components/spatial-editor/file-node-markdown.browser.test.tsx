@@ -12,16 +12,13 @@ import { fileNode } from '@kamiazya/whiteboard-model/test-utils'
  * every unit test passed while it was broken.
  */
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { DOCUMENT_NODE_HEIGHT, DOCUMENT_NODE_WIDTH } from './node-factories.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
-const BODY = parseMarkdownBody(
-  '# Weekly notes\n\nShipped the markdown file node.\n\n- image beats markdown\n',
-)
+const BODY = '# Weekly notes\n\nShipped the markdown file node.\n\n- image beats markdown\n'
 
 const CARD = { title: 'the facet card title', rows: [{ label: 'type', value: 'note' }] }
 
@@ -54,7 +51,7 @@ describe('a file node referencing a markdown document', () => {
         theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceWire(new Map(), { extras: new Map([['notes', { markdown: BODY }]]) })}
+        references={referenceWire(new Map([['notes', { body: BODY }]]))}
       />,
     )
 
@@ -69,8 +66,8 @@ describe('a file node referencing a markdown document', () => {
         theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceWire(new Map(), {
-          extras: new Map([['notes', { markdown: BODY, facets: CARD }]]),
+        references={referenceWire(new Map([['notes', { body: BODY }]]), {
+          extras: new Map([['notes', { facets: CARD }]]),
         })}
       />,
     )
@@ -93,15 +90,13 @@ describe('a file node referencing a markdown document', () => {
   })
 
   it('paints nothing below the node box, however long the body', async () => {
-    const long = parseMarkdownBody(
-      Array.from({ length: 60 }, (_, i) => `paragraph number ${i}`).join('\n\n'),
-    )
+    const long = Array.from({ length: 60 }, (_, i) => `paragraph number ${i}`).join('\n\n')
     const { container } = render(
       <SpatialEditor
         theme="light"
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceWire(new Map(), { extras: new Map([['notes', { markdown: long }]]) })}
+        references={referenceWire(new Map([['notes', { body: long }]]))}
       />,
     )
 
