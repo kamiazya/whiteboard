@@ -16,7 +16,7 @@
 // error anywhere. The output guard converts "every computed position is NaN"
 // into "nothing moved", which is the quietest failure a button has.
 import { describe, expect, it } from 'vitest'
-import { fullyContains } from './layout/edges/edge-rules.js'
+import { fullyContains } from './containment.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import { tidyNodes } from './tidy.js'
 import { mostlyInside, type Rect, type TidyNode } from './tidy-units.js'

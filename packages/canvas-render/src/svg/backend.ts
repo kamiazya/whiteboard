@@ -12,7 +12,7 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { isFiniteBox } from '../finite-box.js'
-import type { ShapeTable } from '../layout/nodes/node-outline.js'
+import type { ShapeTable } from '../outline/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
 import { TEXT_HALO_PAD_PX } from '../theme/text-halo.js'
 import { documentHref, embedHref } from './document-href.js'

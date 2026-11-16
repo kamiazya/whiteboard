@@ -1,8 +1,8 @@
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
+import { commentAnchor } from '../comment-geometry.js'
 import {
   commentBubbleCandidates,
   commentLeaderEnd,
-  nearestPointOnPolyline,
   placeCommentBubble,
 } from '../layout/comment-placement.js'
 import type { Point } from '../layout/edges/edge-geometry.js'
@@ -96,7 +96,11 @@ function leader(anchor: Pt, bubble: Box, radius: number): CommentPlacementRecord
 }
 
 function nearest(at: Pt, path: readonly Pt[]): CommentPlacementRecord {
-  const answer = nearestPointOnPolyline(toPoint(at), path.map(toPoint))
+  // Through `commentAnchor`, the public answer an edge comment's pin stands
+  // at: the stored point re-projected onto the edge's drawn path.
+  const [x, y] = at
+  const comment = { id: 'c', x, y, text: 'c', targetEdgeId: 'e' }
+  const answer = commentAnchor(comment, { nodes: [], edges: [] }, () => path.map(toPoint))
   return {
     kind: 'nearest',
     point: point(toPoint(at)),

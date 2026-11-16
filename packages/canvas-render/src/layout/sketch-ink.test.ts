@@ -9,11 +9,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { seedFromId } from '../ink/seed.js'
 import { sceneDigest } from '../scene-digest.js'
 import { type CommentBoard, layoutBoard } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { seedFromId } from './seed.js'
 import type { RenderContribution, SpatialLayoutOptions } from './spatial-canvas.js'
 
 const PENCIL: ThemeTokens = { ...SAMPLE_THEME_TOKENS, ink: 'sketch', defaults: {} }

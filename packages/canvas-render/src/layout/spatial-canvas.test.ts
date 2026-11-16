@@ -14,10 +14,10 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it, vi } from 'vitest'
+import { outlineContains } from '../outline/node-outline.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
-import { outlineContains } from './nodes/node-outline.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
 import {
   layoutSpatialCanvas,

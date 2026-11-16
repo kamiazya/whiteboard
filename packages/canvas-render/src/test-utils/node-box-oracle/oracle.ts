@@ -2,6 +2,7 @@ import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { VISUAL_THEMES } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import { seedFromId } from '../../ink/seed.js'
 import type { ResolvedLayoutOptions } from '../../layout/layout-options.js'
 import {
   chromeShape,
@@ -14,10 +15,9 @@ import {
   placeAboveNode,
   placeInNode,
 } from '../../layout/node-box.js'
-import { BUNDLED_SHAPE_TABLE } from '../../layout/nodes/node-outline.js'
-import { seedFromId } from '../../layout/seed.js'
 import { translateScene } from '../../layout/translate-scene.js'
 import type { FontDescriptor, TextMetrics } from '../../measure.js'
+import { BUNDLED_SHAPE_TABLE } from '../../outline/node-outline.js'
 import type { ResolvedReference } from '../../references/resolved.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { createThemedAppearance } from '../../theme/theme-asset.js'

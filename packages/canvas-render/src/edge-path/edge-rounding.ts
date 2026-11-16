@@ -1,4 +1,4 @@
-import type { Point } from './edge-geometry.js'
+import type { Point } from '../generated/geometry.zod.js'
 
 // The single definition of how a rounded edge's corners are shaped. The SVG
 // backend serializes these corners as quadratic Béziers; the editor flattens

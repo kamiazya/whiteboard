@@ -1,5 +1,6 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
+import { outlineContentBox } from '../outline/node-outline.js'
 import type { QueryBox, QueryNumbers } from '../query-core.js'
 import { placeCommentBubble, type Size } from './comment-placement.js'
 import type { Point } from './edges/edge-geometry.js'
@@ -11,7 +12,6 @@ import {
   labelObstacles,
 } from './edges/edge-label-anchor.js'
 import type { LayoutCore } from './edges/layout-core.js'
-import { outlineContentBox } from './nodes/node-outline.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
 
 // The geometry an editor asks of the layout on its own (ADR-0054 step 7,

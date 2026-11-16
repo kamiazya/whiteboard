@@ -13,9 +13,9 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { outlineContains, resolveShapeTable } from '../outline/node-outline.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { outlineContains, resolveShapeTable } from './nodes/node-outline.js'
 import {
   layoutSpatialCanvas,
   type RenderContribution,

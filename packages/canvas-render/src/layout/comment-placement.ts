@@ -31,11 +31,9 @@
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
+import { COMMENT_BUBBLE_OFFSET_PX } from '../comment-geometry.js'
 import { cos, sin } from '../det-math.js'
 import type { Point } from './edges/edge-geometry.js'
-
-/** Gap (px) from the anchor point to the bubble's nearest corner. */
-export const COMMENT_BUBBLE_OFFSET_PX = 14
 
 export interface Size {
   readonly w: number
@@ -155,33 +153,4 @@ function coveredArea(box: BoundingBox, obstacles: readonly BoundingBox[]): numbe
     if (w > 0 && h > 0) sum += w * h
   }
   return sum
-}
-
-/**
- * The point of a polyline nearest to `point` — where a comment about an
- * edge is pinned: the reader pressed somewhere near the line, and the pin
- * sits ON it, re-projected from the stored point each layout so it rides a
- * reroute. An empty path answers the point itself.
- */
-export function nearestPointOnPolyline(point: Point, path: readonly Point[]): Point {
-  let best = point
-  let bestDistance = Number.POSITIVE_INFINITY
-  for (let i = 0; i < path.length; i += 1) {
-    const a = path[i] as Point
-    const b = path[i + 1] ?? a
-    const dx = b.x - a.x
-    const dy = b.y - a.y
-    const lengthSquared = dx * dx + dy * dy
-    const t =
-      lengthSquared === 0
-        ? 0
-        : Math.max(0, Math.min(1, ((point.x - a.x) * dx + (point.y - a.y) * dy) / lengthSquared))
-    const candidate = { x: a.x + t * dx, y: a.y + t * dy }
-    const distance = (candidate.x - point.x) ** 2 + (candidate.y - point.y) ** 2
-    if (distance < bestDistance) {
-      best = candidate
-      bestDistance = distance
-    }
-  }
-  return best
 }

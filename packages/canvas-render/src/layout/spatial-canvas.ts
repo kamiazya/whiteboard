@@ -49,8 +49,10 @@ import type {
   SceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
+import { flattenDrawnEdgePath } from '../edge-path/edge-flatten.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { canvasLegend } from '../legend/canvas-legend.js'
+import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from '../outline/node-outline.js'
 import { withReferenceSeams } from '../references/seams.js'
 import { withDeclaredColours } from '../tags/declared-colours.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
@@ -59,7 +61,6 @@ import { createThemedAppearance } from '../theme/theme-asset.js'
 import { layoutThroughCore } from './canvas-switch.js'
 import { canvasTheme, resolveThemeTable, themeFace } from './canvas-theme.js'
 import { composeComments, composeRegionOutlines, regionsOf } from './comments.js'
-import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import type { Point } from './edges/edge-geometry.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import {
@@ -75,20 +76,25 @@ import { withFragmentTable } from './fragment-table.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
 import { labelOf, labelRuns } from './node-box.js'
 import { createNestedLayoutBudget } from './nodes/embed-budget.js'
-import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from './nodes/node-outline.js'
 import { nodePassagesOf } from './passage-highlight.js'
 import { composeProposals } from './proposals.js'
 import { edgesThroughCore, naturalSizeThroughCore } from './query-switch.js'
 
 export {
-  COMMENT_TEXT_MAX_WIDTH_PX,
   type CommentBodyLayoutOptions,
   layoutCommentBody,
 } from './comment-body.js'
 
-import { compareNumbers } from '../det-math.js'
+import { paintOrderOf } from '../paint-order.js'
 
-export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
+export {
+  COMMENT_BUBBLE_OFFSET_PX,
+  COMMENT_BUBBLE_PADDING_PX,
+  COMMENT_BUBBLE_RADIUS_PX,
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  commentAnchor,
+  type EdgePathLookup,
+} from '../comment-geometry.js'
 
 /**
  * Resolves the effective geometry for one `layoutSpatialCanvas` call.
@@ -524,23 +530,6 @@ function composeDecorations(
   return decorations.flatMap((decorate) => decorate(node, context))
 }
 
-/**
- * Containers paint BEHIND what they hold, whatever order the canvas lists
- * them in: every group first, a larger one before a smaller (an outer group
- * before the one inside it), then everything else in stored order.
- * Stored order is a map's id order, not the order a caller wrote, so a group
- * whose id sorted after a member's painted over it once it had a colour —
- * four of eleven boxes vanished from a diagram whose grader, reading the
- * store, passed it. Equal boxes keep their stored order (the sort is
- * stable). Exported so the web app's hit-test index reads the same order.
- */
-export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
-  const groups = nodes
-    .filter((node) => isFrame(node))
-    .sort((a, b) => compareNumbers(b.width * b.height, a.width * a.height))
-  return [...groups, ...nodes.filter((node) => !isFrame(node))]
-}
-
 function emptyFrameIdsOf(canvas: SpatialCanvas): ReadonlySet<string> {
   return new Set(
     canvas.nodes
@@ -783,13 +772,7 @@ function resolveNodeOutlines(
 // here because this file has been the package's layout barrel since before
 // they were split out, and a move that also rewrote every importer would be
 // two changes in one diff.
-export {
-  COMMENT_BUBBLE_PADDING_PX,
-  COMMENT_BUBBLE_RADIUS_PX,
-  COMMENT_PIN_SIZE_PX,
-  commentAnchor,
-  type EdgePathLookup,
-} from './comments.js'
+export { COMMENT_PIN_SIZE_PX } from './comments.js'
 export type {
   SpatialContentCache,
   SpatialLayoutDegradation,

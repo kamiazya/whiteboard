@@ -23,13 +23,16 @@ import {
   spatialAnchorRect,
 } from '@kamiazya/whiteboard-model'
 import type { Appearance, BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
-import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
-import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import {
-  commentLeaderEnd,
-  nearestPointOnPolyline,
-  placeCommentBubble,
-} from './comment-placement.js'
+  COMMENT_BUBBLE_PADDING_PX,
+  COMMENT_BUBBLE_RADIUS_PX,
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  commentAnchor,
+  type EdgePathLookup,
+} from '../comment-geometry.js'
+import type { SpatialCommentAppearance } from '../theme/spatial-appearance.js'
+import { layoutCommentBody } from './comment-body.js'
+import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
 import type { RegionChrome, ResolvedLayoutOptions } from './layout-options.js'
 import { firstLineOfBlocks } from './nodes/mdast-blocks.js'
 import { contentExtent } from './scene-extent.js'
@@ -58,43 +61,6 @@ const COMMENT_PIN_COUNT_FONT_PX = 10
 // Exported with the offset so the editor's compose bubble can wear the same
 // box the renderer draws (padding, corner) — the draft and the settled
 // comment are one object, not two that happen to look alike.
-export const COMMENT_BUBBLE_PADDING_PX = 8
-export const COMMENT_BUBBLE_RADIUS_PX = 8
-
-/** The routed path of an edge, by id, as the layout drew it — absent when the edge is gone. */
-export type EdgePathLookup = (edgeId: string) => readonly { x: number; y: number }[] | undefined
-
-/**
- * Where a comment points: the target node's top-right corner while the node
- * exists (the pin FOLLOWS the node); the point of the target edge's routed
- * path nearest the stored anchor while the edge exists (the pin RIDES the
- * edge through a reroute); the stored anchor otherwise. The fallback is what
- * makes a dangling target harmless, per the model's contract that a comment
- * may outlive its subject.
- *
- * Exported because the editor places its compose bubble and its edit bubble
- * at the same anchor this layer draws from — one producer for the geometry,
- * so the draft cannot open one place and settle another. The editor passes
- * the paths it already flattened for hit-testing as `edgePathOf`; without
- * one, an edge comment stands at its stored point.
- */
-export function commentAnchor(
-  comment: CanvasComment,
-  canvas: SpatialCanvas,
-  edgePathOf?: EdgePathLookup,
-): { readonly x: number; readonly y: number } {
-  if (comment.targetNodeId !== undefined) {
-    const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
-    if (target !== undefined) return commentCornerOf(target)
-  }
-  if (comment.targetEdgeId !== undefined) {
-    const path = edgePathOf?.(comment.targetEdgeId)
-    if (path !== undefined && path.length > 0) {
-      return nearestPointOnPolyline({ x: comment.x, y: comment.y }, path)
-    }
-  }
-  return { x: comment.x, y: comment.y }
-}
 
 /** A node set or region thread, with the box it stands for on this canvas. */
 

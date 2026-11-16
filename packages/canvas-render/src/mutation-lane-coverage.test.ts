@@ -81,7 +81,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // the memo test on a fresh object per call. A mutation score would count
     // 30 property copies.
     //
-    // 60 and 11 since `layout/ink/sketch.ts`, which the lane DOES cover: its
+    // 60 and 11 since `ink/sketch.ts`, which the lane DOES cover: its
     // reach and determinism claims are properties, exactly what a survivor
     // would expose as decorative.
     //
@@ -89,7 +89,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // the paint helpers and the shape/edge renderers it had grown past its
     // line ceiling with. Not in the lane — their properties are the
     // byte-identical SVG tests, which are examples.
-    // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
+    // 61 since `ink/glow.ts`: one arithmetic line pinned by
     // `glow.test.ts`'s bounds assertion, which fails on any other reach.
     //
     // 62 since `scene-graph.ts` LEFT this package for `@kamiazya/whiteboard-
@@ -436,7 +436,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // seam's reason: a dispatch and a request built from options,
     // every branch driven by `layout/canvas-switch.test.ts`, and it goes when
     // the TypeScript layout does.
-    // 132 with `layout/nodes/fragment-ask.ts` (a schema and one key) and
+    // 132 with `fragment-ask.ts` (a schema and one key) and
     // `layout/fragment-table.ts`, rendered math and diagrams as a table.
     // Outside the lane for the same reason: one wrapper and the switch's
     // handling of what it asked, every branch driven by
@@ -459,9 +459,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // and the one box that draws them. Outside the lane for the same reason:
     // every branch driven by `refusal.test.ts` and the switches' tests, and
     // mutation-checked by hand.
+    // 143 with three modules moved out of `layout/` ahead of its deletion
+    // (S18h1): `containment.ts` (`fullyContains`, out of `edge-rules.ts`) and
+    // `comment-geometry.ts` (`nearestPointOnPolyline` out of
+    // `comment-placement.ts`, with `commentAnchor` and the bubble constants)
+    // join the lane, since both files they left were in it and leaving them
+    // out would shrink what it sees; `paint-order.ts` (`paintOrderOf`, out of
+    // `spatial-canvas.ts`, which never was) stays outside, its three branches
+    // driven by `paint-order.test.ts`.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 25,
-      production: 140,
+      mutated: 27,
+      production: 143,
     })
   })
 
@@ -516,6 +524,6 @@ describe('the mutation lane covers what it says it covers', () => {
     // Pinned rather than left to the comment beside it: this exclusion is the
     // one that would look like an oversight to the next reader, and re-adding
     // it puts known-wrong rows in front of an author.
-    expect(MUTATED).not.toContain('src/layout/seed.ts')
+    expect(MUTATED).not.toContain('src/ink/seed.ts')
   })
 })

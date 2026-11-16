@@ -12,7 +12,7 @@ import { type CanvasEdge, isFiniteRect } from '@kamiazya/whiteboard-model'
 // 1631 canvas-render tests green (measured before deleting it). Occlusion
 // and frame membership ask the same geometric question, and a second copy is
 // only a second thing that can be wrong.
-import { fullyContains } from '../../layout/edges/edge-rules.js'
+import { fullyContains } from '../../containment.js'
 /**
  * What a tidy is about: the boxes, the OPTIONS a caller sets, and the UNITS
  * the passes actually move — an outermost frame and everything more than

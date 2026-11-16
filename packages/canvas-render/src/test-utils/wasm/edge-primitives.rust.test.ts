@@ -1,6 +1,7 @@
 import { edgeSideSchema } from '@kamiazya/whiteboard-model'
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
+import { flattenRoundedEdgePath } from '../../edge-path/edge-rounding.js'
 import { diagonalInkThrough } from '../../layout/edges/diagonal-ink.js'
 import {
   boundingBoxOf,
@@ -26,7 +27,6 @@ import {
   selfRetracedInk,
   tunnelledInk,
 } from '../../layout/edges/edge-ink.js'
-import { flattenRoundedEdgePath } from '../../layout/edges/edge-rounding.js'
 import { segmentIntersection } from '../../layout/edges/segment-intersection.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
 import { coordinate, firstDifference, pathAndRects, point, rect } from './edge-arbitraries.js'

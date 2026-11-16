@@ -1,5 +1,5 @@
 //! The rounded corner decomposition: canvas-render's
-//! `layout/edges/edge-rounding.ts`, ported function for function. Plain
+//! `edge-path/edge-rounding.ts`, ported function for function. Plain
 //! arithmetic in the TypeScript's own evaluation order, so nothing here needs
 //! a JS semantics helper.
 

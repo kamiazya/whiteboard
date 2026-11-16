@@ -1,6 +1,8 @@
 import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
+import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from '../fragment-ask.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MarkdownCommentRequest, MarkdownNoteRequest } from '../markdown-core.js'
 import { type MeasureText, measureSpecOf } from '../measure.js'
@@ -11,15 +13,10 @@ import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
 import { createSpatialTheme, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
-import {
-  COMMENT_TEXT_MAX_WIDTH_PX,
-  type CommentBodyLayoutOptions,
-  layoutCommentBody,
-} from './comment-body.js'
+import { type CommentBodyLayoutOptions, layoutCommentBody } from './comment-body.js'
 import type { LayoutCore } from './edges/layout-core.js'
 import type { SpatialRenderStyle } from './layout-options.js'
 import { layoutMdastBlocks } from './markdown-body.js'
-import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from './nodes/fragment-ask.js'
 import type { RenderedSvgFragment } from './nodes/mdast-layout-options.js'
 import { selectMarkdownSection } from './nodes/mdast-section.js'
 

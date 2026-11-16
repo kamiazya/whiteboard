@@ -495,7 +495,7 @@ dry run and re-selects them by title for each mutant, and `@fast-check/vitest`
 writes the run's seed into a property's title — `... (with seed=-114829609)` —
 drawn fresh per process unless fast-check has a global seed. So every property
 in the lane had a title the mutant runs could not find. Measured on
-`layout/ink/sketch.ts` (478 mutants): three survivors judged by 0 tests (the
+`ink/sketch.ts` (478 mutants): three survivors judged by 0 tests (the
 `case 'polygon':` arm and its two literals, each listed as covered by the two
 properties that draw a polygon), 46 judged by three or fewer, 184 survivors in
 all. `vitest.stryker-setup.ts` now pins the seed for the lane's config alone

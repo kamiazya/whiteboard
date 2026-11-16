@@ -1,5 +1,6 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
+import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import type {
   MarkdownCommentRequest,
@@ -16,7 +17,7 @@ import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable } from './canvas-switch.js'
-import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
+import { layoutCommentBody } from './comment-body.js'
 import { layoutMdastBlocks } from './markdown-body.js'
 import {
   layoutCommentDocument,
