@@ -1,5 +1,5 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import type { FenceHighlighter, FenceRow, FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, type FenceRow, FenceTokenMemo } from './fence-tokens.js'
 import type { FontHandles, FontsGlue, LayoutFaces } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS, type RefusalCode } from './generated/input-caps.js'
 import { type HostMeasure, type HostMeasurer, hostMeasurerOf } from './host-measure.js'
@@ -328,6 +328,14 @@ export function layoutMarkdown(
   hostMeasure?: HostMeasure,
   surface?: number,
 ): MarkdownLayoutAnswer {
+  // A comment's request reads neither fences' tokens, since its prose is
+  // coloured by nothing, nor a content cache, since it embeds no board; the
+  // core reads strictly, so neither is sent, whatever a note on this core left
+  // in the memo or the caller hands as `surface`.
+  if (request.kind === 'comment') {
+    const calls = { glue, errors, highlight, memo: new FenceTokenMemo(), fonts }
+    return layoutWith(calls, request, markdownAnswerOf, hostMeasure, undefined)
+  }
   const calls = { glue, errors, highlight, memo, fonts }
   return layoutWith(calls, request, markdownAnswerOf, hostMeasure, surface)
 }
