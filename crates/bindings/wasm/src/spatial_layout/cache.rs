@@ -9,9 +9,10 @@
 //! surface stands for the caller's cache object, so what the caller's contract
 //! keeps out of the key (the reference wire, the measurer's fonts, the theme)
 //! is kept out here the same way: a caller that changes one hands a new cache,
-//! and so names a new surface. The measurer the request names and its mode are
-//! in the key besides, so a body measured by the host is never served to a
-//! layout measured from a font table, nor a light body to a dark layout.
+//! and so names a new surface. The measurer the request names, its mode and its
+//! geometry are in the key besides, so a body measured by the host is never
+//! served to a layout measured from a font table, a light body to a dark
+//! layout, nor a body fitted inside one padding to a box with another.
 //!
 //! One layout's writes are held back and kept only once it is answered, or
 //! asks for fences to tokenise: a layout declined (its host measurer failed,
@@ -25,6 +26,7 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::compose_node::ContentCache;
+use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::typeset::FittedBlocks;
 
 use super::MAX_BODY_BYTES;
@@ -172,7 +174,8 @@ fn measurer_of(spec: &MeasureSpec) -> String {
 /// [`Surface::keep`].
 pub(super) struct Surface {
     id: u32,
-    /// The measurer and the mode, ahead of the composer's key, which starts `[`.
+    /// The measurer, the mode and the request's geometry, ahead of the
+    /// composer's key, which starts `[`.
     prefix: String,
     /// This layout's writes, uncapped: one layout writes at most a body per
     /// element, and the store's caps apply as they are kept.
@@ -180,9 +183,17 @@ pub(super) struct Surface {
 }
 
 impl Surface {
-    pub(super) fn new(id: u32, measure: &MeasureSpec, dark: bool) -> Self {
+    pub(super) fn new(
+        id: u32,
+        measure: &MeasureSpec,
+        dark: bool,
+        geometry: Option<&SpatialGeometry>,
+    ) -> Self {
         let mode = if dark { "dark" } else { "light" };
-        let prefix = format!("{}|{mode}|", measurer_of(measure));
+        let geometry = geometry.map_or_else(String::new, |g| {
+            format!("{},{},{}", g.padding_px, g.label_font_size_px, g.min_content_width_px)
+        });
+        let prefix = format!("{}|{mode}|{geometry}|", measurer_of(measure));
         Self { id, prefix, written: RefCell::new(Resident::new(usize::MAX, usize::MAX)) }
     }
 

@@ -1,4 +1,5 @@
 use serde_json::{Value as Json, json};
+use whiteboard_canvas_render::theme::geometry::SpatialGeometry;
 use whiteboard_canvas_render::typeset::FittedBlocks;
 use whiteboard_proptest::proptest::prelude::*;
 use whiteboard_proptest::{Floor, check};
@@ -153,7 +154,7 @@ fn the_instance_caps_bound_the_bodies_and_their_text() {
 }
 
 #[test]
-fn a_key_names_the_measurer_and_the_mode() {
+fn a_key_names_the_measurer_the_mode_and_the_geometry() {
     let names = [
         measurer_of(&MeasureSpec::Fake(0.6)),
         measurer_of(&MeasureSpec::Fake(0.5)),
@@ -163,24 +164,28 @@ fn a_key_names_the_measurer_and_the_mode() {
         measurer_of(&MeasureSpec::Host),
     ];
     assert_eq!(names, ["fake:0.6", "fake:0.5", "ratio", "fonts:1", "fonts:2", "host"]);
-    let light = Surface::new(7, &MeasureSpec::Host, false);
-    let dark = Surface::new(7, &MeasureSpec::Host, true);
-    assert_eq!(light.key("[1]"), "host|light|[1]");
-    assert_eq!(dark.key("[1]"), "host|dark|[1]");
+    let light = Surface::new(7, &MeasureSpec::Host, false, None);
+    let dark = Surface::new(7, &MeasureSpec::Host, true, None);
+    assert_eq!(light.key("[1]"), "host|light||[1]");
+    assert_eq!(dark.key("[1]"), "host|dark||[1]");
+    let geometry =
+        SpatialGeometry { padding_px: 8.0, label_font_size_px: 16.5, min_content_width_px: 0.0 };
+    let sized = Surface::new(7, &MeasureSpec::Host, false, Some(&geometry));
+    assert_eq!(sized.key("[1]"), "host|light|8,16.5,0|[1]");
 }
 
 #[test]
 fn a_layout_reads_its_own_writes_and_keeps_them_only_when_told() {
     let surface_id = 0x5150_0001;
-    let surface = Surface::new(surface_id, &MeasureSpec::Ratio, false);
+    let surface = Surface::new(surface_id, &MeasureSpec::Ratio, false, None);
     surface.set("[k]", &body(3));
     assert_eq!(surface.get("[k]"), Some(body(3)));
     assert_eq!(resident().kept_by(surface_id), 0);
     surface.keep();
-    assert!(resident().holds(surface_id, "ratio|light|[k]"));
-    let next = Surface::new(surface_id, &MeasureSpec::Ratio, false);
+    assert!(resident().holds(surface_id, "ratio|light||[k]"));
+    let next = Surface::new(surface_id, &MeasureSpec::Ratio, false, None);
     assert_eq!(next.get("[k]"), Some(body(3)));
-    assert_eq!(Surface::new(surface_id, &MeasureSpec::Ratio, true).get("[k]"), None);
+    assert_eq!(Surface::new(surface_id, &MeasureSpec::Ratio, true, None).get("[k]"), None);
     assert!(release_layout_cache(surface_id));
     assert!(!release_layout_cache(surface_id));
 }
@@ -295,4 +300,28 @@ fn a_key_is_hashed_as_fnv_1a_hashes_it() {
     assert_eq!(super::hash_of(""), 0xcbf2_9ce4_8422_2325);
     assert_eq!(super::hash_of("a"), 0xaf63_dc4c_8601_ec8c);
     assert_ne!(super::hash_of("ab"), super::hash_of("ba"));
+}
+
+/// A geometry override on the value wire, at `padding`.
+fn geometry(padding: &str) -> Json {
+    let float = |hex: &str| json!(["f", hex]);
+    m(&[
+        ("paddingPx", float(padding)),
+        ("labelFontSizePx", float("4030000000000000")),
+        ("minContentWidthPx", json!(0)),
+    ])
+}
+
+#[test]
+fn a_body_fitted_under_one_geometry_is_never_served_under_another() {
+    let surface = 0x5150_0006;
+    let body = "# Heading\n\nA paragraph long enough to wrap at either padding.";
+    let (eight, forty) = (geometry("4020000000000000"), geometry("4044000000000000"));
+    lay(surface, body, &[("geometry", eight)]);
+    let warm = lay(surface, body, &[("geometry", forty.clone())]);
+    let fresh = lay(surface + 1, body, &[("geometry", forty)]);
+    assert_eq!(warm.get(0), Some(&json!("ok")), "{warm}");
+    assert_eq!(warm, fresh);
+    assert!(release_layout_cache(surface));
+    assert!(release_layout_cache(surface + 1));
 }

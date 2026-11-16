@@ -373,7 +373,9 @@ pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     if request.font_families.len() > themes.len() {
         return refused("input-too-large", "font-families");
     }
-    let surface = request.cache.map(|id| Surface::new(id, &request.measure, request.dark));
+    let surface = request
+        .cache
+        .map(|id| Surface::new(id, &request.measure, request.dark, request.geometry.as_ref()));
     match with_measurer(&request.measure, host, |measure| {
         lay_out(&request, measure, surface.as_ref(), registry, themes)
     }) {
