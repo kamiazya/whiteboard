@@ -48,11 +48,19 @@ fn key(k: usize) -> String {
     format!("{k}{}", "x".repeat(LENGTHS[k] - 1))
 }
 
+/// A key, the three short ones three times as likely as the two long ones: the
+/// body cap evicts only once four bodies fit within the byte cap together,
+/// which only the short keys can do, so an even draw let the long keys reach
+/// the byte cap first and left the body cap's floor thinly met.
+fn key_index() -> impl Strategy<Value = usize> {
+    prop_oneof![3 => 0_usize..3, 1 => 3..LENGTHS.len()]
+}
+
 fn op() -> impl Strategy<Value = Op> {
     // Two surfaces, so a step mostly lands on something kept.
     prop_oneof![
-        3 => (0_u32..2, 0..LENGTHS.len()).prop_map(|(s, k)| Op::Get(s, k)),
-        4 => (0_u32..2, 0..LENGTHS.len()).prop_map(|(s, k)| Op::Set(s, k)),
+        3 => (0_u32..2, key_index()).prop_map(|(s, k)| Op::Get(s, k)),
+        4 => (0_u32..2, key_index()).prop_map(|(s, k)| Op::Set(s, k)),
         1 => (0_u32..2).prop_map(Op::Release),
     ]
 }
