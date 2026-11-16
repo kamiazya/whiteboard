@@ -124,7 +124,7 @@ the table alone.
   translation used to place a node's laid-out content at its absolute
   position, alongside the renderers whose x-transform-boundary convention
   it must agree with (see decision #5 and `svg/backend.ts`).
-- `scaleScene` (the TypeScript scene scaling): the multiplicative sibling of
+- `scale_scene` (the TypeScript scene scaling): the multiplicative sibling of
   `translate_scene` — uniform scaling about the origin for composing a
   resolved child canvas into a parent node's box (scale-then-translate).
   Uniform scaling commutes with the x-transform-boundary representation,
@@ -867,7 +867,7 @@ the table alone.
     curve); and the randomness is `styleRandomFromSeed(seed)` with no
     positional input, so a moved box draws the same ink moved.
     Ink amplitude is in canvas units and is NOT scaled by
-    `scaleScene`, the same class as arrowheads: a miniature's pencil line is
+    `scale_scene`, the same class as arrowheads: a miniature's pencil line is
     relatively bolder, by design.
     **Glow** (ADR-0030 decision 8, `ink/glow.ts`): `Appearance.glow`
     is a radius; the backend blurs the element (σ = half the radius) and

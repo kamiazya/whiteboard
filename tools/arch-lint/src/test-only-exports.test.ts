@@ -252,8 +252,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "production reaches it through createWorkspaceDocumentAtPath, the subtree import and the restore; exported so a property can hold which folders it reuses and creates to an oracle over the raw tree, which the placed document's path alone cannot show",
   'packages/loro-adapter/src/content-sync.ts#jsonEqual':
     'production reaches it through the content sync; exported so a property can hold the explicit-stack comparison to the recursive one it replaced, at depths no recursion survives',
-  'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_ELEMENT_BUDGET':
-    'the per-render bound on the elements nested canvases lay out; production reads it in its own module, and the embed-budget test derives every expected miniature count from it rather than a copied number',
   'packages/canvas-render/src/references/content-budget.ts#REFERENCE_CHARS_BUDGET':
     "one reference walk's bound on the characters it loads; production reads it in its own module, and server-core's canvas_view cost test sizes how many notes load whole from it rather than a copied number",
   'packages/canvas-render/src/references/content-budget.ts#REFERENCE_ELEMENTS_BUDGET':
