@@ -7,18 +7,11 @@ paths:
 
 ## What belongs here
 
-- `scene.ts`: `ViewerScene` (model's `SpatialCanvas`, re-exported —
-  never redeclared), the total `parseViewerScene`, delegating to
-  codec's `readJsonCanvasText`, the TypeScript JSON Canvas reader. The widget no
-  longer reads a canvas (it shows the daemon's picture, ADR-0054 S17); what still
-  calls it is apps/web's doc snapshots and the eval scripts, and it goes with
-  S17's second step. The daemon and the web app read through the core
-  (`parseSpatial`); arch-lint keeps them off this reader.
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
   (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls
-  canvas-render's `createSpatialTheme` directly, alongside codec's
-  `parseMarkdownBody` and no `onDegrade` (this package degrades silently
+  canvas-render's `createSpatialTheme` directly, with layout's default
+  markdown parser and no `onDegrade` (this package degrades silently
   by choice). It builds BOTH modes once at module scope and picks between
   them with the `theme` prop, defaulting to `light`. The viewer has no
   theme switch of its own — that is exactly why the host has to say: the
@@ -34,8 +27,8 @@ paths:
 - `font.ts`: `VIEWER_FONT_FAMILY` — the single constant feeding both the
   browser measurer and the widget's build-time font embedding.
 - `CanvasViewer.tsx`: builds a scene via canvas-render's shared
-  `layoutSpatialCanvas` (with the theme's `VIEWER_APPEARANCES` entry and
-  codec's `parseMarkdownBody` injected) and renders it via canvas-render's
+  `layoutSpatialCanvas` (with the theme's `VIEWER_APPEARANCES` entry; the
+  body parser is layout's default) and renders it via canvas-render's
   `renderSceneToSvg`, injecting the resulting string through `SceneSvg`.
 - `SceneSvg.tsx`: the ONE component that turns a scene's SVG string into
   DOM; apps/web imports it too.
@@ -63,10 +56,9 @@ paths:
 
 - Scene graph types, layout, or the SVG serializer itself — those are
   `canvas-render`'s job; this package only calls `renderSceneToSvg`.
-- OKF/JSON Canvas parsing internals — this package calls into
-  `codec`'s `readJsonCanvasText` and wire schema, it does not
-  reimplement them. Its tests write JSON Canvas through `serializeSpatial`, the core their
-  setup file installs.
+- Reading or writing JSON Canvas or OKF text. Nothing here parses a
+  document: `CanvasViewer` takes the model, and the widget takes a picture
+  (ADR-0054 S17), so this package has no codec dependency at all.
 - Any editing affordance beyond the widget's comment (ADR-0024: click to
   pick an anchor, submit one `wb_thread_edit` `thread.add`) — the viewer itself is
   read-only, and the widget's one write goes through the host session to
@@ -81,8 +73,7 @@ paths:
 ## Dependency rules
 
 - Runtime dependencies: `@kamiazya/whiteboard-model`,
-  `@kamiazya/whiteboard-codec`, `@kamiazya/whiteboard-canvas-render`
-  (all `workspace:*`), `@modelcontextprotocol/ext-apps`, `react`,
+  `@kamiazya/whiteboard-canvas-render` (both `workspace:*`), `@modelcontextprotocol/ext-apps`, `react`,
   `react-dom`, `zod`.
 - Forbidden imports: `node:*`, `inversify`. DOM globals are this package's
   normal job (browser-runtime UI) — it is held only to the `node:*`/
@@ -124,8 +115,6 @@ paths:
 - Vitest projects: `canvas-viewer-node`, `canvas-viewer-jsdom`,
   `canvas-viewer-browser` (registered in root `vitest.config.ts` /
   `test:browser`).
-- `scene.test.ts` / `scene.property.test.ts`: accept/reject example tests
-  per parse stage, plus round-trip and totality fast-check properties.
 - Color/preset/ellipse-radius/edge-stroke appearance resolution now lives
   in canvas-render's `theme/spatial-theme.ts` tests, since
   `createSpatialTheme` is shared, not viewer-specific. What stays here is
@@ -173,8 +162,5 @@ paths:
 
 ## Common mistakes (append as review finds them)
 
-- Redeclaring the JSON Canvas wire schema here instead of using codec's
-  `jsonCanvasDocumentSchema`, which `parseViewerScene` validates
-  already-parsed input against.
 - Reaching for a DOM-based HTML sanitizer instead of relying on
   canvas-render's own escaping guarantee.

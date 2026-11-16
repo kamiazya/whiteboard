@@ -17,7 +17,7 @@ export type CodecParseStage =
  * one shape of it; the Rust core's OKF reader answers this much and no more
  * (ADR-0054), so a caller reads these three fields and nothing Zod-specific.
  */
-export interface CodecIssue {
+interface CodecIssue {
   readonly code: string
   readonly path: PropertyKey[]
   readonly message: string

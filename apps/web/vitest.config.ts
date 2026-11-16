@@ -14,11 +14,7 @@ export default defineConfig({
   resolve: {
     alias: {
       // Subpath aliases must precede the root alias: rollup-alias prefix-matches,
-      // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
-      '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
-        __dirname,
-        '../../packages/canvas-viewer/src/scene.ts',
-      ),
+      // so the root entry alone would rewrite '/font-loading' to 'index.ts/font-loading'.
       // boot.ts (main.tsx's boot chain) imports this narrow subpath so a
       // jsdom test of the boot sequence does not need the whole viewer graph.
       '@kamiazya/whiteboard-canvas-viewer/font-loading': resolve(

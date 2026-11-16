@@ -26,16 +26,15 @@ the TypeScript, the switch, layer 1 or the differential, it describes what was
 shown before the deletion, and the sections on declines, the TypeScript that
 remains and the exit criteria say what each became.
 
-**What TypeScript JSON Canvas code remains, and why** (open owner question q49,
-answered provisionally with its recommended option `widget-ts-reader`, until the
-owner answers). The widget iframe (MCP Apps) and the viewer that shares its code
-have no core, so `canvas-viewer`'s `parseViewerScene` keeps a TypeScript READ
-path: `readJsonCanvasText` (`spatial/read-json-canvas-text.ts`: JSON text parse,
-the comments refusal, the wire schema) and the projection's lift (`fromJsonCanvas`).
-No daemon, server-core or web source may use it
-(`tools/arch-lint/src/spatial-reader-isolation.test.ts`), so a realm that fails to
-install the core fails loudly instead of answering from a second implementation.
-The registry projection (`toJsonCanvas`/`fromJsonCanvas`, the wire schema, the
+**What TypeScript JSON Canvas code remains, and why** (owner question q49,
+answered `widget-ships-wasm`, applied by ADR-0054's S17). There is no TypeScript
+READER of JSON Canvas text any more. The widget kept one while it laid a canvas
+out; since S17 the daemon lays it out and hands the widget a picture, so the
+widget reads no canvas and needs no core, and `readJsonCanvasText` and
+`canvas-viewer`'s `parseViewerScene` are deleted, the reader's file listed in
+the `PORTED_FUNCTIONS` realm's `deleted` beside `parse.ts` and `serialize.ts`.
+Its last callers, apps/web's doc snapshots and the MCP eval scripts, read through
+the core. The registry projection (`toJsonCanvas`/`fromJsonCanvas`, the wire schema, the
 `JSON_CANVAS_PROJECTION` ledger, the loss tables and the OCIF lift) stays because
 the registry's confluence and completeness properties are about it; their text
 read and write go through the core. The TypeScript WRITER is deleted outright
@@ -95,7 +94,7 @@ colour types) are the generated ones.
 | 13 | Artifact size within its ledger, peak memory reported, Workers budgets measured | met for the size and the memory; the Workers budgets are unmeasured | Size: `crates/wasm-size-ledger.json`'s ceiling is raised by hand from 907500 to 1095500 for the 1094982-byte cargo artifact, 187954 more than before; the shipped, stripped module is 632603 bytes against 526644. Nothing called the codec before, so the linker had dropped it; the exports make the reader, the schema, the URL check, the projection, the writer and the canvas wire reachable. Memory, by `scripts/spatial-boundary.mjs`: 1.13 MiB after init, 1.38 MiB after the 17 KiB boards, 12.88 MiB after a 700 KiB one and **51.75 MiB after the 3.1 MiB one** (about 16 times the text, from the text, the tree, the answer and the wire all being live at once), the same on Node and Chromium; linear memory does not shrink, so an instance that has read a large board keeps it. Startup (`coreFrom`, module compiled) is 2.6 to 3.3 ms on Node and 2.8 to 3.2 ms on Chromium. The Workers budgets (CPU and memory per request) need a workerd binary this environment does not have and are not measured. |
 | 14 | Every untrusted-input entry has caps and a fuzz target, seeded and run, no open crash | met | `crates/input-caps.json` declares both exports, `whiteboard-wasm::json_canvas::json_canvas_parse` and `json_canvas_serialize`, each with `maxBytes` 4 MiB, `maxDepth` and `maxMillis` and the measurement behind them, naming the fuzz targets `json_canvas_wasm_parse` and `json_canvas_wasm_serialize`. The first reads any text and holds the export to the codec's own answer for it (a canvas, a refusal of each class, or a decline) and to its documented shapes; the second reads any text as a canvas wire, in both modes, and holds the answer to its documented shapes, the extended mode never answering a schema refusal. Seeds: the seven texts of `json_canvas_parse` (its links split into an accepted and a declined seed) and seven wires (`crates/fuzz/seeds/json_canvas_wasm_*`), checked by `the_canvas_seeds_are_wires_the_export_decodes`. `cargo xtask inputs` holds the registry and `crates/fuzz` equal. A 60 s local run of each target (`RUST_FUZZ_SECONDS=60 node tools/checks/src/rust-fuzz.mjs pr --targets json_canvas_wasm_parse,json_canvas_wasm_serialize`) found nothing; the serialize target made 4.46M executions. The `maxMillis` of each is measured on Node wasm at the cap (parse 1146 ms worst, serialize 344 ms; the figures are in the registry entry). |
 | 15 | Logging through the `log` facade; `thiserror` convention; poison-and-recover covers held state | n/a | The crate does not log. It answers a refusal or a decline as a value, and holds no state across calls. |
-| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | met (stage 4, in its realm shape) | `tools/arch-lint/src/ported-functions.ts` lists `parseSpatial` and `serializeSpatial` at stage 4 with a `realm`: the export in `packages/codec/src/spatial/spatial-core.ts` dispatches to the core `installSpatialCore` installs, no switch is left, and `parse.ts` and `serialize.ts` must not exist. The widget's reader is not those files: it answers no daemon or web call, which `spatial-reader-isolation.test.ts` holds. |
+| 16 | `PORTED_FUNCTIONS` ledger lists the function; once `rust`, the TypeScript export re-exports the shim | met (stage 4, in its realm shape) | `tools/arch-lint/src/ported-functions.ts` lists `parseSpatial` and `serializeSpatial` at stage 4 with a `realm`: the export in `packages/codec/src/spatial/spatial-core.ts` dispatches to the core `installSpatialCore` installs, no switch is left, and `parse.ts` and `serialize.ts` must not exist, and `read-json-canvas-text.ts` (the widget's reader, deleted at S17) must not exist either. |
 | 17 | Any Unicode table comes from a pinned crate with a version-asserting test | met (no table) | The codec carries none: it uses `is_js_space` (`whiteboard-model`, checked against the engine by the OKF checklist's row 17) and accepts an international host without UTS 46 rather than carry its tables (deviation 6, below). |
 | 18 | Exit criteria (QR-33b) recorded in the PR | met | [Below](#qr-33b-exit-criteria). |
 | 19 | Docs reflect the shipped state | met | `docs/reference/configuration.md` no longer lists `WHITEBOARD_CORE_SPATIAL` or `VITE_WHITEBOARD_CORE_SPATIAL`, and says the daemon and every build need the wasm for JSON Canvas too. The codec, canvas-viewer, core-wasm and app-web rules describe the stage-4 shape, and ADR-0054 carries a dated status note. |

@@ -9,14 +9,12 @@ import {
   type WriterCase,
   writerCase,
 } from '../../test-utils/json-canvas-oracle/oracle.js'
-import { readJsonCanvasText } from '../read-json-canvas-text.js'
 import { parseSpatial, serializeSpatial } from '../spatial-core.js'
 
 /**
  * The committed recording of the JSON Canvas codec's answers, which the Rust
  * crate replays natively (`crates/core/codec/tests/json_canvas_oracle.rs`),
- * equals what the core answers through its wasm shim, and what the viewer's
- * TypeScript reader answers. It was taken from the TypeScript codec before its
+ * equals what the core answers through its wasm shim. It was taken from the TypeScript codec before its
  * writer was deleted and is frozen: it holds the inputs as well as the answers,
  * so these tests need no generator, and a change that moves an answer must say
  * so by editing the recording by hand.
@@ -25,8 +23,7 @@ import { parseSpatial, serializeSpatial } from '../spatial-core.js'
  * types, so the readers agree on the stage and, for a schema refusal, each Zod
  * issue's path and code. A read the core declines (a lone surrogate, nesting
  * past its reader) is held to the inputs that earn it, judged without the core
- * (`earned.ts`); a recorded write is never declined, and the viewer reader
- * declines nothing.
+ * (`earned.ts`), and a recorded write is never declined.
  */
 const FILE = new URL('./json-canvas.jsonl', import.meta.url)
 
@@ -105,12 +102,5 @@ describe('the recorded JSON Canvas oracle', () => {
     for (const recording of writers) {
       expect(writerCase(serializeSpatial, recording.c, recording.m)).toEqual(recording)
     }
-  })
-
-  it('reads every recorded text through the viewer reader as recorded, declining nothing', () => {
-    const parted = readers.findIndex(
-      (c) => JSON.stringify(readerCase(readJsonCanvasText, c.t)) !== JSON.stringify(c),
-    )
-    expect(parted, 'the first recorded text the viewer reader no longer reads as recorded').toBe(-1)
   })
 })

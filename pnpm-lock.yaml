@@ -458,9 +458,6 @@ importers:
       '@kamiazya/whiteboard-canvas-render':
         specifier: workspace:*
         version: link:../canvas-render
-      '@kamiazya/whiteboard-codec':
-        specifier: workspace:*
-        version: link:../codec
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model

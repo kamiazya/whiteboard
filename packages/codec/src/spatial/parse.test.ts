@@ -1,17 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { readJsonCanvasText } from './read-json-canvas-text.js'
 import { parseSpatial as parseWithCore } from './spatial-core.js'
 
 /**
- * The two readers of JSON Canvas text answer one set of failure classes: the
- * core every daemon and web realm reads through, and the TypeScript reader the
- * widget keeps because its iframe has no core. The same assertions hold both,
- * so a document the viewer draws is one the daemon would have read.
+ * JSON Canvas text has one reader, the core every realm reads through, and
+ * these are its failure classes.
  */
-describe.each([
-  ['the core', parseWithCore],
-  ['the viewer reader', readJsonCanvasText],
-] as const)('%s', (_reader, parseSpatial) => {
+describe('the core', () => {
+  const parseSpatial = parseWithCore
+
   describe('parseSpatial failure classes (total parser — never throws)', () => {
     it('non-JSON text -> stage "json-syntax"', () => {
       const result = parseSpatial('{not json')

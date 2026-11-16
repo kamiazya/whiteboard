@@ -473,9 +473,9 @@ codec, and every reader or writer of either in this app (an import, a download, 
 Canvas, an editable PNG, a note sent to a daemon) awaits it before calling codec's plain
 `parseOkf`/`serializeOkf`/`parseSpatial`/`serializeSpatial`, which throw `OkfCoreNotInstalled` or
 `SpatialCoreNotInstalled` until then; a load that fails rejects, since nothing answers in its place.
-Routing loads nothing while it reads `ts`; the codecs load on their first ask. The one TypeScript
-JSON Canvas reader that remains is the viewer's (`parseViewerScene`, in canvas-viewer): the app's
-own source never imports codec's `readJsonCanvasText` (`spatial-reader-isolation.test.ts`). The
+Routing loads nothing while it reads `ts`; the codecs load on their first ask. No TypeScript
+JSON Canvas reader remains anywhere (the widget's went at ADR-0054 S17), so the doc snapshots
+read their `.canvas` sources through `codecsReady()` and `parseSpatial` too. The
 install is `codec-cores.ts`'s and never `layout-core.ts`'s, which
 imports codec's types alone: `layout-core.ts` is on the page's critical path, and one value import
 of codec's readers there carried them into the boot bundle, 147.9 KB

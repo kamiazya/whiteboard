@@ -13,7 +13,7 @@ import { z } from 'zod'
 // `wb_document_get`'s outputSchema.
 export { type OkfMarkdownFrontmatter, okfMarkdownFrontmatterSchema }
 
-export const okfMarkdownDocumentSchema = z.object({
+const okfMarkdownDocumentSchema = z.object({
   frontmatter: okfMarkdownFrontmatterSchema,
   body: z.string(),
 })

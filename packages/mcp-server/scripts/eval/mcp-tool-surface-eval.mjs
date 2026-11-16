@@ -37,6 +37,7 @@ import {
   trackChild,
 } from './lib/live-children.mjs'
 import { facetLine } from './lib/report-line.mjs'
+import { loadSpatialReader } from './lib/spatial-reader.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS, tagLibrary } from './tasks.mjs'
 
@@ -66,9 +67,8 @@ const { constantRatioMeasureText, createSpatialTheme, layoutSpatialCanvas, withD
 const { scoreComposition, scoreDrawing, scoreFacets } = await import(
   '@kamiazya/whiteboard-canvas-render/scoring'
 )
-// This script has no Rust core to read through; it reads what a model drew the way the
-// widget does, with codec's TypeScript reader.
-const { readJsonCanvasText: parseSpatial } = await import('@kamiazya/whiteboard-codec')
+// What a model drew is read through the Rust core, as the daemon reads it.
+const parseSpatial = await loadSpatialReader()
 
 const arg = (name, fallback) => valued.get(name) ?? fallback
 
