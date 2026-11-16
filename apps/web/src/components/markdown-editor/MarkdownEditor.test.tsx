@@ -1,4 +1,4 @@
-import { layoutMdastBlocks, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { layoutMarkdownDocument, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -6,12 +6,12 @@ import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 // Wrapped, not replaced: the real layout still runs, and the call count is
-// how many times the editor laid a body out on the main thread.
+// how many times the editor laid a note out on the main thread.
 vi.mock('@kamiazya/whiteboard-canvas-render', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@kamiazya/whiteboard-canvas-render')>()
-  return { ...actual, layoutMdastBlocks: vi.fn(actual.layoutMdastBlocks) }
+  return { ...actual, layoutMarkdownDocument: vi.fn(actual.layoutMarkdownDocument) }
 })
-const layouts = vi.mocked(layoutMdastBlocks)
+const layouts = vi.mocked(layoutMarkdownDocument)
 
 /** Math loaders whose renders land only when the test says so. */
 function heldMathLoaders() {

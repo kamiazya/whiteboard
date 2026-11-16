@@ -1,8 +1,4 @@
-import type {
-  MdastLayoutOptions,
-  MeasureText,
-  ReferenceSeams,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { type CSSProperties, type MutableRefObject, useCallback, useEffect, useMemo } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
@@ -24,10 +20,8 @@ export interface PreviewPaneProps {
   theme: ResolvedTheme
   /** Every reference seam at once; see render-preview.ts. */
   references?: ReferenceSeams
-  /** Renders math blocks; see render-preview.ts. */
-  renderMath?: MdastLayoutOptions['renderMath']
-  /** Renders diagram fences; see render-preview.ts. */
-  renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /** The rendered math blocks and diagram fences, as a table; see render-preview.ts. */
+  fragments?: RenderMarkdownPreviewOptions['fragments']
   /** Colours an embedded board by intent; see render-preview.ts. */
   tagLibrary?: NonNullable<RenderMarkdownPreviewOptions['tagLibrary']>
   /**
@@ -79,7 +73,7 @@ function previewHostStyle(theme: ResolvedTheme): CSSProperties {
  * `packages/canvas-viewer/src/SceneSvg.tsx` (the serializer is the SOLE
  * producer; there is no untrusted-HTML injection path) and held by
  * `tools/arch-lint`'s html-sink-ledger. The one addition to that
- * reasoning: `renderMath` / `renderDiagram` fragments are emitted verbatim by
+ * reasoning: the math and diagram `fragments` are emitted verbatim by
  * the backend, so they must come only from engines safe against untrusted
  * document text — MathJax typesets into its own glyph paths, and mermaid runs
  * at securityLevel 'strict' (see markdown-fragment-renderers.ts). Do not add a
@@ -94,8 +88,7 @@ export function PreviewPane({
   background,
   theme,
   references,
-  renderMath,
-  renderDiagram,
+  fragments,
   tagLibrary: library,
   anchorsRef,
   blocksRef,
@@ -109,11 +102,10 @@ export function PreviewPane({
         background,
         references,
         theme,
-        renderMath,
-        renderDiagram,
+        fragments,
         tagLibrary: library,
       }),
-    [value, measure, maxWidth, background, references, theme, renderMath, renderDiagram, library],
+    [value, measure, maxWidth, background, references, theme, fragments, library],
   )
   useEffect(() => {
     if (anchorsRef) anchorsRef.current = anchors

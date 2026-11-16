@@ -519,7 +519,7 @@ export function MarkdownEditor({
   })
   // The preview's own layout asks through these, so Write mode — no preview —
   // asks for nothing.
-  const { renderMath, renderDiagram } = useMarkdownFragments(fragmentLoaders).seams
+  const fragments = useMarkdownFragments(fragmentLoaders).table
 
   const divider = useSplitDrag(rootRef, setSplitRatio)
 
@@ -822,8 +822,7 @@ export function MarkdownEditor({
             measure={resolvedMeasure}
             theme={theme}
             references={references}
-            renderMath={renderMath}
-            renderDiagram={renderDiagram}
+            fragments={fragments}
             tagLibrary={tagLibrary}
             onToggleTask={onToggleTask}
           />

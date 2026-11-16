@@ -1,29 +1,18 @@
-import type {
-  MdastLayoutOptions,
-  MeasureText,
-  ReferenceSeams,
-  Scene,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
   type KeyedSvgRender,
-  layoutMdastBlocks,
-  MARKDOWN_THEME_DOCUMENT,
+  layoutMarkdownDocument,
   renderSceneToKeyedSvg,
-  SPATIAL_THEME_FONT_FAMILY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { hasLoadedFace } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
-import {
-  parseMarkdownBlockLines,
-  parseMarkdownBody,
-  resolveReferences,
-} from '@kamiazya/whiteboard-codec'
+import { parseMarkdownBlockLines } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { getAppLogger } from './app-logger.js'
 import { outlineBlocks } from './document-outline.js'
+import type { FragmentTable } from './fragment-requests.js'
 import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
-import { createEditorAppearance } from './spatial/editor-appearance.js'
 import { currentLayoutCore } from './spatial/layout-core.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -45,10 +34,14 @@ export interface RenderMarkdownPreviewOptions {
    * inherited fill, not here; absent, a miniature takes the light theme.
    */
   readonly theme?: ResolvedTheme
-  /** Renders math blocks (canvas-render's layout seam, threaded verbatim). */
-  readonly renderMath?: MdastLayoutOptions['renderMath']
-  /** Renders diagram fences (canvas-render's layout seam, threaded verbatim). */
-  readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
+  /**
+   * The rendered math blocks and diagram fences, as the table the Rust core
+   * can be handed (`useMarkdownFragments().table`); a source it lacks is
+   * drawn as its fallback and reported to the table's listener. Absent, math
+   * keeps canvas-render's escaped-source placeholder and a diagram fence is a
+   * plain code block, and nothing is reported.
+   */
+  readonly fragments?: FragmentTable
   /**
    * The workspace's tag library, so a board embedded in the note is coloured
    * by intent exactly as the editor colours it (ADR-0040 decision 5).
@@ -88,8 +81,9 @@ export { PREVIEW_PADDING_PX }
 
 /**
  * Parse -> layout -> serialize, backing the preview pane. This is the ONLY
- * renderer for markdown in this component: it goes through codec's
- * `parseMarkdownBody` and canvas-render's `layoutMdastBlocks` /
+ * renderer for markdown in this component: it goes through canvas-render's
+ * `layoutMarkdownDocument` (codec's parser and `layoutMdastBlocks`, or the
+ * Rust core's markdown entry, as the realm's core and its switch say) and
  * `renderSceneToSvg`, the same path CanvasViewer uses for spatial text nodes
  * and export. There is no markdown-to-HTML fallback anywhere in this file —
  * that would be a second renderer and would reintroduce the preview/export
@@ -100,10 +94,10 @@ export { PREVIEW_PADDING_PX }
  * (e.g. mid-edit) degrades to an empty scene instead of crashing the editor
  * on a keystroke.
  *
- * `renderMath` / `renderDiagram` come from the host (useMarkdownFragments'
- * cache-backed sync resolvers over the async MathJax/mermaid engines);
- * absent, math keeps canvas-render's documented escaped-source placeholder
- * and a diagram fence renders as a plain code block.
+ * `fragments` comes from the host (useMarkdownFragments' table over the
+ * async MathJax/mermaid engines), as data rather than as the
+ * `renderMath`/`renderDiagram` function seams, which the core cannot be
+ * handed.
  *
  * The SVG plus per-block scroll-sync anchors from the SAME layout pass —
  * anchors derived from a second layout could disagree with what is
@@ -121,8 +115,7 @@ export function renderMarkdownPreview(
     background,
     references,
     theme,
-    renderMath,
-    renderDiagram,
+    fragments,
     tagLibrary,
   }: RenderMarkdownPreviewOptions,
 ): RenderedMarkdownPreview {
@@ -131,8 +124,7 @@ export function renderMarkdownPreview(
     maxWidth,
     references,
     theme,
-    renderMath,
-    renderDiagram,
+    fragments,
     tagLibrary,
   })
   const keyed = renderSceneToKeyedSvg(scene, { padding: PREVIEW_PADDING_PX, background })
@@ -200,44 +192,38 @@ function layoutMarkdownScene(
     maxWidth,
     references,
     theme,
-    renderMath,
-    renderDiagram,
+    fragments,
     tagLibrary,
   }: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Scene {
   try {
-    return layoutMdastBlocks(
-      resolveReferences(parseMarkdownBody(value), references?.resolveAlias),
-      {
-        measure,
-        maxWidth,
-        canvasAppearance: createEditorAppearance(theme ?? 'light'),
-        // A human surface draws the document (ADR-0030 decision 6), so a
-        // board embedded in a note is pencilled or glowing here exactly as
-        // it is on the canvas — the same default the spatial surfaces take.
-        style: 'document',
-        fontFamily: SPATIAL_THEME_FONT_FAMILY,
-        // The markdown itself is measured and declared in the bundled
-        // family — no theme names one for a note's own prose. A board
-        // EMBEDDED in it does, and the family it declares must be the
-        // family this realm measured: the theme's only where a face for it
-        // is held, exactly as `editorLayoutBase` answers for the canvas
-        // surfaces (ADR-0011's invariant).
-        fontAvailable: hasLoadedFace,
-        core: currentLayoutCore(),
-        // A page, not an object. This pane runs to a readable measure, where the
-        // node scale — cut so a heading cannot eat a third of a 280px box —
-        // reads timid. Set on `layoutMarkdownScene` rather than at the preview's own
-        // call so the minimap rail, which maps THESE blocks, is laid out from
-        // the same metrics; two scales here would have the rail marking a
-        // document the reader is not looking at.
-        theme: MARKDOWN_THEME_DOCUMENT,
-        ...(references !== undefined ? { references } : {}),
-        ...(renderMath !== undefined ? { renderMath } : {}),
-        ...(renderDiagram !== undefined ? { renderDiagram } : {}),
-        ...(tagLibrary !== undefined ? { tagLibrary } : {}),
-      },
-    )
+    // A page, not an object: the document theme and the bundled family are
+    // the switch's own, so the minimap rail, which maps THESE blocks, is
+    // laid out from the same metrics as the pane beside it.
+    const scene = layoutMarkdownDocument(value, {
+      measure,
+      maxWidth,
+      // The app theme an embedded board is painted in, so its miniature
+      // matches the page around it.
+      mode: theme ?? 'light',
+      // A human surface draws the document (ADR-0030 decision 6), so a
+      // board embedded in a note is pencilled or glowing here exactly as
+      // it is on the canvas — the same default the spatial surfaces take.
+      style: 'document',
+      // The note's own prose is measured in the bundled family. A board
+      // EMBEDDED in it declares its theme's family only where a face for it
+      // is held, exactly as `editorLayoutBase` answers for the canvas
+      // surfaces (ADR-0011's invariant).
+      fontAvailable: hasLoadedFace,
+      core: currentLayoutCore(),
+      ...(references !== undefined ? { references } : {}),
+      ...(fragments !== undefined
+        ? { fragments: fragments.fragments, onFragmentsAsked: fragments.onFragmentsAsked }
+        : {}),
+      ...(tagLibrary !== undefined ? { tagLibrary } : {}),
+    })
+    // Undefined only for a `section`, which the preview never asks for.
+    return scene ?? { nodes: [] }
   } catch (error) {
     log.warn('markdown preview layout failed; rendering an empty scene', error)
     return { nodes: [] }

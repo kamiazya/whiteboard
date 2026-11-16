@@ -10,8 +10,9 @@ import { useMarkdownFragments } from './use-markdown-fragments.js'
 const LAYOUT = { measure: fakeMeasure, maxWidth: 480 }
 
 /**
- * The hook as the preview uses it: the seams are handed to a layout of
- * `body` on every render, and that layout is what asks for the sources.
+ * The hook as the preview uses it: the table is handed to a layout of
+ * `body` on every render, and that layout is what asks for the sources. The
+ * seams it returns read the same cache, so a test can probe one source.
  */
 function useLaidOutFragments({
   body,
@@ -22,8 +23,12 @@ function useLaidOutFragments({
   loaders: FragmentLoaders
   references?: ReferenceSeams
 }): FragmentSeams {
-  const { seams } = useMarkdownFragments(loaders)
-  layoutMarkdownOutline(body, { ...LAYOUT, ...(references ? { references } : {}), ...seams })
+  const { seams, table } = useMarkdownFragments(loaders)
+  layoutMarkdownOutline(body, {
+    ...LAYOUT,
+    ...(references ? { references } : {}),
+    fragments: table,
+  })
   return seams
 }
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'

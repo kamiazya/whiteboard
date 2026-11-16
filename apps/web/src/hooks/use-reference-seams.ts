@@ -14,9 +14,12 @@
 import {
   imageTargets,
   type LoadedReference,
+  type ReferenceExtra,
   type ReferenceSeams,
   referenceSeams,
+  referenceSeamsFromWire,
   referenceTargets,
+  referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
@@ -101,7 +104,7 @@ function drawableHrefs(imageUrls: ReadonlyMap<string, string>): string[] {
 }
 
 /** What a picture's slot draws: the image at its decoded size, or the label for a retired one. */
-function pictureExtra(href: string, sizes: ReadonlyMap<string, ImageSize>) {
+function pictureExtra(href: string, sizes: ReadonlyMap<string, ImageSize>): ReferenceExtra {
   if (href === RETIRED_PICTURE) return { label: RETIRED_PICTURE_LABEL }
   return { image: { href, ...sizes.get(href) } }
 }
@@ -160,17 +163,23 @@ export function useReferenceSeams({
   // decode can tell; until it answers the picture keeps a line-sized box.
   const imageSizes = useImageSizes(useMemo(() => drawableHrefs(imageUrls), [imageUrls]))
 
-  return useMemo(
-    () =>
-      referenceSeams(cache, {
-        pending: pendingTargets(body, cache),
-        ...(resolveAlias !== undefined ? { resolveAlias } : {}),
-        ...(resolveTitle !== undefined ? { resolveTitle } : {}),
-        extra: (ref) => {
-          const href = imageUrls.get(ref)
-          return href === undefined ? undefined : pictureExtra(href, imageSizes)
-        },
-      }),
-    [body, cache, imageUrls, imageSizes, resolveAlias, resolveTitle],
-  )
+  return useMemo(() => {
+    const extras = new Map<string, ReferenceExtra>()
+    for (const [ref, href] of imageUrls) extras.set(ref, pictureExtra(href, imageSizes))
+    const tables = {
+      ...(resolveAlias !== undefined ? { resolveAlias } : {}),
+      ...(resolveTitle !== undefined ? { resolveTitle } : {}),
+    }
+    // Every target the body names, transitively, is in the cache once
+    // nothing is pending, so the page's tables evaluated over it answer
+    // whatever the layout can ask — and the bundle rebuilt from that wire is
+    // one the Rust core can be handed. A wire cannot say "loading", so while
+    // a load is in flight the bundle stays functions and the TypeScript
+    // draws the placeholder that says so.
+    const pending = pendingTargets(body, cache)
+    if (pending.size > 0) {
+      return referenceSeams(cache, { pending, ...tables, extra: (ref) => extras.get(ref) })
+    }
+    return referenceSeamsFromWire(referenceWire(cache, { ...tables, extras }))
+  }, [body, cache, imageUrls, imageSizes, resolveAlias, resolveTitle])
 }
