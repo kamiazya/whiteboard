@@ -336,18 +336,21 @@ function timedDrag(board: WebLayoutBoard, real: WebCore, rounds = 15) {
     lay(i, hosted, coreCache, core)
   }
   const times = { ts: [] as number[], cold: [] as number[], warm: [] as number[] }
+  const variants = [
+    ['ts', (at: number) => lay(at, browser, tsCache)],
+    ['cold', (at: number) => lay(at, hosted, undefined, core)],
+    ['warm', (at: number) => lay(at, hosted, coreCache, core)],
+  ] as const
   const answeredBefore = tally.answered
   for (let i = 0; i < rounds; i += 1) {
     const at = i + 3
-    let start = performance.now()
-    lay(at, browser, tsCache)
-    times.ts.push(performance.now() - start)
-    start = performance.now()
-    lay(at, hosted, undefined, core)
-    times.cold.push(performance.now() - start)
-    start = performance.now()
-    lay(at, hosted, coreCache, core)
-    times.warm.push(performance.now() - start)
+    // Each round starts from the next variant, so none always runs first.
+    for (let k = 0; k < variants.length; k += 1) {
+      const [name, run] = variants[(i + k) % variants.length] as (typeof variants)[number]
+      const start = performance.now()
+      run(at)
+      times[name].push(performance.now() - start)
+    }
   }
   expect(tally.reports, board.name).toEqual([])
   expect(tally.answered - answeredBefore, board.name).toBe(2 * rounds)
