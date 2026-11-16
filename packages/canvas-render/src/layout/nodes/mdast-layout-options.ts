@@ -10,22 +10,17 @@ import type {
   SvgFragmentNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
+import type { RenderedSvgFragment } from '../../fragment-ask.js'
 import type { CodeTokenLines, CodeTokenRole } from '../../highlight/code-token.js'
 import type { TokenizerBudget } from '../../highlight/tokenizer-budget.js'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 import type { EmbeddedDocument } from '../../references/resolved.js'
 import type { ReferenceSeams } from '../../references/seams.js'
-import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
+import type { MarkdownTheme } from '../../theme/markdown-theme.js'
 import type { NestedLayoutBudget } from './embed-budget.js'
 
-export const BODY_FONT_SIZE_PX = MARKDOWN_THEME_NODE.bodyFontSizePx
-export const BODY_LINE_HEIGHT_PX = bodyLineHeightPx(MARKDOWN_THEME_NODE)
-
-/** Derived metrics, per theme rather than per module. */
-export function bodyLineHeightPx(theme: MarkdownTheme): number {
-  return theme.bodyFontSizePx * theme.bodyLineHeight
-}
+export { BODY_LINE_HEIGHT_PX, bodyLineHeightPx } from '../../theme/markdown-theme.js'
 export function codeFontSizePx(theme: MarkdownTheme): number {
   return theme.bodyFontSizePx * theme.codeFontScale
 }
@@ -234,16 +229,7 @@ export interface MdastLayoutOptions {
   readonly resolveTitle?: (documentId: string) => string | undefined
 }
 
-/**
- * The object form a math/diagram renderer returns when it knows the
- * fragment's intrinsic size. Plain TS, in-process only (zod-schema-
- * discipline: no boundary crossed).
- */
-export interface RenderedSvgFragment {
-  readonly svg: string
-  readonly width?: number
-  readonly height?: number
-}
+export type { RenderedSvgFragment } from '../../fragment-ask.js'
 
 /** The box a canvas miniature may occupy, in the body's own coordinates. */
 export interface EmbeddedCanvasBox {

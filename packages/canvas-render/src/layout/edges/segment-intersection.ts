@@ -2,10 +2,10 @@
 // can be measured by counting its calls.
 
 import { hypot } from '../../det-math.js'
+import { EDGE_JUMP_RADIUS_PX } from '../../edge-path/edge-flatten.js'
 import type { Point } from './edge-geometry.js'
 
-/** Radius of the hop arc, in px. Kept below the editor's edge hit tolerance so the decoration never escapes the grabbable band around the raw path. */
-export const EDGE_JUMP_RADIUS_PX = 5
+export { EDGE_JUMP_RADIUS_PX }
 
 /**
  * A hop needs `radius` of straight run on both sides to land back on the

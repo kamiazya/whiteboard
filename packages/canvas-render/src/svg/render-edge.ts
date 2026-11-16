@@ -17,9 +17,8 @@ import {
   edgeArrowInset,
   edgeArrowScale,
 } from '../edge-arrows.js'
-import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
-import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
-import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
+import { EDGE_JUMP_RADIUS_PX, hopEndpoints, jumpsWithinSpan } from '../edge-path/edge-flatten.js'
+import { roundedEdgeCorners } from '../edge-path/edge-rounding.js'
 import { formatCoord } from './format.js'
 import { appearanceAttrs, idToken, PRESENTATION, pointsAttr } from './paint.js'
 import { edgeGlowExtent, glowOf, renderSketchEdge } from './shapes.js'
@@ -73,7 +72,7 @@ function jumpedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[]):
 
 /**
  * The same polyline with its corners rounded off, per the shared
- * `roundedEdgeCorners` decomposition (see layout/edges/edge-rounding.ts — the
+ * `roundedEdgeCorners` decomposition (see edge-path/edge-rounding.ts — the
  * editor's hit-testing flattens the SAME corners, which is what keeps a tap
  * landing on the ink). Degenerate inputs fall back to the straight reading
  * rather than emitting a malformed `d`, matching this package's never-throw

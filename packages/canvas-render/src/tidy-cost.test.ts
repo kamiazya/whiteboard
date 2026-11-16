@@ -27,8 +27,8 @@ const stackDepth = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('./layout/edges/edge-rules.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./layout/edges/edge-rules.js')>()
+vi.mock('./containment.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./containment.js')>()
   return {
     ...actual,
     fullyContains: (...args: Parameters<typeof actual.fullyContains>) => {

@@ -61,7 +61,7 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 1,
     why: 'SVG root attribute names, which start with a letter by the XML Name production and so are never integer-like',
   },
-  'packages/canvas-render/src/layout/nodes/node-outline.ts': {
+  'packages/canvas-render/src/outline/node-outline.ts': {
     uses: 1,
     why: 'shape names a contribution registers, which the table composes into namespaced ids before anything is ordered by them',
   },

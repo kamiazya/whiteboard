@@ -10,10 +10,12 @@ import { describe, expect, it } from 'vitest'
  * `theme/` decides appearance and geometry tokens and reads nothing else;
  * `highlight/` tokenises a code fence; `leaf` is everything that reads no
  * other stage (references, tags, the vendored line-breaker, the generated
- * contract types, the small root helpers, the legend's measurements); `quality/` scores a drawing;
+ * contract types, the small root helpers, the legend's measurements, a
+ * node's silhouette in `outline/` and a drawn edge's path in `edge-path/`);
+ * `quality/` scores a drawing;
  * `legend/` lays out the legend panel; `engines` are `layout/edges/` and
  * `layout/nodes/`, which `layout/layer-boundary.test.ts` keeps free of each
- * other; `ink` is `layout/ink/`, which draws on both; `scene-bounds` is the
+ * other; `ink` is `ink/`, which draws on both; `scene-bounds` is the
  * root module that knows how far a drawn node or edge reaches, so it sits
  * above the ink it measures and below the composers and the SVG backend that
  * ask it; `layout` composes the scene; `svg` draws it; `surface` is what a
@@ -24,8 +26,8 @@ import { describe, expect, it } from 'vitest'
  * nothing and `scene-bounds` reads it, while `quality/drawing-score.ts` reads
  * `scene-bounds`. Left at directory grain that is a loop
  * legend -> quality -> scene-bounds -> legend no per-file check sees.
- * `layout/seed.ts` is the id-keyed random primitive: it reads nothing, and
- * `layout/ink` and `layout/node-box.ts` both draw from it.
+ * `ink/seed.ts` is the id-keyed random primitive: it reads nothing, and
+ * `ink/` and `layout/node-box.ts` both draw from it.
  *
  * A file in a ranked directory inherits its rank. A root file must be named
  * in `ROOT_FILES`, so a new one is placed on purpose: one in none fails
@@ -72,7 +74,9 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   legend: 'legend',
   'layout/edges': 'engines',
   'layout/nodes': 'engines',
-  'layout/ink': 'ink',
+  ink: 'ink',
+  outline: 'leaf',
+  'edge-path': 'leaf',
   layout: 'layout',
   svg: 'svg',
   // The MCP Apps widget's picture contract: what a consumer receives once a
@@ -83,7 +87,7 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
 /** A file whose role differs from its directory's; each reason is in the header. */
 const FILE_LAYERS: Readonly<Record<string, Layer>> = {
   'legend/legend-geometry.ts': 'leaf',
-  'layout/seed.ts': 'leaf',
+  'ink/seed.ts': 'leaf',
   'quality/drawing-score.ts': 'surface',
 }
 
@@ -96,6 +100,12 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   // `LayoutCore` names: an engine's own rank, reading the edge vocabulary.
   'canvas-core.ts': 'engines',
   'canvas-fragment.ts': 'leaf',
+  // What a comment points at and the bubble constants the editor shares.
+  'comment-geometry.ts': 'leaf',
+  'containment.ts': 'leaf',
+  // A rendered math block or diagram as data, which the core's requests carry.
+  'fragment-ask.ts': 'leaf',
+  'paint-order.ts': 'leaf',
   // A markdown note's request and answer, which `LayoutCore` names beside the
   // whole layout's: the same rank as `canvas-core.ts`.
   'markdown-core.ts': 'engines',

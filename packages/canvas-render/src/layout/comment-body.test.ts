@@ -5,13 +5,14 @@
 
 import type { SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
   MARKDOWN_THEME_COMPACT,
   MARKDOWN_THEME_DOCUMENT,
   MARKDOWN_THEME_NODE,
 } from '../theme/markdown-theme.js'
-import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
+import { layoutCommentBody } from './comment-body.js'
 
 const measure = createFakeMeasure()
 

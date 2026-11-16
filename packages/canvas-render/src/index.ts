@@ -46,8 +46,26 @@ export type {
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
+export { flattenDrawnEdgePath } from './edge-path/edge-flatten.js'
+export { flattenRoundedEdgePath } from './edge-path/edge-rounding.js'
+export {
+  type FragmentAsk,
+  type FragmentEntry,
+  fragmentAskKey,
+  fragmentAskSchema,
+  type RenderedSvgFragment,
+} from './fragment-ask.js'
 export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
 export { boxContains, type HitBox, hitBoxesOf, topmostHit } from './hit-test.js'
+export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './ink/glow.js'
+export { seedFromId, styleRandomFromSeed } from './ink/seed.js'
+export {
+  SKETCH_INK_REACH_PX,
+  type SketchEdgeOptions,
+  type SketchInk,
+  sketchEdge,
+  sketchShape,
+} from './ink/sketch.js'
 export { CoreUnaskable } from './layout/canvas-switch.js'
 export {
   resolveCanvasPalette,
@@ -55,14 +73,12 @@ export {
   resolveThemeTable,
 } from './layout/canvas-theme.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
-export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
 export {
   edgeLabelPlacement,
   frameTitleObstacles,
   type LabelObstacle,
   labelObstacles,
 } from './layout/edges/edge-label-anchor.js'
-export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export { routeEdge } from './layout/edges/edge-router.js'
 export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
 export type { LayoutCore, RoutingCore } from './layout/edges/layout-core.js'
@@ -71,45 +87,19 @@ export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
-export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
-export {
-  SKETCH_INK_REACH_PX,
-  type SketchEdgeOptions,
-  type SketchInk,
-  sketchEdge,
-  sketchShape,
-} from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
 export {
   type CommentDocumentOptions,
   layoutCommentDocument,
   layoutMarkdownDocument,
 } from './layout/markdown-switch.js'
-export {
-  type FragmentAsk,
-  type FragmentEntry,
-  fragmentAskKey,
-  fragmentAskSchema,
-} from './layout/nodes/fragment-ask.js'
 export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
-export {
-  BODY_FONT_SIZE_PX,
-  BODY_LINE_HEIGHT_PX,
-  type EmbeddedCanvasBox,
-  type EmbeddedCanvasMiniature,
-  type MdastLayoutOptions,
-  type RenderedSvgFragment,
+export type {
+  EmbeddedCanvasBox,
+  EmbeddedCanvasMiniature,
+  MdastLayoutOptions,
 } from './layout/nodes/mdast-layout-options.js'
 export { selectMarkdownSection } from './layout/nodes/mdast-section.js'
-export type { ShapeContribution, ShapeTable } from './layout/nodes/node-outline.js'
-export {
-  type NodeOutline,
-  nodeOutline,
-  outlineContains,
-  outlineContentBox,
-  outlineEntryPoint,
-  resolveShapeTable,
-} from './layout/nodes/node-outline.js'
 export {
   queryCommentBubble,
   queryEdgeLabelPlacement,
@@ -117,7 +107,6 @@ export {
   queryOutlineContentBox,
 } from './layout/queries.js'
 export { scaleScene } from './layout/scale-scene.js'
-export { seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
   DecorationContext,
   NodeDecoration,
@@ -140,7 +129,6 @@ export {
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
-  paintOrderOf,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
@@ -159,6 +147,16 @@ export {
   isFullWidthCodePoint,
   measureSpecOf,
 } from './measure.js'
+export type { ShapeContribution, ShapeTable } from './outline/node-outline.js'
+export {
+  type NodeOutline,
+  nodeOutline,
+  outlineContains,
+  outlineContentBox,
+  outlineEntryPoint,
+  resolveShapeTable,
+} from './outline/node-outline.js'
+export { paintOrderOf } from './paint-order.js'
 export {
   CANVAS_VIEW_PICTURE_META_KEY,
   type CanvasViewPicture,
@@ -233,6 +231,8 @@ export { withDeclaredColours } from './tags/declared-colours.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 export type { MarkdownTheme } from './theme/markdown-theme.js'
 export {
+  BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
   MARKDOWN_THEME_COMPACT,
   MARKDOWN_THEME_DOCUMENT,
   MARKDOWN_THEME_NODE,

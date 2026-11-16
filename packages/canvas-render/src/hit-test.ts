@@ -1,6 +1,6 @@
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { HitBox } from './hit-boxes.js'
-import { paintOrderOf } from './layout/spatial-canvas.js'
+import { paintOrderOf } from './paint-order.js'
 
 export { boxContains, type HitBox, topmostHit } from './hit-boxes.js'
 

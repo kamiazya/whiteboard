@@ -251,7 +251,7 @@ export interface ShapeSceneNode {
   readonly radius?: number
   /**
    * Non-rect silhouette, derived at draw time from `bbox` by the shared
-   * decomposition in `layout/nodes/node-outline.ts` (one producer for drawing
+   * decomposition in `outline/node-outline.ts` (one producer for drawing
    * AND hit-testing). Absent = the historic rect, byte-identical to
    * before this field existed. A kind, never stored coordinates, so
    * translate/scale need no knowledge of it.
@@ -269,7 +269,7 @@ export interface ShapeSceneNode {
    * How this chrome is INKED, when a theme says other than crisp (ADR-0030
    * decision 7). A kind plus a seed, never coordinates: the SVG backend
    * derives the strokes from `bbox`/`shape` through the shared decomposition
-   * (`layout/ink/sketch.ts`), so translate/scale need no knowledge of it and
+   * (`ink/sketch.ts`), so translate/scale need no knowledge of it and
    * `sceneDigest`/hit-testing keep reading the box. Absent = the crisp
    * chrome, byte-identical to before this field existed.
    */

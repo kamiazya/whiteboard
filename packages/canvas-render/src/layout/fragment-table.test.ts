@@ -2,12 +2,12 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutRequest } from '../canvas-core.js'
+import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from '../fragment-ask.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
-import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from './nodes/fragment-ask.js'
 import { layoutSpatialCanvasWithAnchors, naturalNodeContentSize } from './spatial-canvas.js'
 
 const base: SpatialLayoutOptions = {

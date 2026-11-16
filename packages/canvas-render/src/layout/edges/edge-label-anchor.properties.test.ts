@@ -7,10 +7,10 @@
 import { afterAllFloor } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { cos, hypot, sin } from '../../det-math.js'
+import { flattenRoundedEdgePath } from '../../edge-path/edge-rounding.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import type { Point } from './edge-geometry.js'
 import { edgeLabelPlacement, type LabelObstacle, type LabelSize } from './edge-label-anchor.js'
-import { flattenRoundedEdgePath } from './edge-rounding.js'
 
 function oracleMidpoint(path: readonly Point[], rounded?: boolean) {
   const first = path[0]

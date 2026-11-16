@@ -226,7 +226,7 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     name: 'outlineContentBox',
     stage: 2,
     ts: {
-      file: 'packages/canvas-render/src/layout/nodes/node-outline.ts',
+      file: 'packages/canvas-render/src/outline/node-outline.ts',
       export: 'outlineContentBox',
     },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },

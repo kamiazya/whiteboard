@@ -1,10 +1,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { outlineContains } from '../../outline/node-outline.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
-import { outlineContains } from './node-outline.js'
 
 const appearance: SpatialAppearanceResolver = {
   resolveNode: () => ({}),

@@ -13,8 +13,8 @@
 import { isFrame, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { compareNumbers, hypot } from '../../det-math.js'
+import { flattenRoundedEdgePath } from '../../edge-path/edge-rounding.js'
 import type { Point } from './edge-geometry.js'
-import { flattenRoundedEdgePath } from './edge-rounding.js'
 
 /** The arc-length midpoint and the drawn segment it lies on. */
 function midpointOf(

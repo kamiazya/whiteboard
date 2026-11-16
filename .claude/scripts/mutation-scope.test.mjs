@@ -21,7 +21,7 @@ test('keeps a changed file the lane curates', () => {
 test('drops a changed file the lane deliberately does not cover', () => {
   // seed.ts is excluded because its report is known wrong; a diff touching it
   // must not drag it back in through the PR path.
-  assert.deepEqual(scopeToDiff(CURATED, [`${PREFIX}src/layout/seed.ts`], PREFIX), [])
+  assert.deepEqual(scopeToDiff(CURATED, [`${PREFIX}src/ink/seed.ts`], PREFIX), [])
 })
 
 test('ignores changes in other packages', () => {

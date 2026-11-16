@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { flattenRoundedEdgePath } from '../../edge-path/edge-rounding.js'
 import { edgeLabelPlacement } from './edge-label-anchor.js'
-import { flattenRoundedEdgePath } from './edge-rounding.js'
 
 // With nothing to avoid, a label sits at the arc-length midpoint of the drawn line.
 const edgeLabelAnchor = (path: readonly { x: number; y: number }[], rounded?: boolean) =>

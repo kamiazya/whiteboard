@@ -65,7 +65,7 @@ cost of the exhaustiveness checking the SVG backend relies on. That has not
 changed and should not.
 
 Shapes are now a TABLE keyed by namespaced id (`ShapeTable`,
-`layout/nodes/node-outline.ts`), merged over the built-ins by both
+`outline/node-outline.ts`), merged over the built-ins by both
 `SpatialLayoutOptions.shapes` and `SvgDocumentOptions.shapes`, exactly as
 `icons` already worked.
 
@@ -436,7 +436,7 @@ the table alone.
       geometry (bbox / routed path). A style's painted deviation from it
       must be bounded by a declared constant (the jump-arc/arrowhead
       class), and that bound is part of the style's contract.
-    - **Style randomness is seeded, id-keyed, and pure** (the `layout/seed`
+    - **Style randomness is seeded, id-keyed, and pure** (the `ink/seed`
       primitive): derived from stable node identity, never ambient RNG;
       invariant under translate/scale composition; unaffected by edits to
       unrelated nodes. A canvas renders byte-identically twice, styled or
@@ -863,7 +863,7 @@ the table alone.
     that PREVIEWS paint rather than painting — the editor's paper and its
     colour swatches — so a picker and the render read one table; it answers
     the bundled palette for the mode wherever layout would draw clean.
-    **Ink** (decision #10's geometry half, `layout/ink/sketch.ts`): a theme
+    **Ink** (decision #10's geometry half, `ink/sketch.ts`): a theme
     whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
     every DOCUMENT shape and edge the layout composes — a kind plus
     `seedFromId(id)`, never coordinates, so translate/scale carry it
@@ -883,7 +883,7 @@ the table alone.
     Ink amplitude is in canvas units and is NOT scaled by
     `scaleScene`, the same class as arrowheads: a miniature's pencil line is
     relatively bolder, by design.
-    **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
+    **Glow** (ADR-0030 decision 8, `ink/glow.ts`): `Appearance.glow`
     is a radius; the backend blurs the element (σ = half the radius) and
     merges the blur twice under the element itself, so the halo is the
     element's OWN paint and no flood colour is invented. The filter's
@@ -956,7 +956,7 @@ edge's path.
   bounded, translated, or exported — has exactly one producing function;
   when two producers are unavoidable, a parity test pins their agreement
   (precedents: `layout/spatial-geometry-parity.test.ts` for layout
-  geometry, `layout/edges/edge-rounding.ts` for the drawn-vs-hit curve). Two
+  geometry, `edge-path/edge-rounding.ts` for the drawn-vs-hit curve). Two
   independently-grown producers of "the same" geometry is the pixel
   version of the Zod schema/interface drift class, and it has shipped
   real defects twice.
@@ -1073,7 +1073,7 @@ edge's path.
   Read a small delta as
   nothing, and re-run before believing a survivor appeared or vanished.
   **Verify a survivor by hand before acting on it.** The tool can report one
-  falsely: measured, `src/layout/seed.ts` is imported by its own test and
+  falsely: measured, `src/ink/seed.ts` is imported by its own test and
   nothing else, so Stryker's related-test selection runs 7 tests against it
   (`svg/format.ts` gets 458), and in that narrow selection its runtime
   mutants come back SURVIVED even where the same edit applied by hand fails
@@ -1182,7 +1182,7 @@ edge's path.
 ## Paint order is not stored order
 
 `layoutSpatialCanvas` paints every group first, larger before smaller, then
-everything else in stored order (`paintOrderOf` in `layout/spatial-canvas.ts`).
+everything else in stored order (`paintOrderOf` in `paint-order.ts`).
 Stored order is a Loro map's id order, not the order a caller wrote, so a
 group whose id sorted after a member's painted over it once it had a colour:
 four of eleven boxes vanished from a diagram the MCP eval lane drew, and the

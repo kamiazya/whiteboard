@@ -30,13 +30,13 @@
  */
 
 import type { BoundingBox, EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
-import { cos, hypot, sin } from '../../det-math.js'
-import type { ArrowPolygon } from '../../edge-arrows.js'
-import { isFiniteBox } from '../../finite-box.js'
-import { flattenDrawnEdgePath } from '../edges/edge-flatten.js'
-import type { Point } from '../edges/edge-geometry.js'
-import type { NodeOutline } from '../nodes/node-outline.js'
-import { styleRandomFromSeed } from '../seed.js'
+import { cos, hypot, sin } from '../det-math.js'
+import type { ArrowPolygon } from '../edge-arrows.js'
+import { flattenDrawnEdgePath } from '../edge-path/edge-flatten.js'
+import { isFiniteBox } from '../finite-box.js'
+import type { Point } from '../layout/edges/edge-geometry.js'
+import type { NodeOutline } from '../outline/node-outline.js'
+import { styleRandomFromSeed } from './seed.js'
 
 /** How far (px) sketch ink may leave the semantic geometry it draws. */
 export const SKETCH_INK_REACH_PX = 8

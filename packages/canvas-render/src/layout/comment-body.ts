@@ -37,17 +37,10 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
 import { MARKDOWN_THEME_COMPACT, MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import { typesetMdastBlocks } from './nodes/mdast-blocks.js'
 import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
-
-/**
- * The width a comment's prose is measured to when its surface names none.
- *
- * Narrow on purpose: a bubble floats over the canvas it annotates, and one
- * that grows with its text covers the thing being talked about.
- */
-export const COMMENT_TEXT_MAX_WIDTH_PX = 200
 
 /**
  * The width a PROPOSAL's bubble measures to, against the comment layer's

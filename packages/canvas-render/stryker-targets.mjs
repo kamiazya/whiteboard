@@ -85,10 +85,14 @@ export const MUTATED = [
   // A four-candidate search whose property scores the candidates from the
   // definition of overlap, sharing nothing with the search.
   'src/layout/comment-placement.ts',
+  // Moved out of `comment-placement.ts` and `edge-rules.ts` (S18h1), both in
+  // the lane, so leaving them out would shrink what it sees.
+  'src/comment-geometry.ts',
+  'src/containment.ts',
   // The sketch ink decomposition: reach, determinism and translation
   // equivariance are properties over random boxes and seeds, and the
   // silhouette per outline kind is pinned by example.
-  'src/layout/ink/sketch.ts',
+  'src/ink/sketch.ts',
   // The junction rule that carries kinsoku across an inline boundary. It is a
   // RULE rather than a ladder of ways to decline, and every one of its
   // decisions is mutation-shaped: `clusterRun <= lineRun`, the two `=== ''`
@@ -109,7 +113,7 @@ export const MUTATED = [
   // the Rust libm crate — so a surviving mutant is a polynomial term or a
   // reduction round that answer never needed.
   'src/det-math.ts',
-  // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
+  // NOT `src/ink/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
   // 7 tests, against the 458 that cover `svg/format.ts`. Its runtime mutants
@@ -179,7 +183,11 @@ export const MINUTES = {
   'src/tidy-axis.ts': 0.5,
   'src/tidy-bands.ts': 1.5,
   'src/layout/comment-placement.ts': 7,
-  'src/layout/ink/sketch.ts': 4.5,
+  // ESTIMATED, not yet measured: a handful of mutants each, priced at
+  // `tidy-axis.ts`'s rate.
+  'src/comment-geometry.ts': 0.5,
+  'src/containment.ts': 0.5,
+  'src/ink/sketch.ts': 4.5,
   'src/layout/nodes/inline-junction.ts': 2.8,
   // ESTIMATED, not yet measured: about 120 mutants, one 5-test file that
   // runs in milliseconds, priced at `tidy-bands.ts`'s rate.
@@ -392,7 +400,7 @@ export const KNOWN_EQUIVALENT = {
   // reads. And `strokeCurve`'s empty-input return is dead: every outline
   // that reaches it carries 13 or 24 sampled vertices. Each hand-verified by
   // applying the edit and running the ink suites, which stay green.
-  'src/layout/ink/sketch.ts': {
+  'src/ink/sketch.ts': {
     'ConditionalExpression: rounded === 0 -> false': 1,
     'ConditionalExpression: n === 0 -> false': 1,
     'ConditionalExpression: i < ARC_SAMPLES -> true': 1,

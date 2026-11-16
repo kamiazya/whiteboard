@@ -1,9 +1,9 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import { describe, expect, it } from 'vitest'
+import { outlineContentBox } from '../../outline/node-outline.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
-import { outlineContentBox } from './node-outline.js'
 
 const APPEARANCE = {
   resolveNode: () => ({}),
