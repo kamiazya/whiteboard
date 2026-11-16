@@ -93,6 +93,21 @@ describe('rendered fragments as a table', () => {
     expect(plain.size).toBe(1)
   })
 
+  it('keys a body laid out beside a table as the core keys it', () => {
+    // The same literals the core's key is pinned to, in
+    // `crates/core/canvas-render/tests/compose_canvas_fragment_cache.rs`.
+    const board: SpatialCanvas = {
+      nodes: [textNode({ id: 'a', x: 0, y: 0, width: 260, height: 200, text: 'plain' })],
+      edges: [],
+    }
+    const without = new Map()
+    layoutSpatialCanvasWithAnchors(board, { ...base, contentCache: without })
+    const beside = new Map()
+    layoutSpatialCanvasWithAnchors(board, { ...base, fragments: [], contentCache: beside })
+    expect([...without.keys()]).toEqual(['[260,200,"plain",null,"Roboto",null,[]]'])
+    expect([...beside.keys()]).toEqual(['[260,200,"plain",null,"Roboto",null,[],"fragments"]'])
+  })
+
   it('serves no body cached without a table to a layout with one', () => {
     const contentCache = new Map()
     expect(drawn({ ...base, contentCache })).not.toContain('<g data-x2/>')

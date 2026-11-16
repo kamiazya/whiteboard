@@ -35,7 +35,7 @@ fn spaces(count: usize) -> impl Iterator<Item = u16> {
 }
 
 /// `/^(%|---|\.\.\.)/m`, where `^` also follows CR, U+2028 and U+2029.
-fn contains_document_marker(text: &[u16]) -> bool {
+pub(super) fn contains_document_marker(text: &[u16]) -> bool {
     let starts_line = |i: usize| {
         i.checked_sub(1)
             .and_then(|p| text.get(p))
@@ -112,7 +112,14 @@ fn single_quoted(text: &[u16], ctx: &Ctx) -> Units {
         }
     }
     out.push(SINGLE_QUOTE);
-    if ctx.implicit_key { out } else { fold(&out, indent, Mode::Flow, ctx.indent_at_start).text }
+    if ctx.implicit_key {
+        return out;
+    }
+    let folded = fold(&out, indent, Mode::Flow, ctx.indent_at_start).text;
+    if indent == 0 && contains_document_marker(&folded) {
+        return fold(&out, 2, Mode::Flow, ctx.indent_at_start).text;
+    }
+    folded
 }
 
 /// Single quotes when the text holds only double quotes, JSON otherwise.
@@ -223,10 +230,14 @@ fn plain_string(text: &[u16], ctx: &mut Ctx) -> Units {
         return quoted(text, ctx);
     }
     if ctx.implicit_key {
-        spelled
-    } else {
-        fold(&spelled, ctx.indent, Mode::Flow, ctx.indent_at_start).text
+        return spelled;
     }
+    let folded = fold(&spelled, ctx.indent, Mode::Flow, ctx.indent_at_start).text;
+    if ctx.indent == 0 && contains_document_marker(&folded) {
+        ctx.force_block_indent = true;
+        return block_string(text, ctx);
+    }
+    folded
 }
 
 /// A string's spelling in the document.

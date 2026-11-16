@@ -665,6 +665,7 @@ dependencies = [
  "whiteboard-facet-engine",
  "whiteboard-model",
  "whiteboard-plugin-visual",
+ "whiteboard-proptest",
  "whiteboard-scene",
 ]
 

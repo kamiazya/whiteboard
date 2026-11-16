@@ -270,7 +270,12 @@ export function layoutThroughCore(
   }
   let answer: ReturnType<typeof core.layout.layoutSpatialCanvas>
   try {
-    answer = core.layout.layoutSpatialCanvas(request, highlightCode, options.measure)
+    answer = core.layout.layoutSpatialCanvas(
+      request,
+      highlightCode,
+      options.measure,
+      options.contentCache,
+    )
   } catch (err) {
     core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'refused', err, repro: request })
     return ts(options)

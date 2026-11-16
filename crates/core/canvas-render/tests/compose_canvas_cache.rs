@@ -152,6 +152,7 @@ fn scene_of(canvas: &SpatialCanvas, cached: bool, layouts: usize, registry: &Reg
         side_overrides: None,
         host: &Naming,
         content_cache: cached.then_some(&cache as &dyn ContentCache),
+        fragment_table_reads: None,
         comments: CommentOptions::default(),
         proposals: &[],
         body: BodySeams {

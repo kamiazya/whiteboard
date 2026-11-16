@@ -576,6 +576,7 @@ impl<'c> Setup<'c> {
             comments: CommentOptions::default(),
             proposals: &[],
             content_cache: cache.map(|c| c as &dyn ContentCache),
+            fragment_table_reads: None,
             body: BodySeams {
                 inline: &self.host,
                 highlight: None,

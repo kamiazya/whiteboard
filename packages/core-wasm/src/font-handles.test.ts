@@ -25,6 +25,7 @@ function glueOf(...answers: string[]) {
       registered.push({ bytes: [...bytes], faces: JSON.parse(faces) })
       return `["ok",${6 + registered.length}]`
     },
+    release_layout_cache: () => false,
     release_layout_fonts(handle) {
       released.push(handle)
       return true

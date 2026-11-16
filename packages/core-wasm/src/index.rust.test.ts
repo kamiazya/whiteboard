@@ -12,6 +12,7 @@ import {
   okf_parse,
   okf_serialize,
   register_layout_fonts,
+  release_layout_cache,
   release_layout_fonts,
 } from '#glue'
 import { loadCore } from './load.js'
@@ -48,8 +49,9 @@ describe('the core-wasm shim over the built artifact', () => {
         layout_spatial_canvas,
         register_layout_fonts,
         release_layout_fonts,
+        release_layout_cache,
       ].map((f) => typeof f),
-    ).toEqual(Array(11).fill('function'))
+    ).toEqual(Array(12).fill('function'))
   })
 
   it('routes a layout from the bytes, and again from a compiled module', async () => {

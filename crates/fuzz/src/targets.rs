@@ -628,12 +628,13 @@ impl whiteboard_wasm::spatial_layout::Host for StandInHost {
 /// The whole layout's export: a request, read up to the first NUL, a
 /// host-measured one measured by [`StandInHost`]. Every answer is one of the
 /// four outcomes (laid out, refused, declined, or the fences whose tokens the
-/// host must send), and a call past the cap is refused before it is read.
+/// host must send), a call past the cap is refused before it is read, and a
+/// laid-out request naming a content cache is answered the same again.
 ///
 /// # Panics
 ///
-/// On an answer that is none of the four, or an input past the cap that is
-/// not refused.
+/// On an answer that is none of the four, an input past the cap that is not
+/// refused, or a warm cache that changed the answer.
 pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
     use whiteboard_wasm::spatial_layout::layout_with_host;
@@ -648,6 +649,11 @@ pub fn layout_spatial_canvas_wasm(data: &[u8]) {
         return;
     }
     assert_layout_answer(&answer);
+    // A request naming a content cache is laid out again over what the first
+    // kept: a warm cache changes timings, never the answer.
+    if answer.starts_with("[\"ok\",") && request.contains("\"cache\"") {
+        assert_eq!(layout_with_host(request, Some(&StandInHost)), answer);
+    }
 }
 
 fn assert_layout_answer(answer: &str) {

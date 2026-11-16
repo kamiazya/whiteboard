@@ -194,3 +194,16 @@ fn the_host_seed_is_a_layout_the_stand_in_measures() {
     let unmeasured = layout_with_host(&request, None);
     assert_eq!(unmeasured, "[\"declined\",\"host-measure\"]");
 }
+
+#[test]
+fn the_content_cache_seed_is_a_layout_a_warm_cache_answers_the_same() {
+    // The fragment seed with a plain body beside it, naming a surface, so the
+    // fuzzer starts from a request whose bodies are kept and read back.
+    let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
+    let request = std::fs::read_to_string(seeds.join("content-cache")).unwrap();
+    let first = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, None);
+    assert!(first.starts_with("[\"ok\""), "{first:.120}");
+    let again = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, None);
+    assert_eq!(again, first);
+    assert!(whiteboard_wasm::spatial_layout::release_layout_cache(7));
+}

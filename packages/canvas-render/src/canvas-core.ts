@@ -113,12 +113,16 @@ export interface CanvasLayoutCore {
    * `highlight` tokenises exactly the fences the core finds the default
    * highlighter would colour: the core holds the gate, never the grammars.
    * `measure` is the layout's own measurer, which the core asks mid-layout
-   * when the request names it `host`.
+   * when the request names it `host`. `cache` is the caller's content cache
+   * (`SpatialContentCache`), named by its identity alone: the core keeps its
+   * own laid-out bodies for as long as that object lives, and never reads or
+   * writes the object.
    */
   layoutSpatialCanvas(
     request: CanvasLayoutRequest,
     highlight: (lang: string, value: string) => CodeTokenLines | undefined,
     measure: MeasureText,
+    cache?: object,
   ): CanvasLayoutAnswer
 }
 

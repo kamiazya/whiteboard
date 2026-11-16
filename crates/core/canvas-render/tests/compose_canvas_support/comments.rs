@@ -261,6 +261,7 @@ fn replay_case(context: &Context, case: &Case) -> Res<()> {
         },
         proposals: &proposals,
         content_cache: None,
+        fragment_table_reads: None,
         body: BodySeams { inline: &host, highlight: None, math: None, diagram: None, embeds: None },
         budget: None,
         embed_path: &[],

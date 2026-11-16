@@ -264,6 +264,7 @@ fn options_of<'a>(
         comments: CommentOptions::default(),
         proposals: &[],
         content_cache: None,
+        fragment_table_reads: None,
         body: BodySeams {
             inline: &Plain,
             highlight: None,

@@ -7,8 +7,10 @@
 //! In: the request (the value wire of [`crate::json_canvas_wire`], read by
 //! [`request`]), whose font-table measurer names faces registered beforehand
 //! by [`register_layout_fonts`], and the host's measurer when the request
-//! names `{kind: 'host'}`. Out: one JSON text whose first element names
-//! the outcome:
+//! names `{kind: 'host'}`. A request naming `cache: <id>` reads laid-out
+//! bodies from that surface's content cache and keeps its own there
+//! ([`cache`]); `release_layout_cache(id)` forgets them. Out: one JSON text
+//! whose first element names the outcome:
 //!
 //! - `["ok", scene, anchors, degradations]`: the scene as the TypeScript holds
 //!   it ([`whiteboard_canvas_render::scene_wire`]), the anchors as
@@ -34,12 +36,14 @@
 //! A host answers a refusal and a decline from the TypeScript.
 
 mod answer;
+mod cache;
 mod fonts;
 mod fragments;
 mod host_measure;
 mod measure;
 mod request;
 
+pub use cache::{MAX_CACHED_BODIES, MAX_CACHED_BYTES, release_layout_cache};
 pub use fonts::{
     MAX_FACES, MAX_HANDLES, MAX_HELD_BYTES, register_layout_fonts, release_layout_fonts,
 };
@@ -50,7 +54,7 @@ use std::sync::OnceLock;
 
 use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::compose_canvas::{self, LaidOut, LayoutOptions, RenderStyle};
-use whiteboard_canvas_render::compose_node::BodySeams;
+use whiteboard_canvas_render::compose_node::{BodySeams, ContentCache};
 use whiteboard_canvas_render::measure::Measure;
 use whiteboard_canvas_render::references::{Expansion, WireHost};
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
@@ -70,6 +74,7 @@ use whiteboard_scene::NodeDecoration;
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
 use answer::{declined, laid_out, needs, refused};
+use cache::Surface;
 use fragments::FragmentTable;
 use measure::{Unmeasured, with_measurer};
 use request::{Comments, Request, Style, request_of};
@@ -255,6 +260,7 @@ fn render_style(style: &Style) -> RenderStyle<'_> {
 fn lay_out(
     request: &Request,
     measure: &dyn Measure,
+    surface: Option<&Surface>,
     registry: &Registry,
     themes: &[(String, ThemeTokens)],
 ) -> String {
@@ -282,7 +288,8 @@ fn lay_out(
         host: &host,
         comments: request.comments.options(),
         proposals: &request.proposals,
-        content_cache: None,
+        content_cache: surface.map(|surface| surface as &dyn ContentCache),
+        fragment_table_reads: fragments.as_ref().map(FragmentTable::reads),
         body: BodySeams {
             inline: &host,
             highlight: Some(&host),
@@ -308,6 +315,16 @@ fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable
     }
 }
 
+/// Whether a layout's bodies may be kept: one answered, or one asking for
+/// fences, whose bodies each drew in full or charged the refusal a missing
+/// fence charges, which the composer never keeps; so the call that sends the
+/// tokens reads the rest. A declined layout keeps nothing, since what it could
+/// not answer (a body past the parser's bounds, say) may have shaped a body
+/// without charging anything.
+fn keeps(answer: &str) -> bool {
+    answer.starts_with(r#"["ok","#) || answer.starts_with(r#"["needs","#)
+}
+
 /// A whole canvas laid out; see the module's documentation for the wire.
 /// `host` measures a request that names `{kind: 'host'}`.
 #[wasm_bindgen]
@@ -318,6 +335,17 @@ fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable
 )]
 pub fn layout_spatial_canvas(request: &str, host: Option<HostMeasurer>) -> String {
     layout_with_host(request, host.as_ref().map(|host| host as &dyn Host))
+}
+
+/// The content a request carries past its caps (comments, proposals, bodies), if any.
+fn past_content_caps(request: &Request) -> Option<&'static str> {
+    if past_comment_caps(&request.comments) {
+        return Some("comments");
+    }
+    if past_proposal_caps(&request.proposals, request.comments.threads.len()) {
+        return Some("proposals");
+    }
+    (body_total(request) > MAX_BODY_BYTES).then_some("bodies")
 }
 
 /// [`layout_spatial_canvas`] over any [`Host`]: a native caller's stand-in,
@@ -339,14 +367,8 @@ pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
         return refused("input-too-large", "fragments");
     }
-    if past_comment_caps(&request.comments) {
-        return refused("input-too-large", "comments");
-    }
-    if past_proposal_caps(&request.proposals, request.comments.threads.len()) {
-        return refused("input-too-large", "proposals");
-    }
-    if body_total(&request) > MAX_BODY_BYTES {
-        return refused("input-too-large", "bodies");
+    if let Some(what) = past_content_caps(&request) {
+        return refused("input-too-large", what);
     }
     let (Some(registry), Some(themes)) = (registry(), themes()) else {
         return refused("malformed", "registry");
@@ -356,10 +378,21 @@ pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     if request.font_families.len() > themes.len() {
         return refused("input-too-large", "font-families");
     }
+    let surface = request
+        .cache
+        .map(|id| Surface::new(id, &request.measure, request.dark, request.geometry.as_ref()));
     match with_measurer(&request.measure, host, |measure| {
-        lay_out(&request, measure, registry, themes)
+        lay_out(&request, measure, surface.as_ref(), registry, themes)
     }) {
-        Ok(answer) => answer,
+        Ok(answer) => {
+            // Measured throughout, since a host that failed answers `Err`.
+            if keeps(&answer)
+                && let Some(surface) = surface
+            {
+                surface.keep();
+            }
+            answer
+        }
         Err(Unmeasured::FontHandle) => refused("malformed", "font-handle"),
         Err(Unmeasured::Host) => declined("host-measure"),
     }

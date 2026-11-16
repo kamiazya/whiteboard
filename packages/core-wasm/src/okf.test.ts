@@ -19,6 +19,7 @@ function coreAnswering(answer: unknown) {
     layout_spatial_canvas: () => '[]',
     register_layout_fonts: () => '[]',
     release_layout_fonts: () => false,
+    release_layout_cache: () => false,
     facet_bucket_check: () => '["declined","malformed","wire"]',
     okf_parse: reply,
     okf_serialize: reply,

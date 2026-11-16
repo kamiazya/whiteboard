@@ -12,6 +12,8 @@
 
 mod level;
 
+use std::cell::Cell;
+
 use whiteboard_det::math::{compare_numbers, js_max};
 use whiteboard_edge_routing::edge_sides::{EdgeAnchorOverride, EdgeAnchorPair};
 use whiteboard_facet_engine::engine::ThemeTokens;
@@ -82,6 +84,11 @@ pub struct LayoutOptions<'a> {
     /// nested in it.
     pub proposals: &'a [Proposal],
     pub content_cache: Option<&'a dyn ContentCache>,
+    /// How often a math or diagram renderer has been asked in a layout given a
+    /// fragment table (`fragmentTableReads`); absent without one. The content
+    /// cache's key says whether there was a table, and a body that asked one is
+    /// not kept, since its key cannot carry what the table answered.
+    pub fragment_table_reads: Option<&'a Cell<usize>>,
     pub body: BodySeams<'a>,
     /// The nested-layout account this canvas spends from when it is itself
     /// embedded; absent, a fresh one.

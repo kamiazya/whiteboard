@@ -36,6 +36,7 @@ import {
   type LayoutRequest,
   layoutSpatialCanvas,
 } from './layout.js'
+import { layoutCachesOf } from './layout-caches.js'
 import {
   type OkfDocument,
   type OkfErrors,
@@ -52,7 +53,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '32'
+export const EXPECTED_ABI = '33'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -203,7 +204,9 @@ export interface Core {
    * seen is one call. With no `highlight` such a layout is declined. A
    * font-table measurer's faces cross once per measurer and core, and a layout
    * names them by handle. A request naming the host's measurer is measured
-   * by `measure` through the core's one import, mid-layout. Throws
+   * by `measure` through the core's one import, mid-layout. `cache` is the
+   * caller's content cache, which the core keeps its own bodies for, per
+   * cache object; nothing is read from or written to the object itself. Throws
    * `CoreInputRefused` for a request the wire does not carry or an answer
    * that is not one.
    */
@@ -211,6 +214,7 @@ export interface Core {
     request: LayoutRequest,
     highlight?: FenceHighlighter,
     measure?: HostMeasure,
+    cache?: object,
   ): LayoutAnswer
 }
 
@@ -324,12 +328,13 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     invalid: (issues) => new CoreSpatialInvalid(issues),
   }
   const fonts = new FontHandles(layout, errors)
+  const caches = layoutCachesOf(layout)
   return {
     parseSpatial: (text) => parseSpatial(spatial, errors, text),
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
-    layoutSpatialCanvas: (request, highlight, measure) =>
+    layoutSpatialCanvas: (request, highlight, measure, cache) =>
       layoutSpatialCanvas(
         layout,
         errors,
@@ -338,6 +343,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
         fences.for(highlight),
         fonts,
         measure,
+        cache === undefined ? undefined : caches.surfaceOf(cache),
       ),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),

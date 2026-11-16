@@ -3,7 +3,9 @@
 //! hold the text.
 
 use super::fold::{Mode, Units, fold};
-use super::quote::{Ctx, after_newline_runs, indent_for, newline_runs, quoted, units};
+use super::quote::{
+    Ctx, after_newline_runs, contains_document_marker, indent_for, newline_runs, quoted, units,
+};
 
 const NEWLINE: u16 = b'\n' as u16;
 const SPACE: u16 = b' ' as u16;
@@ -144,6 +146,10 @@ pub(super) fn block_string(value: &[u16], ctx: &mut Ctx) -> Units {
         let folded = after_newline_runs(&keep_more_indented(&folded), &[], indent);
         let joined: Units = [leading.as_slice(), folded.as_slice(), end.as_slice()].concat();
         let body = fold(&joined, indent, Mode::Block, Some(ctx.indent));
+        if indent == 0 && contains_document_marker(&body.text) {
+            ctx.force_block_indent = true;
+            return block_string(value, ctx);
+        }
         if !body.overflowed {
             return folded_block(&header, indent, &body.text);
         }

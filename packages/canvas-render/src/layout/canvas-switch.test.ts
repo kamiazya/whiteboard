@@ -49,6 +49,7 @@ function coreOf(impl: CoreImpl, answer: Answering) {
   const requests: CanvasLayoutRequest[] = []
   const highlighters: unknown[] = []
   const measurers: unknown[] = []
+  const caches: unknown[] = []
   const mismatches: CoreMismatch[] = []
   const core: LayoutCore = {
     routing: {
@@ -57,17 +58,18 @@ function coreOf(impl: CoreImpl, answer: Answering) {
       },
     },
     layout: {
-      layoutSpatialCanvas: (request, highlight, measure) => {
+      layoutSpatialCanvas: (request, highlight, measure, cache) => {
         requests.push(request)
         highlighters.push(highlight)
         measurers.push(measure)
+        caches.push(cache)
         return answer(request, highlight, measure)
       },
     },
     impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
     onMismatch: (mismatch) => mismatches.push(mismatch),
   }
-  return { core, requests, highlighters, measurers, mismatches }
+  return { core, requests, highlighters, measurers, caches, mismatches }
 }
 
 const agreeing: Answering = () => ({
@@ -447,6 +449,17 @@ describe('what the core can be handed', () => {
     layoutSpatialCanvasWithAnchors(canvas, { ...base, measure: host, core })
     expect(requests).toMatchObject([{ measure: { kind: 'host' } }])
     expect(measurers).toEqual([host])
+  })
+
+  it("hands the core the caller's content cache, and none when there is none", () => {
+    const { core, requests, caches } = coreOf('rust', agreeing)
+    const contentCache = new Map()
+    layoutSpatialCanvasWithAnchors(canvas, { ...base, contentCache, core })
+    layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
+    expect(caches).toEqual([contentCache, undefined])
+    expect(caches[0]).toBe(contentCache)
+    // The cache is the object itself, never part of the request's data.
+    expect(requests[0]).toEqual(requests[1])
   })
 })
 
