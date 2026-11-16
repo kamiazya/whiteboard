@@ -34,10 +34,10 @@ const LEDGER: Readonly<Record<string, { readonly chains: number; readonly reason
     reason:
       'the quality metrics are independent of the layout code they judge, so they do not call into the model',
   },
-  'packages/canvas-render/src/layout/edges/edge-rules.ts': {
+  'packages/canvas-render/src/containment.ts': {
     chains: 1,
     reason:
-      "the edge router's own `{x, y, w, h}` Rect; `frameHolds` takes `{width, height}` and every call here would need an adapter",
+      "the edge router's and tidy's own `{x, y, w, h}` Rect; `frameHolds` takes `{width, height}` and every call here would need an adapter",
   },
 }
 

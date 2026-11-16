@@ -14,8 +14,8 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
-import { glowReachPx } from '../layout/ink/glow.js'
+import { EDGE_JUMP_RADIUS_PX } from '../edge-path/edge-flatten.js'
+import { glowReachPx } from '../ink/glow.js'
 import { sceneBounds } from '../scene-bounds.js'
 import { isWellFormedXmlFragment } from '../test-utils/xml-well-formed.js'
 import { renderSceneToSvg } from './backend.js'

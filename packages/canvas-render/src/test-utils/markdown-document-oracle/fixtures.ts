@@ -1,7 +1,7 @@
 import type { CanvasEdge, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { FragmentEntry } from '../../layout/nodes/fragment-ask.js'
+import type { FragmentEntry } from '../../fragment-ask.js'
 import type { ReferenceWire } from '../../references/wire.js'
 import type { MarkdownTables } from './oracle.js'
 

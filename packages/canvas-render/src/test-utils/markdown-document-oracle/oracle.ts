@@ -1,13 +1,9 @@
 import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
+import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from '../../fragment-ask.js'
 import { layoutCommentBody } from '../../layout/comment-body.js'
 import { layoutMdastBlocks } from '../../layout/markdown-body.js'
-import {
-  type FragmentAsk,
-  type FragmentEntry,
-  fragmentAskKey,
-} from '../../layout/nodes/fragment-ask.js'
 import { selectMarkdownSection } from '../../layout/nodes/mdast-section.js'
 import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wire.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../../theme/font-family.js'

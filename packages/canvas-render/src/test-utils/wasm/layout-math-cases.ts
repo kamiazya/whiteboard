@@ -1,7 +1,7 @@
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
+import type { FragmentEntry } from '../../fragment-ask.js'
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
-import type { FragmentEntry } from '../../layout/nodes/fragment-ask.js'
 import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wire.js'
 
 /**

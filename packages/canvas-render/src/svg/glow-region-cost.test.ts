@@ -8,7 +8,7 @@
 
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { glowReachPx } from '../layout/ink/glow.js'
+import { glowReachPx } from '../ink/glow.js'
 import { renderSceneToSvg } from './backend.js'
 
 const GLOW = { radiusPx: 6 } as const

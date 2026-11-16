@@ -14,16 +14,11 @@ import type {
   ShapeSceneNode,
 } from '@kamiazya/whiteboard-scene'
 import { edgeArrowPolygons } from '../edge-arrows.js'
+import { EDGE_JUMP_RADIUS_PX } from '../edge-path/edge-flatten.js'
 import { isFiniteBox } from '../finite-box.js'
-import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
-import { GLOW_STD_DEVIATION_RATIO, glowReachPx } from '../layout/ink/glow.js'
-import {
-  SKETCH_INK_REACH_PX,
-  SKETCH_PASSES,
-  sketchEdge,
-  sketchShape,
-} from '../layout/ink/sketch.js'
-import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
+import { GLOW_STD_DEVIATION_RATIO, glowReachPx } from '../ink/glow.js'
+import { SKETCH_INK_REACH_PX, SKETCH_PASSES, sketchEdge, sketchShape } from '../ink/sketch.js'
+import { nodeOutline, type ShapeTable } from '../outline/node-outline.js'
 import { formatCoord } from './format.js'
 import type { IconTable } from './icon.js'
 import {
@@ -267,7 +262,7 @@ function passOpacity(
 
 function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   // Non-rect silhouettes come from the shared decomposition (one producer
-  // for drawing and hit-testing — layout/nodes/node-outline.ts); an absent
+  // for drawing and hit-testing — outline/node-outline.ts); an absent
   // `shape` stays the historic rect byte-for-byte.
   if (node.shape !== undefined) {
     const outline = nodeOutline(node.shape, node.bbox, tables?.shapes)

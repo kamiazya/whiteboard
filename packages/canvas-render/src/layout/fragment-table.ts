@@ -1,5 +1,5 @@
+import { type FragmentAsk, fragmentAskKey } from '../fragment-ask.js'
 import type { ResolvedLayoutOptions, SpatialLayoutOptions } from './layout-options.js'
-import { type FragmentAsk, fragmentAskKey } from './nodes/fragment-ask.js'
 import type { RenderedSvgFragment } from './nodes/mdast-layout-options.js'
 
 // The fragment seams answered from a table (`SpatialLayoutOptions.fragments`),

@@ -1,10 +1,10 @@
 import type { BoundingBox, NodeOutline } from '@kamiazya/whiteboard-scene'
-import { nodeOutline, outlineContains, outlineEntryPoint } from '../../layout/nodes/node-outline.js'
+import { nodeOutline, outlineContains, outlineEntryPoint } from '../../outline/node-outline.js'
 import { f64Hex } from '../render-oracle/scene-dump.js'
 
 /**
  * The recorded answers of a silhouette's hit test and edge anchoring
- * (`outlineContains`, `outlineEntryPoint` in `layout/nodes/node-outline.ts`),
+ * (`outlineContains`, `outlineEntryPoint` in `outline/node-outline.ts`),
  * for every bundled silhouette, an id no table carries, and boxes from the
  * ordinary to the degenerate and the non-finite.
  *

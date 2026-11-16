@@ -20,8 +20,8 @@ import type {
   ShapeContribution,
   ShapeTable,
 } from '@kamiazya/whiteboard-scene'
-import { hypot } from '../../det-math.js'
-import { isFiniteBox } from '../../finite-box.js'
+import { hypot } from '../det-math.js'
+import { isFiniteBox } from '../finite-box.js'
 
 export type { NodeOutline, ShapeContribution, ShapeTable }
 

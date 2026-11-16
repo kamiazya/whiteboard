@@ -14,6 +14,7 @@
  * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
 import { type EdgeSide, edgeSideSchema } from '@kamiazya/whiteboard-model'
+import { fullyContains } from '../../containment.js'
 import { compareNumbers } from '../../det-math.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
 import type { Point, Rect } from './edge-geometry.js'
@@ -461,22 +462,7 @@ export type PenaltyRule = {
   ) => number
 }
 
-/**
- * Whether `outer` fully contains `inner` (inclusive borders). A rect that
- * FULLY CONTAINS an edge's endpoint node (a group frame around its member)
- * can never be treated as an obstacle to route around — every route out of
- * the contained node still has to cross it — so both `deriveDefaultSides`'s
- * occlusion filter (spatial-edges.ts) and `endpoint-body-ink`'s exclusion
- * below reuse this SAME predicate rather than each inventing their own.
- */
-export function fullyContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.w <= outer.x + outer.w &&
-    inner.y + inner.h <= outer.y + outer.h
-  )
-}
+export { fullyContains }
 
 /**
  * overlap-and-intrusion: collinear axis-aligned overlap (a parallel overlap

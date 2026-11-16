@@ -1,4 +1,4 @@
-//! The style-randomness primitive (`layout/seed.ts`, package-canvas-render.md
+//! The style-randomness primitive (`ink/seed.ts`, package-canvas-render.md
 //! decision #10): every "random" choice a style makes is a pure function of a
 //! node's identity, never of ambient state or of geometry, so a styled canvas
 //! renders byte-identically twice and a moved box draws the same ink moved.

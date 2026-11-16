@@ -166,3 +166,12 @@ export const MARKDOWN_THEME_COMPACT: MarkdownTheme = Object.freeze({
   blockquoteGapPx: 12,
   tableCellPaddingXPx: 10,
 })
+
+/** A text node's body metrics, which the editor's in-place editors match. */
+export const BODY_FONT_SIZE_PX = MARKDOWN_THEME_NODE.bodyFontSizePx
+export const BODY_LINE_HEIGHT_PX = bodyLineHeightPx(MARKDOWN_THEME_NODE)
+
+/** Derived metrics, per theme rather than per module. */
+export function bodyLineHeightPx(theme: MarkdownTheme): number {
+  return theme.bodyFontSizePx * theme.bodyLineHeight
+}

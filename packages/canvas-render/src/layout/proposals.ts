@@ -19,15 +19,15 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts, endNode, isFrame } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, Scene, SceneNode } from '@kamiazya/whiteboard-scene'
-import type { SpatialProposalAppearance } from '../theme/spatial-appearance.js'
-import { layoutCommentBody, PROPOSAL_TEXT_MAX_WIDTH_PX } from './comment-body.js'
-import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
 import {
-  type BodyLayoutSeam,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   type EdgePathLookup,
-} from './comments.js'
+} from '../comment-geometry.js'
+import type { SpatialProposalAppearance } from '../theme/spatial-appearance.js'
+import { layoutCommentBody, PROPOSAL_TEXT_MAX_WIDTH_PX } from './comment-body.js'
+import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
+import type { BodyLayoutSeam } from './comments.js'
 import type { Point } from './edges/edge-geometry.js'
 import type { ResolvedLayoutOptions } from './layout-options.js'
 import { contentExtent } from './scene-extent.js'

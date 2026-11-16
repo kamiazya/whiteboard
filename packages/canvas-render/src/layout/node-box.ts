@@ -29,6 +29,8 @@ import type {
   ShapeSceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
+import { seedFromId } from '../ink/seed.js'
+import { outlineContentBox } from '../outline/node-outline.js'
 import type { ResolvedReference } from '../references/resolved.js'
 import { markdownTheme } from '../theme/theme-asset.js'
 import { withoutOverlays } from './comments.js'
@@ -39,10 +41,8 @@ import type {
   EmbeddedCanvasMiniature,
   MdastLayoutOptions,
 } from './nodes/mdast-layout-options.js'
-import { outlineContentBox } from './nodes/node-outline.js'
 import { fitToWidth } from './nodes/truncate.js'
 import { fitSceneIntoBox } from './scale-scene.js'
-import { seedFromId } from './seed.js'
 import { translateScene } from './translate-scene.js'
 
 export function mdastOptionsFor(

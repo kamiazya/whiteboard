@@ -7,8 +7,8 @@ import { test } from '@fast-check/vitest'
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { BUNDLED_SHAPE_TABLE, nodeOutline } from '../nodes/node-outline.js'
-import { styleRandomFromSeed } from '../seed.js'
+import { BUNDLED_SHAPE_TABLE, nodeOutline } from '../outline/node-outline.js'
+import { styleRandomFromSeed } from './seed.js'
 import { SKETCH_INK_REACH_PX, SKETCH_PASSES, sketchEdge, sketchShape } from './sketch.js'
 
 /** Every number pair in a path's `d`: end AND control points, which bound a quadratic. */

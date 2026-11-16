@@ -6,9 +6,9 @@
 
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { COMMENT_BUBBLE_OFFSET_PX } from '../comment-geometry.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
-  COMMENT_BUBBLE_OFFSET_PX,
   COMMENT_BUBBLE_RING_REACH_PX,
   commentBubbleCandidates,
   placeCommentBubble,

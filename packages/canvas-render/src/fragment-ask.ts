@@ -1,5 +1,4 @@
 import { z } from 'zod'
-import type { RenderedSvgFragment } from './mdast-layout-options.js'
 
 // Rendered math blocks and diagram fences as DATA. The engines behind the
 // `renderMath` / `renderDiagram` seams (MathJax, mermaid) are asynchronous and
@@ -29,4 +28,15 @@ export type FragmentEntry = readonly [key: string, fragment: RenderedSvgFragment
  */
 export function fragmentAskKey(ask: FragmentAsk): string {
   return ask.kind === 'math' ? `math:${ask.value}` : `fence:${ask.lang}:${ask.value}`
+}
+
+/**
+ * The object form a math/diagram renderer returns when it knows the
+ * fragment's intrinsic size. Plain TS, in-process only (zod-schema-
+ * discipline: no boundary crossed).
+ */
+export interface RenderedSvgFragment {
+  readonly svg: string
+  readonly width?: number
+  readonly height?: number
 }
