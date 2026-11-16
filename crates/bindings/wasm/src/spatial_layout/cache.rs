@@ -174,14 +174,16 @@ pub(super) struct Surface {
     id: u32,
     /// The measurer and the mode, ahead of the composer's key, which starts `[`.
     prefix: String,
-    written: RefCell<Vec<(u64, String, FittedBlocks)>>,
+    /// This layout's writes, uncapped: one layout writes at most a body per
+    /// element, and the store's caps apply as they are kept.
+    written: RefCell<Resident>,
 }
 
 impl Surface {
     pub(super) fn new(id: u32, measure: &MeasureSpec, dark: bool) -> Self {
         let mode = if dark { "dark" } else { "light" };
         let prefix = format!("{}|{mode}|", measurer_of(measure));
-        Self { id, prefix, written: RefCell::default() }
+        Self { id, prefix, written: RefCell::new(Resident::new(usize::MAX, usize::MAX)) }
     }
 
     fn key(&self, key: &str) -> String {
@@ -191,8 +193,8 @@ impl Surface {
     /// Keeps what the layout wrote, once it is known to be answered.
     pub(super) fn keep(self) {
         let mut store = resident();
-        for (_, key, body) in self.written.into_inner() {
-            store.set(self.id, key, body);
+        for kept in self.written.into_inner().kept {
+            store.set(self.id, kept.key, kept.body);
         }
     }
 }
@@ -200,18 +202,12 @@ impl Surface {
 impl ContentCache for Surface {
     fn get(&self, key: &str) -> Option<FittedBlocks> {
         let key = self.key(key);
-        let hash = hash_of(&key);
-        let written = self.written.borrow();
-        if let Some((.., body)) = written.iter().find(|(h, held, _)| *h == hash && *held == key) {
-            return Some(body.clone());
-        }
-        drop(written);
-        resident().get(self.id, &key)
+        let written = self.written.borrow_mut().get(self.id, &key);
+        written.or_else(|| resident().get(self.id, &key))
     }
 
     fn set(&self, key: &str, body: &FittedBlocks) {
-        let key = self.key(key);
-        self.written.borrow_mut().push((hash_of(&key), key, body.clone()));
+        self.written.borrow_mut().set(self.id, self.key(key), body.clone());
     }
 }
 
