@@ -274,7 +274,7 @@ export interface CommentDocumentOptions {
 }
 
 /** `body` and `options` as the comment request the core answers as `layoutCommentBody` would, or why not. */
-export function commentLayoutRequest(
+function commentLayoutRequest(
   body: string,
   options: CommentDocumentOptions,
 ): MarkdownCommentRequest | { readonly skip: MarkdownLayoutSkip } {
