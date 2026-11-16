@@ -1,6 +1,6 @@
-import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest } from '../../canvas-core.js'
 import type { CoreImpl, CoreMismatch, LayoutCore } from '../../layout/edges/layout-core.js'
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
@@ -17,7 +17,13 @@ import { layoutCases } from './layout-cases.js'
  * under `rust`, which answers with the core. The layouts are `layout-cases.ts`.
  */
 describe.runIf(built)('the whole layout through the real core', () => {
-  const real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
+  // factory to collect it, so a core made here fails the file where there is
+  // no artifact instead of skipping it.
+  let real: Core
+  beforeAll(() => {
+    real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  })
   const answered = { compared: 0, declined: [] as string[] }
   const counting: CanvasLayoutCore = {
     layoutSpatialCanvas(request: CanvasLayoutRequest, highlight, measure) {

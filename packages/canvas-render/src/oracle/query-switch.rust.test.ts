@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
-import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import type { CoreImpl, CoreMismatch, LayoutCore } from '../layout/edges/layout-core.js'
 import { fittedTextNodeHeight } from '../layout/fitted-height.js'
 import {
@@ -54,7 +54,13 @@ const boxHex = (b: BoundingBox) => [hex(b.x), hex(b.y), hex(b.w), hex(b.h)]
 const DECLINED = ['quote 33 deep', 'list 39 deep', 'list 40 deep']
 
 describe.runIf(built)('the recorded queries through the query switch', () => {
-  const real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
+  // factory to collect it, so a core made here fails the file where there is
+  // no artifact instead of skipping it.
+  let real: Core
+  beforeAll(() => {
+    real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  })
 
   /** A core under `impl`, and what it reported. */
   const coreOf = (impl: CoreImpl) => {
