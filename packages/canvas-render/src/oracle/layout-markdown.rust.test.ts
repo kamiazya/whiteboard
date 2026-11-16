@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import { highlightCode } from '../highlight/lowlight.js'
 import {
   type MarkdownMeta,
@@ -95,7 +95,13 @@ function judged(core: Core, record: MarkdownRecord, meta: MarkdownMeta): string 
 }
 
 describe.runIf(built)('the recorded markdown-document oracle through the core', () => {
-  const core = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
+  // factory to collect it, so a core made here fails the file where there is
+  // no artifact instead of skipping it.
+  let core: Core
+  beforeAll(() => {
+    core = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  })
 
   for (const name of SURFACES) {
     it(`answers every ${name} record as the TypeScript did`, { timeout: 120_000 }, () => {
