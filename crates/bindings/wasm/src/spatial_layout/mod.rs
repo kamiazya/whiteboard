@@ -337,6 +337,17 @@ pub fn layout_spatial_canvas(request: &str, host: Option<HostMeasurer>) -> Strin
     layout_with_host(request, host.as_ref().map(|host| host as &dyn Host))
 }
 
+/// The content a request carries past its caps (comments, proposals, bodies), if any.
+fn past_content_caps(request: &Request) -> Option<&'static str> {
+    if past_comment_caps(&request.comments) {
+        return Some("comments");
+    }
+    if past_proposal_caps(&request.proposals, request.comments.threads.len()) {
+        return Some("proposals");
+    }
+    (body_total(request) > MAX_BODY_BYTES).then_some("bodies")
+}
+
 /// [`layout_spatial_canvas`] over any [`Host`]: a native caller's stand-in,
 /// since the import answers only inside a wasm host.
 #[must_use]
@@ -356,14 +367,8 @@ pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
         return refused("input-too-large", "fragments");
     }
-    if past_comment_caps(&request.comments) {
-        return refused("input-too-large", "comments");
-    }
-    if past_proposal_caps(&request.proposals, request.comments.threads.len()) {
-        return refused("input-too-large", "proposals");
-    }
-    if body_total(&request) > MAX_BODY_BYTES {
-        return refused("input-too-large", "bodies");
+    if let Some(what) = past_content_caps(&request) {
+        return refused("input-too-large", what);
     }
     let (Some(registry), Some(themes)) = (registry(), themes()) else {
         return refused("malformed", "registry");
