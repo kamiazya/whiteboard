@@ -7,6 +7,7 @@ import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import type { FragmentLoaders } from '../lib/fragment-requests.js'
 import { sceneLinkTarget } from '../lib/scene-link.js'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
+import { currentLayoutCore } from '../lib/spatial/layout-core.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import type { PastDocument } from '../lib/versions-backend.js'
@@ -24,8 +25,8 @@ import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewpor
  * `VersionTimeline`, `PastDocument`) and what `.claude/rules/vocabulary.md`
  * fixes for a saved point in a document's history.
  *
- * Read-only by CONSTRUCTION rather than by a flag: this is the same
- * `CanvasViewer` the MCP Apps widget uses and the same `PreviewPane` the
+ * Read-only by CONSTRUCTION rather than by a flag: this is canvas-viewer's
+ * `CanvasViewer` and the same `PreviewPane` the
  * markdown editor's Read mode uses, neither of which has an edit path to
  * disable. That mattered for the decision — "look at it, then decide" needed
  * a surface where looking cannot become editing, and inventing a read-only
@@ -59,9 +60,9 @@ export function VersionPreview({
   readonly fragmentLoaders?: FragmentLoaders
 }): JSX.Element {
   const measure = useMemo(() => createBrowserMeasureText(), [])
-  // Typeset as the editor typesets: a formula drawn as source here would
-  // read as a change in what the version holds.
-  const { seams, table } = useMarkdownFragments(fragmentLoaders)
+  // Typeset as the editor typesets, and as the table the Rust core can be
+  // handed: a formula drawn as source would read as a change in the version.
+  const { table } = useMarkdownFragments(fragmentLoaders)
   // The viewer lays out what it is given and knows no library; colour by
   // intent is applied to the canvas, as the layout itself applies it, so the
   // legend (derived from the tags and colours the canvas carries) follows.
@@ -85,19 +86,23 @@ export function VersionPreview({
       </div>
     )
   }
-  return <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} {...seams} />
+  return (
+    <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} fragments={table} />
+  )
 }
 
 /**
  * Its own component because the viewport is state, and a hook cannot live
- * behind the kind branch above.
+ * behind the kind branch above. The board is laid out by the core this realm
+ * has loaded, under the editor's own switch (ADR-0054); before it loads, the
+ * TypeScript draws the version.
  */
 function PastCanvasPreview({
   theme,
   ...drawn
 }: { readonly theme: ResolvedTheme } & Pick<
   ComponentProps<typeof CanvasViewer>,
-  'canvas' | 'measure' | 'renderMath' | 'renderDiagram'
+  'canvas' | 'measure' | 'fragments'
 >): JSX.Element {
   const { viewport, moved, reset, rootRef, surfaceHandlers } = usePreviewViewport()
   return (
@@ -126,7 +131,12 @@ function PastCanvasPreview({
           fill: editorTextFill(theme),
         }}
       >
-        <CanvasViewer {...drawn} theme={theme} label="A past state of this document" />
+        <CanvasViewer
+          {...drawn}
+          core={currentLayoutCore()}
+          theme={theme}
+          label="A past state of this document"
+        />
       </div>
       {/* The dock's own view control, said the dock's way: a glyph labelled
           "Zoom to fit", no words drawn. This was a text button reading
