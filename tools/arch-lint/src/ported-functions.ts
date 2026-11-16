@@ -120,6 +120,28 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       member: 'layoutSpatialCanvas',
     },
   },
+  {
+    // A markdown NOTE (S18c): the core's markdown entry, a `kind: 'markdown'`
+    // request on the whole layout's export (S18b), answered under its own
+    // switch key. The daemon's roots follow `WHITEBOARD_CORE_LAYOUT`; the
+    // TypeScript it holds to is `layoutMdastBlocks` over the parsed body.
+    // Stays 2 for routing's reason: stage 3 deletes the rollback.
+    name: 'layoutMarkdown',
+    stage: 2,
+    ts: { file: 'packages/canvas-render/src/layout/markdown-body.ts', export: 'layoutMdastBlocks' },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutMarkdown',
+      option: 'MarkdownDocumentOptions.core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/mod.rs', fn: 'layout_spatial_canvas' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutMarkdown',
+    },
+  },
   // A body's parse and its reference resolution have no switch of their own:
   // the core reaches them only through the whole layout, whose differential
   // compares every scene they shape, so that export is the shim's member.

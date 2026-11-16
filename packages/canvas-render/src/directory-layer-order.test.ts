@@ -96,6 +96,9 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   // `LayoutCore` names: an engine's own rank, reading the edge vocabulary.
   'canvas-core.ts': 'engines',
   'canvas-fragment.ts': 'leaf',
+  // A markdown note's request and answer, which `LayoutCore` names beside the
+  // whole layout's: the same rank as `canvas-core.ts`.
+  'markdown-core.ts': 'engines',
   'det-math.ts': 'leaf',
   'edge-arrows.ts': 'leaf',
   'hit-boxes.ts': 'leaf',

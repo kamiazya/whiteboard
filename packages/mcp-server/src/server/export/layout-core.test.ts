@@ -192,7 +192,12 @@ describe('the daemon layout core', () => {
   describe.runIf(built)('over the staged artifact', () => {
     it('routes and lays out with the Rust core when nothing is set', async () => {
       const core = await layoutCore(layoutCoreSettingsFrom({}))()
-      expect(core?.impl).toEqual({ routeLayout: 'rust', layoutSpatialCanvas: 'rust' })
+      expect(core?.impl).toEqual({
+        routeLayout: 'rust',
+        layoutSpatialCanvas: 'rust',
+        layoutMarkdown: 'rust',
+      })
+      expect(core?.markdown).toBeDefined()
     })
 
     describe('under the default settings, over what the daemon hands a layout', () => {
@@ -276,7 +281,11 @@ describe('the daemon layout core', () => {
       const core = await layoutCore(
         layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'ts', WHITEBOARD_CORE_LAYOUT: 'rust' }),
       )()
-      expect(core?.impl).toEqual({ routeLayout: 'ts', layoutSpatialCanvas: 'rust' })
+      expect(core?.impl).toEqual({
+        routeLayout: 'ts',
+        layoutSpatialCanvas: 'rust',
+        layoutMarkdown: 'rust',
+      })
       if (core?.layout === undefined) throw new Error('the core has no whole layout')
       const { layout } = core
       let asked = 0

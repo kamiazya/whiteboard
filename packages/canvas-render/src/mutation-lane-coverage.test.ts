@@ -446,9 +446,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // `picture/canvas-view-picture.ts`, the widget's picture contract (a schema
     // and one call into `topmostHit`). Outside the lane as `hit-test.ts` is:
     // `hit-test.test.ts` and the widget's picture tests pin every branch.
+    // 136 with `markdown-core.ts` (types alone) and `layout/markdown-switch.ts`,
+    // a markdown note's switch. Outside the lane for the canvas switch's
+    // reason: a dispatch, a request built from options and a comparison,
+    // every branch driven by `layout/markdown-switch.test.ts` and
+    // mutation-checked by hand, and it goes when the TypeScript layout does.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 134,
+      production: 136,
     })
   })
 

@@ -2,6 +2,7 @@ import type {
   CanvasLayoutTally,
   CoreMismatch,
   LayoutCore,
+  MarkdownLayoutTally,
 } from '@kamiazya/whiteboard-canvas-render'
 // Types only: this module is on the page's critical path, and a value import
 // of codec would carry its readers (the schemas) into the boot bundle.
@@ -41,12 +42,16 @@ export interface CoreLog {
   debug(message: string, data?: unknown): void
 }
 
-function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally>) {
+function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally>) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   if (mismatch.fn === 'layoutSpatialCanvas') {
     const { fn, kind, at, ts, rust } = mismatch
     return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
+  }
+  if (mismatch.fn === 'layoutMarkdown') {
+    const { fn, kind, at, ts, rust } = mismatch
+    return { fn, kind, at, ts, rust, bodyChars: mismatch.repro.body.length }
   }
   return {
     fn: mismatch.fn,
