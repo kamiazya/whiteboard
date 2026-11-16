@@ -1,32 +1,16 @@
 import type { EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type {
-  CanvasLayoutCore,
-  CanvasLayoutMismatch,
-  CanvasLayoutTally,
-} from '../../canvas-core.js'
-import type {
-  MarkdownLayoutCore,
-  MarkdownLayoutMismatch,
-  MarkdownLayoutTally,
-} from '../../markdown-core.js'
-import type { QueryLayoutCore, QueryLayoutMismatch, QueryLayoutTally } from '../../query-core.js'
+import type { CanvasLayoutCore } from '../../canvas-core.js'
+import type { MarkdownLayoutCore } from '../../markdown-core.js'
+import type { QueryLayoutCore } from '../../query-core.js'
 import type { Rect } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
 import type { RoutingBudget } from './routing-budget.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
 
-/**
- * ADR-0054's per-function switch: who answers a function the Rust core
- * ports. `ts` runs the TypeScript alone; `differential` runs both, reports
- * any difference and answers with the TypeScript; `rust` answers with the
- * core, the TypeScript still present so rollback is flipping this back.
- */
-export type CoreImpl = 'ts' | 'differential' | 'rust'
-
 /** One layout's routes, in input order, and the anchors the side search settled. */
-export interface RoutedLayout {
+interface RoutedLayout {
   readonly routes: readonly ResolvedEdgeNode[]
   readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
 }
@@ -48,79 +32,25 @@ export interface RoutingCore {
   ): RoutedLayout
 }
 
-/** What reproduces one routing call: everything it read, the budget as it was before. */
-interface RouteLayoutRepro {
-  readonly nodes: readonly SpatialNode[]
-  readonly edges: readonly RoutableElement[]
-  readonly styles: readonly EdgeRoutingStyle[]
-  readonly overrides: readonly (readonly [string, EdgeAnchorOverride])[] | undefined
-  readonly budget: RoutingBudget
-  readonly labels: readonly Rect[]
-}
-
 /**
- * A difference `differential` mode found, or a core that refused a call.
- * `at` is the first position the two canonical answers part at; the
- * answers are given whole so the report needs nothing else to be read.
- * A whole layout, a note or a query the core did not answer is reported on the
- * same sink as a `CanvasLayoutTally`, `MarkdownLayoutTally` or
- * `QueryLayoutTally`, which is a count rather than a difference; a whole
- * layout's, a note's or a query's difference is its own
- * `CanvasLayoutMismatch`, `MarkdownLayoutMismatch` or `QueryLayoutMismatch`.
- */
-export type CoreMismatch =
-  | CanvasLayoutMismatch
-  | CanvasLayoutTally
-  | MarkdownLayoutMismatch
-  | MarkdownLayoutTally
-  | QueryLayoutMismatch
-  | QueryLayoutTally
-  | {
-      readonly fn: 'routeLayout'
-      readonly kind: 'differs'
-      readonly at: number
-      readonly ts: readonly (number | string)[]
-      readonly rust: readonly (number | string)[]
-      readonly repro: RouteLayoutRepro
-    }
-  | {
-      readonly fn: 'routeLayout'
-      readonly kind: 'refused'
-      readonly err: unknown
-      readonly repro: RouteLayoutRepro
-    }
-
-/**
- * The Rust core as a layout is handed it (`SpatialLayoutOptions.core`): the
- * implementation, the switch per ported function, and where a mismatch is
- * reported. canvas-render has no logger, so a mismatch reaches nobody the
- * root did not name.
+ * The Rust core as a layout is handed it (`SpatialLayoutOptions.core`): one
+ * implementation behind each entry, which a composition root holds and hands
+ * over. Given one, the core answers every layout, note and query it is asked;
+ * a layout handed none is the TypeScript composer's own (ADR-0054 step 7,
+ * S18g), which only canvas-render's own tests and recorders still reach.
  */
 export interface LayoutCore {
+  /** An edge set routed in one call (`routeLayout`). */
   readonly routing: RoutingCore
-  /**
-   * The whole layout in one call (`layoutSpatialCanvasWithAnchors`), with its
-   * own switch: absent, either reads `ts`.
-   */
-  readonly layout?: CanvasLayoutCore
-  /**
-   * A markdown note in one call (`layoutMarkdownDocument`), with its own
-   * switch: absent, either reads `ts`.
-   */
-  readonly markdown?: MarkdownLayoutCore
+  /** The whole layout in one call (`layoutSpatialCanvasWithAnchors`). */
+  readonly layout: CanvasLayoutCore
+  /** A markdown note or a comment's prose in one call (`layoutMarkdownDocument`). */
+  readonly markdown: MarkdownLayoutCore
   /**
    * The layout pieces a root calls on their own (the drag frame's edge layer,
-   * a node's size, a label's place, a bubble's, a body overlay's box), one
-   * call each, with their own switch: absent, either reads `ts`.
+   * a node's size, a label's place, a bubble's, a body overlay's box).
    */
-  readonly query?: QueryLayoutCore
-  readonly impl: {
-    readonly routeLayout: CoreImpl
-    readonly layoutSpatialCanvas?: CoreImpl
-    readonly layoutMarkdown?: CoreImpl
-    readonly layoutQuery?: CoreImpl
-  }
-  readonly onMismatch?: (mismatch: CoreMismatch) => void
+  readonly query: QueryLayoutCore
 }
 
 /** What the composer does between the side search and drawing: every edge routed on one budget. */
@@ -139,65 +69,10 @@ function routeLayoutTs(
   return { routes, anchors }
 }
 
-const point = (p: { readonly x: number; readonly y: number } | undefined) =>
-  p === undefined ? ['-'] : [p.x, p.y]
-const optional = (v: string | number | undefined) => (v === undefined ? '-' : v)
-
 /**
- * A routing answer as one flat list, every field in a fixed order, so two
- * answers compare position by position whatever order their objects' keys
- * were written in. Anchors are read in key order for the same reason: the
- * map's insertion order is not part of what either side promises.
- */
-function canonical(layout: RoutedLayout, budget: RoutingBudget): (number | string)[] {
-  const routes = layout.routes.flatMap((r) => [
-    r.id ?? '-',
-    r.rounded === true ? 1 : 0,
-    optional(r.fromSide),
-    optional(r.toSide),
-    optional(r.fromEnd),
-    optional(r.toEnd),
-    r.path.length,
-    ...r.path.flatMap((p) => [p.x, p.y]),
-  ])
-  const anchors = [...layout.anchors.keys()].sort().flatMap((id) => {
-    const a = layout.anchors.get(id) as EdgeAnchorPair
-    return [
-      id,
-      ...point(a.from),
-      ...point(a.to),
-      optional(a.fromLaneDepth),
-      optional(a.toLaneDepth),
-      optional(a.fromSide),
-      optional(a.toSide),
-      a.around === true ? 1 : 0,
-    ]
-  })
-  return [
-    budget.grid,
-    budget.pairs,
-    budget.trials,
-    budget.repairs,
-    layout.routes.length,
-    ...routes,
-    layout.anchors.size,
-    ...anchors,
-  ]
-}
-
-const firstDifference = (a: readonly unknown[], b: readonly unknown[]): number | undefined => {
-  const n = Math.max(a.length, b.length)
-  for (let i = 0; i < n; i++) if (!Object.is(a[i], b[i])) return i
-  return undefined
-}
-
-/**
- * One layout's edge routing, answered as `core` says: by the TypeScript
- * when no core is given or its switch reads `ts`, by the core under `rust`,
- * and under `differential` by the TypeScript with the core run beside it on
- * a copy of the budget. A core that throws is reported and the TypeScript
- * answers, in either mode: a layout is total, and a refused call is the
- * shim's defect, never the canvas's.
+ * One layout's edge routing: by the core when one is given, its budget
+ * written back as the TypeScript's would be, else by the TypeScript composer's
+ * own routing.
  */
 export function routeLayout(
   core: LayoutCore | undefined,
@@ -208,44 +83,6 @@ export function routeLayout(
   budget: RoutingBudget,
   labels: readonly Rect[],
 ): RoutedLayout {
-  const impl = core?.impl.routeLayout ?? 'ts'
-  if (core === undefined || impl === 'ts') {
-    return routeLayoutTs(nodes, edges, styleOf, overrides, budget, labels)
-  }
-  const before = { ...budget }
-  const repro = (): RouteLayoutRepro => ({
-    nodes,
-    edges,
-    styles: edges.map(styleOf),
-    overrides: overrides === undefined ? undefined : [...overrides],
-    budget: before,
-    labels,
-  })
-  const coreBudget = { ...budget }
-  let rust: RoutedLayout
-  try {
-    rust = core.routing.routeLayout(nodes, edges, styleOf, overrides, coreBudget, labels)
-  } catch (err) {
-    core.onMismatch?.({ fn: 'routeLayout', kind: 'refused', err, repro: repro() })
-    return routeLayoutTs(nodes, edges, styleOf, overrides, budget, labels)
-  }
-  if (impl === 'rust') {
-    Object.assign(budget, coreBudget)
-    return rust
-  }
-  const ts = routeLayoutTs(nodes, edges, styleOf, overrides, budget, labels)
-  const tsValues = canonical(ts, budget)
-  const rustValues = canonical(rust, coreBudget)
-  const at = firstDifference(tsValues, rustValues)
-  if (at !== undefined) {
-    core.onMismatch?.({
-      fn: 'routeLayout',
-      kind: 'differs',
-      at,
-      ts: tsValues,
-      rust: rustValues,
-      repro: repro(),
-    })
-  }
-  return ts
+  if (core === undefined) return routeLayoutTs(nodes, edges, styleOf, overrides, budget, labels)
+  return core.routing.routeLayout(nodes, edges, styleOf, overrides, budget, labels)
 }

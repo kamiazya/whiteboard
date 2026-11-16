@@ -25,7 +25,7 @@ function askingGlue(text: string, key: string) {
   const glue: LayoutGlue = {
     layout_spatial_canvas(_request, host) {
       answers.push(host === undefined ? 'no host' : host.measure(text, key))
-      return '["declined","x"]'
+      return '["refused","input-too-large","x"]'
     },
     register_layout_fonts: () => '["ok",1]',
     release_layout_fonts: () => true,

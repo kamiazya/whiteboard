@@ -20,6 +20,14 @@ import {
 import { type FenceHighlighter, FenceTokenMemos } from './fence-tokens.js'
 import { FontHandles } from './font-handles.js'
 import { EDGE_ROUTE_LAYOUT_CAPS, type RefusalCode } from './generated/input-caps.js'
+
+/**
+ * What one font registration may hold (`crates/input-caps.json`): the bytes of
+ * its faces with their wire, and how many faces. A root describing a measurer
+ * by its faces keeps within it, since a registration past it is refused.
+ */
+export { REGISTER_LAYOUT_FONTS_CAPS } from './generated/input-caps.js'
+
 import type { HostMeasure } from './host-measure.js'
 import {
   parseSpatial,
@@ -58,7 +66,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '36'
+export const EXPECTED_ABI = '37'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -201,14 +209,13 @@ export interface Core {
 
   /**
    * `layoutSpatialCanvasWithAnchors` of a request canvas-render built: the
-   * scene, the anchors and the degradations; what the core refused (a request
-   * past its caps, a number its answer cannot spell, a host measurer that did
-   * not answer), which a root draws as a refusal; or the class of what it
-   * declined (a body past the parser's bounds), which a root answers from the
-   * TypeScript. A fence the
+   * scene, the anchors and the degradations; or what the core refused (a
+   * request past its caps, a number its answer cannot spell, a host measurer
+   * that did not answer, faces past what the instance holds), which a root
+   * draws as a refusal. A fence the
    * default highlighter would colour is tokenised by `highlight` and sent on a
    * second call; the tokens are kept per core, so a layout of fences already
-   * seen is one call. With no `highlight` such a layout is declined. A
+   * seen is one call. With no `highlight` such a layout throws. A
    * font-table measurer's faces cross once per measurer and core, and a layout
    * names them by handle. A request naming the host's measurer is measured
    * by `measure` through the core's one import, mid-layout. `cache` is the
@@ -244,8 +251,8 @@ export interface Core {
    * label's place and the obstacles it avoids, a comment bubble's place, or a
    * silhouette's content box. A measured query goes through the calls
    * `layoutSpatialCanvas` makes (the highlighter, the host's measurer, the
-   * faces' handle); a geometry query is one call. Answers `declined` for what
-   * a root answers from the TypeScript.
+   * faces' handle); a geometry query is one call. Answers `refused` for what
+   * the core refused, which the query's caller answers as the query says.
    */
   layoutQuery(
     request: LayoutQueryRequest,

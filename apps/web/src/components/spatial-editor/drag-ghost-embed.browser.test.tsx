@@ -32,7 +32,7 @@ it('drags an expanded embed with its miniature content in the ghost', async () =
         onChange={() => {}}
         theme="light"
         fileRefOptions={[{ file: 'child', label: 'child canvas' }]}
-        references={referenceWire(new Map(), { extras: new Map([['child', { canvas: inner }]]) })}
+        references={referenceWire(new Map([['child', { canvas: inner }]]))}
       />
     </div>,
   )

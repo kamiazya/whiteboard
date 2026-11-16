@@ -175,7 +175,7 @@ fn a_fitted_height_takes_the_taller_reading_unless_the_floor_is_declined() {
 }
 
 #[test]
-fn a_size_past_its_caps_is_refused_and_one_it_cannot_answer_declined() {
+fn a_size_past_its_caps_is_refused_and_one_past_the_parser_bounds_is_sized_as_its_literal_text() {
     let long = "a".repeat(MAX_BODY_BYTES + 1);
     assert_eq!(ask(&size_request(&long, &[])), refused("input-too-large", "bodies"));
     let row = s(vec![
@@ -200,8 +200,9 @@ fn a_size_past_its_caps_is_refused_and_one_it_cannot_answer_declined() {
         ("fontFamilies", families),
     ]);
     assert_eq!(ask(&held), refused("input-too-large", "font-families"));
+    // A body past the parser's bounds is sized as the literal text it draws (D7a).
     let deep = format!("{}deep", "> ".repeat(40));
-    assert_eq!(ask(&size_request(&deep, &[])), json!(["declined", "body"]));
+    assert_eq!(ask(&size_request(&deep, &[]))[0], json!("ok"));
     let fence = size_request("```ts\nconst x = 1\n```", &[]);
     assert_eq!(ask(&fence), json!(["needs", {"code": [["ts", "const x = 1"]]}]));
 }
@@ -296,11 +297,11 @@ fn a_query_at_each_cap_is_read_and_one_past_it_refused() {
     assert_eq!(runs(4 * MAX_ELEMENTS)[0], json!("ok"));
     assert_eq!(runs(4 * MAX_ELEMENTS + 1), refused("input-too-large", "runs"));
     // A node's body at the bodies cap is read, past the parser's own bound
-    // (declined, D7a's), and one at that bound and a table at the fragment cap
-    // are laid out.
+    // (sized as its literal text, D7a), and one at that bound and a table at
+    // the fragment cap are laid out.
     let words = "ab ".repeat(MAX_BODY_BYTES / 3);
     assert_eq!(words.len(), MAX_BODY_BYTES);
-    assert_eq!(ask(&size_request(&words, &[])), json!(["declined", "body"]));
+    assert_eq!(ask(&size_request(&words, &[]))[0], json!("ok"));
     let parsed = "ab ".repeat(786_432 / 3);
     assert_eq!(ask(&size_request(&parsed, &[]))[0], json!("ok"));
     let row = s(vec![

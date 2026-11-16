@@ -1,6 +1,5 @@
 import {
   type CanvasLayoutCore,
-  type CoreMismatch,
   describeMeasure,
   type FittedBlocks,
   type FontDescriptor,
@@ -206,13 +205,12 @@ describe.runIf(RUN)('the browser measurer as a host import: what it would cost',
 })
 
 /**
- * `real` switched to `rust` for the whole layout, counting the layouts the
- * core itself answered and keeping every report the switch made: a layout it
- * skipped, declined or refused is drawn by the TypeScript with the same
- * measurer, so its time would otherwise read as the core's.
+ * `real` for the whole layout, counting the layouts the core itself answered:
+ * a declined layout is drawn as a refusal, so its time would otherwise read
+ * as a layout's.
  */
 function countedCore(real: WebCore) {
-  const tally = { answered: 0, reports: [] as CoreMismatch[] }
+  const tally = { answered: 0 }
   const layout: CanvasLayoutCore = {
     layoutSpatialCanvas(request, highlight, measure, cache) {
       const answer = real.layoutSpatialCanvas(request, highlight, measure, cache)
@@ -220,12 +218,7 @@ function countedCore(real: WebCore) {
       return answer
     },
   }
-  const core: LayoutCore = {
-    routing: real,
-    layout,
-    impl: { routeLayout: 'rust', layoutSpatialCanvas: 'rust' },
-    onMismatch: (report) => tally.reports.push(report),
-  }
+  const core: LayoutCore = { routing: real, layout, markdown: real, query: real }
   return { core, tally }
 }
 
@@ -261,7 +254,6 @@ function timedAgainstCore(board: WebLayoutBoard, real: WebCore, rounds = 15) {
     layOut(board, counted, core)
     rust.push(performance.now() - start)
   }
-  expect(tally.reports, board.name).toEqual([])
   expect(tally.answered - answeredBefore, board.name).toBe(rounds)
   return {
     tsMs: median(ts),
@@ -358,7 +350,6 @@ function timedDrag(board: WebLayoutBoard, real: WebCore, rounds = 15) {
     }
     log.push(ran.join(', '))
   }
-  expect(tally.reports, board.name).toEqual([])
   expect(tally.answered - answeredBefore, board.name).toBe(2 * rounds)
   return { ts: median(times.ts), cold: median(times.cold), warm: median(times.warm), log }
 }

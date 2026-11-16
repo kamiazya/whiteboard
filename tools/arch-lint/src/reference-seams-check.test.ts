@@ -25,6 +25,7 @@
 import { readFileSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
+import { countNamedUses } from './named-use-scan.js'
 import { findSeamDefinitions } from './reference-seam-definitions.js'
 import { REPO_ROOT } from './scan-roots.js'
 import { isTestPath, walkSourceFiles } from './source-scan.js'
@@ -106,6 +107,30 @@ const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines:
 ]
 
 describe('references resolve in one place', () => {
+  it('reads a direct referenceSeams call as one, and the wire rebuild as none', () => {
+    expect(countNamedUses('f.ts', 'referenceSeams(graph)', ['referenceSeams'])).toBe(1)
+    expect(
+      countNamedUses('f.ts', "import { referenceSeams as seams } from 'x'\nseams(graph)", [
+        'referenceSeams',
+      ]),
+    ).toBe(1)
+    expect(
+      countNamedUses('f.ts', 'referenceSeamsFromWire(referenceWire(graph))', ['referenceSeams']),
+    ).toBe(0)
+  })
+
+  it('no composition root or UI package builds the bundle without the wire', () => {
+    // The Rust core lays every layout out, and a bundle built straight from
+    // `referenceSeams` is functions it cannot be handed: a layout given one
+    // throws `CoreUnaskable`, which only a run with a real core and a board
+    // that names something finds. Rebuilt from the wire, the same graph
+    // crosses as data and answers exactly as the direct call did.
+    const direct = production
+      .filter((path) => countNamedUses(path, readFileSync(path, 'utf8'), ['referenceSeams']) > 0)
+      .map((path) => relative(REPO_ROOT, path).split(sep).join('/'))
+    expect(direct, 'build it with `referenceSeamsFromWire(referenceWire(graph))`').toEqual([])
+  })
+
   it('recognises a seam definition in every spelling, and passes a hand-over through', () => {
     for (const { source, defines } of DEFINITION_FIXTURES) {
       expect(findSeamDefinitions('fixture.ts', source).length > 0, source).toBe(defines)
@@ -128,7 +153,7 @@ describe('references resolve in one place', () => {
     }
     expect(
       hits,
-      'a reference seam is defined outside canvas-render/src/references — build it with `referenceSeams` over a loaded graph instead, so every surface answers the same way',
+      'a reference seam is defined outside canvas-render/src/references — build the bundle with `referenceSeamsFromWire(referenceWire(graph))` over a loaded graph instead, so every surface answers the same way',
     ).toEqual([])
   })
 

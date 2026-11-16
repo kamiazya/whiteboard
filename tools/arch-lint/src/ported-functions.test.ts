@@ -25,8 +25,7 @@ const entry = PORTED_FUNCTIONS[0] as PortedFunction
 /** A tree with just enough in it for `entry`, each file overridable. */
 function tree(files: Record<string, string> = {}): ReadFile {
   const base: Record<string, string> = {
-    [entry.ts.file]:
-      'export interface LayoutCore { readonly impl: { readonly routeLayout: string } }\nexport function routeLayout() {}\n',
+    [entry.ts.file]: 'export function routeLayout() {}\n',
     [entry.rust.file]: '#[wasm_bindgen]\npub fn edge_route_layout(input: &[f64]) {}\n',
     [entry.shim.file]: 'routeLayout() {}\n',
   }
@@ -59,23 +58,24 @@ describe('PORTED_FUNCTIONS against the tree', () => {
     expect(checkPortedFunctions(PORTED_FUNCTIONS, readReal)).toEqual([])
   })
 
-  it('reads the real switch keys, so an empty read cannot pass for agreement', () => {
-    const slot = entry.switch as NonNullable<PortedFunction['switch']>
-    const keys = switchKeys(readReal(slot.file) as string, slot.interface)
-    expect(keys).toEqual(['routeLayout', 'layoutSpatialCanvas', 'layoutMarkdown', 'layoutQuery'])
+  it('finds no per-function switch on LayoutCore: the core answers every layout it is handed', () => {
+    const file = 'packages/canvas-render/src/layout/edges/layout-core.ts'
+    const text = readReal(file) as string
+    expect(text).toContain('export interface LayoutCore')
+    expect(switchKeys(text, 'LayoutCore')).toBeUndefined()
   })
 })
 
 describe('the realm-dispatched functions at stage 4', () => {
   const codecs = PORTED_FUNCTIONS.filter((f) => f.realm !== undefined)
 
-  it('are realm dispatchers with their TypeScript gone and no switch left', () => {
-    expect(codecs.map((f) => [f.name, f.stage, f.switch, f.realm?.install])).toEqual([
-      ['parseOkf', 4, undefined, 'installOkfCore'],
-      ['serializeOkf', 4, undefined, 'installOkfCore'],
-      ['parseSpatial', 4, undefined, 'installSpatialCore'],
-      ['serializeSpatial', 4, undefined, 'installSpatialCore'],
-      ['partitionFacetWrites', 4, undefined, 'installFacetWriteCore'],
+  it('are realm dispatchers with their TypeScript gone', () => {
+    expect(codecs.map((f) => [f.name, f.stage, f.realm?.install])).toEqual([
+      ['parseOkf', 4, 'installOkfCore'],
+      ['serializeOkf', 4, 'installOkfCore'],
+      ['parseSpatial', 4, 'installSpatialCore'],
+      ['serializeSpatial', 4, 'installSpatialCore'],
+      ['partitionFacetWrites', 4, 'installFacetWriteCore'],
     ])
     for (const f of codecs) {
       // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.
@@ -113,29 +113,6 @@ describe('the ledger checker', () => {
     ])
   })
 
-  it('fails a switch key the ledger does not list', () => {
-    const read = tree({
-      [entry.ts.file]:
-        'export interface LayoutCore { readonly impl: { readonly routeLayout: string; readonly other: string } }\nexport function routeLayout() {}\n',
-    })
-    expect(checkPortedFunctions([entry], read)).toEqual([
-      expect.stringContaining('switch key other is not in PORTED_FUNCTIONS'),
-    ])
-  })
-
-  it('fails a ledger entry whose switch key is gone', () => {
-    const read = tree({
-      [entry.ts.file]:
-        'export interface LayoutCore { readonly impl: { readonly x: string } }\nexport function routeLayout() {}\n',
-    })
-    expect(checkPortedFunctions([entry], read)).toEqual(
-      expect.arrayContaining([
-        expect.stringContaining('has no switch key routeLayout'),
-        expect.stringContaining('switch key x is not in PORTED_FUNCTIONS'),
-      ]),
-    )
-  })
-
   it('fails a stage-3 function the TypeScript still implements', () => {
     const rust: PortedFunction = { ...entry, stage: 3 }
     expect(checkPortedFunctions([rust], tree())).toEqual([
@@ -171,7 +148,6 @@ describe('the ledger checker', () => {
     const realm: PortedFunction = {
       ...entry,
       stage: 4,
-      switch: undefined,
       realm: { install: 'installCore', deleted: ['old/impl.ts'] },
     }
     const dispatcher = 'export function installCore() {}\nexport function routeLayout() {}\n'

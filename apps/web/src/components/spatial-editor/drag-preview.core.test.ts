@@ -1,10 +1,11 @@
 // @vitest-environment node
 
-// The connect preview routes outside any layout, so it takes the Rust core's
-// switch (ADR-0054) itself: a gesture that drew the TypeScript's line under
-// `rust` would show a route the drop then replaces.
+// The connect preview routes outside any layout, so it takes the Rust core
+// (ADR-0054) itself: a gesture that drew another line than the core's would
+// show a route the drop then replaces.
 
-import type { CoreImpl, LayoutCore, RoutingCore } from '@kamiazya/whiteboard-canvas-render'
+import type { LayoutCore, RoutingCore } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
@@ -20,7 +21,7 @@ const canvas = {
 }
 
 /** A core that routes every edge along one fixed detour, recording what it was asked. */
-function fixedCore(impl: CoreImpl, mismatches: string[] = []) {
+function fixedCore() {
   const asked: number[] = []
   const detour = [
     { x: 100, y: 25 },
@@ -45,12 +46,7 @@ function fixedCore(impl: CoreImpl, mismatches: string[] = []) {
       } as unknown as ReturnType<RoutingCore['routeLayout']>
     },
   }
-  const core: LayoutCore = {
-    routing,
-    impl: { routeLayout: impl },
-    onMismatch: (m) => mismatches.push(m.kind),
-  }
-  return { core, asked, detour }
+  return { core: fakeLayoutCore({ routing }), asked, detour }
 }
 
 const preview = (core: LayoutCore | undefined) =>
@@ -65,9 +61,9 @@ const preview = (core: LayoutCore | undefined) =>
     },
   )
 
-describe('computeDragPreview — connecting under the core switch', () => {
-  it('draws the core’s route for the tentative edge under rust', () => {
-    const { core, asked, detour } = fixedCore('rust')
+describe('computeDragPreview — connecting through the core', () => {
+  it('draws the core’s route for the tentative edge', () => {
+    const { core, asked, detour } = fixedCore()
     const drawn = preview(core)
     expect(drawn?.kind).toBe('line')
     if (drawn?.kind !== 'line') return
@@ -76,19 +72,26 @@ describe('computeDragPreview — connecting under the core switch', () => {
     expect(asked).toEqual([2])
   })
 
-  it('draws the TypeScript route under differential and reports the difference', () => {
-    const mismatches: string[] = []
-    const { core, asked, detour } = fixedCore('differential', mismatches)
-    const drawn = preview(core)
-    if (drawn?.kind !== 'line') throw new Error('expected a line')
-    expect(drawn.path).not.toEqual(detour)
-    expect(asked).toEqual([2])
-    expect(mismatches).toEqual(['differs'])
+  it('draws no line for a board the core refuses to route, and throws anything else', () => {
+    const throwing = (err: Error) =>
+      fakeLayoutCore({
+        routing: {
+          routeLayout: () => {
+            throw err
+          },
+        },
+      })
+    const refused = Object.assign(new Error('edge_route_layout refused its input'), {
+      name: 'CoreInputRefused',
+    })
+    expect(preview(throwing(refused))).toEqual({ kind: 'line', path: [], arrows: [] })
+    const defect = new Error('garbled')
+    expect(() => preview(throwing(defect))).toThrow(defect)
   })
 
-  it('never asks the core under ts', () => {
-    const { core, asked } = fixedCore('ts')
-    expect(preview(core)).toEqual(preview(undefined))
-    expect(asked).toEqual([])
+  it('routes in TypeScript in a realm that holds no core', () => {
+    const drawn = preview(undefined)
+    if (drawn?.kind !== 'line') throw new Error('expected a line')
+    expect(drawn.path).not.toEqual(fixedCore().detour)
   })
 })

@@ -8,10 +8,7 @@ import {
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import type {
-  CanvasLayoutCore,
   CanvasLayoutRequest,
-  CanvasLayoutSeam,
-  CanvasLayoutSkip,
   CoreChange,
   CoreDegradation,
   CoreProposal,
@@ -27,10 +24,11 @@ import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import { usesFragmentTable } from './fragment-table.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
-import type { FragmentAsk } from './nodes/fragment-ask.js'
 
-// The whole layout's switch (ADR-0054 step 7): which requests the Rust core
-// can be handed, and who answers one under `ts`, `differential` and `rust`.
+// The whole layout through the Rust core (ADR-0054 step 7): the request a
+// layout's options make, and what a surface is answered with. A layout handed
+// a core is the core's, always (S18g retired the switch that could send it to
+// the TypeScript); one handed none is the TypeScript composer's own.
 
 /** Every file node of a canvas, the ones of the canvases it nests in a file node included. */
 function fileNodes(canvases: readonly SpatialCanvas[]): SpatialNode[] {
@@ -39,20 +37,19 @@ function fileNodes(canvases: readonly SpatialCanvas[]): SpatialNode[] {
 
 /**
  * The caller's expansion policy settled over every node it could be asked
- * about: one answer when it answers them all alike, else the ids it opens; or
- * undefined when it answers one id open on one node and closed on another,
- * which a set of ids cannot carry.
+ * about: one answer when it answers them all alike, else the ids it opens.
+ * A set of ids cannot carry one id open on one node and closed on another, so
+ * the first canvas to name an id settles it: `canvases` lists the board before
+ * those it nests, so the outer answer wins (owner decision q82, D8b).
  */
 function expansion(
   policy: ((node: SpatialNode) => boolean) | undefined,
   canvases: readonly SpatialCanvas[],
-): boolean | string[] | undefined {
+): boolean | string[] {
   if (policy === undefined) return false
   const answers = new Map<string, boolean>()
   for (const node of fileNodes(canvases)) {
-    const open = policy(node) === true
-    if (answers.get(node.id) === !open) return undefined
-    answers.set(node.id, open)
+    if (!answers.has(node.id)) answers.set(node.id, policy(node) === true)
   }
   const kinds = new Set(answers.values())
   if (kinds.size < 2) return kinds.has(true)
@@ -62,6 +59,7 @@ function expansion(
 export const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
 
+/** The function seams no request can carry, by their option's name. */
 const SEAMS = [
   'parseBody',
   'renderContributions',
@@ -72,10 +70,22 @@ const SEAMS = [
   'resolveAlias',
   'resolveReference',
   'nestedLayoutBudget',
-] as const satisfies readonly CanvasLayoutSeam[]
+] as const satisfies readonly (keyof SpatialLayoutOptions)[]
+
+/**
+ * A layout's options that no request can carry, handed a core: a defect in
+ * the root that built them, since only the TypeScript composer sets a seam
+ * and only canvas-render's own tests hand an unnamed measurer or appearance.
+ */
+export class CoreUnaskable extends Error {
+  constructor(readonly reason: string) {
+    super(`the layout's options cannot be handed to the Rust core: ${reason}`)
+    this.name = 'CoreUnaskable'
+  }
+}
 
 /** The first option no request can carry, since it is a function or a choice the core does not make. */
-function optionSkip(options: SpatialLayoutOptions): CanvasLayoutSkip | undefined {
+function optionSkip(options: SpatialLayoutOptions): string | undefined {
   const seam = SEAMS.find((name) => options[name] !== undefined)
   if (seam !== undefined) return `seam:${seam}`
   if (options.highlightCode !== undefined && options.highlightCode !== highlightCode) {
@@ -103,40 +113,35 @@ export function styleOptions(
   return { style, ...(fontFamilies.length === 0 ? {} : { fontFamilies }) }
 }
 
-/** A request the core can be handed, or why the options cannot be. */
-export type CanvasLayoutAsk = CanvasLayoutRequest | { readonly skip: CanvasLayoutSkip }
-
 /**
- * `options` as a request the core answers exactly as the TypeScript would,
- * or the first reason they cannot be one (`CanvasLayoutSkip`): a measurer or
- * an appearance nobody named, a seam that is a function, a reference
- * bundle not rebuilt from a wire
- * or one whose extras carry content, and an expansion policy that answers
- * one node id open in one canvas and closed in another.
+ * `options` as the request the core answers. Throws `CoreUnaskable` for what
+ * no request carries: a measurer or an appearance nobody named, a seam that
+ * is a function, a highlighter other than the default, and a reference bundle
+ * not rebuilt from a wire or one whose extras carry content.
  */
 export function canvasLayoutRequest(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
-): CanvasLayoutAsk {
+): CanvasLayoutRequest {
   const measure = measureSpecOf(options.measure)
-  if (measure === undefined) return { skip: 'measure' }
+  if (measure === undefined) throw new CoreUnaskable('measure')
   const mode = bundledThemeModeOf(options.appearance)
-  if (mode === undefined) return { skip: 'appearance' }
+  if (mode === undefined) throw new CoreUnaskable('appearance')
   const skip = optionSkip(options)
-  if (skip !== undefined) return { skip }
+  if (skip !== undefined) throw new CoreUnaskable(skip)
   const wire = options.references === undefined ? undefined : wireOfSeams(options.references)
-  if (options.references !== undefined && wire === undefined) return { skip: 'references' }
+  if (options.references !== undefined && wire === undefined) {
+    throw new CoreUnaskable('references')
+  }
   if (wire !== undefined && !wire.extras.every(([, extra]) => hasData(extra))) {
-    return { skip: 'reference-content' }
+    throw new CoreUnaskable('reference-content')
   }
   const nested = (wire?.entries ?? []).flatMap(([, entry]) => entry?.canvas ?? [])
-  const expand = expansion(options.expandFileNode, [canvas, ...nested])
-  if (expand === undefined) return { skip: 'expand-collision' }
   return {
     canvas,
     measure,
     mode,
-    expand,
+    expand: expansion(options.expandFileNode, [canvas, ...nested]),
     ...styleOptions(options),
     ...dataOptions(options),
     ...commentOptions(options),
@@ -192,74 +197,18 @@ export interface LaidOutCanvas {
   readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
 }
 
-/**
- * The path to the first value two answers part at, or undefined when they
- * agree. A key holding `undefined` reads as absent, as it would to anyone
- * reading the scene, and every number is compared with `Object.is`.
- */
-export function firstDifference(a: unknown, b: unknown, at = ''): string | undefined {
-  if (Object.is(a, b)) return undefined
-  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return at
-  if (Array.isArray(a) !== Array.isArray(b)) return at
-  const keys = (o: object) =>
-    Object.entries(o).flatMap(([key, value]) => (value === undefined ? [] : [key]))
-  const ka = keys(a)
-  const kb = keys(b)
-  for (const key of new Set([...ka, ...kb])) {
-    const found = firstDifference(
-      (a as Record<string, unknown>)[key],
-      (b as Record<string, unknown>)[key],
-      `${at}/${key}`,
-    )
-    if (found !== undefined) return found
-  }
-  return undefined
-}
-
-/**
- * What a reader compares: the scene, the anchors by edge id, the events
- * without a thrown value, and the fragment sources asked for.
- */
-function comparable(
-  laid: LaidOutCanvas,
-  events: readonly CoreDegradation[],
-  asks: readonly FragmentAsk[] | undefined,
-) {
-  return {
-    scene: laid.scene,
-    anchors: Object.fromEntries(laid.anchors),
-    events,
-    fragmentsAsked: asks ?? [],
-  }
-}
-
-export function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
-  if (event.kind !== 'body-parse-failed') return event
-  return { kind: event.kind, nodeId: event.nodeId }
-}
-
+/** A core's degradation as the host reports it: a parse failure carries no thrown value across. */
 export function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
   return event.kind === 'body-parse-failed' ? { ...event, err: undefined } : event
 }
 
-export const valueAt = (root: unknown, path: string): unknown =>
-  path
-    .split('/')
-    .slice(1)
-    .reduce<unknown>((value, key) => (value as Record<string, unknown> | undefined)?.[key], root)
-
 /**
- * A canvas laid out as `options.core` says: by the TypeScript when no core or
- * no whole-layout core is given, its switch reads `ts`, or the request is one
- * the core cannot be handed; under `rust` by the core, its degradations
- * reported as the TypeScript's would be; under `differential` by the
- * TypeScript with the core run beside it and any difference reported. What the
- * request gate skips and what the core declines (each reported by its class,
- * so a run can count them), and a core that throws (reported), the
- * TypeScript answers. What the core REFUSES (owner decision q81, D7) is
- * counted as a decline by its class too; under `rust` it is drawn as the
- * refusal (`refusalScene`) and told to `onRefused`, and under `differential`
- * the TypeScript answers it, as the oracle.
+ * A canvas laid out by `options.core`, or by the TypeScript composer (`ts`)
+ * when it is handed none. The core's degradations reach `onDegrade` and the
+ * fragment sources it asked for `onFragmentsAsked`; what it refused (owner
+ * decision q81, D7) is drawn as the refusal (`refusalScene`) and told to
+ * `onRefused`. A core that throws throws to the caller: there is
+ * nothing to answer in its place.
  */
 export function layoutThroughCore(
   stored: SpatialCanvas,
@@ -267,43 +216,21 @@ export function layoutThroughCore(
   ts: (options: SpatialLayoutOptions) => LaidOutCanvas,
 ): LaidOutCanvas {
   const core = options.core
-  const impl = core?.impl.layoutSpatialCanvas ?? 'ts'
-  if (core?.layout === undefined || impl === 'ts') return ts(options)
+  if (core === undefined) return ts(options)
   const request = canvasLayoutRequest(stored, options)
-  if ('skip' in request) {
-    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'skipped', reason: request.skip })
-    return ts(options)
-  }
-  let answer: ReturnType<typeof core.layout.layoutSpatialCanvas>
-  try {
-    answer = core.layout.layoutSpatialCanvas(
-      request,
-      highlightCode,
-      options.measure,
-      options.contentCache,
-    )
-  } catch (err) {
-    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'refused', err, repro: request })
-    return ts(options)
-  }
-  if ('declined' in answer) {
-    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: answer.declined })
-    return ts(options)
-  }
-  if ('refused' in answer) {
-    const { refused } = answer
-    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: refused.reason })
-    return impl === 'rust' ? drawnRefusal(refused, stored, request.mode, options) : ts(options)
-  }
-  if (impl === 'rust') {
-    for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
-    if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
-    return { scene: answer.scene, anchors: answer.anchors }
-  }
-  return compared(answer, request, options, ts)
+  const answer = core.layout.layoutSpatialCanvas(
+    request,
+    highlightCode,
+    options.measure,
+    options.contentCache,
+  )
+  if ('refused' in answer) return drawnRefusal(answer.refused, stored, request.mode, options)
+  for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
+  if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
+  return { scene: answer.scene, anchors: answer.anchors }
 }
 
-/** A refusal as `rust` answers it: told to `onRefused`, and drawn where the board's boxes are. */
+/** A refusal told to `onRefused`, and drawn where the board's boxes are. */
 function drawnRefusal(
   refused: LayoutRefusal,
   stored: SpatialCanvas,
@@ -333,42 +260,4 @@ function topLeftOf(canvas: SpatialCanvas): { x: number; y: number } | undefined 
     at = at === undefined ? { x, y } : { x: Math.min(at.x, x), y: Math.min(at.y, y) }
   }
   return at
-}
-
-/** `differential`'s answer: the TypeScript's, with the core's compared beside it and a difference reported. */
-function compared(
-  answer: Extract<ReturnType<CanvasLayoutCore['layoutSpatialCanvas']>, { scene: unknown }>,
-  request: CanvasLayoutRequest,
-  options: SpatialLayoutOptions,
-  ts: (options: SpatialLayoutOptions) => LaidOutCanvas,
-): LaidOutCanvas {
-  const events: CoreDegradation[] = []
-  let asks: readonly FragmentAsk[] | undefined
-  const laid = ts({
-    ...options,
-    onDegrade: (event) => {
-      events.push(coreEvent(event))
-      options.onDegrade?.(event)
-    },
-    ...(usesFragmentTable(options) && {
-      onFragmentsAsked: (asked: readonly FragmentAsk[]) => {
-        asks = asked
-        options.onFragmentsAsked?.(asked)
-      },
-    }),
-  })
-  const tsValue = comparable(laid, events, asks)
-  const rustValue = comparable(answer, answer.degradations, answer.fragmentsAsked)
-  const at = firstDifference(tsValue, rustValue)
-  if (at !== undefined) {
-    options.core?.onMismatch?.({
-      fn: 'layoutSpatialCanvas',
-      kind: 'differs',
-      at,
-      ts: valueAt(tsValue, at),
-      rust: valueAt(rustValue, at),
-      repro: request,
-    })
-  }
-  return laid
 }

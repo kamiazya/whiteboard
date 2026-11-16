@@ -76,18 +76,13 @@ describe('buildTarballSmokeChildEnv', () => {
     expect(childEnv.PATH).toBe('/usr/bin')
   })
 
-  it('asks for the Rust core and fails on a load failure, so a tarball without it cannot pass', () => {
+  it('drops WHITEBOARD_CORE_DIR, so only the core the tarball carries can answer', () => {
     const childEnv = buildTarballSmokeChildEnv({
       PATH: '/usr/bin',
-      WHITEBOARD_CORE: 'ts',
       WHITEBOARD_CORE_DIR: '/checkout/artifacts',
     })
 
-    expect(childEnv).toEqual({
-      PATH: '/usr/bin',
-      WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
+    expect(childEnv).toEqual({ PATH: '/usr/bin' })
   })
 
   it('does not mutate the input env object', () => {

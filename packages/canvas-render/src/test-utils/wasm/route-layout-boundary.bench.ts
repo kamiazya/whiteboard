@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import { test } from 'vitest'
 import type { LayoutCore } from '../../layout/edges/layout-core.js'
+import { fakeLayoutCore } from '../fake-layout-core.js'
 import { boundaryBoards, routeBoard } from './route-layout-boundary.js'
 
 /**
@@ -28,7 +29,7 @@ const wasm = (() => {
 })()
 const staged = wasm !== undefined
 const rust: LayoutCore | undefined = staged
-  ? { routing: await loadCore(readFileSync(wasm as string)), impl: { routeLayout: 'rust' } }
+  ? fakeLayoutCore({ routing: await loadCore(readFileSync(wasm as string)) })
   : undefined
 
 for (const board of boundaryBoards()) {

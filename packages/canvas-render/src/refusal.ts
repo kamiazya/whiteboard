@@ -77,6 +77,13 @@ const COPY = {
     title: CANNOT,
     detail: 'The browser could not measure its text. Reload the page to try again.',
   },
+  // Not the core's own reason: what a web page draws with when the core it
+  // lays everything out with did not load (a dropped connection at boot).
+  'core-unavailable': {
+    title: CANNOT,
+    detail:
+      'The page did not finish loading what it draws with. Check your connection, then reload the page.',
+  },
 } as const satisfies Record<string, RefusalCopy>
 
 /** What a refusal whose reason has no words of its own says, by its code. */

@@ -6,7 +6,7 @@
 //! committed scene.
 //!
 //! Out: one JSON text whose first element names the outcome, as the whole
-//! layout's does (`refused`, `declined`, `needs`), and when answered:
+//! layout's does (`refused`, `needs`), and when answered:
 //!
 //! - `edges`: `["ok", nodes, degradations]`, the edge layer as `scene_wire`
 //!   writes scene nodes, and what the layout reported instead of failing;

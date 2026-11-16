@@ -37,7 +37,7 @@ impl<'w> WireHost<'w> {
         let entry = self.by_id(id)?;
         let title = entry.name.clone().or_else(|| self.title(id));
         let content = match &entry.body {
-            Some(body) => Ok(self.root_of(body)?),
+            Some(body) => Ok(self.root_of(body)),
             None => Err(entry.canvas.as_ref()?),
         };
         Some((title, content))

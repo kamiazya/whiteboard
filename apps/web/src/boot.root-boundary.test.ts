@@ -34,6 +34,7 @@ it('a rejected server-mode entrance chunk lands in the root error boundary, not 
     rootEl,
     resolveWorkspaceId: async () => 'ws',
     loadFont: async () => undefined,
+    loadCore: async () => undefined,
     dismissSplash: async () => undefined,
   })
   expect(await screen.findByRole('alert')).toBeTruthy()

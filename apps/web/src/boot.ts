@@ -47,6 +47,12 @@ export interface BootSequenceOptions {
   rootEl: HTMLElement
   resolveWorkspaceId?: () => Promise<string>
   loadFont?: () => Promise<unknown>
+  /**
+   * Loads this realm's Rust core, which every layout is answered by. It
+   * settles whether or not the load succeeded (`startLayoutCore`), so the
+   * splash never waits on a failure.
+   */
+  loadCore?: () => Promise<unknown>
   dismissSplash?: () => Promise<void>
   render?: (root: HTMLElement) => void
 }
@@ -153,6 +159,7 @@ export async function startBootSequence({
   resolveWorkspaceId = () =>
     resolveBrowserWorkspaceId(undefined, parseWorkspaceRoute(window.location.pathname)?.workspace),
   loadFont = ensureViewerFontLoaded,
+  loadCore = startLayoutCore,
   dismissSplash = () => dismissBootSplash(),
   render = renderApp,
 }: BootSequenceOptions): Promise<void> {
@@ -160,8 +167,12 @@ export async function startBootSequence({
   // keeper's own uploads are this page's to reclaim. Armed before the awaits
   // below, so its delay counts from page load rather than from first paint.
   if (!servedByServerKeeper()) scheduleFileSweep()
-  // The routing core loads beside the font, so the first layout finds it.
-  startLayoutCore()
+  // The Rust core loads beside the font, and is awaited before the first
+  // render: every layout is the core's, so a page that rendered before it
+  // loaded would have nothing to draw with. The wait is bounded like the
+  // others here: a load that has not settled within CORE_LOAD_TIMEOUT_MS is
+  // abandoned as a failure, and the page renders with the missing-core notice.
+  const coreLoaded = loadCore()
   // Bounded await: every on-screen text measurement (SpatialEditor,
   // MarkdownEditor's preview pane, useDocumentSync) must use the same vendored
   // Roboto face the Node export pipeline measures, or wrapped-line counts and
@@ -174,6 +185,7 @@ export async function startBootSequence({
   // and self-corrects once the font finishes loading in the background (see
   // CanvasViewer's useViewerFontReady for that path).
   await loadFont()
+  await coreLoaded
   await resolveWorkspaceIdWithinBound(resolveWorkspaceId)
   // Paces the index.html splash: the app is ready at this point, but the
   // splash stays up until its draw animation lands plus a beat, and fades out

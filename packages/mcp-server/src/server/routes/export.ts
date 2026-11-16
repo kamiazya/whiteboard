@@ -73,7 +73,7 @@ export interface ExportRouterOptions {
   scope: StoreScope
   /** Defaults to `absolute`, the local daemon's answer. */
   exportPaths?: ExportPathAnswer
-  /** The deps' core switch, so the file export lays out as `wb_scene_render` does. */
+  /** The deps' core, so the file export lays out as `wb_scene_render` does. */
   layoutCore?: ServerDeps['layoutCore']
 }
 

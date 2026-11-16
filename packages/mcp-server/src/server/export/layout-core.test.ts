@@ -103,86 +103,26 @@ describe('where the daemon finds the core artifact', () => {
 })
 
 describe('the daemon layout core', () => {
-  it('reads rust, log and the staged artifacts when nothing is set', () => {
-    expect(layoutCoreSettingsFrom({})).toEqual({
-      WHITEBOARD_CORE: 'rust',
-      WHITEBOARD_CORE_LAYOUT: 'rust',
-      WHITEBOARD_CORE_MISMATCH: 'log',
-    })
-    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'fast' })).toThrow()
-    expect(() => layoutCoreSettingsFrom({ WHITEBOARD_CORE_LAYOUT: 'fast' })).toThrow()
+  it('reads the staged artifacts when nothing is set, and nothing but where they are', () => {
+    expect(layoutCoreSettingsFrom({})).toEqual({})
+    // The retired switches are no settings any more: setting one changes nothing.
+    expect(
+      layoutCoreSettingsFrom({
+        WHITEBOARD_CORE: 'ts',
+        WHITEBOARD_CORE_LAYOUT: 'ts',
+        WHITEBOARD_CORE_MISMATCH: 'throw',
+      }),
+    ).toEqual({})
   })
 
-  it('loads the core when only the whole layout asks for it', async () => {
-    const settings = layoutCoreSettingsFrom({
-      WHITEBOARD_CORE: 'ts',
-      WHITEBOARD_CORE_LAYOUT: 'differential',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-      WHITEBOARD_CORE_DIR: emptyDir(),
-    })
-    await expect(layoutCore(settings)()).rejects.toThrow()
-  })
-
-  it('loads nothing when both switches read ts, the rollback setting', async () => {
-    const capture = captureLogsForTests('warning')
-    try {
-      const load = layoutCore(
-        layoutCoreSettingsFrom({
-          WHITEBOARD_CORE: 'ts',
-          WHITEBOARD_CORE_LAYOUT: 'ts',
-          WHITEBOARD_CORE_DIR: emptyDir(),
-        }),
-      )
-      expect(await load()).toBeUndefined()
-      expect(capture.records).toEqual([])
-    } finally {
-      capture.restore()
-    }
-  })
-
-  it('still asks for the core when routing alone rolls back, since the layout defaults to rust', async () => {
-    const settings = layoutCoreSettingsFrom({
-      WHITEBOARD_CORE: 'ts',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-      WHITEBOARD_CORE_DIR: emptyDir(),
-    })
-    await expect(layoutCore(settings)()).rejects.toThrow()
-  })
-
-  it('warns with a countable event and routes in TypeScript when the default core cannot load', async () => {
+  it('rejects when the artifact cannot be read, since nothing answers in its place', async () => {
     const capture = captureLogsForTests('warning')
     try {
       const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE_DIR: emptyDir() })
-      expect(await layoutCore(settings)()).toBeUndefined()
-      expect(capture.records.filter((r) => r.data?.event === 'core-load-failed')).toHaveLength(1)
+      await expect(layoutCore(settings)()).rejects.toThrow()
     } finally {
       capture.restore()
     }
-  })
-
-  it('warns and routes in TypeScript when the artifact cannot be read', async () => {
-    const capture = captureLogsForTests('warning')
-    try {
-      const settings = layoutCoreSettingsFrom({
-        WHITEBOARD_CORE: 'differential',
-        WHITEBOARD_CORE_DIR: emptyDir(),
-      })
-      expect(await layoutCore(settings)()).toBeUndefined()
-      expect(capture.records.map((r) => r.msg)).toContain(
-        'the Rust core did not load; answering in TypeScript',
-      )
-    } finally {
-      capture.restore()
-    }
-  })
-
-  it('fails instead when mismatches throw: a test that asked for the core compared nothing', async () => {
-    const settings = layoutCoreSettingsFrom({
-      WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-      WHITEBOARD_CORE_DIR: emptyDir(),
-    })
-    await expect(layoutCore(settings)()).rejects.toThrow()
   })
 
   it('has the staged artifact wherever CI runs this file', () => {
@@ -190,160 +130,44 @@ describe('the daemon layout core', () => {
   })
 
   describe.runIf(built)('over the staged artifact', () => {
-    it('routes and lays out with the Rust core when nothing is set', async () => {
+    it('hands every layout entry the one instance, loaded once', async () => {
+      const load = layoutCore(layoutCoreSettingsFrom({}))
+      const core = await load()
+      expect(core.layout).toBe(core.routing)
+      expect(core.markdown).toBe(core.routing)
+      expect(core.query).toBe(core.routing)
+      expect((await load()).routing).toBe(core.routing)
+    })
+
+    /** The core, its whole-layout answers recorded as `laid out` or the refusal's code. */
+    async function recordingCore() {
       const core = await layoutCore(layoutCoreSettingsFrom({}))()
-      expect(core?.impl).toEqual({
-        routeLayout: 'rust',
-        layoutSpatialCanvas: 'rust',
-        layoutMarkdown: 'rust',
-        layoutQuery: 'rust',
-      })
-      expect(core?.markdown).toBeDefined()
-      expect(core?.query).toBeDefined()
-    })
-
-    describe('under the default settings, over what the daemon hands a layout', () => {
-      /** The default core, its whole-layout answers recorded as `laid out` or the decline's class. */
-      async function defaultCore() {
-        const core = await layoutCore(layoutCoreSettingsFrom({}))()
-        if (core?.layout === undefined) throw new Error('the core has no whole layout')
-        const { layout } = core
-        const answers: string[] = []
-        const reports: string[] = []
-        const recording = {
-          ...core,
-          layout: {
-            layoutSpatialCanvas: (r: never, highlight: never, measure: never) => {
-              const answer = layout.layoutSpatialCanvas(r, highlight, measure)
-              answers.push('declined' in answer ? answer.declined : 'laid out')
-              return answer
-            },
-          },
-          onMismatch: (report: Parameters<NonNullable<typeof core.onMismatch>>[0]) => {
-            reports.push(
-              report.kind === 'skipped' || report.kind === 'declined'
-                ? `${report.kind}:${report.reason}`
-                : report.kind,
-            )
-            core.onMismatch?.(report)
-          },
-        }
-        const { measure } = await createExportTextMeasurer({ fontsDir: emptyDir() })
-        const themed = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
-        return { core: recording, answers, reports, themed }
-      }
-
-      it('draws the core’s scene for an ordinary board, the TypeScript’s to the byte', async () => {
-        const { core, answers, reports, themed } = await defaultCore()
-        expect(layoutSpatialCanvas(board, { ...themed, core })).toEqual(
-          layoutSpatialCanvas(board, themed),
-        )
-        expect(answers).toEqual(['laid out'])
-        expect(reports).toEqual([])
-      })
-
-      it('falls back to the TypeScript for a layout the core cannot be handed, counting it', async () => {
-        const capture = captureLogsForTests('warning')
-        try {
-          const { core, answers, reports, themed } = await defaultCore()
-          // An appearance the core has no name for: the request gate skips it.
-          const unnamed = { ...themed, appearance: options.appearance }
-          expect(layoutSpatialCanvas(board, { ...unnamed, core })).toEqual(
-            layoutSpatialCanvas(board, unnamed),
-          )
-          expect(answers).toEqual([])
-          expect(reports).toEqual(['skipped:appearance'])
-          expect(capture.records).toEqual([])
-        } finally {
-          capture.restore()
-        }
-      })
-
-      it('falls back to the TypeScript for a layout the core declines, counting it', async () => {
-        const capture = captureLogsForTests('warning')
-        try {
-          const { core, answers, reports, themed } = await defaultCore()
-          const declined = {
-            ...core,
-            layout: { layoutSpatialCanvas: () => ({ declined: 'body' }) },
-          }
-          expect(layoutSpatialCanvas(board, { ...themed, core: declined as never })).toEqual(
-            layoutSpatialCanvas(board, themed),
-          )
-          expect(answers).toEqual([])
-          expect(reports).toEqual(['declined:body'])
-          expect(capture.records).toEqual([])
-        } finally {
-          capture.restore()
-        }
-      })
-    })
-
-    it('lays the whole canvas out in the core when the layout switch says so', async () => {
-      const core = await layoutCore(
-        layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'ts', WHITEBOARD_CORE_LAYOUT: 'rust' }),
-      )()
-      expect(core?.impl).toEqual({
-        routeLayout: 'ts',
-        layoutSpatialCanvas: 'rust',
-        layoutMarkdown: 'rust',
-        layoutQuery: 'rust',
-      })
-      if (core?.layout === undefined) throw new Error('the core has no whole layout')
-      const { layout } = core
-      let asked = 0
-      const counting = {
-        ...core,
-        layout: {
-          layoutSpatialCanvas: (r: never, highlight: never, measure: never) => {
-            asked += 1
-            return layout.layoutSpatialCanvas(r, highlight, measure)
-          },
-        },
-      }
-      const themed = { ...options, appearance: createSpatialTheme({ mode: 'light' }) }
-      const reference = layoutSpatialCanvas(board, themed)
-      expect(layoutSpatialCanvas(board, { ...themed, core: counting })).toEqual(reference)
-      expect(asked).toBe(1)
-    })
-
-    it('loads once, and a differential layout over it reports nothing', async () => {
-      const capture = captureLogsForTests('warning')
-      try {
-        const load = layoutCore(layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }))
-        const core = await load()
-        expect(core?.impl.routeLayout).toBe('differential')
-        expect(await load()).toBe(core)
-        const reference = layoutSpatialCanvas(board, options)
-        expect(layoutSpatialCanvas(board, { ...options, ...(core ? { core } : {}) })).toEqual(
-          reference,
-        )
-        expect(capture.records).toEqual([])
-      } finally {
-        capture.restore()
-      }
-    })
-
-    it('lays out with the vendored faces in the core, a mark the face would compose included', async () => {
-      const core = await layoutCore(
-        layoutCoreSettingsFrom({
-          WHITEBOARD_CORE_LAYOUT: 'differential',
-          WHITEBOARD_CORE_MISMATCH: 'throw',
-        }),
-      )()
-      if (core?.layout === undefined) throw new Error('the core has no whole layout')
-      const { layout } = core
       const answers: string[] = []
-      const counting = {
+      const recording = {
         ...core,
         layout: {
           layoutSpatialCanvas: (r: never, highlight: never, measure: never) => {
-            const answer = layout.layoutSpatialCanvas(r, highlight, measure)
-            answers.push('declined' in answer ? answer.declined : 'laid out')
+            const answer = core.layout.layoutSpatialCanvas(r, highlight, measure)
+            answers.push('refused' in answer ? answer.refused.code : 'laid out')
             return answer
           },
         },
       }
+      return { core: recording, answers }
+    }
+
+    it('draws the core’s scene for an ordinary board, the TypeScript’s to the byte', async () => {
+      const { core, answers } = await recordingCore()
+      const { measure } = await createExportTextMeasurer({ fontsDir: emptyDir() })
+      const themed = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
+      expect(layoutSpatialCanvas(board, { ...themed, core })).toEqual(
+        layoutSpatialCanvas(board, themed),
+      )
+      expect(answers).toEqual(['laid out'])
+    })
+
+    it('lays out with the vendored faces in the core, a mark the face would compose included', async () => {
+      const { core, answers } = await recordingCore()
       const { measure } = await createExportTextMeasurer({ fontsDir: emptyDir() })
       const themed = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
       const marked: SpatialCanvas = {
@@ -353,99 +177,18 @@ describe('the daemon layout core', () => {
         edges: [],
       }
       for (const canvas of [board, marked]) {
-        expect(layoutSpatialCanvas(canvas, { ...themed, core: counting })).toEqual(
+        expect(layoutSpatialCanvas(canvas, { ...themed, core })).toEqual(
           layoutSpatialCanvas(canvas, themed),
         )
       }
       expect(answers).toEqual(['laid out', 'laid out'])
     })
 
-    it('summarizes a whole-layout difference by the path it parts at', async () => {
-      const capture = captureLogsForTests('warning')
-      try {
-        const lenient = await layoutCore(
-          layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }),
-        )()
-        lenient?.onMismatch?.({
-          fn: 'layoutSpatialCanvas',
-          kind: 'differs',
-          at: '/scene/nodes/0',
-          ts: 1,
-          rust: 2,
-          repro: { canvas: board } as never,
-        })
-        expect(capture.records.map((r) => r.data)).toMatchObject([
-          {
-            fn: 'layoutSpatialCanvas',
-            at: '/scene/nodes/0',
-            ts: 1,
-            rust: 2,
-            nodes: board.nodes.length,
-          },
-        ])
-      } finally {
-        capture.restore()
-      }
-    })
-
-    it('counts a layout the core did not answer by class, and never throws it', async () => {
-      const strict = await layoutCore(
-        layoutCoreSettingsFrom({
-          WHITEBOARD_CORE_LAYOUT: 'differential',
-          WHITEBOARD_CORE_MISMATCH: 'throw',
-        }),
-      )()
-      const capture = captureLogsForTests('debug')
-      try {
-        const tallies = [
-          { kind: 'skipped', reason: 'highlighter' },
-          { kind: 'declined', reason: 'body' },
-          { kind: 'skipped', reason: 'highlighter' },
-        ] as const
-        for (const tally of tallies) {
-          expect(() => strict?.onMismatch?.({ fn: 'layoutSpatialCanvas', ...tally })).not.toThrow()
-        }
-        expect(
-          capture.records
-            .filter((r) => r.msg === 'the Rust core did not answer this layout')
-            .map((r) => r.data),
-        ).toMatchObject([
-          { kind: 'skipped', reason: 'highlighter', count: 1 },
-          { kind: 'declined', reason: 'body', count: 1 },
-          { kind: 'skipped', reason: 'highlighter', count: 2 },
-        ])
-        expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
-      } finally {
-        capture.restore()
-      }
-    })
-
-    it('throws a reported mismatch when the settings say so, and only logs it otherwise', async () => {
-      const mismatch = {
-        fn: 'routeLayout' as const,
-        kind: 'refused' as const,
-        err: new Error('x'),
-        repro: { nodes: [], edges: [], styles: [], overrides: undefined, budget: {}, labels: [] },
-      }
-      const strict = await layoutCore(
-        layoutCoreSettingsFrom({
-          WHITEBOARD_CORE: 'differential',
-          WHITEBOARD_CORE_MISMATCH: 'throw',
-        }),
-      )()
-      expect(() => strict?.onMismatch?.(mismatch as never)).toThrow(/layout core refused/)
-      const capture = captureLogsForTests('warning')
-      try {
-        const lenient = await layoutCore(
-          layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'differential' }),
-        )()
-        lenient?.onMismatch?.(mismatch as never)
-        expect(capture.records.map((r) => r.msg)).toEqual([
-          'the Rust core and the TypeScript disagree',
-        ])
-      } finally {
-        capture.restore()
-      }
+    it('throws for a layout the core cannot be handed, rather than answering in TypeScript', async () => {
+      const { core, answers } = await recordingCore()
+      // An appearance the core has no name for: no request carries it.
+      expect(() => layoutSpatialCanvas(board, { ...options, core })).toThrow(/appearance/)
+      expect(answers).toEqual([])
     })
   })
 })
@@ -517,7 +260,7 @@ describe('the daemon cores, installed at boot', () => {
 
   it.runIf(built)('shares one wasm instance with the layout core', async () => {
     removeRealmCores()
-    const settings = layoutCoreSettingsFrom({ WHITEBOARD_CORE: 'rust' })
+    const settings = layoutCoreSettingsFrom({})
     await installRustCoresAtBoot(settings)
     const bootOkf = installOkfCore(undefined)
     const bootSpatial = installSpatialCore(undefined)
@@ -527,7 +270,7 @@ describe('the daemon cores, installed at boot', () => {
     expect(bootOkf).toBeDefined()
     expect(bootSpatial).toBe(bootOkf)
     expect(bootFacets).toBe(bootOkf)
-    expect(layout?.routing).toBe(bootOkf)
+    expect(layout.routing).toBe(bootOkf)
   })
 })
 

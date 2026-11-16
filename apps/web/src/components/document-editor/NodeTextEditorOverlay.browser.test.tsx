@@ -1,4 +1,4 @@
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { referenceSeamsFromWire, referenceWire } from '@kamiazya/whiteboard-canvas-render'
 // The full editing surface a canvas node's body gets when its own box is
 // too small: the same MarkdownEditor a document uses, over the canvas, with
 // the inline editor's commit grammar (close = commit, Escape = discard) so
@@ -21,9 +21,11 @@ const TARGET_NAME = 'reviews/weekly'
 const targets = [
   { id: TARGET_ID, path: TARGET_NAME, name: 'Weekly review', kind: 'markdown' as const },
 ]
-const references = referenceSeams(new Map(), {
-  resolveAlias: (alias: string) => (alias === TARGET_NAME ? TARGET_ID : null),
-})
+const references = referenceSeamsFromWire(
+  referenceWire(new Map([[TARGET_NAME, { documentId: TARGET_ID }]]), {
+    resolveAlias: (alias: string) => (alias === TARGET_NAME ? TARGET_ID : null),
+  }),
+)
 
 function renderOverlay(
   overrides: { onCommit?: (text: string) => void; onClose?: () => void } = {},

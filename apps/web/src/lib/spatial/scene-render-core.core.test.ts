@@ -1,7 +1,8 @@
 // @vitest-environment node
 
-import type { CanvasLayoutRequest, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import type { CanvasLayoutRequest } from '@kamiazya/whiteboard-canvas-render'
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { recordingFragmentTable } from '../fragment-requests.js'
@@ -22,21 +23,17 @@ const canvas = {
   edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
 }
 
-/** A core whose switch says `rust` and whose routing records the layouts it is asked for. */
+/** A core recording the layouts it is asked for, each answered with an empty scene. */
 function recordingCore() {
-  const asked: number[] = []
-  const core: LayoutCore = {
-    routing: {
-      routeLayout: (_nodes, edges) => {
-        asked.push(edges.length)
-        return {
-          routes: edges.map((edge) => ({ id: edge.id, kind: 'edge', path: [] })),
-          anchors: new Map(),
-        } as unknown as ReturnType<LayoutCore['routing']['routeLayout']>
+  const asked: CanvasLayoutRequest[] = []
+  const core = fakeLayoutCore({
+    layout: {
+      layoutSpatialCanvas: (request) => {
+        asked.push(request)
+        return { scene: { nodes: [] }, anchors: new Map(), degradations: [] }
       },
     },
-    impl: { routeLayout: 'rust' },
-  }
+  })
   return { core, asked }
 }
 
@@ -49,38 +46,39 @@ describe('the editor layout base', () => {
     expect(editorLayoutBase({ measure }).core).toBe(core)
   })
 
-  it('carries none before one loads, so the layout routes in TypeScript', () => {
+  it('carries none in a realm that holds no core', () => {
     vi.mocked(currentLayoutCore).mockReturnValue(undefined)
     expect(editorLayoutBase({ measure }).core).toBeUndefined()
   })
 
-  it('routes the whole editor render through it', () => {
+  it('lays the whole editor render out through it', () => {
     const { core, asked } = recordingCore()
     vi.mocked(currentLayoutCore).mockReturnValue(core)
     renderCanvasToSvgWith(canvas, { measure })
-    expect(asked).toEqual([1])
+    expect(asked.map((request) => request.canvas)).toEqual([canvas])
   })
 })
 
 describe('the whole layout the editor and its worker hand the core', () => {
   beforeEach(() => vi.mocked(currentLayoutCore).mockReset())
 
-  it('carries their math and diagram fragments as a table, never a skipped seam', () => {
+  it('carries their math and diagram fragments as a table, never a seam no request carries', () => {
     const asked: CanvasLayoutRequest[] = []
-    const skipped: string[] = []
-    vi.mocked(currentLayoutCore).mockReturnValue({
-      routing: recordingCore().core.routing,
-      layout: {
-        layoutSpatialCanvas: (request) => {
-          asked.push(request)
-          return { declined: 'recording' } as never
+    vi.mocked(currentLayoutCore).mockReturnValue(
+      fakeLayoutCore({
+        layout: {
+          layoutSpatialCanvas: (request) => {
+            asked.push(request)
+            return {
+              scene: { nodes: [] },
+              anchors: new Map(),
+              degradations: [],
+              fragmentsAsked: [{ kind: 'math', value: 'y' }],
+            }
+          },
         },
-      },
-      impl: { routeLayout: 'ts', layoutSpatialCanvas: 'differential' },
-      onMismatch: (mismatch) => {
-        if (mismatch.kind === 'skipped') skipped.push(mismatch.reason)
-      },
-    })
+      }),
+    )
     const fragment = { svg: '<g/>', width: 4, height: 4 }
     const table = recordingFragmentTable([['math:x^2', fragment]])
     const math = {
@@ -96,10 +94,10 @@ describe('the whole layout the editor and its worker hand the core', () => {
       ],
       edges: [],
     }
+    // A seam set as a function would throw `CoreUnaskable` here.
     renderCanvasToSvgWith(math, { measure, ...table })
-    expect(skipped).toEqual([])
     expect(asked.map((request) => request.fragments)).toEqual([[['math:x^2', fragment]]])
-    // The core declined, so the TypeScript drew it and reported what the table lacked.
+    // What the core reported the table lacked reaches the table.
     expect([...table.asked.values()]).toEqual([{ kind: 'math', value: 'y' }])
   })
 })

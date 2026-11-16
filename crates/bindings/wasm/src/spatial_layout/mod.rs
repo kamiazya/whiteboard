@@ -30,13 +30,13 @@
 //! - `["needs", {code}]`: the fences, as `[lang, value]` rows in the order the
 //!   layout met them, that the default highlighter colours and whose tokens the
 //!   request's `codeTokens` did not carry; the host tokenises exactly those and
-//!   asks once more with them (owner decision q75);
-//! - `["declined", "body"]`: a body past the parser's bounds, which the core
-//!   cannot answer exactly as the TypeScript would.
+//!   asks once more with them (owner decision q75).
 //!
-//! A host draws a refusal as one (owner decision q81, D7), and answers a
-//! decline from the TypeScript. Fragment markup placed past
-//! [`MAX_PLACED_BYTES`] is no refusal: each block past it draws its fallback.
+//! A host draws a refusal as one (owner decision q81, D7). A body past the
+//! parser's bounds is no refusal (D7a): a node's own body draws its literal
+//! text and reports `body-parse-failed`, a note or a comment draws its literal
+//! text as one paragraph. Nor is fragment markup placed past
+//! [`MAX_PLACED_BYTES`]: each block past it draws its fallback.
 //!
 //! A request naming a `kind` is a markdown body rather than a canvas
 //! ([`markdown`]): a note laid out as `layoutMdastBlocks` lays it out, or a
@@ -85,7 +85,7 @@ use whiteboard_scene::NodeDecoration;
 
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::json_value;
-use answer::{declined, laid_out, needs, refused};
+use answer::{laid_out, needs, refused};
 use cache::Surface;
 use fragments::FragmentTable;
 use measure::{Unmeasured, with_measurer};
@@ -358,23 +358,19 @@ fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable
     settled(host, ok)
 }
 
-/// What a layout through `host` answers when `ok` is its laid-out answer:
-/// declined for what the core cannot answer exactly, else the fences it must be sent.
+/// What a layout through `host` answers when `ok` is its laid-out answer: the
+/// fences it must be sent first, if any.
 fn settled(host: &WireHost<'_>, ok: impl FnOnce() -> String) -> String {
     let asked = host.needs();
-    match host.refused() {
-        Some(why) => declined(why.class()),
-        None if !asked.is_empty() => needs(&asked),
-        None => ok(),
-    }
+    if asked.is_empty() { ok() } else { needs(&asked) }
 }
 
 /// Whether a layout's bodies may be kept: one answered, or one asking for
 /// fences, whose bodies each drew in full or charged the refusal a missing
 /// fence charges, which the composer never keeps; so the call that sends the
-/// tokens reads the rest. A declined layout keeps nothing, since what it could
-/// not answer (a body past the parser's bounds, say) may have shaped a body
-/// without charging anything.
+/// tokens reads the rest. A refused layout keeps nothing. (A body past the
+/// parser's bounds is never kept either: the composer keeps only a body that
+/// parsed.)
 fn keeps(answer: &str) -> bool {
     answer.starts_with(r#"["ok","#) || answer.starts_with(r#"["needs","#)
 }

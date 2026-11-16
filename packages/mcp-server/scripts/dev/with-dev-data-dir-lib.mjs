@@ -68,17 +68,10 @@ export function resolveHookProjectRoot(env, cwd) {
  * sharing (and corrupting) one another's canvas data.
  */
 export function resolveDevDataDirEnv(env, repoRoot) {
-  // The dev daemon is where the Rust core is dogfooded (ADR-0054 stage 2):
-  // edge routing and the whole layout run both implementations and the
-  // TypeScript's answer is used, unless the caller says otherwise.
-  const core = {
-    ...(env.WHITEBOARD_CORE ? {} : { WHITEBOARD_CORE: 'differential' }),
-    ...(env.WHITEBOARD_CORE_LAYOUT ? {} : { WHITEBOARD_CORE_LAYOUT: 'differential' }),
-  }
   if (env.WHITEBOARD_DATA_DIR) {
-    return { ...env, ...core }
+    return { ...env }
   }
-  return { ...env, ...core, WHITEBOARD_DATA_DIR: resolve(repoRoot, '.dev-data') }
+  return { ...env, WHITEBOARD_DATA_DIR: resolve(repoRoot, '.dev-data') }
 }
 
 /**

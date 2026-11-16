@@ -1,6 +1,5 @@
 import {
   type CanvasLayoutCore,
-  type CoreMismatch,
   describeMeasure,
   type EdgeAnchorOverride,
   type LayoutCore,
@@ -16,7 +15,6 @@ import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import { describe, expect, it } from 'vitest'
 import { commands } from 'vitest/browser'
-import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { createSpatialContentCache } from '../content-cache.js'
 import { editorLayoutBase } from './scene-render-core.js'
@@ -34,8 +32,8 @@ import type { WebCore } from './web-core.js'
  * out as the editor composes it: the editor's base, its content cache, its
  * fragment table, its comments and proposals.
  *
- * Where the run asks for a core (`CORE_REQUIRED`: `differential` or `rust`) a
- * missing artifact FAILS this file; elsewhere, `ts` included, it skips and says so (as layout-core.browser.test.ts does).
+ * Every browser run needs the artifact: a missing one FAILS this file's first
+ * test, and the timed cases skip, saying so (as layout-core.browser.test.ts does).
  */
 
 const FRAME_BUDGET_MS = 1000 / 60
@@ -60,41 +58,31 @@ const real = await loadRealCore()
 /** No artifact to time: each timed case skips and says so. */
 const ABSENT = 'failure' in real
 
-/** `real` switched to `rust` for the whole layout, counting the layouts it answered. */
+/** `real` for the whole layout, counting the layouts it answered. */
 function countedCore(core: WebCore) {
-  const tally = { answered: 0, reports: [] as CoreMismatch[] }
+  const tally = { answered: 0 }
   const layout: CanvasLayoutCore = {
     layoutSpatialCanvas(request, highlight, measure, cache) {
       const answer = core.layoutSpatialCanvas(request, highlight, measure, cache)
-      if (!('declined' in answer)) tally.answered += 1
+      if (!('refused' in answer)) tally.answered += 1
       return answer
     },
   }
-  const switched: LayoutCore = {
-    routing: core,
-    layout,
-    impl: { routeLayout: 'rust', layoutSpatialCanvas: 'rust' },
-    onMismatch: (report) => tally.reports.push(report),
-  }
+  const switched: LayoutCore = { routing: core, layout, markdown: core, query: core }
   return { switched, tally }
 }
 
-/** `real` switched to `rust` for the queries alone, counting the edge layers it answered. */
+/** `real` for the queries, counting the edge layers it answered. */
 function countedQueries(core: WebCore) {
-  const tally = { answered: 0, reports: [] as CoreMismatch[] }
+  const tally = { answered: 0 }
   const query: QueryLayoutCore = {
     layoutQuery(request, highlight, measure) {
       const answer = core.layoutQuery(request, highlight, measure)
-      if (!('declined' in answer)) tally.answered += 1
+      if (!('refused' in answer)) tally.answered += 1
       return answer
     },
   }
-  const switched: LayoutCore = {
-    routing: core,
-    query,
-    impl: { routeLayout: 'rust', layoutQuery: 'rust' },
-    onMismatch: (report) => tally.reports.push(report),
-  }
+  const switched: LayoutCore = { routing: core, layout: core, markdown: core, query }
   return { switched, tally }
 }
 
@@ -222,7 +210,7 @@ const largest = (): WebLayoutBoard =>
   )[0] as WebLayoutBoard
 
 describe('a drag frame laid out by the core', () => {
-  it.runIf(CORE_REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
+  it('finds the staged artifact where the pipeline promised it', () => {
     if ('failure' in real) throw real.failure
   })
 
@@ -240,7 +228,6 @@ describe('a drag frame laid out by the core', () => {
       const coreMs = timedFrames(board, browser, switched)
       const tsMs = timedFrames(board, browser)
       // Every timed frame was the core's: a declined one is the TypeScript's time.
-      expect(tally.reports).toEqual([])
       expect(tally.answered).toBe(3 + ROUNDS)
       await commands.printReading(
         JSON.stringify({
@@ -278,7 +265,6 @@ describe('a drag frame laid out by the core', () => {
         frames.push(coreMs)
       }
       // Every timed frame was the core's: a skipped or declined one is the TypeScript's time.
-      expect(tally.reports).toEqual([])
       expect(tally.answered).toBe(2 * (3 + ROUNDS))
       await commands.printReading(JSON.stringify(reading))
       for (const ms of frames) expect(ms).toBeLessThan(FRAME_BUDGET_MS)

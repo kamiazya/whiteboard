@@ -496,10 +496,6 @@ Two other things draw the same notice: a position or a size too large to
 draw (no board written through the tools holds one), and, in the browser, a
 page that could not measure its text, which reload answers.
 
-These hold where the layout runs on the Rust core, which is the default; with
-`WHITEBOARD_CORE_LAYOUT=differential` (or `VITE_WHITEBOARD_CORE_LAYOUT`),
-the TypeScript layout draws such a document in full.
-
 ## How many open comment threads and proposed changes one document may hold
 
 One document holds at most **500 open comment threads** and at most **1,000

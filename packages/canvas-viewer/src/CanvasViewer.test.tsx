@@ -1,13 +1,11 @@
 import {
-  type CanvasLayoutCore,
   constantRatioMeasureText,
   type FragmentAsk,
   fragmentAskKey,
-  type LayoutCore,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
-import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { createFixedMeasure, fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
@@ -309,23 +307,25 @@ describe("CanvasViewer typesets from the host's fragment table", () => {
 })
 
 describe("CanvasViewer lays out through the host's core (ADR-0054)", () => {
-  it('hands the layout to the core the host gives it', () => {
-    const layoutSpatialCanvas = vi.fn(() => ({ declined: 'test' as const }))
-    const onMismatch = vi.fn()
-    const core = {
-      routing: {} as LayoutCore['routing'],
-      layout: { layoutSpatialCanvas } as unknown as CanvasLayoutCore,
-      impl: { routeLayout: 'ts', layoutSpatialCanvas: 'rust' },
-      onMismatch,
-    } satisfies LayoutCore
+  it('hands the layout to the core the host gives it, and draws its answer', () => {
+    const marked = {
+      kind: 'textRun',
+      text: 'from the core',
+      bbox: { x: 0, y: 0, w: 100, h: 20 },
+      baseline: 16,
+      font: { family: 'Roboto', weight: 400, style: 'normal', sizePx: 16 },
+    } as const
+    const layoutSpatialCanvas = vi.fn(() => ({
+      scene: { nodes: [marked] },
+      anchors: new Map(),
+      degradations: [],
+    }))
+    const core = fakeLayoutCore({ layout: { layoutSpatialCanvas } })
     const { getByTestId } = render(
       <CanvasViewer canvas={canvas} measure={constantRatioMeasureText} core={core} />,
     )
     expect(layoutSpatialCanvas).toHaveBeenCalledTimes(1)
-    expect(onMismatch).toHaveBeenCalledWith(
-      expect.objectContaining({ fn: 'layoutSpatialCanvas', kind: 'declined' }),
-    )
-    // A core that declines leaves the TypeScript to draw the board.
-    expect(getByTestId('canvas-viewer').textContent).toContain('hello')
+    expect(getByTestId('canvas-viewer').textContent).toContain('from the core')
+    expect(getByTestId('canvas-viewer').textContent).not.toContain('hello')
   })
 })

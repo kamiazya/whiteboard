@@ -65,7 +65,7 @@ describe('the recorded whole-layout oracle', () => {
     }
     // A per-node expansion policy crosses as the ids it opens.
     expect(requests).toMatch(/"expand",\["s",/)
-    expect(all.filter((r) => r.answer.startsWith('["declined"'))).toEqual([])
+    expect(all.filter((r) => r.answer.startsWith('["refused"'))).toEqual([])
     const asked = all.filter((r) => r.answer.startsWith('["needs"'))
     expect(asked.length, 'layouts asking for fences').toBeGreaterThan(2)
     expect(all.filter((r) => r.request.includes('"codeTokens"'))).toHaveLength(asked.length)

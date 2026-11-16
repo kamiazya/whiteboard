@@ -23,9 +23,7 @@ const referenced: SpatialCanvas = {
 
 const EMBED_PROPS = {
   fileRefOptions: [{ file: 'ref-1', label: 'Referenced canvas' }],
-  references: referenceWire(new Map(), {
-    extras: new Map([['ref-1', { canvas: referenced }]]),
-  }),
+  references: referenceWire(new Map([['ref-1', { canvas: referenced }]])),
 }
 
 function embeddedTextExists(container: HTMLElement): boolean {

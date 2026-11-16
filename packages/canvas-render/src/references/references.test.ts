@@ -6,6 +6,7 @@ import { referenceSeams } from './seams.js'
 import { imageTargets, REFERENCE_BUDGET, referenceTargets } from './targets.js'
 import {
   overlayReferences,
+  type ReferenceExtra,
   referenceSeamsFromWire,
   referenceWire,
   referenceWireFor,
@@ -352,6 +353,41 @@ describe('referenceWire', () => {
     expect(seams.resolveEmbed(NOTE_ID)?.title).toBe('Plan')
     expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Board card', canvas: board })
     expect(seams.resolveReference('notes/missing')).toBeUndefined()
+  })
+
+  it('marks the targets still loading pending, asks the tables of them, and rebuilds them as loading', () => {
+    // A target written by path is still loading: the alias table must be
+    // asked of it, or an embed naming its id could not be told it is loading.
+    const wire = referenceWire(graphOf({ 'notes/plan': { documentId: NOTE_ID, body: 'x' } }), {
+      resolveAlias: (alias) => (alias === 'boards/roadmap' ? BOARD_ID : null),
+      resolveTitle: (id) => (id === BOARD_ID ? 'Roadmap' : undefined),
+      extras: new Map([['boards/roadmap', { label: 'Board card' }]]),
+      pending: new Set(['boards/roadmap', 'notes/plan']),
+    })
+    expect(structuredClone(wire)).toEqual(wire)
+    expect(wire.aliases).toEqual([['boards/roadmap', BOARD_ID]])
+    expect(wire.titles).toEqual([[BOARD_ID, 'Roadmap']])
+    expect(wire.extras).toEqual([
+      ['boards/roadmap', { label: 'Board card', pending: true }],
+      ['notes/plan', { pending: true }],
+    ])
+    const seams = referenceSeamsFromWire(wire)
+    expect(seams.isLoading?.(BOARD_ID)).toBe(true)
+    expect(seams.isLoading?.(NOTE_ID)).toBe(true)
+    expect(seams.isLoading?.('01H8XJZ9K5N4M3P2Q1R0S9T8V7')).toBe(false)
+    // The mark is no part of what a reference resolves to.
+    expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Board card' })
+    expect(seams.resolveReference('notes/plan')).toEqual({ markdown: expect.anything() })
+    expect(referenceSeamsFromWire(referenceWire(new Map())).isLoading).toBeUndefined()
+  })
+
+  it('rebuilds the last extra of a key, an empty one included, as a wire without the mark did', () => {
+    const extras: [string, ReferenceExtra][] = [
+      ['a', { label: 'Extra' }],
+      ['a', {}],
+    ]
+    const seams = referenceSeamsFromWire({ ...referenceWire(new Map()), extras })
+    expect(seams.resolveReference('a')).toBeUndefined()
   })
 })
 

@@ -40,6 +40,7 @@ it('a rejected touch-bar panel chunk costs only the bar, never the editor beside
     rootEl,
     resolveWorkspaceId: async () => 'ws',
     loadFont: async () => undefined,
+    loadCore: async () => undefined,
     dismissSplash: async () => undefined,
   })
   await screen.findByText('editor with unsaved text')

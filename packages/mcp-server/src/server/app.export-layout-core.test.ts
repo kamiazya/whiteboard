@@ -1,6 +1,6 @@
 /**
  * `createApp` hands both file exports the deps' layout core factory, so
- * `/export` and `/export-svg` lay a board out through the switch that lays out
+ * `/export` and `/export-svg` lay a board out through the core that lays out
  * `wb_scene_render` (ADR-0054 step 7). The routers take it as an option; a
  * root that forgot to pass it would lay every export out in TypeScript, and
  * the drawing would be identical either way — so only asking says.
@@ -50,7 +50,9 @@ async function appAskingForTheCore() {
   const doc = await boot.serverDeps.liveDocuments.get(WS, 'board')
   writeSpatialNode(doc, textNode({ id: 'n1', x: 0, y: 0, width: 120, height: 40, text: 'hi' }))
   await boot.serverDeps.liveDocuments.save(WS, 'board', doc, { overwrite: true })
-  const layoutCore = vi.fn(async (): Promise<LayoutCore | undefined> => undefined)
+  const real = boot.serverDeps.layoutCore
+  if (real === undefined) throw new Error('the booted deps carry no layout core')
+  const layoutCore = vi.fn((): Promise<LayoutCore> => real())
   const app = createApp({
     authMode: 'local-daemon',
     serverDeps: { ...boot.serverDeps, layoutCore },

@@ -2,10 +2,10 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutRequest } from '../canvas-core.js'
+import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { canvasLayoutRequest } from './canvas-switch.js'
-import type { CoreImpl, CoreMismatch, LayoutCore } from './edges/layout-core.js'
+import { CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from './nodes/fragment-ask.js'
 import { layoutSpatialCanvasWithAnchors, naturalNodeContentSize } from './spatial-canvas.js'
@@ -151,11 +151,9 @@ describe('rendered fragments as a table', () => {
 })
 
 /** A core answering with the TypeScript's own layout and `asks`. */
-function coreOf(impl: CoreImpl, asks: readonly FragmentAsk[] | undefined) {
+function coreOf(asks: readonly FragmentAsk[] | undefined) {
   const requests: CanvasLayoutRequest[] = []
-  const mismatches: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: { routeLayout: () => ({ routes: [], anchors: new Map() }) as never },
+  const core = fakeLayoutCore({
     layout: {
       layoutSpatialCanvas: (request) => {
         requests.push(request)
@@ -163,13 +161,11 @@ function coreOf(impl: CoreImpl, asks: readonly FragmentAsk[] | undefined) {
         return { ...laid, degradations: [], ...(asks && { fragmentsAsked: asks }) }
       },
     },
-    impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
-    onMismatch: (mismatch) => mismatches.push(mismatch),
-  }
-  return { core, requests, mismatches }
+  })
+  return { core, requests }
 }
 
-describe('the request gate and the core, with a table', () => {
+describe('the request and the core, with a table', () => {
   const request = (options: Partial<SpatialLayoutOptions>) =>
     canvasLayoutRequest(canvas, { ...base, ...options })
 
@@ -177,9 +173,9 @@ describe('the request gate and the core, with a table', () => {
     expect(request({ fragments: [X2] })).toMatchObject({ fragments: [X2] })
     expect(request({ onFragmentsAsked: () => {} })).toMatchObject({ fragments: [] })
     expect(request({})).not.toHaveProperty('fragments')
-    expect(request({ fragments: [X2], renderMath: () => undefined })).toEqual({
-      skip: 'seam:renderMath',
-    })
+    expect(() => request({ fragments: [X2], renderMath: () => undefined })).toThrow(
+      new CoreUnaskable('seam:renderMath'),
+    )
   })
 
   const theirs: FragmentAsk[] = [
@@ -187,28 +183,10 @@ describe('the request gate and the core, with a table', () => {
     { kind: 'math', value: 'y' },
   ]
 
-  it("hands the core's asks to the caller under rust, and none when it reports none", () => {
-    const { core } = coreOf('rust', theirs)
+  it("hands the core's asks to the caller, and none when it reports none", () => {
+    const { core } = coreOf(theirs)
     expect(asked({ fragments: [X2], core })).toEqual([theirs])
-    expect(asked({ fragments: [X2], core: coreOf('rust', []).core })).toEqual([])
-    expect(asked({ fragments: [X2], core: coreOf('rust', undefined).core })).toEqual([])
-  })
-
-  it('compares the asks under differential, a content cache beside them or not', () => {
-    const agreeing = coreOf('differential', theirs)
-    expect(asked({ fragments: [X2], core: agreeing.core })).toEqual([theirs])
-    expect(agreeing.mismatches).toEqual([])
-    const parting = coreOf('differential', theirs.slice(1))
-    asked({ fragments: [X2], core: parting.core })
-    expect(parting.mismatches).toMatchObject([{ kind: 'differs', at: '/fragmentsAsked/0/kind' }])
-    const unheard = coreOf('differential', theirs)
-    layoutSpatialCanvasWithAnchors(canvas, { ...base, fragments: [X2], core: unheard.core })
-    expect(unheard.mismatches, 'a table with no listener').toEqual([])
-    // Warm first: a cached body would answer the second layout without asking.
-    const contentCache = new Map()
-    asked({ fragments: [X2], contentCache })
-    const cached = coreOf('differential', theirs)
-    expect(asked({ fragments: [X2], core: cached.core, contentCache })).toEqual([theirs])
-    expect(cached.mismatches).toEqual([])
+    expect(asked({ fragments: [X2], core: coreOf([]).core })).toEqual([])
+    expect(asked({ fragments: [X2], core: coreOf(undefined).core })).toEqual([])
   })
 })

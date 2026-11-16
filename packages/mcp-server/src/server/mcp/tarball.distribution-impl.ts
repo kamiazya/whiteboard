@@ -95,20 +95,14 @@ export function assertTarballFileList(entries: readonly string[]): void {
 // Stripping the flag keeps this smoke pinned to the same dist-mode run a real
 // npm install gets.
 //
-// The core is asked for in `differential` and a failure to load it throws (the
-// OKF and JSON Canvas codecs' core is installed at boot and the daemon refuses
-// to start without it): an
-// install has no sibling core-wasm package, so the only artifact it can find is
-// the one the tarball carries, and an absent or unloadable one must fail this
-// smoke rather than degrade to the TypeScript. WHITEBOARD_CORE_DIR is dropped
-// for the same reason, so an ambient override cannot stand in for the package.
+// The Rust core answers every read, write and layout, and the daemon refuses
+// to start without it: an install has no sibling core-wasm package, so the
+// only artifact it can find is the one the tarball carries, and an absent or
+// unloadable one fails this smoke. WHITEBOARD_CORE_DIR is dropped so an
+// ambient override cannot stand in for the package.
 export function buildTarballSmokeChildEnv(processEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const { WHITEBOARD_DEV: _dev, WHITEBOARD_CORE_DIR: _dir, ...rest } = processEnv
-  return {
-    ...rest,
-    WHITEBOARD_CORE: 'differential',
-    WHITEBOARD_CORE_MISMATCH: 'throw',
-  }
+  return rest
 }
 
 function listTarballEntries(tarballPath: string): string[] {

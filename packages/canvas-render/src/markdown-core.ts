@@ -48,23 +48,20 @@ export interface MarkdownCommentRequest {
 }
 
 /** A markdown body the core's markdown entry takes: a note, or a comment's prose. */
-export type MarkdownBodyRequest = MarkdownNoteRequest | MarkdownCommentRequest
+type MarkdownBodyRequest = MarkdownNoteRequest | MarkdownCommentRequest
 
 /**
  * The core's answer to a note: the scene; what it refused (a request past its
  * caps, a host measurer that did not answer), which a surface draws as a
- * refusal under `rust`; the class of what it declined (a body past the
- * parser's bounds), which the TypeScript then answers; or `missing` for a
- * `section` the note holds no heading for.
+ * refusal; or `missing` for a `section` the note holds no heading for.
  */
-export type MarkdownLayoutAnswer =
+type MarkdownLayoutAnswer =
   | {
       readonly scene: Scene
       readonly degradations: readonly CoreDegradation[]
       /** For a request carrying `fragments`: the sources it could not answer, once each in the order asked. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
     }
-  | { readonly declined: string }
   | { readonly refused: LayoutRefusal }
   | { readonly missing: 'section' }
 
@@ -81,35 +78,3 @@ export interface MarkdownLayoutCore {
     measure: MeasureText,
   ): MarkdownLayoutAnswer
 }
-
-/**
- * Why a note's options could not be handed to the core: a measurer nobody
- * named, or a reference bundle not rebuilt from a wire or one whose extras
- * carry content.
- */
-export type MarkdownLayoutSkip = 'measure' | 'references' | 'reference-content'
-
-/** A note the core did not answer, by class: skipped by the request gate, or declined by the core. */
-export type MarkdownLayoutTally =
-  | { readonly fn: 'layoutMarkdown'; readonly kind: 'skipped'; readonly reason: MarkdownLayoutSkip }
-  | { readonly fn: 'layoutMarkdown'; readonly kind: 'declined'; readonly reason: string }
-
-/**
- * A difference `differential` found in a note's layout, or a core that threw
- * on one: `at` is the path to the first value the two answers part at.
- */
-export type MarkdownLayoutMismatch =
-  | {
-      readonly fn: 'layoutMarkdown'
-      readonly kind: 'differs'
-      readonly at: string
-      readonly ts: unknown
-      readonly rust: unknown
-      readonly repro: MarkdownBodyRequest
-    }
-  | {
-      readonly fn: 'layoutMarkdown'
-      readonly kind: 'refused'
-      readonly err: unknown
-      readonly repro: MarkdownBodyRequest
-    }

@@ -16,7 +16,6 @@ import {
   type LoadedReference,
   type ReferenceExtra,
   type ReferenceSeams,
-  referenceSeams,
   referenceSeamsFromWire,
   referenceTargets,
   referenceWire,
@@ -110,12 +109,11 @@ function pictureExtra(href: string, sizes: ReadonlyMap<string, ImageSize>): Refe
 }
 
 /**
- * The bundle over what loaded. Every target the body names, transitively, is
- * in the cache once nothing is pending, so the page's tables evaluated over
- * it answer whatever the layout can ask — and the bundle rebuilt from that
- * wire is one the Rust core can be handed. A wire cannot say "loading", so
- * while a load is in flight the bundle stays functions and the TypeScript
- * draws the placeholder that says so.
+ * The bundle over what loaded, rebuilt from its wire so the Rust core can be
+ * handed it. Every target the body names, transitively, is in the cache once
+ * nothing is pending, so the page's tables evaluated over it answer whatever
+ * the layout can ask; while a load is in flight, the targets still loading
+ * cross marked `pending`, and the core draws the placeholder that says so.
  */
 function bundleOver(
   cache: ReadonlyMap<string, LoadedReference | null>,
@@ -127,10 +125,7 @@ function bundleOver(
     ...(page.resolveAlias !== undefined ? { resolveAlias: page.resolveAlias } : {}),
     ...(page.resolveTitle !== undefined ? { resolveTitle: page.resolveTitle } : {}),
   }
-  if (pending.size > 0) {
-    return referenceSeams(cache, { pending, ...tables, extra: (ref) => extras.get(ref) })
-  }
-  return referenceSeamsFromWire(referenceWire(cache, { ...tables, extras }))
+  return referenceSeamsFromWire(referenceWire(cache, { ...tables, extras, pending }))
 }
 
 export function useReferenceSeams({

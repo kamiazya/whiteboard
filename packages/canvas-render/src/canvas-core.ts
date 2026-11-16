@@ -18,7 +18,7 @@ import type { SpatialGeometry } from './theme/spatial-geometry.js'
 import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
 /** A reference's surface extras as the core takes them: data only, no body or canvas. */
-type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'image' | 'facets'>
+type CoreExtra = Pick<ReferenceExtra, 'label' | 'missing' | 'pending' | 'image' | 'facets'>
 
 /** A thread as the core takes it: what a layout reads of one, no author or timestamp. */
 export type CoreThread = Pick<CommentThread, 'id' | 'anchor' | 'status'> & {
@@ -90,11 +90,9 @@ export type CoreDegradation =
     }
 
 /**
- * The core's answer: the layout; what it refused (a request past its caps, a
- * number its answer cannot spell, a host measurer that did not answer), which
- * a surface draws as a refusal under `rust`; or the class of what it declined
- * to answer because it could not answer it exactly as the TypeScript would (a
- * body past the parser's bounds), which the TypeScript then answers.
+ * The core's answer: the layout, or what it refused (a request past its caps,
+ * a number its answer cannot spell, a host measurer that did not answer,
+ * faces past what the instance holds), which a surface draws as a refusal.
  */
 type CanvasLayoutAnswer =
   | {
@@ -104,7 +102,6 @@ type CanvasLayoutAnswer =
       /** For a request carrying `fragments`: the sources it could not answer, once each in the order asked. */
       readonly fragmentsAsked?: readonly FragmentAsk[]
     }
-  | { readonly declined: string }
   | { readonly refused: LayoutRefusal }
 
 /**
@@ -128,64 +125,3 @@ export interface CanvasLayoutCore {
     cache?: object,
   ): CanvasLayoutAnswer
 }
-
-/** The function seams no request can carry, by their option's name. */
-export type CanvasLayoutSeam =
-  | 'parseBody'
-  | 'renderContributions'
-  | 'renderMath'
-  | 'renderDiagram'
-  | 'resolveEmbed'
-  | 'resolveTitle'
-  | 'resolveAlias'
-  | 'resolveReference'
-  | 'nestedLayoutBudget'
-
-/**
- * Why a layout's options could not be handed to the core (the request gate,
- * `canvasLayoutRequest`): a measurer or an appearance nobody named, a
- * function seam, a highlighter other than the default, a reference bundle
- * not rebuilt from a wire or one whose extras carry content, and an expansion policy that answers
- * some file nodes open and others closed.
- */
-export type CanvasLayoutSkip =
-  | 'measure'
-  | 'appearance'
-  | `seam:${CanvasLayoutSeam}`
-  | 'highlighter'
-  | 'references'
-  | 'reference-content'
-  | 'expand-collision'
-
-/**
- * A layout the core did not answer, by class, reported so a run can count
- * them: `skipped` by the request gate before the core was asked, `declined`
- * by the core itself (the class it answered). Neither is a difference.
- */
-export type CanvasLayoutTally =
-  | {
-      readonly fn: 'layoutSpatialCanvas'
-      readonly kind: 'skipped'
-      readonly reason: CanvasLayoutSkip
-    }
-  | { readonly fn: 'layoutSpatialCanvas'; readonly kind: 'declined'; readonly reason: string }
-
-/**
- * A difference `differential` found in a whole layout, or a core that threw
- * on one: `at` is the path to the first value the two answers part at.
- */
-export type CanvasLayoutMismatch =
-  | {
-      readonly fn: 'layoutSpatialCanvas'
-      readonly kind: 'differs'
-      readonly at: string
-      readonly ts: unknown
-      readonly rust: unknown
-      readonly repro: CanvasLayoutRequest
-    }
-  | {
-      readonly fn: 'layoutSpatialCanvas'
-      readonly kind: 'refused'
-      readonly err: unknown
-      readonly repro: CanvasLayoutRequest
-    }

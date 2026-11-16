@@ -7,6 +7,7 @@
 // whenever a DIFFERENT document was edited, which is the property that makes
 // that analysis usable as a change signal at all.
 
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import {
   writeDocumentKind,
   writeMarkdownBody,
@@ -305,24 +306,21 @@ describe('wb_canvas_snapshot({ layout: true })', () => {
   test('lays the canvas out through the core ServerDeps hands it', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
-    // A core that refuses: the layout reports it and the TypeScript answers,
-    // so the digest is unchanged and the report is the proof the core was asked.
-    const reports: string[] = []
+    // A core that throws: nothing answers in its place, so the throw reaching
+    // the caller is the proof the core was asked.
+    const asked = new Error('the core was asked')
     const deps = {
       ...makeDeps(store),
-      layoutCore: async () => ({
-        routing: {
-          routeLayout: () => {
-            throw new Error('refused')
+      layoutCore: async () =>
+        fakeLayoutCore({
+          layout: {
+            layoutSpatialCanvas: () => {
+              throw asked
+            },
           },
-        },
-        impl: { routeLayout: 'rust' as const },
-        onMismatch: (m: { kind: string }) => reports.push(m.kind),
-      }),
+        }),
     }
     const input = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, layout: true }
-    const withCore = await createCanvasSnapshotTool(deps).execute(input)
-    expect(reports).toEqual(['refused'])
-    expect(withCore).toEqual(await createCanvasSnapshotTool(makeDeps(store)).execute(input))
+    await expect(createCanvasSnapshotTool(deps).execute(input)).rejects.toBe(asked)
   })
 })

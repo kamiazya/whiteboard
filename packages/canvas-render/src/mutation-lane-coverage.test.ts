@@ -424,16 +424,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // codegen` emits from contracts/geometry. Outside the lane: it is
     // generated, so an edit to it fails `codegen --check` before any test,
     // and its refusals are pinned by `geometry-contract.test.ts`.
-    // 127 with `layout/edges/layout-core.ts`, ADR-0054's CoreImpl switch for
-    // the layout's routing. Outside the lane: it is a three-way dispatch and
-    // a comparison, every branch driven by `layout/core-switch.test.ts` and
-    // mutation-checked by hand, and it goes when the TypeScript routing does.
+    // 127 with `layout/edges/layout-core.ts`, ADR-0054's routing seam: the
+    // core when a root hands one, else the TypeScript routing. Outside the
+    // lane: it is a two-way dispatch, both branches driven by
+    // `layout/route-layout.test.ts`, and it goes when the TypeScript routing does.
     // 128 with `layout/nodes/phrase-pairs.ts`: the join of a BudouX phrase that
     // ends inside a surrogate pair, outside the lane because it is one loop
     // whose every branch `mdast-blocks-surrogate-pair.test.ts` drives.
     // 130 with `canvas-core.ts` (types alone) and `layout/canvas-switch.ts`,
-    // the whole layout's switch. Outside the lane for the routing switch's
-    // reason: a dispatch, a request built from options and a comparison,
+    // the whole layout's dispatch to the core. Outside the lane for the routing
+    // seam's reason: a dispatch and a request built from options,
     // every branch driven by `layout/canvas-switch.test.ts`, and it goes when
     // the TypeScript layout does.
     // 132 with `layout/nodes/fragment-ask.ts` (a schema and one key) and
@@ -447,8 +447,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // and one call into `topmostHit`). Outside the lane as `hit-test.ts` is:
     // `hit-test.test.ts` and the widget's picture tests pin every branch.
     // 136 with `markdown-core.ts` (types alone) and `layout/markdown-switch.ts`,
-    // a markdown note's switch. Outside the lane for the canvas switch's
-    // reason: a dispatch, a request built from options and a comparison,
+    // a markdown note's dispatch to the core. Outside the lane for the canvas
+    // dispatch's reason: a dispatch and a request built from options,
     // every branch driven by `layout/markdown-switch.test.ts` and
     // mutation-checked by hand, and it goes when the TypeScript layout does.
     // 139 with `query-core.ts` (types alone), `layout/query-switch.ts` (the

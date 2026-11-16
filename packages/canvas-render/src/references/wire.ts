@@ -11,7 +11,14 @@ import { imageTargets, referenceTargets } from './targets.js'
  * A test may hand content this way too; a keeper puts content in the
  * record, where the seams derive it once.
  */
-export type ReferenceExtra = Partial<ResolvedReference>
+export type ReferenceExtra = Partial<ResolvedReference> & {
+  /**
+   * The caller is still loading this reference (`isLoading`): an embed of it
+   * draws the placeholder that says so. A wire cannot carry a function, so
+   * "loading" travels as this mark.
+   */
+  readonly pending?: true
+}
 
 /**
  * The reference bundle as DATA, so it can cross a `postMessage`.
@@ -39,6 +46,12 @@ export interface ReferenceWireOptions {
   readonly resolveAlias?: AliasResolver
   readonly resolveTitle?: (documentId: string) => string | undefined
   readonly extras?: ReadonlyMap<string, ReferenceExtra>
+  /**
+   * The targets the caller is still loading: each is asked of the alias and
+   * title tables as a loaded one is, so an embed written by path still finds
+   * its id, and its extra is marked `pending`.
+   */
+  readonly pending?: ReadonlySet<string>
 }
 
 /**
@@ -52,7 +65,10 @@ export function referenceWire(
 ): ReferenceWire {
   const aliases: [string, string][] = []
   const ids = new Set<string>()
-  for (const [key, entry] of graph) {
+  const pending = options.pending ?? new Set<string>()
+  const keys = [...graph.keys(), ...[...pending].filter((target) => !graph.has(target))]
+  for (const key of keys) {
+    const entry = graph.get(key) ?? null
     if (entry !== null) ids.add(entry.documentId ?? key)
     const own = options.resolveAlias?.(key)
     if (own !== undefined && own !== null) {
@@ -65,12 +81,9 @@ export function referenceWire(
     const title = options.resolveTitle?.(id)
     if (title !== undefined) titles.push([id, title])
   }
-  return {
-    entries: [...graph.entries()],
-    aliases,
-    titles,
-    extras: [...(options.extras ?? new Map<string, ReferenceExtra>()).entries()],
-  }
+  const extras = new Map(options.extras ?? new Map<string, ReferenceExtra>())
+  for (const target of pending) extras.set(target, { ...extras.get(target), pending: true })
+  return { entries: [...graph.entries()], aliases, titles, extras: [...extras] }
 }
 
 /**
@@ -110,11 +123,19 @@ const WIRES = new WeakMap<ReferenceSeams, ReferenceWire>()
 export function referenceSeamsFromWire(wire: ReferenceWire): ReferenceSeams {
   const aliases = new Map(wire.aliases)
   const titles = new Map(wire.titles)
-  const extras = new Map(wire.extras)
+  const pending = new Set<string>()
+  const extras = new Map<string, ReferenceExtra>()
+  for (const [ref, { pending: loading, ...extra }] of wire.extras) {
+    if (loading === true) pending.add(ref)
+    // The last of a key wins, an empty extra included; a mark that only says
+    // a target is loading carries no extra of its own.
+    if (loading !== true || Object.keys(extra).length > 0) extras.set(ref, extra)
+  }
   const seams = referenceSeams(new Map(wire.entries), {
     resolveAlias: (alias) => aliases.get(alias) ?? null,
     resolveTitle: (documentId) => titles.get(documentId),
     extra: (ref) => extras.get(ref),
+    pending,
   })
   WIRES.set(seams, wire)
   return seams

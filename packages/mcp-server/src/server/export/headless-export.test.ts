@@ -201,7 +201,7 @@ describe('exportCanvasHeadlessSvg', () => {
 describe('the layout core reaches the renderer', () => {
   // A stand-in: the renderer is mocked, so what matters is that the core the
   // factory answers is the one the renderer is handed.
-  const core = { routing: {}, impl: { routeLayout: 'rust' } } as unknown as LayoutCore
+  const core = { routing: {}, layout: {}, markdown: {}, query: {} } as unknown as LayoutCore
 
   it('hands the PNG renderer the core its factory answers', async () => {
     await saveDocument('01KR4HFA5KRXT4QEFYG44FX0A1', 'design', spatialTextDoc('n1', 'hello'))
@@ -225,13 +225,12 @@ describe('the layout core reaches the renderer', () => {
     expect(renderSvgSpy.mock.calls[0]?.[2]?.core).toBe(core)
   })
 
-  it('hands no core when the factory answers none (the `ts` switch)', async () => {
+  it('hands no core when there is no factory (a test composition)', async () => {
     await saveDocument('01KR4HFA5KRXT4QEFYG44FX0A3', 'design', spatialTextDoc('n1', 'hello'))
     await exportCanvasHeadlessSvg({
       scope: testStoreScope(),
       workspaceId: '01KR4HFA5KRXT4QEFYG44FX0A3',
       path: 'design',
-      layoutCore: async () => undefined,
     })
     expect(renderSvgSpy.mock.calls[0]?.[2]).not.toHaveProperty('core')
   })

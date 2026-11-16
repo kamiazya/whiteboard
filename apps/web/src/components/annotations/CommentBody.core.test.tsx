@@ -1,9 +1,8 @@
 import {
-  type CoreMismatch,
   constantRatioMeasureText,
-  type LayoutCore,
-  type MarkdownBodyRequest,
+  type MarkdownLayoutCore,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
@@ -16,12 +15,10 @@ vi.mock('../../lib/spatial/layout-core.js', () => ({
 
 afterEach(cleanup)
 
-/** A core whose markdown switch reads `rust`, recording each body it is handed and answering one run. */
+/** A core recording each body it is handed and answering one run. */
 function recordingCore() {
-  const asked: MarkdownBodyRequest[] = []
-  const reports: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: { routeLayout: () => ({ routes: [], anchors: new Map() }) as never },
+  const asked: Parameters<MarkdownLayoutCore['layoutMarkdown']>[0][] = []
+  const core = fakeLayoutCore({
     markdown: {
       layoutMarkdown: (request) => {
         asked.push(request)
@@ -41,22 +38,19 @@ function recordingCore() {
         }
       },
     },
-    impl: { routeLayout: 'ts', layoutMarkdown: 'rust' },
-    onMismatch: (report) => reports.push(report),
-  }
-  return { core, asked, reports }
+  })
+  return { core, asked }
 }
 
 describe("a comment's prose through the core", () => {
   beforeEach(() => vi.mocked(currentLayoutCore).mockReset())
 
   it('hands the core the comment at the density its surface has, and draws its answer', () => {
-    const { core, asked, reports } = recordingCore()
+    const { core, asked } = recordingCore()
     vi.mocked(currentLayoutCore).mockReturnValue(core)
     const { container } = render(
       <CommentBody body="Please **tighten** this" compact measure={constantRatioMeasureText} />,
     )
-    expect(reports).toEqual([])
     expect(asked).toEqual([
       {
         kind: 'comment',
@@ -69,7 +63,7 @@ describe("a comment's prose through the core", () => {
     expect(container.textContent).toContain('from the core')
   })
 
-  it('draws the TypeScript where no core is loaded', () => {
+  it('draws the TypeScript in a realm that holds no core', () => {
     vi.mocked(currentLayoutCore).mockReturnValue(undefined)
     const { container } = render(
       <CommentBody body="Please **tighten** this" measure={constantRatioMeasureText} />,

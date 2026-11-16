@@ -11,10 +11,11 @@
 //! surface whose content cache an embedded board's bodies read. Its answer is
 //! the canvas's `["ok", scene, [], degradations, asked?]`, the anchors always
 //! empty; a section the note does not hold answers `["missing", "section"]`.
-//! A body past the parser's bounds is declined, as a canvas's is, and a
-//! request past its caps refused.
+//! A body past the parser's bounds draws its literal text as one paragraph
+//! (owner decision q81, D7a), and a request past its caps is refused.
 
 use whiteboard_canvas_render::comments::CommentOptions;
+use whiteboard_canvas_render::comments::body::literal_root;
 use whiteboard_canvas_render::compose_canvas::{LaidOut, LayoutOptions};
 use whiteboard_canvas_render::compose_node::{BodySeams, ComposeHost, ContentCache};
 use whiteboard_canvas_render::markdown_document::{layout_comment_text, layout_markdown_document};
@@ -31,7 +32,7 @@ use whiteboard_model::mdast::Root;
 use whiteboard_plugin_visual::render::StencilBadge;
 use whiteboard_scene::NodeDecoration;
 
-use super::answer::{declined, laid_out, missing, refused};
+use super::answer::{laid_out, missing, refused};
 use super::cache::Surface;
 use super::fragments::FragmentTable;
 use super::host_measure::Host;
@@ -53,9 +54,9 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
             measured(&request.measure, host, None, |measure, _| {
                 // The plain parser and no reference: a comment resolves no link.
                 let seams = WireHost::new(&empty, Expansion::Every(false));
-                let Ok(root) = seams.parse_markdown(&request.body) else {
-                    return declined("body");
-                };
+                let root = seams
+                    .parse_markdown(&request.body)
+                    .unwrap_or_else(|_| literal_root(&request.body));
                 let scene =
                     layout_comment_text(&root, request.max_width, *density, measure, &seams);
                 laid_out(&LaidOut { scene, anchors: Vec::new() }, &[], None)
@@ -93,7 +94,7 @@ fn layout_note(request: &MarkdownRequest, note: &Note, host: Option<&dyn Host>) 
 
 /// The root the note draws: its whole body, or the section its heading names.
 fn root_of(body: &str, note: &Note, host: &WireHost<'_>) -> Result<Root, String> {
-    let whole = host.parse_body(body).map_err(|_| declined("body"))?;
+    let whole = host.parse_body(body).unwrap_or_else(|_| literal_root(body));
     match &note.section {
         None => Ok(whole),
         Some(heading) => select_markdown_section(&whole, heading).ok_or_else(|| missing("section")),

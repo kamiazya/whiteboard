@@ -3,8 +3,10 @@ import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { highlightCode } from '../highlight/lowlight.js'
 import {
+  bodyName,
   type MarkdownMeta,
   type MarkdownRecord,
+  PAST_THE_PARSER,
   sortedSceneDigest,
 } from '../test-utils/markdown-document-oracle/oracle.js'
 import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
@@ -16,22 +18,14 @@ import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
  * line, the highlighter answering the fences the core asks for. A recorded
  * scene is compared as a value, a long one by its sorted-key digest
  * (`layout-markdown-digests.jsonl`). The bodies past the parser's bounds are
- * declined, and only those. The native replay
- * (`crates/bindings/wasm/tests/markdown_oracle.rs`) holds the same.
+ * a tolerated class (owner decision q81, D7a): the core draws each as its
+ * literal text where the TypeScript drew remark's reading, so each must be
+ * answered with a scene AND differ from the recording, and only those differ.
+ * The native replay (`crates/bindings/wasm/tests/markdown_oracle.rs`) holds
+ * the same.
  */
 const DIR = new URL('./', import.meta.url)
 const SURFACES = ['comment', 'daemon', 'outline', 'preview', 'thumbnail'] as const
-
-const DECLINED = new Set([
-  'quote 33 deep',
-  'list 39 deep',
-  'list 40 deep',
-  '1024 delimiter runs',
-  '1100 delimiter runs',
-])
-
-/** The body a record's id names: what follows its surface, less its variant. */
-const bodyName = (id: string) => id.split('/').slice(1).join('/').split('#')[0] ?? ''
 
 type Core = ReturnType<typeof coreFrom>
 type Request = Parameters<Core['layoutMarkdown']>[0]
@@ -75,12 +69,22 @@ const digests = new Map(
     .map(({ id, n, h }) => [id, { n, h }] as const),
 )
 
-/** How the core's answer to `record` differs from the recording, if it does. */
+/** How the core's answer to `record` differs from what it is held to, if it does. */
 function judged(core: Core, record: MarkdownRecord, meta: MarkdownMeta): string | undefined {
   const answer = core.layoutMarkdown(requestOf(record, meta), highlightCode)
-  if (DECLINED.has(bodyName(record.id))) {
-    return 'declined' in answer && answer.declined === 'body' ? undefined : 'not declined'
-  }
+  const differs = difference(answer, record)
+  if (!PAST_THE_PARSER.has(bodyName(record.id))) return differs
+  if (!('scene' in answer)) return `not drawn as its literal text: ${JSON.stringify(answer)}`
+  return differs === undefined
+    ? 'draws as the TypeScript did; drop it from PAST_THE_PARSER'
+    : undefined
+}
+
+/** How the core's `answer` differs from the recording of `record`, if it does. */
+function difference(
+  answer: ReturnType<Core['layoutMarkdown']>,
+  record: MarkdownRecord,
+): string | undefined {
   if ('refused' in record) return 'missing' in answer ? undefined : JSON.stringify(answer)
   if (!('scene' in answer)) return JSON.stringify(answer)
   const asked = 'asked' in record ? record.asked : undefined

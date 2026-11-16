@@ -8,10 +8,13 @@
 //! markdown document whatever else it carries; only a bodiless record offers
 //! its canvas; a file node draws an empty canvas as its card.
 //!
-//! Where a body is past the parser's bounds, the host answers as if it had none
-//! and notes a [`Refused`]: the layout it was asked for is then refused whole,
-//! and the caller's TypeScript draws it (owner decision q72, option c), so no
-//! scene differs from the TypeScript's for a reason the core cannot see.
+//! Where a body is past the parser's bounds, the host answers what the
+//! composer degrades to (owner decision q81, D7a): a node's own body draws its
+//! literal text and reports `body-parse-failed`, and a referenced body draws as
+//! one paragraph of its literal text. No layout is refused for it.
+//!
+//! A reference the caller is still loading is marked pending on its extra
+//! (`pending`), and an embed of it draws the placeholder that says so.
 //!
 //! A fence's tokens are the one answer that arrives as data AFTER the core has
 //! asked for it (owner decision q75): the host colours a fence the
@@ -61,6 +64,8 @@ pub struct ExtraImage {
 pub struct ReferenceExtra {
     pub label: Option<String>,
     pub missing: Option<bool>,
+    /// Still loading in the caller (`isLoading`): an embed of it draws as pending.
+    pub pending: Option<bool>,
     pub image: Option<ExtraImage>,
     pub facets: Option<FacetCard>,
 }
@@ -86,24 +91,6 @@ pub struct FenceTokens {
     pub lang: String,
     pub value: String,
     pub lines: Option<CodeTokenLines>,
-}
-
-/// Why the host could not answer as the TypeScript would, so the layout it
-/// served is refused.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Refused {
-    /// A body past the markdown parser's bounds.
-    Body,
-}
-
-impl Refused {
-    /// The class a refusal names it by.
-    #[must_use]
-    pub const fn class(self) -> &'static str {
-        match self {
-            Self::Body => "body",
-        }
-    }
 }
 
 #[cfg(test)]

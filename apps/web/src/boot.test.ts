@@ -82,6 +82,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
         rootEl: rootEl(),
         resolveWorkspaceId: () => resolveBrowserWorkspaceId(REAL_DB_NAME),
         loadFont: async () => undefined,
+        loadCore: async () => undefined,
         dismissSplash: async () => undefined,
         render: () => {
           rendered = true
@@ -132,6 +133,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       rootEl: rootEl(),
       resolveWorkspaceId: () => new Promise<string>(() => {}),
       loadFont: async () => undefined,
+      loadCore: async () => undefined,
       dismissSplash: async () => {
         splashDismissed = true
       },
@@ -159,6 +161,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
         rootEl: rootEl(),
         resolveWorkspaceId: async () => '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         loadFont: async () => undefined,
+        loadCore: async () => undefined,
         dismissSplash: async () => undefined,
         render: () => undefined,
       })
@@ -208,6 +211,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       rootEl: rootEl(),
       resolveWorkspaceId: async () => getBrowserWorkspaceId(),
       loadFont: async () => undefined,
+      loadCore: async () => undefined,
       dismissSplash: async () => undefined,
       render: () => {
         rendered = true
@@ -244,7 +248,12 @@ describe('startBootSequence — the address chooses which workspace boots', () =
     resetBrowserWorkspaceIdForTests()
 
     window.history.replaceState(null, '', '/w/me/second/d/anything')
-    await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
+    await startBootSequence({
+      rootEl: rootEl(),
+      loadFont: async () => {},
+      loadCore: async () => undefined,
+      render: () => {},
+    })
 
     expect(getBrowserWorkspaceId()).toBe(ADDRESSED_ULID)
     expect(getBrowserWorkspaceId()).not.toBe(first)
@@ -255,10 +264,93 @@ describe('startBootSequence — the address chooses which workspace boots', () =
     resetBrowserWorkspaceIdForTests()
 
     window.history.replaceState(null, '', '/')
-    await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
+    await startBootSequence({
+      rootEl: rootEl(),
+      loadFont: async () => {},
+      loadCore: async () => undefined,
+      render: () => {},
+    })
 
     expect(getBrowserWorkspaceId()).toBe(only)
   })
+})
+
+describe('startBootSequence — the Rust core', () => {
+  it('starts the core beside the font and renders only once it has settled', async () => {
+    const order: string[] = []
+    let settle: () => void = () => {}
+    const core = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    const booted = startBootSequence({
+      rootEl: rootEl(),
+      resolveWorkspaceId: async () => 'ws',
+      loadFont: async () => {
+        order.push('font')
+      },
+      loadCore: () => {
+        order.push('core asked')
+        return core
+      },
+      dismissSplash: async () => {},
+      render: () => {
+        order.push('render')
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    // Asked before the font is awaited, so the two load side by side.
+    expect(order).toEqual(['core asked', 'font'])
+    settle()
+    await booted
+    expect(order).toEqual(['core asked', 'font', 'render'])
+  })
+  it('renders with the missing-core notice when the core fetch never settles', async () => {
+    // A stalled fetch (a captive portal, a request a service worker holds)
+    // never rejects. Without the load's bound the boot would await it forever
+    // and the splash would never lift. Fetch is stubbed BEFORE the host is
+    // installed, since the host takes the platform's fetch as it stands then.
+    const asked: (AbortSignal | undefined)[] = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        const signal = init?.signal ?? undefined
+        asked.push(signal)
+        signal?.addEventListener('abort', () => reject(signal.reason))
+      })) as typeof fetch
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    // The host is installed once per module instance and keeps the fetch and
+    // the failure it saw; a fresh instance per run is what makes a repeat
+    // exercise a first load rather than the previous run's settled one.
+    vi.resetModules()
+    const { startBootSequence: boot } = await import('./boot.js')
+    const { currentLayoutCore: current } = await import('./lib/spatial/layout-core.js')
+    try {
+      let rendered = false
+      const booted = boot({
+        rootEl: rootEl(),
+        resolveWorkspaceId: async () => 'ws',
+        loadFont: async () => undefined,
+        dismissSplash: async () => {},
+        render: () => {
+          rendered = true
+        },
+      })
+      await vi.waitFor(() => expect(asked).toHaveLength(1), { timeout: 10_000 })
+      expect(rendered).toBe(false)
+      // The load's bound (layout-core.ts's CORE_LOAD_TIMEOUT_MS).
+      await vi.advanceTimersByTimeAsync(30_000)
+      await vi.waitFor(() => expect(rendered).toBe(true), { timeout: 5_000 })
+      await booted
+      expect(asked[0]?.aborted).toBe(true)
+      expect(
+        current()?.layout.layoutSpatialCanvas({} as never, () => undefined, (() => ({})) as never),
+      ).toEqual({ refused: { code: 'malformed', reason: 'core-unavailable' } })
+    } finally {
+      vi.useRealTimers()
+      globalThis.fetch = realFetch
+    }
+    await expectLoggedFailure('the Rust core did not load')
+  }, 30_000)
 })
 
 describe('startBootSequence — the page-load file sweep', () => {
@@ -272,6 +364,7 @@ describe('startBootSequence — the page-load file sweep', () => {
       rootEl: rootEl(),
       resolveWorkspaceId: async () => 'ws',
       loadFont: async () => {},
+      loadCore: async () => undefined,
       dismissSplash: async () => {},
       render: () => {},
     })

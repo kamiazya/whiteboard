@@ -59,7 +59,7 @@ export function fittedHeight(
   core?: LayoutCore,
 ): number {
   // canvas-render's one fitted height, the same the editor grows a node to,
-  // answered by the Rust core where the daemon's layout switch says so.
+  // answered by the Rust core the daemon hands it.
   return Math.max(
     fallback,
     fittedTextNodeHeight(node, { measure, appearance: MCP_SCENE_APPEARANCE, core }),
@@ -204,7 +204,7 @@ export class CanvasEditSession {
    * on first use, and a batch of moves and locks should not pay for that.
    */
   readonly measure: MeasureText | undefined
-  /** The Rust core the measurer's sizing is answered by, when the daemon's switch says so. */
+  /** The Rust core the measurer's sizing is answered by. */
   readonly core: LayoutCore | undefined
 
   constructor(

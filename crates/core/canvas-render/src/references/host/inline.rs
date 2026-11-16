@@ -29,8 +29,8 @@ impl InlineSeams for WireHost<'_> {
         self.embedded(document_id)?.0
     }
 
-    fn embed_pending(&self, _: &str) -> bool {
-        false
+    fn embed_pending(&self, document_id: &str) -> bool {
+        self.pending(document_id)
     }
 
     fn image_reference(&self, url: &str) -> Option<ImageRef> {

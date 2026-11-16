@@ -1,7 +1,7 @@
 //! The composer's host over a [`ReferenceWire`]: `referenceSeamsFromWire`'s
 //! seams, answered in the core.
 
-use std::cell::{Cell, RefCell};
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use whiteboard_codec::markdown::parse_markdown_body;
@@ -10,7 +10,8 @@ use whiteboard_det::utf16::is_js_whitespace;
 use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
 
-use super::{Expansion, FenceTokens, LoadedReference, ReferenceWire, Refused};
+use super::{Expansion, FenceTokens, LoadedReference, ReferenceWire};
+use crate::comments::body::literal_root;
 use crate::compose_node::{ComposeHost, Degradation, ParseFailed};
 use crate::node_box::{ReferenceImage, ResolvedReference};
 use crate::typeset::CodeTokenLines;
@@ -43,7 +44,6 @@ pub struct WireHost<'w> {
     /// Each fence the highlighter colours whose tokens were not sent, in the
     /// order met, and the same as a set so a fence is asked for once.
     needs: RefCell<Asked>,
-    refused: Cell<Option<Refused>>,
     degradations: RefCell<Vec<Degradation>>,
 }
 
@@ -71,7 +71,6 @@ impl<'w> WireHost<'w> {
             expand: expand.into(),
             code: BTreeMap::new(),
             needs: RefCell::new(Asked::default()),
-            refused: Cell::new(None),
             degradations: RefCell::new(Vec::new()),
         }
     }
@@ -95,22 +94,10 @@ impl<'w> WireHost<'w> {
         self.needs.borrow().order.clone()
     }
 
-    /// Why the layout through this host must be refused, the first reason noted.
-    #[must_use]
-    pub fn refused(&self) -> Option<Refused> {
-        self.refused.get()
-    }
-
     /// What the layout reported instead of failing, in order.
     #[must_use]
     pub fn degradations(&self) -> Vec<Degradation> {
         self.degradations.borrow().clone()
-    }
-
-    fn refuse(&self, why: Refused) {
-        if self.refused.get().is_none() {
-            self.refused.set(Some(why));
-        }
     }
 
     // The tables are maps on the host's side, where a later row wins.
@@ -126,21 +113,31 @@ impl<'w> WireHost<'w> {
         })
     }
 
+    /// Whether the caller is still loading `document_id` (`isLoading`): an
+    /// extra marked pending names it as written, or as a target the alias
+    /// table resolves to it.
+    fn pending(&self, document_id: &str) -> bool {
+        self.wire.extras.iter().any(|(key, extra)| {
+            extra.pending == Some(true)
+                && (key == document_id || self.aliases.get(key).is_some_and(|id| id == document_id))
+        })
+    }
+
     fn title(&self, id: &str) -> Option<String> {
         self.wire.titles.iter().rev().find(|(name, _)| name == id).map(|(_, title)| title.clone())
     }
 
-    /// A body parsed with this wire's aliases resolved; refused past the
-    /// parser's bounds.
-    fn root_of(&self, body: &str) -> Option<Root> {
-        let root = parse_markdown_body(body).map_err(|_| self.refuse(Refused::Body)).ok()?;
-        Some(resolve_references(&root, &self.aliases))
+    /// A body parsed with this wire's aliases resolved; past the parser's
+    /// bounds, one paragraph of its literal text (owner decision q81, D7a).
+    fn root_of(&self, body: &str) -> Root {
+        parse_markdown_body(body)
+            .map_or_else(|_| literal_root(body), |root| resolve_references(&root, &self.aliases))
     }
 
     /// What a file node's reference draws from its record (`fileContent`).
     fn file_content(&self, entry: &LoadedReference, resolved: &mut ResolvedReference) {
         if let Some(body) = &entry.body {
-            resolved.markdown = if is_blank(body) { None } else { self.root_of(body) };
+            resolved.markdown = if is_blank(body) { None } else { Some(self.root_of(body)) };
         } else {
             resolved.canvas = entry.canvas.clone().filter(|canvas| !canvas.nodes.is_empty());
         }
@@ -172,7 +169,8 @@ impl<'w> WireHost<'w> {
 
 impl ComposeHost for WireHost<'_> {
     fn parse_body(&self, text: &str) -> Result<Root, ParseFailed> {
-        self.root_of(text).ok_or(ParseFailed)
+        let root = parse_markdown_body(text).map_err(|_| ParseFailed)?;
+        Ok(resolve_references(&root, &self.aliases))
     }
 
     fn resolve_reference(&self, reference: &str) -> Option<ResolvedReference> {
@@ -188,7 +186,7 @@ impl ComposeHost for WireHost<'_> {
     }
 
     fn parse_markdown(&self, text: &str) -> Result<Root, ParseFailed> {
-        parse_markdown_body(text).map_err(|_| self.refuse(Refused::Body)).map_err(|()| ParseFailed)
+        parse_markdown_body(text).map_err(|_| ParseFailed)
     }
 
     fn degrade(&self, event: Degradation) {

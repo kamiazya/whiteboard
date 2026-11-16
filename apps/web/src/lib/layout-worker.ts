@@ -76,13 +76,12 @@ const contentCacheFor = createContentCacheStore()
 // fallback metrics, which is exactly the divergence this worker must not
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
-// The Rust routing core, loaded in this realm like the measurer's face: a
-// layout waits for it (`measurable`) so the worker never routes a request in
-// TypeScript that the page would have sent through the core. A load that
-// fails under `throw` rejects here and again for each request, which fails it.
-startLayoutCore()
-const coreReady = layoutCoreReady()
-coreReady.catch(() => undefined)
+// The Rust core, loaded in this realm like the measurer's face: a layout
+// waits for it (`measurable`), since there is no TypeScript to answer in its
+// place. A load that fails is logged once; each request after it asks for the
+// core again (`measurable`) and draws the missing-core notice while it cannot
+// load, so a page whose own retry loaded re-asks a worker that loads too.
+const coreReady = startLayoutCore()
 /** Every theme face posted so far, settled — what a layout waits on before it measures. */
 let facesReady: Promise<unknown> = Promise.resolve()
 
@@ -153,6 +152,9 @@ function fail(id: number, cause: unknown): void {
  */
 async function measurable(id: number): Promise<boolean> {
   await coreReady
+  // Settles at once with the core loaded; after a failure, one bounded load
+  // that every request in flight shares.
+  await layoutCoreReady().catch(() => undefined)
   if ((await fontReady) === 'loaded') return true
   fail(id, FONT_DEGRADED)
   return false

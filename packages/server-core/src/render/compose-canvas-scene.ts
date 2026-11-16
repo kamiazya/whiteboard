@@ -82,8 +82,8 @@ export interface ComposeCanvasSceneOptions {
    */
   readonly tagLibrary?: TagLibrary
   /**
-   * The Rust core and its switch (`ServerDeps.layoutCore`, resolved by the
-   * caller). Absent, the layout routes in TypeScript.
+   * The Rust core (`ServerDeps.layoutCore`, resolved by the caller). Absent,
+   * the TypeScript composer lays it out.
    */
   readonly core?: LayoutCore
   /**

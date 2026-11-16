@@ -2,20 +2,19 @@ import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wa
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest } from '../../canvas-core.js'
-import type { CoreImpl, CoreMismatch, LayoutCore } from '../../layout/edges/layout-core.js'
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { describeMeasure, type MeasureText } from '../../measure.js'
 import { type LayoutRefusal, refusalScene } from '../../refusal.js'
+import { fakeLayoutCore } from '../fake-layout-core.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { layoutCases } from './layout-cases.js'
 
 /**
  * The whole layout through the REAL core (ADR-0054 step 7): canvas-render's
- * `layoutSpatialCanvasWithAnchors` under `differential`, which runs the
- * TypeScript and the core's `layout_spatial_canvas` over one request and
- * reports any difference in the scene, the anchors or the degradations, and
- * under `rust`, which answers with the core. The layouts are `layout-cases.ts`.
+ * `layoutSpatialCanvasWithAnchors` handed the core, which answers with its
+ * `layout_spatial_canvas`, held to the scene and the anchors the TypeScript
+ * composer draws handed none. The layouts are `layout-cases.ts`.
  */
 describe.runIf(built)('the whole layout through the real core', () => {
   // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
@@ -25,55 +24,36 @@ describe.runIf(built)('the whole layout through the real core', () => {
   beforeAll(() => {
     real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
   })
-  const answered = { compared: 0, declined: [] as string[] }
+  const answered = { compared: 0, refused: [] as string[] }
   const counting: CanvasLayoutCore = {
     layoutSpatialCanvas(request: CanvasLayoutRequest, highlight, measure) {
       const answer = real.layoutSpatialCanvas(request, highlight, measure)
-      if ('declined' in answer) answered.declined.push(answer.declined)
+      if ('refused' in answer) answered.refused.push(answer.refused.reason)
       else answered.compared += 1
       return answer
     },
   }
-  const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions, impl: CoreImpl) => {
-    const mismatches: CoreMismatch[] = []
-    const tallies: string[] = []
-    const core: LayoutCore = {
-      routing: real,
-      layout: counting,
-      impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
-      onMismatch: (mismatch) => {
-        if (mismatch.kind === 'skipped' || mismatch.kind === 'declined') {
-          tallies.push(`${mismatch.kind}:${mismatch.reason}`)
-        } else mismatches.push(mismatch)
-      },
-    }
-    const laid = layoutSpatialCanvasWithAnchors(canvas, { ...options, core })
-    return { ...laid, mismatches, tallies }
-  }
+  const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions) =>
+    layoutSpatialCanvasWithAnchors(canvas, {
+      ...options,
+      core: fakeLayoutCore({ routing: real, layout: counting }),
+    })
 
   const cases = layoutCases(20)
-  it('reports no difference under differential, and rust draws what the TypeScript draws', () => {
-    const tallies: string[] = []
+  it('draws what the TypeScript draws', () => {
     for (const { name, canvas, options } of cases) {
       const reference = layoutSpatialCanvasWithAnchors(canvas, options)
-      const differential = lay(canvas, options, 'differential')
-      expect(differential.mismatches, name).toEqual([])
-      expect(differential.scene, name).toEqual(reference.scene)
-      const rust = lay(canvas, options, 'rust')
-      expect(rust.mismatches, name).toEqual([])
-      tallies.push(...differential.tallies, ...rust.tallies)
+      const rust = lay(canvas, options)
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
     }
-    // Every layout is compared: the core is judged, never declined or skipped.
-    expect(answered.compared).toBe(2 * cases.length)
-    expect(answered.declined).toEqual([])
-    expect(tallies).toEqual([])
+    // Every layout is compared: the core is judged, never refused.
+    expect(answered.compared).toBe(cases.length)
+    expect(answered.refused).toEqual([])
   })
 
   it('draws what the TypeScript draws when the core asks the measurer itself', () => {
     answered.compared = 0
-    const tallies: string[] = []
     let asked = 0
     for (const { name, canvas, options } of cases) {
       const own = options.measure
@@ -93,26 +73,21 @@ describe.runIf(built)('the whole layout through the real core', () => {
           return own(text, font)
         },
       })
-      const differential = lay(canvas, hosted, 'differential')
-      expect(differential.mismatches, name).toEqual([])
       const before = asked
-      const rust = lay(canvas, hosted, 'rust')
-      expect(rust.mismatches, name).toEqual([])
-      // Under `rust` only the core measures, so a layout the TypeScript
-      // measured in must have asked the host through the import.
+      const rust = lay(canvas, hosted)
+      // Only the core measures, so a layout the TypeScript measured in must
+      // have asked the host through the import.
       if (tsAsked > 0) expect(asked, name).toBeGreaterThan(before)
-      tallies.push(...differential.tallies, ...rust.tallies)
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
     }
-    expect(answered.compared).toBe(2 * cases.length)
-    expect(answered.declined).toEqual([])
-    expect(tallies).toEqual([])
+    expect(answered.compared).toBe(cases.length)
+    expect(answered.refused).toEqual([])
     expect(asked).toBeGreaterThan(cases.length)
   })
 
   it('draws the refusal for a layout whose host answers a number that is not finite', () => {
-    answered.declined.length = 0
+    answered.refused.length = 0
     const [first] = cases
     if (first === undefined) throw new Error('no layout cases')
     for (const bad of [Number.NaN, Number.POSITIVE_INFINITY]) {
@@ -127,9 +102,7 @@ describe.runIf(built)('the whole layout through the real core', () => {
         measure: host,
         onRefused: (r: LayoutRefusal) => heard.push(r),
       }
-      const rust = lay(first.canvas, hosted, 'rust')
-      expect(rust.tallies).toEqual(['declined:host-measure'])
-      expect(rust.mismatches).toEqual([])
+      const rust = lay(first.canvas, hosted)
       const refused = { code: 'malformed', reason: 'host-measure' } as const
       expect(heard).toEqual([refused])
       const drawn = (['light', 'dark'] as const).map((mode) =>
@@ -141,7 +114,7 @@ describe.runIf(built)('the whole layout through the real core', () => {
       expect(baselines.length).toBeGreaterThan(0)
       expect(baselines.every(Number.isFinite)).toBe(true)
     }
-    // A refusal is not a decline: the core answered it.
-    expect(answered.declined).toEqual([])
+    // The core answered each with its refusal, which the surface drew.
+    expect(answered.refused).toEqual(['host-measure', 'host-measure'])
   })
 })

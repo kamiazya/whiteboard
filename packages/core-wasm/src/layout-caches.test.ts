@@ -82,7 +82,7 @@ function glueSending(sent: unknown[][]): CoreGlue {
     facet_bucket_check: () => '',
     layout_spatial_canvas: (request) => {
       sent.push(JSON.parse(request) as unknown[])
-      return '["declined","x"]'
+      return '["refused","input-too-large","x"]'
     },
     register_layout_fonts: () => '[]',
     release_layout_fonts: () => false,

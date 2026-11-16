@@ -2,13 +2,7 @@ import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type {
-  CanvasLayoutTally,
-  CoreMismatch,
-  LayoutCore,
-  MarkdownLayoutTally,
-  QueryLayoutTally,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   installOkfCore,
   installSpatialCore,
@@ -20,52 +14,26 @@ import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import { facetWriteCoreInstalled, installFacetWriteCore } from '@kamiazya/whiteboard-server-core'
 import { z } from 'zod'
 import { findPackageRoot } from '../../shared/package-root.js'
-import { getLogger } from '../log.js'
-
-const log = getLogger('layout-core')
 
 /**
- * How this daemon routes a canvas's edges (ADR-0054's `CoreImpl`), from
- * its environment. `WHITEBOARD_CORE` is `rust` unless something sets it: the
- * Rust core answers and a published daemon pays for no second routing. The
- * dev scripts and CI's test jobs set `differential` to compare it with the
- * TypeScript; `ts` is the rollback while the TypeScript exists.
- * `WHITEBOARD_CORE_MISMATCH=throw` turns a reported difference into a
- * failure, which is what a test run wants; a person dogfooding wants the
- * log line and the drawing.
+ * Where this daemon finds the Rust core (ADR-0054), from its environment:
+ * `WHITEBOARD_CORE_DIR` names the directory holding the glue and wasm, else
+ * the packaged copy or the checkout's staged one (`artifactDirectory`).
  *
- * The OKF envelope, the JSON Canvas codec and the facet write (every write of
- * a facets bucket: `wb_facet_set`, `wb_canvas_edit`, a document's
- * frontmatter) have no switch: their TypeScript is deleted in the daemon
- * (docs/contributing/parity/okf-codec.md,
- * docs/contributing/parity/json-canvas-codec.md,
- * docs/contributing/parity/facet-engine.md), so the daemon installs the core
- * at boot (`installRustCoresAtBoot`) and refuses to start without it.
- *
- * `WHITEBOARD_CORE_LAYOUT` is the whole layout's own switch
- * (`layoutSpatialCanvasWithAnchors` in one core call, and a markdown note's
- * `layoutMarkdownDocument` through the core's markdown entry, and the layout
- * pieces a tool calls on its own through the core's query entry: a text
- * node's fitted height for `wb_canvas_edit`), `rust` unless something
- * sets it, like routing's; the dev scripts and CI's test jobs set
- * `differential`, and `ts` is its rollback. It answers only a layout whose
- * every option the core can be handed as data, and the TypeScript answers the
- * rest, and any layout the core declines, under every setting. Rolling the
- * whole core back takes both switches at `ts`: either one alone still loads it.
+ * The core answers every layout, every markdown note and every layout piece a
+ * tool asks on its own (a text node's fitted height for `wb_canvas_edit`), as
+ * it answers the OKF envelope, the JSON Canvas codec and the facet write: the
+ * switches that could send a layout to the TypeScript are retired (ADR-0054
+ * step 7, S18g), so the daemon installs the core at boot
+ * (`installRustCoresAtBoot`) and refuses to start without it.
  */
 const layoutCoreSettingsSchema = z.object({
-  WHITEBOARD_CORE: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_LAYOUT: z.enum(['ts', 'differential', 'rust']).default('rust'),
-  WHITEBOARD_CORE_MISMATCH: z.enum(['log', 'throw']).default('log'),
   WHITEBOARD_CORE_DIR: z.string().min(1).optional(),
 })
 export type LayoutCoreSettings = z.infer<typeof layoutCoreSettingsSchema>
 
 export function layoutCoreSettingsFrom(env: Readonly<Record<string, string | undefined>>) {
   return layoutCoreSettingsSchema.parse({
-    WHITEBOARD_CORE: env.WHITEBOARD_CORE || undefined,
-    WHITEBOARD_CORE_LAYOUT: env.WHITEBOARD_CORE_LAYOUT || undefined,
-    WHITEBOARD_CORE_MISMATCH: env.WHITEBOARD_CORE_MISMATCH || undefined,
     WHITEBOARD_CORE_DIR: env.WHITEBOARD_CORE_DIR || undefined,
   })
 }
@@ -104,59 +72,6 @@ export function artifactDirectory(
     : candidates.staged
 }
 
-/** What one line of the log says of a mismatch: where the answers part, never the whole request. */
-function summarize(
-  mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally | QueryLayoutTally>,
-) {
-  if (mismatch.kind !== 'differs')
-    return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
-  if (mismatch.fn === 'layoutSpatialCanvas') {
-    const { fn, kind, at, ts, rust } = mismatch
-    return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
-  }
-  if (mismatch.fn === 'layoutMarkdown') {
-    const { fn, kind, at, ts, rust } = mismatch
-    return { fn, kind, at, ts, rust, bodyChars: mismatch.repro.body.length }
-  }
-  if (mismatch.fn === 'layoutQuery') {
-    const { fn, kind, at, ts, rust } = mismatch
-    return { fn, kind, at, ts, rust, query: mismatch.repro.query }
-  }
-  return {
-    fn: mismatch.fn,
-    kind: mismatch.kind,
-    at: mismatch.at,
-    ts: mismatch.ts[mismatch.at],
-    rust: mismatch.rust[mismatch.at],
-    edges: mismatch.repro.edges.length,
-  }
-}
-
-/**
- * A mismatch reported, or thrown when the settings ask a test run to fail on
- * one. A whole layout the core did not answer is no mismatch: it is counted
- * by its class and logged at debug with the count so far, never thrown.
- */
-function reporter(settings: LayoutCoreSettings): (mismatch: CoreMismatch) => void {
-  const tally = new Map<string, number>()
-  return (mismatch) => {
-    if (mismatch.kind === 'skipped' || mismatch.kind === 'declined') {
-      const key = `${mismatch.kind}:${mismatch.reason}`
-      const count = (tally.get(key) ?? 0) + 1
-      tally.set(key, count)
-      const { fn, kind, reason } = mismatch
-      log.debug({ fn, kind, reason, count }, 'the Rust core did not answer this layout')
-      return
-    }
-    const summary = summarize(mismatch)
-    log.warning(summary, 'the Rust core and the TypeScript disagree')
-    log.debug({ repro: mismatch.repro }, 'what reproduces it')
-    if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') {
-      throw new Error(`layout core ${mismatch.kind}: ${JSON.stringify(summary)}`)
-    }
-  }
-}
-
 /**
  * The plugin ids the Rust core's facet registry holds: the bundled `visual`
  * plugin it is built from (plugin-visual's JSON asset tables). A deployment
@@ -183,39 +98,23 @@ export function refuseFacetCoreForDeployment(deployment: Pick<FacetRegistry, 'pl
 
 /** The `ServerDeps` factory the core serves, over one load. */
 export interface CoreLoaders {
-  readonly layoutCore: () => Promise<LayoutCore | undefined>
+  readonly layoutCore: () => Promise<LayoutCore>
 }
 
 /**
- * The `ServerDeps.layoutCore` factory: nothing loaded while the switch reads
- * `ts`, else the staged glue and wasm read once, on the first call that asks
- * (or at boot, which shares the one load). The glue is
- * imported by PATH at run time, never bundled, so a build of this package
- * needs no artifact. An artifact that cannot be read degrades to the
- * TypeScript with a warning carrying `event: 'core-load-failed'` (so a
- * deployment can count it), unless mismatches throw: a test run that asked
- * for the core and did not get it has compared nothing.
+ * The `ServerDeps.layoutCore` factory: the staged glue and wasm read once, on
+ * the first call that asks (or at boot, which shares the one load). The glue
+ * is imported by PATH at run time, never bundled, so a build of this package
+ * needs no artifact. A load that fails rejects, and the next ask tries again:
+ * there is no TypeScript to answer in its place, and a daemon whose boot
+ * install succeeded has the instance this shares.
  */
 export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
-  const routing = settings.WHITEBOARD_CORE
-  const layout = settings.WHITEBOARD_CORE_LAYOUT
-  const loadCore = coreLoader(settings)
-  // Nothing loads only when neither switch asks for the core.
-  const asked = routing === 'ts' ? layout : routing
   return {
-    layoutCore: memoized(asked, loadCore, (core) => ({
-      routing: core,
-      layout: core,
-      markdown: core,
-      query: core,
-      impl: {
-        routeLayout: routing,
-        layoutSpatialCanvas: layout,
-        layoutMarkdown: layout,
-        layoutQuery: layout,
-      },
-      onMismatch: reporter(settings),
-    })),
+    layoutCore: async () => {
+      const core = await loadCoreFrom(artifactDirectory(settings))
+      return { routing: core, layout: core, markdown: core, query: core }
+    },
   }
 }
 
@@ -240,27 +139,6 @@ function loadCoreFrom(dir: string): Promise<Core> {
   return loaded
 }
 
-/** The staged glue and wasm, read on the first call that asks. */
-function coreLoader(settings: LayoutCoreSettings): () => Promise<Core | undefined> {
-  let loaded: Promise<Core | undefined> | undefined
-  return () => {
-    loaded ??= (async () => {
-      const dir = artifactDirectory(settings)
-      try {
-        return await loadCoreFrom(dir)
-      } catch (err) {
-        if (settings.WHITEBOARD_CORE_MISMATCH === 'throw') throw err
-        log.warning(
-          { event: 'core-load-failed', dir, err },
-          'the Rust core did not load; answering in TypeScript',
-        )
-        return undefined
-      }
-    })()
-    return loaded
-  }
-}
-
 /**
  * Installs the Rust core as this process's OKF and JSON Canvas codecs and its
  * facet write, before anything is served. None has a TypeScript to degrade to,
@@ -283,19 +161,5 @@ export async function installRustCoresAtBoot(
       `the Rust core is required to read and write OKF Markdown and JSON Canvas and to judge a facet write, and did not load from ${dir}; build it with \`pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm\` or point WHITEBOARD_CORE_DIR at a directory holding it`,
       { cause: err },
     )
-  }
-}
-
-/** The switch's factory: nothing under `ts`, else what `wrap` makes of the core, built once. */
-function memoized<T>(
-  impl: 'ts' | 'differential' | 'rust',
-  loadCore: () => Promise<Core | undefined>,
-  wrap: (core: Core) => T,
-): () => Promise<T | undefined> {
-  let built: Promise<T | undefined> | undefined
-  return () => {
-    if (impl === 'ts') return Promise.resolve(undefined)
-    built ??= loadCore().then((core) => (core === undefined ? undefined : wrap(core)))
-    return built
   }
 }

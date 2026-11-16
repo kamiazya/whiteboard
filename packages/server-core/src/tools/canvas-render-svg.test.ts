@@ -1,9 +1,9 @@
-import type { RoutingCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   constantRatioMeasureText,
   refusalCopy,
   SPATIAL_THEME_FONT_FAMILY,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import {
   writeCommentThread,
   writeDocumentKind,
@@ -614,41 +614,38 @@ describe('wb_scene_render comments', () => {
   })
 })
 
-describe('wb_scene_render and the routing core', () => {
-  test('routes through the core ServerDeps hands it, under the switch it names', async () => {
+describe('wb_scene_render and the core', () => {
+  test('lays the board out through the core ServerDeps hands it', async () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeSpatialCanvas(doc, {
-        nodes: [
-          textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' }),
-          textNode({ id: 'b', x: 300, y: 0, width: 100, height: 50, text: 'b' }),
-        ],
-        edges: [{ id: 'e', from: { node: 'a' }, to: { node: 'b' } }],
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' })],
+        edges: [],
       })
     })
-    // A core whose one route is a path no TypeScript routing would draw: the
-    // SVG carries it only if the layout asked the core.
-    const marked = { x: 123, y: 456 }
-    const routing: RoutingCore = {
-      routeLayout: (_nodes, edges) => ({
-        routes: edges.map((edge) => ({
-          kind: 'edge' as const,
-          id: edge.id,
-          path: [marked, { x: 300, y: 25 }],
-          fromSide: 'right' as const,
-          toSide: 'left' as const,
-          fromEnd: 'none' as const,
-          toEnd: 'arrow' as const,
-        })),
-        anchors: new Map(),
-      }),
-    }
+    // A scene no TypeScript layout of this board would draw: the SVG carries
+    // it only if the layout asked the core.
+    const marked = {
+      kind: 'textRun',
+      text: 'from the core',
+      bbox: { x: 0, y: 0, w: 100, h: 20 },
+      baseline: 16,
+      font: { family: 'Roboto', weight: 400, style: 'normal', sizePx: 16 },
+    } as const
     let asked = 0
     const deps = {
       ...(await makeDeps(store)),
       layoutCore: async () => {
         asked += 1
-        return { routing, impl: { routeLayout: 'rust' as const } }
+        return fakeLayoutCore({
+          layout: {
+            layoutSpatialCanvas: () => ({
+              scene: { nodes: [marked] },
+              anchors: new Map(),
+              degradations: [],
+            }),
+          },
+        })
       },
     }
     const result = await createCanvasRenderSvgTool(deps).execute({
@@ -659,7 +656,7 @@ describe('wb_scene_render and the routing core', () => {
       style: 'clean',
     })
     expect(asked).toBe(1)
-    expect(result.svg).toContain('points="123,456 300,25"')
+    expect(result.svg).toContain('from the core')
   })
 })
 
@@ -673,18 +670,10 @@ describe('wb_scene_render of a board the core refuses', () => {
       })
     })
     const refused = { code: 'input-too-large', reason: 'too-many-elements' } as const
-    const routing: RoutingCore = {
-      routeLayout: () => {
-        throw new Error('no edge is routed here')
-      },
-    }
     const deps = {
       ...(await makeDeps(store)),
-      layoutCore: async () => ({
-        routing,
-        layout: { layoutSpatialCanvas: () => ({ refused }) },
-        impl: { routeLayout: 'ts' as const, layoutSpatialCanvas: 'rust' as const },
-      }),
+      layoutCore: async () =>
+        fakeLayoutCore({ layout: { layoutSpatialCanvas: () => ({ refused }) } }),
     }
     const input = {
       workspaceId: WORKSPACE_ID,

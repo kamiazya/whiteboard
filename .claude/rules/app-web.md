@@ -440,42 +440,49 @@ The list surfaces (row thumbnail, preview pane, Peek) are the one other
 reader: `load-row-render.ts` is not a page and has no `model.tags`, and its
 render key must name the library before the worker is asked.
 
-## The Rust routing core, per realm (ADR-0054 stage 2)
+## The Rust core, per realm (ADR-0054)
 
-`lib/spatial/layout-core-settings.ts` decides from `VITE_WHITEBOARD_CORE` /
-`VITE_WHITEBOARD_CORE_MISMATCH` (`differential` in the dev server, `rust` in a
-production build, `ts` in a vitest run unless the job sets it; an unknown value
-throws). Each realm installs its own host through `startLayoutCore()` (the
-page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
-reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
-it routes in TypeScript. The whole layout rides the same instance under its own
-switch, `VITE_WHITEBOARD_CORE_LAYOUT`, which follows routing unless set (`rust`
-in a production build since S16b, `ts` the rollback): the core measures through the page's own
-measurer, which canvas-viewer's `createBrowserMeasureText` names `{kind:
-'host'}` and the core asks mid-layout through its one import. Every spatial
-layout the editor runs — its committed scene, drag layers and layout worker,
-and the export — hands its math and diagrams as canvas-render's fragment
-TABLE (`fragments` + `onFragmentsAsked`, `useMarkdownFragments().table`,
-`recordingFragmentTable`), never as the `renderMath`/`renderDiagram`
-functions the request gate skips, so CI's `differential` + `throw` browser
-run compares the editor's whole layout; `editor-layout-core.browser.test.tsx`
-counts what the switch reports over the editor's composition and requires
-none. A NOTE rides the same switch since S18c: `render-preview.ts` (the
-preview pane, a note's version history, and the worker's rail, outline and
-row picture) lays it out through canvas-render's `layoutMarkdownDocument`,
-and `CommentBody` its prose through `layoutCommentDocument`, both answered
-under `impl.layoutMarkdown`, which the host sets from the same
-`VITE_WHITEBOARD_CORE_LAYOUT` — so a board embedded in a note is laid out
-inside the note's one core request. The preview takes the fragment TABLE too,
-and `useReferenceSeams` rebuilds its bundle from a wire once nothing is in
-flight (a wire cannot say "loading", so while a load is pending the gate
-skips it as `references` and the TypeScript draws the placeholder);
-`markdown-preview-core.browser.test.tsx` holds the count. Version history's past board rides it too since S18e: `VersionPreview`
-hands `CanvasViewer` `currentLayoutCore()` and the fragment table, and
-`version-preview-core.browser.test.tsx` holds the count. `layout-core-source.ts` is the one module that names
-the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
-`worker.plugins`): every build carries the wasm, because OKF and JSON Canvas have no TypeScript left here. A CI job
-that builds or tests the app restores the artifact with `.github/actions/core-wasm`.
+Every layout this app makes is the Rust core's, with no switch and no rollback
+(step 7's S18g retired the web build's three core switches with the daemon's).
+Each realm installs its own host through `startLayoutCore()` and AWAITS it
+before its first layout: the page in `boot.ts` (beside the font, before the
+first render), `layout-worker.ts` before its first message, and the browser
+test setup with a top-level `await`. Every layout reads `currentLayoutCore()`
+through `editorLayoutBase` (or hands it on: `render-preview.ts`, `CommentBody`,
+`VersionPreview`'s `CanvasViewer`, the overlays and the drag preview). The
+load is bounded (`CORE_LOAD_TIMEOUT_MS`, 30 s, sized from the gzipped wasm on
+Chrome's Slow 3G preset), so a fetch that never settles cannot hold the boot
+splash. A load that fails or times out is logged once, and `currentLayoutCore()`
+then answers a core that refuses every layout as `core-unavailable`, which each
+surface draws as its refusal notice; there is no TypeScript to answer in its
+place. The first failure schedules one more load `CORE_RETRY_AFTER_MS` (5 s)
+later by itself, a layout asked at least that long after a failure starts one
+too, and the worker asks again before each request; a load that succeeds moves `useLayoutCoreGeneration`, which
+the editor's scene and the preview pane are keyed on, so they draw again
+without a reload. A realm that installs no host — a jsdom unit test of a component — gets
+`undefined`, and canvas-render's TypeScript composer lays out, which is what
+S18h deletes. The core measures through the page's own measurer, which
+canvas-viewer's `createBrowserMeasureText` names `{kind: 'host'}` and the core
+asks mid-layout through its one import. Every spatial layout the editor runs
+— its committed scene, drag layers and layout worker, and the export — hands
+its math and diagrams as canvas-render's fragment TABLE (`fragments` +
+`onFragmentsAsked`, `useMarkdownFragments().table`, `recordingFragmentTable`),
+never as the `renderMath`/`renderDiagram` functions no request carries (one
+would throw `CoreUnaskable`); `editor-layout-core.browser.test.tsx` mounts the
+editor's composition and requires the core asked. A NOTE rides the core's
+markdown entry: `render-preview.ts` (the preview pane, a note's version
+history, and the worker's rail, outline and row picture) lays it out through
+canvas-render's `layoutMarkdownDocument`, and `CommentBody` its prose through
+`layoutCommentDocument`, so a board embedded in a note is laid out inside the
+note's one core request. `useReferenceSeams` hands its bundle as a wire always:
+a target still loading crosses marked `pending`, and the core draws the
+placeholder that says so; `markdown-preview-core.browser.test.tsx` holds it.
+Version history's past board: `VersionPreview` hands `CanvasViewer`
+`currentLayoutCore()` and the fragment table
+(`version-preview-core.browser.test.tsx`). `layout-core-source.ts` is the one
+module that names the artifact, and `vite-plugin-core-source.ts` fails a build
+that has none staged (page AND `worker.plugins`). A CI job that builds or
+tests the app restores the artifact with `.github/actions/core-wasm`.
 
 The same host loads the core the OKF and JSON Canvas codecs answer through (no switch: their
 TypeScript is deleted here). `codecsReady()` (`lib/codec-cores.ts`) awaits it and installs it into
@@ -483,7 +490,7 @@ codec, and every reader or writer of either in this app (an import, a download, 
 Canvas, an editable PNG, a note sent to a daemon) awaits it before calling codec's plain
 `parseOkf`/`serializeOkf`/`parseSpatial`/`serializeSpatial`, which throw `OkfCoreNotInstalled` or
 `SpatialCoreNotInstalled` until then; a load that fails rejects, since nothing answers in its place.
-Routing loads nothing while it reads `ts`; the codecs load on their first ask. No TypeScript
+The codecs share the page's one load. No TypeScript
 JSON Canvas reader remains anywhere (the widget's went at ADR-0054 S17), so the doc snapshots
 read their `.canvas` sources through `codecsReady()` and `parseSpatial` too. The
 install is `codec-cores.ts`'s and never `layout-core.ts`'s, which

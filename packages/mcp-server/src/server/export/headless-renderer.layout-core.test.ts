@@ -1,14 +1,12 @@
-// The file export lays a board out through the same core switch as
-// `wb_scene_render` (ADR-0054 step 7): under `rust` the Rust core answers the
-// layout, a document style included, and `WHITEBOARD_CORE_LAYOUT=ts` never
-// asks the core for a layout. Either way the
-// bytes are the TypeScript's, in both export modes.
+// The file export lays a board out through the same core as `wb_scene_render`
+// (ADR-0054 step 7): the Rust core answers the layout, a document style
+// included, and the bytes are the TypeScript composer's, in both export modes.
 
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import type { CoreMismatch, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -48,72 +46,52 @@ const board: SpatialCanvas = {
   ],
 }
 
-/** The core the settings load, with every whole-layout call and every report it makes counted. */
-async function countedCore(env: Record<string, string>) {
-  const base = await coreLoaders(layoutCoreSettingsFrom(env)).layoutCore()
-  if (base === undefined) throw new Error('the core did not load')
-  const seen = { layouts: 0, reports: [] as CoreMismatch[] }
-  const layout = base.layout
+/** The daemon's core, with every whole-layout call counted. */
+async function countedCore() {
+  const base = await coreLoaders(layoutCoreSettingsFrom({})).layoutCore()
+  const seen = { layouts: 0 }
   const core: LayoutCore = {
     ...base,
-    ...(layout === undefined
-      ? {}
-      : {
-          layout: {
-            layoutSpatialCanvas: (request, highlight, measure) => {
-              seen.layouts += 1
-              return layout.layoutSpatialCanvas(request, highlight, measure)
-            },
-          },
-        }),
-    onMismatch: (mismatch) => seen.reports.push(mismatch),
+    layout: {
+      layoutSpatialCanvas: (request, highlight, measure) => {
+        seen.layouts += 1
+        return base.layout.layoutSpatialCanvas(request, highlight, measure)
+      },
+    },
   }
   return { core, seen }
 }
 
-const RUST = { WHITEBOARD_CORE_LAYOUT: 'rust', WHITEBOARD_CORE_MISMATCH: 'throw' }
-
 describe.runIf(built)('the file export through the layout core', () => {
   for (const theme of ['light', 'dark'] as const) {
-    it(`under rust the core lays the ${theme} export out, to the TypeScript's SVG bytes`, async () => {
-      const { core, seen } = await countedCore(RUST)
+    it(`the core lays the ${theme} export out, to the TypeScript's SVG bytes`, async () => {
+      const { core, seen } = await countedCore()
       const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme })
       const rust = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme, core })
-      expect(seen).toEqual({ layouts: 1, reports: [] })
+      expect(seen).toEqual({ layouts: 1 })
       expect(rust.svg).toBe(ts.svg)
     })
 
-    it(`under rust the core lays the ${theme} PNG out, to the TypeScript's PNG bytes`, async () => {
-      const { core, seen } = await countedCore(RUST)
+    it(`the core lays the ${theme} PNG out, to the TypeScript's PNG bytes`, async () => {
+      const { core, seen } = await countedCore()
       const ts = await renderSpatialCanvasToPng(board, NO_INSTALLED_FONTS, { theme, scale: 2 })
       const rust = await renderSpatialCanvasToPng(board, NO_INSTALLED_FONTS, {
         theme,
         scale: 2,
         core,
       })
-      expect(seen).toEqual({ layouts: 1, reports: [] })
+      expect(seen).toEqual({ layouts: 1 })
       expect(Buffer.compare(rust.png, ts.png)).toBe(0)
     })
   }
 
-  it("under rust the core lays a document-style export out, to the TypeScript's bytes", async () => {
-    const { core, seen } = await countedCore(RUST)
+  it("the core lays a document-style export out, to the TypeScript's bytes", async () => {
+    const { core, seen } = await countedCore()
     const options = { style: 'document' as const, theme: 'dark' as const }
     const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, options)
     const rust = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { ...options, core })
-    expect(seen).toEqual({ layouts: 1, reports: [] })
+    expect(seen).toEqual({ layouts: 1 })
     expect(rust.svg).toBe(ts.svg)
-  })
-
-  it('WHITEBOARD_CORE_LAYOUT=ts never asks the core for a layout', async () => {
-    const { core, seen } = await countedCore({ ...RUST, WHITEBOARD_CORE_LAYOUT: 'ts' })
-    const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme: 'dark' })
-    const rolledBack = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, {
-      theme: 'dark',
-      core,
-    })
-    expect(seen).toEqual({ layouts: 0, reports: [] })
-    expect(rolledBack.svg).toBe(ts.svg)
   })
 
   it('repeated exports hand the core the vendored faces once', async () => {
@@ -128,17 +106,10 @@ describe.runIf(built)('the file export through the layout core', () => {
       },
     }
     const layout = coreFrom(counted, await readFile(join(dir, 'whiteboard_wasm_bg.wasm')))
-    const reports: CoreMismatch[] = []
-    const core: LayoutCore = {
-      routing: layout,
-      layout,
-      impl: { routeLayout: 'ts', layoutSpatialCanvas: 'rust' },
-      onMismatch: (mismatch) => reports.push(mismatch),
-    }
+    const core: LayoutCore = { routing: layout, layout, markdown: layout, query: layout }
     for (const theme of ['light', 'dark', 'light'] as const) {
       await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme, core })
     }
-    expect(reports).toEqual([])
     expect(registered).toHaveLength(1)
     expect(registered[0]).toBeGreaterThan(1_000_000)
   })

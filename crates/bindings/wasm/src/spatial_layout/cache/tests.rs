@@ -264,17 +264,26 @@ fn a_layout_asking_for_fences_keeps_every_body_but_the_fence() {
 }
 
 #[test]
-fn a_declined_or_refused_layout_keeps_nothing() {
-    let surface = 0x5150_0003;
-    // A body past the parser's bounds.
+fn a_body_past_the_parser_bounds_is_never_kept_and_a_refused_layout_keeps_nothing() {
+    // A body past the parser's bounds draws its literal text (D7a); the body
+    // beside it that parsed is kept, and the literal one is not.
+    let degraded = 0x5150_0003;
     let deep = format!("{} x", ">".repeat(64));
-    let declined = lay_board(surface, beside(&deep), None, &[]);
-    assert_eq!(declined.get(0), Some(&json!("declined")), "{declined}");
+    let drawn = lay_board(degraded, beside(&deep), None, &[]);
+    assert_eq!(drawn.get(0), Some(&json!("ok")), "{drawn}");
+    assert_eq!(
+        drawn.get(3),
+        Some(&json!([{"kind": "body-parse-failed", "nodeId": "b"}])),
+        "{drawn}"
+    );
+    assert_eq!(resident().kept_by(degraded), 1);
+    assert!(release_layout_cache(degraded));
     // A host that did not answer.
+    let refused = 0x5150_0006;
     let host = m(&[("kind", json!("host"))]);
-    let silent = lay_board(surface, beside("x"), Some(&Silent), &[("measure", host)]);
+    let silent = lay_board(refused, beside("x"), Some(&Silent), &[("measure", host)]);
     assert_eq!(silent, json!(["refused", "malformed", "host-measure"]));
-    assert_eq!(resident().kept_by(surface), 0);
+    assert_eq!(resident().kept_by(refused), 0);
 }
 
 #[test]

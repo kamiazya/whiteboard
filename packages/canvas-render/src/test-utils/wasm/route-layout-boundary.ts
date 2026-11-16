@@ -1,7 +1,9 @@
 import type { Core } from '@kamiazya/whiteboard-core-wasm'
 import type { EdgeRoutingStyle } from '@kamiazya/whiteboard-model'
-import { type CoreMismatch, type LayoutCore, routeLayout } from '../../layout/edges/layout-core.js'
+import { type LayoutCore, routeLayout } from '../../layout/edges/layout-core.js'
 import { createRoutingBudget } from '../../layout/edges/routing-budget.js'
+import { fakeLayoutCore } from '../fake-layout-core.js'
+import { firstDifference } from '../first-difference.js'
 import {
   clusteredLayout,
   latticeLayouts,
@@ -121,6 +123,19 @@ export function routeBoard(core: LayoutCore | undefined, board: Board, style: Ed
   }
 }
 
+/** Whether `core` routes every case of `board` as the TypeScript does, the budget it leaves included. */
+function routesAgree(core: LayoutCore, board: Board, style: EdgeRoutingStyle): boolean {
+  const s = styleOf(style)
+  return board.cases.every((c) => {
+    const routed = (routing: LayoutCore | undefined) => {
+      const budget = createRoutingBudget()
+      const { routes, anchors } = routeLayout(routing, c.nodes, c.edges, s, undefined, budget, [])
+      return { routes, anchors: Object.fromEntries(anchors), budget }
+    }
+    return firstDifference(routed(core), routed(undefined)) === undefined
+  })
+}
+
 /** The summary of one quantity over the rounds. */
 export interface Spread {
   readonly median: number
@@ -206,18 +221,11 @@ interface Runners {
 function prepare(options: BoundaryOptions, board: Board): Runners {
   const { core, instrumented } = options
   const style = options.style ?? 'straight'
-  const rust: LayoutCore = { routing: core, impl: { routeLayout: 'rust' } }
-  const mismatches: CoreMismatch[] = []
-  const differential: LayoutCore = {
-    routing: core,
-    impl: { routeLayout: 'differential' },
-    onMismatch: (m) => mismatches.push(m),
-  }
+  const rust = fakeLayoutCore({ routing: core })
   const runTs = () => routeBoard(undefined, board, style)
   const runRust = () => routeBoard(rust, board, style)
 
-  routeBoard(differential, board, style)
-  if (mismatches.length > 0) {
+  if (!routesAgree(rust, board, style)) {
     throw new Error(`${board.name}: the Rust core answers differently from the TypeScript`)
   }
   const { inputs } = instrumented.capture(runRust)
@@ -319,7 +327,7 @@ export function memorySteadyState(
   board: Board,
   repeats = 20,
 ): MemorySteadyState {
-  const rust: LayoutCore = { routing: options.core, impl: { routeLayout: 'rust' } }
+  const rust = fakeLayoutCore({ routing: options.core })
   const before = options.instrumented.memoryBytes()
   for (let i = 0; i < repeats; i++) routeBoard(rust, board, options.style ?? 'straight')
   return { board: board.name, repeats, before, after: options.instrumented.memoryBytes() }

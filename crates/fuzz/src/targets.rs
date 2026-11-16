@@ -627,13 +627,14 @@ impl whiteboard_wasm::spatial_layout::Host for StandInHost {
 
 /// The whole layout's export: a request, read up to the first NUL, a
 /// host-measured one measured by [`StandInHost`]. Every answer is one of the
-/// four outcomes (laid out, refused, declined, or the fences whose tokens the
-/// host must send), a call past the cap is refused before it is read, and a
+/// outcomes (laid out, refused, a markdown section missing, or the fences whose
+/// tokens the host must send; never declined, owner decision q81 D7a), a call
+/// past the cap is refused before it is read, and a
 /// laid-out request naming a content cache is answered the same again.
 ///
 /// # Panics
 ///
-/// On an answer that is none of the four, an input past the cap that is not
+/// On an answer that is none of those, an input past the cap that is not
 /// refused, or a warm cache that changed the answer.
 pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::LAYOUT_SPATIAL_CANVAS;
@@ -657,8 +658,8 @@ pub fn layout_spatial_canvas_wasm(data: &[u8]) {
 }
 
 /// The query export: a request, read up to the first NUL, a host-measured one
-/// measured by [`StandInHost`]. Every answer is laid out, refused, declined or
-/// the fences whose tokens the host must send, and a call past the cap is
+/// measured by [`StandInHost`]. Every answer is laid out, refused or the fences
+/// whose tokens the host must send (never declined, D7a), and a call past the cap is
 /// refused before it is read.
 ///
 /// # Panics
@@ -680,18 +681,16 @@ pub fn layout_query_wasm(data: &[u8]) {
     }
     let laid = answer.starts_with("[\"ok\",[") && answer.ends_with(']');
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
-    let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
     let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
-    assert!(laid || refused || declined || needs, "{answer:.120} is not an answer");
+    assert!(laid || refused || needs, "{answer:.120} is not an answer");
 }
 
 fn assert_layout_answer(answer: &str) {
     let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && answer.ends_with("]]");
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
-    let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
     let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
     let missing = answer == "[\"missing\",\"section\"]";
-    assert!(laid || refused || declined || needs || missing, "{answer:.120} is not an answer");
+    assert!(laid || refused || needs || missing, "{answer:.120} is not an answer");
 }
 
 /// The font registration's export: the faces' wire and the bytes they point

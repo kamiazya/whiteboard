@@ -10,6 +10,7 @@ import { constantRatioMeasureText, measureSpecOf } from '../measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { bundledThemeModeOf, createSpatialTheme } from '../theme/spatial-theme.js'
+import { CoreUnaskable } from './canvas-switch.js'
 import type { LayoutCore } from './edges/layout-core.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
 import { naturalNodeContentSize } from './spatial-canvas.js'
@@ -41,7 +42,11 @@ export function fittedTextNodeHeight(
      * in the app the floor left a third of a nine-line note empty.
      */
     readonly floor?: 'ratio' | 'none'
-    /** The Rust core and its switch: the height rides `impl.layoutQuery` (S18d). */
+    /**
+     * The Rust core, whose query entry answers the height (S18d); absent, the
+     * TypeScript does. A height the core refused is the node's own, so a
+     * caller growing the node to it leaves the node as it is.
+     */
     readonly core?: LayoutCore
   },
 ): number {
@@ -56,12 +61,13 @@ export function fittedTextNodeHeight(
   return queried(options.core, {
     request: () => {
       const measure = measureSpecOf(options.measure)
-      if (measure === undefined) return { skip: 'measure' }
+      if (measure === undefined) throw new CoreUnaskable('measure')
       const mode = bundledThemeModeOf(appearance)
-      if (mode === undefined) return { skip: 'appearance' }
+      if (mode === undefined) throw new CoreUnaskable('appearance')
       return { query: 'node-size', node, measure, mode, floor }
     },
     ts,
+    unanswered: () => node.height,
     read: (answer) => tupleOf(numbersOf(answer)?.[0], 1)?.[0],
     measure: options.measure,
   })

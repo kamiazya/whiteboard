@@ -3,11 +3,11 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboar
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, test } from 'vitest'
 import type { CanvasLayoutCore } from '../../canvas-core.js'
-import type { LayoutCore } from '../../layout/edges/layout-core.js'
 import type { SpatialContentCache } from '../../layout/layout-options.js'
 import type { FittedBlocks } from '../../layout/nodes/mdast-blocks.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
+import { fakeLayoutCore } from '../fake-layout-core.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 
@@ -67,17 +67,11 @@ test.runIf(built)(
     const counting: CanvasLayoutCore = {
       layoutSpatialCanvas(...args: Parameters<CanvasLayoutCore['layoutSpatialCanvas']>) {
         const answer = real.layoutSpatialCanvas(...args)
-        if (!('declined' in answer)) answered += 1
+        if (!('refused' in answer)) answered += 1
         return answer
       },
     }
-    const reports: unknown[] = []
-    const core: LayoutCore = {
-      routing: real,
-      layout: counting,
-      impl: { routeLayout: 'rust', layoutSpatialCanvas: 'rust' },
-      onMismatch: (report) => reports.push(report),
-    }
+    const core = fakeLayoutCore({ routing: real, layout: counting })
     const tsCache = memo()
     const coreCache = memo()
     let frame = 0
@@ -100,7 +94,6 @@ test.runIf(built)(
       expect(laid.scene).toEqual(reference.scene)
     }
     expect(answered).toBe(3)
-    expect(reports).toEqual([])
 
     await bench.compare(
       bench('TypeScript, no content cache', ts(undefined)),
@@ -108,6 +101,5 @@ test.runIf(built)(
       bench('Rust core, no content cache', rust(undefined)),
       bench('Rust core, the content cache handed over', rust(coreCache)),
     )
-    expect(reports).toEqual([])
   },
 )

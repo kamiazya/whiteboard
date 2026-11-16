@@ -1,116 +1,124 @@
-import type {
-  CanvasLayoutTally,
-  CoreMismatch,
-  LayoutCore,
-  MarkdownLayoutTally,
-  QueryLayoutTally,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { LayoutCore, LayoutRefusal } from '@kamiazya/whiteboard-canvas-render'
 // Types only: this module is on the page's critical path, and a value import
 // of codec would carry its readers (the schemas) into the boot bundle.
 // Installing the OKF and JSON Canvas cores into codec is `codec-cores.ts`'s,
 // which only the call sites that read or write them import.
-import { type CoreSettings, coreSettingsFrom } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
 
 /**
- * The Rust routing core as this realm holds it: the page and the layout
+ * The Rust core as this realm holds it (ADR-0054): the page and the layout
  * worker each build their own, since a wasm instance is not shared across
- * realms. `current` is synchronous because the layouts that ask (a drag
- * frame, the main-thread fallback) cannot wait; before the load settles it
- * answers nothing and they route in TypeScript. A worker awaits `ready`
- * before its first layout instead.
+ * realms. Every layout, note and query this app makes is answered by it, and
+ * there is no TypeScript to answer in its place (S18g), so each realm awaits
+ * `ready` before its first layout: the page at boot (`boot.ts`), the worker
+ * before its first message. `current` is synchronous because the layouts
+ * that ask (a drag frame, a render) cannot wait.
  */
 export interface LayoutCoreHost {
-  /** Starts the load on first call; settles with the core, or `undefined` when none is in use. */
-  ready(): Promise<LayoutCore | undefined>
-  /** The loaded core, or `undefined` before it loads. Starts the load, and throws a failed one under `throw`. */
+  /** Starts the load on first call; settles with the core, or rejects when it cannot load. */
+  ready(): Promise<LayoutCore>
+  /**
+   * The loaded core; `undefined` only before the load settles, which a realm
+   * that awaited `ready` never sees. After a failed load it answers a core
+   * that refuses every layout as `core-unavailable`, which each surface draws
+   * as its refusal notice, and starts one more load once `retryAfterMs` has
+   * passed since the last failure. The first failure also schedules one
+   * retry at that delay by itself.
+   */
   current(): LayoutCore | undefined
+  /** How many times a core became available; a surface keyed on it draws again when it does. */
+  generation(): number
+  /** Calls `listener` whenever `generation` moves. Answers the unsubscribe. */
+  subscribe(listener: () => void): () => void
   /**
    * Starts the load on first call and settles with the core the OKF and JSON
-   * Canvas codecs answer through, whatever the routing switch reads: they have
-   * no TypeScript to answer in their place, so a load that fails rejects (and
-   * the next call tries again).
+   * Canvas codecs answer through: a load that fails rejects (and the next call
+   * tries again).
    */
   codecs(): Promise<WebCore>
 }
 
-/**
- * Where the host reports to. Structural, and injected by the realm that
- * installs it: this directory is below `lib/` and may not import its logger.
- */
-export interface CoreLog {
-  warn(message: string, data?: unknown): void
-  debug(message: string, data?: unknown): void
-}
+/** What one loaded instance answers: every layout entry, through the one instance. */
+const layoutFrom = (core: WebCore): LayoutCore => ({
+  routing: core,
+  layout: core,
+  markdown: core,
+  query: core,
+})
 
-function summarize(
-  mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally | QueryLayoutTally>,
-) {
-  if (mismatch.kind !== 'differs')
-    return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
-  if (mismatch.fn === 'layoutSpatialCanvas') {
-    const { fn, kind, at, ts, rust } = mismatch
-    return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
-  }
-  if (mismatch.fn === 'layoutMarkdown') {
-    const { fn, kind, at, ts, rust } = mismatch
-    return { fn, kind, at, ts, rust, bodyChars: mismatch.repro.body.length }
-  }
-  if (mismatch.fn === 'layoutQuery') {
-    const { fn, kind, at, ts, rust } = mismatch
-    return { fn, kind, at, ts, rust, query: mismatch.repro.query }
-  }
-  return {
-    fn: mismatch.fn,
-    kind: mismatch.kind,
-    at: mismatch.at,
-    ts: mismatch.ts[mismatch.at],
-    rust: mismatch.rust[mismatch.at],
-    edges: mismatch.repro.edges.length,
-  }
-}
-
-function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMismatch) => void {
-  return (mismatch) => {
-    // A whole layout the core did not answer is a count, never a failure.
-    if (mismatch.kind === 'skipped' || mismatch.kind === 'declined') {
-      log.debug('the Rust core did not answer this layout', mismatch)
-      return
-    }
-    const summary = summarize(mismatch)
-    log.warn('the Rust core and the TypeScript disagree', summary)
-    log.debug('what reproduces it', mismatch.repro)
-    if (settings.mismatch === 'throw') {
-      throw new Error(`layout core ${mismatch.kind}: ${JSON.stringify(summary)}`)
-    }
+/** A load that had not settled within its bound, abandoned and its fetch aborted. */
+class CoreLoadTimedOut extends Error {
+  override readonly name = 'CoreLoadTimedOut'
+  constructor(readonly timeoutMs: number) {
+    super(`the Rust core did not load within ${timeoutMs} ms`)
   }
 }
 
 /**
- * What one loaded instance answers: routing, and the whole layout under its
- * own switch, measured by the page's measurer through the core's host import;
- * nothing for a routing switch that reads `ts`. A markdown note rides the
- * whole layout's switch, as the daemon's does: a note embeds boards, so a
- * rollback of one is a rollback of both. So do the queries (a drag frame's
- * edges, a label's or a bubble's place, a node's size): each is a piece of
- * the committed layout, which a rollback of the layout has to take with it.
+ * How long a load may take before it is abandoned. Sized from the artifact:
+ * the shipped wasm is 1,647,795 bytes, 606,011 gzipped (brotli is smaller,
+ * gzip is the worse case a host may serve), and Chrome's slowest throttling
+ * preset (Slow 3G: 400 kbit/s, 2 s round trip) moves that in about 12 s, about
+ * 14 s with the connection's setup; compiling it took 4-6 ms in Node. Twice
+ * that, so a slow but live connection loads while a fetch that never settles
+ * (a captive portal, a held request) stops holding the boot splash.
  */
-function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): LayoutCore | undefined {
-  return settings.impl === 'ts'
-    ? undefined
-    : {
-        routing: core,
-        layout: core,
-        markdown: core,
-        query: core,
-        impl: {
-          routeLayout: settings.impl,
-          layoutSpatialCanvas: settings.layout,
-          layoutMarkdown: settings.layout,
-          layoutQuery: settings.layout,
-        },
-        onMismatch: layoutReporter(settings, log),
-      }
+const CORE_LOAD_TIMEOUT_MS = 30_000
+
+/**
+ * How long after a failed load a layout asks for the core again: one load
+ * at a time, at most this often, however many frames ask, so a short offline
+ * blip at boot heals without a reload and a long one costs a fetch every few
+ * seconds rather than one per frame.
+ */
+const CORE_RETRY_AFTER_MS = 5_000
+
+/** What a layout draws when this realm's core did not load. */
+const CORE_UNAVAILABLE: LayoutRefusal = { code: 'malformed', reason: 'core-unavailable' }
+
+/**
+ * Answers every layout as refused, for a realm whose core did not load: each
+ * surface already draws a refusal as its notice, so a missing core reads as
+ * that and not as a blank board or an error screen. Routing has no refusal
+ * arm and throws what the core throws for one, which its one caller (the
+ * connect preview) answers by drawing no line.
+ */
+const unavailableCore: LayoutCore = {
+  routing: {
+    routeLayout() {
+      const err = new Error('the Rust core did not load')
+      err.name = 'CoreInputRefused'
+      throw err
+    },
+  },
+  layout: { layoutSpatialCanvas: () => ({ refused: CORE_UNAVAILABLE }) },
+  markdown: { layoutMarkdown: () => ({ refused: CORE_UNAVAILABLE }) },
+  query: { layoutQuery: () => ({ refused: CORE_UNAVAILABLE }) },
+}
+
+/** Rejects with `CoreLoadTimedOut` and aborts `load`'s signal when it outlives `timeoutMs`. */
+function withinBound(
+  load: (signal: AbortSignal) => Promise<WebCore>,
+  timeoutMs: number,
+): Promise<WebCore> {
+  const controller = new AbortController()
+  return new Promise<WebCore>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      const err = new CoreLoadTimedOut(timeoutMs)
+      controller.abort(err)
+      reject(err)
+    }, timeoutMs)
+    load(controller.signal).then(
+      (core) => {
+        clearTimeout(timer)
+        resolve(core)
+      },
+      (err: unknown) => {
+        clearTimeout(timer)
+        reject(err)
+      },
+    )
+  })
 }
 
 /** `load`, shared by every ask; a failed load is forgotten, so the next ask tries again. */
@@ -125,84 +133,139 @@ function loadAtMostOnce(load: () => Promise<WebCore>): () => Promise<WebCore> {
   }
 }
 
+interface LayoutCoreHostOptions {
+  readonly timeoutMs?: number
+  readonly retryAfterMs?: number
+  readonly now?: () => number
+}
+
+/** How many times a core became available, and who hears it move. */
+function createAnnouncer(): Pick<LayoutCoreHost, 'generation' | 'subscribe'> & {
+  announce(): void
+} {
+  let generation = 0
+  const listeners = new Set<() => void>()
+  return {
+    generation: () => generation,
+    subscribe(listener) {
+      listeners.add(listener)
+      return () => listeners.delete(listener)
+    },
+    announce() {
+      generation += 1
+      for (const listener of listeners) listener()
+    },
+  }
+}
+
 /**
- * `load` is called once for all, on the first ask of whichever half asks. An
- * artifact that cannot load degrades routing to TypeScript with a warning,
- * unless mismatches throw: a test run that asked for the core and did not get it
- * has compared nothing. The codecs cannot degrade, so `codecs()` rejects instead.
+ * Asks again after a failed load: `now` starts one more load (or joins the
+ * one in flight), and `scheduleOnce` arms a single one at the delay, for a board that
+ * drew the notice and is not laid out again until the connection is back.
+ */
+function createRetry(attempt: () => Promise<unknown>, retryAfterMs: number) {
+  let armed = false
+  let timer: ReturnType<typeof setTimeout> | undefined
+  // Asking again while a load is in flight joins it (`loadAtMostOnce`).
+  const now = (): void => void attempt().catch(() => undefined)
+  return {
+    now,
+    scheduleOnce() {
+      if (armed) return
+      armed = true
+      timer = setTimeout(now, retryAfterMs)
+    },
+    cancel: () => clearTimeout(timer),
+  }
+}
+
+/**
+ * `load` is called once for all, on the first ask of whichever half asks,
+ * and abandoned past `timeoutMs`; a load that fails is forgotten, so the
+ * next `ready` or `codecs` tries again.
  */
 export function createLayoutCoreHost(
-  settings: CoreSettings,
-  load: () => Promise<WebCore>,
-  log: CoreLog,
+  load: (signal: AbortSignal) => Promise<WebCore>,
+  {
+    timeoutMs = CORE_LOAD_TIMEOUT_MS,
+    retryAfterMs = CORE_RETRY_AFTER_MS,
+    now = () => Date.now(),
+  }: LayoutCoreHostOptions = {},
 ): LayoutCoreHost {
   let layout: LayoutCore | undefined
-  let failure: { readonly err: unknown } | undefined
-  let started: Promise<LayoutCore | undefined> | undefined
-  const loadOnce = loadAtMostOnce(load)
-  // Routing loads nothing while it reads `ts`; the codecs load on their own ask.
-  const answersInRust = settings.impl !== 'ts'
+  let failedAt: number | undefined
+  const announcer = createAnnouncer()
+  const loadOnce = loadAtMostOnce(() => withinBound(load, timeoutMs))
 
-  const start = (): Promise<LayoutCore | undefined> => {
-    if (!answersInRust) return Promise.resolve(undefined)
-    started ??= loadOnce().then(
+  const ready = (): Promise<LayoutCore> =>
+    loadOnce().then(
       (core) => {
-        layout = layoutFrom(core, settings, log)
+        failedAt = undefined
+        retry.cancel()
+        if (layout === undefined) {
+          layout = layoutFrom(core)
+          announcer.announce()
+        }
         return layout
       },
       (err: unknown) => {
-        failure = { err }
-        if (settings.mismatch === 'throw') throw err
-        log.warn('the Rust core did not load; answering in TypeScript', err)
-        return undefined
+        failedAt = now()
+        retry.scheduleOnce()
+        throw err
       },
     )
-    return started
-  }
-
-  // A failed load under `throw` was already surfaced through `ready`; the
-  // synchronous readers have no promise to reject, so they raise the same error.
-  const startAndRaise = (): void => {
-    if (!answersInRust) return
-    void start().catch(() => undefined)
-    if (failure !== undefined && settings.mismatch === 'throw') throw failure.err
-  }
+  const retry = createRetry(ready, retryAfterMs)
 
   return {
-    ready: start,
+    ready,
     codecs: loadOnce,
     current() {
-      startAndRaise()
-      return layout
+      if (layout !== undefined) return layout
+      if (failedAt !== undefined) {
+        if (now() - failedAt >= retryAfterMs) retry.now()
+        return unavailableCore
+      }
+      void ready().catch(() => undefined)
+      return undefined
     },
+    generation: announcer.generation,
+    subscribe: announcer.subscribe,
   }
 }
 
 let installed: LayoutCoreHost | undefined
 
 /**
- * Makes this realm's host from the build's environment. Each realm that lays
- * out installs once (the page at boot, the layout worker at start): a realm
- * that never does routes in TypeScript, which is what a unit test of a
- * component wants.
+ * Makes this realm's host. Each realm that lays out installs once (the page
+ * at boot, the layout worker at start). A realm that never does (a jsdom unit
+ * test of a component) answers no core, and its layouts are the TypeScript
+ * composer's, which S18h deletes with the TypeScript itself.
  */
-export function installLayoutCore(log: CoreLog): LayoutCoreHost {
+export function installLayoutCore(): LayoutCoreHost {
   // The platform's fetch as it stood now. The wasm is a build asset, not an
   // API call: a later replacement of `globalThis.fetch` (a test double
   // answering 404 to every route it was not told of) would otherwise be asked
   // for bytes it knows nothing about.
   const fetchAsset: typeof fetch = globalThis.fetch?.bind(globalThis)
-  installed ??= createLayoutCoreHost(
-    coreSettingsFrom(import.meta.env),
-    async () => (await import('./layout-core-source.js')).loadWebCore(fetchAsset),
-    log,
+  installed ??= createLayoutCoreHost(async (signal) =>
+    (await import('./layout-core-source.js')).loadWebCore(fetchAsset, signal),
   )
   return installed
 }
 
-/** Settles with this realm's core once loaded; `undefined` when none is installed or in use. */
+/** Settles with this realm's core once loaded, rejecting when it cannot load; `undefined` when none is installed. */
 export const layoutCoreReady = (): Promise<LayoutCore | undefined> =>
   installed?.ready() ?? Promise.resolve(undefined)
 
-/** The core this realm has loaded so far, or `undefined`. */
+/**
+ * The core this realm has loaded, `undefined` in a realm that installed none;
+ * after a failed load, a core that refuses every layout as `core-unavailable`.
+ */
 export const currentLayoutCore = (): LayoutCore | undefined => installed?.current()
+
+/** How many times this realm's core became available: 0 in a realm that installed none. */
+export const layoutCoreGeneration = (): number => installed?.generation() ?? 0
+
+/** Calls `listener` when this realm's core becomes available; a no-op where none is installed. */
+export const subscribeLayoutCore = (listener: () => void): (() => void) =>
+  installed?.subscribe(listener) ?? (() => undefined)

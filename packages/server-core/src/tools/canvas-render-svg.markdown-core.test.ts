@@ -1,9 +1,9 @@
 import type {
-  CoreMismatch,
   LayoutCore,
   MarkdownLayoutCore,
   MarkdownNoteRequest,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import {
   writeDocumentKind,
   writeMarkdownBody,
@@ -45,16 +45,10 @@ async function workspace(): Promise<FakeDocumentStore> {
   return store
 }
 
-/** A markdown core under `rust` whose scene is one marked run, keeping what it was asked. */
+/** A markdown core whose scene is one marked run, keeping what it was asked. */
 function markingCore(answer: MarkdownLayoutCore['layoutMarkdown']) {
   const requests: MarkdownNoteRequest[] = []
-  const reports: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: {
-      routeLayout: () => {
-        throw new Error('no edge is routed here')
-      },
-    },
+  const core = fakeLayoutCore({
     markdown: {
       layoutMarkdown: (request, highlight, measure) => {
         // The daemon renders notes; a comment's request never reaches this tool.
@@ -62,10 +56,8 @@ function markingCore(answer: MarkdownLayoutCore['layoutMarkdown']) {
         return answer(request, highlight, measure)
       },
     },
-    impl: { routeLayout: 'ts', layoutMarkdown: 'rust' },
-    onMismatch: (report) => reports.push(report),
-  }
-  return { core, requests, reports }
+  })
+  return { core, requests }
 }
 
 const marked: MarkdownLayoutCore['layoutMarkdown'] = () => ({
@@ -124,18 +116,16 @@ describe('wb_scene_render of a note and the markdown core', () => {
   })
 
   test('lays the note out through the core ServerDeps hands it', async () => {
-    const { core, requests, reports } = markingCore(marked)
+    const { core, requests } = markingCore(marked)
     const { svg } = await render(core)
     expect(svg).toContain('from the core')
     expect(requests).toMatchObject([{ kind: 'markdown', body: BODY, maxWidth: 720 }])
     expect(requests[0]).not.toHaveProperty('references')
-    expect(reports).toEqual([])
   })
 
   test('hands the core the references as a wire, never skipping them', async () => {
-    const { core, requests, reports } = markingCore(marked)
+    const { core, requests } = markingCore(marked)
     await render(core, { embedReferences: true })
-    expect(reports).toEqual([])
     const entries = requests[0]?.references?.entries.map(([key]) => key)
     expect(entries).toEqual([BOARD_ID])
   })
