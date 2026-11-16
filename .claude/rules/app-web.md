@@ -448,8 +448,8 @@ throws). Each realm installs its own host through `startLayoutCore()` (the
 page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
 reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
 it routes in TypeScript. The whole layout rides the same instance under its own
-switch, `VITE_WHITEBOARD_CORE_LAYOUT` (`differential` wherever routing is, `ts`
-in a production build until S16b): the core measures through the page's own
+switch, `VITE_WHITEBOARD_CORE_LAYOUT`, which follows routing unless set (`rust`
+in a production build since S16b, `ts` the rollback): the core measures through the page's own
 measurer, which canvas-viewer's `createBrowserMeasureText` names `{kind:
 'host'}` and the core asks mid-layout through its one import. Every spatial
 layout the editor runs — its committed scene, drag layers and layout worker,
