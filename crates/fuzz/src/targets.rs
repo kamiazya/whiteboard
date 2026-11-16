@@ -661,7 +661,8 @@ fn assert_layout_answer(answer: &str) {
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
     let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
     let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
-    assert!(laid || refused || declined || needs, "{answer:.120} is not an answer");
+    let missing = answer == "[\"missing\",\"section\"]";
+    assert!(laid || refused || declined || needs || missing, "{answer:.120} is not an answer");
 }
 
 /// The font registration's export: the faces' wire and the bytes they point

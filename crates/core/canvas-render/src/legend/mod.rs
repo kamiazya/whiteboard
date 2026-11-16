@@ -7,6 +7,7 @@
 //! listed; colour spent with no key carrying it is said in one flag per
 //! population.
 
+pub mod block;
 pub mod channels;
 
 use whiteboard_facet_engine::registry::Registry;

@@ -139,6 +139,23 @@ fn the_fragment_seeds_are_layouts_the_export_draws_a_table_for() {
 }
 
 #[test]
+fn the_markdown_seeds_are_bodies_the_export_lays_out() {
+    // Taken from the recorded markdown layouts: a note embedding a note and
+    // a board (whose fence it asks for), one embedding a board with a legend,
+    // and a comment's prose.
+    let seeds = root().join("seeds").join("layout_spatial_canvas_wasm");
+    for (name, start, part) in [
+        ("markdown-note", "[\"needs\"", "\"ts\""),
+        ("markdown-legend", "[\"ok\"", "\"text\":\"health\""),
+        ("markdown-comment", "[\"ok\"", "\"kind\":\"textRun\""),
+    ] {
+        let request = std::fs::read_to_string(seeds.join(name)).unwrap();
+        let answer = whiteboard_wasm::spatial_layout::layout_spatial_canvas(&request, None);
+        assert!(answer.starts_with(start) && answer.contains(part), "{name}: {answer:.120}");
+    }
+}
+
+#[test]
 fn the_font_seeds_are_faces_the_export_registers() {
     // A seed refused at its wire or its faces teaches the fuzzer nothing about
     // the measurer a handle builds; only the ones named for a refusal may be.

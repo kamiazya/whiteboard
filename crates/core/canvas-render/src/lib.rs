@@ -43,6 +43,7 @@ pub mod legend;
 pub mod legend_geometry;
 pub mod linebreak;
 pub mod longest_fit;
+pub mod markdown_document;
 pub mod measure;
 pub mod measure_memo;
 pub mod node_box;

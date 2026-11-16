@@ -1,0 +1,53 @@
+import { readFileSync } from 'node:fs'
+import { describe, expect, it } from 'vitest'
+import { loadCore } from './load.js'
+
+/**
+ * A markdown body through the shim over the built artifact: a comment is
+ * sent only what its request reads, whatever a note on the same core left
+ * behind (the fences' tokens it was answered) or the caller hands it (a
+ * content cache, which only a note's boards keep bodies in).
+ */
+
+// Built, not committed: a name the relative-import scan reads as a file that
+// must exist would fail every job that has no wasm build.
+const WASM = 'whiteboard_wasm_bg.wasm'
+const bytes = () => readFileSync(new URL(`../artifacts/${WASM}`, import.meta.url))
+
+const measure = { kind: 'fake', factor: 0.6 } as const
+const highlight = () => [[{ text: 'return 1', role: 'keyword' as const }]]
+
+describe('a markdown body through the shim over the built artifact', () => {
+  it('sends a comment none of the fence tokens a note left on the same core', async () => {
+    const core = await loadCore(bytes())
+    const note = core.layoutMarkdown(
+      { kind: 'markdown', body: '```ts\nreturn 1\n```', maxWidth: 400, measure, mode: 'light' },
+      highlight,
+    )
+    expect('scene' in note, JSON.stringify(note)).toBe(true)
+    const comment = core.layoutMarkdown(
+      { kind: 'comment', body: 'return 1', maxWidth: 200, measure, density: 'compact' },
+      highlight,
+    )
+    expect('scene' in comment, JSON.stringify(comment)).toBe(true)
+  })
+
+  it('sends a comment no content cache, which only a note reads', async () => {
+    const core = await loadCore(bytes())
+    const request = { kind: 'comment', body: 'hi', maxWidth: 200, measure } as const
+    const comment = core.layoutMarkdown(
+      { ...request, density: 'comfortable' },
+      undefined,
+      undefined,
+      {},
+    )
+    expect('scene' in comment, JSON.stringify(comment)).toBe(true)
+    const note = core.layoutMarkdown(
+      { kind: 'markdown', body: 'hi', maxWidth: 200, measure, mode: 'light' },
+      undefined,
+      undefined,
+      {},
+    )
+    expect('scene' in note, JSON.stringify(note)).toBe(true)
+  })
+})

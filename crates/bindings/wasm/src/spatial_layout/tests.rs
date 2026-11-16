@@ -21,7 +21,7 @@ pub(super) fn s(items: Vec<Json>) -> Json {
     Json::Array(out)
 }
 
-fn text_node(id: &str, body: &str) -> SpatialNode {
+pub(super) fn text_node(id: &str, body: &str) -> SpatialNode {
     SpatialNode {
         id: id.to_owned(),
         x: 0.0,
@@ -41,7 +41,7 @@ pub(super) fn board(body: &str) -> Json {
     canvas_json(&SpatialCanvas { nodes: vec![text_node("a", body)], ..SpatialCanvas::default() })
 }
 
-fn fake() -> Json {
+pub(super) fn fake() -> Json {
     m(&[("kind", json!("fake")), ("factor", json!(["f", "3fe3333333333333"]))])
 }
 

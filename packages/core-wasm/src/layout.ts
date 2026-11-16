@@ -1,5 +1,5 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import type { FenceHighlighter, FenceRow, FenceTokenMemo } from './fence-tokens.js'
+import { type FenceHighlighter, type FenceRow, FenceTokenMemo } from './fence-tokens.js'
 import type { FontHandles, FontsGlue, LayoutFaces } from './font-handles.js'
 import { LAYOUT_SPATIAL_CANVAS_CAPS, type RefusalCode } from './generated/input-caps.js'
 import { type HostMeasure, type HostMeasurer, hostMeasurerOf } from './host-measure.js'
@@ -133,14 +133,38 @@ export function layoutSpatialCanvas(
   hostMeasure?: HostMeasure,
   surface?: number,
 ): LayoutAnswer {
+  const calls = { glue, errors, highlight, memo, fonts }
+  return layoutWith(calls, request, answerOf, hostMeasure, surface)
+}
+
+/** What every layout call goes through: the glue, its errors, the fences' memo and the faces' handles. */
+interface Calls {
+  readonly glue: LayoutGlue
+  readonly errors: LayoutErrors
+  readonly highlight: FenceHighlighter | undefined
+  readonly memo: FenceTokenMemo
+  readonly fonts: FontHandles
+}
+
+/** How the last call's answer is read into what the caller is answered. */
+type Read<A> = (parsed: unknown[], errors: LayoutErrors) => A
+
+/** A layout through `calls`, its last answer read by `read`; see `layoutSpatialCanvas`. */
+function layoutWith<A>(
+  { glue, errors, highlight, memo, fonts }: Calls,
+  request: LayoutRequest,
+  read: Read<A>,
+  hostMeasure: HostMeasure | undefined,
+  surface: number | undefined,
+): A | { readonly declined: string } {
   const { measure } = request
   const host =
     measure.kind === 'host' && hostMeasure !== undefined ? hostMeasurerOf(hostMeasure) : undefined
-  const once = (): LayoutAnswer | 'lost' => {
+  const once = (): A | { readonly declined: string } | 'lost' => {
     const named = measure.kind === 'fonts' ? fonts.handleOf(measure) : undefined
     if (named !== undefined && 'declined' in named) return named
     const measurer = { handle: named?.handle, host, surface }
-    return layoutOnce(glue, errors, request, measurer, highlight, memo)
+    return layoutOnce(glue, errors, request, measurer, highlight, memo, read)
   }
   const first = once()
   if (first !== 'lost') return first
@@ -158,14 +182,15 @@ interface Measurer {
 }
 
 /** One layout over `measurer`, the fences asked for included; `lost` when the core holds no faces under its handle. */
-function layoutOnce(
+function layoutOnce<A>(
   glue: LayoutGlue,
   errors: LayoutErrors,
   request: LayoutRequest,
   { handle, host, surface }: Measurer,
   highlight: FenceHighlighter | undefined,
   memo: FenceTokenMemo,
-): LayoutAnswer | 'lost' {
+  read: Read<A>,
+): A | { readonly declined: string } | 'lost' {
   const encoded = encodeLayoutRequest(request, handle, surface)
   if (encoded === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')
   const send = (rows: readonly FenceRow[]): Raw | { declined: string } => {
@@ -183,7 +208,7 @@ function layoutOnce(
   if ('lost' in raw) return 'lost'
   if ('declined' in raw) return raw
   if ('needs' in raw) return { declined: 'highlight' }
-  return answerOf(raw.parsed, errors)
+  return read(raw.parsed, errors)
 }
 
 /** The answer one call gave, read. */
@@ -239,4 +264,88 @@ function isAnchors(v: unknown): v is [string, AnchorPair][] {
     Array.isArray(v) &&
     v.every((row) => Array.isArray(row) && typeof row[0] === 'string' && isRecord(row[1]))
   )
+}
+
+/**
+ * A markdown body laid out by the core as data, as canvas-render's
+ * `layoutMdastBlocks` and `layoutCommentBody` take it; typed structurally,
+ * like `LayoutRequest`, since this package may not import canvas-render. A
+ * note (`kind: 'markdown'`) is drawn at the document theme with its embeds
+ * resolved from `references` (none resolve without it), each embedded board
+ * in `mode` and `style` with the families in `fontFamilies`, coloured by
+ * `tagLibrary`; `fragments` answers its math blocks and diagram fences, and
+ * `section` narrows it to a `#Heading`. A comment (`kind: 'comment'`) is
+ * drawn at the theme its `density` names, with nothing resolved.
+ */
+export type MarkdownLayoutRequest = LayoutRequest &
+  (
+    | {
+        readonly kind: 'markdown'
+        readonly body: string
+        readonly maxWidth: number
+        readonly mode: 'light' | 'dark'
+        readonly style?: string
+        readonly fontFamilies?: readonly string[]
+        readonly tagLibrary?: object
+        readonly references?: object
+        readonly fragments?: readonly (readonly [string, object])[]
+        readonly section?: string
+      }
+    | {
+        readonly kind: 'comment'
+        readonly body: string
+        readonly maxWidth: number
+        readonly density: 'comfortable' | 'compact'
+      }
+  )
+
+/** The core's markdown layout, what it declined, or a `section` the note does not hold. */
+export type MarkdownLayoutAnswer =
+  | {
+      readonly scene: Scene
+      readonly degradations: readonly LayoutEvent[]
+      /** For a request carrying `fragments`: what the table did not hold. */
+      readonly fragmentsAsked?: readonly FragmentAsk[]
+    }
+  | { readonly declined: string }
+  | { readonly missing: 'section' }
+
+/**
+ * A markdown body laid out by the core, over the same calls, caps and
+ * answers as `layoutSpatialCanvas`: the scene and its degradations, a
+ * `declined` class a root answers from the TypeScript, or `missing` for a
+ * `section` the note holds no heading for, which a root reports as the
+ * TypeScript's section lookup does. Throws `CoreInputRefused` for a request
+ * the wire does not carry or an answer that is not one.
+ */
+export function layoutMarkdown(
+  glue: LayoutGlue,
+  errors: LayoutErrors,
+  request: MarkdownLayoutRequest,
+  highlight: FenceHighlighter | undefined,
+  memo: FenceTokenMemo,
+  fonts: FontHandles,
+  hostMeasure?: HostMeasure,
+  surface?: number,
+): MarkdownLayoutAnswer {
+  // A comment's request reads neither fences' tokens, since its prose is
+  // coloured by nothing, nor a content cache, since it embeds no board; the
+  // core reads strictly, so neither is sent, whatever a note on this core left
+  // in the memo or the caller hands as `surface`.
+  if (request.kind === 'comment') {
+    const calls = { glue, errors, highlight, memo: new FenceTokenMemo(), fonts }
+    return layoutWith(calls, request, markdownAnswerOf, hostMeasure, undefined)
+  }
+  const calls = { glue, errors, highlight, memo, fonts }
+  return layoutWith(calls, request, markdownAnswerOf, hostMeasure, surface)
+}
+
+/** A markdown answer: a canvas's, its anchors always none, or a missing section. */
+function markdownAnswerOf(parsed: unknown[], errors: LayoutErrors): MarkdownLayoutAnswer {
+  if (parsed[0] === 'missing' && parsed[1] === 'section') return { missing: 'section' }
+  const laid = answerOf(parsed, errors)
+  if ('declined' in laid) return laid
+  if (laid.anchors.size > 0) throw errors.refused(OPERATION, 'malformed', 'answer')
+  const { scene, degradations, fragmentsAsked } = laid
+  return { scene, degradations, ...(fragmentsAsked === undefined ? {} : { fragmentsAsked }) }
 }
