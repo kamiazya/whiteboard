@@ -1,9 +1,17 @@
-import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type CanvasLayoutCore,
+  constantRatioMeasureText,
+  type FragmentAsk,
+  fragmentAskKey,
+  type LayoutCore,
+  SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
+} from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
 
 // The returned queries are bound to document.body, so a render left mounted
@@ -246,8 +254,8 @@ describe('CanvasViewer draws in the theme its host says it is in', () => {
   })
 })
 
-describe("CanvasViewer typesets through the host's fragment seams", () => {
-  it("draws a text node's math and diagram fence from the seams", () => {
+describe("CanvasViewer typesets from the host's fragment table", () => {
+  it("draws a text node's math and diagram fence from the fragment table", () => {
     const typeset: SpatialCanvas = {
       nodes: [
         textNode({
@@ -261,16 +269,63 @@ describe("CanvasViewer typesets through the host's fragment seams", () => {
       ],
       edges: [],
     }
+    const math: FragmentAsk = { kind: 'math', value: 'x^2' }
+    const fence: FragmentAsk = { kind: 'diagram', lang: 'mermaid', value: 'graph TD; A-->B' }
+    const asked: FragmentAsk[] = []
     const { getByTestId } = render(
       <CanvasViewer
         canvas={typeset}
         measure={fakeMeasure}
-        renderMath={(value) => ({ svg: `<g data-math="${value}"/>`, height: 40 })}
-        renderDiagram={(lang) => ({ svg: `<g data-diagram="${lang}"/>`, width: 100, height: 80 })}
+        fragments={{
+          fragments: [
+            [fragmentAskKey(math), { svg: '<g data-math="x^2"/>', height: 40 }],
+            [fragmentAskKey(fence), { svg: '<g data-diagram="mermaid"/>', width: 100, height: 80 }],
+          ],
+          onFragmentsAsked: (asks) => asked.push(...asks),
+        }}
       />,
     )
     const html = getByTestId('canvas-viewer').innerHTML
     expect(html).toContain('data-math="x^2"')
     expect(html).toContain('data-diagram="mermaid"')
+    expect(asked).toEqual([])
+  })
+
+  it('reports a source the fragment table lacks, and draws its fallback', () => {
+    const typeset: SpatialCanvas = {
+      nodes: [textNode({ id: 'm', x: 0, y: 0, width: 300, height: 200, text: '$$\ny^3\n$$\n' })],
+      edges: [],
+    }
+    const asked: FragmentAsk[] = []
+    render(
+      <CanvasViewer
+        canvas={typeset}
+        measure={fakeMeasure}
+        fragments={{ fragments: [], onFragmentsAsked: (asks) => asked.push(...asks) }}
+      />,
+    )
+    expect(asked).toEqual([{ kind: 'math', value: 'y^3' }])
+  })
+})
+
+describe("CanvasViewer lays out through the host's core (ADR-0054)", () => {
+  it('hands the layout to the core the host gives it', () => {
+    const layoutSpatialCanvas = vi.fn(() => ({ declined: 'test' as const }))
+    const onMismatch = vi.fn()
+    const core = {
+      routing: {} as LayoutCore['routing'],
+      layout: { layoutSpatialCanvas } as unknown as CanvasLayoutCore,
+      impl: { routeLayout: 'ts', layoutSpatialCanvas: 'rust' },
+      onMismatch,
+    } satisfies LayoutCore
+    const { getByTestId } = render(
+      <CanvasViewer canvas={canvas} measure={constantRatioMeasureText} core={core} />,
+    )
+    expect(layoutSpatialCanvas).toHaveBeenCalledTimes(1)
+    expect(onMismatch).toHaveBeenCalledWith(
+      expect.objectContaining({ fn: 'layoutSpatialCanvas', kind: 'declined' }),
+    )
+    // A core that declines leaves the TypeScript to draw the board.
+    expect(getByTestId('canvas-viewer').textContent).toContain('hello')
   })
 })
