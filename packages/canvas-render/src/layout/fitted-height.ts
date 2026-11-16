@@ -6,10 +6,12 @@
  */
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MeasureText } from '../measure.js'
-import { constantRatioMeasureText } from '../measure.js'
+import { constantRatioMeasureText, measureSpecOf } from '../measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
-import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { bundledThemeModeOf, createSpatialTheme } from '../theme/spatial-theme.js'
+import type { LayoutCore } from './edges/layout-core.js'
+import { numbersOf, queried, tupleOf } from './query-switch.js'
 import { naturalNodeContentSize } from './spatial-canvas.js'
 
 /** Metrics do not vary by UI mode, so the light theme stands for both. */
@@ -39,11 +41,28 @@ export function fittedTextNodeHeight(
      * in the app the floor left a third of a nine-line note empty.
      */
     readonly floor?: 'ratio' | 'none'
+    /** The Rust core and its switch: the height rides `impl.layoutQuery` (S18d). */
+    readonly core?: LayoutCore
   },
 ): number {
   const appearance = options.appearance ?? DEFAULT_APPEARANCE
-  const under = (measure: MeasureText) => naturalNodeContentSize(node, { measure, appearance }).h
-  const own = under(options.measure)
-  const natural = options.floor === 'none' ? own : Math.max(own, under(constantRatioMeasureText))
-  return natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
+  const floor = options.floor ?? 'ratio'
+  const ts = () => {
+    const under = (measure: MeasureText) => naturalNodeContentSize(node, { measure, appearance }).h
+    const own = under(options.measure)
+    const natural = floor === 'none' ? own : Math.max(own, under(constantRatioMeasureText))
+    return natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
+  }
+  return queried(options.core, {
+    request: () => {
+      const measure = measureSpecOf(options.measure)
+      if (measure === undefined) return { skip: 'measure' }
+      const mode = bundledThemeModeOf(appearance)
+      if (mode === undefined) return { skip: 'appearance' }
+      return { query: 'node-size', node, measure, mode, floor }
+    },
+    ts,
+    read: (answer) => tupleOf(numbersOf(answer)?.[0], 1)?.[0],
+    measure: options.measure,
+  })
 }

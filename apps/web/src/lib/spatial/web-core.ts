@@ -1,13 +1,20 @@
 import type {
   CanvasLayoutCore,
   MarkdownLayoutCore,
+  QueryLayoutCore,
   RoutingCore,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { OkfCore, SpatialCore } from '@kamiazya/whiteboard-codec'
 
 /**
  * What the Rust core answers in a realm: the routing call, the whole layout,
- * a markdown note, the OKF envelope and the JSON Canvas codec, from one instance. Its own module so the loader and the host
- * can both name it without importing each other.
+ * a markdown note, the layout pieces an editor asks on their own, the OKF
+ * envelope and the JSON Canvas codec, from one instance. Its own module so the
+ * loader and the host can both name it without importing each other.
  */
-export type WebCore = RoutingCore & CanvasLayoutCore & MarkdownLayoutCore & OkfCore & SpatialCore
+export type WebCore = RoutingCore &
+  CanvasLayoutCore &
+  MarkdownLayoutCore &
+  QueryLayoutCore &
+  OkfCore &
+  SpatialCore

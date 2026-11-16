@@ -216,8 +216,6 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
-  'packages/canvas-render/src/layout/canvas-switch.ts#canvasLayoutRequest':
-    "which options the Rust core can be handed: the whole layout's switch calls it, canvas-switch.test.ts holds each declined option apart, and the recorder of the crate's native replay builds its requests with it, so the replay asks what the switch would",
   'packages/canvas-render/src/layout/markdown-switch.ts#markdownLayoutRequest':
     "which options of a markdown note the Rust core can be handed: the note's switch calls it, and markdown-switch.test.ts holds each option a surface varies, and the empty table a listener alone asks for, apart from the whole switch",
   'packages/facet-engine/src/unrecognized-keys.ts#firstUnrecognizedKey':

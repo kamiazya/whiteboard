@@ -2,7 +2,7 @@ import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
   createSpatialTheme,
-  outlineContentBox,
+  queryOutlineContentBox,
   type SceneNode,
   SPATIAL_THEME_GEOMETRY,
   type SpatialPalette,
@@ -15,6 +15,7 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
+import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
@@ -37,7 +38,7 @@ function contentBoxOf(
     w: selectionBox.width,
     h: selectionBox.height,
   }
-  const inner = outlineContentBox(shapeId, bbox)
+  const inner = queryOutlineContentBox(currentLayoutCore(), shapeId, bbox)
   return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
 }
 

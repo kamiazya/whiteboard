@@ -408,12 +408,14 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   claimSpatialDocument(doc, input.documentId)
   const measure = await resolveMeasurerFor(deps, input.ops)
+  // The core sizes what the measurer would, so it is asked for only then.
+  const core = measure === undefined ? undefined : await deps.layoutCore?.()
 
   // Every op runs against this session; nothing reaches the doc until
   // the last op has applied. That is what makes the batch all-or-nothing
   // — including the lock ops, which would otherwise write through to the
   // doc's sidecar map as they were applied.
-  const s = new CanvasEditSession(canvas, doc, measure)
+  const s = new CanvasEditSession(canvas, doc, measure, core)
 
   // One handler per verb, keyed by the schema (canvas-edit-handlers.ts).
   // A verb added to the schema and not to the table does not compile, where

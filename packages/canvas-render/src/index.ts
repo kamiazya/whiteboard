@@ -116,6 +116,12 @@ export {
   outlineEntryPoint,
   resolveShapeTable,
 } from './layout/nodes/node-outline.js'
+export {
+  queryCommentBubble,
+  queryEdgeLabelPlacement,
+  queryLabelObstacles,
+  queryOutlineContentBox,
+} from './layout/queries.js'
 export { scaleScene } from './layout/scale-scene.js'
 export { seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
@@ -160,12 +166,21 @@ export {
   constantRatioMeasureText,
   describeMeasure,
   isFullWidthCodePoint,
+  measureSpecOf,
 } from './measure.js'
 export {
   CANVAS_VIEW_PICTURE_META_KEY,
   type CanvasViewPicture,
   canvasViewPictureSchema,
 } from './picture/canvas-view-picture.js'
+export type {
+  QueryAnswer,
+  QueryLayoutCore,
+  QueryLayoutMismatch,
+  QueryLayoutSkip,
+  QueryLayoutTally,
+  QueryRequest,
+} from './query-core.js'
 export {
   createReferenceContentAccount,
   REFERENCE_CHARS_BUDGET,

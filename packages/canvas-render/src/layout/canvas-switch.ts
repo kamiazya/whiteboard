@@ -232,12 +232,12 @@ function comparable(
   }
 }
 
-function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
+export function coreEvent(event: SpatialLayoutDegradation): CoreDegradation {
   if (event.kind !== 'body-parse-failed') return event
   return { kind: event.kind, nodeId: event.nodeId }
 }
 
-function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
+export function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
   return event.kind === 'body-parse-failed' ? { ...event, err: undefined } : event
 }
 

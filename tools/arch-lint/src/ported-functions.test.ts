@@ -40,6 +40,14 @@ describe('PORTED_FUNCTIONS against the tree', () => {
       'routeLayout',
       'layoutSpatialCanvas',
       'layoutMarkdown',
+      'layoutSpatialEdges',
+      'naturalNodeContentSize',
+      'fittedTextNodeHeight',
+      'edgeLabelPlacement',
+      'labelObstacles',
+      'frameTitleObstacles',
+      'placeCommentBubble',
+      'outlineContentBox',
       'parseMarkdownBody',
       'resolveReferences',
       'parseOkf',
@@ -54,7 +62,7 @@ describe('PORTED_FUNCTIONS against the tree', () => {
   it('reads the real switch keys, so an empty read cannot pass for agreement', () => {
     const slot = entry.switch as NonNullable<PortedFunction['switch']>
     const keys = switchKeys(readReal(slot.file) as string, slot.interface)
-    expect(keys).toEqual(['routeLayout', 'layoutSpatialCanvas', 'layoutMarkdown'])
+    expect(keys).toEqual(['routeLayout', 'layoutSpatialCanvas', 'layoutMarkdown', 'layoutQuery'])
   })
 })
 

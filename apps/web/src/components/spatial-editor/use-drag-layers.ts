@@ -16,8 +16,10 @@ import type {
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  frameTitleObstacles,
+  describeMeasure,
   layoutSpatialEdges,
+  measureSpecOf,
+  queryLabelObstacles,
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -27,6 +29,7 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
+import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import { editorLayoutBase, renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -48,6 +51,39 @@ import type { GestureState } from './gestures.js'
 import { useDropSettle } from './use-drop-settle.js'
 import type { useFileSeamScene } from './use-file-seam-scene.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
+
+/**
+ * The page's measurer memoised for one gesture: the backdrop's frames and the
+ * overlay's re-measure the same texts every move. The memo answers exactly
+ * what it wraps, so it is named as that measurer is, and a frame the Rust core
+ * lays out is not skipped for a measurer it cannot repeat.
+ */
+function gestureMeasure(page: MeasureText): MeasureText {
+  const metricsCache = new Map<string, TextMetrics>()
+  const measure: MeasureText = (text, font) => {
+    const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx}\u0000${text}`
+    const hit = metricsCache.get(key)
+    if (hit !== undefined) return hit
+    const metrics = page(text, font)
+    metricsCache.set(key, metrics)
+    return metrics
+  }
+  const spec = measureSpecOf(page)
+  if (spec !== undefined) describeMeasure(measure, spec)
+  return measure
+}
+
+/**
+ * The frame titles a drag preview routes round, read off the committed scene
+ * once per committed layout rather than per pointer move, through the Rust
+ * core where this realm's layout switch says so.
+ */
+function useFrameTitles(nodes: SpatialCanvas['nodes'], committed: Scene) {
+  return useMemo(
+    () => queryLabelObstacles(currentLayoutCore(), nodes, committed.nodes).titles,
+    [nodes, committed],
+  )
+}
 
 /** One empty list, so a host passing no threads keeps the layers' memos stable. */
 const NO_THREADS: readonly CommentThread[] = []
@@ -259,15 +295,7 @@ export function useDragLayers({
       showResolved,
       threads: threadsFor(threads, carried, false),
     })
-    const metricsCache = new Map<string, TextMetrics>()
-    const measure: MeasureText = (text, font) => {
-      const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx}\u0000${text}`
-      const hit = metricsCache.get(key)
-      if (hit !== undefined) return hit
-      const metrics = resolvedMeasure(text, font)
-      metricsCache.set(key, metrics)
-      return metrics
-    }
+    const measure = gestureMeasure(resolvedMeasure)
     // The committed anchor state: liveEdges pins bystander edges to these
     // exact points so a carried edge joining their (node, side) group
     // cannot re-fraction them mid-drag. Taken from the committed scene's
@@ -312,6 +340,7 @@ export function useDragLayers({
         : 'committed',
   )
 
+  const frameTitles = useFrameTitles(canvas.nodes, gestureCommitted.scene)
   /**
    * The in-flight preview geometry, derived per frame from the gesture's own
    * start snapshot plus the live pointer. Move/resize never read `canvas`
@@ -343,9 +372,18 @@ export function useDragLayers({
       canvas,
       selectableBoxes,
       frozenEdgeSides: frozenSidesOf(gestureCommitted.scene),
-      frameTitles: frameTitleObstacles(canvas.nodes, gestureCommitted.scene.nodes),
+      frameTitles,
     })
-  }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted, settling])
+  }, [
+    gestureState,
+    livePoint,
+    boxes,
+    canvas,
+    selectableBoxes,
+    gestureCommitted,
+    settling,
+    frameTitles,
+  ])
 
   /**
    * EVERY edge, re-composed against the ghost's snapped live position and

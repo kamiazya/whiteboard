@@ -3,6 +3,7 @@ import type {
   CoreMismatch,
   LayoutCore,
   MarkdownLayoutTally,
+  QueryLayoutTally,
 } from '@kamiazya/whiteboard-canvas-render'
 // Types only: this module is on the page's critical path, and a value import
 // of codec would carry its readers (the schemas) into the boot bundle.
@@ -42,7 +43,9 @@ export interface CoreLog {
   debug(message: string, data?: unknown): void
 }
 
-function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally>) {
+function summarize(
+  mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally | QueryLayoutTally>,
+) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   if (mismatch.fn === 'layoutSpatialCanvas') {
@@ -52,6 +55,10 @@ function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownL
   if (mismatch.fn === 'layoutMarkdown') {
     const { fn, kind, at, ts, rust } = mismatch
     return { fn, kind, at, ts, rust, bodyChars: mismatch.repro.body.length }
+  }
+  if (mismatch.fn === 'layoutQuery') {
+    const { fn, kind, at, ts, rust } = mismatch
+    return { fn, kind, at, ts, rust, query: mismatch.repro.query }
   }
   return {
     fn: mismatch.fn,
@@ -84,7 +91,9 @@ function layoutReporter(settings: CoreSettings, log: CoreLog): (mismatch: CoreMi
  * own switch, measured by the page's measurer through the core's host import;
  * nothing for a routing switch that reads `ts`. A markdown note rides the
  * whole layout's switch, as the daemon's does: a note embeds boards, so a
- * rollback of one is a rollback of both.
+ * rollback of one is a rollback of both. So do the queries (a drag frame's
+ * edges, a label's or a bubble's place, a node's size): each is a piece of
+ * the committed layout, which a rollback of the layout has to take with it.
  */
 function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): LayoutCore | undefined {
   return settings.impl === 'ts'
@@ -93,10 +102,12 @@ function layoutFrom(core: WebCore, settings: CoreSettings, log: CoreLog): Layout
         routing: core,
         layout: core,
         markdown: core,
+        query: core,
         impl: {
           routeLayout: settings.impl,
           layoutSpatialCanvas: settings.layout,
           layoutMarkdown: settings.layout,
+          layoutQuery: settings.layout,
         },
         onMismatch: layoutReporter(settings, log),
       }
