@@ -1,6 +1,7 @@
 import {
   constantRatioMeasureText,
   type MarkdownLayoutCore,
+  refusalCopy,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { cleanup, render } from '@testing-library/react'
@@ -63,12 +64,19 @@ describe("a comment's prose through the core", () => {
     expect(container.textContent).toContain('from the core')
   })
 
-  it('draws the TypeScript in a realm that holds no core', () => {
-    vi.mocked(currentLayoutCore).mockReturnValue(undefined)
+  it('draws the core-unavailable notice in a realm whose core did not load', () => {
+    // After a failed load the realm's core refuses every layout as
+    // `core-unavailable`; the prose is not drawn by anything in its place.
+    const unavailable = { code: 'malformed', reason: 'core-unavailable' } as const
+    vi.mocked(currentLayoutCore).mockReturnValue(
+      fakeLayoutCore({ markdown: { layoutMarkdown: () => ({ refused: unavailable }) } }),
+    )
     const { container } = render(
       <CommentBody body="Please **tighten** this" measure={constantRatioMeasureText} />,
     )
-    expect(container.textContent).toContain('tighten')
-    expect(container.textContent).not.toContain('from the core')
+    // The title wraps into runs the DOM's text joins without a space.
+    const squash = (text: string | null) => (text ?? '').replace(/\s+/g, '')
+    expect(squash(container.textContent)).toContain(squash(refusalCopy(unavailable).title))
+    expect(container.textContent).not.toContain('tighten')
   })
 })

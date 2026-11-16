@@ -1,5 +1,5 @@
 // DOCUMENTED CEILING: the CSS textarea overlay and the committed render's
-// injected-measure layout (mdast-blocks.ts) are two independent wrap
+// injected-measure layout (the TypeScript typesetter) are two independent wrap
 // engines over the SAME content width (nodeWidth - 2*paddingPx) — CSS shapes
 // whole line boxes (kerning across word+space), the measurer sums per-word
 // advances (packages/canvas-render/src/measure.ts). This test pins their

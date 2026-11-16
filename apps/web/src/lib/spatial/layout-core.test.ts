@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
+import { createLayoutCoreHost } from './layout-core.js'
 import type { WebCore } from './web-core.js'
 
 const instance = {} as WebCore
@@ -210,8 +210,13 @@ describe('the codecs half of the host', () => {
 })
 
 describe('a realm that never installed a core', () => {
-  it('has none, and its layouts are the TypeScript composer’s', async () => {
-    expect(currentLayoutCore()).toBeUndefined()
-    expect(await layoutCoreReady()).toBeUndefined()
+  it('has none, and is ready with none', async () => {
+    // This test realm installs one at setup, as the page does at boot; a fresh
+    // module instance is a realm that never did.
+    vi.resetModules()
+    const fresh = await import('./layout-core.js')
+    expect(fresh.currentLayoutCore()).toBeUndefined()
+    expect(await fresh.layoutCoreReady()).toBeUndefined()
+    expect(fresh.layoutCoreGeneration()).toBe(0)
   })
 })

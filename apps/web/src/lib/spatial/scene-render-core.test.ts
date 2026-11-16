@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { referenceSeamsFromWire, referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -12,6 +12,10 @@ import {
   renderCanvasForExportWith,
   renderCanvasToSvgWith,
 } from './scene-render-core.js'
+
+/** A reference bundle rebuilt from a wire, as every root builds one: the core carries a wire. */
+const wired = (...args: Parameters<typeof referenceWire>) =>
+  referenceSeamsFromWire(referenceWire(...args))
 
 const measure = createFixedMeasure({ advance: (text) => text.length * 6, ascent: 10, descent: 2 })
 
@@ -84,7 +88,7 @@ describe('renderCanvasForExport through layoutWithFragments', () => {
     }
     const math = vi.fn(async () => MATH_FRAGMENT)
     const diagram = vi.fn(async () => DIAGRAM_FRAGMENT)
-    const references = referenceSeams(
+    const references = wired(
       new Map([[NOTE_ID, { name: 'Note', body: '```mermaid\ngraph TD; C-->D\n```\n' }]]),
     )
     const { svg } = await layoutWithFragments(

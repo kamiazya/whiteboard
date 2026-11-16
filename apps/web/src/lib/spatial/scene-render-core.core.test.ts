@@ -46,9 +46,9 @@ describe('the editor layout base', () => {
     expect(editorLayoutBase({ measure }).core).toBe(core)
   })
 
-  it('carries none in a realm that holds no core', () => {
+  it('throws, naming the realm, where no core is loaded: nothing lays out in its place', () => {
     vi.mocked(currentLayoutCore).mockReturnValue(undefined)
-    expect(editorLayoutBase({ measure }).core).toBeUndefined()
+    expect(() => editorLayoutBase({ measure })).toThrow(/the layout core is not loaded/)
   })
 
   it('lays the whole editor render out through it', () => {

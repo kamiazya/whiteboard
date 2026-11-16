@@ -1,9 +1,17 @@
-import { layoutMarkdownDocument, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import {
+  layoutMarkdownDocument,
+  referenceSeamsFromWire,
+  referenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { FragmentLoaders } from '../../lib/fragment-requests.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
+
+/** A reference bundle rebuilt from a wire, as every root builds one: the core carries a wire. */
+const wired = (...args: Parameters<typeof referenceWire>) =>
+  referenceSeamsFromWire(referenceWire(...args))
 
 // Wrapped, not replaced: the real layout still runs, and the call count is
 // how many times the editor laid a note out on the main thread.
@@ -363,7 +371,7 @@ describe('MarkdownEditor', () => {
         theme="light"
         value={`![[${BOARD}]]`}
         onChange={() => {}}
-        references={referenceSeams(new Map([[BOARD, { name: 'Board', canvas: board }]]))}
+        references={wired(new Map([[BOARD, { name: 'Board', canvas: board }]]))}
         tagLibrary={{ health: { exclusive: true, values: { failing: { color: '1' } } } }}
         previewDebounceMs={150}
       />,

@@ -1,5 +1,6 @@
 import { refusalCopy } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { act, cleanup, render } from '@testing-library/react'
@@ -53,9 +54,8 @@ it('draws the board again once a retry loads the core it drew the notice without
   expect(notice()?.textContent).toContain(refusalCopy(CORE_UNAVAILABLE).title)
   expect(container.textContent).not.toContain('Ship')
 
-  // The retry loaded it: this realm has no core artifact, so the board is the
-  // TypeScript composer's, which is what a realm with no core draws.
-  realm.core = undefined
+  // The retry loaded it: the realm's core, which draws the board.
+  realm.core = testLayoutCore()
   realm.generation = 1
   act(() => {
     for (const listener of realm.listeners) listener()

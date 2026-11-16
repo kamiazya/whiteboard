@@ -1,4 +1,8 @@
-import { type ReferenceSeams, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type ReferenceSeams,
+  referenceSeamsFromWire,
+  referenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -6,6 +10,10 @@ import type { FragmentLoaders, FragmentSeams } from '../lib/fragment-requests.js
 import { layoutMarkdownOutline } from '../lib/render-preview.js'
 import { fakeMeasure } from '../test-utils/fake-measure.js'
 import { useMarkdownFragments } from './use-markdown-fragments.js'
+
+/** A reference bundle rebuilt from a wire, as every root builds one: the core carries a wire. */
+const wired = (...args: Parameters<typeof referenceWire>) =>
+  referenceSeamsFromWire(referenceWire(...args))
 
 const LAYOUT = { measure: fakeMeasure, maxWidth: 480 }
 
@@ -160,7 +168,7 @@ describe('useMarkdownFragments', () => {
 
   it("renders an embedded note's math and diagram fence, as the layout asks for them", async () => {
     const l = loaders()
-    const references = referenceSeams(
+    const references = wired(
       new Map([
         [TARGET_ID, { name: 'Target', body: '$$\ny^2\n$$\n\n```mermaid\ngraph TD; C-->D\n```\n' }],
       ]),
@@ -193,7 +201,7 @@ describe('useMarkdownFragments', () => {
     expect(l.math).not.toHaveBeenCalledWith('y^2')
 
     rerender({
-      references: referenceSeams(new Map([[TARGET_ID, { name: 'T', body: '$$\ny^2\n$$\n' }]])),
+      references: wired(new Map([[TARGET_ID, { name: 'T', body: '$$\ny^2\n$$\n' }]])),
     })
     await waitFor(() => expect(result.current.renderMath('y^2')).toBeDefined())
     expect(l.math).toHaveBeenCalledWith('y^2')
