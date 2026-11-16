@@ -51,3 +51,16 @@ fn a_root_scalar_folded_onto_a_document_marker_or_directive_is_indented() {
     let written = write(&value);
     assert_eq!(read(&written), value, "{written:?}");
 }
+
+#[test]
+fn a_root_scalar_folded_onto_no_marker_keeps_its_folds_at_the_margin() {
+    // The re-fold is for a marker alone: a long single-quoted scalar at the
+    // root whose folds start no line with one is written as yaml writes it,
+    // continuation lines at column 0.
+    let value = format!("\"{} yyyyyyyyyy z", "x".repeat(78));
+    let written = write(&s(&value));
+    assert!(written.starts_with('\''), "{written:?}");
+    assert!(written.contains('\n'), "{written:?}");
+    assert!(written.lines().skip(1).all(|line| !line.starts_with(' ')), "{written:?}");
+    assert_eq!(read(&written), s(&value), "{written:?}");
+}
