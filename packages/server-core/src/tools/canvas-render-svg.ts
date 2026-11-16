@@ -173,7 +173,7 @@ async function canvasScene(
  * the document is drawn as a refusal (the layout past a cap the core holds it
  * to), when it is; the output itself is unchanged, since the SVG is the notice.
  */
-type CanvasRenderSvgAnswer = CanvasRenderSvgOutput & { readonly [REFUSAL_NOTE]?: string }
+export type CanvasRenderSvgAnswer = CanvasRenderSvgOutput & { readonly [REFUSAL_NOTE]?: string }
 
 async function renderDocument(
   deps: ServerDeps,

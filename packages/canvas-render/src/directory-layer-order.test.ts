@@ -107,6 +107,9 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'hit-test.ts': 'surface',
   'finite-box.ts': 'leaf',
   'measure.ts': 'leaf',
+  // The refusal's words and its scene (S18f): read off the theme's palette, read
+  // by the answers that carry a refusal and by the switches that draw one.
+  'refusal.ts': 'leaf',
   'scene-children.ts': 'leaf',
   'scene-entry-keys.ts': 'leaf',
   'xml-escape.ts': 'leaf',
