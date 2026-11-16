@@ -37,8 +37,8 @@ use super::fragments::FragmentTable;
 use super::host_measure::Host;
 use super::request::{MarkdownRequest, Note, Prose};
 use super::{
-    MAX_BODY_BYTES, MAX_FRAGMENTS, MAX_REFERENCED_ELEMENTS, measured, outcome, plugin,
-    referenced_bytes, referenced_elements, render_style,
+    MAX_BODY_BYTES, MAX_FRAGMENTS, MAX_REFERENCED_ELEMENTS, held_families, measured, outcome,
+    plugin, referenced_bytes, referenced_elements, render_style,
 };
 
 /// The body a request lays out; see the module's documentation for the wire.
@@ -116,9 +116,7 @@ fn lay_out_note(
     };
     let mode = if note.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let appearance = create_spatial_theme(mode, None);
-    let held = |family: &str| {
-        note.font_families.iter().any(|held| held == family) && measure.has_family(family)
-    };
+    let held = held_families(&note.font_families, measure);
     let fragments = note.fragments.as_deref().map(FragmentTable::new);
     let decorations: [&dyn NodeDecoration; 1] = [&StencilBadge { registry }];
     let options = LayoutOptions {

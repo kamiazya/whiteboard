@@ -282,6 +282,15 @@ fn render_style(style: &Style) -> RenderStyle<'_> {
     }
 }
 
+/// Whether a family may be declared: the surface holds a face for it, and the
+/// measurer measures it in that face (the declared family must be the measured one).
+fn held_families<'a>(
+    families: &'a [String],
+    measure: &'a dyn Measure,
+) -> impl Fn(&str) -> bool + 'a {
+    move |family| families.iter().any(|held| held == family) && measure.has_family(family)
+}
+
 /// The request laid out, as the answer's JSON text.
 fn lay_out(
     request: &Request,
@@ -305,9 +314,7 @@ fn with_options(
     then: &mut dyn FnMut(&LayoutOptions<'_>, &WireHost<'_>, Option<&FragmentTable<'_>>) -> String,
 ) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
-    let held = |family: &str| {
-        request.font_families.iter().any(|held| held == family) && measure.has_family(family)
-    };
+    let held = held_families(&request.font_families, measure);
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand.clone())
         .with_code_tokens(&request.code_tokens);
