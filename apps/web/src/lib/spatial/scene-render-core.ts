@@ -18,7 +18,6 @@ import type {
   KeyedSvgRender,
   MeasureText,
   ReferenceSeams,
-  ResolvedReference,
   Scene,
   SpatialContentCache,
   SpatialLayoutOptions,
@@ -48,7 +47,6 @@ export interface RenderCanvasCoreOptions {
   readonly theme?: SpatialThemeMode
   /** The reference bundle, for what text-node bodies embed and link. */
   readonly references?: ReferenceSeams
-  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   readonly expandFileNode?: (node: SpatialNode) => boolean
   /**
    * canvas-render's text-node body memo (see SpatialContentCache's caller
@@ -172,7 +170,6 @@ export function renderCanvasToSvgWith(
   const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
     ...editorLayoutBase(options),
     references: options.references,
-    resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,
     contentCache: options.contentCache,
     suppressedBodyNodeIds: options.suppressedBodyNodeIds,

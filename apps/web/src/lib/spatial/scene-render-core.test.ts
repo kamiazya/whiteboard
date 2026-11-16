@@ -4,10 +4,14 @@ import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, expectTypeOf, it, vi } from 'vitest'
 import { layoutWithFragments } from '../fragment-requests.js'
-import { renderCanvasForExport } from './scene-render.js'
-import { renderCanvasForExportWith, renderCanvasToSvgWith } from './scene-render-core.js'
+import { type RenderCanvasOptions, renderCanvasForExport } from './scene-render.js'
+import {
+  type RenderCanvasCoreOptions,
+  renderCanvasForExportWith,
+  renderCanvasToSvgWith,
+} from './scene-render-core.js'
 
 const measure = createFixedMeasure({ advance: (text) => text.length * 6, ascent: 10, descent: 2 })
 
@@ -109,5 +113,15 @@ describe('renderCanvasForExportWith', () => {
     expect(Math.min(left, top, right, bottom)).toBeGreaterThanOrEqual(16)
     expect(right).toBeCloseTo(left)
     expect(bottom).toBeCloseTo(top)
+  })
+})
+
+describe('the editor surface options', () => {
+  it('carry the reference chrome on the wire, never as a resolveReference function', () => {
+    // A function seam the request gate cannot hand the core: a layout given
+    // one is skipped as `seam:resolveReference` and drawn by the TypeScript.
+    // File-node labels and dangling marks ride the reference wire instead.
+    expectTypeOf<RenderCanvasOptions>().not.toHaveProperty('resolveReference')
+    expectTypeOf<RenderCanvasCoreOptions>().not.toHaveProperty('resolveReference')
   })
 })
