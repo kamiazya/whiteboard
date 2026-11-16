@@ -25,7 +25,8 @@ function askCore(body: string, references: ReferenceSeams) {
     routing: { routeLayout: () => ({ routes: [], anchors: new Map() }) as never },
     markdown: {
       layoutMarkdown: (request) => {
-        asked.push(request)
+        // A note's layout only: a comment never reaches these surfaces.
+        if (request.kind === 'markdown') asked.push(request)
         return { declined: 'recording' }
       },
     },

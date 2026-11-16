@@ -4,7 +4,8 @@
  * theme, its reference bundle, its math fragments, a board embedded in it —
  * is a note the markdown switch hands the core, never one it skips; and so
  * are the rail's outline and a row's picture, which the layout worker lays
- * out through the same `render-preview.ts` calls this page makes.
+ * out through the same `render-preview.ts` calls this page makes; and so is
+ * a comment's prose, in the card and in the rail.
  *
  * The switch reports a layout the core did not answer at debug, by class;
  * this counts them and requires none, with the core asked for every note.
@@ -27,6 +28,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { layoutMarkdownOutline, renderMarkdownPreview } from '../../lib/render-preview.js'
 import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
 import { webLayoutBoards } from '../../test-utils/web-layout-boards.js'
+import { CommentBody } from '../annotations/CommentBody.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(cleanup)
@@ -166,6 +168,34 @@ it.skipIf(MARKDOWN === 'ts')(
       const ts = draw('ts', theme)
       expect(ts).toContain('Release plan')
       expect(draw('rust', theme), theme).toBe(ts)
+    }
+  },
+  30_000,
+)
+
+it.skipIf(MARKDOWN === 'ts')(
+  "hands the core a comment's prose, in the card and in the rail",
+  async () => {
+    const core = loaded as LayoutCore
+    const reports = unanswered()
+    const calls = asked(core)
+    try {
+      const prose =
+        'Please **tighten** this, rename `flags`, and see the [docs](https://example.com).'
+      const { container } = render(
+        <div style={{ width: 320 }}>
+          <CommentBody body={prose} />
+          <CommentBody body={prose} compact />
+        </div>,
+      )
+      await expect.poll(() => container.querySelectorAll('[data-comment-body] svg').length).toBe(2)
+      expect({ classes: reports.classes, asked: calls.count() >= 2 }).toEqual({
+        classes: [],
+        asked: true,
+      })
+    } finally {
+      calls.restore()
+      reports.restore()
     }
   },
   30_000,

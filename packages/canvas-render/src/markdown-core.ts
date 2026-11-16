@@ -33,6 +33,23 @@ export interface MarkdownNoteRequest {
 }
 
 /**
+ * A comment's PROSE asked of the Rust core (S18b's `kind: 'comment'`): the
+ * body laid out exactly as `layoutCommentBody` lays it out, at the markdown
+ * theme its `density` picks, in the bundled family, with nothing resolved.
+ * Built only by `commentLayoutRequest`.
+ */
+export interface MarkdownCommentRequest {
+  readonly kind: 'comment'
+  readonly body: string
+  readonly maxWidth: number
+  readonly measure: MeasureSpec
+  readonly density: 'comfortable' | 'compact'
+}
+
+/** A markdown body the core's markdown entry takes: a note, or a comment's prose. */
+export type MarkdownBodyRequest = MarkdownNoteRequest | MarkdownCommentRequest
+
+/**
  * The core's answer to a note: the scene, or the class of what it declined
  * (a body past the parser's bounds, a request past its caps), which the
  * TypeScript then answers, or `missing` for a `section` the note holds no
@@ -56,7 +73,7 @@ export type MarkdownLayoutAnswer =
  */
 export interface MarkdownLayoutCore {
   layoutMarkdown(
-    request: MarkdownNoteRequest,
+    request: MarkdownBodyRequest,
     highlight: (lang: string, value: string) => CodeTokenLines | undefined,
     measure: MeasureText,
   ): MarkdownLayoutAnswer
@@ -85,11 +102,11 @@ export type MarkdownLayoutMismatch =
       readonly at: string
       readonly ts: unknown
       readonly rust: unknown
-      readonly repro: MarkdownNoteRequest
+      readonly repro: MarkdownBodyRequest
     }
   | {
       readonly fn: 'layoutMarkdown'
       readonly kind: 'refused'
       readonly err: unknown
-      readonly repro: MarkdownNoteRequest
+      readonly repro: MarkdownBodyRequest
     }

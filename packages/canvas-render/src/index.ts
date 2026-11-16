@@ -86,7 +86,11 @@ export {
   sketchShape,
 } from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
-export { layoutMarkdownDocument } from './layout/markdown-switch.js'
+export {
+  type CommentDocumentOptions,
+  layoutCommentDocument,
+  layoutMarkdownDocument,
+} from './layout/markdown-switch.js'
 export {
   type FragmentAsk,
   type FragmentEntry,
@@ -143,6 +147,8 @@ export { translateScene } from './layout/translate-scene.js'
 export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
 export type {
+  MarkdownBodyRequest,
+  MarkdownCommentRequest,
   MarkdownLayoutCore,
   MarkdownLayoutMismatch,
   MarkdownLayoutTally,

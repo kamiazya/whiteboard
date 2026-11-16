@@ -1,16 +1,23 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
 import { highlightCode } from '../highlight/lowlight.js'
-import type { MarkdownLayoutAnswer, MarkdownNoteRequest } from '../markdown-core.js'
+import type {
+  MarkdownCommentRequest,
+  MarkdownLayoutAnswer,
+  MarkdownNoteRequest,
+} from '../markdown-core.js'
+import { measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import type { CoreImpl, CoreMismatch, LayoutCore } from './edges/layout-core.js'
 import { layoutMdastBlocks } from './markdown-body.js'
 import {
+  layoutCommentDocument,
   layoutMarkdownDocument,
   type MarkdownDocumentOptions,
   markdownLayoutRequest,
@@ -31,10 +38,10 @@ const typescript = (text: string) =>
   })
 const reference = typescript(body)
 
-type Answering = (request: MarkdownNoteRequest) => MarkdownLayoutAnswer
+type Answering = (request: MarkdownNoteRequest | MarkdownCommentRequest) => MarkdownLayoutAnswer
 
 function coreOf(impl: CoreImpl, answer: Answering) {
-  const requests: MarkdownNoteRequest[] = []
+  const requests: (MarkdownNoteRequest | MarkdownCommentRequest)[] = []
   const highlighters: unknown[] = []
   const mismatches: CoreMismatch[] = []
   const core: LayoutCore = {
@@ -215,5 +222,89 @@ describe('a markdown note through the core switch', () => {
       expect(mismatches, reason).toEqual([{ fn: 'layoutMarkdown', kind: 'skipped', reason }])
     }
     expect(run('rust', agreeing, { references: withContent }).requests).toHaveLength(1)
+  })
+})
+
+describe("a comment's prose through the core switch", () => {
+  const prose = 'Please **tighten** this, and `rename` it.'
+  /** What the TypeScript draws, as `CommentBody.tsx` laid a comment out before the switch. */
+  const commentTs = (density: 'comfortable' | 'compact' = 'comfortable', maxWidth = 260) =>
+    layoutCommentBody(prose, { measure, fontFamily: SPATIAL_THEME_FONT_FAMILY, maxWidth, density })
+  const lay = (impl: CoreImpl, answer: Answering, density?: 'compact') => {
+    const { core, requests, mismatches } = coreOf(impl, answer)
+    const scene = layoutCommentDocument(prose, {
+      measure,
+      maxWidth: 260,
+      ...(density === undefined ? {} : { density }),
+      core,
+    })
+    return { scene, requests, mismatches }
+  }
+  const sceneOf = { nodes: [] }
+
+  it('lays a comment out as layoutCommentBody does with no core, and under ts asks none', () => {
+    expect(layoutCommentDocument(prose, { measure, maxWidth: 260 })).toEqual(commentTs())
+    expect(layoutCommentDocument(prose, { measure })).toEqual(
+      commentTs('comfortable', COMMENT_TEXT_MAX_WIDTH_PX),
+    )
+    const { scene, requests } = lay('ts', () => ({ scene: sceneOf, degradations: [] }))
+    expect(scene).toEqual(commentTs())
+    expect(requests).toEqual([])
+  })
+
+  it("answers with the core under rust, handing it a comment's request", () => {
+    const { scene, requests, mismatches } = lay(
+      'rust',
+      () => ({ scene: sceneOf, degradations: [] }),
+      'compact',
+    )
+    expect(scene).toBe(sceneOf)
+    expect(requests).toEqual([
+      {
+        kind: 'comment',
+        body: prose,
+        maxWidth: 260,
+        measure: measureSpecOf(measure),
+        density: 'compact',
+      },
+    ])
+    expect(mismatches).toEqual([])
+  })
+
+  it('answers with the TypeScript under differential and reports where the core parts', () => {
+    const same = lay('differential', () => ({ scene: commentTs(), degradations: [] }))
+    expect(same.scene).toEqual(commentTs())
+    expect(same.mismatches).toEqual([])
+    const differs = lay('differential', () => ({ scene: sceneOf, degradations: [] }))
+    expect(differs.scene).toEqual(commentTs())
+    expect(differs.mismatches.map((m) => [m.fn, m.kind])).toEqual([['layoutMarkdown', 'differs']])
+  })
+
+  it('answers from the TypeScript what the core declines, throws on, or answers as a note', () => {
+    const declined = lay('rust', () => ({ declined: 'body' }))
+    expect(declined.scene).toEqual(commentTs())
+    expect(declined.mismatches).toEqual([
+      { fn: 'layoutMarkdown', kind: 'declined', reason: 'body' },
+    ])
+    const thrown = lay('rust', () => {
+      throw new Error('boom')
+    })
+    expect(thrown.scene).toEqual(commentTs())
+    expect(thrown.mismatches.map((m) => m.kind)).toEqual(['refused'])
+    const missing = lay('rust', () => ({ missing: 'section' }))
+    expect(missing.scene).toEqual(commentTs())
+    expect(missing.mismatches.map((m) => m.kind)).toEqual(['refused'])
+  })
+
+  it('skips a measurer nobody named, asking the core nothing', () => {
+    const { core, requests, mismatches } = coreOf('rust', () => ({
+      scene: sceneOf,
+      degradations: [],
+    }))
+    const unnamed = (...args: Parameters<typeof measure>) => measure(...args)
+    const scene = layoutCommentDocument(prose, { measure: unnamed, maxWidth: 260, core })
+    expect(scene).toEqual(commentTs())
+    expect(requests).toEqual([])
+    expect(mismatches).toEqual([{ fn: 'layoutMarkdown', kind: 'skipped', reason: 'measure' }])
   })
 })
