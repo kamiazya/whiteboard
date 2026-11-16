@@ -7,6 +7,14 @@
  * still draws it, as the oracle, so each case sets `rust` for the layout it
  * draws. Where no core is loaded (a run under `ts`) it skips, and a run that
  * asked for one (`CORE_REQUIRED`) fails instead when the core did not load.
+ *
+ * A page whose canvas context throws from `measureText` is the browser's
+ * `host-measure` refusal: the core asks that measurer mid-layout, and the
+ * notice it answers must not be drawn with the measurer that failed. A first
+ * scene is laid out on the main thread, over a `<canvas>` context, so stubbing
+ * that prototype reaches the measurer the editor and the preview really ask.
+ * A NaN answer cannot reach the core this way: canvas-viewer's measurer
+ * clamps every metric to a finite one.
  */
 
 import {
@@ -27,6 +35,32 @@ import { SpatialEditor } from './spatial-editor/SpatialEditor.js'
 import { VersionPreview } from './VersionPreview.js'
 
 afterEach(cleanup)
+
+const measureText = Object.getOwnPropertyDescriptor(
+  CanvasRenderingContext2D.prototype,
+  'measureText',
+)
+afterEach(() => {
+  if (measureText !== undefined) {
+    Object.defineProperty(CanvasRenderingContext2D.prototype, 'measureText', measureText)
+  }
+})
+
+/** Makes every page `<canvas>` context throw from `measureText`; answers how often it was asked. */
+function breakMeasureText(): { readonly asked: number } {
+  const count = { asked: 0 }
+  Object.defineProperty(CanvasRenderingContext2D.prototype, 'measureText', {
+    configurable: true,
+    writable: true,
+    value: () => {
+      count.asked += 1
+      throw new Error('the 2D context is lost')
+    },
+  })
+  return count
+}
+
+const hostFailed = refusalCopy({ code: 'malformed', reason: 'host-measure' })
 
 const loaded: LayoutCore | undefined = await layoutCoreReady()
 const LAYOUT = loaded?.impl.layoutSpatialCanvas ?? 'ts'
@@ -181,6 +215,66 @@ it.skipIf(LAYOUT === 'ts')(
       )
       const pane = () => container.querySelector('[data-testid="markdown-preview-pane"]')
       await expect.poll(() => drawnText(pane())).toContain(bodies.title)
+      expect(pane()?.textContent ?? '').not.toContain('Ship it.')
+    })
+  },
+  60_000,
+)
+
+const SMALL: SpatialCanvas = {
+  nodes: [
+    textNode({ id: 'a', x: 0, y: 0, width: 160, height: 80, text: 'Ship it' }),
+    textNode({ id: 'b', x: 240, y: 0, width: 160, height: 80, text: 'Then tell people' }),
+  ],
+  edges: [],
+}
+
+it.skipIf(LAYOUT === 'ts')(
+  'shows the editor notice clear of its chrome when the page cannot measure text',
+  async () => {
+    await underRust('layoutSpatialCanvas', async () => {
+      const broken = breakMeasureText()
+      const { container } = render(
+        <div style={{ width: 900, height: 560 }}>
+          <SpatialEditor canvas={SMALL} onChange={() => {}} theme="light" />
+        </div>,
+      )
+      const notice = () => container.querySelector('[data-testid="canvas-refusal-notice"]')
+      await expect.poll(() => notice()?.textContent ?? '').toContain(hostFailed.title)
+      expect(notice()?.textContent).toContain(hostFailed.detail)
+      expect(broken.asked).toBeGreaterThan(0)
+      expect(container.querySelector('[data-testid="spatial-editor"]')).not.toBeNull()
+      const box = (notice() as HTMLElement).getBoundingClientRect()
+      expect(box.width * box.height).toBeGreaterThan(0)
+      for (const id of ['shortcuts-button', 'tool-palette', 'minimap']) {
+        const element = container.querySelector(`[data-testid="${id}"]`)
+        expect(element, id).not.toBeNull()
+        expect(intersects(box, (element as HTMLElement).getBoundingClientRect()), id).toBe(false)
+      }
+    })
+  },
+  60_000,
+)
+
+it.skipIf(LAYOUT === 'ts')(
+  'draws the notice in the preview when the page cannot measure text',
+  async () => {
+    await underRust('layoutMarkdown', async () => {
+      const broken = breakMeasureText()
+      const { container } = render(
+        <div style={{ width: 900, height: 900 }}>
+          <MarkdownEditor
+            theme="light"
+            value={'# Plan\n\nShip it.\n'}
+            onChange={() => {}}
+            previewDebounceMs={0}
+            initialViewMode="read"
+          />
+        </div>,
+      )
+      const pane = () => container.querySelector('[data-testid="markdown-preview-pane"]')
+      await expect.poll(() => drawnText(pane())).toContain(hostFailed.title)
+      expect(broken.asked).toBeGreaterThan(0)
       expect(pane()?.textContent ?? '').not.toContain('Ship it.')
     })
   },
