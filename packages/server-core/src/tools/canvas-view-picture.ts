@@ -2,7 +2,8 @@ import {
   type CanvasViewPicture,
   hitBoxesOf,
   loadedReferenceFromWire,
-  referenceSeams,
+  referenceSeamsFromWire,
+  referenceWire,
   renderSceneToSvg,
   resolveCanvasPalette,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -43,7 +44,8 @@ export async function canvasViewPicture(
     ]),
   )
   const scene = composeCanvasScene(canvas, measurer.measure, {
-    ...(graph.size === 0 ? {} : { references: referenceSeams(graph) }),
+    // Through the wire, so the core is handed what the file nodes name as data.
+    ...(graph.size === 0 ? {} : { references: referenceSeamsFromWire(referenceWire(graph)) }),
     threads: result.threads,
     style,
     fontAvailable: fontAvailableOf(measurer),

@@ -5,10 +5,12 @@
 // against.
 
 import {
+  type CanvasLayoutRequest,
   canvasViewPictureSchema,
   hitBoxesOf,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { fromJsonCanvas } from '@kamiazya/whiteboard-codec'
 import {
   writeCommentThread,
@@ -78,6 +80,34 @@ async function view(style?: 'document', facets?: Record<string, unknown>) {
 }
 
 describe('canvas_view picture', () => {
+  test('hands the core what its file nodes name as data, so a board with references is laid out', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store)
+    const asked: CanvasLayoutRequest[] = []
+    const refused = { code: 'input-too-large', reason: 'too-many-elements' } as const
+    const core = fakeLayoutCore({
+      layout: {
+        layoutSpatialCanvas: (request) => {
+          asked.push(request)
+          return { refused }
+        },
+      },
+    })
+    const deps = {
+      ...makeTestDeps({ documentStore: store, documentIndex: store.documentIndex }),
+      layoutCore: async () => core,
+    }
+    const result = await createCanvasViewTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: BOARD_ID,
+    })
+
+    await canvasViewPicture(deps, result)
+
+    expect(asked).toHaveLength(1)
+    expect(JSON.stringify(asked[0])).toContain('Shipped it.')
+  })
+
   test('draws the board with what its file nodes name and its conversation', async () => {
     const { picture } = await view()
 
