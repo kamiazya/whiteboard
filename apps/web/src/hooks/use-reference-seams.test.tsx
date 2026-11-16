@@ -1,11 +1,11 @@
 import {
-  type CoreMismatch,
+  CoreUnaskable,
   constantRatioMeasureText,
-  type LayoutCore,
   layoutMarkdownDocument,
   type MarkdownNoteRequest,
   type ReferenceSeams,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { renderHook, waitFor } from '@testing-library/react'
@@ -17,29 +17,30 @@ import { type ReferenceLoader, useReferenceSeams } from './use-reference-seams.j
 const B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 const C = '01BX5ZZKBKACTAV9WEVGEMMVS0'
 
-/** What the markdown switch hands a core for `body` over `references`, and what it reported. */
+/** What `layoutMarkdownDocument` hands a core for `body` over `references`, or why it could not. */
 function askCore(body: string, references: ReferenceSeams) {
   const asked: MarkdownNoteRequest[] = []
-  const reports: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: { routeLayout: () => ({ routes: [], anchors: new Map() }) as never },
+  const core = fakeLayoutCore({
     markdown: {
       layoutMarkdown: (request) => {
         // A note's layout only: a comment never reaches these surfaces.
         if (request.kind === 'markdown') asked.push(request)
-        return { declined: 'recording' }
+        return { refused: { code: 'malformed', reason: 'recording' } }
       },
     },
-    impl: { routeLayout: 'ts', layoutMarkdown: 'rust' },
-    onMismatch: (report) => reports.push(report),
-  }
-  layoutMarkdownDocument(body, {
-    measure: constantRatioMeasureText,
-    maxWidth: 400,
-    references,
-    core,
   })
-  return { asked, reports }
+  try {
+    layoutMarkdownDocument(body, {
+      measure: constantRatioMeasureText,
+      maxWidth: 400,
+      references,
+      core,
+    })
+  } catch (err) {
+    if (err instanceof CoreUnaskable) return { asked, unaskable: err.reason }
+    throw err
+  }
+  return { asked, unaskable: undefined }
 }
 
 describe('useReferenceSeams', () => {
@@ -298,8 +299,8 @@ describe('useReferenceSeams', () => {
         expect(result.current.resolveEmbed(B)).toBeDefined()
         expect(result.current.resolveReference('asset:pic')).toBeDefined()
       })
-      const { asked, reports } = askCore(body, result.current)
-      expect(reports.filter((r) => r.kind === 'skipped')).toEqual([])
+      const { asked, unaskable } = askCore(body, result.current)
+      expect(unaskable).toBeUndefined()
       expect(asked).toHaveLength(1)
       const wire = asked[0]?.references as {
         entries: readonly (readonly [string, unknown])[]
@@ -316,13 +317,15 @@ describe('useReferenceSeams', () => {
       expect(result.current.resolveTitle(C)).toBe('Other note')
     })
 
-    it('is not a wire while a load is in flight, since a wire cannot say "loading"', () => {
+    it('is a wire while a load is in flight, the target still loading marked pending', () => {
       const load = vi.fn<ReferenceLoader>(() => new Promise(() => undefined))
       const { result } = renderHook(() => useReferenceSeams({ body: `![[${B}]]`, load }))
       expect(result.current.isLoading?.(B)).toBe(true)
-      const { asked, reports } = askCore(`![[${B}]]`, result.current)
-      expect(asked).toEqual([])
-      expect(reports).toEqual([{ fn: 'layoutMarkdown', kind: 'skipped', reason: 'references' }])
+      const { asked, unaskable } = askCore(`![[${B}]]`, result.current)
+      expect(unaskable).toBeUndefined()
+      expect(asked).toHaveLength(1)
+      const wire = asked[0]?.references as { extras: readonly (readonly [string, unknown])[] }
+      expect(wire.extras).toContainEqual([B, { pending: true }])
     })
   })
 })

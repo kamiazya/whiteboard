@@ -107,13 +107,13 @@ export interface ServerDeps {
    */
   textMeasurer?: () => Promise<SceneTextMeasurer>
   /**
-   * The Rust core a canvas layout routes through, and the switch per ported
-   * function (ADR-0054's `CoreImpl`). Optional for the reason `textMeasurer`
-   * is: loading the wasm is a composition root's to do, and absent means
-   * every layout runs in TypeScript. A factory, memoized by the root, so a
-   * server that never renders never loads it.
+   * The Rust core every layout, note and query is answered by (ADR-0054). A
+   * factory, memoized by the root, so a server that never renders never loads
+   * it; a load that fails rejects, since nothing answers in its place. Every
+   * root sets it. Absent, the TypeScript composer lays out instead, which only
+   * a test composition still asks for (S18g; S18h deletes it).
    */
-  layoutCore?: () => Promise<LayoutCore | undefined>
+  layoutCore?: () => Promise<LayoutCore>
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

@@ -15,7 +15,7 @@
  * producer is `layoutCommentBody`, which fixes the metrics a comment is
  * laid out with, so this and the bubble cannot pick different ones; it is
  * reached through `layoutCommentDocument`, which answers it from the Rust
- * core's markdown entry where this realm's core and its switch say so.
+ * core's markdown entry.
  *
  * What that costs, said plainly because it is a real cost and not an
  * oversight: the body is `<text>` elements rather than a paragraph, so it

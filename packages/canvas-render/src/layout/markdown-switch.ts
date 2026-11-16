@@ -2,14 +2,7 @@ import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { highlightCode } from '../highlight/lowlight.js'
-import type {
-  MarkdownBodyRequest,
-  MarkdownCommentRequest,
-  MarkdownLayoutAnswer,
-  MarkdownLayoutCore,
-  MarkdownLayoutSkip,
-  MarkdownNoteRequest,
-} from '../markdown-core.js'
+import type { MarkdownCommentRequest, MarkdownNoteRequest } from '../markdown-core.js'
 import { type MeasureText, measureSpecOf } from '../measure.js'
 import type { ReferenceSeams } from '../references/seams.js'
 import { wireOfSeams } from '../references/wire.js'
@@ -17,22 +10,22 @@ import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
 import { createSpatialTheme, type SpatialThemeMode } from '../theme/spatial-theme.js'
-import { firstDifference, hasData, styleOptions, valueAt } from './canvas-switch.js'
+import { CoreUnaskable, hasData, styleOptions } from './canvas-switch.js'
 import {
   COMMENT_TEXT_MAX_WIDTH_PX,
   type CommentBodyLayoutOptions,
   layoutCommentBody,
 } from './comment-body.js'
-import type { CoreImpl, LayoutCore } from './edges/layout-core.js'
+import type { LayoutCore } from './edges/layout-core.js'
 import type { SpatialRenderStyle } from './layout-options.js'
 import { layoutMdastBlocks } from './markdown-body.js'
 import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from './nodes/fragment-ask.js'
 import type { RenderedSvgFragment } from './nodes/mdast-layout-options.js'
 import { selectMarkdownSection } from './nodes/mdast-section.js'
 
-// A markdown body's switch (ADR-0054 step 7, S18c): which notes and which
-// comments the Rust core's markdown entry can be handed, and who answers one
-// under `ts`, `differential` and `rust`.
+// A markdown body through the Rust core's markdown entry (ADR-0054 step 7,
+// S18c): the request a note or a comment makes, and what a surface is answered
+// with. Handed a core, the core answers; handed none, the TypeScript does.
 
 /**
  * A markdown DOCUMENT laid out as a page: the document theme, the bundled
@@ -61,37 +54,35 @@ export interface MarkdownDocumentOptions {
   readonly onFragmentsAsked?: (asks: readonly FragmentAsk[]) => void
   /** Lay out only the section under this heading (`#Heading`). */
   readonly section?: string
-  /** The Rust core and its switch, as a canvas layout takes it. */
+  /** The Rust core, as a canvas layout takes it; absent, the TypeScript lays the note out. */
   readonly core?: LayoutCore
   /**
-   * Told when the core REFUSED the note under `rust` (`SpatialLayoutOptions`'
+   * Told when the core refused the note (`SpatialLayoutOptions`'
    * `onRefused`); the scene answered is then the refusal, at `maxWidth`.
    */
   readonly onRefused?: (refusal: LayoutRefusal) => void
 }
 
-/** A note's request the core can be handed, or why the options cannot be one. */
-export type MarkdownLayoutAsk = MarkdownNoteRequest | { readonly skip: MarkdownLayoutSkip }
-
 const usesTable = (options: MarkdownDocumentOptions): boolean =>
   options.fragments !== undefined || options.onFragmentsAsked !== undefined
 
 /**
- * `body` and `options` as a request the core answers exactly as the
- * TypeScript would, or the first reason they cannot be one: a measurer
- * nobody named, or a reference bundle not rebuilt from a wire or one whose
- * extras carry content.
+ * `body` and `options` as the request the core answers. Throws `CoreUnaskable`
+ * for a measurer nobody named, or a reference bundle not rebuilt from a wire
+ * or one whose extras carry content.
  */
 export function markdownLayoutRequest(
   body: string,
   options: MarkdownDocumentOptions,
-): MarkdownLayoutAsk {
+): MarkdownNoteRequest {
   const measure = measureSpecOf(options.measure)
-  if (measure === undefined) return { skip: 'measure' }
+  if (measure === undefined) throw new CoreUnaskable('measure')
   const wire = options.references === undefined ? undefined : wireOfSeams(options.references)
-  if (options.references !== undefined && wire === undefined) return { skip: 'references' }
+  if (options.references !== undefined && wire === undefined) {
+    throw new CoreUnaskable('references')
+  }
   if (wire !== undefined && !wire.extras.every(([, extra]) => hasData(extra))) {
-    return { skip: 'reference-content' }
+    throw new CoreUnaskable('reference-content')
   }
   const { tagLibrary, section } = options
   return {
@@ -131,11 +122,7 @@ interface TsNote {
   readonly asked?: readonly FragmentAsk[]
 }
 
-function layoutTs(
-  body: string,
-  options: MarkdownDocumentOptions,
-  core: LayoutCore | undefined,
-): TsNote {
+function layoutTs(body: string, options: MarkdownDocumentOptions): TsNote {
   const { references, section, style, fontAvailable, tagLibrary } = options
   const whole = resolveReferences(parseMarkdownBody(body), references?.resolveAlias)
   const root = section === undefined ? whole : selectMarkdownSection(whole, section)
@@ -151,7 +138,6 @@ function layoutTs(
     ...(fontAvailable === undefined ? {} : { fontAvailable }),
     ...(tagLibrary === undefined ? {} : { tagLibrary }),
     ...(references === undefined ? {} : { references }),
-    ...(core === undefined ? {} : { core }),
     ...table?.seams,
   })
   return table === undefined ? { scene } : { scene, asked: table.asked() }
@@ -164,125 +150,37 @@ function answered(laid: TsNote, options: MarkdownDocumentOptions): Scene | undef
 }
 
 /**
- * A markdown DOCUMENT laid out as `options.core` says, or `undefined` for a
- * `section` it holds no heading for: by the TypeScript (`layoutMdastBlocks`
- * over the parsed, resolved body) when no core or no markdown core is given,
- * its switch reads `ts`, or the request is one the core cannot be handed;
- * under `rust` by the core's markdown entry; under `differential` by the
- * TypeScript with the core run beside it and any difference in the scene or
- * the fragments asked reported. What the gate skips and what the core
- * declines (each reported by class), and a core that throws (reported), the
- * TypeScript answers, handed the core for a board the note embeds as before.
+ * A markdown DOCUMENT laid out by `options.core`'s markdown entry, or by the
+ * TypeScript (`layoutMdastBlocks` over the parsed, resolved body) when it is
+ * handed none; `undefined` for a `section` it holds no heading for. What the
+ * core refused is drawn as the refusal at `maxWidth` and told to
+ * `onRefused`; a core that throws throws to the caller.
  *
- * Degradations are not reported: the TypeScript reports none for a note, so
- * a core's are not compared and not forwarded.
+ * Degradations are not reported: a note reports none.
  */
 export function layoutMarkdownDocument(
   body: string,
   options: MarkdownDocumentOptions,
 ): Scene | undefined {
   const core = options.core
-  const impl = core?.impl.layoutMarkdown ?? 'ts'
-  const fallback = () => answered(layoutTs(body, options, core), options)
-  if (core?.markdown === undefined || impl === 'ts') return fallback()
-  return throughCore(core, core.markdown, impl, markdownLayoutRequest(body, options), {
-    measure: options.measure,
-    fallback,
-    // The TypeScript beside the core is the TypeScript alone: an embedded
-    // board handed the core would report its own gate's skips into the count.
-    beside: () => layoutTs(body, options, undefined),
-    answered: (laid) => answered(laid, options),
-    refused: (refusal) => {
-      options.onRefused?.(refusal)
-      const mode = options.mode ?? 'light'
-      return refusalScene(refusal, { measure: options.measure, mode, maxWidth: options.maxWidth })
-    },
-  })
-}
-
-/** How one body is answered where the core does not answer it, and how a laid-out body reaches its caller. */
-interface Answering {
-  readonly measure: MeasureText
-  /** The TypeScript's answer, handed the core for whatever it lays out in turn. */
-  readonly fallback: () => Scene | undefined
-  /** The TypeScript's layout to compare the core's with, handed no core. */
-  readonly beside: () => TsNote
-  readonly answered: (laid: TsNote) => Scene | undefined
-  /** What a body the core refused is drawn as, under `rust`. */
-  readonly refused: (refusal: LayoutRefusal) => Scene
-}
-
-/** The core's laid-out answer in the TypeScript's shape: its scene, or none for a missing section, and what it asked. */
-function noteOf(
-  answer: Exclude<
-    MarkdownLayoutAnswer,
-    { readonly declined: string } | { readonly refused: unknown }
-  >,
-): TsNote {
-  if ('missing' in answer) return { scene: undefined }
-  const { scene, fragmentsAsked } = answer
-  return fragmentsAsked === undefined ? { scene } : { scene, asked: fragmentsAsked }
-}
-
-/**
- * A body whose switch reads `differential` or `rust`, as the core answers it.
- * What the gate skips (reported by class), what the core declines (reported
- * by class) or throws on, and a `missing` answer to a comment, which asks for
- * no section (each reported as refused), the TypeScript answers. What the
- * core refuses is counted as a decline by its class too, and drawn as the
- * refusal under `rust`; under `differential` the TypeScript answers it. Under
- * `rust` the core's answer is the caller's; under `differential` the
- * TypeScript's is, with the first difference in the scene or the fragments
- * asked reported.
- */
-function throughCore(
-  core: LayoutCore,
-  markdown: MarkdownLayoutCore,
-  impl: Exclude<CoreImpl, 'ts'>,
-  request: MarkdownBodyRequest | { readonly skip: MarkdownLayoutSkip },
-  answering: Answering,
-): Scene | undefined {
-  if ('skip' in request) {
-    core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'skipped', reason: request.skip })
-    return answering.fallback()
-  }
-  let answer: MarkdownLayoutAnswer
-  try {
-    answer = markdown.layoutMarkdown(request, highlightCode, answering.measure)
-  } catch (err) {
-    core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'refused', err, repro: request })
-    return answering.fallback()
-  }
-  if ('declined' in answer) {
-    core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'declined', reason: answer.declined })
-    return answering.fallback()
-  }
+  if (core === undefined) return answered(layoutTs(body, options), options)
+  const answer = core.markdown.layoutMarkdown(
+    markdownLayoutRequest(body, options),
+    highlightCode,
+    options.measure,
+  )
   if ('refused' in answer) {
-    core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'declined', reason: answer.refused.reason })
-    return impl === 'rust' ? answering.refused(answer.refused) : answering.fallback()
+    const refusal = answer.refused
+    options.onRefused?.(refusal)
+    const mode = options.mode ?? 'light'
+    return refusalScene(refusal, { measure: options.measure, mode, maxWidth: options.maxWidth })
   }
-  if ('missing' in answer && request.kind === 'comment') {
-    const err = new Error('the core answered a comment as a note missing its section')
-    core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'refused', err, repro: request })
-    return answering.fallback()
-  }
-  const rust = noteOf(answer)
-  if (impl === 'rust') return answering.answered(rust)
-  const ts = answering.beside()
-  const comparable = (note: TsNote) => ({ scene: note.scene ?? 'missing', asked: note.asked ?? [] })
-  const [tsValue, rustValue] = [comparable(ts), comparable(rust)]
-  const at = firstDifference(tsValue, rustValue)
-  if (at !== undefined) {
-    core.onMismatch?.({
-      fn: 'layoutMarkdown',
-      kind: 'differs',
-      at,
-      ts: valueAt(tsValue, at),
-      rust: valueAt(rustValue, at),
-      repro: request,
-    })
-  }
-  return answering.answered(ts)
+  if ('missing' in answer) return undefined
+  const { scene, fragmentsAsked } = answer
+  return answered(
+    fragmentsAsked === undefined ? { scene } : { scene, asked: fragmentsAsked },
+    options,
+  )
 }
 
 /**
@@ -295,17 +193,17 @@ export interface CommentDocumentOptions {
   /** Defaults to `COMMENT_TEXT_MAX_WIDTH_PX`. */
   readonly maxWidth?: number
   readonly density?: NonNullable<CommentBodyLayoutOptions['density']>
-  /** The Rust core and its switch; a comment rides the note's (`impl.layoutMarkdown`). */
+  /** The Rust core, whose markdown entry lays a comment out as a note's; absent, the TypeScript does. */
   readonly core?: LayoutCore
 }
 
-/** `body` and `options` as the comment request the core answers as `layoutCommentBody` would, or why not. */
+/** `body` and `options` as the comment request the core answers as `layoutCommentBody` would. */
 function commentLayoutRequest(
   body: string,
   options: CommentDocumentOptions,
-): MarkdownCommentRequest | { readonly skip: MarkdownLayoutSkip } {
+): MarkdownCommentRequest {
   const measure = measureSpecOf(options.measure)
-  if (measure === undefined) return { skip: 'measure' }
+  if (measure === undefined) throw new CoreUnaskable('measure')
   return {
     kind: 'comment',
     body,
@@ -316,35 +214,34 @@ function commentLayoutRequest(
 }
 
 /**
- * A comment's prose laid out as `options.core` says: by `layoutCommentBody`
- * when no core or no markdown core is given or its switch reads `ts`, and
- * otherwise through the core's markdown entry under the note's switch,
- * exactly as `layoutMarkdownDocument` answers a note. A comment asks for no
- * fragments and embeds nothing, so only its scene is compared.
+ * A comment's prose laid out by `options.core`'s markdown entry, exactly as
+ * `layoutMarkdownDocument` answers a note, or by `layoutCommentBody` when it
+ * is handed none. What the core refused is drawn as the refusal.
  */
 export function layoutCommentDocument(body: string, options: CommentDocumentOptions): Scene {
-  const ts = (): Scene =>
-    layoutCommentBody(body, {
+  const core = options.core
+  if (core === undefined) {
+    return layoutCommentBody(body, {
       measure: options.measure,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
       ...(options.maxWidth === undefined ? {} : { maxWidth: options.maxWidth }),
       ...(options.density === undefined ? {} : { density: options.density }),
     })
-  const core = options.core
-  const impl = core?.impl.layoutMarkdown ?? 'ts'
-  if (core?.markdown === undefined || impl === 'ts') return ts()
-  const scene = throughCore(core, core.markdown, impl, commentLayoutRequest(body, options), {
-    measure: options.measure,
-    fallback: ts,
-    beside: () => ({ scene: ts() }),
-    answered: (laid) => laid.scene,
-    refused: (refusal) =>
-      refusalScene(refusal, {
-        measure: options.measure,
-        mode: 'light',
-        maxWidth: options.maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
-      }),
-  })
-  // Never undefined: a `missing` answer to a comment is refused above.
-  return scene ?? ts()
+  }
+  const answer = core.markdown.layoutMarkdown(
+    commentLayoutRequest(body, options),
+    highlightCode,
+    options.measure,
+  )
+  if ('refused' in answer) {
+    return refusalScene(answer.refused, {
+      measure: options.measure,
+      mode: 'light',
+      maxWidth: options.maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
+    })
+  }
+  if ('missing' in answer) {
+    throw new Error('the core answered a comment as a note missing its section')
+  }
+  return answer.scene
 }

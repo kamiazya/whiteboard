@@ -62,7 +62,6 @@ import { namesAReference } from './names-a-reference.js'
 import { startLayoutCore } from './page-layout-core.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
-import { layoutCoreReady } from './spatial/layout-core.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
 
 const measure = createBrowserMeasureText()
@@ -76,13 +75,11 @@ const contentCacheFor = createContentCacheStore()
 // fallback metrics, which is exactly the divergence this worker must not
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
-// The Rust routing core, loaded in this realm like the measurer's face: a
-// layout waits for it (`measurable`) so the worker never routes a request in
-// TypeScript that the page would have sent through the core. A load that
-// fails under `throw` rejects here and again for each request, which fails it.
-startLayoutCore()
-const coreReady = layoutCoreReady()
-coreReady.catch(() => undefined)
+// The Rust core, loaded in this realm like the measurer's face: a layout
+// waits for it (`measurable`), since there is no TypeScript to answer in its
+// place. A load that fails is logged once, and each request's layout throws
+// it again, which fails that request.
+const coreReady = startLayoutCore()
 /** Every theme face posted so far, settled — what a layout waits on before it measures. */
 let facesReady: Promise<unknown> = Promise.resolve()
 

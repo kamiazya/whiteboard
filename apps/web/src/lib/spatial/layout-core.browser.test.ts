@@ -1,12 +1,11 @@
-// The Rust routing core, loaded for real in a browser (ADR-0054 step 5):
-// the staged wasm fetched from where the bundler serves it, and a board laid
-// out beside the TypeScript with every difference thrown. The jsdom suites
-// pin the switch against a fake core; only here does the artifact itself run.
+// The Rust core, loaded for real in a browser (ADR-0054): the staged wasm
+// fetched from where the bundler serves it, and a board laid out through it
+// as the TypeScript composer lays it out. The jsdom suites pin the host
+// against a fake core; only here does the artifact itself run.
 //
-// The artifact is built in the pipeline, never committed. Where the run asks
-// for a core (`CORE_REQUIRED`: `differential` or `rust`) a missing artifact
-// FAILS these tests; elsewhere, `ts` included, it skips and says so, because a person without the Rust toolchain has no
-// artifact to load.
+// The artifact is built in the pipeline, never committed, and every browser
+// run needs it: a missing artifact FAILS the first test here, and the rest
+// skip, saying so.
 
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -22,7 +21,6 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { codecsReady } from '../codec-cores.js'
 import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js'
 import { startLayoutCore } from '../page-layout-core.js'
@@ -39,8 +37,6 @@ async function loadRealCore() {
   }
 }
 const real = await loadRealCore()
-
-const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
 
 const board = (routing: 'orthogonal' | 'curved' | 'straight'): SpatialCanvas =>
   ({
@@ -62,41 +58,37 @@ const board = (routing: 'orthogonal' | 'curved' | 'straight'): SpatialCanvas =>
   }) as SpatialCanvas
 
 describe('the real Rust core in a browser', () => {
-  it.runIf(CORE_REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
+  it('finds the staged artifact where the pipeline promised it', () => {
     if ('failure' in real) throw real.failure
   })
 
-  it.skipIf('failure' in real)(
-    'lays boards out beside the TypeScript with no difference, thrown or otherwise',
-    async () => {
-      if ('failure' in real) return
-      const { routing } = real
-      let calls = 0
-      const host = createLayoutCoreHost(
-        { impl: 'differential', layout: 'ts', mismatch: 'throw' },
-        async () => ({
-          ...routing,
-          routeLayout: (...args) => {
-            calls += 1
-            return routing.routeLayout(...args)
-          },
-        }),
-        silent(),
-      )
-      const core = await host.ready()
-      expect(core).toBeDefined()
-      for (const style of ['orthogonal', 'curved', 'straight'] as const) {
-        const scene = layoutSpatialCanvas(board(style), {
-          measure: constantRatioMeasureText,
-          appearance: createEditorAppearance('light'),
-          core,
-        })
-        expect(scene.nodes.length).toBeGreaterThan(0)
+  it.skipIf('failure' in real)('lays boards out as the TypeScript composer does', async () => {
+    if ('failure' in real) return
+    const { routing } = real
+    let calls = 0
+    const host = createLayoutCoreHost(async () => routing)
+    const core = await host.ready()
+    const counted = {
+      ...core,
+      layout: {
+        layoutSpatialCanvas: (...args: Parameters<typeof routing.layoutSpatialCanvas>) => {
+          calls += 1
+          return routing.layoutSpatialCanvas(...args)
+        },
+      },
+    }
+    for (const style of ['orthogonal', 'curved', 'straight'] as const) {
+      const options = {
+        measure: constantRatioMeasureText,
+        appearance: createEditorAppearance('light'),
       }
-      // The core was consulted for every board, so "no difference" compared something.
-      expect(calls).toBe(3)
-    },
-  )
+      const scene = layoutSpatialCanvas(board(style), { ...options, core: counted })
+      expect(scene.nodes.length).toBeGreaterThan(0)
+      expect(scene, style).toEqual(layoutSpatialCanvas(board(style), options))
+    }
+    // The core was asked for every board, so the comparison compared its answers.
+    expect(calls).toBe(3)
+  })
 })
 
 describe('the real Rust core reading and writing OKF in a browser', () => {
@@ -163,9 +155,9 @@ describe('the real Rust core reading and writing JSON Canvas in a browser', () =
   })
 })
 
-describe.runIf(CORE_REQUIRED)('the page core', () => {
+describe('the page core', () => {
   it('loads although the page has since replaced fetch, which knows nothing of the wasm', async () => {
-    startLayoutCore()
+    void startLayoutCore()
     vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }))
     try {
       expect(await layoutCoreReady()).toBeDefined()
@@ -175,8 +167,8 @@ describe.runIf(CORE_REQUIRED)('the page core', () => {
   })
 })
 
-describe.skipIf(!CORE_REQUIRED)('the layout worker with the core on', () => {
-  it('lays a board out through its own loaded core without a mismatch', async () => {
+describe('the layout worker', () => {
+  it('lays a board out through its own loaded core', async () => {
     const request: LayoutRequest = {
       type: 'layout',
       id: 1,
@@ -198,8 +190,8 @@ describe.skipIf(!CORE_REQUIRED)('the layout worker with the core on', () => {
       }
       worker.postMessage(request)
     })
-    // A core that failed to load, or a difference, under VITE_WHITEBOARD_CORE_MISMATCH=throw
-    // fails the request; `laid-out` is the core having been compared and found equal.
+    // A core that failed to load fails the request: there is no TypeScript to
+    // answer in its place, so `laid-out` is the core having answered.
     expect(reply.type).toBe('laid-out')
   }, 60_000)
 })

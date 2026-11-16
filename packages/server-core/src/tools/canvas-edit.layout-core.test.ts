@@ -3,6 +3,7 @@ import {
   type LayoutCore,
   type QueryRequest,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { loadDocument } from '../document-io.js'
@@ -20,20 +21,14 @@ describe('wb_canvas_edit sizing through the layout core', () => {
   function withCore() {
     const asked: QueryRequest[] = []
     let loads = 0
-    const core: LayoutCore = {
-      routing: {
-        routeLayout: () => {
-          throw new Error('routing is not asked')
-        },
-      },
+    const core: LayoutCore = fakeLayoutCore({
       query: {
         layoutQuery: (request) => {
           asked.push(request)
           return { numbers: [[123]] }
         },
       },
-      impl: { routeLayout: 'ts', layoutQuery: 'rust' },
-    }
+    })
     const store = new FakeDocumentStore()
     const deps = {
       ...makeDeps(store),

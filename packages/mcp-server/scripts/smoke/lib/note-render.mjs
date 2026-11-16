@@ -3,9 +3,7 @@
  * note embedding a board, rendered whole with its references (the board's
  * box drawn inside the note), by one heading's section (the prose before it
  * left out), and refused by name for a heading the note does not hold. The
- * layout is the core's markdown entry under `WHITEBOARD_CORE_LAYOUT`, so
- * running the smoke with it at `differential` and mismatches thrown compares
- * every one of these with the TypeScript.
+ * layout is the core's markdown entry.
  */
 export async function noteRenderDrawsItsBoardAndSection({
   callTool,

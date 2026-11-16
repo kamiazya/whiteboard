@@ -59,11 +59,8 @@ function createFirstDocument(
 }
 
 /**
- * Draws one routed edge through `wb_scene_render`. Under
- * `WHITEBOARD_CORE=differential` with `WHITEBOARD_CORE_MISMATCH=throw` (what
- * the tarball smoke sets) this is the call that loads the Rust core, so an
- * install whose artifact is missing or unloadable fails here instead of
- * quietly routing in TypeScript.
+ * Draws one routed edge through `wb_scene_render`: the Rust core lays it out,
+ * so an install whose artifact is missing or unloadable fails here.
  */
 async function renderRoutedEdge(
   callTool: (name: string, args: unknown) => Promise<Record<string, unknown>>,

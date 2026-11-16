@@ -3,7 +3,7 @@ import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wa
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { CoreImpl, CoreMismatch, LayoutCore } from '../layout/edges/layout-core.js'
+import type { LayoutCore } from '../layout/edges/layout-core.js'
 import { fittedTextNodeHeight } from '../layout/fitted-height.js'
 import {
   queryCommentBubble,
@@ -13,6 +13,7 @@ import {
 } from '../layout/queries.js'
 import { layoutSpatialEdges, naturalNodeContentSize } from '../layout/spatial-canvas.js'
 import { hex } from '../test-utils/compose-canvas-oracle/oracle.js'
+import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { editorOptions } from '../test-utils/query-oracle/boards.js'
 import type { EdgesRecord } from '../test-utils/query-oracle/edges.js'
@@ -24,12 +25,11 @@ import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 
 /**
- * S18a's query recordings through canvas-render's query switch over the REAL
- * core, as the editors, the drag layers and `wb_canvas_edit` ask: under
- * `differential` every query the core answers is compared with the TypeScript
- * and none may differ; under `rust` the core's answer is what the caller gets,
- * and it is the recorded one. Only the bodies past the parser's bounds may be
- * declined, and nothing is skipped: every caller hands its arguments as data.
+ * S18a's query recordings through canvas-render's queries over the REAL core,
+ * as the editors, the drag layers and `wb_canvas_edit` ask: the core's answer
+ * is what the caller gets, and it is the recorded one, but for the bodies past
+ * the parser's bounds, which it sizes as their literal text (owner decision
+ * q81, D7a) and which must differ. Every caller hands its arguments as data.
  */
 const DIR = new URL('./', import.meta.url)
 
@@ -50,10 +50,10 @@ const box = ([x, y, w, h]: readonly string[]): BoundingBox => ({
 })
 const boxHex = (b: BoundingBox) => [hex(b.x), hex(b.y), hex(b.w), hex(b.h)]
 
-/** The bodies the parser refuses: the core declines a node holding one, and the TypeScript sizes it. */
-const DECLINED = ['quote 33 deep', 'list 39 deep', 'list 40 deep']
+/** The bodies the parser refuses: the core sizes a node holding one as the literal text it draws. */
+const TOLERATED = ['quote 33 deep', 'list 39 deep', 'list 40 deep']
 
-describe.runIf(built)('the recorded queries through the query switch', () => {
+describe.runIf(built)('the recorded queries through the core', () => {
   // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
   // factory to collect it, so a core made here fails the file where there is
   // no artifact instead of skipping it.
@@ -62,31 +62,25 @@ describe.runIf(built)('the recorded queries through the query switch', () => {
     real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
   })
 
-  /** A core under `impl`, and what it reported. */
-  const coreOf = (impl: CoreImpl) => {
-    const reports: CoreMismatch[] = []
-    const core: LayoutCore = {
-      routing: real,
-      query: real,
-      impl: { routeLayout: 'ts', layoutQuery: impl },
-      onMismatch: (report) => reports.push(report),
-    }
-    return { core, reports }
+  /** `ask` of the real core's query entry, and whether the core refused it. */
+  function through<T>(ask: (core: LayoutCore) => T) {
+    let refused: string | undefined
+    const core = fakeLayoutCore({
+      query: {
+        layoutQuery(...args) {
+          const answer = real.layoutQuery(...args)
+          refused = 'refused' in answer ? answer.refused.reason : undefined
+          return answer
+        },
+      },
+    })
+    return { rust: ask(core), refused }
   }
 
-  /** Runs `ask` under both answering settings, and holds the reports to `declined` alone. */
-  function both<T>(ask: (core: LayoutCore) => T, declined = false) {
-    const out: Record<'differential' | 'rust', T> = {} as never
-    for (const impl of ['differential', 'rust'] as const) {
-      const { core, reports } = coreOf(impl)
-      out[impl] = ask(core)
-      const tallies = reports.map((r) =>
-        r.kind === 'declined' || r.kind === 'skipped'
-          ? `${r.fn} ${r.kind}:${r.reason}`
-          : `${r.fn} ${r.kind}`,
-      )
-      expect(tallies).toEqual(declined ? ['layoutQuery declined:body'] : [])
-    }
+  /** `ask` of the real core, which must answer it. */
+  function both<T>(ask: (core: LayoutCore) => T) {
+    const out = through(ask)
+    expect(out.refused).toBeUndefined()
     return out
   }
 
@@ -109,10 +103,10 @@ describe.runIf(built)('the recorded queries through the query switch', () => {
   it('sizes every recorded node as recorded', { timeout: 120_000 }, () => {
     const all = records<NodeSizeRecord>('node-size')
     expect(all.length).toBe(236)
-    let declined = 0
+    let tolerated = 0
     for (const record of all) {
-      const refused = DECLINED.some((name) => record.id.includes(`/${name}@`))
-      if (refused) declined += 1
+      const literal = TOLERATED.some((name) => record.id.includes(`/${name}@`))
+      if (literal) tolerated += 1
       const measure = createFakeMeasure()
       const appearance = createSpatialTheme({ mode: record.mode })
       const ask = (core: LayoutCore): readonly number[] => {
@@ -132,10 +126,15 @@ describe.runIf(built)('the recorded queries through the query switch', () => {
         })
         return [w, h]
       }
-      const { rust } = both(ask, refused)
-      expect(rust.map(hex), record.id).toEqual(record.answer)
+      const { rust, refused } = through(ask)
+      expect(refused, record.id).toBeUndefined()
+      if (literal) {
+        expect(rust.map(hex), record.id).not.toEqual(record.answer)
+      } else {
+        expect(rust.map(hex), record.id).toEqual(record.answer)
+      }
     }
-    expect(declined).toBe(24)
+    expect(tolerated).toBe(24)
   })
 
   it('places every recorded label, and finds every recorded obstacle', { timeout: 120_000 }, () => {

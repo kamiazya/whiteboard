@@ -15,7 +15,7 @@
 //   - actions/cache keys an entry by its path list too, so a PR job restoring
 //     the nightly corpus under a different list restores nothing, silently.
 
-import { readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { parse as parseYaml } from 'yaml'
@@ -248,7 +248,7 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(at).toBeLessThan(run)
   })
 
-  it('is what test-unit restores before any of its projects runs, and before mcp-node runs in differential', () => {
+  it('is what test-unit restores before any of its projects runs, mcp-node included', () => {
     const unit = stepsOf(ci, 'test-unit')
     const at = unit.findIndex((s) => s.uses === './.github/actions/core-wasm')
     const test = unit.findIndex((s) => s.run?.includes('--project=mcp-node'))
@@ -259,14 +259,9 @@ describe('the core-wasm action builds what the rust job builds', () => {
     // Every project installs the core OKF is answered through, so the restore
     // may not wait on the scope naming mcp-node alone.
     expect(unit[at]?.if).toBe("steps.scope.outputs.run == 'true'")
-    expect(unit[test]?.env).toEqual({
-      WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_LAYOUT: 'differential',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
   })
 
-  it('is what test-browser restores before the browser projects run in differential', () => {
+  it('is what test-browser restores before the browser projects run', () => {
     const browser = stepsOf(ci, 'test-browser')
     const at = browser.findIndex((s) => s.uses === './.github/actions/core-wasm')
     const test = browser.findIndex((s) => s.run?.includes('run test-browser'))
@@ -275,28 +270,17 @@ describe('the core-wasm action builds what the rust job builds', () => {
     // Restored when the browser projects run at all, never only when a
     // narrower scope happens to name the web app.
     expect(browser[at]?.if).toBe("steps.scope.outputs.run == 'true'")
-    expect(browser[test]?.env).toMatchObject({
-      VITE_WHITEBOARD_CORE: 'differential',
-      VITE_WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
   })
 
-  it('is restored for every stress leg, with routing on for the browser leg alone', () => {
+  it('is restored for every stress leg', () => {
     const stress = stepsOf(ci, 'stress-changed-tests')
     const restore = stress.find((s) => s.uses === './.github/actions/core-wasm')
     expect(restore?.if).toBe("steps.changed.outputs.files != ''")
     const runs = stress.filter((s) => s.run?.includes('pnpm exec vitest run'))
     expect(runs).toHaveLength(2)
     for (const run of runs) {
-      // The whole expression: the browser leg compares and fails, the node leg is unset.
-      expect(run.env?.VITE_WHITEBOARD_CORE).toMatch(
-        /^\$\{\{ matrix\.leg == 'browser' && 'differential' \|\| '' \}\}$/,
-      )
-      expect(run.env).toMatchObject({ VITE_WHITEBOARD_CORE_MISMATCH: 'throw' })
-      // OKF and JSON Canvas have no switch left to set: the realms that run them install the core.
-      expect(Object.keys(run.env ?? {}).filter((name) => /CORE_(OKF|SPATIAL)/.test(name))).toEqual(
-        [],
-      )
+      // No switch is left to set: the realms that run a layout install the core.
+      expect(Object.keys(run.env ?? {}).filter((name) => /WHITEBOARD_CORE/.test(name))).toEqual([])
     }
   })
 
@@ -307,9 +291,6 @@ describe('the core-wasm action builds what the rust job builds', () => {
     expect(at).toBeGreaterThanOrEqual(0)
     expect(at).toBeLessThan(test)
     expect(shared[at]?.if).toBe("steps.scope.outputs.run == 'true'")
-    expect(shared[test]?.env).toMatchObject({
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
   })
 
   it('is what test-jsdom restores before the web pages run, loaded by the Node process that hosts them', () => {
@@ -348,6 +329,36 @@ describe('the core-wasm action builds what the rust job builds', () => {
       (s) => s.uses === './.github/actions/core-wasm',
     )
     expect(restore?.with?.['use-cache']).toBe('false')
+  })
+})
+
+/**
+ * The layout switches ADR-0054 step 7 retired (S18g), by every spelling a
+ * workflow could set: the daemon's and the web build's. Nothing reads them,
+ * so setting one would read as a choice and change nothing.
+ */
+const RETIRED_CORE_SWITCH =
+  /\b(?:VITE_)?WHITEBOARD_CORE(?:_LAYOUT|_MISMATCH|_OKF|_SPATIAL|_FACETS)?\b(?!_)/g
+
+describe('no workflow sets a retired core switch', () => {
+  const workflows = readdirSync(join(REPO_ROOT, '.github/workflows')).filter((f) =>
+    /\.ya?ml$/.test(f),
+  )
+
+  it('reads the workflows', () => {
+    expect(workflows).toContain('ci.yml')
+  })
+
+  it.each(workflows)('%s names none', (file) => {
+    expect(read(`.github/workflows/${file}`).match(RETIRED_CORE_SWITCH) ?? []).toEqual([])
+  })
+
+  it('matches every retired spelling and leaves WHITEBOARD_CORE_DIR alone', () => {
+    const named = 'WHITEBOARD_CORE: x\nVITE_WHITEBOARD_CORE_LAYOUT: x\nWHITEBOARD_CORE_DIR: /d'
+    expect(named.match(RETIRED_CORE_SWITCH)).toEqual([
+      'WHITEBOARD_CORE',
+      'VITE_WHITEBOARD_CORE_LAYOUT',
+    ])
   })
 })
 
@@ -420,12 +431,11 @@ describe('verify and packaged-smoke build over the same artifact a release ships
   it.each([
     ['verify', 'pnpm smoke:packaged'],
     ['packaged-smoke', 'pnpm smoke:distribution:packaged:node'],
-  ])('%s runs its packaged smoke in differential, throwing on a load failure', (id, command) => {
+  ])('%s runs its packaged smoke over the core the dist carries', (id, command) => {
     const smoke = stepsOf(ci, id).find((s) => s.run?.trim() === command)
-    expect(smoke?.env).toEqual({
-      WHITEBOARD_CORE: 'differential',
-      WHITEBOARD_CORE_MISMATCH: 'throw',
-    })
+    expect(smoke).toBeDefined()
+    // No setting points the daemon elsewhere: the packaged artifact answers.
+    expect(smoke?.env?.WHITEBOARD_CORE_DIR).toBeUndefined()
   })
 })
 

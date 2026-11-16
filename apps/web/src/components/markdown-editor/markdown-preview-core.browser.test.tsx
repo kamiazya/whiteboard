@@ -2,23 +2,17 @@
  * The note preview reaches the Rust core (ADR-0054 step 7, S18c): the Read
  * pane the markdown editor draws — its measurer, its document style, its app
  * theme, its reference bundle, its math fragments, a board embedded in it —
- * is a note the markdown switch hands the core, never one it skips; and so
- * are the rail's outline and a row's picture, which the layout worker lays
- * out through the same `render-preview.ts` calls this page makes; and so is
- * a comment's prose, in the card and in the rail.
- *
- * The switch reports a layout the core did not answer at debug, by class;
- * this counts them and requires none, with the core asked for every note.
- * Under the CI browser job's `differential` + `throw` a difference fails the
- * layout. Where no core is loaded (a run under `ts`) it skips, and a run that
- * asked for one (`differential` or `rust`, `CORE_REQUIRED`) fails instead
- * when the core did not load.
+ * is a note the core's markdown entry is handed; and so are the rail's
+ * outline and a row's picture, which the layout worker lays out through the
+ * same `render-preview.ts` calls this page makes; and so is a comment's
+ * prose, in the card and in the rail. An option no request carries would
+ * throw and fail the render, and the core is asked for every note.
  */
 
 import {
-  type CoreImpl,
   fragmentAskKey,
   type LayoutCore,
+  layoutMarkdownDocument,
   type MarkdownLayoutCore,
   referenceSeamsFromWire,
   referenceWire,
@@ -28,7 +22,6 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { layoutMarkdownOutline, renderMarkdownPreview } from '../../lib/render-preview.js'
 import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
-import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { CommentBody } from '../annotations/CommentBody.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -36,9 +29,8 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 afterEach(cleanup)
 
 const loaded: LayoutCore | undefined = await layoutCoreReady()
-const MARKDOWN = loaded?.impl.layoutMarkdown ?? 'ts'
 
-it.runIf(CORE_REQUIRED)('loads the core the pipeline asked for before a note is laid out', () => {
+it('loads the core before a note is laid out', () => {
   expect(loaded).toBeDefined()
 })
 
@@ -74,130 +66,86 @@ const references = () =>
     ),
   )
 
-/** What the switch reports at debug from now until restored: one `kind:reason` per note the core did not answer. */
-function unanswered(): { readonly classes: string[]; readonly restore: () => void } {
-  const classes: string[] = []
-  const spy = vi.spyOn(console, 'debug').mockImplementation((...args: unknown[]) => {
-    const [message, report] = args as [string, { kind?: string; reason?: string } | undefined]
-    if (typeof message === 'string' && message.includes('did not answer this layout')) {
-      classes.push(`${report?.kind}:${report?.reason}`)
-    }
-  })
-  return { classes, restore: () => spy.mockRestore() }
-}
-
 /** Counts the notes the loaded core is asked for. */
 function asked(core: LayoutCore): { count: () => number; restore: () => void } {
   const spy = vi.spyOn(core.markdown as MarkdownLayoutCore, 'layoutMarkdown')
   return { count: () => spy.mock.calls.length, restore: () => spy.mockRestore() }
 }
 
-it.skipIf(MARKDOWN === 'ts')(
-  'hands the core the Read preview, the rail and a row picture',
-  async () => {
-    const core = loaded as LayoutCore
-    expect(board).toBeDefined()
-    for (const theme of ['light', 'dark'] as const) {
-      const reports = unanswered()
-      const calls = asked(core)
-      try {
-        const { container } = render(
-          <div style={{ width: 900, height: 900 }}>
-            <MarkdownEditor
-              theme={theme}
-              value={NOTE}
-              onChange={() => {}}
-              previewDebounceMs={0}
-              initialViewMode="read"
-              references={references()}
-            />
-          </div>,
-        )
-        const pane = () => container.querySelector('[data-testid="markdown-preview-pane"]')
-        await expect.poll(() => pane()?.textContent ?? '').toContain('Release plan')
-        // The fragment lands, and the layout that draws it is the core's too.
-        await expect
-          .poll(() => pane()?.querySelector('[data-mml-node="math"]') !== null, {
-            timeout: 20_000,
-          })
-          .toBe(true)
-        const measure = createBrowserMeasureText()
-        layoutMarkdownOutline(NOTE, { measure, maxWidth: 320 })
-        renderMarkdownPreview(NOTE, { measure, maxWidth: 480, theme, references: references() })
-        expect({ classes: reports.classes, asked: calls.count() >= 3 }, theme).toEqual({
-          classes: [],
-          asked: true,
-        })
-      } finally {
-        calls.restore()
-        reports.restore()
-        cleanup()
-      }
-    }
-  },
-  60_000,
-)
-
-it.skipIf(MARKDOWN === 'ts')(
-  'draws the preview byte for byte as the TypeScript does',
-  () => {
-    const core = loaded as LayoutCore
-    const impl = core.impl as { layoutMarkdown?: CoreImpl }
-    const before = impl.layoutMarkdown
-    const measure = createBrowserMeasureText()
-    const fragments = {
-      fragments: [
-        [fragmentAskKey({ kind: 'math', value: 'x^2' }), { svg: '<g/>', height: 40 }],
-      ] as const,
-      onFragmentsAsked: () => {},
-    }
-    const draw = (as: CoreImpl, theme: 'light' | 'dark') => {
-      impl.layoutMarkdown = as
-      try {
-        return renderMarkdownPreview(NOTE, {
-          measure,
-          maxWidth: 640,
-          theme,
-          references: references(),
-          fragments,
-        }).keyed.svg
-      } finally {
-        impl.layoutMarkdown = before
-      }
-    }
-    for (const theme of ['light', 'dark'] as const) {
-      const ts = draw('ts', theme)
-      expect(ts).toContain('Release plan')
-      expect(draw('rust', theme), theme).toBe(ts)
-    }
-  },
-  30_000,
-)
-
-it.skipIf(MARKDOWN === 'ts')(
-  "hands the core a comment's prose, in the card and in the rail",
-  async () => {
-    const core = loaded as LayoutCore
-    const reports = unanswered()
+it('hands the core the Read preview, the rail and a row picture', async () => {
+  const core = loaded as LayoutCore
+  expect(board).toBeDefined()
+  for (const theme of ['light', 'dark'] as const) {
     const calls = asked(core)
     try {
-      const prose =
-        'Please **tighten** this, rename `flags`, and see the [docs](https://example.com).'
       const { container } = render(
-        <div style={{ width: 320 }}>
-          <CommentBody body={prose} />
-          <CommentBody body={prose} compact />
+        <div style={{ width: 900, height: 900 }}>
+          <MarkdownEditor
+            theme={theme}
+            value={NOTE}
+            onChange={() => {}}
+            previewDebounceMs={0}
+            initialViewMode="read"
+            references={references()}
+          />
         </div>,
       )
-      await expect.poll(() => container.querySelectorAll('[data-comment-body] svg').length).toBe(2)
-      expect({ classes: reports.classes, asked: calls.count() >= 2 }).toEqual({
-        classes: [],
-        asked: true,
-      })
+      const pane = () => container.querySelector('[data-testid="markdown-preview-pane"]')
+      await expect.poll(() => pane()?.textContent ?? '').toContain('Release plan')
+      // The fragment lands, and the layout that draws it is the core's too.
+      await expect
+        .poll(() => pane()?.querySelector('[data-mml-node="math"]') !== null, {
+          timeout: 20_000,
+        })
+        .toBe(true)
+      const measure = createBrowserMeasureText()
+      layoutMarkdownOutline(NOTE, { measure, maxWidth: 320 })
+      renderMarkdownPreview(NOTE, { measure, maxWidth: 480, theme, references: references() })
+      expect(calls.count(), theme).toBeGreaterThanOrEqual(3)
     } finally {
       calls.restore()
-      reports.restore()
+      cleanup()
     }
-  },
-  30_000,
-)
+  }
+}, 60_000)
+
+it("lays the preview's note out as the TypeScript does, in this browser's measure", () => {
+  const core = loaded as LayoutCore
+  const measure = createBrowserMeasureText()
+  const fragments = [
+    [fragmentAskKey({ kind: 'math', value: 'x^2' }), { svg: '<g/>', height: 40 }],
+  ] as const
+  for (const mode of ['light', 'dark'] as const) {
+    // As `renderMarkdownPreview` hands it, short of the core.
+    const options = {
+      measure,
+      maxWidth: 640,
+      mode,
+      style: 'document' as const,
+      references: references(),
+      fragments,
+    }
+    const ts = layoutMarkdownDocument(NOTE, options)
+    expect(ts?.nodes.length).toBeGreaterThan(0)
+    expect(layoutMarkdownDocument(NOTE, { ...options, core }), mode).toEqual(ts)
+  }
+}, 30_000)
+
+it("hands the core a comment's prose, in the card and in the rail", async () => {
+  const core = loaded as LayoutCore
+  const calls = asked(core)
+  try {
+    const prose =
+      'Please **tighten** this, rename `flags`, and see the [docs](https://example.com).'
+    const { container } = render(
+      <div style={{ width: 320 }}>
+        <CommentBody body={prose} />
+        <CommentBody body={prose} compact />
+      </div>,
+    )
+    await expect.poll(() => container.querySelectorAll('[data-comment-body] svg').length).toBe(2)
+    expect(calls.count()).toBeGreaterThanOrEqual(2)
+  } finally {
+    calls.restore()
+  }
+}, 30_000)

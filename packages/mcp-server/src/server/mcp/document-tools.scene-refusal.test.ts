@@ -2,9 +2,11 @@
 // and `wb_scene_render` says so in words beside the SVG: the structured output
 // is the same shape either way, so the second text item is the only place an
 // agent that does not read the picture learns why.
+
 import { join } from 'node:path'
 import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import { refusalCopy } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport } from '@modelcontextprotocol/server'
@@ -42,15 +44,9 @@ async function call(deps: ServerDeps, name: string, args: Record<string, unknown
 
 const refused = { code: 'input-too-large', reason: 'too-many-elements' } as const
 
-const refusing: LayoutCore = {
-  routing: {
-    routeLayout: () => {
-      throw new Error('no edge is routed here')
-    },
-  },
+const refusing: LayoutCore = fakeLayoutCore({
   layout: { layoutSpatialCanvas: () => ({ refused }) },
-  impl: { routeLayout: 'ts', layoutSpatialCanvas: 'rust' },
-}
+})
 
 type Content = readonly { readonly type: string; readonly text?: string }[]
 

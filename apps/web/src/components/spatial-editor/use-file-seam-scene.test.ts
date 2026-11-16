@@ -9,7 +9,6 @@
 import {
   type CanvasLayoutRequest,
   constantRatioMeasureText,
-  type LayoutCore,
   layoutSpatialCanvasWithAnchors,
   type MeasureText,
   type ResolvedReference,
@@ -18,7 +17,7 @@ import {
   referenceWireFor,
   type SpatialLayoutOptions,
 } from '@kamiazya/whiteboard-canvas-render'
-import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { createFixedMeasure, fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   fileNode as buildFileNode,
@@ -364,28 +363,22 @@ describe('useFileSeamScene reference chrome', () => {
     await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fa']))
     const ask = (options: Partial<SpatialLayoutOptions>) => {
       const asked: CanvasLayoutRequest[] = []
-      const skipped: string[] = []
-      const core: LayoutCore = {
-        routing: { routeLayout: () => ({ declined: 'unused' }) as never },
+      const core = fakeLayoutCore({
         layout: {
           layoutSpatialCanvas: (request) => {
             asked.push(request)
-            return { declined: 'recording' } as never
+            return { scene: { nodes: [] }, anchors: new Map(), degradations: [] }
           },
         },
-        impl: { routeLayout: 'ts', layoutSpatialCanvas: 'differential' },
-        onMismatch: (mismatch) => {
-          if (mismatch.kind === 'skipped') skipped.push(mismatch.reason)
-        },
-      }
+      })
       const base = editorLayoutBase({ measure: constantRatioMeasureText })
+      // An option no request carries would throw `CoreUnaskable` here.
       layoutSpatialCanvasWithAnchors(board, { ...base, ...options, core })
-      return { asked, skipped }
+      return { asked }
     }
     // Every option the editor lays out with, its typeset math and diagrams
     // included: they ride as a table, which the core answers from.
-    const { asked, skipped } = ask(result.current.fileSeamOptions)
-    expect(skipped).toEqual([])
+    const { asked } = ask(result.current.fileSeamOptions)
     expect(asked).toHaveLength(1)
     expect(asked[0]?.expand).toEqual(['fa'])
     expect(Object.fromEntries(asked[0]?.references?.extras ?? [])).toEqual({

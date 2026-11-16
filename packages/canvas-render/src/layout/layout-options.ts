@@ -107,9 +107,11 @@ export interface SpatialLayoutOptions {
    */
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
   /**
-   * The Rust core and the switch for each function it ports (ADR-0054's
-   * `CoreImpl`), set by the composition root and read nowhere ambiently.
-   * Absent, every function runs in TypeScript.
+   * The Rust core (ADR-0054), set by the composition root and read nowhere
+   * ambiently. Given one, it answers the layout and everything the layout
+   * asks; every root hands one. Absent, the TypeScript composer lays the
+   * canvas out, which only canvas-render's own tests and recorders still do
+   * (S18g; S18h deletes it).
    */
   readonly core?: LayoutCore
   /**
@@ -186,9 +188,9 @@ export interface SpatialLayoutOptions {
   readonly fontAvailable?: (family: string) => boolean
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
-   * Told when the core REFUSED the layout under `rust` (owner decision q81,
-   * D7): a request past one of its caps, a number its answer cannot spell,
-   * or a host measurer that did not answer. The scene answered is then the
+   * Told when the core REFUSED the layout (owner decision q81, D7): a request
+   * past one of its caps, a number its answer cannot spell, or a host
+   * measurer that did not answer. The scene answered is then the
    * refusal (`refusalScene`), so a caller that also says why in words (the
    * daemon's log, `wb_scene_render`'s text) learns it here. Omitted, the
    * scene is the same.

@@ -6,16 +6,16 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
+import type { CanvasLayoutCore, CanvasLayoutRequest } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
+import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { canvasLayoutRequest, firstDifference } from './canvas-switch.js'
-import type { CoreImpl, CoreMismatch, LayoutCore } from './edges/layout-core.js'
+import { CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
 
@@ -46,18 +46,12 @@ const reference = layoutSpatialCanvasWithAnchors(canvas, base)
 type Answering = CanvasLayoutCore['layoutSpatialCanvas']
 
 /** A core answering as `answer` says, keeping each request it was handed. */
-function coreOf(impl: CoreImpl, answer: Answering) {
+function coreOf(answer: Answering) {
   const requests: CanvasLayoutRequest[] = []
   const highlighters: unknown[] = []
   const measurers: unknown[] = []
   const caches: unknown[] = []
-  const mismatches: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: {
-      routeLayout: () => {
-        throw new Error('the routing core is not asked here')
-      },
-    },
+  const core = fakeLayoutCore({
     layout: {
       layoutSpatialCanvas: (request, highlight, measure, cache) => {
         requests.push(request)
@@ -67,10 +61,8 @@ function coreOf(impl: CoreImpl, answer: Answering) {
         return answer(request, highlight, measure)
       },
     },
-    impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
-    onMismatch: (mismatch) => mismatches.push(mismatch),
-  }
-  return { core, requests, highlighters, measurers, caches, mismatches }
+  })
+  return { core, requests, highlighters, measurers, caches }
 }
 
 const agreeing: Answering = () => ({
@@ -78,8 +70,8 @@ const agreeing: Answering = () => ({
   degradations: [{ kind: 'unknown-node-kind', nodeId: 'u', type: 'x/unknown' }],
 })
 
-function run(impl: CoreImpl, answer: Answering, options: Partial<SpatialLayoutOptions> = {}) {
-  const { core, requests, mismatches } = coreOf(impl, answer)
+function run(answer: Answering, options: Partial<SpatialLayoutOptions> = {}) {
+  const { core, requests } = coreOf(answer)
   const events: SpatialLayoutDegradation[] = []
   const laid = layoutSpatialCanvasWithAnchors(canvas, {
     ...base,
@@ -87,21 +79,13 @@ function run(impl: CoreImpl, answer: Answering, options: Partial<SpatialLayoutOp
     core,
     onDegrade: (event) => events.push(event),
   })
-  return { laid, requests, mismatches, events }
+  return { laid, requests, events }
 }
 
-describe('the whole layout through the core switch', () => {
-  it('leaves the core unasked under ts, and with no switch at all', () => {
-    expect(run('ts', agreeing).requests).toEqual([])
-    const { core, requests } = coreOf('rust', agreeing)
-    const unswitched: LayoutCore = { ...core, impl: { routeLayout: 'ts' } }
-    layoutSpatialCanvasWithAnchors(canvas, { ...base, core: unswitched })
-    expect(requests).toEqual([])
-  })
-
-  it('answers with the core under rust, its degradations reported as the TypeScript reports them', () => {
+describe('the whole layout through the core', () => {
+  it('answers with the core, its degradations reported as the TypeScript reports them', () => {
     const moved = { ...reference.scene, nodes: reference.scene.nodes.slice(1) }
-    const { laid, events, mismatches } = run('rust', () => ({
+    const { laid, events, requests } = run(() => ({
       scene: moved,
       anchors: reference.anchors,
       degradations: [
@@ -109,42 +93,31 @@ describe('the whole layout through the core switch', () => {
         { kind: 'body-parse-failed', nodeId: 'a' },
       ],
     }))
+    expect(requests).toHaveLength(1)
     expect(laid.scene).toBe(moved)
     expect(events).toEqual([
       { kind: 'unknown-node-kind', nodeId: 'u', type: 'x/unknown' },
       { kind: 'body-parse-failed', nodeId: 'a', err: undefined },
     ])
-    expect(mismatches).toEqual([])
   })
 
   it('hands the core the default highlighter to tokenise the fences it asks for', () => {
-    const { core, highlighters } = coreOf('rust', agreeing)
+    const { core, highlighters } = coreOf(agreeing)
     layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
     expect(highlighters).toEqual([highlightCode])
   })
 
-  it('answers from the TypeScript what the core declines, reporting its class', () => {
-    const { laid, mismatches, requests, events } = run('rust', () => ({ declined: 'body' }))
-    expect(requests).toHaveLength(1)
-    expect(laid.scene).toEqual(reference.scene)
-    expect(mismatches).toEqual([{ fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'body' }])
-    expect(events.map((e) => e.kind)).toEqual(['unknown-node-kind'])
-  })
-
-  it('draws what the core refuses as the refusal under rust, and tells onRefused', () => {
+  it('draws what the core refuses as the refusal, and tells onRefused', () => {
     const refused: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
     const heard: LayoutRefusal[] = []
     for (const mode of ['light', 'dark'] as const) {
-      const { laid, mismatches, events } = run('rust', () => ({ refused }), {
+      const { laid, events } = run(() => ({ refused }), {
         appearance: createSpatialTheme({ mode }),
         onRefused: (refusal) => heard.push(refusal),
       })
       expect(laid.scene).toEqual(refusalScene(refused, { measure, mode }))
       expect(laid.anchors.size).toBe(0)
       expect(events).toEqual([])
-      expect(mismatches).toEqual([
-        { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'too-many-elements' },
-      ])
     }
     expect(heard).toEqual([refused, refused])
   })
@@ -160,7 +133,7 @@ describe('the whole layout through the core switch', () => {
       ],
       edges: [],
     }
-    const { core } = coreOf('rust', () => ({ refused }))
+    const { core } = coreOf(() => ({ refused }))
     const laid = layoutSpatialCanvasWithAnchors(away, { ...base, core })
     const at = { x: 700, y: 100 }
     expect(laid.scene).toEqual(refusalScene(refused, { measure, mode: 'light', at }))
@@ -168,63 +141,21 @@ describe('the whole layout through the core switch', () => {
     expect(empty.scene).toEqual(refusalScene(refused, { measure, mode: 'light' }))
   })
 
-  it('answers from the TypeScript what the core refuses under differential, as its oracle', () => {
-    const heard: LayoutRefusal[] = []
-    const refused: LayoutRefusal = { code: 'malformed', reason: 'non-finite' }
-    const { laid, mismatches } = run('differential', () => ({ refused }), {
-      onRefused: (refusal) => heard.push(refusal),
-    })
-    expect(laid.scene).toEqual(reference.scene)
-    expect(mismatches).toEqual([
-      { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'non-finite' },
-    ])
-    expect(heard).toEqual([])
+  it('throws for options no request can carry, asking the core nothing', () => {
+    const { core, requests } = coreOf(agreeing)
+    expect(() =>
+      layoutSpatialCanvasWithAnchors(canvas, { ...base, core, renderMath: () => undefined }),
+    ).toThrow(new CoreUnaskable('seam:renderMath'))
+    expect(requests).toEqual([])
   })
 
-  it('reports a layout the request gate skips by its class, asking the core nothing', () => {
-    for (const impl of ['rust', 'differential'] as const) {
-      const { laid, mismatches, requests } = run(impl, agreeing, { renderMath: () => undefined })
-      expect(requests).toEqual([])
-      expect(laid.scene).toEqual(reference.scene)
-      expect(mismatches).toEqual([
-        { fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'seam:renderMath' },
-      ])
-    }
-  })
-
-  it('reports a core that throws and answers from the TypeScript', () => {
+  it('throws what the core throws: there is no TypeScript to answer in its place', () => {
     const err = new Error('garbled')
-    const { laid, mismatches } = run('differential', () => {
-      throw err
-    })
-    expect(laid.scene).toEqual(reference.scene)
-    expect(mismatches).toEqual([
-      { fn: 'layoutSpatialCanvas', kind: 'refused', err, repro: expect.anything() },
-    ])
-  })
-
-  it('compares under differential and answers with the TypeScript', () => {
-    const agree = run('differential', agreeing)
-    expect(agree.mismatches).toEqual([])
-    expect(agree.events.map((e) => e.kind)).toEqual(['unknown-node-kind'])
-    const skewed = run('differential', () => ({
-      scene: { nodes: [...reference.scene.nodes.slice(0, -1)] },
-      anchors: reference.anchors,
-      degradations: [{ kind: 'unknown-node-kind', nodeId: 'u', type: 'x/unknown' }],
-    }))
-    expect(skewed.laid.scene).toEqual(reference.scene)
-    const [mismatch] = skewed.mismatches
-    expect(mismatch).toMatchObject({ fn: 'layoutSpatialCanvas', kind: 'differs' })
-    expect(mismatch?.kind === 'differs' && mismatch.at).toBe(
-      `/scene/nodes/${reference.scene.nodes.length - 1}`,
-    )
-    const events = run('differential', () => ({ ...reference, degradations: [] }))
-    expect(events.mismatches).toMatchObject([{ kind: 'differs', at: '/events/0' }])
-    const anchors = run('differential', () => ({
-      ...agreeing(undefined as never, highlightCode, measure),
-      anchors: new Map(),
-    }))
-    expect(anchors.mismatches).toMatchObject([{ kind: 'differs', at: '/anchors/e1' }])
+    expect(() =>
+      run(() => {
+        throw err
+      }),
+    ).toThrow(err)
   })
 })
 
@@ -276,9 +207,21 @@ const coreProposal = {
   ],
 }
 
+/** The request `options` make of `board`, or the reason `CoreUnaskable` names for why they cannot. */
+function askOf(
+  board: SpatialCanvas,
+  options: Partial<SpatialLayoutOptions>,
+): CanvasLayoutRequest | { readonly skip: string } {
+  try {
+    return canvasLayoutRequest(board, { ...base, ...options })
+  } catch (err) {
+    if (err instanceof CoreUnaskable) return { skip: err.reason }
+    throw err
+  }
+}
+
 describe('what the core can be handed', () => {
-  const request = (options: Partial<SpatialLayoutOptions>) =>
-    canvasLayoutRequest(canvas, { ...base, ...options })
+  const request = (options: Partial<SpatialLayoutOptions>) => askOf(canvas, options)
 
   it('names the measurer, the appearance and every data option', () => {
     const overrides = new Map([['e1', { fromSide: 'right', toSide: 'left' } as const]])
@@ -418,9 +361,9 @@ describe('what the core can be handed', () => {
       const label = chrome.labels.get(ref)
       return { ...seams.resolveReference(ref), ...(label === undefined ? {} : { label }) }
     }
-    expect(
-      canvasLayoutRequest(withFiles, { ...base, references: seams, resolveReference: composed }),
-    ).toEqual({ skip: 'seam:resolveReference' })
+    expect(askOf(withFiles, { references: seams, resolveReference: composed })).toEqual({
+      skip: 'seam:resolveReference',
+    })
     const overlaid = overlayReferences(wire, chrome)
     const asked = canvasLayoutRequest(withFiles, {
       ...base,
@@ -444,7 +387,7 @@ describe('what the core can be handed', () => {
     }
     const references = referenceSeamsFromWire(wire)
     const asked = (policy: (node: SpatialNode) => boolean) => {
-      const built = canvasLayoutRequest(withFiles, { ...base, references, expandFileNode: policy })
+      const built = askOf(withFiles, { references, expandFileNode: policy })
       return 'skip' in built ? built : built.expand
     }
     const seen: string[] = []
@@ -459,7 +402,7 @@ describe('what the core can be handed', () => {
     expect(asked((node) => node.id === 'f2')).toEqual(['f2'])
   })
 
-  it('skips a policy that answers one id open in one canvas and closed in another', () => {
+  it('settles an id answered open in one canvas and closed in another by the outer canvas', () => {
     const twin = (x: number) => ({ ...fileNode('f', 'board'), x })
     const nested: SpatialCanvas = { nodes: [twin(500), fileNode('g', 'other')], edges: [] }
     const deeper: SpatialCanvas = { nodes: [{ ...fileNode('g', 'other'), x: 900 }], edges: [] }
@@ -475,11 +418,12 @@ describe('what the core can be handed', () => {
     const withFiles = { ...canvas, nodes: [...canvas.nodes, twin(0)] }
     const asked = (policy: (node: SpatialNode) => boolean) => {
       const references = referenceSeamsFromWire(wire)
-      const built = canvasLayoutRequest(withFiles, { ...base, references, expandFileNode: policy })
+      const built = askOf(withFiles, { references, expandFileNode: policy })
       return 'skip' in built ? built : built.expand
     }
-    expect(asked((node) => node.x < 100)).toEqual({ skip: 'expand-collision' })
-    expect(asked((node) => node.x > 800)).toEqual({ skip: 'expand-collision' })
+    // The board's own `f` and the nested `g` are named first, so their answer stands.
+    expect(asked((node) => node.x < 100)).toBe(true)
+    expect(asked((node) => node.x > 800)).toBe(false)
     expect(asked((node) => node.id === 'g')).toEqual(['g'])
     expect(asked((node) => node.id === 'f' && node.x < 1000)).toEqual(['f'])
   })
@@ -496,14 +440,14 @@ describe('what the core can be handed', () => {
       kind: 'host',
     })
     expect(request({ measure: host })).toMatchObject({ measure: { kind: 'host' } })
-    const { core, requests, measurers } = coreOf('rust', agreeing)
+    const { core, requests, measurers } = coreOf(agreeing)
     layoutSpatialCanvasWithAnchors(canvas, { ...base, measure: host, core })
     expect(requests).toMatchObject([{ measure: { kind: 'host' } }])
     expect(measurers).toEqual([host])
   })
 
   it("hands the core the caller's content cache, and none when there is none", () => {
-    const { core, requests, caches } = coreOf('rust', agreeing)
+    const { core, requests, caches } = coreOf(agreeing)
     const contentCache = new Map()
     layoutSpatialCanvasWithAnchors(canvas, { ...base, contentCache, core })
     layoutSpatialCanvasWithAnchors(canvas, { ...base, core })
@@ -513,20 +457,3 @@ describe('what the core can be handed', () => {
     expect(requests[0]).toEqual(requests[1])
   })
 })
-
-describe('firstDifference', () => {
-  it('names the path to the first value two answers part at', () => {
-    expect(firstDifference({ a: [1, { b: 2 }] }, { a: [1, { b: 2 }] })).toBeUndefined()
-    expect(firstDifference({ a: [1, { b: 2 }] }, { a: [1, { b: 3 }] })).toBe('/a/1/b')
-    expect(firstDifference({ a: 1, b: undefined }, { a: 1 })).toBeUndefined()
-    expect(firstDifference({ a: 1 }, { a: 1, c: 0 })).toBe('/c')
-    expect(firstDifference([0], [-0])).toBe('/0')
-    expect(firstDifference([Number.NaN], [Number.NaN])).toBeUndefined()
-    expect(firstDifference([1], { 0: 1 })).toBe('')
-    expect(firstDifference(null, {})).toBe('')
-    expect(firstDifference([1, 2], [1])).toBe('/1')
-  })
-})
-
-const _typed: CoreDegradation = { kind: 'font-missing', family: 'x' }
-void _typed

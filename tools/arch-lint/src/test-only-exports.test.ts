@@ -230,6 +230,8 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/layout-caches.ts#LayoutCaches':
     'the allocator `layoutCachesOf` builds one of per wasm instance; exported so layout-caches.test.ts can hand it a finalizer that collects on demand, which `FinalizationRegistry` cannot be made to do, rather than widening `layoutCachesOf` with a test-only parameter',
+  'packages/mcp-server/src/server/export/measure-text.ts#facesWithinRegistration':
+    'which installed families fit one font registration of the Rust core; exported so measure-text.faces-within.test.ts drives the byte and face caps over small faces, which a real fonts directory could only reach with megabytes of fixtures',
   'packages/mcp-server/src/server/export/layout-core.ts#packagedArtifacts':
     'where a published install carries the wasm; exported so layout-core.test.ts pins the dist/assets/core-wasm segment that copy-core-wasm-into-dist.mjs writes, rather than a second spelling of it',
   'packages/mcp-server/src/server/export/layout-core.ts#artifactDirectory':
@@ -237,7 +239,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/mcp-server/src/server/export/layout-core.ts#stagedArtifacts':
     "where the daemon reads the staged wasm by default; exported so layout-core.test.ts asserts CI staged it at the SAME path, rather than a second spelling of the path that could drift from the loader's",
   'apps/web/src/lib/spatial/layout-core.ts#createLayoutCoreHost':
-    "the host a realm installs, built from the build's environment (`installLayoutCore`); exported so its load-failure and mismatch policy is driven with a fake source and each setting, which the baked-in environment cannot vary within one run",
+    "the host a realm installs over the build's artifact (`installLayoutCore`); exported so its load-failure policy is driven with a fake source, which the real artifact cannot be made to fail within one run",
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
     'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
   'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels':

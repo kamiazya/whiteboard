@@ -50,13 +50,6 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
    * to colour, so the typesetter never reads it.
    */
   readonly tagLibrary?: NonNullable<SpatialLayoutOptions['tagLibrary']>
-  /**
-   * The Rust core an embedded canvas routes its edges through, forwarded to
-   * that canvas's own layout: the note has no edges of its own, so without
-   * it a board drawn inside a note would stay on the TypeScript while the
-   * same board on its own page took the switch.
-   */
-  readonly core?: SpatialLayoutOptions['core']
 }
 
 /**
@@ -139,7 +132,6 @@ const FORWARDED_TO_EMBEDDED_CANVAS = [
   'style',
   'fontAvailable',
   'tagLibrary',
-  'core',
   'highlightCode',
   'renderMath',
   'renderDiagram',

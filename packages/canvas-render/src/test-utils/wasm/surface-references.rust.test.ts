@@ -3,7 +3,6 @@ import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore } from '../../canvas-core.js'
-import type { CoreImpl, CoreMismatch, LayoutCore } from '../../layout/edges/layout-core.js'
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import {
@@ -13,6 +12,7 @@ import {
   referenceWireFor,
 } from '../../references/wire.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
+import { fakeLayoutCore } from '../fake-layout-core.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 
@@ -20,8 +20,8 @@ import { built, requireWasm, wasmBytes } from './glue.js'
  * A surface's file-node chrome — the readable label it knows a reference by
  * and the references it holds as dangling — laid over a keeper's wire the way
  * the web editor does (the cut to the canvas, then `overlayReferences`),
- * through the REAL core: under `differential` the core is compared on every
- * board, never skipped or declined, and its scene is the TypeScript's.
+ * through the REAL core: the core answers every board, never declining one,
+ * and its scene is the TypeScript composer's.
  */
 const inner: SpatialCanvas = {
   nodes: [textNode({ id: 'i', x: 0, y: 0, width: 120, height: 60, text: 'inside' })],
@@ -118,27 +118,22 @@ describe.runIf(built)("a surface's reference chrome through the real core", () =
   beforeAll(() => {
     real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
   })
-  const answered = { compared: 0, declined: [] as string[] }
+  const answered = { compared: 0, refused: [] as string[] }
   const counting: CanvasLayoutCore = {
     layoutSpatialCanvas(request, highlight) {
       const answer = real.layoutSpatialCanvas(request, highlight)
-      if ('declined' in answer) answered.declined.push(answer.declined)
+      if ('refused' in answer) answered.refused.push(answer.refused.reason)
       else answered.compared += 1
       return answer
     },
   }
-  const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions, impl: CoreImpl) => {
-    const mismatches: CoreMismatch[] = []
-    const core: LayoutCore = {
-      routing: real,
-      layout: counting,
-      impl: { routeLayout: 'ts', layoutSpatialCanvas: impl },
-      onMismatch: (mismatch) => mismatches.push(mismatch),
-    }
-    return { ...layoutSpatialCanvasWithAnchors(canvas, { ...options, core }), mismatches }
-  }
+  const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions) =>
+    layoutSpatialCanvasWithAnchors(canvas, {
+      ...options,
+      core: fakeLayoutCore({ routing: real, layout: counting }),
+    })
 
-  it('reports no difference under differential, and rust draws what the TypeScript draws', () => {
+  it('draws what the TypeScript draws', () => {
     for (const { name, canvas, expanded } of boards) {
       const wire = overlayReferences(referenceWireFor(keeper, { canvases: [canvas] }), chrome)
       const options: SpatialLayoutOptions = {
@@ -154,14 +149,9 @@ describe.runIf(built)("a surface's reference chrome through the real core", () =
         references: referenceSeamsFromWire(referenceWireFor(keeper, { canvases: [canvas] })),
       })
       expect(bare.scene, name).not.toEqual(reference.scene)
-      const differential = lay(canvas, options, 'differential')
-      expect(differential.mismatches, name).toEqual([])
-      expect(differential.scene, name).toEqual(reference.scene)
-      const rust = lay(canvas, options, 'rust')
-      expect(rust.mismatches, name).toEqual([])
-      expect(rust.scene, name).toEqual(reference.scene)
+      expect(lay(canvas, options).scene, name).toEqual(reference.scene)
     }
-    expect(answered.compared).toBe(2 * boards.length)
-    expect(answered.declined).toEqual([])
+    expect(answered.compared).toBe(boards.length)
+    expect(answered.refused).toEqual([])
   })
 })

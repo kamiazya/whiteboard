@@ -70,10 +70,9 @@ export interface CanvasViewerProps {
    */
   fragments?: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>
   /**
-   * The Rust core and its switch (ADR-0054), which this package never loads
-   * itself: the host owns the wasm instance and says, through the core's
-   * `impl`, whether the board is laid out by it, by the TypeScript, or by
-   * both and compared. Absent, the TypeScript lays it out.
+   * The Rust core (ADR-0054), which this package never loads itself: the
+   * host owns the wasm instance and hands it over, and it lays the board out.
+   * Absent (a host that holds none, a unit test), the TypeScript does.
    */
   core?: LayoutCore
   /**

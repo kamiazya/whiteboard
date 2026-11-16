@@ -44,6 +44,23 @@ import { answerText } from '../wasm/answer-text.js'
 
 export type Surface = 'daemon' | 'preview' | 'outline' | 'thumbnail' | 'comment'
 
+/**
+ * The recorded bodies past the markdown parser's bounds, by name: the core
+ * draws each as its literal text (owner decision q81, D7a) where the
+ * TypeScript drew remark's reading, so a replay holds them as a tolerated
+ * class that must differ from the recording rather than equal it.
+ */
+export const PAST_THE_PARSER: ReadonlySet<string> = new Set([
+  'quote 33 deep',
+  'list 39 deep',
+  'list 40 deep',
+  '1024 delimiter runs',
+  '1100 delimiter runs',
+])
+
+/** The body a record's id names: what follows its surface, less its variant. */
+export const bodyName = (id: string): string => id.split('/').slice(1).join('/').split('#')[0] ?? ''
+
 export interface MarkdownInput {
   readonly id: string
   readonly surface: Surface

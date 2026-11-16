@@ -15,10 +15,13 @@ import { outlineContentBox } from './nodes/node-outline.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
 
 // The geometry an editor asks of the layout on its own (ADR-0054 step 7,
-// S18d), each answered as `core` says under `impl.layoutQuery`: where an
-// edge's label goes and what it avoids, where a comment's compose bubble
-// goes, and the box a shaped node's body is edited in. The functions they
-// switch between stay the composer's own, which calls them without a core.
+// S18d), each answered by `core`'s query entry: where an edge's label goes and
+// what it avoids, where a comment's compose bubble goes, and the box a shaped
+// node's body is edited in. Handed no core, the composer's own functions
+// answer. A query the core refused (S18g; it needs input no model-valid board
+// holds, or a measurer that failed) is answered by the plainest geometry that
+// keeps the editor usable: no place for the label, nothing to avoid, the
+// bubble at its anchor, and the node's own box.
 
 const boxOf = (b: {
   readonly x: number
@@ -40,7 +43,7 @@ function boxesOf(value: QueryNumbers | undefined): BoundingBox[] | undefined {
   return boxes.includes(undefined) ? undefined : (boxes as BoundingBox[])
 }
 
-/** `edgeLabelPlacement` as `core` says: where a label of `size` sits on a drawn path. */
+/** `edgeLabelPlacement` by `core`: where a label of `size` sits on a drawn path; refused, nowhere. */
 export function queryEdgeLabelPlacement(
   core: LayoutCore | undefined,
   path: readonly Point[],
@@ -59,6 +62,7 @@ export function queryEdgeLabelPlacement(
       rounded: rounded === true,
     }),
     ts: () => edgeLabelPlacement(path, size, obstacles, rounded) ?? none,
+    unanswered: () => none,
     read: (answer) => {
       const [at] = numbersOf(answer) ?? []
       if (Array.isArray(at) && at.length === 0) return none
@@ -70,10 +74,10 @@ export function queryEdgeLabelPlacement(
 }
 
 /**
- * What an edge label avoids, as `core` says: the frame titles among the
- * scene's runs (`frameTitleObstacles`) and every obstacle with them
+ * What an edge label avoids, by `core`: the frame titles among the scene's
+ * runs (`frameTitleObstacles`) and every obstacle with them
  * (`labelObstacles`), so a label editor and a drag preview avoid what the
- * layout's own labels avoid.
+ * layout's own labels avoid; refused, nothing.
  */
 export function queryLabelObstacles(
   core: LayoutCore | undefined,
@@ -94,6 +98,7 @@ export function queryLabelObstacles(
       const titles = frameTitleObstacles(nodes, sceneNodes)
       return { titles, obstacles: labelObstacles(nodes, titles) }
     },
+    unanswered: () => ({ titles: [], obstacles: [] }),
     read: (answer) => {
       const [titles, obstacles] = (numbersOf(answer) ?? []).map(boxesOf)
       return titles === undefined || obstacles === undefined ? undefined : { titles, obstacles }
@@ -101,7 +106,10 @@ export function queryLabelObstacles(
   })
 }
 
-/** `placeCommentBubble` as `core` says: the least-covered spot for a bubble of `size` near `anchor`. */
+/**
+ * `placeCommentBubble` by `core`: the least-covered spot for a bubble of
+ * `size` near `anchor`; refused, at the anchor.
+ */
 export function queryCommentBubble(
   core: LayoutCore | undefined,
   anchor: Point,
@@ -116,13 +124,14 @@ export function queryCommentBubble(
       obstacles: obstacles.map(boxOf),
     }),
     ts: () => placeCommentBubble(anchor, size, obstacles),
+    unanswered: () => ({ x: anchor.x, y: anchor.y, w: size.w, h: size.h }),
     read: (answer) => boundingBoxOf(numbersOf(answer)?.[0]),
   })
 }
 
 /**
- * `outlineContentBox` over the bundled silhouettes as `core` says: the box a
- * shaped node's content is inscribed in.
+ * `outlineContentBox` over the bundled silhouettes by `core`: the box a
+ * shaped node's content is inscribed in; refused, the node's own box.
  */
 export function queryOutlineContentBox(
   core: LayoutCore | undefined,
@@ -136,6 +145,7 @@ export function queryOutlineContentBox(
       box: boxOf(box),
     }),
     ts: () => outlineContentBox(shapeId, box),
+    unanswered: () => box,
     read: (answer) => boundingBoxOf(numbersOf(answer)?.[0]),
   })
 }

@@ -37,6 +37,12 @@ const NOT_READ_BY_SOURCE: Readonly<Record<string, string>> = {
     'retired with the JSON Canvas TypeScript; no source reads it, and the ADR and the parity checklist name it as history',
   WHITEBOARD_CORE_FACETS:
     "retired with the daemon's facet-write TypeScript; no source reads it, and the ADR and the parity checklist name it as history",
+  WHITEBOARD_CORE:
+    'retired with the layout switches (ADR-0054 step 7, S18g); no source reads it, and the configuration reference names it as gone',
+  WHITEBOARD_CORE_LAYOUT:
+    'retired with the layout switches (ADR-0054 step 7, S18g); no source reads it, and the configuration reference names it as gone',
+  WHITEBOARD_CORE_MISMATCH:
+    'retired with the layout switches (ADR-0054 step 7, S18g); no source reads it, and the configuration reference names it as gone',
 }
 
 const NAME_PATTERN = /\b((?:WHITEBOARD|MCP|OTEL)_[A-Z0-9_]*[A-Z0-9])\b/g

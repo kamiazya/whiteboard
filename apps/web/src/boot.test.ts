@@ -82,6 +82,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
         rootEl: rootEl(),
         resolveWorkspaceId: () => resolveBrowserWorkspaceId(REAL_DB_NAME),
         loadFont: async () => undefined,
+        loadCore: async () => undefined,
         dismissSplash: async () => undefined,
         render: () => {
           rendered = true
@@ -132,6 +133,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       rootEl: rootEl(),
       resolveWorkspaceId: () => new Promise<string>(() => {}),
       loadFont: async () => undefined,
+      loadCore: async () => undefined,
       dismissSplash: async () => {
         splashDismissed = true
       },
@@ -159,6 +161,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
         rootEl: rootEl(),
         resolveWorkspaceId: async () => '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         loadFont: async () => undefined,
+        loadCore: async () => undefined,
         dismissSplash: async () => undefined,
         render: () => undefined,
       })
@@ -208,6 +211,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       rootEl: rootEl(),
       resolveWorkspaceId: async () => getBrowserWorkspaceId(),
       loadFont: async () => undefined,
+      loadCore: async () => undefined,
       dismissSplash: async () => undefined,
       render: () => {
         rendered = true
@@ -244,7 +248,12 @@ describe('startBootSequence — the address chooses which workspace boots', () =
     resetBrowserWorkspaceIdForTests()
 
     window.history.replaceState(null, '', '/w/me/second/d/anything')
-    await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
+    await startBootSequence({
+      rootEl: rootEl(),
+      loadFont: async () => {},
+      loadCore: async () => undefined,
+      render: () => {},
+    })
 
     expect(getBrowserWorkspaceId()).toBe(ADDRESSED_ULID)
     expect(getBrowserWorkspaceId()).not.toBe(first)
@@ -255,9 +264,45 @@ describe('startBootSequence — the address chooses which workspace boots', () =
     resetBrowserWorkspaceIdForTests()
 
     window.history.replaceState(null, '', '/')
-    await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
+    await startBootSequence({
+      rootEl: rootEl(),
+      loadFont: async () => {},
+      loadCore: async () => undefined,
+      render: () => {},
+    })
 
     expect(getBrowserWorkspaceId()).toBe(only)
+  })
+})
+
+describe('startBootSequence — the Rust core', () => {
+  it('starts the core beside the font and renders only once it has settled', async () => {
+    const order: string[] = []
+    let settle: () => void = () => {}
+    const core = new Promise<void>((resolve) => {
+      settle = resolve
+    })
+    const booted = startBootSequence({
+      rootEl: rootEl(),
+      resolveWorkspaceId: async () => 'ws',
+      loadFont: async () => {
+        order.push('font')
+      },
+      loadCore: () => {
+        order.push('core asked')
+        return core
+      },
+      dismissSplash: async () => {},
+      render: () => {
+        order.push('render')
+      },
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    // Asked before the font is awaited, so the two load side by side.
+    expect(order).toEqual(['core asked', 'font'])
+    settle()
+    await booted
+    expect(order).toEqual(['core asked', 'font', 'render'])
   })
 })
 
@@ -272,6 +317,7 @@ describe('startBootSequence — the page-load file sweep', () => {
       rootEl: rootEl(),
       resolveWorkspaceId: async () => 'ws',
       loadFont: async () => {},
+      loadCore: async () => undefined,
       dismissSplash: async () => {},
       render: () => {},
     })

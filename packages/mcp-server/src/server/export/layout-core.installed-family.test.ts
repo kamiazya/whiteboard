@@ -48,14 +48,9 @@ async function fontsDirWith(files: Record<string, Buffer>): Promise<string> {
   return dir
 }
 
-/** The core under the strictest settings, each layout's faces and answer recorded. */
+/** The core, each layout's faces and answer recorded. */
 async function recordingCore() {
-  const settings = layoutCoreSettingsFrom({
-    WHITEBOARD_CORE_LAYOUT: 'rust',
-    WHITEBOARD_CORE_MISMATCH: 'throw',
-  })
-  const core = await coreLoaders(settings).layoutCore()
-  if (core?.layout === undefined) throw new Error('the core has no whole layout')
+  const core = await coreLoaders(layoutCoreSettingsFrom({})).layoutCore()
   const { layout } = core
   const faces: string[][] = []
   const answers: string[] = []
@@ -66,7 +61,7 @@ async function recordingCore() {
         const { measure } = request as { measure: { faces?: Record<string, unknown>[] } }
         faces.push((measure.faces ?? []).map((f) => `${f.family} ${f.bold} ${f.italic}`))
         const answer = layout.layoutSpatialCanvas(request, highlight, own)
-        answers.push('declined' in answer ? `declined:${answer.declined}` : 'laid out')
+        answers.push('refused' in answer ? `refused:${answer.refused.code}` : 'laid out')
         return answer
       },
     },
@@ -131,12 +126,27 @@ describe.runIf(built)('a family the user installed, under the Rust layout', () =
         ['warning', { family: 'Yomogi' }],
       ])
       expect(capture.records.filter((r) => r.level === 'warning')).toHaveLength(2)
-      const unanswered = capture.records.filter(
-        (r) => r.msg === 'the Rust core did not answer this layout',
-      )
-      expect(unanswered).toEqual([])
     } finally {
       capture.restore()
     }
+  })
+
+  it('hands the core only the faces one registration holds, so more families than that still lay out', async () => {
+    // Past the registration's 64 faces the core would refuse the whole set and
+    // every layout with it; the daemon keeps the first families that fit instead.
+    const files = Object.fromEntries(
+      Array.from({ length: 70 }, (_, i) => {
+        const family = `Family${String(i).padStart(2, '0')}`
+        return [`${family}.ttf`, syntheticFont(CARRIED, family)]
+      }),
+    )
+    const fontsDir = await fontsDirWith(files)
+    const { core, faces, answers } = await recordingCore()
+
+    await renderSpatialCanvasToSvg(sketched, fontsDir, { style: 'document', core })
+
+    expect(answers).toEqual(['laid out'])
+    expect(faces[0]).toHaveLength(64)
+    expect(faces[0]?.slice(0, 4)).toEqual(ROBOTO)
   })
 })

@@ -1,85 +1,55 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import type { CoreDegradation } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { type MeasureText, measureSpecOf } from '../measure.js'
-import type { QueryAnswer, QueryLayoutSkip, QueryNumbers, QueryRequest } from '../query-core.js'
+import type { QueryAnswer, QueryNumbers, QueryRequest } from '../query-core.js'
+import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
-import {
-  canvasLayoutRequest,
-  coreEvent,
-  firstDifference,
-  hostEvent,
-  styleOptions,
-  valueAt,
-} from './canvas-switch.js'
+import { CoreUnaskable, canvasLayoutRequest, hostEvent, styleOptions } from './canvas-switch.js'
 import type { LayoutCore } from './edges/layout-core.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 
-// The queries' switch (ADR-0054 step 7, S18d): which of the layout pieces a
-// root calls on their own the Rust core's query entry can be handed, and who
-// answers one under `ts`, `differential` and `rust`. They ride one switch key,
-// `impl.layoutQuery`.
+// The layout pieces a root calls on their own, through the Rust core's query
+// entry (ADR-0054 step 7, S18d): the request each makes, and what it is
+// answered with. Handed a core, the core answers, and a query it refused is
+// answered as the query itself says (`unanswered`), since there
+// is no TypeScript behind it any more (S18g); handed none, the TypeScript does.
 
 /** A query the core answered, in the core's shape. */
-type Answered = Exclude<QueryAnswer, { readonly declined: string }>
+type Answered = Exclude<QueryAnswer, { readonly refused: unknown }>
 
-/** How a query asks the core and reads its answer, and how the TypeScript answers it. */
+/** How a query asks the core and reads its answer, and how it is answered otherwise. */
 export interface Querying<T> {
-  /** The request, or why the arguments cannot be one; built only when the core is asked. */
-  readonly request: () => QueryRequest | { readonly skip: QueryLayoutSkip }
-  /** The TypeScript's answer. */
+  /** The request; built only when the core is asked, and throwing `CoreUnaskable` for one it cannot be. */
+  readonly request: () => QueryRequest
+  /** The TypeScript's answer, for a caller that hands no core. */
   readonly ts: () => T
-  /** The core's answer in the TypeScript's shape, or undefined when it is not one. */
+  /**
+   * The answer to a query the core refused (a request past its
+   * caps, a number it cannot spell, a host measurer that did not answer): what
+   * the surface asking can show without the core's geometry.
+   */
+  readonly unanswered: () => T
+  /** The core's answer in the query's shape, or undefined when it is not one. */
   readonly read: (answer: Answered) => T | undefined
   /** The host's measurer, for a request naming `{kind: 'host'}`. */
   readonly measure?: MeasureText
 }
 
 /**
- * A query answered as `core` says: by the TypeScript when no core or no
- * query core is given or its switch reads `ts`; under `rust` by the core;
- * under `differential` by the TypeScript with the core asked beside it and
- * the first difference reported. What the gate skips and what the core
- * declines (each counted by class), and a core that throws or answers in a
- * shape the query does not have (each reported as refused), the TypeScript
- * answers.
+ * A query answered by `core`, or by the TypeScript when it is handed none.
+ * A query the core refused is answered by `unanswered`; a core
+ * that throws, or answers in a shape the query does not have, throws to the
+ * caller, since either is a defect rather than an input.
  */
 export function queried<T>(core: LayoutCore | undefined, querying: Querying<T>): T {
-  const impl = core?.impl.layoutQuery ?? 'ts'
-  if (core?.query === undefined || impl === 'ts') return querying.ts()
+  if (core === undefined) return querying.ts()
   const request = querying.request()
-  if ('skip' in request) {
-    core.onMismatch?.({ fn: 'layoutQuery', kind: 'skipped', reason: request.skip })
-    return querying.ts()
-  }
-  let rust: T | undefined
-  try {
-    const answer = core.query.layoutQuery(request, highlightCode, querying.measure)
-    if ('declined' in answer) {
-      core.onMismatch?.({ fn: 'layoutQuery', kind: 'declined', reason: answer.declined })
-      return querying.ts()
-    }
-    rust = querying.read(answer)
-    if (rust === undefined) throw new Error(`the core answered ${request.query} in another shape`)
-  } catch (err) {
-    core.onMismatch?.({ fn: 'layoutQuery', kind: 'refused', err, repro: request })
-    return querying.ts()
-  }
-  if (impl === 'rust') return rust
-  const ts = querying.ts()
-  const at = firstDifference(ts, rust)
-  if (at !== undefined) {
-    core.onMismatch?.({
-      fn: 'layoutQuery',
-      kind: 'differs',
-      at,
-      ts: valueAt(ts, at),
-      rust: valueAt(rust, at),
-      repro: request,
-    })
-  }
-  return ts
+  const answer = core.query.layoutQuery(request, highlightCode, querying.measure)
+  if ('refused' in answer) return querying.unanswered()
+  const read = querying.read(answer)
+  if (read === undefined) throw new Error(`the core answered ${request.query} in another shape`)
+  return read
 }
 
 /** The numbers of a query's answer, or undefined when it answered an edge layer. */
@@ -92,51 +62,31 @@ export function tupleOf(value: QueryNumbers | undefined, n: number): number[] | 
   return value.every((v) => typeof v === 'number') ? (value as number[]) : undefined
 }
 
-/** An edge layer and the degradations the layout reported beside it. */
-interface EdgeLayer {
-  readonly nodes: readonly SceneNode[]
-  readonly degradations: readonly CoreDegradation[]
-}
-
 /**
- * The drag frame's edge layer as `options.core` says (`layoutSpatialEdges`):
- * the request is the canvas layout's own, so whatever would send a whole
- * layout of these options to the TypeScript sends this one there too. Under
- * `rust` the core's degradations reach `onDegrade` as the TypeScript's would;
- * under `differential` the layer and the degradations are compared.
+ * The drag frame's edge layer through `options.core`'s query entry
+ * (`layoutSpatialEdges`): the request is the canvas layout's own, so the core
+ * answers it exactly as it answers the whole layout, and its degradations reach
+ * `onDegrade`. A layer the core refused is no edges: the whole layout of the
+ * same request was refused too, and the surface draws its refusal instead.
  */
 export function edgesThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
   ts: (options: SpatialLayoutOptions) => SceneNode[],
 ): SceneNode[] {
-  const reported = (): EdgeLayer => {
-    const degradations: CoreDegradation[] = []
-    const nodes = ts({
-      ...options,
-      onDegrade: (event) => {
-        degradations.push(coreEvent(event))
-        options.onDegrade?.(event)
-      },
-    })
-    return { nodes, degradations }
-  }
-  let rust = false
-  const layer = queried<EdgeLayer>(options.core, {
-    request: () => {
-      const request = canvasLayoutRequest(stored, options)
-      return 'skip' in request ? request : { ...request, query: 'edges' }
-    },
-    ts: reported,
+  const unanswered: readonly SceneNode[] = []
+  const nodes = queried<readonly SceneNode[]>(options.core, {
+    request: () => ({ ...canvasLayoutRequest(stored, options), query: 'edges' }),
+    ts: () => ts(options),
+    unanswered: () => unanswered,
     read: (answer) => {
       if (!('nodes' in answer)) return undefined
-      rust = options.core?.impl.layoutQuery === 'rust'
-      return { nodes: answer.nodes, degradations: answer.degradations }
+      for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
+      return answer.nodes
     },
     measure: options.measure,
   })
-  if (rust) for (const event of layer.degradations) options.onDegrade?.(hostEvent(event))
-  return [...layer.nodes]
+  return [...nodes]
 }
 
 /** The options a node's natural size reads that the core's query takes as data. */
@@ -150,10 +100,12 @@ const NATURAL_OPTIONS = new Set([
 ])
 
 /**
- * A node's natural content size as `options.core` says
+ * A node's natural content size through `options.core`'s query entry
  * (`naturalNodeContentSize`). The core's query takes the measurer, the theme
  * mode, the style with the families the surface holds, and a fragment table;
- * an option beyond those, set to anything, sends it to the TypeScript.
+ * an option beyond those is `CoreUnaskable`. A size the core refused is what
+ * the node's own box holds inside its padding, so a caller sizing the node by
+ * it leaves the node as it is.
  */
 export function naturalSizeThroughCore(
   node: SpatialNode,
@@ -163,11 +115,12 @@ export function naturalSizeThroughCore(
   return queried(options.core, {
     request: () => {
       const measure = measureSpecOf(options.measure)
-      if (measure === undefined) return { skip: 'measure' }
+      if (measure === undefined) throw new CoreUnaskable('measure')
       const mode = bundledThemeModeOf(options.appearance)
-      if (mode === undefined) return { skip: 'appearance' }
+      if (mode === undefined) throw new CoreUnaskable('appearance')
       const set = Object.entries(options).filter(([, value]) => value !== undefined)
-      if (set.some(([key]) => !NATURAL_OPTIONS.has(key))) return { skip: 'options' }
+      const extra = set.find(([key]) => !NATURAL_OPTIONS.has(key))
+      if (extra !== undefined) throw new CoreUnaskable(`option:${extra[0]}`)
       const { fragments } = options
       return {
         query: 'node-content',
@@ -179,6 +132,10 @@ export function naturalSizeThroughCore(
       }
     },
     ts,
+    unanswered: () => {
+      const inset = 2 * SPATIAL_THEME_GEOMETRY.paddingPx
+      return { w: Math.max(0, node.width - inset), h: Math.max(0, node.height - inset) }
+    },
     read: (answer) => {
       const [size] = numbersOf(answer) ?? []
       const wh = tupleOf(size, 2)

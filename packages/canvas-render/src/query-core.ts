@@ -1,9 +1,10 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
-import type { CanvasLayoutRequest, CanvasLayoutSkip, CoreDegradation } from './canvas-core.js'
+import type { CanvasLayoutRequest, CoreDegradation } from './canvas-core.js'
 import type { CodeTokenLines } from './highlight/code-token.js'
 import type { FragmentEntry } from './layout/nodes/fragment-ask.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
+import type { LayoutRefusal } from './refusal.js'
 import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
 /** A box as the query wire carries it, `[x, y, w, h]`. */
@@ -68,12 +69,13 @@ export type QueryNumbers = number | readonly QueryNumbers[]
 /**
  * The core's answer to a query: an edge layer and what the layout reported
  * beside it, the numbers of any other query (each double exactly as computed),
- * or the class of what it declined, which the TypeScript then answers.
+ * or what it refused, which a caller answers on its own terms (each query says
+ * how), having no scene to draw a refusal in.
  */
 export type QueryAnswer =
   | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly CoreDegradation[] }
   | { readonly numbers: readonly QueryNumbers[] }
-  | { readonly declined: string }
+  | { readonly refused: LayoutRefusal }
 
 /**
  * The Rust core's query entry, as `@kamiazya/whiteboard-core-wasm`'s
@@ -88,36 +90,3 @@ export interface QueryLayoutCore {
     measure: MeasureText | undefined,
   ): QueryAnswer
 }
-
-/**
- * Why a query's arguments could not be handed to the core: any reason a
- * canvas layout's could not (for `edges`), or an option the core's query does
- * not take (for a node's natural size).
- */
-export type QueryLayoutSkip = CanvasLayoutSkip | 'options'
-
-/** A query the core did not answer, by class: skipped by the request gate, or declined by the core. */
-export type QueryLayoutTally =
-  | { readonly fn: 'layoutQuery'; readonly kind: 'skipped'; readonly reason: QueryLayoutSkip }
-  | { readonly fn: 'layoutQuery'; readonly kind: 'declined'; readonly reason: string }
-
-/**
- * A difference `differential` found in a query's answer, or a core that threw
- * on one or answered it in a shape the query does not have: `at` is the path
- * to the first value the two answers part at.
- */
-export type QueryLayoutMismatch =
-  | {
-      readonly fn: 'layoutQuery'
-      readonly kind: 'differs'
-      readonly at: string
-      readonly ts: unknown
-      readonly rust: unknown
-      readonly repro: QueryRequest
-    }
-  | {
-      readonly fn: 'layoutQuery'
-      readonly kind: 'refused'
-      readonly err: unknown
-      readonly repro: QueryRequest
-    }

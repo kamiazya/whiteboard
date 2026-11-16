@@ -71,8 +71,8 @@ export interface ConnectPreviewContext {
   readonly frameTitles?: readonly LabelObstacle[]
   /**
    * The Rust core to route the tentative edge through (ADR-0054); absent,
-   * this realm's own, once loaded. Without it the preview would draw the
-   * TypeScript's line under `rust` and the drop would replace it.
+   * this realm's own. Without it the preview would draw another line than
+   * the one the drop lays out.
    */
   readonly core?: LayoutCore
 }
@@ -200,19 +200,17 @@ function previewLine(
   const titles = connect.frameTitles ?? []
   const core = connect.core ?? currentLayoutCore()
   const routed =
-    core === undefined || core.impl.routeLayout === 'ts'
+    core === undefined
       ? routeTentativeOnly(nodes, canvas.edges, tentative, routingStyle, connect, budget, titles)
-      : // The core answers a whole layout in one call, so the existing edges
-        // are routed too and only the tentative one (last) is drawn.
-        routeLayout(
+      : routedByCore(
           core,
           nodes,
           [...canvas.edges, tentative],
-          () => routingStyle ?? 'straight',
-          connect.frozenEdgeSides,
+          routingStyle,
+          connect,
           budget,
           titles,
-        ).routes.at(-1)
+        )
   if (routed === undefined) return { kind: 'line', path: [], arrows: [] }
   return {
     kind: 'line',
@@ -222,10 +220,42 @@ function previewLine(
 }
 
 /**
- * The TypeScript's routing of the tentative edge alone: the side search sees
- * every edge, but only this one is routed. Kept apart from `routeLayout`
- * because that routes (and spends the budget on) every edge per pointer
- * move, which the preview has never paid.
+ * The tentative edge (last of `edges`) as the core routes it: the core answers
+ * a whole layout in one call, so the existing edges are routed too. A board
+ * past the core's routing cap is refused (`CoreInputRefused`), as its whole
+ * layout is, and its preview draws no line rather than throw out of a pointer
+ * move; any other throw is a defect, and is thrown.
+ */
+function routedByCore(
+  core: LayoutCore,
+  nodes: SpatialCanvas['nodes'],
+  edges: readonly CanvasEdge[],
+  routingStyle: ReturnType<typeof resolveCanvasEdgeStyle>['style'],
+  connect: ConnectPreviewContext,
+  budget: ReturnType<typeof createRoutingBudget>,
+  titles: readonly LabelObstacle[],
+) {
+  try {
+    const style = () => routingStyle ?? 'straight'
+    return routeLayout(
+      core,
+      nodes,
+      edges,
+      style,
+      connect.frozenEdgeSides,
+      budget,
+      titles,
+    ).routes.at(-1)
+  } catch (err) {
+    if (err instanceof Error && err.name === 'CoreInputRefused') return undefined
+    throw err
+  }
+}
+
+/**
+ * The TypeScript's routing of the tentative edge alone, for a realm that holds
+ * no core (a jsdom unit test; S18h deletes it with the TypeScript): the side
+ * search sees every edge, but only this one is routed.
  */
 function routeTentativeOnly(
   nodes: SpatialCanvas['nodes'],

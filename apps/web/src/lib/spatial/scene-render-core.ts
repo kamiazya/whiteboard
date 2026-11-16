@@ -155,10 +155,10 @@ export function editorLayoutBase(options: {
     // face for it; otherwise layout measures and declares the bundled one,
     // the same answer the daemon's export gives.
     fontAvailable: hasLoadedFace,
-    // The Rust core this realm has loaded, if any (ADR-0054): every layout
-    // here takes the same routing switch, the worker's and the drag layers'
-    // alike, or the committed scene and the overlay floating over it would
-    // route apart under `rust`. Before it loads, TypeScript answers.
+    // The Rust core this realm has loaded (ADR-0054), which the page and the
+    // worker await before their first layout: every layout here takes the
+    // same core, the worker's and the drag layers' alike, or the committed
+    // scene and the overlay floating over it would route apart.
     core: currentLayoutCore(),
   }
 }

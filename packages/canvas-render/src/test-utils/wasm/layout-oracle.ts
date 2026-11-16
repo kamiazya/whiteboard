@@ -2,7 +2,7 @@ import { type CoreGlue, coreFrom, EXPECTED_ABI } from '@kamiazya/whiteboard-core
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { CanvasLayoutRequest, CoreDegradation } from '../../canvas-core.js'
 import { highlightCode } from '../../highlight/lowlight.js'
-import { canvasLayoutRequest } from '../../layout/canvas-switch.js'
+import { CoreUnaskable, canvasLayoutRequest } from '../../layout/canvas-switch.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import type { FragmentAsk } from '../../layout/nodes/fragment-ask.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
@@ -19,7 +19,7 @@ export interface LayoutRecord {
 /**
  * The request texts exactly as the shim sends them: a core over a glue that
  * keeps what it is handed, answers the first call with the fences `needs`
- * names when there are any, and declines, so the recording cannot drift from
+ * names when there are any, and refuses, so the recording cannot drift from
  * the shim's encoding of a request or of the tokens it sends on a second call.
  */
 function shimRequests(request: CanvasLayoutRequest, needs: readonly Fence[]): string[] {
@@ -30,7 +30,7 @@ function shimRequests(request: CanvasLayoutRequest, needs: readonly Fence[]): st
     layout_spatial_canvas: (text: string) => {
       sent.push(text)
       const asks = sent.length === 1 && needs.length > 0
-      return asks ? needsAnswer(needs) : '["declined","recorded"]'
+      return asks ? needsAnswer(needs) : '["refused","input-too-large","recorded"]'
     },
   } as unknown as CoreGlue
   coreFrom(glue, new Uint8Array()).layoutSpatialCanvas(request, highlightCode)
@@ -83,8 +83,13 @@ function layoutRecord(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): LayoutRecord[] {
-  const request = canvasLayoutRequest(canvas, options)
-  if ('skip' in request) return []
+  let request: CanvasLayoutRequest
+  try {
+    request = canvasLayoutRequest(canvas, options)
+  } catch (err) {
+    if (err instanceof CoreUnaskable) return []
+    throw err
+  }
   const needs = colouredFences(canvas, options)
   const sent = shimRequests(request, needs)
   const events: CoreDegradation[] = []
@@ -102,7 +107,7 @@ function layoutRecord(
   const asks = request.fragments === undefined ? [] : [asked]
   const answer =
     answerText(['ok', laid.scene, [...laid.anchors], events, ...asks]) ??
-    '["declined","non-finite"]'
+    '["refused","malformed","non-finite"]'
   const [first, second] = sent
   if (first === undefined) return []
   if (second === undefined) return [{ id: name, request: first, answer }]

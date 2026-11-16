@@ -49,9 +49,8 @@ export interface RenderMarkdownPreviewOptions {
   readonly tagLibrary?: TagLibrary
 }
 
-// A failed layout still answers an empty scene, but says so: under
-// VITE_WHITEBOARD_CORE_MISMATCH=throw a routing difference in a board embedded
-// in a note lands in that catch, and a silent blank would hide it.
+// A failed layout still answers an empty scene, but says so: a core that
+// failed to load or threw lands in that catch, and a silent blank would hide it.
 const log = getAppLogger('render-preview')
 /**
  * One top-level block's scroll-sync anchor: its 1-based source start line
@@ -82,8 +81,7 @@ export { PREVIEW_PADDING_PX }
 /**
  * Parse -> layout -> serialize, backing the preview pane. This is the ONLY
  * renderer for markdown in this component: it goes through canvas-render's
- * `layoutMarkdownDocument` (codec's parser and `layoutMdastBlocks`, or the
- * Rust core's markdown entry, as the realm's core and its switch say) and
+ * `layoutMarkdownDocument` (the Rust core's markdown entry) and
  * `renderSceneToSvg`, the same path CanvasViewer uses for spatial text nodes
  * and export. There is no markdown-to-HTML fallback anywhere in this file —
  * that would be a second renderer and would reintroduce the preview/export
@@ -198,7 +196,7 @@ function layoutMarkdownScene(
 ): Scene {
   try {
     // A page, not an object: the document theme and the bundled family are
-    // the switch's own, so the minimap rail, which maps THESE blocks, is
+    // the markdown entry's own, so the minimap rail, which maps THESE blocks, is
     // laid out from the same metrics as the pane beside it.
     const scene = layoutMarkdownDocument(value, {
       measure,

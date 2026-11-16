@@ -1,46 +1,44 @@
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { QueryAnswer, QueryRequest } from '../query-core.js'
+import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import type { CoreImpl, CoreMismatch, LayoutCore } from './edges/layout-core.js'
+import { CoreUnaskable } from './canvas-switch.js'
 import { fittedTextNodeHeight } from './fitted-height.js'
-import { queryEdgeLabelPlacement, queryOutlineContentBox } from './queries.js'
+import {
+  queryCommentBubble,
+  queryEdgeLabelPlacement,
+  queryLabelObstacles,
+  queryOutlineContentBox,
+} from './queries.js'
 import { layoutSpatialEdges, naturalNodeContentSize } from './spatial-canvas.js'
 
-/** A core whose query entry answers `answer`, recording what it was asked and what it reported. */
-function fake(impl: CoreImpl, answer: (request: QueryRequest) => QueryAnswer) {
+/** A core whose query entry answers `answer`, recording what it was asked. */
+function fake(answer: (request: QueryRequest) => QueryAnswer) {
   const asked: QueryRequest[] = []
-  const reports: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: {
-      routeLayout: () => {
-        throw new Error('routing is not asked')
-      },
-    },
+  const core = fakeLayoutCore({
     query: {
       layoutQuery: (request) => {
         asked.push(request)
         return answer(request)
       },
     },
-    impl: { routeLayout: 'ts', layoutQuery: impl },
-    onMismatch: (report) => reports.push(report),
-  }
-  return { core, asked, reports }
+  })
+  return { core, asked }
 }
 
 const box = { x: 0, y: 0, w: 100, h: 50 }
 const node = textNode({ id: 'n', x: 0, y: 0, width: 160, height: 80, text: 'two words' })
 const measure = createFakeMeasure()
 const appearance = createSpatialTheme({ mode: 'dark' })
+const refused = () => ({ refused: { code: 'malformed', reason: 'non-finite' } }) as const
 
-describe('the query switch', () => {
-  it('asks nothing under ts, and the core answers under rust', () => {
-    const quiet = fake('ts', () => ({ numbers: [[1, 2, 3, 4]] }))
-    expect(queryOutlineContentBox(quiet.core, undefined, box)).toEqual(box)
-    expect(quiet.asked).toEqual([])
-    const rust = fake('rust', () => ({ numbers: [[1, 2, 3, 4]] }))
+describe('the queries through the core', () => {
+  it('answers with the TypeScript when handed no core, and with the core when handed one', () => {
+    expect(queryOutlineContentBox(undefined, undefined, box)).toEqual(box)
+    const rust = fake(() => ({ numbers: [[1, 2, 3, 4]] }))
     expect(queryOutlineContentBox(rust.core, 'visual.ellipse', box)).toEqual({
       x: 1,
       y: 2,
@@ -50,39 +48,50 @@ describe('the query switch', () => {
     expect(rust.asked).toEqual([
       { query: 'outline-content-box', shape: 'visual.ellipse', box: [0, 0, 100, 50] },
     ])
-    expect(rust.reports).toEqual([])
   })
 
-  it('answers from the TypeScript when the core declines, throws or answers another shape', () => {
-    const declined = fake('rust', () => ({ declined: 'body' }))
-    expect(queryOutlineContentBox(declined.core, undefined, box)).toEqual(box)
-    expect(declined.reports).toEqual([{ fn: 'layoutQuery', kind: 'declined', reason: 'body' }])
-    const thrown = fake('rust', () => {
-      throw new Error('trap')
+  it('throws what the core throws, and an answer in another shape', () => {
+    const err = new Error('trap')
+    const thrown = fake(() => {
+      throw err
     })
-    expect(queryOutlineContentBox(thrown.core, undefined, box)).toEqual(box)
-    expect(thrown.reports.map((r) => r.kind)).toEqual(['refused'])
-    const shaped = fake('rust', () => ({ numbers: [[1, 2, 3]] }))
-    expect(queryOutlineContentBox(shaped.core, undefined, box)).toEqual(box)
-    expect(shaped.reports.map((r) => r.kind)).toEqual(['refused'])
+    expect(() => queryOutlineContentBox(thrown.core, undefined, box)).toThrow(err)
+    const shaped = fake(() => ({ numbers: [[1, 2, 3]] }))
+    expect(() => queryOutlineContentBox(shaped.core, undefined, box)).toThrow(/another shape/)
   })
 
-  it('reports where differential parts, and answers with the TypeScript', () => {
-    const { core, reports } = fake('differential', () => ({ numbers: [[0, 0, 100, -0]] }))
-    expect(queryOutlineContentBox(core, undefined, box)).toEqual(box)
-    expect(reports).toEqual([
-      expect.objectContaining({ fn: 'layoutQuery', kind: 'differs', at: '/h', ts: 50, rust: -0 }),
-    ])
+  it('answers a refused query with the plainest geometry that keeps the editor usable', () => {
+    const { core } = fake(refused)
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+    ]
+    expect(queryOutlineContentBox(core, 'visual.ellipse', box)).toBe(box)
+    expect(queryEdgeLabelPlacement(core, path, { w: 10, h: 10 }, [])).toBeUndefined()
+    expect(queryLabelObstacles(core, [node], [])).toEqual({ titles: [], obstacles: [] })
+    expect(queryCommentBubble(core, { x: 5, y: 7 }, { w: 20, h: 10 }, [])).toEqual({
+      x: 5,
+      y: 7,
+      w: 20,
+      h: 10,
+    })
+    expect(fittedTextNodeHeight(node, { measure, appearance, core })).toBe(node.height)
+    const inset = 2 * SPATIAL_THEME_GEOMETRY.paddingPx
+    expect(naturalNodeContentSize(node, { measure, appearance, core })).toEqual({
+      w: node.width - inset,
+      h: node.height - inset,
+    })
+    const canvas = { nodes: [node], edges: [] }
+    expect(layoutSpatialEdges(canvas, { measure, appearance, core })).toEqual([])
   })
 
-  it('reads a path that draws no line as no place, from the core as from the TypeScript', () => {
-    const { core, reports } = fake('differential', () => ({ numbers: [[]] }))
+  it('reads a path that draws no line as no place', () => {
+    const { core } = fake(() => ({ numbers: [[]] }))
     expect(queryEdgeLabelPlacement(core, [{ x: 5, y: 5 }], { w: 10, h: 10 }, [])).toBeUndefined()
-    expect(reports).toEqual([])
   })
 
-  it('sends a fitted height its measurer, mode and floor, and skips a measurer nobody named', () => {
-    const { core, asked } = fake('rust', () => ({ numbers: [[42]] }))
+  it('sends a fitted height its measurer, mode and floor, and throws for a measurer nobody named', () => {
+    const { core, asked } = fake(() => ({ numbers: [[42]] }))
     expect(fittedTextNodeHeight(node, { measure, appearance, core })).toBe(42)
     expect(asked).toEqual([
       {
@@ -93,14 +102,13 @@ describe('the query switch', () => {
         floor: 'ratio',
       },
     ])
-    const unnamed = fake('rust', () => ({ numbers: [[42]] }))
-    const own = fittedTextNodeHeight(node, { measure: (t, f) => measure(t, f), core: unnamed.core })
-    expect(own).not.toBe(42)
-    expect(unnamed.reports).toEqual([{ fn: 'layoutQuery', kind: 'skipped', reason: 'measure' }])
+    expect(() =>
+      fittedTextNodeHeight(node, { measure: (t, f) => measure(t, f), core: fake(refused).core }),
+    ).toThrow(new CoreUnaskable('measure'))
   })
 
-  it('skips a natural size handed an option the query does not take', () => {
-    const { core, asked, reports } = fake('rust', () => ({ numbers: [[1, 2]] }))
+  it('throws for a natural size handed an option the query does not take', () => {
+    const { core, asked } = fake(() => ({ numbers: [[1, 2]] }))
     expect(naturalNodeContentSize(node, { measure, appearance, style: 'document', core })).toEqual({
       w: 1,
       h: 2,
@@ -112,25 +120,23 @@ describe('the query switch', () => {
       mode: 'dark',
       style: 'document',
     })
-    naturalNodeContentSize(node, {
-      measure,
-      appearance,
-      geometry: { paddingPx: 1, labelFontSizePx: 9, minContentWidthPx: 0 },
-      core,
-    })
-    naturalNodeContentSize(node, { measure: (t, f) => measure(t, f), appearance, core })
-    naturalNodeContentSize(node, { measure, appearance: { ...appearance }, core })
-    expect(reports.map((r) => (r.kind === 'skipped' ? r.reason : r.kind))).toEqual([
-      'options',
-      'measure',
-      'appearance',
-    ])
+    const geometry = { paddingPx: 1, labelFontSizePx: 9, minContentWidthPx: 0 }
+    expect(() => naturalNodeContentSize(node, { measure, appearance, geometry, core })).toThrow(
+      new CoreUnaskable('option:geometry'),
+    )
+    expect(() =>
+      naturalNodeContentSize(node, { measure: (t, f) => measure(t, f), appearance, core }),
+    ).toThrow(new CoreUnaskable('measure'))
+    expect(() =>
+      naturalNodeContentSize(node, { measure, appearance: { ...appearance }, core }),
+    ).toThrow(new CoreUnaskable('appearance'))
+    expect(asked).toHaveLength(1)
   })
 
-  it('hands an edge layer the canvas request, and its degradations to the caller under rust', () => {
+  it('hands an edge layer the canvas request, and its degradations to the caller', () => {
     const canvas = { nodes: [node], edges: [] }
     const event = { kind: 'unknown-theme', theme: 'x.y' } as const
-    const { core, asked } = fake('rust', () => ({ nodes: [], degradations: [event] }))
+    const { core, asked } = fake(() => ({ nodes: [], degradations: [event] }))
     const degraded: unknown[] = []
     const nodes = layoutSpatialEdges(canvas, {
       measure,

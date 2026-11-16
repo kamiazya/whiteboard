@@ -91,9 +91,9 @@ export interface HeadlessExportOptions {
    */
   tagLibrary?: TagLibrary
   /**
-   * The Rust core and its switch (`ServerDeps.layoutCore`, resolved by the
-   * caller), so a file export is laid out by whatever lays out
-   * `wb_scene_render`. Absent, the layout is the TypeScript's.
+   * The Rust core (`ServerDeps.layoutCore`, resolved by the caller), so a
+   * file export is laid out by whatever lays out `wb_scene_render`. Absent
+   * (a test composition), the layout is the TypeScript composer's.
    */
   core?: LayoutCore
 }
@@ -228,12 +228,8 @@ export function buildSpatialScene(
   })
 }
 
-/**
- * What the file export hands the layout, short of the core: the one
- * definition the export and the layout census (`layout-census.mjs`) both
- * read, so the census measures the export's profile rather than a copy of it.
- */
-export function exportLayoutOptions(
+/** What the file export hands the layout, short of the core. */
+function exportLayoutOptions(
   measure: MeasureText,
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,

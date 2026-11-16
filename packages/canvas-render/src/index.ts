@@ -41,15 +41,14 @@ export type {
 } from '@kamiazya/whiteboard-scene'
 export type {
   CanvasLayoutCore,
-  CanvasLayoutMismatch,
   CanvasLayoutRequest,
-  CanvasLayoutTally,
   CoreDegradation,
 } from './canvas-core.js'
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
 export { boxContains, type HitBox, hitBoxesOf, topmostHit } from './hit-test.js'
+export { CoreUnaskable } from './layout/canvas-switch.js'
 export {
   resolveCanvasPalette,
   resolveCanvasThemeFontFamily,
@@ -66,12 +65,7 @@ export {
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export { routeEdge } from './layout/edges/edge-router.js'
 export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
-export type {
-  CoreImpl,
-  CoreMismatch,
-  LayoutCore,
-  RoutingCore,
-} from './layout/edges/layout-core.js'
+export type { LayoutCore, RoutingCore } from './layout/edges/layout-core.js'
 export { routeLayout } from './layout/edges/layout-core.js'
 export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
@@ -153,11 +147,8 @@ export { translateScene } from './layout/translate-scene.js'
 export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
 export type {
-  MarkdownBodyRequest,
   MarkdownCommentRequest,
   MarkdownLayoutCore,
-  MarkdownLayoutMismatch,
-  MarkdownLayoutTally,
   MarkdownNoteRequest,
 } from './markdown-core.js'
 export type { FontDescriptor, MeasureSpec, MeasureText, TextMetrics } from './measure.js'
@@ -176,9 +167,6 @@ export {
 export type {
   QueryAnswer,
   QueryLayoutCore,
-  QueryLayoutMismatch,
-  QueryLayoutSkip,
-  QueryLayoutTally,
   QueryRequest,
 } from './query-core.js'
 export {

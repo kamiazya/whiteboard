@@ -1,14 +1,13 @@
 // @vitest-environment node
 
 import {
-  type CoreMismatch,
   constantRatioMeasureText,
-  type LayoutCore,
   type MarkdownNoteRequest,
   referenceSeamsFromWire,
   referenceWire,
   type Scene,
 } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { recordingFragmentTable } from './fragment-requests.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
@@ -33,12 +32,10 @@ const CORE_SCENE = {
   ],
 } as unknown as Scene
 
-/** A core whose markdown switch reads `impl` and which records every note it is handed. */
-function recordingCore(impl: 'rust' | 'differential' = 'rust') {
+/** A core recording every note it is handed. */
+function recordingCore() {
   const asked: MarkdownNoteRequest[] = []
-  const reports: CoreMismatch[] = []
-  const core: LayoutCore = {
-    routing: { routeLayout: () => ({ routes: [], anchors: new Map() }) as never },
+  const core = fakeLayoutCore({
     markdown: {
       layoutMarkdown: (request) => {
         // A note's layout only: a comment never reaches these surfaces.
@@ -46,17 +43,15 @@ function recordingCore(impl: 'rust' | 'differential' = 'rust') {
         return { scene: CORE_SCENE, degradations: [] }
       },
     },
-    impl: { routeLayout: 'ts', layoutMarkdown: impl },
-    onMismatch: (report) => reports.push(report),
-  }
-  return { core, asked, reports }
+  })
+  return { core, asked }
 }
 
 describe('the preview pane lays its note out through the core', () => {
   beforeEach(() => vi.mocked(currentLayoutCore).mockReset())
 
   it('hands the core the whole note as the page draws it, and paints its answer', () => {
-    const { core, asked, reports } = recordingCore()
+    const { core, asked } = recordingCore()
     vi.mocked(currentLayoutCore).mockReturnValue(core)
     const table = recordingFragmentTable([])
     const { keyed } = renderMarkdownPreview('# Title\n\n$$x$$', {
@@ -65,7 +60,6 @@ describe('the preview pane lays its note out through the core', () => {
       theme: 'dark',
       fragments: table,
     })
-    expect(reports).toEqual([])
     expect(asked).toHaveLength(1)
     expect(asked[0]).toMatchObject({
       kind: 'markdown',
@@ -80,7 +74,7 @@ describe('the preview pane lays its note out through the core', () => {
   })
 
   it('hands the core the references as their wire', () => {
-    const { core, asked, reports } = recordingCore()
+    const { core, asked } = recordingCore()
     vi.mocked(currentLayoutCore).mockReturnValue(core)
     const wire = referenceWire(new Map([['other', { body: 'hi', name: 'Other' }]]))
     renderMarkdownPreview('[[other]]', {
@@ -88,7 +82,6 @@ describe('the preview pane lays its note out through the core', () => {
       maxWidth: 480,
       references: referenceSeamsFromWire(wire),
     })
-    expect(reports).toEqual([])
     expect(asked[0]?.references).toBe(wire)
   })
 
@@ -116,14 +109,5 @@ describe('the preview pane lays its note out through the core', () => {
     expect(asked).toHaveLength(1)
     expect(asked[0]).toMatchObject({ kind: 'markdown', maxWidth: 320, mode: 'light' })
     expect(blocks).toHaveLength(1)
-  })
-
-  it('compares under differential and draws the TypeScript', () => {
-    const { core, reports } = recordingCore('differential')
-    vi.mocked(currentLayoutCore).mockReturnValue(core)
-    const { keyed } = renderMarkdownPreview('plain words', { measure, maxWidth: 480 })
-    expect(keyed.svg).not.toContain('from the core')
-    expect(keyed.svg).toContain('plain')
-    expect(reports.map((r) => r.kind)).toEqual(['differs'])
   })
 })

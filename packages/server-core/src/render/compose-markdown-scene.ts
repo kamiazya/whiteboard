@@ -40,7 +40,7 @@ export interface ComposeMarkdownSceneOptions {
   readonly tagLibrary?: TagLibrary
   /** Lay out only the section under this heading (`#Heading`). */
   readonly section?: string
-  /** The Rust core and its switch (`ServerDeps.layoutCore`); absent, the TypeScript lays it out. */
+  /** The Rust core (`ServerDeps.layoutCore`); absent, the TypeScript lays it out. */
   readonly core?: LayoutCore
   /** Told when the core refused the note and the scene is the refusal; it is logged either way. */
   readonly onRefused?: (refusal: LayoutRefusal) => void
@@ -49,7 +49,7 @@ export interface ComposeMarkdownSceneOptions {
 /**
  * Composes a document scene from a markdown body — canvas-render's
  * `layoutMarkdownDocument`, the same note layout the web preview takes,
- * answered by the Rust core's markdown entry under `core`'s switch, with an
+ * answered by the Rust core's markdown entry, with an
  * embedded canvas painted in the pinned light appearance every MCP render
  * uses. `undefined` for a `section` the body holds no heading for.
  */

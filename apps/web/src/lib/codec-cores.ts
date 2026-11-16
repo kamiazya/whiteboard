@@ -4,7 +4,6 @@ import {
   okfCoreInstalled,
   spatialCoreInstalled,
 } from '@kamiazya/whiteboard-codec'
-import { getAppLogger } from './app-logger.js'
 import { installLayoutCore } from './spatial/layout-core.js'
 
 /**
@@ -19,7 +18,7 @@ import { installLayoutCore } from './spatial/layout-core.js'
  */
 export async function codecsReady(): Promise<void> {
   if (okfCoreInstalled() && spatialCoreInstalled()) return
-  const core = await installLayoutCore(getAppLogger('layout-core')).codecs()
+  const core = await installLayoutCore().codecs()
   if (!okfCoreInstalled()) installOkfCore(core)
   if (!spatialCoreInstalled()) installSpatialCore(core)
 }

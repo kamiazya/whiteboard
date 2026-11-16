@@ -3,13 +3,16 @@ import { parseSource } from './ast-helpers.js'
 
 /**
  * ADR-0054's `PORTED_FUNCTIONS` ledger: every function the Rust core ports
- * that has reached stage 2 (`differential`) or later, with where its
- * TypeScript lives, where its switch is and which Rust export answers it.
+ * that has reached stage 2 or later, with where its TypeScript lives and
+ * which Rust export answers it.
  *
- * Both-sided (see `ported-functions.test.ts`): a function missing here while
- * its switch key exists fails, a function listed here that no longer exists
- * fails, and once the stage reaches `rust` the TypeScript export must be a
- * re-export of the shim rather than an implementation.
+ * Both-sided (see `ported-functions.test.ts`): a function listed here that no
+ * longer exists fails, and once the stage reaches `rust` the TypeScript export
+ * must be a re-export of the shim rather than an implementation. The layout's
+ * per-function switch (`LayoutCore['impl']`) was retired in step 7's S18g: the
+ * core answers every layout a root hands it, and the TypeScript left is the
+ * composer's own, reached only by canvas-render's tests and recorders until
+ * S18h deletes it and moves these entries to stage 4.
  *
  * Stage 4 has two shapes. A function whose callers can import the shim
  * re-exports it. One whose callers are synchronous and reach it by import from
@@ -20,18 +23,15 @@ import { parseSource } from './ast-helpers.js'
  * TypeScript must be gone. The OKF envelope, the JSON Canvas codec and the facet write are the second shape.
  */
 export interface PortedFunction {
-  /** The name the function goes by in the TypeScript and in the switch. */
+  /** The name the function goes by in the TypeScript. */
   readonly name: string
-  /** ADR-0054's transition table: 2 differential, 3 rust, 4 TypeScript deleted. */
+  /**
+   * ADR-0054's transition table: 2 the TypeScript still implements it (beside
+   * a `differential` switch until S18g, beside the core alone since), 3 the
+   * TypeScript export re-exports the shim, 4 the TypeScript deleted.
+   */
   readonly stage: 2 | 3 | 4
   readonly ts: { readonly file: string; readonly export: string }
-  /** The `CoreImpl` switch: a key of `<interface>['impl']`, set through `option`. Gone once the TypeScript is deleted. */
-  readonly switch?: {
-    readonly file: string
-    readonly interface: string
-    readonly key: string
-    readonly option: string
-  }
   readonly rust: { readonly file: string; readonly fn: string }
   /** What the TypeScript export re-exports from once the stage is 3 or later. */
   readonly shim: { readonly module: string; readonly file: string; readonly member: string }
@@ -77,18 +77,11 @@ const FACET_WRITE_TYPESCRIPT = [
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'routeLayout',
-    // Stays 2 although the switch defaults to `rust`: stage 3 makes the
-    // TypeScript export a re-export of the shim, which deletes the
-    // implementation the `ts` and `differential` settings (the rollback) run.
-    // It moves with the TypeScript's deletion.
+    // Stays 2 although the core answers every layout a root hands it (S18g):
+    // the TypeScript export is still the composer's own routing. It moves
+    // with the TypeScript's deletion (S18h3).
     stage: 2,
     ts: { file: 'packages/canvas-render/src/layout/edges/layout-core.ts', export: 'routeLayout' },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'routeLayout',
-      option: 'SpatialLayoutOptions.core',
-    },
     rust: { file: 'crates/bindings/wasm/src/spatial_edges.rs', fn: 'edge_route_layout' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
@@ -98,20 +91,13 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   {
     name: 'layoutSpatialCanvas',
-    // The daemon defaults to `rust` (S16a) and the web app to `ts` until
-    // S16b; `differential` holds it to the TypeScript in canvas-render-rust,
-    // CI's mcp-node step and the dev daemon, and the crate replays the
-    // recording. Stays 2 for routing's reason: stage 3 deletes the rollback.
+    // The core answers it on every root (S16a, S16b; the switch retired in
+    // S18g), and the crate replays the recording. Stays 2 for routing's
+    // reason until S18h2.
     stage: 2,
     ts: {
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
       export: 'layoutSpatialCanvasWithAnchors',
-    },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutSpatialCanvas',
-      option: 'SpatialLayoutOptions.core',
     },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/mod.rs', fn: 'layout_spatial_canvas' },
     shim: {
@@ -122,19 +108,12 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   },
   {
     // A markdown NOTE (S18c): the core's markdown entry, a `kind: 'markdown'`
-    // request on the whole layout's export (S18b), answered under its own
-    // switch key. The daemon's roots follow `WHITEBOARD_CORE_LAYOUT`; the
-    // TypeScript it holds to is `layoutMdastBlocks` over the parsed body.
-    // Stays 2 for routing's reason: stage 3 deletes the rollback.
+    // request on the whole layout's export (S18b). The TypeScript it was held
+    // to is `layoutMdastBlocks` over the parsed body. Stays 2 for routing's
+    // reason until S18h2.
     name: 'layoutMarkdown',
     stage: 2,
     ts: { file: 'packages/canvas-render/src/layout/markdown-body.ts', export: 'layoutMdastBlocks' },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutMarkdown',
-      option: 'MarkdownDocumentOptions.core',
-    },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/mod.rs', fn: 'layout_spatial_canvas' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
@@ -143,21 +122,14 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     },
   },
   // The layout pieces a root calls on their own (S18d): one export,
-  // `layout_query`, with a tagged query per piece, under one switch key that
-  // rides `WHITEBOARD_CORE_LAYOUT` like the whole layout's. The TypeScript
-  // each is held to is the function the composer still calls without a core.
+  // `layout_query`, with a tagged query per piece. The TypeScript each was
+  // held to is the function the composer still calls without a core.
   {
     name: 'layoutSpatialEdges',
     stage: 2,
     ts: {
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
       export: 'layoutSpatialEdges',
-    },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'SpatialLayoutOptions.core',
     },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
@@ -173,12 +145,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
       export: 'naturalNodeContentSize',
     },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'SpatialLayoutOptions.core',
-    },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
@@ -192,12 +158,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     ts: {
       file: 'packages/canvas-render/src/layout/fitted-height.ts',
       export: 'fittedTextNodeHeight',
-    },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'fittedTextNodeHeight options.core',
     },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
@@ -213,12 +173,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
       export: 'edgeLabelPlacement',
     },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'queryEdgeLabelPlacement core',
-    },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
@@ -232,12 +186,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     ts: {
       file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
       export: 'labelObstacles',
-    },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'queryLabelObstacles core',
     },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
@@ -253,12 +201,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
       export: 'frameTitleObstacles',
     },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'queryLabelObstacles core',
-    },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
@@ -272,12 +214,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
     ts: {
       file: 'packages/canvas-render/src/layout/comment-placement.ts',
       export: 'placeCommentBubble',
-    },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'queryCommentBubble core',
     },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
@@ -293,12 +229,6 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/canvas-render/src/layout/nodes/node-outline.ts',
       export: 'outlineContentBox',
     },
-    switch: {
-      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
-      interface: 'LayoutCore',
-      key: 'layoutQuery',
-      option: 'queryOutlineContentBox core',
-    },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
@@ -306,9 +236,9 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       member: 'layoutQuery',
     },
   },
-  // A body's parse and its reference resolution have no switch of their own:
-  // the core reaches them only through the whole layout, whose differential
-  // compares every scene they shape, so that export is the shim's member.
+  // A body's parse and its reference resolution have no entry of their own:
+  // the core reaches them only through the whole layout, so that export is
+  // the shim's member.
   {
     name: 'parseMarkdownBody',
     stage: 2,
@@ -438,7 +368,10 @@ function reexportsFrom(file: ts.SourceFile, module: string): Set<string> {
   return names
 }
 
-/** The member names of `<interface>['impl']`'s type literal, or `undefined` when it is not one. */
+/**
+ * The member names of `<interface>['impl']`'s type literal, or `undefined`
+ * when it has none: a per-function switch, which S18g retired from `LayoutCore`.
+ */
 export function switchKeys(text: string, interfaceName: string): string[] | undefined {
   const file = parseSource('layout-core.ts', text, false)
   for (const s of file.statements) {
@@ -531,28 +464,6 @@ function checkRustSide(f: PortedFunction, read: ReadFile): string[] {
   return problems
 }
 
-/** Both directions between one switch interface's keys and the entries naming it. */
-function checkSwitch(
-  slot: string,
-  listed: readonly Switched[],
-  keys: readonly string[] | undefined,
-): string[] {
-  if (keys === undefined) return [`${slot}: no \`impl\` type literal to read the switch keys from`]
-  const missing = listed
-    .filter((f) => !keys.includes(f.switch.key))
-    .map((f) => `${f.name}: ${f.switch.file} has no switch key ${f.switch.key}`)
-  const unlisted = keys
-    .filter((key) => !listed.some((f) => f.switch.key === key))
-    .map((key) => `${slot}: switch key ${key} is not in PORTED_FUNCTIONS`)
-  return [...missing, ...unlisted]
-}
-
-/** An entry still held by a switch: stage 4's is gone with the TypeScript it chose between. */
-type Switched = PortedFunction & { readonly switch: NonNullable<PortedFunction['switch']> }
-const hasSwitch = (f: PortedFunction): f is Switched => f.switch !== undefined
-
-const slotOf = (f: Switched): string => `${f.switch.file}#${f.switch.interface}`
-
 /** Every way the ledger and the tree disagree, one sentence each. */
 export function checkPortedFunctions(ledger: readonly PortedFunction[], read: ReadFile): string[] {
   const names = ledger.map((f) => f.name)
@@ -560,13 +471,5 @@ export function checkPortedFunctions(ledger: readonly PortedFunction[], read: Re
     .filter((name) => names.filter((n) => n === name).length > 1)
     .map((name) => `${name}: listed twice`)
   const perEntry = ledger.flatMap((f) => [...checkTsExport(f, read), ...checkRustSide(f, read)])
-  const switched = ledger.filter(hasSwitch)
-  const perSwitch = [...new Set(switched.map(slotOf))].flatMap((slot) => {
-    const listed = switched.filter((f) => slotOf(f) === slot)
-    const first = listed[0] as Switched
-    const text = read(first.switch.file)
-    const keys = text === undefined ? undefined : switchKeys(text, first.switch.interface)
-    return checkSwitch(slot, listed, keys)
-  })
-  return [...twice, ...perEntry, ...perSwitch]
+  return [...twice, ...perEntry]
 }

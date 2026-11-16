@@ -1,179 +1,73 @@
-import type { CoreMismatch } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it, vi } from 'vitest'
 import { createLayoutCoreHost, currentLayoutCore, layoutCoreReady } from './layout-core.js'
-import type { CoreSettings } from './layout-core-settings.js'
 import type { WebCore } from './web-core.js'
 
-const routing = {} as WebCore
-const settings = (
-  impl: CoreSettings['impl'],
-  mismatch: CoreSettings['mismatch'] = 'log',
-  layout: CoreSettings['layout'] = 'ts',
-): CoreSettings => ({ impl, layout, mismatch })
-const silent = () => ({ warn: vi.fn(), debug: vi.fn() })
-
-const differs: CoreMismatch = {
-  fn: 'routeLayout',
-  kind: 'differs',
-  at: 3,
-  ts: [1, 2, 3, 4],
-  rust: [1, 2, 3, 5],
-  repro: {
-    nodes: [],
-    edges: [],
-    styles: [],
-    overrides: undefined,
-    budget: {} as never,
-    labels: [],
-  },
-}
+const instance = {} as WebCore
 
 describe('createLayoutCoreHost', () => {
-  it('loads nothing under ts and answers no core', async () => {
-    const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('ts'), load, silent())
-    expect(await host.ready()).toBeUndefined()
-    expect(host.current()).toBeUndefined()
-    expect(load).not.toHaveBeenCalled()
-  })
-
-  it('answers no core until the load settles, then the loaded one, loading once', async () => {
-    const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('differential'), load, silent())
+  it('answers no core until the load settles, then the loaded one on every entry, loading once', async () => {
+    const load = vi.fn(async () => instance)
+    const host = createLayoutCoreHost(load)
     expect(host.current()).toBeUndefined()
     const core = await host.ready()
-    expect(core?.routing).toBe(routing)
-    expect(core?.impl).toEqual({
-      routeLayout: 'differential',
-      layoutSpatialCanvas: 'ts',
-      layoutMarkdown: 'ts',
-      layoutQuery: 'ts',
+    expect(core).toEqual({
+      routing: instance,
+      layout: instance,
+      markdown: instance,
+      query: instance,
     })
     expect(host.current()).toBe(core)
-    await host.ready()
+    expect(await host.ready()).toBe(core)
     expect(load).toHaveBeenCalledTimes(1)
   })
 
-  it('carries the impl it was set to', async () => {
-    const host = createLayoutCoreHost(settings('rust'), async () => routing, silent())
-    expect((await host.ready())?.impl.routeLayout).toBe('rust')
-  })
-
-  it('hands the whole layout to the same instance, under its own switch', async () => {
-    const host = createLayoutCoreHost(
-      settings('rust', 'log', 'differential'),
-      async () => routing,
-      silent(),
-    )
-    const core = await host.ready()
-    expect(core?.layout).toBe(routing)
-    expect(core?.impl).toEqual({
-      routeLayout: 'rust',
-      layoutSpatialCanvas: 'differential',
-      layoutMarkdown: 'differential',
-      layoutQuery: 'differential',
-    })
-  })
-
-  it('hands a markdown note to the same instance, under the whole layout switch', async () => {
-    const host = createLayoutCoreHost(
-      settings('rust', 'log', 'rust'),
-      async () => routing,
-      silent(),
-    )
-    const core = await host.ready()
-    expect(core?.markdown).toBe(routing)
-    expect(core?.impl.layoutMarkdown).toBe('rust')
-  })
-
-  it('warns and routes in TypeScript when the artifact cannot load', async () => {
-    const log = silent()
-    const host = createLayoutCoreHost(
-      settings('differential'),
-      async () => {
-        throw new Error('404')
-      },
-      log,
-    )
-    expect(await host.ready()).toBeUndefined()
-    expect(host.current()).toBeUndefined()
-    expect(log.warn).toHaveBeenCalledTimes(1)
-  })
-
-  it('fails instead when mismatches throw, because nothing was compared', async () => {
-    const host = createLayoutCoreHost(
-      settings('differential', 'throw'),
-      async () => {
-        throw new Error('404')
-      },
-      silent(),
-    )
+  it('rejects a load that fails, throws it to every layout after, and tries again on the next ready', async () => {
+    const load = vi
+      .fn<() => Promise<WebCore>>()
+      .mockRejectedValueOnce(new Error('404'))
+      .mockResolvedValueOnce(instance)
+    const host = createLayoutCoreHost(load)
     await expect(host.ready()).rejects.toThrow('404')
+    // There is no TypeScript to answer in the core's place: a layout after a
+    // failed load is an error its surface shows, never a silent fallback.
     expect(() => host.current()).toThrow('404')
-  })
-
-  it('logs a mismatch and carries on under log', async () => {
-    const log = silent()
-    const host = createLayoutCoreHost(settings('differential'), async () => routing, log)
-    const core = await host.ready()
-    expect(() => core?.onMismatch?.(differs)).not.toThrow()
-    expect(log.warn).toHaveBeenCalledTimes(1)
-  })
-
-  it('logs a layout the core did not answer at debug, and never throws it', async () => {
-    const log = silent()
-    const host = createLayoutCoreHost(settings('differential', 'throw'), async () => routing, log)
-    const core = await host.ready()
-    const skipped = { fn: 'layoutSpatialCanvas', kind: 'skipped', reason: 'highlighter' } as const
-    expect(() => core?.onMismatch?.(skipped)).not.toThrow()
-    expect(log.warn).not.toHaveBeenCalled()
-    expect(log.debug).toHaveBeenCalledWith('the Rust core did not answer this layout', skipped)
-  })
-
-  it('throws a mismatch under throw, naming what differed', async () => {
-    const host = createLayoutCoreHost(
-      settings('differential', 'throw'),
-      async () => routing,
-      silent(),
-    )
-    const core = await host.ready()
-    expect(() => core?.onMismatch?.(differs)).toThrow(/differs/)
+    expect((await host.ready()).routing).toBe(instance)
+    expect(host.current()?.routing).toBe(instance)
+    expect(load).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('the codecs half of the host', () => {
-  it('loads for the codecs alone, and answers no routing core while routing stays on ts', async () => {
-    const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('ts'), load, silent())
+  it('loads for the codecs alone', async () => {
+    const load = vi.fn(async () => instance)
+    const host = createLayoutCoreHost(load)
     expect(load).not.toHaveBeenCalled()
-    expect(await host.codecs()).toBe(routing)
-    expect(await host.ready()).toBeUndefined()
-    expect(host.current()).toBeUndefined()
+    expect(await host.codecs()).toBe(instance)
     expect(load).toHaveBeenCalledTimes(1)
   })
 
-  it('shares the one load routing made', async () => {
-    const load = vi.fn(async () => routing)
-    const host = createLayoutCoreHost(settings('rust'), load, silent())
+  it('shares the one load the layouts made', async () => {
+    const load = vi.fn(async () => instance)
+    const host = createLayoutCoreHost(load)
     await host.ready()
-    expect(await host.codecs()).toBe(routing)
+    expect(await host.codecs()).toBe(instance)
     expect(load).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects when the artifact cannot load, whatever routing does, and tries again on the next ask', async () => {
+  it('rejects when the artifact cannot load, and tries again on the next ask', async () => {
     const load = vi
       .fn<() => Promise<WebCore>>()
       .mockRejectedValueOnce(new Error('404'))
-      .mockResolvedValueOnce(routing)
-    const host = createLayoutCoreHost(settings('ts'), load, silent())
+      .mockResolvedValueOnce(instance)
+    const host = createLayoutCoreHost(load)
     await expect(host.codecs()).rejects.toThrow('404')
-    expect(await host.codecs()).toBe(routing)
+    expect(await host.codecs()).toBe(instance)
     expect(load).toHaveBeenCalledTimes(2)
   })
 })
 
 describe('a realm that never installed a core', () => {
-  it('has none and routes in TypeScript', async () => {
+  it('has none, and its layouts are the TypeScript composer’s', async () => {
     expect(currentLayoutCore()).toBeUndefined()
     expect(await layoutCoreReady()).toBeUndefined()
   })

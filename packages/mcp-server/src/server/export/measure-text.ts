@@ -7,6 +7,7 @@
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { constantRatioMeasureText, describeMeasure } from '@kamiazya/whiteboard-canvas-render'
+import { REGISTER_LAYOUT_FONTS_CAPS } from '@kamiazya/whiteboard-core-wasm'
 import type * as opentype from 'opentype.js'
 import { errnoCode } from '../../shared/errno.js'
 
@@ -278,15 +279,16 @@ const FACE_SLOTS = ['regular', 'bold', 'italic', 'boldItalic'] as const
 
 /**
  * Names the measurer by its faces, so the Rust core can lay a canvas out
- * measuring as this does (ADR-0054 step 7, a whole layout's
- * `layoutSpatialCanvas` switch): the vendored family's four first, the family
+ * measuring as this does (ADR-0054 step 7, a whole layout through
+ * `layoutSpatialCanvas`): the vendored family's four first, the family
  * a descriptor naming no held one is measured in, then one face per installed
  * family, which the core's measurer answers every weight and style with as
  * `buildOpentypeMeasurer` does. A face the core's reader cannot read (a WOFF
- * opentype.js inflates, a collection) is dropped by the core, so a theme
- * naming its family reports `font-missing` there and draws in Roboto; faces
- * past the registration's caps together are the core's to decline, and the
- * TypeScript then lays the canvas out.
+ * opentype.js inflates, a collection) is dropped by the core, and an installed
+ * family past what one registration holds is left out here
+ * (`facesWithinRegistration`); either way a theme naming that family reports
+ * `font-missing` and draws in Roboto, since there is no TypeScript to lay the
+ * canvas out in its place.
  */
 async function describeFaces(
   measure: MeasureText,
@@ -312,7 +314,42 @@ async function describeFaces(
     italic: false,
     bytes,
   }))
-  describeMeasure(measure, { kind: 'fonts', faces: [...faces, ...families] })
+  describeMeasure(measure, { kind: 'fonts', faces: facesWithinRegistration(faces, families) })
+}
+
+/** What a face's wire costs beside its bytes, past its family name: its flags and its range. */
+const FACE_WIRE_BYTES = 256
+
+interface DescribedFace {
+  readonly family: string
+  readonly bold: boolean
+  readonly italic: boolean
+  readonly bytes: Uint8Array
+}
+
+/**
+ * The vendored faces, then each installed family in turn while the faces fit
+ * one font registration (`REGISTER_LAYOUT_FONTS_CAPS`: their bytes with their
+ * wire, and their count). A registration past it is declined whole, which
+ * would leave every layout without a measurer, so a family that does not fit
+ * is left out instead and drawn as one the core cannot read is.
+ */
+export function facesWithinRegistration(
+  vendored: readonly DescribedFace[],
+  installed: readonly DescribedFace[],
+  caps: { readonly maxBytes: number; readonly maxNodes: number } = REGISTER_LAYOUT_FONTS_CAPS,
+): DescribedFace[] {
+  const cost = (face: DescribedFace) =>
+    face.bytes.byteLength + FACE_WIRE_BYTES + 3 * face.family.length
+  let spent = vendored.reduce((n, face) => n + cost(face), 0)
+  const held = [...vendored]
+  for (const face of installed) {
+    if (held.length >= caps.maxNodes) break
+    if (spent + cost(face) > caps.maxBytes) continue
+    spent += cost(face)
+    held.push(face)
+  }
+  return held
 }
 
 async function loadRealMeasurer(
