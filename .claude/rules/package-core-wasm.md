@@ -92,7 +92,7 @@ reproducibility check measure) and `stage:wasm` copies it in. There is no
 `build` script, so `pnpm -r build` and the release path need no Rust yet.
 In CI, `.github/actions/core-wasm` restores it from a cache keyed on its
 inputs and builds and saves it only on a miss (owner decision, 2026-11-08);
-a job that lays out through the core in `differential` uses that action.
+a job that lays out through the core uses that action.
 
 `#glue` (package `imports`) is declared by hand in `src/glue.d.ts`, so
 `tsc` needs no artifact: the TypeScript jobs and the pre-push hook have no
