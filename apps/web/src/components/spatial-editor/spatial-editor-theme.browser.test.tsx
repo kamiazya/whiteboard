@@ -5,13 +5,12 @@
  * "not #737373", which would pass for any wrong color too).
  */
 
-import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { EDITOR_DARK_PALETTE, EDITOR_LIGHT_PALETTE } from '../../lib/spatial/editor-appearance.js'
-import { hostMeasure } from '../../test-utils/fake-measure.js'
+import { fixedEditorMeasure } from '../../test-utils/fake-measure.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 /** A real browser normalizes an inline `fill: '#RRGGBB'` style to `rgb(r, g, b)`. */
@@ -23,7 +22,7 @@ function hexToRgb(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`
 }
 
-const fakeMeasure = hostMeasure(createFixedMeasure({ advance: 30, ascent: 10, descent: 2 }))
+const fakeMeasure = fixedEditorMeasure
 
 function twoNodeCanvasWithEdge(): SpatialCanvas {
   return {

@@ -4,6 +4,7 @@ import {
   type MeasureText,
   type TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
+import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 
 /**
  * Names a test's measurer as the HOST measurer, the way the page's canvas
@@ -38,4 +39,12 @@ export const fakeMeasure: MeasureText = hostMeasure(
       lineGap: 0,
     }
   },
+)
+
+/**
+ * A fixed 30px advance per string with a 10/2 ascent and descent, named as the
+ * host measurer: the editor tests that assert in those numbers share it.
+ */
+export const fixedEditorMeasure: MeasureText = hostMeasure(
+  createFixedMeasure({ advance: 30, ascent: 10, descent: 2 }),
 )
