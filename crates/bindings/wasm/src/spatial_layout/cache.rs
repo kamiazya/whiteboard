@@ -97,11 +97,6 @@ impl Resident {
         Some(kept.body.clone())
     }
 
-    fn forget(&mut self, at: usize) {
-        let kept = self.kept.swap_remove(at);
-        self.bytes = self.bytes.saturating_sub(kept.key.len());
-    }
-
     /// Keeps `body` under `key` for `surface`, forgetting the least recently
     /// used bodies of every surface until it fits; a key past the byte cap on
     /// its own is not kept.
@@ -110,14 +105,16 @@ impl Resident {
             return;
         }
         if let Some(at) = self.at(surface, &key) {
-            self.forget(at);
+            let replaced = self.kept.swap_remove(at);
+            self.bytes = self.bytes.saturating_sub(replaced.key.len());
         }
         while self.kept.len() >= self.max_bodies
             || self.bytes.saturating_add(key.len()) > self.max_bytes
         {
             let oldest = self.kept.iter().enumerate().min_by_key(|(_, kept)| kept.used);
             let Some((at, _)) = oldest else { break };
-            self.forget(at);
+            let evicted = self.kept.swap_remove(at);
+            self.bytes = self.bytes.saturating_sub(evicted.key.len());
         }
         let used = self.tick();
         self.bytes = self.bytes.saturating_add(key.len());
