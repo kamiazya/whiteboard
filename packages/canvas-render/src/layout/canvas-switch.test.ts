@@ -8,7 +8,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
-import { describeMeasure } from '../measure.js'
+import { constantRatioMeasureText, describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
@@ -147,6 +147,19 @@ describe('the whole layout through the core switch', () => {
       ])
     }
     expect(heard).toEqual([refused, refused])
+  })
+
+  it('draws a refusal the host measurer caused without asking that measurer again', () => {
+    const refused: LayoutRefusal = { code: 'malformed', reason: 'host-measure' }
+    const failing = describeMeasure(
+      () => {
+        throw new Error('no canvas context')
+      },
+      { kind: 'host' },
+    )
+    const { laid } = run('rust', () => ({ refused }), { measure: failing })
+    const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
+    expect(laid.scene).toEqual(drawn)
   })
 
   it('draws the refusal where the board is, at the top-left of its boxes', () => {

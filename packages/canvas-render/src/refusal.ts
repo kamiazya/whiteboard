@@ -1,5 +1,10 @@
 import type { Scene, SceneNode, SceneRefusal } from '@kamiazya/whiteboard-scene'
-import { clampAdvance, type FontDescriptor, type MeasureText } from './measure.js'
+import {
+  clampAdvance,
+  constantRatioMeasureText,
+  type FontDescriptor,
+  type MeasureText,
+} from './measure.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 import type { SpatialThemeMode } from './theme/spatial-theme-mode.js'
@@ -138,11 +143,44 @@ function wrap(text: string, width: number, measure: MeasureText, at: FontDescrip
   return lines
 }
 
+/** Raised by `trusted` to abandon a notice drawn with a measurer that failed. */
+class Unmeasured extends Error {}
+
+/** `measure`, throwing `Unmeasured` for an answer this notice cannot place. */
+const trusted =
+  (measure: MeasureText): MeasureText =>
+  (text, at) => {
+    let metrics: ReturnType<MeasureText>
+    try {
+      metrics = measure(text, at)
+    } catch {
+      throw new Unmeasured()
+    }
+    if (!Number.isFinite(metrics.advanceWidth) || !Number.isFinite(metrics.ascent)) {
+      throw new Unmeasured()
+    }
+    return metrics
+  }
+
 /**
  * A refused layout drawn as one box naming why, at `at` (the origin by
  * default), in the palette of `mode`: the title in bold, then the detail, wrapped to the box.
+ *
+ * A measurer that throws or answers no finite advance or ascent draws the
+ * whole notice by the ratio estimate instead: a `host-measure` refusal is
+ * drawn because the host's measurer failed, so its notice cannot depend on it,
+ * and one measurer for the whole box keeps its lines consistent.
  */
 export function refusalScene(refusal: LayoutRefusal, options: RefusalSceneOptions): Scene {
+  try {
+    return drawn(refusal, { ...options, measure: trusted(options.measure) })
+  } catch (err) {
+    if (!(err instanceof Unmeasured)) throw err
+    return drawn(refusal, { ...options, measure: constantRatioMeasureText })
+  }
+}
+
+function drawn(refusal: LayoutRefusal, options: RefusalSceneOptions): Scene {
   const { measure, mode } = options
   const palette = mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
   const width = Math.min(options.maxWidth ?? WIDTH_PX, WIDTH_PX)

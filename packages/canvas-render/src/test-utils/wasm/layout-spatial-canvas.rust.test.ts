@@ -136,6 +136,10 @@ describe.runIf(built)('the whole layout through the real core', () => {
         refusalScene(refused, { measure: host, mode }),
       )
       expect(drawn).toContainEqual(rust.scene)
+      // Equal scenes can share one NaN, so the numbers are asked of directly.
+      const baselines = rust.scene.nodes.flatMap((n) => (n.kind === 'textRun' ? [n.baseline] : []))
+      expect(baselines.length).toBeGreaterThan(0)
+      expect(baselines.every(Number.isFinite)).toBe(true)
     }
     // A refusal is not a decline: the core answered it.
     expect(answered.declined).toEqual([])

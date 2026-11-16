@@ -1,5 +1,6 @@
 import type { Scene, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
+import { constantRatioMeasureText, type MeasureText } from './measure.js'
 import { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
 import { renderSceneToSvg } from './svg/backend.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
@@ -59,6 +60,27 @@ describe('refusalCopy', () => {
 
 describe('refusalScene', () => {
   const tooMany: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
+
+  it('draws by the ratio estimate when the measurer throws or answers no finite number', () => {
+    // A host-measure refusal is drawn BECAUSE the measurer failed, so its notice cannot need it.
+    const failed: LayoutRefusal = { code: 'malformed', reason: 'host-measure' }
+    const byRatio = refusalScene(failed, { measure: constantRatioMeasureText, mode: 'light' })
+    const broken: MeasureText[] = [
+      () => {
+        throw new Error('no canvas context')
+      },
+      (line, at) => ({ ...measure(line, at), ascent: Number.NaN }),
+      (line, at) => ({ ...measure(line, at), advanceWidth: Number.POSITIVE_INFINITY }),
+    ]
+    for (const bad of broken) {
+      const scene = refusalScene(failed, { measure: bad, mode: 'light' })
+      expect(scene).toEqual(byRatio)
+      for (const run of runs(scene)) {
+        expect(Number.isFinite(run.baseline), run.text).toBe(true)
+        expect(Number.isFinite(run.bbox.w), run.text).toBe(true)
+      }
+    }
+  })
 
   it('draws one box holding the title and the detail, wrapped inside it', () => {
     const scene = refusalScene(tooMany, { measure, mode: 'light' })
