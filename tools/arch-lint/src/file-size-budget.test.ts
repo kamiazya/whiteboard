@@ -227,8 +227,8 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
   // the fit that decides what is cut when a body does not fit. Each inner step
   // is a named function carrying its reason, which is where the lines go. The
-  // code block (`mdast-code-block.ts`), the table (`mdast-table.ts`) and the
-  // vocabulary they share with the typesetter (`mdast-layout-options.ts`) are
+  // code block (the TypeScript code-block typesetter), the table (the TypeScript table typesetter) and the
+  // vocabulary they share with the typesetter (the TypeScript typesetter's options) are
   // sibling modules; the vocabulary went first, so neither imports the
   // typesetter back. The next shrink is the inline writer out of
   // `layoutPhrasing`, benched before and after. Raised by 9 for the nested-

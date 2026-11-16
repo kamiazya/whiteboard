@@ -23,7 +23,6 @@ export type {
   LinkProvenance,
   ListBlockNode,
   ListItemNode,
-  ParagraphBlockNode,
   RawHtmlNode,
   ResolvedEdgeNode,
   Scene,
