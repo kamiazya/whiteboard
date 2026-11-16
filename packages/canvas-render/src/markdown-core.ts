@@ -5,6 +5,7 @@ import type { CodeTokenLines } from './highlight/code-token.js'
 import type { FragmentAsk, FragmentEntry } from './layout/nodes/fragment-ask.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
 import type { ReferenceWire } from './references/wire.js'
+import type { LayoutRefusal } from './refusal.js'
 import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
 /**
@@ -50,10 +51,11 @@ export interface MarkdownCommentRequest {
 export type MarkdownBodyRequest = MarkdownNoteRequest | MarkdownCommentRequest
 
 /**
- * The core's answer to a note: the scene, or the class of what it declined
- * (a body past the parser's bounds, a request past its caps), which the
- * TypeScript then answers, or `missing` for a `section` the note holds no
- * heading for.
+ * The core's answer to a note: the scene; what it refused (a request past its
+ * caps, a host measurer that did not answer), which a surface draws as a
+ * refusal under `rust`; the class of what it declined (a body past the
+ * parser's bounds), which the TypeScript then answers; or `missing` for a
+ * `section` the note holds no heading for.
  */
 export type MarkdownLayoutAnswer =
   | {
@@ -63,6 +65,7 @@ export type MarkdownLayoutAnswer =
       readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | { readonly declined: string }
+  | { readonly refused: LayoutRefusal }
   | { readonly missing: 'section' }
 
 /**

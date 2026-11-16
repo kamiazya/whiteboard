@@ -32,6 +32,7 @@ import { z } from 'zod'
 import type { MeasureText } from '../measure.js'
 import type { ResolvedReference } from '../references/resolved.js'
 import type { ReferenceSeams } from '../references/seams.js'
+import type { LayoutRefusal } from '../refusal.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
@@ -184,6 +185,15 @@ export interface SpatialLayoutOptions {
    */
   readonly fontAvailable?: (family: string) => boolean
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
+  /**
+   * Told when the core REFUSED the layout under `rust` (owner decision q81,
+   * D7): a request past one of its caps, a number its answer cannot spell,
+   * or a host measurer that did not answer. The scene answered is then the
+   * refusal (`refusalScene`), so a caller that also says why in words (the
+   * daemon's log, `wb_scene_render`'s text) learns it here. Omitted, the
+   * scene is the same.
+   */
+  readonly onRefused?: (refusal: LayoutRefusal) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `typesetMdastBlocks`
    * call this module makes — a spatial `text` node's body, and a file node's

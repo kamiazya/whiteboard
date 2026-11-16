@@ -1,4 +1,9 @@
-import type { LayoutCore, MeasureText, ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  LayoutCore,
+  LayoutRefusal,
+  MeasureText,
+  ReferenceGraph,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   renderSceneToSvg,
   type Scene,
@@ -19,6 +24,7 @@ import { loadDocument } from '../document-io.js'
 import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
+import { refusalNote } from '../render/refusal-note.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import { unknownStyleRefusal } from '../render/unknown-style.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -108,6 +114,7 @@ async function markdownScene(
   doc: LoroDoc,
   measure: MeasureText,
   fontAvailable: ReturnType<typeof fontAvailableOf>,
+  onRefused: (refusal: LayoutRefusal) => void,
 ): Promise<Scene> {
   const body = readMarkdownBody(doc)
   const loaded = input.embedReferences
@@ -117,6 +124,7 @@ async function markdownScene(
     references: loaded?.seams,
     style: input.style,
     fontAvailable,
+    onRefused,
     ...(input.fragment === undefined ? {} : { section: input.fragment }),
     ...(await laidOutBy(deps)),
     ...(await drawnTagLibrary(deps, input.workspaceId, [], loaded?.graph)),
@@ -135,6 +143,7 @@ async function canvasScene(
   canvas: SpatialCanvas,
   measure: MeasureText,
   fontAvailable: ReturnType<typeof fontAvailableOf>,
+  onRefused: (refusal: LayoutRefusal) => void,
 ): Promise<Scene> {
   const part = input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)
   if (part === undefined) {
@@ -148,6 +157,7 @@ async function canvasScene(
     ...(await laidOutBy(deps)),
     style: input.style,
     fontAvailable,
+    onRefused,
     // Colour by intent (ADR-0040 decision 5).
     ...(await drawnTagLibrary(deps, input.workspaceId, [part], loaded?.graph)),
     // With comments asked for, the export draws what the editor draws: a
@@ -159,6 +169,52 @@ async function canvasScene(
 }
 
 export function createCanvasRenderSvgTool(deps: ServerDeps) {
+  /**
+   * `execute`'s answer, and when the document is drawn as a refusal (the
+   * layout past a cap the core holds it to), the words that say so, which the
+   * MCP answer carries beside the structured output: the output itself is
+   * unchanged, since the SVG is the notice.
+   */
+  async function render(
+    input: CanvasRenderSvgInput,
+  ): Promise<{ readonly output: CanvasRenderSvgOutput; readonly note?: string }> {
+    const refusal = unknownStyleRefusal(input.style)
+    if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
+    await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+    const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+    const measurer = await resolveTextMeasurer(deps)
+    const { measure } = measurer
+    const fontAvailable = fontAvailableOf(measurer)
+    // The doc's own recorded kind wins; the index row is the fallback for
+    // a document that predates kinds (wb_document_get's read path). Neither
+    // known reads as spatial, the kind every pre-kind document was.
+    const kind =
+      readDocumentKind(doc) ??
+      (
+        await deps.documentIndex.resolveDocumentById({
+          workspaceId: input.workspaceId,
+          documentId: input.documentId,
+        })
+      )?.kind
+
+    let refused: LayoutRefusal | undefined
+    const onRefused = (said: LayoutRefusal) => {
+      refused = said
+    }
+    const scene =
+      kind === 'markdown'
+        ? await markdownScene(deps, input, doc, measure, fontAvailable, onRefused)
+        : await canvasScene(deps, input, doc, canvas, measure, fontAvailable, onRefused)
+
+    const envelope = sceneEnvelope(scene)
+    const output = {
+      svg: renderSceneToSvg(scene, { viewBox: envelope }),
+      width: envelope.w,
+      height: envelope.h,
+    }
+    return refused === undefined ? { output } : { output, note: refusalNote(refused) }
+  }
+
   return {
     name: 'wb_scene_render' as const,
     description:
@@ -166,37 +222,9 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
-      const refusal = unknownStyleRefusal(input.style)
-      if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
-      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-      const measurer = await resolveTextMeasurer(deps)
-      const { measure } = measurer
-      const fontAvailable = fontAvailableOf(measurer)
-      // The doc's own recorded kind wins; the index row is the fallback for
-      // a document that predates kinds (wb_document_get's read path). Neither
-      // known reads as spatial, the kind every pre-kind document was.
-      const kind =
-        readDocumentKind(doc) ??
-        (
-          await deps.documentIndex.resolveDocumentById({
-            workspaceId: input.workspaceId,
-            documentId: input.documentId,
-          })
-        )?.kind
-
-      const scene =
-        kind === 'markdown'
-          ? await markdownScene(deps, input, doc, measure, fontAvailable)
-          : await canvasScene(deps, input, doc, canvas, measure, fontAvailable)
-
-      const envelope = sceneEnvelope(scene)
-      return {
-        svg: renderSceneToSvg(scene, { viewBox: envelope }),
-        width: envelope.w,
-        height: envelope.h,
-      }
+      return (await render(input)).output
     },
+    render,
   }
 }
 

@@ -1,5 +1,6 @@
 import type {
   LayoutCore,
+  LayoutRefusal,
   MeasureText,
   ReferenceSeams,
   Scene,
@@ -15,6 +16,7 @@ import {
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { getLogger } from '../log.js'
+import { logRefusal } from './refusal-note.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
 // decision #8): a user's ambient UI theme must never change what wb_scene_render
@@ -84,6 +86,11 @@ export interface ComposeCanvasSceneOptions {
    * caller). Absent, the layout routes in TypeScript.
    */
   readonly core?: LayoutCore
+  /**
+   * Told when the core refused the layout and the scene is the refusal
+   * (canvas-render's `onRefused`); the refusal is logged either way.
+   */
+  readonly onRefused?: (refusal: LayoutRefusal) => void
 }
 
 /**
@@ -112,6 +119,10 @@ export function composeCanvasScene(
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
+    onRefused: (refusal) => {
+      logRefusal(refusal)
+      options?.onRefused?.(refusal)
+    },
     ...(options?.style === undefined ? {} : { style: options.style }),
     ...(options?.fontAvailable === undefined ? {} : { fontAvailable: options.fontAvailable }),
     ...(options?.threads === undefined ? {} : { threads: options.threads }),

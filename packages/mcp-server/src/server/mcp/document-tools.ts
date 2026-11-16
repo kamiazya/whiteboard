@@ -76,8 +76,12 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.canvasRenderSvg.inputSchema.parse(args)
-      const result = await tools.canvasRenderSvg.execute(parsed)
-      return structuredJsonResult(result)
+      const { output, note } = await tools.canvasRenderSvg.render(parsed)
+      const result = structuredJsonResult(output)
+      // A document drawn as a refusal says so in words beside the SVG.
+      return note === undefined
+        ? result
+        : { ...result, content: [...result.content, { type: 'text' as const, text: note }] }
     },
   )
 

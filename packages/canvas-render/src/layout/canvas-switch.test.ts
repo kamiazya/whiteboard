@@ -11,6 +11,7 @@ import { highlightCode } from '../highlight/lowlight.js'
 import { describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
+import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { canvasLayoutRequest, firstDifference } from './canvas-switch.js'
@@ -128,6 +129,37 @@ describe('the whole layout through the core switch', () => {
     expect(laid.scene).toEqual(reference.scene)
     expect(mismatches).toEqual([{ fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'body' }])
     expect(events.map((e) => e.kind)).toEqual(['unknown-node-kind'])
+  })
+
+  it('draws what the core refuses as the refusal under rust, and tells onRefused', () => {
+    const refused: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
+    const heard: LayoutRefusal[] = []
+    for (const mode of ['light', 'dark'] as const) {
+      const { laid, mismatches, events } = run('rust', () => ({ refused }), {
+        appearance: createSpatialTheme({ mode }),
+        onRefused: (refusal) => heard.push(refusal),
+      })
+      expect(laid.scene).toEqual(refusalScene(refused, { measure, mode }))
+      expect(laid.anchors.size).toBe(0)
+      expect(events).toEqual([])
+      expect(mismatches).toEqual([
+        { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'too-many-elements' },
+      ])
+    }
+    expect(heard).toEqual([refused, refused])
+  })
+
+  it('answers from the TypeScript what the core refuses under differential, as its oracle', () => {
+    const heard: LayoutRefusal[] = []
+    const refused: LayoutRefusal = { code: 'malformed', reason: 'non-finite' }
+    const { laid, mismatches } = run('differential', () => ({ refused }), {
+      onRefused: (refusal) => heard.push(refusal),
+    })
+    expect(laid.scene).toEqual(reference.scene)
+    expect(mismatches).toEqual([
+      { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'non-finite' },
+    ])
+    expect(heard).toEqual([])
   })
 
   it('reports a layout the request gate skips by its class, asking the core nothing', () => {

@@ -13,6 +13,7 @@ import type {
 import { type MeasureText, measureSpecOf } from '../measure.js'
 import type { ReferenceSeams } from '../references/seams.js'
 import { wireOfSeams } from '../references/wire.js'
+import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
 import { createSpatialTheme, type SpatialThemeMode } from '../theme/spatial-theme.js'
@@ -62,6 +63,11 @@ export interface MarkdownDocumentOptions {
   readonly section?: string
   /** The Rust core and its switch, as a canvas layout takes it. */
   readonly core?: LayoutCore
+  /**
+   * Told when the core REFUSED the note under `rust` (`SpatialLayoutOptions`'
+   * `onRefused`); the scene answered is then the refusal, at `maxWidth`.
+   */
+  readonly onRefused?: (refusal: LayoutRefusal) => void
 }
 
 /** A note's request the core can be handed, or why the options cannot be one. */
@@ -186,6 +192,11 @@ export function layoutMarkdownDocument(
     // board handed the core would report its own gate's skips into the count.
     beside: () => layoutTs(body, options, undefined),
     answered: (laid) => answered(laid, options),
+    refused: (refusal) => {
+      options.onRefused?.(refusal)
+      const mode = options.mode ?? 'light'
+      return refusalScene(refusal, { measure: options.measure, mode, maxWidth: options.maxWidth })
+    },
   })
 }
 
@@ -197,10 +208,17 @@ interface Answering {
   /** The TypeScript's layout to compare the core's with, handed no core. */
   readonly beside: () => TsNote
   readonly answered: (laid: TsNote) => Scene | undefined
+  /** What a body the core refused is drawn as, under `rust`. */
+  readonly refused: (refusal: LayoutRefusal) => Scene
 }
 
 /** The core's laid-out answer in the TypeScript's shape: its scene, or none for a missing section, and what it asked. */
-function noteOf(answer: Exclude<MarkdownLayoutAnswer, { readonly declined: string }>): TsNote {
+function noteOf(
+  answer: Exclude<
+    MarkdownLayoutAnswer,
+    { readonly declined: string } | { readonly refused: unknown }
+  >,
+): TsNote {
   if ('missing' in answer) return { scene: undefined }
   const { scene, fragmentsAsked } = answer
   return fragmentsAsked === undefined ? { scene } : { scene, asked: fragmentsAsked }
@@ -210,9 +228,12 @@ function noteOf(answer: Exclude<MarkdownLayoutAnswer, { readonly declined: strin
  * A body whose switch reads `differential` or `rust`, as the core answers it.
  * What the gate skips (reported by class), what the core declines (reported
  * by class) or throws on, and a `missing` answer to a comment, which asks for
- * no section (each reported as refused), the TypeScript answers. Under `rust`
- * the core's answer is the caller's; under `differential` the TypeScript's
- * is, with the first difference in the scene or the fragments asked reported.
+ * no section (each reported as refused), the TypeScript answers. What the
+ * core refuses is counted as a decline by its class too, and drawn as the
+ * refusal under `rust`; under `differential` the TypeScript answers it. Under
+ * `rust` the core's answer is the caller's; under `differential` the
+ * TypeScript's is, with the first difference in the scene or the fragments
+ * asked reported.
  */
 function throughCore(
   core: LayoutCore,
@@ -235,6 +256,10 @@ function throughCore(
   if ('declined' in answer) {
     core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'declined', reason: answer.declined })
     return answering.fallback()
+  }
+  if ('refused' in answer) {
+    core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'declined', reason: answer.refused.reason })
+    return impl === 'rust' ? answering.refused(answer.refused) : answering.fallback()
   }
   if ('missing' in answer && request.kind === 'comment') {
     const err = new Error('the core answered a comment as a note missing its section')
@@ -313,6 +338,12 @@ export function layoutCommentDocument(body: string, options: CommentDocumentOpti
     fallback: ts,
     beside: () => ({ scene: ts() }),
     answered: (laid) => laid.scene,
+    refused: (refusal) =>
+      refusalScene(refusal, {
+        measure: options.measure,
+        mode: 'light',
+        maxWidth: options.maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
+      }),
   })
   // Never undefined: a `missing` answer to a comment is refused above.
   return scene ?? ts()
