@@ -58,7 +58,7 @@ function expansion(
  * Whether a layout reads a fragment table: one handed a table, or a listener
  * for what the table lacks (a listener with no table asks for every source).
  */
-export const usesFragmentTable = (
+const usesFragmentTable = (
   options: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>,
 ): boolean => options.fragments !== undefined || options.onFragmentsAsked !== undefined
 

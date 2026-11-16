@@ -142,7 +142,7 @@ const OPTION_CYCLE: readonly RenderOptions[] = [
   { mode: 'light', style: 'clean' },
 ]
 
-export function renderInputs(): readonly RenderInput[] {
+function renderInputs(): readonly RenderInput[] {
   const named: { id: string; canvas: SpatialCanvas }[] = [
     ...ROUTING_CORPUS.map((c) => ({ id: `routing/${c.name}`, canvas: canvasOf(c.nodes, c.edges) })),
     ...syntheticLayouts(12).map((c) => ({

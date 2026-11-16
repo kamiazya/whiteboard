@@ -133,10 +133,6 @@ export function dumpScene(scene: Scene, num: NumberText = f64Hex): string {
 /** `f64Hex`, with every NaN written as the positive quiet NaN `f64::NAN` is. */
 export const hex = (value: number): string =>
   Number.isNaN(value) ? '7ff8000000000000' : f64Hex(value)
-
-/** A value as it reads back from its JSON text: what a recording holds. */
-export const viaJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as T
-
 /** A text's length and FNV-1a digest, as a large answer is held. */
 export function digestOf(text: string): { n: number; h: number } {
   let state = 0x811c_9dc5

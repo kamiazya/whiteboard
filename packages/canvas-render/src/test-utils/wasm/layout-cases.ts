@@ -45,7 +45,7 @@ import { proposalCases } from './layout-proposal-cases.js'
  * core something new adds a topic and a recording rather than re-recording
  * the others.
  */
-export type LayoutTopic =
+type LayoutTopic =
   | 'composer'
   | 'bodies'
   | 'shortcode'

@@ -29,7 +29,7 @@ export const REFERENCE_CHARS_BUDGET = 4 * MARKDOWN_MAX_CHARS
 export const REFERENCE_ELEMENTS_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES_AND_LINES
 
 /** What a canvas charges an element budget: everything it lays out; a body, 0. */
-export function canvasElementCount(canvas: SpatialCanvas | undefined): number {
+function canvasElementCount(canvas: SpatialCanvas | undefined): number {
   if (canvas === undefined) return 0
   return canvas.nodes.length + canvas.edges.length + (canvas.lines?.length ?? 0)
 }

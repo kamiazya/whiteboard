@@ -13,37 +13,6 @@ export interface FitRecord {
   w: string
   calls: number[]
 }
-
-export interface FitAnswer {
-  r: string
-  tr: boolean
-  ov: boolean
-  w: string
-  calls: number[]
-}
-
-export interface UaxRecord {
-  kind: 'uax'
-  t: string
-  s: string[]
-  e: number[]
-}
-
-export interface GraphemeRecord {
-  kind: 'grapheme'
-  t: string
-  g: number[]
-}
-
-export interface LongestRecord {
-  kind: 'longest'
-  limit: number
-  guess: number
-  threshold: number
-  r: number
-  p: number[]
-}
-
 export interface DigestRecord {
   kind: 'digest'
   c: string

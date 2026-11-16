@@ -10,7 +10,7 @@ export interface DigestRecord {
   h: number
 }
 
-export interface MetaRecord {
+interface MetaRecord {
   kind: 'meta'
   version: string
   reps: number[]

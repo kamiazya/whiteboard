@@ -172,6 +172,6 @@ export const BODY_FONT_SIZE_PX = MARKDOWN_THEME_NODE.bodyFontSizePx
 export const BODY_LINE_HEIGHT_PX = bodyLineHeightPx(MARKDOWN_THEME_NODE)
 
 /** Derived metrics, per theme rather than per module. */
-export function bodyLineHeightPx(theme: MarkdownTheme): number {
+function bodyLineHeightPx(theme: MarkdownTheme): number {
   return theme.bodyFontSizePx * theme.bodyLineHeight
 }

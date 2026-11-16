@@ -89,7 +89,7 @@ export interface ShapeContribution {
 export type ShapeTable = Readonly<Record<string, ShapeContribution>>
 
 /** What a decoration is told about the node it marks. */
-export interface DecorationContext {
+interface DecorationContext {
   readonly bounds: BoundingBox
   readonly label: Appearance
 }

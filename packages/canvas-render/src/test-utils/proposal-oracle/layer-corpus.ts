@@ -24,10 +24,6 @@ export interface ProposalBoard {
   readonly threads: readonly CommentThread[]
   readonly proposals: readonly Proposal[]
 }
-
-/** The label `parseBody` throws on, so a bubble degrades to its literal text. */
-export const THROWING_LABEL = '5 proposed changes'
-
 const box = (id: string, x: number, y: number, width = 140, height = 70): SpatialNode =>
   ({
     id,
@@ -192,12 +188,4 @@ function mixed(): ProposalBoard {
 export function proposalBoards(): readonly ProposalBoard[] {
   serial = 0
   return [arms(), crowd(), mixed()]
-}
-
-/** Every label a bubble on these boards can carry, as the layer words it. */
-export function proposalLabels(): readonly string[] {
-  return Array.from({ length: 12 }, (_, i) => i + 1).flatMap((n) => {
-    const changed = `${n} proposed change${n === 1 ? '' : 's'}`
-    return [changed, ...Array.from({ length: n }, (_, c) => `${changed}, ${c + 1} needs a look`)]
-  })
 }

@@ -3,7 +3,7 @@
  */
 type Paint = 'icon' | 'image'
 
-export type Op =
+type Op =
   | { o: 'push'; t: string; p?: Paint; w: number }
   | { o: 'placed'; t: string; p?: Paint }
   | { o: 'breakable'; t: string; p?: Paint }
@@ -12,15 +12,6 @@ export type Op =
   | { o: 'allow' }
   | { o: 'start' }
   | { o: 'reloc' }
-
-export interface EdgeRecord {
-  kind: 'edge'
-  t: string
-  p?: Paint
-  head: string
-  tail: string
-}
-
 export interface JunctionRecord {
   kind: 'junction'
   ops: Op[]

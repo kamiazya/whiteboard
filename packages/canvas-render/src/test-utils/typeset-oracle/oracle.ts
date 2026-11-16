@@ -8,7 +8,7 @@ type MiniatureMode = unknown
 /**
  * The shape of a frozen recording (ADR-0054 step 7, S18h): what the TypeScript answered before it was deleted. The Rust port replays the recording natively; nothing here answers it again.
  */
-export type ThemeName = 'node' | 'document' | 'compact'
+type ThemeName = 'node' | 'document' | 'compact'
 
 /** What the host answered for the questions this input can ask. */
 interface SeamTables {
@@ -36,14 +36,14 @@ interface SeamTables {
 }
 
 /** Which embed seams the host supplies: none, the documents', or those and the canvas picture. */
-export type EmbedSeams = 'none' | 'documents' | 'full'
+type EmbedSeams = 'none' | 'documents' | 'full'
 
 type TokenLinesWire = readonly (readonly { text: string; role?: string }[])[]
 
 /** `s` is the string form a renderer may answer; the other is the object form. */
 type RenderedWire = { s: string } | { svg: string; width?: number; height?: number }
 
-export interface TypesetInput {
+interface TypesetInput {
   readonly id: string
   readonly root: MdastRoot
   /** The wrap width's IEEE bits, since JSON cannot hold NaN or infinity. */

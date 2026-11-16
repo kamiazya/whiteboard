@@ -72,7 +72,7 @@ export interface SpatialAppearanceResolver {
  * paint would ask a reader to learn three treatments before they can read
  * one. What each MEANS is said by the bubble, in words.
  */
-export interface SpatialProposalAppearance {
+interface SpatialProposalAppearance {
   /** Around the box a change concerns, or along the route of an edge one. */
   readonly outline: Appearance
   /** The card counting what the proposal would do. */
@@ -120,7 +120,7 @@ interface SpatialCommentChromeAppearance {
 }
 
 /** What a resolver decided for the comment layer's chrome. */
-export interface SpatialCommentAppearance extends SpatialCommentChromeAppearance {
+interface SpatialCommentAppearance extends SpatialCommentChromeAppearance {
   /**
    * The muted treatment for a comment shown under `showResolved` (ADR-0025
    * decision 2 — resolved comments recede, never disappear from the toggle).

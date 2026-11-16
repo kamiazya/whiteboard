@@ -21,7 +21,7 @@ interface MetaRecord {
   readonly embeds: Readonly<Record<string, { title: string; canvas: CanvasWire }>>
 }
 
-export interface Event {
+interface Event {
   readonly kind: string
   readonly nodeId: string
   readonly detail: string

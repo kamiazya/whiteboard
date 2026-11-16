@@ -30,7 +30,7 @@ import { answerText } from '../wasm/answer-text.js'
  * scene runs to megabytes is held as its length and FNV digest instead.
  */
 
-export type Surface = 'daemon' | 'preview' | 'outline' | 'thumbnail' | 'comment'
+type Surface = 'daemon' | 'preview' | 'outline' | 'thumbnail' | 'comment'
 
 /**
  * The recorded bodies past the markdown parser's bounds, by name: the core
@@ -49,7 +49,7 @@ export const PAST_THE_PARSER: ReadonlySet<string> = new Set([
 /** The body a record's id names: what follows its surface, less its variant. */
 export const bodyName = (id: string): string => id.split('/').slice(1).join('/').split('#')[0] ?? ''
 
-export interface MarkdownInput {
+interface MarkdownInput {
   readonly id: string
   readonly surface: Surface
   readonly body: string
@@ -85,7 +85,7 @@ export type MarkdownRecord = MarkdownInput & Answer
  * What every record of a file may point at, written once as the file's first
  * line: one copy of the wire rather than one per record that hands it.
  */
-export interface MarkdownTables {
+interface MarkdownTables {
   readonly references: ReferenceWire
   readonly fragments: readonly FragmentEntry[]
   readonly library: TagLibrary
@@ -116,23 +116,4 @@ export function sortedSceneDigest(scene: Scene): { readonly n: number; readonly 
   const text = answerText(sortedKeys(scene))
   if (text === undefined) throw new Error('markdown-document-oracle: a non-finite number')
   return digestOf(text)
-}
-
-/** The input half of a record, as the replay hands it back. */
-export function inputOf(record: MarkdownRecord): MarkdownInput {
-  const {
-    scene: _s,
-    n: _n,
-    h: _h,
-    asked: _a,
-    refused: _r,
-    ...input
-  } = record as MarkdownRecord & {
-    scene?: unknown
-    n?: unknown
-    h?: unknown
-    asked?: unknown
-    refused?: unknown
-  }
-  return input
 }

@@ -267,8 +267,6 @@ export const REFERENCES: Readonly<Record<string, Nested>> = {
 
 /** The document `![[child]]` resolves to, and the canvas it draws. */
 export const CHILD_ID = '01HZX3Q8K9V2M4N5P6R7S8T9WC'
-export const resolveAlias = (alias: string): string | null => (alias === 'child' ? CHILD_ID : null)
-
 /** A canvas drawing others: two by reference, one through a body's embed, and a chain past the cap. */
 function nesting(): Board {
   return {
@@ -304,7 +302,7 @@ export const TAG_LIBRARY: TagLibrary = {
 }
 
 /** A theme of a test contribution: the sketch tokens with a default silhouette. */
-export const BOXY_THEME_ID = 'test.boxy'
+const BOXY_THEME_ID = 'test.boxy'
 
 const OVERRIDE: EdgeAnchorOverride = { fromSide: 'bottom', toSide: 'top' }
 
