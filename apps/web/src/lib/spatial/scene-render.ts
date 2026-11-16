@@ -9,7 +9,6 @@ import type {
   BoundingBox,
   MeasureText,
   ReferenceSeams,
-  ResolvedReference,
   SpatialThemeMode,
 } from '@kamiazya/whiteboard-canvas-render'
 import { fittedTextNodeHeight } from '@kamiazya/whiteboard-canvas-render'
@@ -32,8 +31,6 @@ export interface RenderCanvasOptions {
   readonly theme?: SpatialThemeMode
   /** Passed through to layout: the reference bundle text-node bodies read. */
   readonly references?: ReferenceSeams
-  /** Passed through to layout: what the host resolved for one reference. */
-  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */
   readonly expandFileNode?: (node: SpatialNode) => boolean
   /** See RenderCanvasCoreOptions: the node ids whose body an editor overlay owns. */

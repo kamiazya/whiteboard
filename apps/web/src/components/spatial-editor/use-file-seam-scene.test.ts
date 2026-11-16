@@ -177,6 +177,17 @@ function overlayAsFunction(
   }
 }
 
+/**
+ * The scene the editor drew with that function: canvas-render's layout under
+ * the editor's own base, since the editor's options no longer take one.
+ */
+function functionOverlayScene(canvas: SpatialCanvas, options: Partial<SpatialLayoutOptions>) {
+  return layoutSpatialCanvasWithAnchors(canvas, {
+    ...editorLayoutBase({ measure: fixedMeasure }),
+    ...options,
+  }).scene
+}
+
 describe('useFileSeamScene reference chrome', () => {
   const inner: SpatialCanvas = canvasOf([
     buildTextNode({ id: 'i', x: 0, y: 0, width: 120, height: 60, text: 'inside' }),
@@ -221,15 +232,13 @@ describe('useFileSeamScene reference chrome', () => {
 
     const seams = referenceSeamsFromWire(referenceWireFor(wire, { canvases: [board] }))
     const labels = new Map(fileRefOptions.map((option) => [option.file, option.label]))
-    const before = renderCanvasToSvg(board, {
-      measure: fixedMeasure,
+    const before = functionOverlayScene(board, {
       references: seams,
       resolveReference: overlayAsFunction(seams.resolveReference, labels, new Set(['doc-gone'])),
       expandFileNode: fileSeamOptions.expandFileNode,
     })
     const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
-    expect(after.scene).toEqual(before.scene)
-    expect(after.svg).toBe(before.svg)
+    expect(after.scene).toEqual(before)
 
     // The chrome is what this board is about: without it the board draws otherwise.
     const bare = renderCanvasToSvg(board, {
@@ -237,7 +246,7 @@ describe('useFileSeamScene reference chrome', () => {
       references: seams,
       expandFileNode: fileSeamOptions.expandFileNode,
     })
-    expect(bare.svg).not.toBe(before.svg)
+    expect(bare.scene).not.toEqual(before)
     expect(after.svg).toContain('Beta')
     expect(after.svg).not.toContain('Extra B')
   })
@@ -257,12 +266,11 @@ describe('useFileSeamScene reference chrome', () => {
     const { fileSeamOptions } = result.current
     expect(fileSeamOptions.expandFileNode).toBeUndefined()
     const labels = new Map(fileRefOptions.map((option) => [option.file, option.label]))
-    const before = renderCanvasToSvg(board, {
-      measure: fixedMeasure,
+    const before = functionOverlayScene(board, {
       resolveReference: overlayAsFunction(() => undefined, labels, new Set(['doc-gone'])),
     })
     const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
-    expect(after.svg).toBe(before.svg)
+    expect(after.scene).toEqual(before)
     expect(after.svg).toContain('Alpha')
   })
 
@@ -297,8 +305,7 @@ describe('useFileSeamScene reference chrome', () => {
     expect(extras['doc-256']).toEqual({ label: 'Past the budget' })
     expect(extras['doc-257']).toEqual({ missing: true })
     const seams = referenceSeamsFromWire(referenceWire(new Map()))
-    const before = renderCanvasToSvg(many, {
-      measure: fixedMeasure,
+    const before = functionOverlayScene(many, {
       references: seams,
       expandFileNode: result.current.fileSeamOptions.expandFileNode,
       resolveReference: overlayAsFunction(
@@ -311,7 +318,7 @@ describe('useFileSeamScene reference chrome', () => {
       measure: fixedMeasure,
       ...result.current.fileSeamOptions,
     })
-    expect(after.svg).toBe(before.svg)
+    expect(after.scene).toEqual(before)
   })
 
   it('labels a file node inside a canvas the board loads, as the function overlay did', async () => {
