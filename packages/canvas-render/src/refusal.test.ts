@@ -111,6 +111,12 @@ describe('refusalScene', () => {
     expect(runs(moved).map((run) => run.bbox)).toEqual(shifted)
   })
 
+  it('carries the refusal it draws, as data a surface can read across a worker', () => {
+    const scene = refusalScene(tooMany, { measure, mode: 'light' })
+    expect(scene.refusal).toEqual(tooMany)
+    expect(structuredClone(scene).refusal).toEqual(tooMany)
+  })
+
   it('is painted from the palette of the mode it is drawn in', () => {
     const light = frame(refusalScene(tooMany, { measure, mode: 'light' }))
     const dark = frame(refusalScene(tooMany, { measure, mode: 'dark' }))

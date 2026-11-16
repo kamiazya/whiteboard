@@ -126,6 +126,7 @@ import { activeDescendantId, CanvasA11yTree } from './CanvasA11yTree.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CanvasEmptyHint, canvasIsEmpty, emptyHintRef } from './CanvasEmptyHint.js'
 import { CanvasNotice } from './CanvasNotice.js'
+import { CanvasRefusalNotice, drawnScene } from './CanvasRefusalNotice.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentRevealPulse } from './CommentRevealPulse.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
@@ -571,7 +572,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const fontsGeneration = useThemeFontsGeneration()
     useThemeFaceFor(canvas)
     const editingFontFamily = useEditingFontFamily(canvas)
-    const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
+    const {
+      bounds,
+      scene: laidOut,
+      anchors,
+      sceneCurrent,
+    } = useWorkerScene(
       canvas,
       {
         measure: resolvedMeasure,
@@ -587,6 +593,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       fileSeamOptions,
       seamWire,
     )
+    // A refused layout is said in screen space (`CanvasRefusalNotice`), clear of the chrome.
+    const scene = drawnScene(laidOut)
     const {
       keyed,
       palette,
@@ -1607,6 +1615,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           />
         )}
         {canvasIsEmpty(canvas) && <CanvasEmptyHint coarse={hasCoarsePointer()} id={emptyHintId} />}
+        <CanvasRefusalNotice refusal={laidOut.refusal} />
         <LayoutStatus current={sceneCurrent} />
         {tool === 'connect' && canvas.nodes.length > 0 && (
           <ConnectToolHint coarse={hasCoarsePointer()} armed={gestureState.kind === 'connecting'} />

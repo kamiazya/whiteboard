@@ -66,19 +66,76 @@ async function underRust(
 const drawnText = (root: Element | null | undefined) =>
   [...(root?.querySelectorAll('svg text') ?? [])].map((run) => run.textContent).join(' ')
 
+/** Whether two client rects overlap by any area. */
+const intersects = (a: DOMRect, b: DOMRect) =>
+  a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+
+/** A board past the element cap, placed far from the origin. */
+const FAR_AWAY: SpatialCanvas = {
+  ...PAST_THE_ELEMENT_CAP,
+  nodes: PAST_THE_ELEMENT_CAP.nodes.map((node) => ({
+    ...node,
+    x: node.x + 9000,
+    y: node.y - 6000,
+  })),
+}
+
 it.skipIf(LAYOUT === 'ts')(
-  'draws a board past the element cap as the notice, in the editor and in version history',
+  'shows the editor notice clear of its chrome, wherever the board sits and at any zoom',
   async () => {
     await underRust('layoutSpatialCanvas', async () => {
       const { container } = render(
-        <div style={{ width: 1000, height: 700 }}>
-          <SpatialEditor canvas={PAST_THE_ELEMENT_CAP} onChange={() => {}} theme="dark" />
+        <div style={{ width: 900, height: 560 }}>
+          <SpatialEditor canvas={FAR_AWAY} onChange={() => {}} theme="dark" />
         </div>,
       )
-      await expect.poll(() => drawnText(container)).toContain(tooMany.title)
-      expect(drawnText(container)).toContain(tooMany.detail.split(' ').slice(0, 4).join(' '))
+      const notice = () => container.querySelector('[data-testid="canvas-refusal-notice"]')
+      await expect.poll(() => notice()?.textContent ?? '').toContain(tooMany.title)
+      expect(notice()?.textContent).toContain(tooMany.detail)
+      // Drawn once, on screen: the canvas space holds none of it.
+      expect(drawnText(container)).not.toContain(tooMany.title)
       expect(drawnText(container)).not.toContain('b4096')
+      const chrome = () =>
+        ['shortcuts-button', 'tool-palette', 'minimap'].map((id) => {
+          const element = container.querySelector(`[data-testid="${id}"]`)
+          expect(element, id).not.toBeNull()
+          return { id, rect: (element as HTMLElement).getBoundingClientRect() }
+        })
+      const clear = () => {
+        const box = (notice() as HTMLElement).getBoundingClientRect()
+        expect(box.width * box.height).toBeGreaterThan(0)
+        for (const { id, rect } of chrome()) expect(intersects(box, rect), id).toBe(false)
+      }
+      clear()
+      // Zoom in and out, pan, and fit, as a mouse does; each must move the view.
+      const editor = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
+      const view = () =>
+        container.querySelector('[data-testid="viewport-transform"]')?.getAttribute('style') ?? ''
+      const wheels = [
+        { deltaX: 0, deltaY: -400, ctrlKey: true },
+        { deltaX: 0, deltaY: 600, ctrlKey: true },
+        { deltaX: 700, deltaY: -500, ctrlKey: false },
+      ]
+      for (const wheel of wheels) {
+        const before = view()
+        editor.dispatchEvent(
+          new WheelEvent('wheel', { bubbles: true, clientX: 450, clientY: 280, ...wheel }),
+        )
+        await expect.poll(view).not.toBe(before)
+        clear()
+      }
+      const beforeFit = view()
+      ;(container.querySelector('[data-testid="zoom-fit-button"]') as HTMLElement).click()
+      await expect.poll(view).not.toBe(beforeFit)
+      clear()
     })
+  },
+  60_000,
+)
+
+it.skipIf(LAYOUT === 'ts')(
+  'draws a board past the element cap as the notice in version history',
+  async () => {
     await underRust('layoutSpatialCanvas', async () => {
       const { container } = render(
         <div style={{ width: 800, height: 600 }}>

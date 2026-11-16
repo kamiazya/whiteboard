@@ -1,4 +1,4 @@
-import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { Scene, SceneNode, SceneRefusal } from '@kamiazya/whiteboard-scene'
 import { clampAdvance, type FontDescriptor, type MeasureText } from './measure.js'
 import { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
@@ -16,10 +16,7 @@ import type { SpatialThemeMode } from './theme/spatial-theme-mode.js'
 // place a raised cap would have to reach.
 
 /** A layout the core refused, as `@kamiazya/whiteboard-core-wasm` answers it. */
-export interface LayoutRefusal {
-  readonly code: 'input-too-large' | 'malformed'
-  readonly reason: string
-}
+export type LayoutRefusal = SceneRefusal
 
 /** What a refusal says: a title, and a detail saying what happened and what the reader can do. */
 export interface RefusalCopy {
@@ -192,5 +189,5 @@ export function refusalScene(refusal: LayoutRefusal, options: RefusalSceneOption
       strokeWidth: 1,
     },
   }
-  return { nodes: [box, ...runs] }
+  return { nodes: [box, ...runs], refusal }
 }
