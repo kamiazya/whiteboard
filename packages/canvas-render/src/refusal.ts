@@ -100,11 +100,16 @@ export function refusalCopy({ code, reason }: LayoutRefusal): RefusalCopy {
   return isWorded(reason) ? COPY[reason] : GENERAL[code]
 }
 
-/** How a refusal is drawn: the measurer, the mode, and the width there is (default and most, 480px). */
+/**
+ * How a refusal is drawn: the measurer, the mode, the width there is (default
+ * and most, 480px), and the point its top-left corner sits at (default the
+ * origin), so a surface showing a board where its boxes are sees it there.
+ */
 export interface RefusalSceneOptions {
   readonly measure: MeasureText
   readonly mode: SpatialThemeMode
   readonly maxWidth?: number
+  readonly at?: { readonly x: number; readonly y: number }
 }
 
 const WIDTH_PX = 480
@@ -140,8 +145,8 @@ function wrap(text: string, width: number, measure: MeasureText, at: FontDescrip
 }
 
 /**
- * A refused layout drawn as one box naming why, at the origin, in the
- * palette of `mode`: the title in bold, then the detail, wrapped to the box.
+ * A refused layout drawn as one box naming why, at `at` (the origin by
+ * default), in the palette of `mode`: the title in bold, then the detail, wrapped to the box.
  */
 export function refusalScene(refusal: LayoutRefusal, options: RefusalSceneOptions): Scene {
   const { measure, mode } = options
@@ -149,6 +154,7 @@ export function refusalScene(refusal: LayoutRefusal, options: RefusalSceneOption
   const width = Math.min(options.maxWidth ?? WIDTH_PX, WIDTH_PX)
   const inner = width - 2 * PADDING_PX
   const { title, detail } = refusalCopy(refusal)
+  const { x: left, y: top } = options.at ?? { x: 0, y: 0 }
   const runs: SceneNode[] = []
   let y = PADDING_PX
   const set = (text: string, sizePx: number, strong: boolean) => {
@@ -158,7 +164,12 @@ export function refusalScene(refusal: LayoutRefusal, options: RefusalSceneOption
       const { advanceWidth, ascent } = measure(line, at)
       runs.push({
         kind: 'textRun',
-        bbox: { x: PADDING_PX, y, w: Math.min(clampAdvance(advanceWidth), inner), h: lineHeight },
+        bbox: {
+          x: left + PADDING_PX,
+          y: top + y,
+          w: Math.min(clampAdvance(advanceWidth), inner),
+          h: lineHeight,
+        },
         text: line,
         ...(strong ? { strong: true } : {}),
         baseline: ascent + (lineHeight - sizePx) / 2,
@@ -176,7 +187,7 @@ export function refusalScene(refusal: LayoutRefusal, options: RefusalSceneOption
   set(detail, DETAIL_SIZE_PX, false)
   const box: SceneNode = {
     kind: 'shape',
-    bbox: { x: 0, y: 0, w: width, h: y + PADDING_PX },
+    bbox: { x: left, y: top, w: width, h: y + PADDING_PX },
     radius: palette.cornerRadiusPx,
     appearance: {
       fill: palette.node.file.fill,

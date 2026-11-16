@@ -149,6 +149,25 @@ describe('the whole layout through the core switch', () => {
     expect(heard).toEqual([refused, refused])
   })
 
+  it('draws the refusal where the board is, at the top-left of its boxes', () => {
+    const refused: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
+    const away: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'a', x: 900, y: 300, width: 120, height: 60, text: 'a' }),
+        textNode({ id: 'b', x: 700, y: 500, width: 120, height: 60, text: 'b' }),
+        textNode({ id: 'c', x: 800, y: 100, width: 120, height: 60, text: 'c' }),
+        textNode({ id: 'n', x: Number.NaN, y: -1e9, width: 120, height: 60, text: 'n' }),
+      ],
+      edges: [],
+    }
+    const { core } = coreOf('rust', () => ({ refused }))
+    const laid = layoutSpatialCanvasWithAnchors(away, { ...base, core })
+    const at = { x: 700, y: 100 }
+    expect(laid.scene).toEqual(refusalScene(refused, { measure, mode: 'light', at }))
+    const empty = layoutSpatialCanvasWithAnchors({ nodes: [], edges: [] }, { ...base, core })
+    expect(empty.scene).toEqual(refusalScene(refused, { measure, mode: 'light' }))
+  })
+
   it('answers from the TypeScript what the core refuses under differential, as its oracle', () => {
     const heard: LayoutRefusal[] = []
     const refused: LayoutRefusal = { code: 'malformed', reason: 'non-finite' }

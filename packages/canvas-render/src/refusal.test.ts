@@ -86,6 +86,18 @@ describe('refusalScene', () => {
     )
   })
 
+  it('is drawn at the point it is given, every run moved with its box', () => {
+    const atOrigin = refusalScene(tooMany, { measure, mode: 'light' })
+    const moved = refusalScene(tooMany, { measure, mode: 'light', at: { x: 5000, y: -40 } })
+    expect(frame(moved)?.bbox).toMatchObject({ x: 5000, y: -40 })
+    const shifted = runs(atOrigin).map((run) => ({
+      ...run.bbox,
+      x: run.bbox.x + 5000,
+      y: run.bbox.y - 40,
+    }))
+    expect(runs(moved).map((run) => run.bbox)).toEqual(shifted)
+  })
+
   it('is painted from the palette of the mode it is drawn in', () => {
     const light = frame(refusalScene(tooMany, { measure, mode: 'light' }))
     const dark = frame(refusalScene(tooMany, { measure, mode: 'dark' }))

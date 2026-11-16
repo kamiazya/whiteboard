@@ -295,7 +295,12 @@ export function layoutThroughCore(
     core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: refused.reason })
     if (impl !== 'rust') return ts(options)
     options.onRefused?.(refused)
-    const scene = refusalScene(refused, { measure: options.measure, mode: request.mode })
+    const at = topLeftOf(stored)
+    const scene = refusalScene(refused, {
+      measure: options.measure,
+      mode: request.mode,
+      ...(at === undefined ? {} : { at }),
+    })
     return { scene, anchors: new Map() }
   }
   if (impl === 'rust') {
@@ -304,6 +309,18 @@ export function layoutThroughCore(
     return { scene: answer.scene, anchors: answer.anchors }
   }
   return compared(answer, request, options, ts)
+}
+
+/** Where a board's boxes begin, its least x and y; none for a board with no box placed at a finite point. */
+// A fold rather than a spread: a refused board is a large one, and spreading
+// its nodes as arguments is bounded by the engine's argument limit.
+function topLeftOf(canvas: SpatialCanvas): { x: number; y: number } | undefined {
+  let at: { x: number; y: number } | undefined
+  for (const { x, y } of canvas.nodes) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    at = at === undefined ? { x, y } : { x: Math.min(at.x, x), y: Math.min(at.y, y) }
+  }
+  return at
 }
 
 /** `differential`'s answer: the TypeScript's, with the core's compared beside it and a difference reported. */
