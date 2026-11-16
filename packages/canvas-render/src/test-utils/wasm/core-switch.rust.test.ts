@@ -1,6 +1,6 @@
-import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
+import { beforeAll, describe, expect, it } from 'vitest'
 import type { CoreImpl, CoreMismatch, LayoutCore } from '../../layout/edges/layout-core.js'
 import {
   layoutSpatialCanvasWithAnchors,
@@ -51,7 +51,13 @@ const canvasesOf = (board: (typeof boards)[number]): SpatialCanvas[] =>
   )
 
 describe.runIf(built)('the routing core switch over the real core', () => {
-  const routing = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
+  // factory to collect it, so a core made here fails the file where there is
+  // no artifact instead of skipping it.
+  let routing: Core
+  beforeAll(() => {
+    routing = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  })
   const layout = (canvas: SpatialCanvas, impl: CoreImpl | undefined) => {
     const mismatches: CoreMismatch[] = []
     const core: LayoutCore | undefined =

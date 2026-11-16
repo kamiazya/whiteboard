@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
-import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
-import { describe, expect, it } from 'vitest'
+import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import { beforeAll, describe, expect, it } from 'vitest'
 import type { CoreImpl, CoreMismatch, LayoutCore } from '../layout/edges/layout-core.js'
 import {
   layoutCommentDocument,
@@ -50,7 +50,13 @@ function optionsOf(record: MarkdownRecord, meta: MarkdownMeta): MarkdownDocument
 }
 
 describe.runIf(built)('the recorded notes through the markdown switch', () => {
-  const real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
+  // factory to collect it, so a core made here fails the file where there is
+  // no artifact instead of skipping it.
+  let real: Core
+  beforeAll(() => {
+    real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+  })
 
   const lay = (record: MarkdownRecord, meta: MarkdownMeta, impl: CoreImpl) => {
     const reports: CoreMismatch[] = []

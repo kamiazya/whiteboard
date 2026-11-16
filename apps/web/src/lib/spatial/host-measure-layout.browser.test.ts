@@ -4,8 +4,9 @@
 // CJK, a Markdown body, a code fence, comments, proposals, file nodes, and a
 // board at an ordinary working size.
 //
-// The artifact is built in the pipeline, never committed: where CI sets
-// VITE_WHITEBOARD_CORE a missing artifact FAILS this file; elsewhere it skips
+// The artifact is built in the pipeline, never committed: where the run asks
+// for a core (`CORE_REQUIRED`: `differential` or `rust`) a missing artifact
+// FAILS this file; elsewhere, `ts` included, it skips
 // and says so (as layout-core.browser.test.ts does).
 
 import {
@@ -18,11 +19,10 @@ import {
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import { describe, expect, it } from 'vitest'
+import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { editorLayoutBase } from './scene-render-core.js'
 import type { WebCore } from './web-core.js'
-
-const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 
 async function loadRealCore(): Promise<{ core: WebCore } | { failure: unknown }> {
   try {
@@ -64,7 +64,7 @@ function lay(core: WebCore, board: WebLayoutBoard, impl: CoreImpl) {
 }
 
 describe('the whole layout measured by the browser through the core', () => {
-  it.runIf(REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
+  it.runIf(CORE_REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
     if ('failure' in real) throw real.failure
   })
 
