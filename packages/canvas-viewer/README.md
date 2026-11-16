@@ -15,7 +15,11 @@ widget, HTML export). Private workspace package — never published to npm.
   viewer has no theme switch of its own, so its host says which mode it is
   in. Body markdown goes through canvas-render's default parser (codec's),
   and there is no `onDegrade` callback — a malformed body or unrecognized
-  node kind still renders, silently.
+  node kind still renders, silently. Math and diagrams come from the host as
+  a fragment table (`fragments`, with misses reported to `onFragmentsAsked`),
+  and the host may hand the Rust core (`core`, canvas-render's `LayoutCore`,
+  ADR-0054): the viewer loads no core itself, and without one the TypeScript
+  lays the board out.
   Pan/zoom/select are the browser's native SVG behavior; there is no
   editing affordance.
 - `createBrowserMeasureText` (from `./measure-text`) — the browser

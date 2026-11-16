@@ -470,9 +470,9 @@ inside the note's one core request. The preview takes the fragment TABLE too,
 and `useReferenceSeams` rebuilds its bundle from a wire once nothing is in
 flight (a wire cannot say "loading", so while a load is pending the gate
 skips it as `references` and the TypeScript draws the placeholder);
-`markdown-preview-core.browser.test.tsx` holds the count. One web surface
-still lays a board out in TypeScript, through S18: `CanvasViewer` (a past
-board in version history), which takes no core. `layout-core-source.ts` is the one module that names
+`markdown-preview-core.browser.test.tsx` holds the count. Version history's past board rides it too since S18e: `VersionPreview`
+hands `CanvasViewer` `currentLayoutCore()` and the fragment table, and
+`version-preview-core.browser.test.tsx` holds the count. `layout-core-source.ts` is the one module that names
 the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
 `worker.plugins`): every build carries the wasm, because OKF and JSON Canvas have no TypeScript left here. A CI job
 that builds or tests the app restores the artifact with `.github/actions/core-wasm`.

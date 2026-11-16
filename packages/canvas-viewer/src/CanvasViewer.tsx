@@ -1,4 +1,5 @@
 import type {
+  LayoutCore,
   MeasureText,
   ReferenceSeams,
   SpatialLayoutOptions,
@@ -59,14 +60,22 @@ export interface CanvasViewerProps {
    */
   references?: ReferenceSeams
   /**
-   * Typesets a math block in any body this canvas lays out. Synchronous by
-   * canvas-render's contract, so a host with an async engine answers from
-   * what it has already rendered. Absent keeps the escaped-source
-   * placeholder.
+   * The math blocks and diagram fences the host has already rendered, as
+   * canvas-render's fragment TABLE: `fragments` by `fragmentAskKey`, DATA
+   * because a function cannot cross into the Rust core. A source the table
+   * lacks keeps its fallback (the escaped-source placeholder, a plain code
+   * block) and is handed to `onFragmentsAsked`, once each, which a host
+   * answers by rendering it and passing a new table. Absent, every source
+   * keeps its fallback.
    */
-  renderMath?: SpatialLayoutOptions['renderMath']
-  /** Draws a diagram fence, on the same terms as `renderMath`; absent is a plain code block. */
-  renderDiagram?: SpatialLayoutOptions['renderDiagram']
+  fragments?: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>
+  /**
+   * The Rust core and its switch (ADR-0054), which this package never loads
+   * itself: the host owns the wasm instance and says, through the core's
+   * `impl`, whether the board is laid out by it, by the TypeScript, or by
+   * both and compared. Absent, the TypeScript lays it out.
+   */
+  core?: LayoutCore
   /**
    * The document's conversations, for the chrome the flat comments inside
    * `canvas` cannot carry — a passage's highlight, a node set's outline.
@@ -113,8 +122,8 @@ export function CanvasViewer({
   background,
   measure,
   references,
-  renderMath,
-  renderDiagram,
+  fragments,
+  core,
   threads,
   style,
   theme = 'light',
@@ -173,8 +182,8 @@ export function CanvasViewer({
       // draws at the node's intrinsic size, export's policy.
       ...(references === undefined ? {} : { references, expandFileNode: () => true }),
       ...(threads === undefined ? {} : { threads }),
-      ...(renderMath === undefined ? {} : { renderMath }),
-      ...(renderDiagram === undefined ? {} : { renderDiagram }),
+      ...fragments,
+      ...(core === undefined ? {} : { core }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).
@@ -205,8 +214,8 @@ export function CanvasViewer({
     padding,
     background,
     references,
-    renderMath,
-    renderDiagram,
+    fragments,
+    core,
     threads,
     style,
     theme,
