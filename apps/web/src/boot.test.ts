@@ -18,6 +18,7 @@ import {
 } from './lib/browser-workspace-id.js'
 import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
+import { currentLayoutCore } from './lib/spatial/layout-core.js'
 import { clearNamedDb } from './test-utils/browser-document.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
@@ -304,6 +305,51 @@ describe('startBootSequence — the Rust core', () => {
     await booted
     expect(order).toEqual(['core asked', 'font', 'render'])
   })
+  it('renders with the missing-core notice when the core fetch never settles', async () => {
+    // A stalled fetch (a captive portal, a request a service worker holds)
+    // never rejects. Without the load's bound the boot would await it forever
+    // and the splash would never lift. Fetch is stubbed BEFORE the host is
+    // installed, since the host takes the platform's fetch as it stands then.
+    const asked: (AbortSignal | undefined)[] = []
+    const realFetch = globalThis.fetch
+    globalThis.fetch = ((_url: unknown, init?: RequestInit) =>
+      new Promise<Response>((_, reject) => {
+        const signal = init?.signal ?? undefined
+        asked.push(signal)
+        signal?.addEventListener('abort', () => reject(signal.reason))
+      })) as typeof fetch
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      let rendered = false
+      const booted = startBootSequence({
+        rootEl: rootEl(),
+        resolveWorkspaceId: async () => 'ws',
+        loadFont: async () => undefined,
+        dismissSplash: async () => {},
+        render: () => {
+          rendered = true
+        },
+      })
+      await vi.waitFor(() => expect(asked).toHaveLength(1), { timeout: 10_000 })
+      expect(rendered).toBe(false)
+      // The load's bound (layout-core.ts's CORE_LOAD_TIMEOUT_MS).
+      await vi.advanceTimersByTimeAsync(30_000)
+      await vi.waitFor(() => expect(rendered).toBe(true), { timeout: 5_000 })
+      await booted
+      expect(asked[0]?.aborted).toBe(true)
+      expect(
+        currentLayoutCore()?.layout.layoutSpatialCanvas(
+          {} as never,
+          () => undefined,
+          (() => ({})) as never,
+        ),
+      ).toEqual({ refused: { code: 'malformed', reason: 'core-unavailable' } })
+    } finally {
+      vi.useRealTimers()
+      globalThis.fetch = realFetch
+    }
+    await expectLoggedFailure('the Rust core did not load')
+  }, 30_000)
 })
 
 describe('startBootSequence — the page-load file sweep', () => {
