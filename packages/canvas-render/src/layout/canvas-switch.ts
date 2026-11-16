@@ -20,9 +20,9 @@ import type {
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
-import { refusalScene } from '../refusal.js'
+import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
-import { bundledThemeModeOf } from '../theme/spatial-theme.js'
+import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import { usesFragmentTable } from './fragment-table.js'
@@ -293,15 +293,7 @@ export function layoutThroughCore(
   if ('refused' in answer) {
     const { refused } = answer
     core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: refused.reason })
-    if (impl !== 'rust') return ts(options)
-    options.onRefused?.(refused)
-    const at = topLeftOf(stored)
-    const scene = refusalScene(refused, {
-      measure: options.measure,
-      mode: request.mode,
-      ...(at === undefined ? {} : { at }),
-    })
-    return { scene, anchors: new Map() }
+    return impl === 'rust' ? drawnRefusal(refused, stored, request.mode, options) : ts(options)
   }
   if (impl === 'rust') {
     for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
@@ -311,9 +303,29 @@ export function layoutThroughCore(
   return compared(answer, request, options, ts)
 }
 
-/** Where a board's boxes begin, its least x and y; none for a board with no box placed at a finite point. */
-// A fold rather than a spread: a refused board is a large one, and spreading
-// its nodes as arguments is bounded by the engine's argument limit.
+/** A refusal as `rust` answers it: told to `onRefused`, and drawn where the board's boxes are. */
+function drawnRefusal(
+  refused: LayoutRefusal,
+  stored: SpatialCanvas,
+  mode: SpatialThemeMode,
+  options: SpatialLayoutOptions,
+): LaidOutCanvas {
+  options.onRefused?.(refused)
+  const at = topLeftOf(stored)
+  const scene = refusalScene(refused, {
+    measure: options.measure,
+    mode,
+    ...(at === undefined ? {} : { at }),
+  })
+  return { scene, anchors: new Map() }
+}
+
+/**
+ * Where a board's boxes begin, its least x and y; none for a board with no
+ * box placed at a finite point. A fold rather than a spread: a refused board
+ * is a large one, and spreading its nodes as arguments is bounded by the
+ * engine's argument limit.
+ */
 function topLeftOf(canvas: SpatialCanvas): { x: number; y: number } | undefined {
   let at: { x: number; y: number } | undefined
   for (const { x, y } of canvas.nodes) {
