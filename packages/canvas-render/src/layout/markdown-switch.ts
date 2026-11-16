@@ -199,6 +199,13 @@ interface Answering {
   readonly answered: (laid: TsNote) => Scene | undefined
 }
 
+/** The core's laid-out answer in the TypeScript's shape: its scene, or none for a missing section, and what it asked. */
+function noteOf(answer: Exclude<MarkdownLayoutAnswer, { readonly declined: string }>): TsNote {
+  if ('missing' in answer) return { scene: undefined }
+  const { scene, fragmentsAsked } = answer
+  return fragmentsAsked === undefined ? { scene } : { scene, asked: fragmentsAsked }
+}
+
 /**
  * A body whose switch reads `differential` or `rust`, as the core answers it.
  * What the gate skips (reported by class), what the core declines (reported
@@ -234,13 +241,7 @@ function throughCore(
     core.onMismatch?.({ fn: 'layoutMarkdown', kind: 'refused', err, repro: request })
     return answering.fallback()
   }
-  const rust: TsNote =
-    'missing' in answer
-      ? { scene: undefined }
-      : {
-          scene: answer.scene,
-          ...(answer.fragmentsAsked === undefined ? {} : { asked: answer.fragmentsAsked }),
-        }
+  const rust = noteOf(answer)
   if (impl === 'rust') return answering.answered(rust)
   const ts = answering.beside()
   const comparable = (note: TsNote) => ({ scene: note.scene ?? 'missing', asked: note.asked ?? [] })

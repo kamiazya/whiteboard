@@ -109,6 +109,30 @@ function pictureExtra(href: string, sizes: ReadonlyMap<string, ImageSize>): Refe
   return { image: { href, ...sizes.get(href) } }
 }
 
+/**
+ * The bundle over what loaded. Every target the body names, transitively, is
+ * in the cache once nothing is pending, so the page's tables evaluated over
+ * it answer whatever the layout can ask — and the bundle rebuilt from that
+ * wire is one the Rust core can be handed. A wire cannot say "loading", so
+ * while a load is in flight the bundle stays functions and the TypeScript
+ * draws the placeholder that says so.
+ */
+function bundleOver(
+  cache: ReadonlyMap<string, LoadedReference | null>,
+  pending: ReadonlySet<string>,
+  extras: ReadonlyMap<string, ReferenceExtra>,
+  page: Pick<UseReferenceSeamsOptions, 'resolveAlias' | 'resolveTitle'>,
+): ReferenceSeams {
+  const tables = {
+    ...(page.resolveAlias !== undefined ? { resolveAlias: page.resolveAlias } : {}),
+    ...(page.resolveTitle !== undefined ? { resolveTitle: page.resolveTitle } : {}),
+  }
+  if (pending.size > 0) {
+    return referenceSeams(cache, { pending, ...tables, extra: (ref) => extras.get(ref) })
+  }
+  return referenceSeamsFromWire(referenceWire(cache, { ...tables, extras }))
+}
+
 export function useReferenceSeams({
   body,
   resolveAlias,
@@ -166,20 +190,6 @@ export function useReferenceSeams({
   return useMemo(() => {
     const extras = new Map<string, ReferenceExtra>()
     for (const [ref, href] of imageUrls) extras.set(ref, pictureExtra(href, imageSizes))
-    const tables = {
-      ...(resolveAlias !== undefined ? { resolveAlias } : {}),
-      ...(resolveTitle !== undefined ? { resolveTitle } : {}),
-    }
-    // Every target the body names, transitively, is in the cache once
-    // nothing is pending, so the page's tables evaluated over it answer
-    // whatever the layout can ask — and the bundle rebuilt from that wire is
-    // one the Rust core can be handed. A wire cannot say "loading", so while
-    // a load is in flight the bundle stays functions and the TypeScript
-    // draws the placeholder that says so.
-    const pending = pendingTargets(body, cache)
-    if (pending.size > 0) {
-      return referenceSeams(cache, { pending, ...tables, extra: (ref) => extras.get(ref) })
-    }
-    return referenceSeamsFromWire(referenceWire(cache, { ...tables, extras }))
+    return bundleOver(cache, pendingTargets(body, cache), extras, { resolveAlias, resolveTitle })
   }, [body, cache, imageUrls, imageSizes, resolveAlias, resolveTitle])
 }
