@@ -232,7 +232,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
   'packages/core-wasm/src/index.ts#CoreInputRefused':
     "the refusal a composition root sees, with its registry refusal code, when a wire is past its input caps or the artifact's answer cannot be accounted for; the roots load the core in ADR-0054 step 5's next slice, and the shim's own tests hold the refusal",
   'packages/core-wasm/src/layout-caches.ts#LayoutCaches':
-    "the allocator `layoutCachesOf` builds one of per wasm instance; exported so layout-caches.test.ts can hand it a finalizer that collects on demand, which `FinalizationRegistry` cannot be made to do, rather than widening `layoutCachesOf` with a test-only parameter",
+    'the allocator `layoutCachesOf` builds one of per wasm instance; exported so layout-caches.test.ts can hand it a finalizer that collects on demand, which `FinalizationRegistry` cannot be made to do, rather than widening `layoutCachesOf` with a test-only parameter',
   'packages/mcp-server/src/server/export/layout-core.ts#packagedArtifacts':
     'where a published install carries the wasm; exported so layout-core.test.ts pins the dist/assets/core-wasm segment that copy-core-wasm-into-dist.mjs writes, rather than a second spelling of it',
   'packages/mcp-server/src/server/export/layout-core.ts#artifactDirectory':
