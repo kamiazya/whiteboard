@@ -116,6 +116,20 @@ class Model {
     return [...this.docs.values()].filter((d) => d.path === from || d.path.startsWith(`${from}/`))
   }
 
+  /**
+   * Whether the tree keeps a FOLDER at `path` that a move landing there would
+   * have to merge into: one holding a document the move does not carry. The
+   * keeper refuses that (`moveCollision`), while a create promotes the folder
+   * — so this matters for moves only, and a folder the move empties is free.
+   */
+  folderHoldsOthersAt(path: string, leaving: readonly string[]): boolean {
+    if (this.byPath(path) !== undefined) return false
+    for (const d of this.docs.values()) {
+      if (!leaving.includes(d.id) && d.path.startsWith(`${path}/`)) return true
+    }
+    return false
+  }
+
   followMove(from: string, to: string): void {
     const rows = () =>
       [...this.docs.values()].map((d) => ({ id: d.id, path: d.path, name: d.name }))
@@ -159,8 +173,20 @@ async function tokensOf(documentId: string): Promise<string[]> {
 
 let runSeq = 0
 
+// `alpha` leaves, a document lands under the folder it left behind, and
+// another document is moved onto that folder — refused by the keeper, since
+// the folder still holds `alpha/leaf`.
+const MOVE_ONTO_FOLDER: Cmd[] = [
+  { t: 'move', slot: 0, to: 'beta' },
+  { t: 'create', slot: 0, path: 'alpha/leaf', name: 'Plan' },
+  { t: 'move', slot: 1, to: 'alpha' },
+]
+
 describe('browser rename follow parity', () => {
-  fcTest.prop([fc.array(cmdArb, { minLength: 1, maxLength: 6 })], withDefaults({ numRuns: 8 }))(
+  fcTest.prop(
+    [fc.array(cmdArb, { minLength: 1, maxLength: 6 })],
+    withDefaults<[Cmd[]]>({ numRuns: 8, examples: [[MOVE_ONTO_FOLDER]] }),
+  )(
     'the browser keeper agrees with the naive follow model',
     async (cmds) => {
       const prefix = `pr${runSeq++}`
@@ -239,12 +265,13 @@ describe('browser rename follow parity', () => {
             if (to === from || to.startsWith(`${from}/`)) break
             const movedPaths = model.movedBy(from).map((d) => d.path)
             const produced = (path: string) => to + path.slice(from.length)
+            const movedIds = model.movedBy(from).map((d) => d.id)
             const collides = movedPaths.some((path) => {
               const holder = model.byPath(produced(path))
-              return holder !== undefined && !movedPaths.includes(holder.path)
+              if (holder !== undefined) return !movedPaths.includes(holder.path)
+              return model.folderHoldsOthersAt(produced(path), movedIds)
             })
             if (collides) break
-            const movedIds = model.movedBy(from).map((d) => d.id)
             if (doc.name !== undefined && model.nameTakenBeside(to, doc.name, movedIds)) {
               await expect(source.renameDocumentPath(from, to)).rejects.toThrow(
                 DisplayNameTakenError,
