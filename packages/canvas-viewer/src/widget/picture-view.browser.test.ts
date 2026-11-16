@@ -108,6 +108,22 @@ describe('the picture the widget shows', () => {
       '<svg xmlns="http://www.w3.org/2000/svg"><a href=" javascript:1"><text>x</text></a></svg>',
     ],
     [
+      'a script URL split by a newline reference',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="java&#xA;script:1"><text>x</text></a></svg>',
+    ],
+    [
+      'a script URL split by a tab reference',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a href="&#x9;javascript:1"><text>x</text></a></svg>',
+    ],
+    [
+      'an animation that writes a link',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a><set attributeName="href" to="javascript:1"/><text>x</text></a></svg>',
+    ],
+    [
+      'an animation of an attribute',
+      '<svg xmlns="http://www.w3.org/2000/svg"><a><animate attributeName="href" values="javascript:1"/></a></svg>',
+    ],
+    [
       'foreign markup',
       '<svg xmlns="http://www.w3.org/2000/svg"><foreignObject><div/></foreignObject></svg>',
     ],

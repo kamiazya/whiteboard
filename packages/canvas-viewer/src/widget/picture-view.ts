@@ -7,21 +7,40 @@
 // serializer now runs in another process and the string reaches this frame
 // through the host, so the argument `SceneSvg` rests on is no longer one this
 // frame can see. A parser builds no script that runs, and the check below
-// refuses the three ways a parsed SVG can still act when it is placed: a
-// script-bearing element, an event-handler attribute, a `javascript:` link.
+// refuses the ways a parsed SVG can still act when it is placed: a
+// script-bearing element, an event-handler attribute, a `javascript:` link,
+// and an animation element, which can write an attribute (a link's `href`)
+// after the check has run.
 // Nothing the serializer writes is any of them, so a refusal is never a
 // drawing lost — it is a string that did not come from the serializer.
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
-const ACTIVE_ELEMENTS = new Set(['script', 'foreignobject', 'iframe', 'object', 'embed'])
+const ACTIVE_ELEMENTS = new Set([
+  'script',
+  'foreignobject',
+  'iframe',
+  'object',
+  'embed',
+  'set',
+  'animate',
+  'animatemotion',
+  'animatetransform',
+])
 const SCRIPT_URL = /^\s*javascript:/i
+// The URL Standard strips ASCII tab and newline anywhere in a URL before it
+// reads the scheme, so `java&#xA;script:` is a script link once parsed.
+const URL_STRIPPED = /[\t\n\r]/g
 
 /** Whether one parsed element could run anything once placed in the document. */
 function isActive(element: Element): boolean {
   if (ACTIVE_ELEMENTS.has(element.localName.toLowerCase())) return true
   for (const attribute of Array.from(element.attributes)) {
     if (attribute.name.toLowerCase().startsWith('on')) return true
-    if (attribute.localName === 'href' && SCRIPT_URL.test(attribute.value)) return true
+    if (
+      attribute.localName === 'href' &&
+      SCRIPT_URL.test(attribute.value.replace(URL_STRIPPED, ''))
+    )
+      return true
   }
   return false
 }
