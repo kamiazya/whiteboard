@@ -204,4 +204,10 @@ impl Measure for FontTableMeasurer<'_> {
             None => estimate_vertical(font.size_px),
         }
     }
+
+    /// Whether a face was added under `family`: any other family is measured
+    /// in the first one's faces, or by the estimate when none was added.
+    fn has_family(&self, family: &str) -> bool {
+        self.families.iter().any(|held| held.name == family)
+    }
 }

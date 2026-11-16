@@ -4,6 +4,7 @@ import type { FontHandles } from './font-handles.js'
 import { LAYOUT_QUERY_CAPS } from './generated/input-caps.js'
 import type { HostMeasure } from './host-measure.js'
 import {
+  drawnRefusal,
   type LayoutErrors,
   type LayoutEvent,
   type LayoutGlue,
@@ -85,12 +86,16 @@ function numbersOf(value: unknown): QueryNumbers | undefined {
   return items.includes(undefined) ? undefined : (items as QueryNumbers[])
 }
 
-/** What the core declined or refused past its caps, which a root answers from the TypeScript. */
-function unanswered([kind, a, b]: unknown[]): { readonly declined: string } | undefined {
+/**
+ * What the core declined, or refused as a root would draw it, which a query's
+ * root answers from the TypeScript: a query answers no scene to draw a
+ * refusal in.
+ */
+function unanswered(parsed: unknown[]): { readonly declined: string } | undefined {
+  const [kind, a] = parsed
   if (kind === 'declined' && typeof a === 'string') return { declined: a }
-  if (kind === 'refused' && a === 'input-too-large' && typeof b === 'string') {
-    return { declined: b }
-  }
+  const refused = drawnRefusal(parsed)
+  if (refused !== undefined) return { declined: refused.reason }
   return undefined
 }
 
@@ -142,7 +147,8 @@ export function layoutQuery(
   const { glue, errors } = calls
   if ('measure' in request) {
     const read = request.query === 'edges' ? readEdges : readNumbers
-    return layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
+    const got = layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
+    return 'refused' in got ? { declined: got.refused.reason } : got
   }
   const wire = wireOf(request, 0, true)
   if (wire === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')

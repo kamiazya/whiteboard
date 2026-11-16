@@ -58,7 +58,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '35'
+export const EXPECTED_ABI = '36'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -201,9 +201,11 @@ export interface Core {
 
   /**
    * `layoutSpatialCanvasWithAnchors` of a request canvas-render built: the
-   * scene, the anchors and the degradations, or the class of what the core
-   * declined (an input past its caps, or one it cannot answer exactly as the
-   * TypeScript would), which a root answers from the TypeScript. A fence the
+   * scene, the anchors and the degradations; what the core refused (a request
+   * past its caps, a number its answer cannot spell, a host measurer that did
+   * not answer), which a root draws as a refusal; or the class of what it
+   * declined (a body past the parser's bounds), which a root answers from the
+   * TypeScript. A fence the
    * default highlighter would colour is tokenised by `highlight` and sent on a
    * second call; the tokens are kept per core, so a layout of fences already
    * seen is one call. With no `highlight` such a layout is declined. A

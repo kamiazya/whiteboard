@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { FenceTokenMemo } from './fence-tokens.js'
 import { FontHandles } from './font-handles.js'
+import { LAYOUT_QUERY_CAPS } from './generated/input-caps.js'
 import type { LayoutGlue } from './layout.js'
 import { type LayoutQueryRequest, layoutQuery } from './query.js'
 
@@ -97,6 +98,11 @@ describe('a query over the artifact', () => {
     expect(ask(glueOf('["declined","body"]').glue, box)).toEqual({ declined: 'body' })
     const past = '["refused","input-too-large","runs"]'
     expect(ask(glueOf(past).glue, box)).toEqual({ declined: 'runs' })
+    // A query answers no scene to draw a refusal in, so its root asks the TypeScript.
+    for (const reason of ['non-finite', 'host-measure']) {
+      const refused = JSON.stringify(['refused', 'malformed', reason])
+      expect(ask(glueOf(refused).glue, box)).toEqual({ declined: reason })
+    }
     expect(() => ask(glueOf('["refused","malformed","request"]').glue, box)).toThrow(
       'layout_query malformed request',
     )
@@ -107,8 +113,19 @@ describe('a query over the artifact', () => {
 
   it("declines a geometry query past the entry's bytes without calling it", () => {
     const { glue, sent } = glueOf()
-    const huge = { ...box, shape: 'x'.repeat(5 * 1024 * 1024) }
+    const huge = { ...box, shape: 'x'.repeat(LAYOUT_QUERY_CAPS.maxBytes) }
     expect(ask(glue, huge)).toEqual({ declined: 'too-large' })
+    expect(sent).toEqual([])
+  })
+
+  it("declines a measured query past the entry's bytes without calling it", () => {
+    const { glue, sent } = glueOf()
+    const huge = {
+      query: 'node-size',
+      measure: { kind: 'ratio' },
+      text: 'x'.repeat(LAYOUT_QUERY_CAPS.maxBytes),
+    } as const
+    expect(ask(glue, huge as unknown as LayoutQueryRequest)).toEqual({ declined: 'too-large' })
     expect(sent).toEqual([])
   })
 })

@@ -20,20 +20,23 @@
 //!   fifth element: the sources the table did not hold, each drawn as its
 //!   fallback, as `FragmentAsk`s once each in the order asked, which the host
 //!   renders and lays out again with;
-//! - `["refused", code, class]`: an input past this entry's caps, or one that
-//!   is not a request; `["refused", "malformed", "font-handle"]` names a
-//!   handle this instance holds no faces under, and the host registers again;
+//! - `["refused", code, class]`: an input past this entry's caps (`code`
+//!   `input-too-large`, `class` naming the cap), or one that is not a request;
+//!   `["refused", "malformed", "non-finite"]` a layout holding a number the
+//!   answer cannot spell, `["refused", "malformed", "host-measure"]` a host
+//!   measurer not handed over or one that did not answer, and
+//!   `["refused", "malformed", "font-handle"]` a handle this instance holds no
+//!   faces under, which the host registers again;
 //! - `["needs", {code}]`: the fences, as `[lang, value]` rows in the order the
 //!   layout met them, that the default highlighter colours and whose tokens the
 //!   request's `codeTokens` did not carry; the host tokenises exactly those and
 //!   asks once more with them (owner decision q75);
-//! - `["declined", class]`: a request the core cannot answer exactly as the
-//!   TypeScript would (a body past the parser's bounds, a number the answer
-//!   cannot spell, more fragment markup placed than [`MAX_PLACED_BYTES`], a
-//!   host measurer not handed over or one that did not answer:
-//!   `host-measure`).
+//! - `["declined", "body"]`: a body past the parser's bounds, which the core
+//!   cannot answer exactly as the TypeScript would.
 //!
-//! A host answers a refusal and a decline from the TypeScript.
+//! A host draws a refusal as one (owner decision q81, D7), and answers a
+//! decline from the TypeScript. Fragment markup placed past
+//! [`MAX_PLACED_BYTES`] is no refusal: each block past it draws its fallback.
 //!
 //! A request naming a `kind` is a markdown body rather than a canvas
 //! ([`markdown`]): a note laid out as `layoutMdastBlocks` lays it out, or a
@@ -88,20 +91,27 @@ use fragments::FragmentTable;
 use measure::{Unmeasured, with_measurer};
 use request::{Asked, Comments, MeasureSpec, Request, Style, asked_of};
 
-/// The most canvas elements (nodes, edges and lines) a request may hold, its
-/// own canvas and every canvas it references together: this entry's
-/// `maxNodes`, which bounds the routing a layout runs as `maxBytes` cannot.
+/// The most canvas elements (nodes, edges and lines) a request's own canvas
+/// may hold: this entry's `maxNodes`, which bounds the routing a layout runs
+/// as `maxBytes` cannot, and is above the model's 2,000 nodes and 2,000 edges
+/// and lines.
 pub const MAX_ELEMENTS: usize = match LAYOUT_SPATIAL_CANVAS.max_nodes {
     Some(n) => n,
     None => 0,
 };
 
+/// The most elements every canvas the request references may hold together:
+/// as many again, at least the 4,000 the keepers' reference walk loads. Each
+/// canvas is routed on its own, so the two caps add rather than multiply.
+pub const MAX_REFERENCED_ELEMENTS: usize = MAX_ELEMENTS;
+
 /// The most text a request's bodies may hold together, in bytes: every node's
-/// content and every referenced body. One parse's own bound
-/// (`whiteboard_markdown::limits::MAX_BYTES`, 768 KiB), so a layout parses at
-/// most what one body may hold; the cost of a body is in its parse and its
-/// typesetting, which `maxBytes` alone would let a request repeat.
-pub const MAX_BODY_BYTES: usize = 786_432;
+/// content and every referenced body. 3 MiB is the keepers' reference budget
+/// (`4 × MARKDOWN_MAX_CHARS` UTF-16 units, at most three bytes each) with room
+/// for a board's own content. One parse stays bounded by the parser's own
+/// 768 KiB, so this bounds how many parses run; the cost of a body is in its
+/// parse and its typesetting, which `maxBytes` alone would let a request repeat.
+pub const MAX_BODY_BYTES: usize = 3 * 1024 * 1024;
 
 fn content_bytes(canvas: &SpatialCanvas) -> usize {
     canvas
@@ -137,10 +147,6 @@ fn referenced_bytes(wire: &ReferenceWire) -> usize {
 fn elements(canvas: &SpatialCanvas) -> usize {
     let lines = canvas.lines.as_ref().map_or(0, Vec::len);
     canvas.nodes.len().saturating_add(canvas.edges.len()).saturating_add(lines)
-}
-
-fn element_total(request: &Request) -> usize {
-    elements(&request.canvas).saturating_add(referenced_elements(&request.references))
 }
 
 /// The elements of every canvas a reference wire carries.
@@ -299,7 +305,9 @@ fn with_options(
     then: &mut dyn FnMut(&LayoutOptions<'_>, &WireHost<'_>, Option<&FragmentTable<'_>>) -> String,
 ) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
-    let held = |family: &str| request.font_families.iter().any(|held| held == family);
+    let held = |family: &str| {
+        request.font_families.iter().any(|held| held == family) && measure.has_family(family)
+    };
     let appearance = create_spatial_theme(mode, None);
     let host = WireHost::new(&request.references, request.expand.clone())
         .with_code_tokens(&request.code_tokens);
@@ -340,20 +348,15 @@ fn with_options(
 /// What a layout through `host` and `fragments` answers.
 fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable<'_>>) -> String {
     let ok = || laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked));
-    settled(host, fragments, ok)
+    settled(host, ok)
 }
 
-/// What a layout through `host` and `fragments` answers when `ok` is its laid-out answer:
+/// What a layout through `host` answers when `ok` is its laid-out answer:
 /// declined for what the core cannot answer exactly, else the fences it must be sent.
-fn settled(
-    host: &WireHost<'_>,
-    fragments: Option<&FragmentTable<'_>>,
-    ok: impl FnOnce() -> String,
-) -> String {
+fn settled(host: &WireHost<'_>, ok: impl FnOnce() -> String) -> String {
     let asked = host.needs();
     match host.refused() {
         Some(why) => declined(why.class()),
-        None if fragments.is_some_and(FragmentTable::over) => declined("fragments"),
         None if !asked.is_empty() => needs(&asked),
         None => ok(),
     }
@@ -444,14 +447,17 @@ fn measured(
             answer
         }
         Err(Unmeasured::FontHandle) => refused("malformed", "font-handle"),
-        Err(Unmeasured::Host) => declined("host-measure"),
+        Err(Unmeasured::Host) => refused("malformed", "host-measure"),
     }
 }
 
 /// What of a canvas request is past this entry's caps, if anything.
 fn past_canvas_caps(request: &Request) -> Option<&'static str> {
-    if element_total(request) > MAX_ELEMENTS || expanded_ids(request) > MAX_ELEMENTS {
+    if elements(&request.canvas) > MAX_ELEMENTS || expanded_ids(request) > MAX_ELEMENTS {
         return Some("too-many-elements");
+    }
+    if referenced_elements(&request.references) > MAX_REFERENCED_ELEMENTS {
+        return Some("referenced-elements");
     }
     if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
         return Some("fragments");

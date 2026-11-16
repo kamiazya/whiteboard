@@ -80,11 +80,11 @@ fn the_host_is_asked_once_per_text_and_font() {
 }
 
 #[test]
-fn a_layout_with_no_host_or_a_host_that_fails_is_declined() {
+fn a_layout_with_no_host_or_a_host_that_fails_is_refused() {
     let hosted = request(board("hello"), &[("measure", host())]);
-    assert_eq!(answer(&hosted, None), json!(["declined", "host-measure"]));
+    assert_eq!(answer(&hosted, None), json!(["refused", "malformed", "host-measure"]));
     let refusing = Recording { refuse: true, ..Recording::default() };
-    assert_eq!(answer(&hosted, Some(&refusing)), json!(["declined", "host-measure"]));
+    assert_eq!(answer(&hosted, Some(&refusing)), json!(["refused", "malformed", "host-measure"]));
     assert_eq!(answer(&request(board("hello"), &[]), Some(&refusing)).get(0), Some(&json!("ok")));
 }
 
@@ -178,7 +178,11 @@ fn a_number_that_is_not_finite_is_no_answer() {
             let mut metrics = [10.0, 8.0, 2.0, 0.0];
             metrics[at] = bad;
             let host = Fixed(metrics);
-            assert_eq!(answer(&hosted, Some(&host)), json!(["declined", "host-measure"]), "{at}");
+            assert_eq!(
+                answer(&hosted, Some(&host)),
+                json!(["refused", "malformed", "host-measure"]),
+                "{at}"
+            );
             let measure = HostMeasure::new(&host);
             measure.measure("word", &font("Roboto", 10.0));
             assert!(measure.failed(), "{bad} at {at}");

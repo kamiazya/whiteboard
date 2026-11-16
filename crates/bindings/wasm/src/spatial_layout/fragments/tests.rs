@@ -2,7 +2,10 @@ use serde_json::{Value as Json, json};
 use whiteboard_canvas_render::typeset::{DiagramRenderer, MathRenderer, Rendered};
 
 use super::{Ask, FragmentTable, MAX_FRAGMENTS, MAX_PLACED_BYTES, fits};
-use crate::spatial_layout::tests::{answer, board, m, request, s};
+use whiteboard_model::spatial::{SpatialCanvas, SpatialNode};
+
+use crate::json_canvas_wire::canvas_json;
+use crate::spatial_layout::tests::{answer, board, m, request, s, text_node};
 
 fn row(key: &str, svg: &str) -> (String, Rendered) {
     (key.to_owned(), Rendered::Fragment { svg: svg.to_owned(), width: Some(4.0), height: None })
@@ -40,7 +43,6 @@ fn a_row_answers_and_a_later_row_answers_first() {
     assert_eq!(svg(table.render_math("x")), "<g b/>");
     assert_eq!(svg(table.render_diagram("m", "v")), "<g c/>");
     assert_eq!(table.asked(), Vec::new());
-    assert!(!table.over());
 }
 
 #[test]
@@ -55,15 +57,13 @@ fn a_missing_source_is_asked_for_once_in_the_order_met() {
 }
 
 #[test]
-fn placing_past_the_cap_answers_nothing_and_says_so() {
+fn placing_past_the_cap_answers_nothing_and_asks_for_nothing() {
     let half = "a".repeat(MAX_PLACED_BYTES / 2);
     let rows = [row("math:x", &half), row("math:y", "b")];
     let table = FragmentTable::new(&rows);
     assert!(table.render_math("x").is_some());
     assert!(table.render_math("x").is_some());
-    assert!(!table.over());
     assert_eq!(table.render_math("y"), None);
-    assert!(table.over());
     assert_eq!(table.asked(), Vec::new());
 }
 
@@ -108,14 +108,25 @@ fn a_table_that_is_not_one_or_past_its_caps_is_refused() {
 }
 
 #[test]
-fn a_layout_placing_more_markup_than_its_cap_is_declined() {
+fn a_layout_placing_more_markup_than_its_cap_draws_the_rest_as_their_fallback() {
     let third = "a".repeat(MAX_PLACED_BYTES / 3 + 1);
     let table = s(vec![fragment("math:x", &third)]);
     let thrice = ["$$\nx\n$$"; 3].join("\n\n");
-    let got = answer(&request(board(&thrice), &[("fragments", table.clone())]));
-    assert_eq!(got, json!(["declined", "fragments"]));
-    let twice = answer(&request(board(&thrice[..thrice.len() - 9]), &[("fragments", table)]));
-    assert_eq!(twice.get(0), Some(&json!("ok")));
+    // A box tall enough to draw every block, so none is cut before it is placed.
+    let tall = |body: &str| {
+        let node = SpatialNode { height: 2000.0, ..text_node("a", body) };
+        canvas_json(&SpatialCanvas { nodes: vec![node], ..SpatialCanvas::default() })
+    };
+    let got = answer(&request(tall(&thrice), &[("fragments", table.clone())]));
+    assert_eq!(got.get(0), Some(&json!("ok")), "an answer, not a decline");
+    let scene = got.get(1).map(Json::to_string).unwrap_or_default();
+    assert_eq!(scene.matches(&third).count(), 2, "the first two placed");
+    assert_eq!(got.get(3), Some(&json!([])));
+    assert_eq!(got.get(4), Some(&json!([])), "a row it holds is never asked for");
+    let twice = answer(&request(tall(&thrice[..thrice.len() - 9]), &[("fragments", table)]));
+    let placed = twice.get(1).map(Json::to_string).unwrap_or_default();
+    assert_eq!(placed.matches(&third).count(), 2);
+    assert!(scene.len() > placed.len(), "the third block is drawn, as its fallback");
 }
 
 #[test]

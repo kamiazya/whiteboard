@@ -139,9 +139,9 @@ fn edges(request: &Request, host: Option<&dyn Host>) -> String {
         Err(refusal) => return refusal,
     };
     measured(&request.measure, host, None, |measure, _| {
-        with_options(request, measure, None, plugin, &mut |options, wire, fragments| {
+        with_options(request, measure, None, plugin, &mut |options, wire, _| {
             let nodes = layout_spatial_edges(&request.canvas, options);
-            settled(wire, fragments, || edge_layer(&nodes, wire))
+            settled(wire, || edge_layer(&nodes, wire))
         })
     })
 }
@@ -155,7 +155,7 @@ fn edge_layer(
         nodes_tree(nodes),
         events(&wire.degradations()),
     ]);
-    answer.to_json().unwrap_or_else(|_| super::answer::declined("non-finite"))
+    answer.to_json().unwrap_or_else(|_| refused("malformed", "non-finite"))
 }
 
 /// A node's size, or why it is not answered: refused past the bodies' or the
@@ -176,16 +176,11 @@ fn node_size(size: &NodeSize, host: Option<&dyn Host>) -> String {
         // The content's size under `measure`, or the answer that stands for it.
         let under = |measure: &dyn Measure| -> Result<ContentSize, String> {
             let mut natural = ContentSize { w: 0.0, h: 0.0 };
-            let unanswered = with_options(
-                &size.layout,
-                measure,
-                None,
-                plugin,
-                &mut |options, wire, fragments| {
+            let unanswered =
+                with_options(&size.layout, measure, None, plugin, &mut |options, wire, _| {
                     natural = natural_node_content_size(&size.node, options);
-                    settled(wire, fragments, String::new)
-                },
-            );
+                    settled(wire, String::new)
+                });
             if unanswered.is_empty() { Ok(natural) } else { Err(unanswered) }
         };
         let own = match under(measure) {

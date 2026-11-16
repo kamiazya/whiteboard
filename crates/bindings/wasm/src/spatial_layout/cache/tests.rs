@@ -256,22 +256,16 @@ fn a_layout_asking_for_fences_keeps_every_body_but_the_fence() {
 }
 
 #[test]
-fn a_declined_layout_keeps_nothing() {
+fn a_declined_or_refused_layout_keeps_nothing() {
     let surface = 0x5150_0003;
     // A body past the parser's bounds.
     let deep = format!("{} x", ">".repeat(64));
-    let refused = lay_board(surface, beside(&deep), None, &[]);
-    assert_eq!(refused.get(0), Some(&json!("declined")), "{refused}");
-    // More fragment markup than a layout may place.
-    let third = "a".repeat(super::super::MAX_PLACED_BYTES / 3 + 1);
-    let row = s(vec![json!("math:x"), m(&[("svg", json!(third))])]);
-    let thrice = ["$$\nx\n$$"; 3].join("\n\n");
-    let over = lay_board(surface, beside(&thrice), None, &[("fragments", s(vec![row]))]);
-    assert_eq!(over, json!(["declined", "fragments"]));
+    let declined = lay_board(surface, beside(&deep), None, &[]);
+    assert_eq!(declined.get(0), Some(&json!("declined")), "{declined}");
     // A host that did not answer.
     let host = m(&[("kind", json!("host"))]);
     let silent = lay_board(surface, beside("x"), Some(&Silent), &[("measure", host)]);
-    assert_eq!(silent, json!(["declined", "host-measure"]));
+    assert_eq!(silent, json!(["refused", "malformed", "host-measure"]));
     assert_eq!(resident().kept_by(surface), 0);
 }
 

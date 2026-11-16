@@ -1,9 +1,15 @@
 use serde_json::{Value as Json, json};
 use whiteboard_model::spatial::{NodeResource, SpatialCanvas, SpatialNode};
 
-use super::{MAX_BODY_BYTES, MAX_COMMENT_ITEMS, MAX_ELEMENTS, MAX_PASSAGES, layout_spatial_canvas};
+use super::{
+    MAX_BODY_BYTES, MAX_COMMENT_ITEMS, MAX_ELEMENTS, MAX_PASSAGES, MAX_REFERENCED_ELEMENTS,
+    layout_spatial_canvas,
+};
 use crate::input_caps::LAYOUT_SPATIAL_CANVAS;
 use crate::json_canvas_wire::canvas_json;
+
+/// The most one body may hold and still be parsed (`whiteboard_markdown::limits::MAX_BYTES`).
+const MAX_PARSE_BYTES: usize = 786_432;
 
 /// A mapping on the value wire.
 pub(super) fn m(fields: &[(&str, Json)]) -> Json {
@@ -85,14 +91,70 @@ fn a_shortcode_is_answered_from_the_plugin_tables() {
 }
 
 #[test]
-fn what_the_core_cannot_answer_as_the_typescript_would_is_declined() {
-    let at_cap = answer(&request(board(&"a".repeat(MAX_BODY_BYTES)), &[]));
-    assert_eq!(at_cap.get(0), Some(&json!("ok")));
+fn a_layout_holding_a_number_the_answer_cannot_spell_is_refused() {
+    let at_parse_cap = answer(&request(board(&"a".repeat(MAX_PARSE_BYTES)), &[]));
+    assert_eq!(at_parse_cap.get(0), Some(&json!("ok")));
     let huge = canvas_json(&SpatialCanvas {
         nodes: vec![SpatialNode { x: f64::INFINITY, ..text_node("a", "x") }],
         ..SpatialCanvas::default()
     });
-    assert_eq!(answer(&request(huge, &[])), json!(["declined", "non-finite"]));
+    assert_eq!(answer(&request(huge, &[])), json!(["refused", "malformed", "non-finite"]));
+}
+
+/// A reference wire whose entries are `entries`, with no alias, title or extra.
+pub(super) fn wire_of(entries: Vec<Json>) -> Json {
+    m(&[
+        ("entries", s(entries)),
+        ("aliases", s(Vec::new())),
+        ("titles", s(Vec::new())),
+        ("extras", s(Vec::new())),
+    ])
+}
+
+/// A canvas of `n` empty text boxes.
+fn boxes_canvas(n: usize) -> SpatialCanvas {
+    SpatialCanvas {
+        nodes: (0..n).map(|i| text_node(&format!("n{i}"), "")).collect(),
+        ..SpatialCanvas::default()
+    }
+}
+
+#[test]
+fn the_own_canvas_and_the_referenced_ones_are_each_held_to_the_element_cap() {
+    let referencing = |own: usize, referenced: usize| {
+        let entry = s(vec![json!("c"), m(&[("canvas", canvas_json(&boxes_canvas(referenced)))])]);
+        let references = wire_of(vec![entry]);
+        answer(&request(canvas_json(&boxes_canvas(own)), &[("references", references)]))
+    };
+    assert_eq!(MAX_REFERENCED_ELEMENTS, MAX_ELEMENTS);
+    let both_full = referencing(MAX_ELEMENTS, MAX_REFERENCED_ELEMENTS);
+    assert_eq!(both_full.get(0), Some(&json!("ok")));
+    assert_eq!(
+        referencing(MAX_ELEMENTS + 1, 0),
+        json!(["refused", "input-too-large", "too-many-elements"])
+    );
+    assert_eq!(
+        referencing(1, MAX_REFERENCED_ELEMENTS + 1),
+        json!(["refused", "input-too-large", "referenced-elements"])
+    );
+}
+
+#[test]
+fn the_bodies_together_are_held_to_three_mebibytes() {
+    assert_eq!(MAX_BODY_BYTES, 3 * 1024 * 1024);
+    // Bodies no file node draws are still counted, so the cap is checked without a parse.
+    let bodies = |sizes: &[usize]| {
+        let entries = sizes.iter().enumerate();
+        let entries = entries
+            .map(|(i, n)| s(vec![json!(format!("d{i}")), m(&[("body", json!("a".repeat(*n)))])]));
+        answer(&request(board("x"), &[("references", wire_of(entries.collect()))]))
+    };
+    let rest = MAX_BODY_BYTES - 1 - 3 * MAX_PARSE_BYTES;
+    assert_eq!(bodies(&[MAX_PARSE_BYTES; 3]).get(0), Some(&json!("ok")));
+    let full = [MAX_PARSE_BYTES, MAX_PARSE_BYTES, MAX_PARSE_BYTES, rest];
+    assert_eq!(bodies(&full).get(0), Some(&json!("ok")));
+    let past = [MAX_PARSE_BYTES, MAX_PARSE_BYTES, MAX_PARSE_BYTES, rest + 1];
+    assert_eq!(bodies(&past), json!(["refused", "input-too-large", "bodies"]));
 }
 
 #[test]

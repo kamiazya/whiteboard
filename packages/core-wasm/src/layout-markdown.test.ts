@@ -99,7 +99,7 @@ describe('a markdown body over the artifact', () => {
     expect(lay(glueOf('["missing","section"]').glue, note)).toEqual({ missing: 'section' })
     expect(lay(glueOf('["declined","body"]').glue, note)).toEqual({ declined: 'body' })
     const capped = glueOf('["refused","input-too-large","bodies"]').glue
-    expect(lay(capped, note)).toEqual({ declined: 'bodies' })
+    expect(lay(capped, note)).toEqual({ refused: { code: 'input-too-large', reason: 'bodies' } })
   })
 
   it('asks the highlighter for the fences the core needs, and declines without one', () => {

@@ -149,10 +149,10 @@ describe('the faces a font-table measurer reads', () => {
     ).toEqual({
       declined: 'held',
     })
-    // The shim places every range itself, so `malformed font` names bytes the
-    // core's reader does not read (a WOFF opentype.js inflates), not a defect.
+    // The core keeps the faces it reads and drops the rest, so `malformed font`
+    // names a range outside the bytes, which the shim never places: a defect.
     const unread = refusing('["refused","malformed","font"]')
-    expect(
+    expect(() =>
       layoutSpatialCanvas(
         unread,
         errors,
@@ -161,7 +161,7 @@ describe('the faces a font-table measurer reads', () => {
         new FenceTokenMemo(),
         new FontHandles(unread, errors),
       ),
-    ).toEqual({ declined: 'font' })
+    ).toThrow('register_layout_fonts malformed font')
     const bad = refusing('["refused","malformed","faces"]')
     expect(() =>
       layoutSpatialCanvas(
@@ -206,8 +206,8 @@ describe('the faces a font-table measurer reads', () => {
 
   it('remember a decline the measurer cannot outgrow, and register again after one it can', () => {
     const answers = [
-      '["refused","malformed","font"]',
-      '["refused","input-too-large","face"]',
+      '["refused","input-too-large","faces"]',
+      '["refused","input-too-large","face-bytes"]',
       '["refused","input-too-large","held"]',
       '["refused","input-too-large","handles"]',
     ]
@@ -216,7 +216,7 @@ describe('the faces a font-table measurer reads', () => {
     const fonts = new FontHandles(glue, errors)
     const [unread, past, full, many] = [facesOf(), facesOf(), facesOf(), facesOf()]
     const declines = () => [unread, past, full, many].map((faces) => fonts.handleOf(faces))
-    const reasons = [{ declined: 'font' }, { declined: 'face' }]
+    const reasons = [{ declined: 'faces' }, { declined: 'face-bytes' }]
     expect(declines()).toEqual([...reasons, { declined: 'held' }, { declined: 'handles' }])
     expect(asked).toBe(4)
     // The faces and the reader are fixed; how much an instance holds is not.
