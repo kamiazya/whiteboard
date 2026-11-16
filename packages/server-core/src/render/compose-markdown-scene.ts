@@ -1,17 +1,12 @@
 import type {
+  LayoutCore,
   MeasureText,
   ReferenceSeams,
   Scene,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
-import {
-  layoutMdastBlocks,
-  MARKDOWN_THEME_DOCUMENT,
-  SPATIAL_THEME_FONT_FAMILY,
-} from '@kamiazya/whiteboard-canvas-render'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { layoutMarkdownDocument } from '@kamiazya/whiteboard-canvas-render'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import { MCP_SCENE_APPEARANCE } from './compose-canvas-scene.js'
 
 /**
  * The measure a markdown document is laid out to. A page, not an object:
@@ -41,28 +36,33 @@ export interface ComposeMarkdownSceneOptions {
    * intent as it is rendered on its own (ADR-0040 decision 5).
    */
   readonly tagLibrary?: TagLibrary
+  /** Lay out only the section under this heading (`#Heading`). */
+  readonly section?: string
+  /** The Rust core and its switch (`ServerDeps.layoutCore`); absent, the TypeScript lays it out. */
+  readonly core?: LayoutCore
 }
 
 /**
- * Composes a document scene from a parsed markdown body — canvas-render's
- * `layoutMdastBlocks`, the same path the web preview, a canvas text node
- * and export all take, with an embedded canvas painted in the pinned light
- * appearance every MCP render uses.
+ * Composes a document scene from a markdown body — canvas-render's
+ * `layoutMarkdownDocument`, the same note layout the web preview takes,
+ * answered by the Rust core's markdown entry under `core`'s switch, with an
+ * embedded canvas painted in the pinned light appearance every MCP render
+ * uses. `undefined` for a `section` the body holds no heading for.
  */
 export function composeMarkdownScene(
-  root: MdastRoot,
+  body: string,
   measure: MeasureText,
   options?: ComposeMarkdownSceneOptions,
-): Scene {
-  return layoutMdastBlocks(root, {
+): Scene | undefined {
+  return layoutMarkdownDocument(body, {
     measure,
     maxWidth: MARKDOWN_SCENE_WIDTH_PX,
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    theme: MARKDOWN_THEME_DOCUMENT,
-    canvasAppearance: MCP_SCENE_APPEARANCE,
+    mode: 'light',
     ...(options?.references !== undefined ? { references: options.references } : {}),
     ...(options?.style !== undefined ? { style: options.style } : {}),
     ...(options?.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),
     ...(options?.tagLibrary !== undefined ? { tagLibrary: options.tagLibrary } : {}),
+    ...(options?.section !== undefined ? { section: options.section } : {}),
+    ...(options?.core !== undefined ? { core: options.core } : {}),
   })
 }
