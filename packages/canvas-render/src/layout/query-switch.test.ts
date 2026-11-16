@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { QueryAnswer, QueryRequest } from '../query-core.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable } from './canvas-switch.js'
@@ -18,15 +19,17 @@ import { layoutSpatialEdges, naturalNodeContentSize } from './spatial-canvas.js'
 /** A core whose query entry answers `answer`, recording what it was asked. */
 function fake(answer: (request: QueryRequest) => QueryAnswer) {
   const asked: QueryRequest[] = []
+  const measurers: unknown[] = []
   const core = fakeLayoutCore({
     query: {
-      layoutQuery: (request) => {
+      layoutQuery: (request, _highlight, measurer) => {
         asked.push(request)
+        measurers.push(measurer)
         return answer(request)
       },
     },
   })
-  return { core, asked }
+  return { core, asked, measurers }
 }
 
 const box = { x: 0, y: 0, w: 100, h: 50 }
@@ -36,8 +39,8 @@ const appearance = createSpatialTheme({ mode: 'dark' })
 const refused = () => ({ refused: { code: 'malformed', reason: 'non-finite' } }) as const
 
 describe('the queries through the core', () => {
-  it('answers with the TypeScript when handed no core, and with the core when handed one', () => {
-    expect(queryOutlineContentBox(undefined, undefined, box)).toEqual(box)
+  it('answers with the core it is handed', () => {
+    expect(queryOutlineContentBox(testLayoutCore(), undefined, box)).toEqual(box)
     const rust = fake(() => ({ numbers: [[1, 2, 3, 4]] }))
     expect(queryOutlineContentBox(rust.core, 'visual.ellipse', box)).toEqual({
       x: 1,
@@ -90,7 +93,7 @@ describe('the queries through the core', () => {
     expect(queryEdgeLabelPlacement(core, [{ x: 5, y: 5 }], { w: 10, h: 10 }, [])).toBeUndefined()
   })
 
-  it('sends a fitted height its measurer, mode and floor, and throws for a measurer nobody named', () => {
+  it('sends a fitted height its measurer, mode and floor, and asks a measurer nobody named itself', () => {
     const { core, asked } = fake(() => ({ numbers: [[42]] }))
     expect(fittedTextNodeHeight(node, { measure, appearance, core })).toBe(42)
     expect(asked).toEqual([
@@ -102,9 +105,11 @@ describe('the queries through the core', () => {
         floor: 'ratio',
       },
     ])
-    expect(() =>
-      fittedTextNodeHeight(node, { measure: (t, f) => measure(t, f), core: fake(refused).core }),
-    ).toThrow(new CoreUnaskable('measure'))
+    const unnamed: typeof measure = (t, f) => measure(t, f)
+    const hosted = fake(() => ({ numbers: [[7]] }))
+    expect(fittedTextNodeHeight(node, { measure: unnamed, core: hosted.core })).toBe(7)
+    expect(hosted.asked[0]).toMatchObject({ query: 'node-size', measure: { kind: 'host' } })
+    expect(hosted.measurers).toEqual([unnamed])
   })
 
   it('throws for a natural size handed an option the query does not take', () => {
@@ -121,16 +126,22 @@ describe('the queries through the core', () => {
       style: 'document',
     })
     const geometry = { paddingPx: 1, labelFontSizePx: 9, minContentWidthPx: 0 }
-    expect(() => naturalNodeContentSize(node, { measure, appearance, geometry, core })).toThrow(
-      new CoreUnaskable('option:geometry'),
-    )
-    expect(() =>
-      naturalNodeContentSize(node, { measure: (t, f) => measure(t, f), appearance, core }),
-    ).toThrow(new CoreUnaskable('measure'))
+    // The type refuses it too; a caller spreading wider options past it still reaches this guard.
+    const wider = { measure, appearance, geometry, core } as Parameters<
+      typeof naturalNodeContentSize
+    >[1]
+    expect(() => naturalNodeContentSize(node, wider)).toThrow(new CoreUnaskable('option:geometry'))
     expect(() =>
       naturalNodeContentSize(node, { measure, appearance: { ...appearance }, core }),
     ).toThrow(new CoreUnaskable('appearance'))
     expect(asked).toHaveLength(1)
+    const unnamed: typeof measure = (t, f) => measure(t, f)
+    const hosted = fake(() => ({ numbers: [[3, 4]] }))
+    expect(
+      naturalNodeContentSize(node, { measure: unnamed, appearance, core: hosted.core }),
+    ).toEqual({ w: 3, h: 4 })
+    expect(hosted.asked[0]).toMatchObject({ query: 'node-content', measure: { kind: 'host' } })
+    expect(hosted.measurers).toEqual([unnamed])
   })
 
   it('hands an edge layer the canvas request, and its degradations to the caller', () => {

@@ -45,17 +45,7 @@ export default defineProject({
     name: 'canvas-render-rust',
     environment: 'node',
     include: ['src/**/*.rust.test.ts', ...(ported ? ['src/layout/edges/**/*.test.ts'] : [])],
-    // grid-route.cost.test.ts counts the obstacle READS the TypeScript search
-    // makes; the shim reads each rect once per call, so under Rust its bound
-    // cannot fail and it would judge nothing. spatial-edges.cost.test.ts counts
-    // the side-choice search's work through mocks of its TypeScript modules,
-    // which the Rust search never calls; the budget accounts that bound the
-    // Rust search are compared exactly by spatial-edges.rust.test.ts.
-    exclude: [
-      'src/**/*.browser.test.ts',
-      'src/layout/edges/grid-route.cost.test.ts',
-      'src/layout/edges/spatial-edges.cost.test.ts',
-    ],
+    exclude: ['src/**/*.browser.test.ts'],
     testTimeout: 20_000,
     // `vitest bench --project "canvas-render-rust (bench)"`: the spike's
     // TypeScript-against-Rust measurement.

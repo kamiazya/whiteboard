@@ -1,17 +1,17 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { describeMeasure } from '../measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import type { SpatialLayoutOptions } from './spatial-canvas.js'
 import { layoutSpatialCanvas, layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
 
-const measure = () => ({ advanceWidth: 12, ascent: 10, descent: 2, lineGap: 0 })
-const parseBody = () => ({ type: 'root' as const, children: [] })
-const appearance = {
-  resolveNode: () => ({ radius: 8 }),
-  resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-}
+const measure = describeMeasure(() => ({ advanceWidth: 12, ascent: 10, descent: 2, lineGap: 0 }), {
+  kind: 'host',
+})
+const appearance = createSpatialTheme({ mode: 'light' })
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -34,7 +34,7 @@ const canvas: SpatialCanvas = {
   facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
 } as SpatialCanvas
 
-const options: SpatialLayoutOptions = { measure, parseBody, appearance }
+const options: SpatialLayoutOptions = { core: testLayoutCore(), measure, appearance }
 
 describe('layoutSpatialCanvasWithAnchors', () => {
   it('returns the scene layoutSpatialCanvas would produce, unchanged', () => {

@@ -44,6 +44,8 @@ import {
   type MetricRect,
   pathLength,
 } from '../../test-utils/routing-metrics.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { routeEdge } from './edge-router.js'
 import type { RoutingBudget } from './routing-budget.js'
@@ -71,16 +73,9 @@ function routeStraight(testCase: RoutingCase, budget?: RoutingBudget): Map<strin
 function layoutStraight(testCase: RoutingCase): { paths: Map<string, Path>; titles: MetricRect[] } {
   const canvas: SpatialCanvas = { nodes: [...testCase.nodes], edges: [...testCase.edges] }
   const scene = layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: (text: string) => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
-    appearance: {
-      resolveNode: () => ({}),
-      resolveEdge: () => ({ stroke: '#606060' }),
-      resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-    },
+    appearance: createSpatialTheme({ mode: 'light' }),
   })
   const frames = new Set(testCase.nodes.filter((n) => isFrame(n)).map((n) => n.id))
   const paths = new Map<string, Path>()

@@ -1,17 +1,6 @@
-import { createHash } from 'node:crypto'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  GENERATED_COUNT,
-  GENERATED_SEED,
-  typesetInputs,
-} from '../test-utils/typeset-oracle/corpus.js'
-import {
-  type RecordMeta,
-  type TypesetInput,
-  type TypesetRecord,
-  typesetAnswer,
-} from '../test-utils/typeset-oracle/oracle.js'
+import type { RecordMeta, TypesetRecord } from '../test-utils/typeset-oracle/oracle.js'
 
 /**
  * The committed recording of what `typesetMdastBlocks` answers for a paragraph
@@ -24,24 +13,9 @@ import {
  */
 const FILE = new URL('./typeset.jsonl', import.meta.url)
 
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  const records = typesetInputs(true).map(typesetAnswer)
-  const meta: RecordMeta = { kind: 'meta', seed: GENERATED_SEED, generated: GENERATED_COUNT }
-  // The host's answers repeat across records (every tree that embeds a document carries that
-  // document's tables), so each distinct set is written once and a record names it by key.
-  const tables = new Map<string, unknown>()
-  const keyed = records.map((record) => {
-    const key = keyOf(record.seams)
-    tables.set(key, record.seams)
-    return { ...record, seams: key }
-  })
-  const sections = [...tables].map(([key, seams]) => ({ kind: 'seams', key, seams }))
-  writeFileSync(FILE, `${[meta, ...sections, ...keyed].map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
-
-function keyOf(seams: unknown): string {
-  return createHash('sha256').update(JSON.stringify(seams)).digest('hex').slice(0, 24)
-}
+/** The generated trees' seed and count as the recording was drawn: its provenance, not a property seed. */
+const GENERATED_SEED = 0x7e57_5e7a
+const GENERATED_COUNT = 600
 
 const lines = readFileSync(FILE, 'utf8').trimEnd().split('\n')
 const parsed = lines.slice(1).map((line) => JSON.parse(line) as { kind?: string; key?: string })
@@ -59,28 +33,6 @@ const records = parsed
     const named = line as unknown as { seams: string }
     return { ...named, seams: tables.get(named.seams) } as unknown as TypesetRecord
   })
-
-const asInput = ({
-  id,
-  root,
-  width,
-  theme,
-  fill,
-  embeds,
-  syntax,
-  digest,
-  embedPath,
-}: TypesetRecord): TypesetInput => ({
-  id,
-  root,
-  width,
-  theme,
-  fill,
-  embeds,
-  syntax,
-  digest,
-  ...(embedPath === undefined ? {} : { embedPath }),
-})
 
 describe('the recorded typeset oracle', () => {
   it('reaches every kind of input the Rust typesetter is held to', () => {
@@ -141,15 +93,5 @@ describe('the recorded typeset oracle', () => {
       'header',
     ])
       expect(held.includes(`"${key}":`), `a run carrying ${key}`).toBe(true)
-  })
-
-  it('equals what the TypeScript answers today', { timeout: 120_000 }, () => {
-    const parted = records.findIndex(
-      (r) => JSON.stringify(typesetAnswer(asInput(r))) !== JSON.stringify(r),
-    )
-    expect(
-      records[parted]?.id,
-      'the first recorded case the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
   })
 })

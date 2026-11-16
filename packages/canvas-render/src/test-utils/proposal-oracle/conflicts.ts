@@ -7,8 +7,8 @@ import type {
   SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts, nodePatchField } from '@kamiazya/whiteboard-model'
-import { hex } from '../compose-canvas-oracle/oracle.js'
 import { type CanvasWire, canvasWire } from '../compose-canvas-oracle/wire.js'
+import { hex } from '../render-oracle/scene-dump.js'
 import { type ChangeWire, changeWire } from './wire.js'
 
 /**

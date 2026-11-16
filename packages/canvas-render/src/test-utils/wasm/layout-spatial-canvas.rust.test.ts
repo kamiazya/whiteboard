@@ -1,21 +1,44 @@
+import { readdirSync, readFileSync } from 'node:fs'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest } from '../../canvas-core.js'
-import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
+import type { FragmentAsk } from '../../fragment-ask.js'
+import type { SpatialLayoutDegradation, SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { describeMeasure, type MeasureText } from '../../measure.js'
 import { type LayoutRefusal, refusalScene } from '../../refusal.js'
 import { fakeLayoutCore } from '../fake-layout-core.js'
+import { answerText } from './answer-text.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { layoutCases } from './layout-cases.js'
 
 /**
  * The whole layout through the REAL core (ADR-0054 step 7): canvas-render's
  * `layoutSpatialCanvasWithAnchors` handed the core, which answers with its
- * `layout_spatial_canvas`, held to the scene and the anchors the TypeScript
- * composer draws handed none. The layouts are `layout-cases.ts`.
+ * `layout_spatial_canvas`, held to the scene, the anchors, the degradations
+ * and the fragment sources the TypeScript composer drew for the same cases
+ * before it was deleted (S18h), as `layout-spatial-canvas.<topic>.jsonl`
+ * froze them. The layouts are `layout-cases.ts`.
  */
+const DIR = new URL('./oracle/', import.meta.url)
+const recordedAnswers = new Map(
+  readdirSync(DIR)
+    .filter((name) => /^layout-spatial-canvas\.[a-z0-9-]+\.jsonl$/.test(name))
+    .flatMap((name) =>
+      readFileSync(new URL(name, DIR), 'utf8')
+        .trimEnd()
+        .split('\n')
+        .map((line) => JSON.parse(line) as { id: string; answer: string })
+        .map((r) => [r.id, r.answer] as const),
+    ),
+)
+
+/** A degradation as the recording spells it: a parse failure carries no thrown value. */
+function recordedEvent(event: SpatialLayoutDegradation) {
+  return event.kind === 'body-parse-failed' ? { kind: event.kind, nodeId: event.nodeId } : event
+}
+
 describe.runIf(built)('the whole layout through the real core', () => {
   // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
   // factory to collect it, so a core made here fails the file where there is
@@ -33,26 +56,40 @@ describe.runIf(built)('the whole layout through the real core', () => {
       return answer
     },
   }
-  const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions) =>
+  const lay = (canvas: SpatialCanvas, options: Omit<SpatialLayoutOptions, 'core'>) =>
     layoutSpatialCanvasWithAnchors(canvas, {
       ...options,
       core: fakeLayoutCore({ routing: real, layout: counting }),
     })
 
-  const cases = layoutCases(20)
-  it('draws what the TypeScript draws', () => {
+  const cases = layoutCases(8)
+  it('draws every recorded case as the TypeScript drew it', () => {
+    let replayed = 0
     for (const { name, canvas, options } of cases) {
-      const reference = layoutSpatialCanvasWithAnchors(canvas, options)
-      const rust = lay(canvas, options)
-      expect(rust.scene, name).toEqual(reference.scene)
-      expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
+      const recorded = recordedAnswers.get(name)
+      if (recorded === undefined) continue
+      const events: unknown[] = []
+      let asked: readonly FragmentAsk[] = []
+      const tabled = options.fragments !== undefined || options.onFragmentsAsked !== undefined
+      const rust = lay(canvas, {
+        ...options,
+        onDegrade: (event) => events.push(recordedEvent(event)),
+        ...(tabled && { onFragmentsAsked: (asks: readonly FragmentAsk[]) => (asked = asks) }),
+      })
+      const tail = tabled ? [asked] : []
+      // Compared as values: the recording spells keys in the order the
+      // TypeScript built its objects, which no writer of the core's answer
+      // repeats; `layout_oracle.rs` holds the core to it byte for byte.
+      const answer = answerText(['ok', rust.scene, [...rust.anchors], events, ...tail])
+      expect(JSON.parse(answer ?? 'null'), name).toEqual(JSON.parse(recorded))
+      replayed += 1
     }
-    // Every layout is compared: the core is judged, never refused.
-    expect(answered.compared).toBe(cases.length)
+    expect(replayed, 'recorded cases replayed').toBeGreaterThan(cases.length / 2)
+    // Every layout is answered: the core is judged, never refused.
     expect(answered.refused).toEqual([])
   })
 
-  it('draws what the TypeScript draws when the core asks the measurer itself', () => {
+  it('draws what it draws for a named measurer when the core asks the measurer itself', () => {
     answered.compared = 0
     let asked = 0
     for (const { name, canvas, options } of cases) {
@@ -65,25 +102,13 @@ describe.runIf(built)('the whole layout through the real core', () => {
         { kind: 'host' },
       )
       const hosted = { ...options, measure: host }
-      let tsAsked = 0
-      const reference = layoutSpatialCanvasWithAnchors(canvas, {
-        ...options,
-        measure: (text, font) => {
-          tsAsked += 1
-          return own(text, font)
-        },
-      })
-      const before = asked
+      const reference = lay(canvas, options)
       const rust = lay(canvas, hosted)
-      // Only the core measures, so a layout the TypeScript measured in must
-      // have asked the host through the import.
-      if (tsAsked > 0) expect(asked, name).toBeGreaterThan(before)
       expect(rust.scene, name).toEqual(reference.scene)
       expect(Object.fromEntries(rust.anchors), name).toEqual(Object.fromEntries(reference.anchors))
     }
-    expect(answered.compared).toBe(cases.length)
     expect(answered.refused).toEqual([])
-    expect(asked).toBeGreaterThan(cases.length)
+    expect(asked, 'the host asked through the import').toBeGreaterThan(cases.length)
   })
 
   it('draws the refusal for a layout whose host answers a number that is not finite', () => {

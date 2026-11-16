@@ -4,7 +4,6 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, test } from 'vitest'
 import type { CanvasLayoutCore } from '../../canvas-core.js'
 import type { SpatialContentCache } from '../../layout/layout-options.js'
-import type { FittedBlocks } from '../../layout/nodes/mdast-blocks.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { fakeLayoutCore } from '../fake-layout-core.js'
@@ -17,10 +16,9 @@ import { built, requireWasm, wasmBytes } from './glue.js'
  * lays its canvas out on every committed move. Each iteration moves the
  * dragged node one step further, so no layout repeats the last one whole.
  *
- * Four rows over the same frames: the TypeScript with no content cache and
- * with a warm one (what the editor runs today), the Rust core handed no
- * cache, and the core handed the caller's content cache. Before the core kept a cache of its own
- * the last two did the same work; their gap is what the resident cache buys.
+ * Two rows over the same frames: the Rust core handed no cache, and the core
+ * handed the caller's content cache; their gap is what the resident cache
+ * buys. The TypeScript rows went with the TypeScript composer (S18h).
  *
  * Run with `pnpm bench`, after `pnpm rust:build:wasm:oracle`; without the
  * artifact the case is skipped.
@@ -50,16 +48,14 @@ function board(dx: number): SpatialCanvas {
   return { nodes, edges } as SpatialCanvas
 }
 
-function memo(): SpatialContentCache {
-  const held = new Map<string, FittedBlocks>()
-  return { get: (key) => held.get(key), set: (key, value) => void held.set(key, value) }
-}
+/** A surface's cache: the core keys its own bodies by the object, which holds nothing. */
+const memo = (): SpatialContentCache => ({})
 
 const measure = createFakeMeasure()
 const appearance = createSpatialTheme({ mode: 'light' })
 
 test.runIf(built)(
-  'a drag frame, the TypeScript against the core',
+  'a drag frame through the core, with and without a content cache',
   { timeout: 0 },
   async ({ bench }) => {
     const real = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
@@ -72,18 +68,15 @@ test.runIf(built)(
       },
     }
     const core = fakeLayoutCore({ routing: real, layout: counting })
-    const tsCache = memo()
     const coreCache = memo()
     let frame = 0
     const next = () => board((frame++ % 40) * 4)
-    const ts = (contentCache?: SpatialContentCache) => () =>
-      layoutSpatialCanvasWithAnchors(next(), { measure, appearance, contentCache })
     const rust = (contentCache?: SpatialContentCache) => () =>
       layoutSpatialCanvasWithAnchors(next(), { measure, appearance, core, contentCache })
 
-    // Judged before timed: the core answers every frame, and draws what the
-    // TypeScript draws, cached or not.
-    const reference = layoutSpatialCanvasWithAnchors(board(8), { measure, appearance })
+    // Judged before timed: the core answers every frame, and draws the same
+    // board cached or not.
+    const reference = layoutSpatialCanvasWithAnchors(board(8), { measure, appearance, core })
     for (const contentCache of [undefined, coreCache, coreCache]) {
       const laid = layoutSpatialCanvasWithAnchors(board(8), {
         measure,
@@ -93,11 +86,9 @@ test.runIf(built)(
       })
       expect(laid.scene).toEqual(reference.scene)
     }
-    expect(answered).toBe(3)
+    expect(answered).toBe(4)
 
     await bench.compare(
-      bench('TypeScript, no content cache', ts(undefined)),
-      bench('TypeScript, warm content cache', ts(tsCache)),
       bench('Rust core, no content cache', rust(undefined)),
       bench('Rust core, the content cache handed over', rust(coreCache)),
     )

@@ -1,9 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  type PassageHighlightRecord,
-  passageHighlightRecords,
-} from '../test-utils/passage-highlight-oracle.js'
+import type { PassageHighlightRecord } from '../test-utils/passage-highlight-oracle.js'
 
 /**
  * The committed recording of what the passage highlights and the searches they
@@ -13,12 +10,6 @@ import {
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node passage-highlight-recorded`.
  */
 const FILE = new URL('./passage-highlight.jsonl', import.meta.url)
-
-const fresh = passageHighlightRecords()
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${fresh.map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -40,11 +31,5 @@ describe('the recorded passage-highlight oracle', () => {
     expect(
       resolved.filter((r) => r.answer !== null && r.answer[0] !== r.start).length,
     ).toBeGreaterThan(50)
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
-    expect(parted, 'the first record the TypeScript no longer answers as recorded').toBe(-1)
-    expect(records).toHaveLength(fresh.length)
   })
 })

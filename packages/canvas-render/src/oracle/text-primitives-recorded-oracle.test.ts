@@ -1,22 +1,7 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { uaxSegments } from '../layout/nodes/uax-segments.js'
-import {
-  type EdgeRecord,
-  type JunctionRecord,
-  runOps,
-} from '../test-utils/text-primitives-oracle/junction.js'
-import {
-  type DigestRecord,
-  type FitRecord,
-  fitAnswer,
-  type GraphemeRecord,
-  graphemeEnds,
-  type LongestRecord,
-  longestAnswer,
-  recording,
-  type UaxRecord,
-} from '../test-utils/text-primitives-oracle/oracle.js'
+import type { JunctionRecord } from '../test-utils/text-primitives-oracle/junction.js'
+import type { DigestRecord, FitRecord } from '../test-utils/text-primitives-oracle/oracle.js'
 
 /**
  * The committed recording of what the text primitives answer equals what the
@@ -26,15 +11,6 @@ import {
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node text-primitives-recorded`.
  */
 const FILE = new URL('./text-primitives.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(
-    FILE,
-    `${recording()
-      .map((r) => JSON.stringify(r))
-      .join('\n')}\n`,
-  )
-}
 
 type Record = { kind: string }
 
@@ -79,42 +55,5 @@ describe('the recorded text-primitives oracle', () => {
     expect(count('reloc', false)).toBeGreaterThan(10)
     expect(count('breakable', true)).toBeGreaterThan(30)
     expect(count('breakable', false)).toBeGreaterThan(30)
-  })
-
-  it('records the corpora the builders produce today', { timeout: 120_000 }, () => {
-    const rebuilt = recording().map((r) => JSON.stringify(r))
-    const parted = rebuilt.findIndex((line, i) => line !== lines[i])
-    expect(
-      parted === -1 ? undefined : rebuilt[parted]?.slice(0, 160),
-      'the first record the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
-    expect(rebuilt).toHaveLength(lines.length)
-  })
-
-  it('answers each recorded question as the TypeScript does', () => {
-    for (const r of of<UaxRecord>('uax')) expect([...uaxSegments(r.t)]).toEqual(r.s)
-    for (const r of of<GraphemeRecord>('grapheme')) expect(graphemeEnds(r.t)).toEqual(r.g)
-    for (const r of of<LongestRecord>('longest')) {
-      expect(longestAnswer(r.limit, r.guess, r.threshold)).toEqual({ p: r.p, r: r.r })
-    }
-    const fromHex = (h: string) => {
-      const view = new DataView(new ArrayBuffer(8))
-      view.setBigUint64(0, BigInt(`0x${h}`))
-      return view.getFloat64(0)
-    }
-    for (const r of fits) {
-      const { r: kept, tr, ov, w, calls } = fitAnswer(r.t, fromHex(r.f), fromHex(r.s), fromHex(r.m))
-      expect({ kept, tr, ov, w, calls }).toEqual({
-        kept: r.r,
-        tr: r.tr,
-        ov: r.ov,
-        w: r.w,
-        calls: r.calls,
-      })
-    }
-    for (const r of of<JunctionRecord>('junction')) {
-      expect(runOps(r.ops)).toEqual({ out: r.out, runs: r.runs, line: r.line })
-    }
-    expect(of<EdgeRecord>('edge').length).toBeGreaterThan(0)
   })
 })

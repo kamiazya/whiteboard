@@ -10,6 +10,8 @@ import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { interiorInk } from '../../test-utils/routing-metrics.js'
 import { node } from '../../test-utils/spatial-node.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { routeEdge } from './edge-router.js'
 
@@ -42,16 +44,9 @@ describe('a frame title in a route’s way', () => {
       edges: [{ id: 'e', from: { node: 'above' }, to: { node: 'member' } }],
     }
     const scene = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
-      parseBody: (text: string) => ({
-        type: 'root',
-        children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-      }),
-      appearance: {
-        resolveNode: () => ({}),
-        resolveEdge: () => ({ stroke: '#606060' }),
-        resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-      },
+      appearance: createSpatialTheme({ mode: 'light' }),
     })
     const title = scene.nodes.find(
       (n): n is TextRunNode => n.kind === 'textRun' && (n as TextRunNode).annotates?.id === 'frame',

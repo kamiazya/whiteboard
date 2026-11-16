@@ -1,16 +1,8 @@
-import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { Scene } from '@kamiazya/whiteboard-scene'
-import { type FragmentAsk, type FragmentEntry, fragmentAskKey } from '../../fragment-ask.js'
-import { layoutCommentBody } from '../../layout/comment-body.js'
-import { layoutMdastBlocks } from '../../layout/markdown-body.js'
-import { selectMarkdownSection } from '../../layout/nodes/mdast-section.js'
-import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wire.js'
-import { SPATIAL_THEME_FONT_FAMILY } from '../../theme/font-family.js'
-import { MARKDOWN_THEME_DOCUMENT } from '../../theme/markdown-theme.js'
-import { createSpatialTheme } from '../../theme/spatial-theme.js'
-import { createFakeMeasure } from '../fake-measure.js'
-import { digestOf } from '../typeset-oracle/oracle.js'
+import type { FragmentAsk, FragmentEntry } from '../../fragment-ask.js'
+import type { ReferenceWire } from '../../references/wire.js'
+import { digestOf } from '../render-oracle/scene-dump.js'
 import { answerText } from '../wasm/answer-text.js'
 
 /**
@@ -103,74 +95,6 @@ export interface MarkdownMeta extends MarkdownTables {
   readonly kind: 'meta'
 }
 
-/** A fragment seam answered from the table, noting each source it lacked once, in the order asked. */
-function tabled(fragments: readonly FragmentEntry[], asked: Map<string, FragmentAsk>) {
-  const rendered = new Map(fragments)
-  const answer = (ask: FragmentAsk) => {
-    const key = fragmentAskKey(ask)
-    const found = rendered.get(key)
-    if (found === undefined && !asked.has(key)) asked.set(key, ask)
-    return found
-  }
-  return {
-    renderMath: (value: string) => answer({ kind: 'math', value }),
-    renderDiagram: (lang: string, value: string) => answer({ kind: 'diagram', lang, value }),
-  }
-}
-
-function documentOptions(
-  input: MarkdownInput,
-  tables: MarkdownTables,
-  asked: Map<string, FragmentAsk>,
-): Parameters<typeof layoutMdastBlocks>[1] {
-  const fonts = new Set(input.fonts ?? [])
-  const references =
-    input.references === true ? referenceSeamsFromWire(tables.references) : undefined
-  const fragments = input.fragments === 'full' ? tables.fragments : []
-  return {
-    measure: createFakeMeasure(),
-    maxWidth: input.maxWidth,
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    theme: MARKDOWN_THEME_DOCUMENT,
-    canvasAppearance: createSpatialTheme({ mode: input.mode ?? 'light' }),
-    ...(input.surface === 'daemon'
-      ? input.style === undefined
-        ? {}
-        : { style: input.style }
-      : { style: 'document' }),
-    ...(input.fonts === undefined ? {} : { fontAvailable: (family: string) => fonts.has(family) }),
-    ...(references === undefined ? {} : { references }),
-    ...(input.fragments === undefined ? {} : tabled(fragments, asked)),
-    ...(input.library === true ? { tagLibrary: tables.library } : {}),
-  }
-}
-
-function layoutOf(
-  input: MarkdownInput,
-  tables: MarkdownTables,
-  asked: Map<string, FragmentAsk>,
-): Scene | undefined {
-  if (input.surface === 'comment') {
-    return layoutCommentBody(input.body, {
-      measure: createFakeMeasure(),
-      fontFamily: SPATIAL_THEME_FONT_FAMILY,
-      maxWidth: input.maxWidth,
-      density: input.density ?? 'comfortable',
-    })
-  }
-  const options = documentOptions(input, tables, asked)
-  const whole = resolveReferences(parseMarkdownBody(input.body), options.references?.resolveAlias)
-  const root = input.section === undefined ? whole : selectMarkdownSection(whole, input.section)
-  return root === undefined ? undefined : layoutMdastBlocks(root, options)
-}
-
-/**
- * The longest scene held as text. Past it a record holds the scene's length
- * and digest, which still pins every byte but names no first difference; the
- * repository's long documents and the boundary bodies are the ones over it.
- */
-const SCENE_TEXT_LIMIT = 48_000
-
 /** `value` with every object's keys in code-unit order. */
 function sortedKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortedKeys)
@@ -192,29 +116,6 @@ export function sortedSceneDigest(scene: Scene): { readonly n: number; readonly 
   const text = answerText(sortedKeys(scene))
   if (text === undefined) throw new Error('markdown-document-oracle: a non-finite number')
   return digestOf(text)
-}
-
-/** `sortedSceneDigest` of an input's scene, or undefined for a section that names no heading. */
-export function sortedDigest(
-  input: MarkdownInput,
-  tables: MarkdownTables,
-): { readonly n: number; readonly h: number } | undefined {
-  const scene = layoutOf(input, tables, new Map())
-  return scene === undefined ? undefined : sortedSceneDigest(scene)
-}
-
-export function markdownAnswer(input: MarkdownInput, tables: MarkdownTables): MarkdownRecord {
-  const asked = new Map<string, FragmentAsk>()
-  const scene = layoutOf(input, tables, asked)
-  if (scene === undefined) return { ...input, refused: 'section-not-found' }
-  const text = answerText(scene)
-  if (text === undefined)
-    throw new Error(`markdown-document-oracle: ${input.id} drew a non-finite number`)
-  const fragments = input.fragments === undefined ? {} : { asked: [...asked.values()] }
-  if (input.digest === true || text.length > SCENE_TEXT_LIMIT) {
-    return { ...input, digest: true, ...digestOf(text), ...fragments }
-  }
-  return { ...input, scene: text, ...fragments }
 }
 
 /** The input half of a record, as the replay hands it back. */

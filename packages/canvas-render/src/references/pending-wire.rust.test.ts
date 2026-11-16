@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import { layoutMarkdownDocument } from '../layout/markdown-switch.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
 import { referenceSeamsFromWire, referenceWire } from './wire.js'
 
@@ -37,7 +38,7 @@ describe.runIf(built)('an embed still loading, through the real core', () => {
       maxWidth: 480,
       references: referenceSeamsFromWire(wire),
     }
-    const ts = layoutMarkdownDocument(body, options)
+    const ts = layoutMarkdownDocument(body, { ...options, core: testLayoutCore() })
     expect(JSON.stringify(ts)).toContain('Loading…')
     const core = fakeLayoutCore({ markdown: real })
     expect(layoutMarkdownDocument(body, { ...options, core })).toEqual(ts)

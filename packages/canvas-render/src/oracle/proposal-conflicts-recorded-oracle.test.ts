@@ -1,9 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  type ProposalConflictsRecord,
-  proposalConflictsRecords,
-} from '../test-utils/proposal-oracle/conflicts.js'
+import type { ProposalConflictsRecord } from '../test-utils/proposal-oracle/conflicts.js'
 
 /**
  * The committed recording of whether a proposed change still fits its board
@@ -13,12 +10,6 @@ import {
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node proposal-conflicts-recorded`.
  */
 const FILE = new URL('./proposal-conflicts.jsonl', import.meta.url)
-
-const fresh = proposalConflictsRecords()
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${fresh.map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -40,11 +31,5 @@ describe('the recorded proposal-conflicts oracle', () => {
         ).toBe(true)
       }
     }
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
-    expect(parted, 'the first record the TypeScript no longer answers as recorded').toBe(-1)
-    expect(records).toHaveLength(fresh.length)
   })
 })

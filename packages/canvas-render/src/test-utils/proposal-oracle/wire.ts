@@ -1,5 +1,4 @@
 import type { NodePatchFields, Proposal, ProposedChange } from '@kamiazya/whiteboard-model'
-import { hex } from '../compose-canvas-oracle/oracle.js'
 import {
   type ElementWire,
   type EndWire,
@@ -8,6 +7,7 @@ import {
   type NodeWire,
   nodeWire,
 } from '../compose-canvas-oracle/wire.js'
+import { hex } from '../render-oracle/scene-dump.js'
 
 /**
  * A proposed change as the Rust replay reads it: the canvas wire's nodes,

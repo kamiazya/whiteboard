@@ -7,12 +7,13 @@
 // `minContentWidthPx`/`labelFontSizePx`.
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { MeasureText } from '../measure.js'
+import { describeMeasure, type MeasureText } from '../measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 // Deliberately NOT the shared `createFakeMeasure`, which ignores
@@ -27,22 +28,18 @@ const CHAR_WIDTH_BY_FAMILY: Readonly<Record<string, number>> = {
   Roboto: 0.55,
 }
 
-const measure: MeasureText = (text, font) => {
-  const charWidth = CHAR_WIDTH_BY_FAMILY[font.family] ?? 0.6
-  return {
-    advanceWidth: text.length * charWidth * font.sizePx,
-    ascent: font.sizePx * 0.8,
-    descent: font.sizePx * 0.2,
-    lineGap: font.sizePx * 0.1,
-  }
-}
-
-function fakeParseBody(text: string): MdastRoot {
-  return {
-    type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-  }
-}
+const measure: MeasureText = describeMeasure(
+  (text, font) => {
+    const charWidth = CHAR_WIDTH_BY_FAMILY[font.family] ?? 0.6
+    return {
+      advanceWidth: text.length * charWidth * font.sizePx,
+      ascent: font.sizePx * 0.8,
+      descent: font.sizePx * 0.2,
+      lineGap: font.sizePx * 0.1,
+    }
+  },
+  { kind: 'host' },
+)
 
 // Three appearance-only resolvers that disagree on nothing but color. The
 // narrowed `SpatialAppearanceResolver` (post-theme-layer) has no room left for
@@ -51,23 +48,11 @@ function fakeParseBody(text: string): MdastRoot {
 // family changes text metrics — which is why all three declare the same one
 // (explicitly, or via layout's 'sans-serif' fallback) and why the measurer
 // above is family-sensitive.
-const editorShaped: SpatialAppearanceResolver = {
-  resolveNode: () => ({ appearance: { fill: 'none', stroke: '#737373' } }),
-  resolveEdge: () => ({ stroke: '#737373' }),
-  resolveLabel: () => ({ fill: '#737373' }),
-}
+const editorShaped: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
-const viewerShaped: SpatialAppearanceResolver = {
-  resolveNode: () => ({ appearance: { fill: '#e03131' } }),
-  resolveEdge: () => ({ stroke: '#e03131' }),
-  resolveLabel: () => ({ fill: '#000000' }),
-}
+const viewerShaped: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
-const exportShaped: SpatialAppearanceResolver = {
-  resolveNode: () => ({ radius: 4, appearance: { fill: '#ffffff', stroke: '#d0d0d0' } }),
-  resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-}
+const exportShaped: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 /** A fixture exercising every divergence-triggering shape from the spec. */
 function fixture(): SpatialCanvas {
@@ -114,7 +99,7 @@ function fixture(): SpatialCanvas {
 }
 
 function layout(appearance: SpatialAppearanceResolver): Scene {
-  return layoutSpatialCanvas(fixture(), { measure, parseBody: fakeParseBody, appearance })
+  return layoutSpatialCanvas(fixture(), { core: testLayoutCore(), measure, appearance })
 }
 
 /** Strips appearance/radius, keeping only bbox/baseline/path geometry, recursively. */

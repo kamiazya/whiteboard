@@ -1,13 +1,6 @@
-import { readdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { markdownCases } from '../test-utils/markdown-document-oracle/corpus.js'
-import { MARKDOWN_TABLES } from '../test-utils/markdown-document-oracle/fixtures.js'
-import {
-  inputOf,
-  type MarkdownMeta,
-  type MarkdownRecord,
-  markdownAnswer,
-} from '../test-utils/markdown-document-oracle/oracle.js'
+import type { MarkdownMeta, MarkdownRecord } from '../test-utils/markdown-document-oracle/oracle.js'
 
 /**
  * The committed recordings of what a markdown DOCUMENT lays out as on each
@@ -24,17 +17,6 @@ import {
 const DIR = new URL('./', import.meta.url)
 const SURFACE_FILE = /^layout-markdown\.([a-z]+)\.jsonl$/
 const fileOf = (surface: string) => new URL(`layout-markdown.${surface}.jsonl`, DIR)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  const meta: MarkdownMeta = { kind: 'meta', ...MARKDOWN_TABLES }
-  for (const [surface, cases] of markdownCases()) {
-    const records = cases.map((input) => markdownAnswer(input, MARKDOWN_TABLES))
-    writeFileSync(
-      fileOf(surface),
-      `${[meta, ...records].map((r) => JSON.stringify(r)).join('\n')}\n`,
-    )
-  }
-}
 
 const files = new Map(
   readdirSync(DIR).flatMap((name) => {
@@ -107,17 +89,5 @@ describe('the recorded markdown-document oracle', () => {
     expect(new Set(all.map((r) => r.mode ?? 'light')).size, 'modes').toBe(2)
     expect(new Set(all.map((r) => r.density).filter(Boolean)).size, 'densities').toBe(2)
     expect(all.filter((r) => r.digest === true).length, 'digests').toBeGreaterThan(4)
-  })
-
-  it('equals what the TypeScript answers today, surface by surface', { timeout: 120_000 }, () => {
-    for (const [surface, { meta, lines, records }] of files) {
-      const parted = records.findIndex(
-        (r, i) => JSON.stringify(markdownAnswer(inputOf(r), meta)) !== lines[i],
-      )
-      expect(
-        parted === -1 ? undefined : records[parted]?.id,
-        `the first record of ${surface} the TypeScript no longer answers as recorded`,
-      ).toBeUndefined()
-    }
   })
 })

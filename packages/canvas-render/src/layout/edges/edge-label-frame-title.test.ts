@@ -7,6 +7,8 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { frameTitleObstacles } from './edge-label-anchor.js'
 
@@ -23,16 +25,9 @@ const board = (): SpatialCanvas => ({
 
 const runs = (canvas: SpatialCanvas) =>
   layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: (text: string) => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
-    appearance: {
-      resolveNode: () => ({}),
-      resolveEdge: () => ({ stroke: '#606060' }),
-      resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-    },
+    appearance: createSpatialTheme({ mode: 'light' }),
     geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
   }).nodes.filter((n): n is TextRunNode => n.kind === 'textRun')
 
@@ -63,16 +58,9 @@ describe('frameTitleObstacles', () => {
   it('reads each frame title box off the laid-out scene, and nothing else', () => {
     const canvas = board()
     const scene = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
-      parseBody: (text: string) => ({
-        type: 'root',
-        children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-      }),
-      appearance: {
-        resolveNode: () => ({}),
-        resolveEdge: () => ({ stroke: '#606060' }),
-        resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-      },
+      appearance: createSpatialTheme({ mode: 'light' }),
       geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
     })
     const title = scene.nodes.find(

@@ -14,6 +14,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { SPATIAL_LIGHT_PALETTE } from '../theme/spatial-palette.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
@@ -34,6 +35,7 @@ const CANVAS: SpatialCanvas = {
 
 it('colours a fenced block when the caller passes no highlighter', () => {
   const scene = layoutSpatialCanvas(CANVAS, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: 'light' }),
   })

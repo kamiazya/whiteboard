@@ -1,8 +1,9 @@
 /**
- * Walkers move, measure or read a scene — `translateScene`, `scaleScene`,
- * `sceneBounds`, and `fitBlocksToHeight`'s run search — and the ones that do
- * not share `sceneChildrenOf` carry their own switch over the node kinds that
- * hold children. A kind missing from ONE of them is silent: the node lands
+ * Walkers move, measure or read a scene, and the ones that do not share
+ * `sceneChildrenOf` carry their own switch over the node kinds that hold
+ * children. In this package that is `sceneBounds`; the layout's walkers
+ * (moving, scaling, the fit's run search) are the Rust core's since S18h,
+ * where a `match` over the kinds is exhaustive by construction. A kind missing from ONE of them is silent: the node lands
  * where it should and the things inside it do not.
  *
  * That is not hypothetical. `codeBlock` gained `runs` after all three were
@@ -21,16 +22,12 @@
 
 import type {
   ListItemNode,
-  Scene,
   SceneNode,
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { expect, it } from 'vitest'
-import { fitBlocksToHeight } from './layout/nodes/mdast-blocks.js'
-import { scaleScene } from './layout/scale-scene.js'
-import { translateScene } from './layout/translate-scene.js'
 import { sceneBounds } from './scene-bounds.js'
 
 type WalkableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
@@ -146,45 +143,10 @@ it('has a sample carrying the marker for every kind that holds children', () => 
   expect(CONTAINERS.length).toBe(12)
 })
 
-it('translateScene moves what every container holds', () => {
-  for (const [kind, sample] of CONTAINERS) {
-    const scene: Scene = { nodes: [sample.node as SceneNode] }
-    const moved = leaves(translateScene(scene, 40, 70).nodes)
-    // y only: x is deliberately left wrapper-relative under a listItem or a
-    // tableCell (see translate-scene.ts), and y carries no such exception.
-    expect(
-      moved.map((run) => run.bbox.y),
-      kind,
-    ).toEqual([marker().bbox.y + 70])
-  }
-})
-
-it('scaleScene scales what every container holds', () => {
-  for (const [kind, sample] of CONTAINERS) {
-    const scene: Scene = { nodes: [sample.node as SceneNode] }
-    const scaled = leaves(scaleScene(scene, 0.5).nodes)
-    expect(
-      scaled.map((run) => run.bbox.y),
-      kind,
-    ).toEqual([marker().bbox.y * 0.5])
-  }
-})
-
 it('sceneBounds measures what every container holds', () => {
   for (const [kind, sample] of CONTAINERS) {
     const bounds = sceneBounds({ nodes: [sample.node as SceneNode] })
     const bottom = marker().bbox.y + marker().bbox.h
     expect(bounds.y + bounds.h, kind).toBeGreaterThanOrEqual(bottom)
-  }
-})
-
-it('fitBlocksToHeight finds an overflowing run under every container', () => {
-  for (const [kind, sample] of CONTAINERS) {
-    const node = structuredClone(sample.node) as SceneNode
-    for (const run of leaves([node as WalkableNode])) {
-      ;(run as { overflows?: boolean }).overflows = true
-    }
-    // Tall enough that no block is cut, so only the run search can answer.
-    expect(fitBlocksToHeight([node], 10_000).overflows, kind).toBe(true)
   }
 })

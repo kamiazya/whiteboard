@@ -62,10 +62,6 @@ export const MUTATED = [
   // the reason `tidy-units.ts` is: leaving it out would shrink what the lane
   // sees of the digest while the report kept looking the same.
   'src/quality/rect.ts',
-  'src/layout/nodes/truncate.ts',
-  // The prefix search `truncate.ts` and the line breaker share, split out of
-  // the cut loop it replaced. In the lane because the file it left was.
-  'src/layout/nodes/longest-fit.ts',
   'src/tidy.ts',
   // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
   // where that file's mutation residue moved once its scoreboard existed,
@@ -82,9 +78,6 @@ export const MUTATED = [
   // rather than restating it.
   'src/tidy-axis.ts',
   'src/tidy-bands.ts',
-  // A four-candidate search whose property scores the candidates from the
-  // definition of overlap, sharing nothing with the search.
-  'src/layout/comment-placement.ts',
   // Moved out of `comment-placement.ts` and `edge-rules.ts` (S18h1), both in
   // the lane, so leaving them out would shrink what it sees.
   'src/comment-geometry.ts',
@@ -93,21 +86,6 @@ export const MUTATED = [
   // equivariance are properties over random boxes and seeds, and the
   // silhouette per outline kind is pinned by example.
   'src/ink/sketch.ts',
-  // The junction rule that carries kinsoku across an inline boundary. It is a
-  // RULE rather than a ladder of ways to decline, and every one of its
-  // decisions is mutation-shaped: `clusterRun <= lineRun`, the two `=== ''`
-  // sentinels, `.at(0)`/`.at(-1)`, `length > 1`.
-  // Its first report is why `inline-junction.test.ts` exists: 16 of 20
-  // survivors came back `judged by 0 tests` and the rest by one, because
-  // nothing NAMED the module — the boundary suite reaches it through
-  // `typesetMdastBlocks`, and the wrapping scoreboard that would price it is
-  // excluded from the lane for run time. Seven of those survivors were then
-  // applied by hand against the direct tests and every one went red, 1 to 9
-  // tests each. One — `headCharacter`'s whitespace branch — had killed
-  // NOTHING through the layout, since `emit` handles a leading space on its
-  // own path, so it is a gap the direct tests closed rather than a selection
-  // artefact.
-  'src/layout/nodes/inline-junction.ts',
   // The pinned math layout calls instead of Math.hypot/sin/cos (ADR-0054
   // decision 11). Its oracle is independent and bit-exact — 900 answers of
   // the Rust libm crate — so a surviving mutant is a polynomial term or a
@@ -173,22 +151,15 @@ export const MINUTES = {
   'src/scene-children.ts': 0.8,
   'src/scene-digest.ts': 6.8,
   'src/quality/rect.ts': 7.7,
-  'src/layout/nodes/truncate.ts': 1.8,
-  // Measured locally (2026-10-17, one 4-runner run, not a CI leg): 43
-  // mutants, 27 killed and 16 timed out — a search loop mutated to never
-  // end costs a whole timeout, which is most of this figure.
-  'src/layout/nodes/longest-fit.ts': 11.8,
   'src/tidy.ts': 11.3,
   'src/tidy-units.ts': 4.2,
   'src/tidy-axis.ts': 0.5,
   'src/tidy-bands.ts': 1.5,
-  'src/layout/comment-placement.ts': 7,
   // ESTIMATED, not yet measured: a handful of mutants each, priced at
   // `tidy-axis.ts`'s rate.
   'src/comment-geometry.ts': 0.5,
   'src/containment.ts': 0.5,
   'src/ink/sketch.ts': 4.5,
-  'src/layout/nodes/inline-junction.ts': 2.8,
   // ESTIMATED, not yet measured: about 120 mutants, one 5-test file that
   // runs in milliseconds, priced at `tidy-bands.ts`'s rate.
   'src/det-math.ts': 1.5,
@@ -405,44 +376,6 @@ export const KNOWN_EQUIVALENT = {
     'ConditionalExpression: n === 0 -> false': 1,
     'ConditionalExpression: i < ARC_SAMPLES -> true': 1,
     'EqualityOperator: i < ARC_SAMPLES -> i <= ARC_SAMPLES': 1,
-  },
-  // Every one of these makes `mayCluster` answer TRUE more often, which buys
-  // the segmenter path — the correct one everywhere — at the price of walking
-  // text that did not need it. The invariant is on `mayCluster`, backed by a
-  // sweep of the domain the cheap path serves; only a bench can see them.
-  // Naming `granularity` is equivalent to leaving it to the default.
-  //
-  // NOT recorded here, deliberately: `StringLiteral: 'grapheme' -> ""`, which
-  // the lane also reports on this file. That one is KILLED — it throws
-  // `RangeError` at module load and 34 test files fail to import — and it
-  // survives the report only because it was judged by zero tests. An entry
-  // would make this ledger claim no test can kill it, which is false; the
-  // measurement is on `GRAPHEMES` instead.
-  'src/layout/nodes/truncate.ts': {
-    'BlockStatement: { yield* text return } -> {}': 1,
-    'BooleanLiteral: false -> true': 1,
-    'ConditionalExpression: !mayCluster(text) -> false': 1,
-    'ConditionalExpression: code >= 0x0300 || code === 0x000d -> true': 1,
-    'EqualityOperator: code === 0x000d -> code !== 0x000d': 1,
-    'EqualityOperator: i < text.length -> i <= text.length': 1,
-    "ObjectLiteral: { granularity: 'grapheme' } -> {}": 1,
-    'ConditionalExpression: ends.length <= count -> true': 1,
-  },
-  // Its upper bound once every prefix fits is any count past `lo`; the
-  // bisection never runs from there. Verified by applying the edit and
-  // running canvas-render-node, which stays green.
-  'src/layout/nodes/longest-fit.ts': {
-    'ArithmeticOperator: limit + 1 -> limit - 1': 1,
-  },
-  // A placed bubble sits a whole offset to one side of its anchor on each
-  // axis, so the anchor is never on a centre line and `<=` cannot differ from
-  // `<`; a zero-extent overlap contributes nothing to the sum whether the
-  // guard admits it or not. Hand-verified against the comment suites.
-  'src/layout/comment-placement.ts': {
-    'EqualityOperator: anchor.x <= centerX -> anchor.x < centerX': 1,
-    'EqualityOperator: anchor.y <= centerY -> anchor.y < centerY': 1,
-    'EqualityOperator: w > 0 -> w >= 0': 1,
-    'EqualityOperator: h > 0 -> h >= 0': 1,
   },
   // Belt-and-braces guards whose removal is masked by a guarantee the caller
   // already makes, plus type tests that a second test repeats. The load-bearing

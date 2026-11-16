@@ -2,39 +2,28 @@
 // labelled, so an open conversation is the only one that shows its whole text.
 
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { type CommentBoard, layoutBoard } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import type { SpatialLayoutOptions } from './spatial-canvas.js'
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({ radius: 4 }),
-  resolveEdge: () => ({ stroke: '#606060' }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-  resolveComment: () => ({
-    pin: { fill: '#d97706' },
-    bubble: { fill: '#fef3c7', stroke: '#d97706' },
-    leader: { stroke: '#d97706' },
-    resolvedOverlay: {
-      pin: { fill: '#d97706', fillOpacity: 0.45 },
-      bubble: { fill: '#fef3c7', stroke: '#6b7280', fillOpacity: 0.45 },
-      leader: { stroke: '#6b7280' },
-      text: { fill: '#6b7280', fontFamily: 'sans-serif' },
-    },
-  }),
-}
+/** The resolved overlay's text fill in the bundled light theme the core draws in. */
+const MUTED_TEXT = createSpatialTheme({ mode: 'light' }).resolveComment?.().resolvedOverlay?.text
+  ?.fill
 
-function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayoutOptions {
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
+
+function baseOptions(
+  overrides: Partial<Omit<SpatialLayoutOptions, 'core'>> = {},
+): SpatialLayoutOptions {
   return {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: (text: string): MdastRoot => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
     appearance,
     geometry: { paddingPx: 8, labelFontSizePx: 14, minContentWidthPx: 1 },
     ...overrides,
@@ -79,8 +68,8 @@ describe('comment layer', () => {
       expect(new Set(bodyRuns.map((run) => run.bbox.y)).size).toBe(1)
       expect(bodyRuns.length).toBeGreaterThan(0)
       expect(bodyRuns.map((run) => run.text).join(' ').length).toBeLessThan(LONG.length)
-      expect(bodyRuns.every((run) => run.appearance?.fill === '#6b7280')).toBe(true)
-      expect(label?.appearance?.fill).toBe('#6b7280')
+      expect(bodyRuns.every((run) => run.appearance?.fill === MUTED_TEXT)).toBe(true)
+      expect(label?.appearance?.fill).toBe(MUTED_TEXT)
       expect(label?.bbox.y).toBeGreaterThan(bodyRuns[0]?.bbox.y ?? Number.POSITIVE_INFINITY)
     })
 
@@ -102,7 +91,7 @@ describe('comment layer', () => {
       )
       const runs = runsOf(open.nodes)
       expect(runs.some((run) => run.text === 'Resolved')).toBe(false)
-      expect(runs.some((run) => run.appearance?.fill === '#6b7280')).toBe(false)
+      expect(runs.some((run) => run.appearance?.fill === MUTED_TEXT)).toBe(false)
       expect(open).toEqual(
         layoutBoard(canvasWith([{ id: 'c1', x: 400, y: 60, text: LONG }]), baseOptions()),
       )

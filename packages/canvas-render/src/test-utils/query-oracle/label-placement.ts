@@ -8,7 +8,7 @@ import {
   type LabelObstacle,
   labelObstacles,
 } from '../../layout/edges/edge-label-anchor.js'
-import { hex } from '../compose-canvas-oracle/oracle.js'
+import { hex } from '../render-oracle/scene-dump.js'
 import { committed, profileFor, queryBoards, viaJson } from './boards.js'
 
 /**

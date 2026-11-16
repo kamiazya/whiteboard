@@ -1,10 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  type NodeBoxRecord,
-  nodeBoxRecords,
-  reanswer,
-} from '../test-utils/node-box-oracle/oracle.js'
+import type { NodeBoxRecord } from '../test-utils/node-box-oracle/oracle.js'
 
 /**
  * The committed recording of what the node-box primitives answer equals what they
@@ -13,15 +9,6 @@ import {
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node node-box-recorded`.
  */
 const FILE = new URL('./node-box.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(
-    FILE,
-    `${nodeBoxRecords()
-      .map((r) => JSON.stringify(r))
-      .join('\n')}\n`,
-  )
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -82,14 +69,5 @@ describe('the recorded node-box oracle', () => {
         cases.some((c) => c.align === align && c.shape !== null),
         `${align} shaped`,
       ).toBe(true)
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r) => JSON.stringify(reanswer(r)) !== JSON.stringify(r))
-    const record = records[parted]
-    expect(
-      record === undefined ? undefined : `${parted}: ${record.kind}`,
-      'the first record the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
   })
 })

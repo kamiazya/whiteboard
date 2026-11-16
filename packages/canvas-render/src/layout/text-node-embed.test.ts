@@ -10,12 +10,14 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { referenceSeams } from '../references/seams.js'
+import { referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 const NOTE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-const APPEARANCE = { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) }
+const APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 function textOf(nodes: readonly SceneNode[]): string[] {
   const out: string[] = []
@@ -51,10 +53,13 @@ const canvas: SpatialCanvas = {
 describe('a text node body in the reference grammar', () => {
   it('embeds the document and labels the link through the reference bundle', () => {
     const scene = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
       appearance: APPEARANCE,
-      references: referenceSeams(
-        new Map([[NOTE, { documentId: NOTE, name: 'Note', body: 'PROSE FROM THE NOTE' }]]),
+      references: referenceSeamsFromWire(
+        referenceWire(
+          new Map([[NOTE, { documentId: NOTE, name: 'Note', body: 'PROSE FROM THE NOTE' }]]),
+        ),
       ),
     })
     const text = textOf(scene.nodes).join(' ')
@@ -69,6 +74,7 @@ describe('a text node body in the reference grammar', () => {
       edges: [],
     }
     const scene = layoutSpatialCanvas(literal, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
       appearance: APPEARANCE,
     })

@@ -5,14 +5,15 @@
 // than to the resolver alone (the legend is judged by the score, and the
 // score reads the canvas).
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { layoutMdastBlocks } from '../layout/markdown-body.js'
+import { layoutMarkdownDocument } from '../layout/markdown-switch.js'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
+import { referenceSeamsFromWire } from '../references/wire.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { SPATIAL_LIGHT_PALETTE } from '../theme/spatial-palette.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 
@@ -47,7 +48,11 @@ const options = { measure: createFakeMeasure(), appearance: createSpatialTheme({
 
 describe('a layout given the tag library', () => {
   it('lists the declared key in the legend with the declared colours as swatches', () => {
-    const scene = layoutSpatialCanvas(canvas, { ...options, tagLibrary: library })
+    const scene = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
+      ...options,
+      tagLibrary: library,
+    })
     expect(scene.legend?.keys.map((key) => key.key)).toEqual(['health'])
     const entries = scene.legend?.keys[0]?.entries ?? []
     expect(entries.map((entry) => [entry.value, entry.count])).toEqual([
@@ -61,7 +66,7 @@ describe('a layout given the tag library', () => {
   })
 
   it('draws the same board exactly as stored without the library: no colour, no legend', () => {
-    const scene = layoutSpatialCanvas(canvas, options)
+    const scene = layoutSpatialCanvas(canvas, { ...options, core: testLayoutCore() })
     expect(scene.legend).toBeUndefined()
   })
 })
@@ -72,7 +77,13 @@ describe('a layout given the tag library', () => {
 describe('a canvas drawn inside another document, given the tag library', () => {
   const BOARD = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
   const failing = SPATIAL_LIGHT_PALETTE.presets['1'].fill
-  const resolveReference = (ref: string) => (ref === BOARD ? { canvas } : undefined)
+  // The board as a keeper loads it, crossing to the core as a wire.
+  const references = referenceSeamsFromWire({
+    entries: [[BOARD, { documentId: BOARD, name: 'Board', canvas }]],
+    aliases: [],
+    titles: [[BOARD, 'Board']],
+    extras: [],
+  })
 
   it('colours a file node miniature the way the board colours itself', () => {
     const host: SpatialCanvas = {
@@ -80,9 +91,10 @@ describe('a canvas drawn inside another document, given the tag library', () => 
       edges: [],
     }
     const scene = layoutSpatialCanvas(host, {
+      core: testLayoutCore(),
       ...options,
       tagLibrary: library,
-      resolveReference,
+      references,
       expandFileNode: () => true,
     })
     expect(shapeFills(scene.nodes, 'db')).toEqual([failing])
@@ -94,26 +106,23 @@ describe('a canvas drawn inside another document, given the tag library', () => 
       edges: [],
     }
     const scene = layoutSpatialCanvas(host, {
+      core: testLayoutCore(),
       ...options,
       tagLibrary: library,
-      resolveEmbed: (id) => (id === BOARD ? { title: 'Board', canvas } : undefined),
+      references,
     })
     expect(shapeFills(scene.nodes, 'db')).toEqual([failing])
   })
 
   it(`colours a note's ![[board]] the way the board colours itself`, () => {
-    const note: MdastRoot = {
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'embed', documentId: BOARD }] }],
-    }
-    const scene = layoutMdastBlocks(note, {
+    const scene = layoutMarkdownDocument(`![[${BOARD}]]`, {
+      core: testLayoutCore(),
       measure: options.measure,
       maxWidth: 800,
-      fontFamily: 'sans-serif',
       tagLibrary: library,
-      resolveEmbed: (id) => (id === BOARD ? { title: 'Board', canvas } : undefined),
+      references,
     })
-    expect(shapeFills(scene.nodes, 'db')).toEqual([failing])
+    expect(shapeFills(scene?.nodes ?? [], 'db')).toEqual([failing])
   })
 })
 

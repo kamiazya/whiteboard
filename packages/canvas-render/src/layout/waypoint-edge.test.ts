@@ -7,15 +7,14 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const options: SpatialLayoutOptions = {
+  core: testLayoutCore(),
   measure: createFakeMeasure(),
-  appearance: {
-    resolveNode: () => ({ appearance: { fill: '#fff', stroke: '#000' } }),
-    resolveEdge: () => ({ stroke: '#000' }),
-    resolveLabel: () => ({ fill: '#000', fontFamily: 'x' }),
-  },
+  appearance: createSpatialTheme({ mode: 'light' }),
 }
 
 const BEND = { x: 60, y: 400 }

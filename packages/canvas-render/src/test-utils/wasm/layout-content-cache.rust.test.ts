@@ -5,12 +5,12 @@ import { beforeAll, describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore } from '../../canvas-core.js'
 import type { FragmentAsk, FragmentEntry } from '../../fragment-ask.js'
 import type { SpatialContentCache, SpatialLayoutOptions } from '../../layout/layout-options.js'
-import type { FittedBlocks } from '../../layout/nodes/mdast-blocks.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { describeMeasure } from '../../measure.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { fakeLayoutCore } from '../fake-layout-core.js'
 import { createFakeMeasure } from '../fake-measure.js'
+import { testLayoutCore } from '../test-layout-core.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { layoutCases } from './layout-cases.js'
 
@@ -19,7 +19,7 @@ import { layoutCases } from './layout-cases.js'
  * step 7, S15n): a layout handed a `contentCache` names a surface, and the
  * core lays out again only the bodies that surface does not hold. A cache may
  * change timings and never what is drawn, so every layout here, warm or cold,
- * is held to the TypeScript composer's.
+ * is held to what the core draws with no cache at all.
  */
 describe.runIf(built)('the whole layout over a content cache kept in the core', () => {
   // Made in `beforeAll`, not in this factory: vitest runs a skipped suite's
@@ -38,7 +38,7 @@ describe.runIf(built)('the whole layout over a content cache kept in the core', 
       return answer
     },
   }
-  const lay = (canvas: SpatialCanvas, options: SpatialLayoutOptions) => {
+  const lay = (canvas: SpatialCanvas, options: Omit<SpatialLayoutOptions, 'core'>) => {
     const core = fakeLayoutCore({ routing: real, layout: counting })
     const asks: FragmentAsk[][] = []
     const laid = layoutSpatialCanvasWithAnchors(canvas, {
@@ -50,17 +50,14 @@ describe.runIf(built)('the whole layout over a content cache kept in the core', 
     })
     return { ...laid, asks }
   }
-  const memo = (): SpatialContentCache => {
-    const held = new Map<string, FittedBlocks>()
-    return { get: (key) => held.get(key), set: (key, value) => void held.set(key, value) }
-  }
+  const memo = (): SpatialContentCache => ({})
   /** `canvas` with its first node moved `dx` to the right. */
   const moved = (canvas: SpatialCanvas, dx: number): SpatialCanvas => ({
     ...canvas,
     nodes: canvas.nodes.map((node, at) => (at === 0 ? { ...node, x: node.x + dx } : node)),
   })
 
-  it('draws every case as the TypeScript does, laid out again over a warm cache', () => {
+  it('draws every case as it draws with no cache, laid out again over a warm one', () => {
     answered.compared = 0
     answered.refused.length = 0
     const cases = layoutCases(12)
@@ -68,7 +65,10 @@ describe.runIf(built)('the whole layout over a content cache kept in the core', 
       const cache = memo()
       for (const dx of [0, 24, 48]) {
         const board = moved(canvas, dx)
-        const reference = layoutSpatialCanvasWithAnchors(board, options)
+        const reference = layoutSpatialCanvasWithAnchors(board, {
+          ...options,
+          core: testLayoutCore(),
+        })
         const answered = lay(board, { ...options, contentCache: cache })
         expect(answered.scene, `${name} +${dx}`).toEqual(reference.scene)
       }
@@ -92,12 +92,16 @@ describe.runIf(built)('the whole layout over a content cache kept in the core', 
   it('never serves a body drawn without a table to a layout with one, nor one that asked it', () => {
     const cache = memo()
     const base = { measure, appearance, contentCache: cache }
-    const fallback = lay(board, base)
+    const fallback = lay(board, { ...base })
     expect(JSON.stringify(fallback.scene)).not.toContain('data-x2')
     for (const fragments of [[], [X2], []] as FragmentEntry[][]) {
       const options = { ...base, fragments }
-      const reference = layoutSpatialCanvasWithAnchors(board, { ...options, contentCache: memo() })
-      const laid = lay(board, options)
+      const reference = layoutSpatialCanvasWithAnchors(board, {
+        core: testLayoutCore(),
+        ...options,
+        contentCache: memo(),
+      })
+      const laid = lay(board, { ...options })
       expect(laid.scene, JSON.stringify(fragments)).toEqual(reference.scene)
       // The body that asked the table was laid out again, so it asked again.
       expect(laid.asks).toEqual(fragments.length === 0 ? [[{ kind: 'math', value: 'x^2' }]] : [])
@@ -110,12 +114,20 @@ describe.runIf(built)('the whole layout over a content cache kept in the core', 
     const hosted = describeMeasure((text, font) => wide(text, font), { kind: 'host' })
     for (const each of [measure, hosted, wide, measure]) {
       const options = { measure: each, appearance, contentCache: cache }
-      const reference = layoutSpatialCanvasWithAnchors(board, { measure: each, appearance })
-      const laid = lay(board, options)
+      const reference = layoutSpatialCanvasWithAnchors(board, {
+        core: testLayoutCore(),
+        measure: each,
+        appearance,
+      })
+      const laid = lay(board, { ...options })
       expect(laid.scene).toEqual(reference.scene)
     }
     const dark = createSpatialTheme({ mode: 'dark' })
-    const reference = layoutSpatialCanvasWithAnchors(board, { measure, appearance: dark })
+    const reference = layoutSpatialCanvasWithAnchors(board, {
+      core: testLayoutCore(),
+      measure,
+      appearance: dark,
+    })
     expect(lay(board, { measure, appearance: dark, contentCache: cache }).scene).toEqual(
       reference.scene,
     )

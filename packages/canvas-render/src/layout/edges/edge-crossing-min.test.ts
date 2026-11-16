@@ -8,6 +8,8 @@ import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { node } from '../../test-utils/spatial-node.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 // Static, not `await import()` inside the test body: an in-body import of
 // this module graph charges its transform-and-load to the 5s per-test
 // timeout, which is ample on an idle machine and the first thing to blow
@@ -149,9 +151,9 @@ describe('edgeSideOverrides through layoutSpatialEdges', () => {
       ['e-red', { fromSide: 'bottom' as const, toSide: 'left' as const }],
     ])
     const sceneNodes = layoutSpatialEdges(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
-      parseBody: () => ({ type: 'root' as const, children: [] }),
-      appearance: { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) },
+      appearance: createSpatialTheme({ mode: 'light' }),
       edgeSideOverrides: frozen,
     })
     const orange = sceneNodes.find((n) => n.kind === 'edge' && n.id === 'e-orange')

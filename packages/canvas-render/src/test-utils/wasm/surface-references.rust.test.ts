@@ -14,6 +14,7 @@ import {
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { fakeLayoutCore } from '../fake-layout-core.js'
 import { createFakeMeasure } from '../fake-measure.js'
+import { testLayoutCore } from '../test-layout-core.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 
 /**
@@ -137,6 +138,7 @@ describe.runIf(built)("a surface's reference chrome through the real core", () =
     for (const { name, canvas, expanded } of boards) {
       const wire = overlayReferences(referenceWireFor(keeper, { canvases: [canvas] }), chrome)
       const options: SpatialLayoutOptions = {
+        core: testLayoutCore(),
         measure: createFakeMeasure(),
         appearance: createSpatialTheme({ mode: 'light' }),
         references: referenceSeamsFromWire(wire),

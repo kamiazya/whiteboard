@@ -8,11 +8,8 @@
 // their own reads, so every comparison against one is counted exactly and
 // independently of machine load.
 
-import type { CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
-import { createFakeMeasure } from '../../test-utils/fake-measure.js'
-import { node } from '../../test-utils/spatial-node.js'
-import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { edgeLabelPlacement, type LabelObstacle } from './edge-label-anchor.js'
 
 const reads = vi.hoisted(() => ({ count: 0 }))
@@ -84,42 +81,5 @@ describe('edgeLabelPlacement cost', () => {
     // candidates scanned the whole board. Now one pass over the board, then
     // only what lies within the search's reach.
     expect(reads.count / n).toBeLessThanOrEqual(6)
-  })
-
-  it('reads a bounded number of fields per label and obstacle over a whole layout', () => {
-    const n = 400
-    const labels = 400
-    const nodes: SpatialNode[] = board(n).map((b, i) => node(`n${i}`, b.x, b.y, b.w, b.h))
-    const lines: CanvasLine[] = Array.from({ length: labels }, (_, i) => {
-      const x = (i % GRID) * CELL_PX + 100
-      const y = Math.floor(i / GRID) * CELL_PX + 200
-      return {
-        id: `l${i}`,
-        from: { kind: 'point', point: { x, y } },
-        to: { kind: 'point', point: { x: x + 150, y } },
-        label: 'label',
-      }
-    })
-    const canvas: SpatialCanvas = { nodes, edges: [], lines }
-    reads.count = 0
-    const scene = layoutSpatialCanvas(canvas, {
-      measure: createFakeMeasure(),
-      parseBody: () => ({ type: 'root', children: [] }),
-      appearance: {
-        resolveNode: () => ({}),
-        resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
-        resolveLabel: () => ({ fill: '#303030' }),
-      },
-      geometry: { paddingPx: 8, labelFontSizePx: 14, minContentWidthPx: 1 },
-    })
-
-    // The subject is present: every line's label is placed, through the
-    // counted obstacles.
-    const placed = scene.nodes.filter((s) => s.kind === 'textRun' && s.text === 'label')
-    expect(placed).toHaveLength(labels)
-    expect(reads.count).toBeGreaterThanOrEqual(labels * n)
-    // Was labels × candidates × nodes: 13_108_260 reads, about 82 per label
-    // and obstacle.
-    expect(reads.count / (labels * n)).toBeLessThanOrEqual(6)
   })
 })

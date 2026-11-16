@@ -467,9 +467,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // out would shrink what it sees; `paint-order.ts` (`paintOrderOf`, out of
     // `spatial-canvas.ts`, which never was) stays outside, its three branches
     // driven by `paint-order.test.ts`.
+    // 111 and 23 since the TypeScript composer and typesetter were deleted
+    // (S18h2): the layout is the Rust core's, so `layout/` keeps only the
+    // request builders and queries over it, and the four mutated modules that
+    // went with it (`truncate.ts`, `longest-fit.ts`, `inline-junction.ts`,
+    // `comment-placement.ts`) are the Rust ports' to hold now, by
+    // cargo-mutants over the frozen recordings. Nothing that remained left
+    // the lane.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 27,
-      production: 143,
+      mutated: 23,
+      production: 111,
     })
   })
 

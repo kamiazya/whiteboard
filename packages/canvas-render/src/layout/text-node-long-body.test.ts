@@ -10,9 +10,11 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutDegradation } from './spatial-canvas.js'
 
-const APPEARANCE = { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) }
+const APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 describe('a text node whose body has no break opportunity', () => {
   it('is typeset into lines, not degraded to a label', () => {
@@ -24,6 +26,7 @@ describe('a text node whose body has no break opportunity', () => {
     }
     const onDegrade = vi.fn<(event: SpatialLayoutDegradation) => void>()
     const scene = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
       appearance: APPEARANCE,
       onDegrade,

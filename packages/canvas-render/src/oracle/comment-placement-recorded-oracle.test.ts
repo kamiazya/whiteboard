@@ -1,31 +1,37 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { commentBubbleCandidates } from '../layout/comment-placement.js'
-import {
-  type CommentPlacementRecord,
-  commentPlacementRecords,
-} from '../test-utils/comment-placement-oracle.js'
+import { COMMENT_BUBBLE_OFFSET_PX } from '../comment-geometry.js'
+import type { CommentPlacementRecord } from '../test-utils/comment-placement-oracle.js'
 import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
 
 /**
- * The committed recording of what the comment placement primitives answer
- * equals what they answer today, and the Rust port replays it exactly
- * (`tests/comment_placement_oracle.rs` in `crates/core/canvas-render`).
- * Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node comment-placement-recorded`.
+ * The committed recording of what the comment placement primitives answered,
+ * taken from the TypeScript before it was deleted (ADR-0054 step 7, S18h) and
+ * frozen. The Rust port replays it exactly
+ * (`tests/comment_placement_oracle.rs` in `crates/core/canvas-render`), and
+ * the editor's compose bubble asks the core's query through the recordings in
+ * `query-switch.rust.test.ts`; this test holds the recording to the cases it
+ * must reach.
  */
 const FILE = new URL('./comment-placement.jsonl', import.meta.url)
-
-const fresh = commentPlacementRecords()
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${fresh.map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
   .split('\n')
   .map((line) => JSON.parse(line) as CommentPlacementRecord)
+
+/** The four boxes hung off the anchor's corners, in the order placement tries them; anything else is a ring box. */
+function quadrants(anchor: { x: number; y: number }, size: { w: number; h: number }) {
+  const d = COMMENT_BUBBLE_OFFSET_PX
+  const [right, left] = [anchor.x + d, anchor.x - d - size.w]
+  const [below, above] = [anchor.y + d, anchor.y - d - size.h]
+  return [
+    { x: right, y: below, ...size },
+    { x: right, y: above, ...size },
+    { x: left, y: below, ...size },
+    { x: left, y: above, ...size },
+  ]
+}
 
 describe('the recorded comment-placement oracle', () => {
   it('reaches every quadrant and the ring', () => {
@@ -36,21 +42,14 @@ describe('the recorded comment-placement oracle', () => {
         if (r.kind !== 'place') return []
         const [x, y] = r.anchor.map(fromHex)
         const [w, h] = r.size.map(fromHex)
-        const all = commentBubbleCandidates({ x: x ?? 0, y: y ?? 0 }, { w: w ?? 0, h: h ?? 0 })
-        const at = all.findIndex(
+        const at = quadrants({ x: x ?? 0, y: y ?? 0 }, { w: w ?? 0, h: h ?? 0 }).findIndex(
           (c) => JSON.stringify([c.x, c.y, c.w, c.h].map(f64Hex)) === JSON.stringify(r.answer),
         )
-        return [Math.min(at, 4)]
+        return [at === -1 ? 4 : at]
       }),
     )
     expect([...picked].sort(), 'each quadrant, and a ring box, picked').toEqual([0, 1, 2, 3, 4])
     const kinds = new Set(records.map((r) => r.kind))
     expect([...kinds].sort()).toEqual(['candidates', 'leader', 'nearest', 'place'])
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
-    expect(parted, 'the first record the TypeScript no longer answers as recorded').toBe(-1)
-    expect(records).toHaveLength(fresh.length)
   })
 })

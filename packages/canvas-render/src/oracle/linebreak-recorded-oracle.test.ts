@@ -1,12 +1,9 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { recording } from '../test-utils/linebreak-oracle/corpus.js'
-import {
-  breaksOf,
-  type DigestRecord,
-  type OracleRecord,
-  type TextRecord,
-  unitsOfRecord,
+import type {
+  DigestRecord,
+  OracleRecord,
+  TextRecord,
 } from '../test-utils/linebreak-oracle/oracle.js'
 
 /**
@@ -19,15 +16,6 @@ import {
  * (its freshness is held in `tools/arch-lint`, since a test here may not read the Rust tree).
  */
 const FILE = new URL('./linebreak.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(
-    FILE,
-    `${recording()
-      .map((r) => JSON.stringify(r))
-      .join('\n')}\n`,
-  )
-}
 
 describe('the recorded line-break oracle', () => {
   const text = readFileSync(FILE, 'utf8')
@@ -64,23 +52,5 @@ describe('the recorded line-break oracle', () => {
     expect(texts.filter((r) => 'u' in r).length, 'texts holding a lone surrogate').toBeGreaterThan(
       20,
     )
-  })
-
-  it('records the corpora the builders produce today', () => {
-    const lines = text.trimEnd().split('\n')
-    const rebuilt = recording().map((r) => JSON.stringify(r))
-    const parted = rebuilt.findIndex((line, i) => line !== lines[i])
-    expect(
-      parted === -1 ? undefined : rebuilt[parted]?.slice(0, 120),
-      'the first record the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
-    expect(rebuilt).toHaveLength(lines.length)
-  })
-
-  it('answers each recorded text with the breaks the TypeScript gives it', () => {
-    const parted = texts.find(
-      (r) => JSON.stringify(breaksOf(unitsOfRecord(r))) !== JSON.stringify(r.b),
-    )
-    expect(parted, 'the first text answered differently').toBeUndefined()
   })
 })

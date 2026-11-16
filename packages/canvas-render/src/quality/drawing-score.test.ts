@@ -12,6 +12,7 @@ import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
 import { DRAWING_CORPUS } from '../test-utils/drawing-corpus.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type DrawingScore, scoreDrawing } from './drawing-score.js'
 
@@ -20,7 +21,7 @@ import { type DrawingScore, scoreDrawing } from './drawing-score.js'
 const measure = constantRatioMeasureText
 const appearance = createSpatialTheme({ mode: 'light' })
 const layout = (canvas: SpatialCanvas): Scene =>
-  layoutSpatialCanvas(canvas, { measure, appearance })
+  layoutSpatialCanvas(canvas, { core: testLayoutCore(), measure, appearance })
 const score = (canvas: SpatialCanvas): DrawingScore => scoreDrawing(canvas, layout(canvas))
 
 const box = (id: string, x: number, y: number, width = 200, height = 80): SpatialNode =>

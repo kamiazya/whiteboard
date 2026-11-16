@@ -5,9 +5,10 @@ import { fittedTextNodeHeight } from '../../layout/fitted-height.js'
 import { naturalNodeContentSize } from '../../layout/spatial-canvas.js'
 import { BUNDLED_SHAPE_TABLE } from '../../outline/node-outline.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
-import { hex } from '../compose-canvas-oracle/oracle.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { BOUNDARY_BODIES, HAND_BODIES } from '../markdown-document-oracle/bodies.js'
+import { hex } from '../render-oracle/scene-dump.js'
+import { testLayoutCore } from '../test-layout-core.js'
 import { viaJson } from './boards.js'
 
 /**
@@ -46,11 +47,17 @@ export function nodeSizeAnswer(input: NodeSizeInput): NodeSizeRecord {
   const measure = createFakeMeasure()
   const appearance = createSpatialTheme({ mode: input.mode })
   if (input.kind === 'fitted') {
-    const h = fittedTextNodeHeight(input.node, { measure, appearance, floor: input.floor })
+    const h = fittedTextNodeHeight(input.node, {
+      core: testLayoutCore(),
+      measure,
+      appearance,
+      floor: input.floor,
+    })
     return { ...input, answer: [hex(h)] }
   }
   const fonts = new Set(input.fonts ?? [])
   const { w, h } = naturalNodeContentSize(input.node, {
+    core: testLayoutCore(),
     measure,
     appearance,
     ...(input.style === undefined ? {} : { style: input.style }),

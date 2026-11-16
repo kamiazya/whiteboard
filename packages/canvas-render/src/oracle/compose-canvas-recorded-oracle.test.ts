@@ -1,9 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  type ComposeCanvasRecord,
-  composeCanvasRecords,
-} from '../test-utils/compose-canvas-oracle/oracle.js'
+import type { ComposeCanvasRecord } from '../test-utils/compose-canvas-oracle/oracle.js'
 
 /**
  * The committed recording of what the composer's walk over a whole canvas
@@ -13,12 +10,6 @@ import {
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node compose-canvas-recorded`.
  */
 const FILE = new URL('./compose-canvas.jsonl', import.meta.url)
-
-const fresh = composeCanvasRecords()
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${fresh.map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -58,17 +49,5 @@ describe('the recorded compose-canvas oracle', () => {
       cases.some((c) => c.answer.natural.some(([, w]) => w !== '0000000000000000')),
       'a natural size',
     ).toBe(true)
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
-    const record = records[parted]
-    expect(
-      record === undefined
-        ? undefined
-        : `${parted}: ${record.kind === 'case' ? record.id : 'meta'}`,
-      'the first record the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
-    expect(records.length).toBe(fresh.length)
   })
 })

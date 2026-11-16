@@ -1,6 +1,6 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { type FitRecord, fitRecords, reanswer } from '../test-utils/typeset-oracle/fit-oracle.js'
+import type { FitRecord } from '../test-utils/typeset-oracle/fit-oracle.js'
 import { HAND_SCENES } from '../test-utils/typeset-oracle/fit-scenes.js'
 
 /**
@@ -11,15 +11,6 @@ import { HAND_SCENES } from '../test-utils/typeset-oracle/fit-scenes.js'
  * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node fit-recorded`.
  */
 const FILE = new URL('./fit.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(
-    FILE,
-    `${fitRecords()
-      .map((r) => JSON.stringify(r))
-      .join('\n')}\n`,
-  )
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -60,13 +51,5 @@ describe('the recorded fit oracle', () => {
         `a ${family} hand scene`,
       ).toBe(true)
     expect(declared.filter((id) => !recorded.has(id))).toEqual([])
-  })
-
-  it('equals what the TypeScript keeps today', () => {
-    const parted = records.findIndex((r) => JSON.stringify(reanswer(r)) !== JSON.stringify(r))
-    expect(
-      records[parted]?.id,
-      'the first case the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
   })
 })

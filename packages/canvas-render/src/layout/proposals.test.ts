@@ -14,21 +14,14 @@ import type {
 } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({ radius: 4 }),
-  resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-  resolveProposal: () => ({
-    outline: { fill: 'none', stroke: '#4f46e5', strokeWidth: 2, strokeDasharray: '6 4' },
-    bubble: { fill: '#ffffff', stroke: '#4f46e5' },
-    leader: { stroke: '#4f46e5', strokeWidth: 1, strokeDasharray: '4 3' },
-  }),
-}
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 const NODE_A = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 40, text: 'A' })
 const NODE_B = textNode({ id: 'b', x: 300, y: 0, width: 100, height: 40, text: 'B' })
@@ -44,15 +37,7 @@ const BOARD: SpatialCanvas = {
 }
 
 function layout(canvas: SpatialCanvas, proposals: readonly Proposal[]): readonly SceneNode[] {
-  const options: SpatialLayoutOptions = {
-    measure,
-    appearance,
-    parseBody: (text) => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
-    proposals,
-  }
+  const options: SpatialLayoutOptions = { core: testLayoutCore(), measure, appearance, proposals }
   return layoutSpatialCanvas(canvas, options).nodes
 }
 

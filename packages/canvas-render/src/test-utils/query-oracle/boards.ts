@@ -14,6 +14,7 @@ import { boards, TAG_LIBRARY } from '../compose-canvas-oracle/corpus.js'
 import { DRAWING_CORPUS } from '../drawing-corpus.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { ROUTING_CORPUS, stackedFrameLayouts, syntheticLayouts } from '../routing-corpus.js'
+import { testLayoutCore } from '../test-layout-core.js'
 
 /**
  * The boards the query recordings (ADR-0054 step 7, S18a) are drawn over,
@@ -37,6 +38,7 @@ export const viaJson = <T>(value: T): T => JSON.parse(JSON.stringify(value)) as 
 export function editorOptions(profile: EditorProfile): SpatialLayoutOptions {
   const fonts = new Set(profile.fonts)
   return {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: profile.mode }),
     style: 'document',

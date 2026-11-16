@@ -1,11 +1,12 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneEntries } from '../scene-entry-keys.js'
 import { type CommentBoard, layoutBoard } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { renderSceneToSvg } from './backend.js'
 import { renderSceneToKeyedSvg } from './keyed.js'
 
@@ -124,23 +125,15 @@ describe('renderSceneToKeyedSvg', () => {
 
 describe('renderSceneToKeyedSvg over a comment scene', () => {
   it('keys the pin and bubble by the editor hit-testing handle, not a leader ordinal', () => {
-    const appearance: SpatialAppearanceResolver = {
-      resolveNode: () => ({}),
-      resolveEdge: () => ({}),
-      resolveLabel: () => ({ fill: '#000', fontFamily: 'sans-serif' }),
-    }
-    const parseBody = (text: string): MdastRoot => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    })
+    const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
     const canvas: CommentBoard = {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
       edges: [],
       comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
     }
     const laidOut = layoutBoard(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
-      parseBody,
       appearance,
       geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
     })
@@ -172,39 +165,15 @@ describe('renderSceneToKeyedSvg over a comment scene', () => {
  * has an id of its own to be marked by.
  */
 describe('the keyed projection marks the annotation layer', () => {
-  const appearance: SpatialAppearanceResolver = {
-    resolveNode: () => ({}),
-    resolveEdge: () => ({}),
-    resolveLabel: () => ({ fill: '#000', fontFamily: 'sans-serif' }),
-    resolveComment: () => ({
-      pin: { fill: '#d97706' },
-      bubble: { fill: '#fef3c7', stroke: '#d97706' },
-      leader: { stroke: '#d97706' },
-      passage: { fill: '#d97706', fillOpacity: 0.22 },
-      region: { fill: 'none', stroke: '#d97706' },
-      pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif' },
-      resolvedOverlay: {
-        pin: { fill: '#d97706', fillOpacity: 0.45 },
-        bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
-        leader: { stroke: '#d97706', strokeOpacity: 0.45 },
-        passage: { fill: '#d97706', fillOpacity: 0.1 },
-        region: { fill: 'none', stroke: '#d97706', strokeOpacity: 0.45 },
-        pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif', fillOpacity: 0.45 },
-      },
-    }),
-  }
-  const parseBody = (text: string): MdastRoot => ({
-    type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-  })
+  const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
   const canvas: CommentBoard = {
     nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
     edges: [],
     comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }],
   }
   const laidOut = layoutBoard(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody,
     appearance,
     // Two messages, so the pin carries a count — the entry with no id of
     // its own, which is the case owner inheritance exists for.
@@ -236,9 +205,9 @@ describe('the keyed projection marks the annotation layer', () => {
   it('leaves the document nodes and the chrome pseudo-groups unmarked', () => {
     const groups = renderSceneToKeyedSvg(laidOut, { padding: 4, background: '#fff' }).groups
     const unmarked = groups.filter((group) => group.annotation !== true).map((group) => group.key)
-    // No `#defs`: this scene draws nothing that needs one, and the
-    // pseudo-group is emitted only when it is non-empty.
-    expect(unmarked).toEqual(['#background', 'n1', 'n1#1'])
+    // `#defs` is chrome too: the bundled theme the core draws with defines
+    // what its shapes reference, and the pseudo-group is unmarked like the rest.
+    expect(unmarked).toEqual(['#defs', '#background', 'n1', 'n1#1'])
   })
 
   it('leaves the emitted bytes untouched — the mark is out-of-band', () => {

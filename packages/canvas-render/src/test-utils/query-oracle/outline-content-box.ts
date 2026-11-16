@@ -1,6 +1,6 @@
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import { BUNDLED_SHAPE_TABLE, outlineContentBox } from '../../outline/node-outline.js'
-import { hex } from '../compose-canvas-oracle/oracle.js'
+import { hex } from '../render-oracle/scene-dump.js'
 
 /**
  * The recorded answers of `outlineContentBox` (ADR-0054 step 7, S18a), the

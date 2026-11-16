@@ -7,17 +7,16 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ParagraphBlockNode, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const PADDING_PX = 8
 
 const OPTIONS: SpatialLayoutOptions = {
+  core: testLayoutCore(),
   measure: createFakeMeasure(),
-  parseBody: () => ({
-    type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'text', value: 'one line' }] }],
-  }),
-  appearance: { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) },
+  appearance: createSpatialTheme({ mode: 'light' }),
   geometry: { paddingPx: PADDING_PX, labelFontSizePx: 14, minContentWidthPx: 1 },
 }
 

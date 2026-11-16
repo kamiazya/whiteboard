@@ -4,26 +4,19 @@
 // Canvas-wide today; the per-edge override slot reuses the same resolution.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { computeEdgeJumps, EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
 const measure = createFakeMeasure()
-const fakeAppearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({}),
-  resolveEdge: () => ({ stroke: '#606060' }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-}
+const fakeAppearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 const fakeGeometry = { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 }
-const fakeParseBody = (text: string): MdastRoot => ({
-  type: 'root',
-  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-})
 
 // A clean cross: e1 runs horizontally, e2 vertically over it at (225, 100).
 // No node stands in either path, so both routes are direct segments.
@@ -51,7 +44,6 @@ const cross = (lineJumps?: 'none' | 'arc'): SpatialCanvas => ({
 
 const options = () => ({
   measure,
-  parseBody: fakeParseBody,
   appearance: fakeAppearance,
   geometry: fakeGeometry,
 })
@@ -63,14 +55,14 @@ const edgeById = (nodes: readonly unknown[], id: string) =>
 
 describe('line jumps', () => {
   it('the later edge hops over the earlier one at their crossing', () => {
-    const scene = layoutSpatialCanvas(cross('arc'), options())
+    const scene = layoutSpatialCanvas(cross('arc'), { ...options(), core: testLayoutCore() })
     expect(edgeById(scene.nodes, 'e2')?.jumps).toEqual([{ segment: 0, x: 225, y: 100 }])
     expect(edgeById(scene.nodes, 'e1')?.jumps).toBeUndefined()
   })
 
   it('absent or none leaves every edge jump-free', () => {
     for (const canvas of [cross(), cross('none')]) {
-      const scene = layoutSpatialCanvas(canvas, options())
+      const scene = layoutSpatialCanvas(canvas, { ...options(), core: testLayoutCore() })
       expect(edgeById(scene.nodes, 'e1')?.jumps).toBeUndefined()
       expect(edgeById(scene.nodes, 'e2')?.jumps).toBeUndefined()
     }
@@ -108,7 +100,7 @@ describe('line jumps', () => {
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }
-    const scene = layoutSpatialCanvas(tight, options())
+    const scene = layoutSpatialCanvas(tight, { ...options(), core: testLayoutCore() })
     const jumps = edgeById(scene.nodes, 'h')?.jumps
     expect(jumps).toHaveLength(1)
     expect(jumps?.[0]).toMatchObject({ x: 197 })
@@ -137,7 +129,7 @@ describe('line jumps', () => {
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }
-    const scene = layoutSpatialCanvas(fan, options())
+    const scene = layoutSpatialCanvas(fan, { ...options(), core: testLayoutCore() })
     expect(edgeById(scene.nodes, 'f2')?.jumps).toBeUndefined()
   })
 })

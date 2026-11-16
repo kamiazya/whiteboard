@@ -3,14 +3,12 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { outlineContains } from '../../outline/node-outline.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({}),
-  resolveEdge: () => undefined,
-  resolveLabel: () => ({}),
-}
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -46,7 +44,7 @@ const layout = (ellipse?: 'ellipse') =>
             node.id === 'a' ? { ...node, facets: { 'visual.shape/v0': { kind: ellipse } } } : node,
           ),
         },
-    { measure: createFakeMeasure(), appearance },
+    { core: testLayoutCore(), measure: createFakeMeasure(), appearance },
   )
 
 describe('a node silhouette in layout', () => {
