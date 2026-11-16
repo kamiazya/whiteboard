@@ -2,7 +2,7 @@
 // and `wb_scene_render` says so in words beside the SVG: the structured output
 // is the same shape either way, so the second text item is the only place an
 // agent that does not read the picture learns why.
-
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import { refusalCopy } from '@kamiazya/whiteboard-canvas-render'
@@ -26,6 +26,8 @@ vi.mock('../config.js', () => ({
   WHITEBOARD_ROOT: '/tmp/whiteboard',
 }))
 
+// lazy-import: the server and its deps are imported after `vi.mock` replaces
+// `../config.js`, so they read this file's temporary data directory.
 const { createMcpServer } = await import('./server.js')
 const { resolveTestServerDeps } = await import('../routes/_test-helpers.js')
 
@@ -52,7 +54,6 @@ type Content = readonly { readonly type: string; readonly text?: string }[]
 
 describe('wb_scene_render of a board the core refuses', () => {
   beforeEach(async () => {
-    const { mkdir } = await import('node:fs/promises')
     await mkdir(join(tmp.dir, 'data'), { recursive: true })
   })
 

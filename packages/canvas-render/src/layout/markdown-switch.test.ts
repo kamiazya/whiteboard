@@ -6,7 +6,7 @@ import type {
   MarkdownLayoutCore,
   MarkdownNoteRequest,
 } from '../markdown-core.js'
-import { measureSpecOf } from '../measure.js'
+import { constantRatioMeasureText, describeMeasure, measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
 import { refusalScene } from '../refusal.js'
@@ -222,6 +222,24 @@ describe("a comment's prose through the core", () => {
     const refused = { code: 'malformed', reason: 'host-measure' } as const
     const drawn = lay(() => ({ refused }))
     expect(drawn.scene).toEqual(refusalScene(refused, { measure, mode: 'light', maxWidth: 260 }))
+  })
+
+  it('draws a refusal the host measurer caused without asking that measurer again', () => {
+    const refused = { code: 'malformed', reason: 'host-measure' } as const
+    const failing = describeMeasure(
+      () => {
+        throw new Error('no canvas context')
+      },
+      { kind: 'host' },
+    )
+    const { core } = coreOf(() => ({ refused }))
+    const scene = layoutCommentDocument(prose, { measure: failing, maxWidth: 260, core })
+    const drawn = refusalScene(refused, {
+      measure: constantRatioMeasureText,
+      mode: 'light',
+      maxWidth: 260,
+    })
+    expect(scene).toEqual(drawn)
   })
 
   it('throws what the core throws, and an answer a comment cannot have', () => {

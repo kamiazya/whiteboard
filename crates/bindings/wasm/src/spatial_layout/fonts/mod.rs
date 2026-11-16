@@ -5,7 +5,7 @@
 //! `register_layout_fonts(bytes, faces)` reads `faces` (the value wire of
 //! [`crate::json_canvas_wire`]: a list of `{family, bold, italic, from, to}`,
 //! each a range of `bytes`), keeps the faces the reader can read and a copy of
-//! `bytes` in this instance and answers `["ok", handle]`, or
+//! their bytes alone in this instance and answers `["ok", handle]`, or
 //! `["refused", code, class]` for an input past its caps or one that is not
 //! faces. A face the reader cannot read (a WOFF, a collection, one past
 //! [`whiteboard_canvas_render::sfnt::MAX_BYTES`]) is dropped rather than refusing the rest (owner
@@ -64,17 +64,22 @@ pub(crate) struct Fonts {
     held: Vec<Held>,
 }
 
-/// The faces of `faces` the reader can read, each a range of `bytes`; a range
+/// The faces of `faces` the reader can read, over a copy of only their bytes,
+/// each range moved to where its face now sits. A face dropped here keeps none
+/// of its bytes, so it takes nothing from what the instance may hold. A range
 /// outside `bytes` is no face of these bytes, and refused.
-fn readable(bytes: &[u8], faces: Vec<Face>) -> Result<Vec<Face>, Refusal> {
+fn readable(bytes: &[u8], faces: Vec<Face>) -> Result<(Vec<u8>, Vec<Face>), Refusal> {
+    let mut kept = Vec::new();
     let mut read = Vec::with_capacity(faces.len());
     for face in faces {
         let data = bytes.get(face.from..face.to).ok_or(("malformed", "font"))?;
         if Sfnt::parse(data).is_ok() {
-            read.push(face);
+            let from = kept.len();
+            kept.extend_from_slice(data);
+            read.push(Face { from, to: kept.len(), ..face });
         }
     }
-    Ok(read)
+    Ok((kept, read))
 }
 
 /// The measurer over `faces`, each a range of `bytes` that was read when it
@@ -102,7 +107,7 @@ impl Fonts {
         self.held.iter().fold(0, |sum, held| sum.saturating_add(cost(&held.bytes, &held.faces)))
     }
 
-    /// Holds `faces` over a copy of `bytes`, answering the handle that names them.
+    /// Holds `faces` over a copy of the bytes of those it reads, answering the handle that names them.
     pub(crate) fn register(&mut self, bytes: &[u8], faces: Vec<Face>) -> Result<u32, Refusal> {
         if faces.len() > MAX_FACES {
             return Err(("input-too-large", "faces"));
@@ -118,13 +123,13 @@ impl Fonts {
         if self.held.len() >= MAX_HANDLES {
             return Err(("input-too-large", "handles"));
         }
-        if self.held_bytes().saturating_add(cost(bytes, &faces)) > MAX_HELD_BYTES {
+        let (bytes, faces) = readable(bytes, faces)?;
+        if self.held_bytes().saturating_add(cost(&bytes, &faces)) > MAX_HELD_BYTES {
             return Err(("input-too-large", "held"));
         }
-        let faces = readable(bytes, faces)?;
         let handle = self.next;
         self.next = handle.checked_add(1).ok_or(("input-too-large", "handles"))?;
-        self.held.push(Held { handle, faces, bytes: bytes.to_vec() });
+        self.held.push(Held { handle, faces, bytes });
         Ok(handle)
     }
 

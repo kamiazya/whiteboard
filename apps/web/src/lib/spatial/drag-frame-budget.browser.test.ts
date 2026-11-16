@@ -64,7 +64,7 @@ function countedCore(core: WebCore) {
   const layout: CanvasLayoutCore = {
     layoutSpatialCanvas(request, highlight, measure, cache) {
       const answer = core.layoutSpatialCanvas(request, highlight, measure, cache)
-      if (!('declined' in answer)) tally.answered += 1
+      if (!('refused' in answer)) tally.answered += 1
       return answer
     },
   }
@@ -78,7 +78,7 @@ function countedQueries(core: WebCore) {
   const query: QueryLayoutCore = {
     layoutQuery(request, highlight, measure) {
       const answer = core.layoutQuery(request, highlight, measure)
-      if (!('declined' in answer)) tally.answered += 1
+      if (!('refused' in answer)) tally.answered += 1
       return answer
     },
   }

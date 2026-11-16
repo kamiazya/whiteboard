@@ -158,9 +158,10 @@ fn an_instance_holds_a_bounded_count_of_faces_registrations_and_bytes() {
     assert!(fonts.measurer(3).is_none());
     assert!(fonts.measurer(4).is_some());
     // Handle 1 holds Roboto and its one face's family, "F".
-    let past = MAX_HELD_BYTES - (ROBOTO.len() + 1) + 1;
-    assert_eq!(fonts.register(&vec![0; past], Vec::new()), Err(("input-too-large", "held")));
-    assert!(fonts.register(&vec![0; past - 1], Vec::new()).is_ok());
+    let past = MAX_HELD_BYTES - (ROBOTO.len() + 1) - len + 1;
+    let named = |n: usize| vec![Face { family: "F".repeat(n), ..face(0, len) }];
+    assert_eq!(fonts.register(ROBOTO, named(past)), Err(("input-too-large", "held")));
+    assert!(fonts.register(ROBOTO, named(past - 1)).is_ok());
 }
 
 #[test]
@@ -170,9 +171,27 @@ fn a_faces_family_is_held_with_the_bytes() {
     let room = MAX_HELD_BYTES - ROBOTO.len();
     assert_eq!(fonts.register(ROBOTO, vec![named(room + 1)]), Err(("input-too-large", "held")));
     assert_eq!(fonts.register(ROBOTO, vec![named(room)]), Ok(0));
-    assert_eq!(fonts.register(&[0], Vec::new()), Err(("input-too-large", "held")));
+    let one = || vec![face(0, ROBOTO.len())];
+    assert_eq!(fonts.register(ROBOTO, one()), Err(("input-too-large", "held")));
     assert!(fonts.release(0));
-    assert_eq!(fonts.register(&[0], Vec::new()), Ok(1));
+    assert_eq!(fonts.register(ROBOTO, one()), Ok(1));
+}
+
+#[test]
+fn a_dropped_face_holds_none_of_the_instances_bytes() {
+    let mut fonts = Fonts::new();
+    let mut bytes = vec![0_u8; sfnt::MAX_BYTES + 1];
+    let at = bytes.len();
+    bytes.extend_from_slice(ROBOTO);
+    let one = vec![face(0, at), face(at, bytes.len())];
+    assert_eq!(fonts.register(&bytes, one), Ok(0));
+    assert!(fonts.measurer(0).is_some_and(|measurer| measurer.has_family("F")));
+    // Handle 0 holds Roboto and one family name, "F", and not the face it dropped.
+    let named = Face {
+        family: "F".repeat(MAX_HELD_BYTES - 2 * (ROBOTO.len() + 1)),
+        ..face(0, ROBOTO.len())
+    };
+    assert_eq!(fonts.register(ROBOTO, vec![named]), Ok(1));
 }
 
 #[test]
