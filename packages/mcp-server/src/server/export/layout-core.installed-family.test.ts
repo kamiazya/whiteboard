@@ -1,8 +1,10 @@
 // A daemon with a family the user installed (ADR-0012) hands the Rust core the
 // faces it measures with, the installed ones beside the vendored four, so a
 // canvas drawn in that family is laid out by the core exactly as the
-// TypeScript lays it out. A face the core's reader cannot read declines the
-// whole layout to the TypeScript, at debug level and never as a disagreement.
+// TypeScript lays it out. A face the core's reader cannot read is dropped
+// when it is registered (owner decision q81, D7g): the core still lays the
+// board out, declares that family nowhere, and reports it as `font-missing`,
+// which the export logs as a warning while the board draws in Roboto.
 
 import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
@@ -99,34 +101,40 @@ describe.runIf(built)('a family the user installed, under the Rust layout', () =
   })
 
   it.each([
-    ['a WOFF under a .ttf name', woffOf(syntheticFont(CARRIED, 'Yomogi')), 'font'],
-    ['a cmap that repeats a code point', syntheticFont(TEXT, 'Yomogi'), 'font'],
+    ['a WOFF under a .ttf name', woffOf(syntheticFont(CARRIED, 'Yomogi'))],
+    ['a cmap that repeats a code point', syntheticFont(TEXT, 'Yomogi')],
     [
       'a face past the core’s 32 MiB per face',
       Buffer.concat([syntheticFont(CARRIED, 'Yomogi'), Buffer.alloc(32 * 1024 * 1024 + 1)]),
-      'face',
     ],
-  ])('stays with the TypeScript for %s, reported at debug level', async (_, bytes, reason) => {
+  ])('lays out with %s dropped, drawn in Roboto and reported missing', async (_, bytes) => {
     const fontsDir = await fontsDirWith({ 'yomogi.ttf': bytes })
-    const { core, answers } = await recordingCore()
+    const { core, faces, answers } = await recordingCore()
     const capture = captureLogsForTests('debug')
     try {
       const svg = await renderSpatialCanvasToSvg(sketched, fontsDir, { style: 'document', core })
       await renderSpatialCanvasToSvg(sketched, fontsDir, { style: 'document', core })
 
-      expect(answers).toEqual([`declined:${reason}`, `declined:${reason}`])
-      expect(svg.svg).toContain('font-family="Yomogi"')
-      expect(svg.svg).toBe(
-        (await renderSpatialCanvasToSvg(sketched, fontsDir, { style: 'document' })).svg,
+      // The core answers; it was handed the face, and dropped it itself.
+      expect(answers).toEqual(['laid out', 'laid out'])
+      expect(faces[0]).toEqual([...ROBOTO, 'Yomogi false false'])
+      // The theme's family is declared nowhere: the board is drawn in the vendored faces.
+      expect(svg.svg).not.toContain('font-family="Yomogi"')
+      expect(svg.svg).toMatch(/font-family="Roboto[",]/)
+      const missing = capture.records.filter(
+        (r) =>
+          r.msg ===
+          'theme names a font family this export cannot measure; declaring the bundled one',
       )
+      expect(missing.map((r) => [r.level, r.data])).toEqual([
+        ['warning', { family: 'Yomogi' }],
+        ['warning', { family: 'Yomogi' }],
+      ])
+      expect(capture.records.filter((r) => r.level === 'warning')).toHaveLength(2)
       const unanswered = capture.records.filter(
         (r) => r.msg === 'the Rust core did not answer this layout',
       )
-      expect(unanswered.map((r) => r.data)).toMatchObject([
-        { kind: 'declined', reason, count: 1 },
-        { kind: 'declined', reason, count: 2 },
-      ])
-      expect(capture.records.filter((r) => r.level === 'warning')).toEqual([])
+      expect(unanswered).toEqual([])
     } finally {
       capture.restore()
     }
