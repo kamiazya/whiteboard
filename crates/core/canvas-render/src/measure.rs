@@ -79,8 +79,7 @@ pub trait Measure {
     /// be the measured one), so a measurer that measures every family it is
     /// asked about keeps the default; one reading a table of faces answers from
     /// its faces.
-    fn has_family(&self, family: &str) -> bool {
-        let _ = family;
+    fn has_family(&self, _family: &str) -> bool {
         true
     }
 }
