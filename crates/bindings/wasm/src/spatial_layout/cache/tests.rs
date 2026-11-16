@@ -48,11 +48,19 @@ fn key(k: usize) -> String {
     format!("{k}{}", "x".repeat(LENGTHS[k] - 1))
 }
 
+/// A key, the three short ones three times as likely as the two long ones: the
+/// body cap evicts only once four bodies fit within the byte cap together,
+/// which only the short keys can do, so an even draw let the long keys reach
+/// the byte cap first and left the body cap's floor thinly met.
+fn key_index() -> impl Strategy<Value = usize> {
+    prop_oneof![3 => 0_usize..3, 1 => 3..LENGTHS.len()]
+}
+
 fn op() -> impl Strategy<Value = Op> {
     // Two surfaces, so a step mostly lands on something kept.
     prop_oneof![
-        3 => (0_u32..2, 0..LENGTHS.len()).prop_map(|(s, k)| Op::Get(s, k)),
-        4 => (0_u32..2, 0..LENGTHS.len()).prop_map(|(s, k)| Op::Set(s, k)),
+        3 => (0_u32..2, key_index()).prop_map(|(s, k)| Op::Get(s, k)),
+        4 => (0_u32..2, key_index()).prop_map(|(s, k)| Op::Set(s, k)),
         1 => (0_u32..2).prop_map(Op::Release),
     ]
 }
@@ -256,22 +264,16 @@ fn a_layout_asking_for_fences_keeps_every_body_but_the_fence() {
 }
 
 #[test]
-fn a_declined_layout_keeps_nothing() {
+fn a_declined_or_refused_layout_keeps_nothing() {
     let surface = 0x5150_0003;
     // A body past the parser's bounds.
     let deep = format!("{} x", ">".repeat(64));
-    let refused = lay_board(surface, beside(&deep), None, &[]);
-    assert_eq!(refused.get(0), Some(&json!("declined")), "{refused}");
-    // More fragment markup than a layout may place.
-    let third = "a".repeat(super::super::MAX_PLACED_BYTES / 3 + 1);
-    let row = s(vec![json!("math:x"), m(&[("svg", json!(third))])]);
-    let thrice = ["$$\nx\n$$"; 3].join("\n\n");
-    let over = lay_board(surface, beside(&thrice), None, &[("fragments", s(vec![row]))]);
-    assert_eq!(over, json!(["declined", "fragments"]));
+    let declined = lay_board(surface, beside(&deep), None, &[]);
+    assert_eq!(declined.get(0), Some(&json!("declined")), "{declined}");
     // A host that did not answer.
     let host = m(&[("kind", json!("host"))]);
     let silent = lay_board(surface, beside("x"), Some(&Silent), &[("measure", host)]);
-    assert_eq!(silent, json!(["declined", "host-measure"]));
+    assert_eq!(silent, json!(["refused", "malformed", "host-measure"]));
     assert_eq!(resident().kept_by(surface), 0);
 }
 

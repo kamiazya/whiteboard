@@ -85,17 +85,31 @@ describe('the whole layout over the artifact', () => {
     expect(none).not.toHaveProperty('fragmentsAsked')
   })
 
-  it('declines what the core declined and a request past the cap', () => {
-    expect(layoutSpatialCanvas(glueOf('["declined","highlight"]').glue, errors, fake)).toEqual({
-      declined: 'highlight',
+  it('declines what the core declined', () => {
+    expect(layoutSpatialCanvas(glueOf('["declined","body"]').glue, errors, fake)).toEqual({
+      declined: 'body',
     })
-    const tooMany = '["refused","input-too-large","too-many-elements"]'
-    expect(layoutSpatialCanvas(glueOf(tooMany).glue, errors, fake)).toEqual({
-      declined: 'too-many-elements',
-    })
+  })
+
+  it('reads a refusal a host draws: a cap passed, a number with no spelling, a silent host', () => {
+    const refusals = [
+      ['input-too-large', 'too-many-elements'],
+      ['input-too-large', 'referenced-elements'],
+      ['input-too-large', 'bodies'],
+      ['malformed', 'non-finite'],
+      ['malformed', 'host-measure'],
+    ] as const
+    for (const [code, reason] of refusals) {
+      const answer = JSON.stringify(['refused', code, reason])
+      expect(layoutSpatialCanvas(glueOf(answer).glue, errors, fake), answer).toEqual({
+        refused: { code, reason },
+      })
+    }
     const { glue, calls } = glueOf('[]')
     const big = { ...fake, body: 'x'.repeat(LAYOUT_SPATIAL_CANVAS_CAPS.maxBytes) }
-    expect(layoutSpatialCanvas(glue, errors, big)).toEqual({ declined: 'too-large' })
+    expect(layoutSpatialCanvas(glue, errors, big)).toEqual({
+      refused: { code: 'input-too-large', reason: 'too-large' },
+    })
     expect(calls).toEqual([])
   })
 
@@ -203,11 +217,11 @@ describe('a fence the core asks for', () => {
     }
   })
 
-  it('declines a second call the tokens carry past the cap', () => {
+  it('refuses a second call the tokens carry past the cap', () => {
     const big = { ...fake, body: 'x'.repeat(LAYOUT_SPATIAL_CANVAS_CAPS.maxBytes - 200) }
     const { glue, sent } = glueAnswering(`["needs",{"code":[["js","${'y'.repeat(300)}"]]}]`, OK)
     expect(layoutSpatialCanvas(glue, errors, big as LayoutRequest, tokens)).toEqual({
-      declined: 'too-large',
+      refused: { code: 'input-too-large', reason: 'too-large' },
     })
     expect(sent).toHaveLength(1)
   })

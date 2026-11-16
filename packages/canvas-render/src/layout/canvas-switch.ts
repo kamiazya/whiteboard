@@ -20,8 +20,9 @@ import type {
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
+import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
-import { bundledThemeModeOf } from '../theme/spatial-theme.js'
+import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import { usesFragmentTable } from './fragment-table.js'
@@ -255,7 +256,10 @@ export const valueAt = (root: unknown, path: string): unknown =>
  * TypeScript with the core run beside it and any difference reported. What the
  * request gate skips and what the core declines (each reported by its class,
  * so a run can count them), and a core that throws (reported), the
- * TypeScript answers.
+ * TypeScript answers. What the core REFUSES (owner decision q81, D7) is
+ * counted as a decline by its class too; under `rust` it is drawn as the
+ * refusal (`refusalScene`) and told to `onRefused`, and under `differential`
+ * the TypeScript answers it, as the oracle.
  */
 export function layoutThroughCore(
   stored: SpatialCanvas,
@@ -286,6 +290,11 @@ export function layoutThroughCore(
     core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: answer.declined })
     return ts(options)
   }
+  if ('refused' in answer) {
+    const { refused } = answer
+    core.onMismatch?.({ fn: 'layoutSpatialCanvas', kind: 'declined', reason: refused.reason })
+    return impl === 'rust' ? drawnRefusal(refused, stored, request.mode, options) : ts(options)
+  }
   if (impl === 'rust') {
     for (const event of answer.degradations) options.onDegrade?.(hostEvent(event))
     if (answer.fragmentsAsked?.length) options.onFragmentsAsked?.(answer.fragmentsAsked)
@@ -294,9 +303,41 @@ export function layoutThroughCore(
   return compared(answer, request, options, ts)
 }
 
+/** A refusal as `rust` answers it: told to `onRefused`, and drawn where the board's boxes are. */
+function drawnRefusal(
+  refused: LayoutRefusal,
+  stored: SpatialCanvas,
+  mode: SpatialThemeMode,
+  options: SpatialLayoutOptions,
+): LaidOutCanvas {
+  options.onRefused?.(refused)
+  const at = topLeftOf(stored)
+  const scene = refusalScene(refused, {
+    measure: options.measure,
+    mode,
+    ...(at === undefined ? {} : { at }),
+  })
+  return { scene, anchors: new Map() }
+}
+
+/**
+ * Where a board's boxes begin, its least x and y; none for a board with no
+ * box placed at a finite point. A fold rather than a spread: a refused board
+ * is a large one, and spreading its nodes as arguments is bounded by the
+ * engine's argument limit.
+ */
+function topLeftOf(canvas: SpatialCanvas): { x: number; y: number } | undefined {
+  let at: { x: number; y: number } | undefined
+  for (const { x, y } of canvas.nodes) {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+    at = at === undefined ? { x, y } : { x: Math.min(at.x, x), y: Math.min(at.y, y) }
+  }
+  return at
+}
+
 /** `differential`'s answer: the TypeScript's, with the core's compared beside it and a difference reported. */
 function compared(
-  answer: Exclude<ReturnType<CanvasLayoutCore['layoutSpatialCanvas']>, { declined: string }>,
+  answer: Extract<ReturnType<CanvasLayoutCore['layoutSpatialCanvas']>, { scene: unknown }>,
   request: CanvasLayoutRequest,
   options: SpatialLayoutOptions,
   ts: (options: SpatialLayoutOptions) => LaidOutCanvas,

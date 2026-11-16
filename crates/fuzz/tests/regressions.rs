@@ -209,7 +209,7 @@ fn the_host_seed_is_a_layout_the_stand_in_measures() {
     let answer = layout_with_host(&request, Some(&StandInHost));
     assert!(answer.starts_with("[\"ok\""), "{answer:.120}");
     let unmeasured = layout_with_host(&request, None);
-    assert_eq!(unmeasured, "[\"declined\",\"host-measure\"]");
+    assert_eq!(unmeasured, "[\"refused\",\"malformed\",\"host-measure\"]");
 }
 
 #[test]

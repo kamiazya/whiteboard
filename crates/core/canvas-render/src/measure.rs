@@ -73,6 +73,15 @@ pub trait Measure {
         let VerticalMetrics { ascent, descent, line_gap } = self.vertical_metrics(font);
         TextMetrics { advance_width: self.advance_width(text, font), ascent, descent, line_gap }
     }
+
+    /// Whether a text in `family` is measured in that family's own face. A
+    /// layout declares a family only where this holds (the declared family must
+    /// be the measured one), so a measurer that measures every family it is
+    /// asked about keeps the default; one reading a table of faces answers from
+    /// its faces.
+    fn has_family(&self, _family: &str) -> bool {
+        true
+    }
 }
 
 impl<M: Measure + ?Sized> Measure for &M {
@@ -88,6 +97,10 @@ impl<M: Measure + ?Sized> Measure for &M {
     // answers whole metrics per text keeps doing so behind a reference.
     fn measure(&self, text: &str, font: &FontDescriptor) -> TextMetrics {
         (**self).measure(text, font)
+    }
+
+    fn has_family(&self, family: &str) -> bool {
+        (**self).has_family(family)
     }
 }
 

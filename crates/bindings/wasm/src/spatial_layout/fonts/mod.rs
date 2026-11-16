@@ -4,9 +4,13 @@
 //!
 //! `register_layout_fonts(bytes, faces)` reads `faces` (the value wire of
 //! [`crate::json_canvas_wire`]: a list of `{family, bold, italic, from, to}`,
-//! each a range of `bytes`), parses every face, keeps a copy of `bytes` in
-//! this instance and answers `["ok", handle]`, or `["refused", code, class]`
-//! for an input past its caps or one that is not faces of fonts.
+//! each a range of `bytes`), keeps the faces the reader can read and a copy of
+//! their bytes alone in this instance and answers `["ok", handle]`, or
+//! `["refused", code, class]` for an input past its caps or one that is not
+//! faces. A face the reader cannot read (a WOFF, a collection, one past
+//! [`whiteboard_canvas_render::sfnt::MAX_BYTES`]) is dropped rather than refusing the rest (owner
+//! decision q81, D7g): a layout then declares its family nowhere, so a theme
+//! naming it reports `font-missing` and draws in the faces that were read.
 //! `release_layout_fonts(handle)` forgets them. A handle is never reused, so
 //! one released, or minted by an instance since recreated, answers a layout
 //! `["refused", "malformed", "font-handle"]` and the host registers again.
@@ -21,9 +25,9 @@
 use std::sync::{Mutex, MutexGuard, PoisonError};
 
 use wasm_bindgen::prelude::wasm_bindgen;
-use whiteboard_canvas_render::font_measure::{FontError, FontTableMeasurer};
+use whiteboard_canvas_render::font_measure::FontTableMeasurer;
 use whiteboard_canvas_render::measure::FontStyle;
-use whiteboard_canvas_render::sfnt::SfntError;
+use whiteboard_canvas_render::sfnt::Sfnt;
 
 use super::answer::refused;
 use super::request::{Face, face_of};
@@ -60,19 +64,32 @@ pub(crate) struct Fonts {
     held: Vec<Held>,
 }
 
-/// The measurer over `faces`, each a range of `bytes`.
-fn measurer<'b>(bytes: &'b [u8], faces: &[Face]) -> Result<FontTableMeasurer<'b>, Refusal> {
-    let mut measurer = FontTableMeasurer::new();
+/// The faces of `faces` the reader can read, over a copy of only their bytes,
+/// each range moved to where its face now sits. A face dropped here keeps none
+/// of its bytes, so it takes nothing from what the instance may hold. A range
+/// outside `bytes` is no face of these bytes, and refused.
+fn readable(bytes: &[u8], faces: Vec<Face>) -> Result<(Vec<u8>, Vec<Face>), Refusal> {
+    let mut kept = Vec::new();
+    let mut read = Vec::with_capacity(faces.len());
     for face in faces {
-        let style = if face.italic { FontStyle::Italic } else { FontStyle::Normal };
         let data = bytes.get(face.from..face.to).ok_or(("malformed", "font"))?;
-        measurer =
-            measurer.with_face(&face.family, face.bold, style, data).map_err(|e| match e {
-                FontError(SfntError::TooLarge) => ("input-too-large", "face"),
-                FontError(_) => ("malformed", "font"),
-            })?;
+        if Sfnt::parse(data).is_ok() {
+            let from = kept.len();
+            kept.extend_from_slice(data);
+            read.push(Face { from, to: kept.len(), ..face });
+        }
     }
-    Ok(measurer)
+    Ok((kept, read))
+}
+
+/// The measurer over `faces`, each a range of `bytes` that was read when it
+/// was registered, so none fails here.
+fn measurer<'b>(bytes: &'b [u8], faces: &[Face]) -> Option<FontTableMeasurer<'b>> {
+    faces.iter().try_fold(FontTableMeasurer::new(), |measurer, face| {
+        let style = if face.italic { FontStyle::Italic } else { FontStyle::Normal };
+        let data = bytes.get(face.from..face.to)?;
+        measurer.with_face(&face.family, face.bold, style, data).ok()
+    })
 }
 
 /// What a registration holds: its bytes, and each face's family, which is
@@ -90,7 +107,7 @@ impl Fonts {
         self.held.iter().fold(0, |sum, held| sum.saturating_add(cost(&held.bytes, &held.faces)))
     }
 
-    /// Holds `faces` over a copy of `bytes`, answering the handle that names them.
+    /// Holds `faces` over a copy of the bytes of those it reads, answering the handle that names them.
     pub(crate) fn register(&mut self, bytes: &[u8], faces: Vec<Face>) -> Result<u32, Refusal> {
         if faces.len() > MAX_FACES {
             return Err(("input-too-large", "faces"));
@@ -106,13 +123,13 @@ impl Fonts {
         if self.held.len() >= MAX_HANDLES {
             return Err(("input-too-large", "handles"));
         }
-        if self.held_bytes().saturating_add(cost(bytes, &faces)) > MAX_HELD_BYTES {
+        let (bytes, faces) = readable(bytes, faces)?;
+        if self.held_bytes().saturating_add(cost(&bytes, &faces)) > MAX_HELD_BYTES {
             return Err(("input-too-large", "held"));
         }
-        measurer(bytes, &faces)?;
         let handle = self.next;
         self.next = handle.checked_add(1).ok_or(("input-too-large", "handles"))?;
-        self.held.push(Held { handle, faces, bytes: bytes.to_vec() });
+        self.held.push(Held { handle, faces, bytes });
         Ok(handle)
     }
 
@@ -126,7 +143,7 @@ impl Fonts {
     /// The measurer a handle names, or `None` when it names no registration.
     pub(crate) fn measurer(&self, handle: u32) -> Option<FontTableMeasurer<'_>> {
         let held = self.held.iter().find(|held| held.handle == handle)?;
-        measurer(&held.bytes, &held.faces).ok()
+        measurer(&held.bytes, &held.faces)
     }
 }
 

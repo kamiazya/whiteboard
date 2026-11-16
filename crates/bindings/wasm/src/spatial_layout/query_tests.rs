@@ -207,13 +207,16 @@ fn a_size_past_its_caps_is_refused_and_one_it_cannot_answer_declined() {
 }
 
 #[test]
-fn a_host_measured_query_is_measured_by_the_host_or_declined() {
+fn a_host_measured_query_is_measured_by_the_host_or_refused() {
     let host_measure = m(&[("kind", json!("host"))]);
     let asked = size_request("hello", &[("measure", host_measure.clone())]);
     let text = asked.to_string();
-    assert_eq!(query_with_host(&text, None), r#"["declined","host-measure"]"#);
+    assert_eq!(query_with_host(&text, None), r#"["refused","malformed","host-measure"]"#);
     let refusing = Counting { refuse: true, ..Counting::default() };
-    assert_eq!(query_with_host(&text, Some(&refusing)), r#"["declined","host-measure"]"#);
+    assert_eq!(
+        query_with_host(&text, Some(&refusing)),
+        r#"["refused","malformed","host-measure"]"#
+    );
     let host = Counting::default();
     assert!(query_with_host(&text, Some(&host)).starts_with(r#"["ok",["#));
     assert!(host.asked.get() > 0, "the host measured the node's text");
@@ -243,6 +246,21 @@ fn an_edge_layer_past_the_canvas_caps_is_refused() {
     assert_eq!(none, json!(["ok", [], []]), "a canvas with no edge draws no edge layer");
     let stray = edges(board("x"), &[("floor", json!("ratio"))]);
     assert_eq!(ask(&stray), refused("malformed", "request"));
+    let edge = whiteboard_model::spatial::CanvasEdge {
+        id: "e".to_owned(),
+        from: whiteboard_model::spatial::EdgeEnd { node: "a".to_owned(), ..Default::default() },
+        to: whiteboard_model::spatial::EdgeEnd { node: "b".to_owned(), ..Default::default() },
+        ..Default::default()
+    };
+    let far = SpatialCanvas {
+        nodes: vec![
+            whiteboard_model::spatial::SpatialNode { x: f64::INFINITY, ..text_node("a", "a") },
+            text_node("b", "b"),
+        ],
+        edges: vec![edge],
+        ..SpatialCanvas::default()
+    };
+    assert_eq!(ask(&edges(canvas_json(&far), &[])), refused("malformed", "non-finite"));
 }
 
 #[test]
@@ -277,10 +295,14 @@ fn a_query_at_each_cap_is_read_and_one_past_it_refused() {
     };
     assert_eq!(runs(4 * MAX_ELEMENTS)[0], json!("ok"));
     assert_eq!(runs(4 * MAX_ELEMENTS + 1), refused("input-too-large", "runs"));
-    // A node's body at the bodies cap, and a table at the fragment cap, are laid out.
+    // A node's body at the bodies cap is read, past the parser's own bound
+    // (declined, D7a's), and one at that bound and a table at the fragment cap
+    // are laid out.
     let words = "ab ".repeat(MAX_BODY_BYTES / 3);
     assert_eq!(words.len(), MAX_BODY_BYTES);
-    assert_eq!(ask(&size_request(&words, &[]))[0], json!("ok"));
+    assert_eq!(ask(&size_request(&words, &[])), json!(["declined", "body"]));
+    let parsed = "ab ".repeat(786_432 / 3);
+    assert_eq!(ask(&size_request(&parsed, &[]))[0], json!("ok"));
     let row = s(vec![
         json!("math:x"),
         m(&[("svg", json!("<g/>")), ("width", json!(1)), ("height", json!(1))]),

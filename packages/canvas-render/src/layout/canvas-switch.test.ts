@@ -8,9 +8,10 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { CanvasLayoutCore, CanvasLayoutRequest, CoreDegradation } from '../canvas-core.js'
 import { highlightCode } from '../highlight/lowlight.js'
-import { describeMeasure } from '../measure.js'
+import { constantRatioMeasureText, describeMeasure } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
+import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { canvasLayoutRequest, firstDifference } from './canvas-switch.js'
@@ -128,6 +129,69 @@ describe('the whole layout through the core switch', () => {
     expect(laid.scene).toEqual(reference.scene)
     expect(mismatches).toEqual([{ fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'body' }])
     expect(events.map((e) => e.kind)).toEqual(['unknown-node-kind'])
+  })
+
+  it('draws what the core refuses as the refusal under rust, and tells onRefused', () => {
+    const refused: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
+    const heard: LayoutRefusal[] = []
+    for (const mode of ['light', 'dark'] as const) {
+      const { laid, mismatches, events } = run('rust', () => ({ refused }), {
+        appearance: createSpatialTheme({ mode }),
+        onRefused: (refusal) => heard.push(refusal),
+      })
+      expect(laid.scene).toEqual(refusalScene(refused, { measure, mode }))
+      expect(laid.anchors.size).toBe(0)
+      expect(events).toEqual([])
+      expect(mismatches).toEqual([
+        { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'too-many-elements' },
+      ])
+    }
+    expect(heard).toEqual([refused, refused])
+  })
+
+  it('draws a refusal the host measurer caused without asking that measurer again', () => {
+    const refused: LayoutRefusal = { code: 'malformed', reason: 'host-measure' }
+    const failing = describeMeasure(
+      () => {
+        throw new Error('no canvas context')
+      },
+      { kind: 'host' },
+    )
+    const { laid } = run('rust', () => ({ refused }), { measure: failing })
+    const drawn = refusalScene(refused, { measure: constantRatioMeasureText, mode: 'light' })
+    expect(laid.scene).toEqual(drawn)
+  })
+
+  it('draws the refusal where the board is, at the top-left of its boxes', () => {
+    const refused: LayoutRefusal = { code: 'input-too-large', reason: 'too-many-elements' }
+    const away: SpatialCanvas = {
+      nodes: [
+        textNode({ id: 'a', x: 900, y: 300, width: 120, height: 60, text: 'a' }),
+        textNode({ id: 'b', x: 700, y: 500, width: 120, height: 60, text: 'b' }),
+        textNode({ id: 'c', x: 800, y: 100, width: 120, height: 60, text: 'c' }),
+        textNode({ id: 'n', x: Number.NaN, y: -1e9, width: 120, height: 60, text: 'n' }),
+      ],
+      edges: [],
+    }
+    const { core } = coreOf('rust', () => ({ refused }))
+    const laid = layoutSpatialCanvasWithAnchors(away, { ...base, core })
+    const at = { x: 700, y: 100 }
+    expect(laid.scene).toEqual(refusalScene(refused, { measure, mode: 'light', at }))
+    const empty = layoutSpatialCanvasWithAnchors({ nodes: [], edges: [] }, { ...base, core })
+    expect(empty.scene).toEqual(refusalScene(refused, { measure, mode: 'light' }))
+  })
+
+  it('answers from the TypeScript what the core refuses under differential, as its oracle', () => {
+    const heard: LayoutRefusal[] = []
+    const refused: LayoutRefusal = { code: 'malformed', reason: 'non-finite' }
+    const { laid, mismatches } = run('differential', () => ({ refused }), {
+      onRefused: (refusal) => heard.push(refusal),
+    })
+    expect(laid.scene).toEqual(reference.scene)
+    expect(mismatches).toEqual([
+      { fn: 'layoutSpatialCanvas', kind: 'declined', reason: 'non-finite' },
+    ])
+    expect(heard).toEqual([])
   })
 
   it('reports a layout the request gate skips by its class, asking the core nothing', () => {

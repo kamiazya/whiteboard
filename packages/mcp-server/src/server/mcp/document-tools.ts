@@ -1,9 +1,14 @@
 import { CANVAS_VIEW_PICTURE_META_KEY } from '@kamiazya/whiteboard-canvas-render'
-import { canvasViewPicture, createServer, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import {
+  canvasViewPicture,
+  createServer,
+  REFUSAL_NOTE,
+  type ServerDeps,
+} from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { gatedByMembership } from '../security/mcp-caller.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
-import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
+import { registerToolWithAnnotations, structuredJsonResult, withTextNote } from './tool-support.js'
 
 /**
  * `canvas_view`'s answer: what the model reads, unchanged, and in `_meta` the
@@ -76,8 +81,8 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.canvasRenderSvg.inputSchema.parse(args)
-      const result = await tools.canvasRenderSvg.execute(parsed)
-      return structuredJsonResult(result)
+      const { [REFUSAL_NOTE]: note, ...output } = await tools.canvasRenderSvg.execute(parsed)
+      return withTextNote(structuredJsonResult(output), note)
     },
   )
 

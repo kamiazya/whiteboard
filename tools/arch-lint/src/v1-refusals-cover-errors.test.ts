@@ -64,6 +64,8 @@ const WORKSPACE_EDIT = 'raised by wb_workspace_edit batch ops; /api/v1 mounts no
 
 /** A class with no arm in create-server.ts, and why no /api/v1 operation can raise it. */
 const EXEMPT: Readonly<Record<string, string>> = {
+  Unmeasured:
+    "module-private to canvas-render's refusal.ts: raised and caught inside refusalScene to redraw a notice whose measurer failed by the ratio estimate, so it never leaves that function, let alone reaches /api/v1",
   FacetWriteCoreNotInstalled:
     'a wiring defect of the realm (no Rust core was installed, which the daemon refuses to boot without), never an input the caller can fix; it is the 500 it is, and the tool tests hold the named failure',
   CausalGapError:

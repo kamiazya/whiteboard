@@ -11,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
+import { REFUSAL_NOTE, refusalNote } from '../render/refusal-note.js'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, placeUnlessPlaced, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -102,6 +103,26 @@ async function render(
 }
 
 describe('wb_scene_render of a note and the markdown core', () => {
+  test('draws a note the core refuses as the notice, and says why beside the SVG', async () => {
+    const refused = { code: 'input-too-large', reason: 'bodies' } as const
+    const { core } = markingCore(() => ({ refused }))
+    const deps: ServerDeps = {
+      ...makeTestDeps({ documentStore: await workspace() }),
+      layoutCore: async () => core,
+    }
+    deps.documentIndex = (deps.documentStore as FakeDocumentStore).documentIndex
+    const { [REFUSAL_NOTE]: note, ...output } = await createCanvasRenderSvgTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      embedReferences: false,
+      comments: false,
+      style: 'clean',
+    })
+    expect(output.svg).not.toContain('Ship it')
+    expect(output.svg).toContain('Too much to draw here')
+    expect(note).toBe(refusalNote(refused))
+  })
+
   test('lays the note out through the core ServerDeps hands it', async () => {
     const { core, requests, reports } = markingCore(marked)
     const { svg } = await render(core)

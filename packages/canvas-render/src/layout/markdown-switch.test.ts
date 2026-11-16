@@ -6,9 +6,10 @@ import type {
   MarkdownLayoutAnswer,
   MarkdownNoteRequest,
 } from '../markdown-core.js'
-import { measureSpecOf } from '../measure.js'
+import { constantRatioMeasureText, describeMeasure, measureSpecOf } from '../measure.js'
 import { referenceSeams } from '../references/seams.js'
 import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
+import { refusalScene } from '../refusal.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
@@ -134,6 +135,21 @@ describe('a markdown note through the core switch', () => {
     expect(markdownLayoutRequest(body, { ...base, onFragmentsAsked: () => {} })).toMatchObject({
       fragments: [],
     })
+  })
+
+  it('draws a note the core refuses as the refusal at its width under rust', () => {
+    const refused = { code: 'input-too-large', reason: 'bodies' } as const
+    const heard: unknown[] = []
+    const drawn = run('rust', () => ({ refused }), {
+      mode: 'dark',
+      onRefused: (refusal) => heard.push(refusal),
+    })
+    expect(drawn.scene).toEqual(refusalScene(refused, { measure, mode: 'dark', maxWidth: 400 }))
+    expect(drawn.mismatches).toEqual([{ fn: 'layoutMarkdown', kind: 'declined', reason: 'bodies' }])
+    expect(heard).toEqual([refused])
+    const oracle = run('differential', () => ({ refused }), { onRefused: (r) => heard.push(r) })
+    expect(oracle.scene).toEqual(reference)
+    expect(heard).toHaveLength(1)
   })
 
   it('answers undefined for a section the core reports missing, as the TypeScript does', () => {
@@ -278,6 +294,34 @@ describe("a comment's prose through the core switch", () => {
     const differs = lay('differential', () => ({ scene: sceneOf, degradations: [] }))
     expect(differs.scene).toEqual(commentTs())
     expect(differs.mismatches.map((m) => [m.fn, m.kind])).toEqual([['layoutMarkdown', 'differs']])
+  })
+
+  it('draws a comment the core refuses as the refusal at its width under rust', () => {
+    const refused = { code: 'malformed', reason: 'host-measure' } as const
+    const drawn = lay('rust', () => ({ refused }))
+    expect(drawn.scene).toEqual(refusalScene(refused, { measure, mode: 'light', maxWidth: 260 }))
+    expect(drawn.mismatches).toEqual([
+      { fn: 'layoutMarkdown', kind: 'declined', reason: 'host-measure' },
+    ])
+    expect(lay('differential', () => ({ refused })).scene).toEqual(commentTs())
+  })
+
+  it('draws a refusal the host measurer caused without asking that measurer again', () => {
+    const refused = { code: 'malformed', reason: 'host-measure' } as const
+    const failing = describeMeasure(
+      () => {
+        throw new Error('no canvas context')
+      },
+      { kind: 'host' },
+    )
+    const { core } = coreOf('rust', () => ({ refused }))
+    const scene = layoutCommentDocument(prose, { measure: failing, maxWidth: 260, core })
+    const drawn = refusalScene(refused, {
+      measure: constantRatioMeasureText,
+      mode: 'light',
+      maxWidth: 260,
+    })
+    expect(scene).toEqual(drawn)
   })
 
   it('answers from the TypeScript what the core declines, throws on, or answers as a note', () => {

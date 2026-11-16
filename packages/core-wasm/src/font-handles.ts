@@ -117,9 +117,6 @@ export class FontHandles {
     if (kind === 'refused' && a === 'input-too-large' && typeof b === 'string') {
       return { declined: b }
     }
-    // Every range was placed above, so this names bytes the core's reader does
-    // not read (a WOFF that opentype.js inflates), which the TypeScript lays out.
-    if (kind === 'refused' && a === 'malformed' && b === 'font') return { declined: 'font' }
     const detail = kind === 'refused' && typeof b === 'string' ? b : 'answer'
     throw this.#errors.refused(OPERATION, 'malformed', detail)
   }

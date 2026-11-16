@@ -600,9 +600,27 @@ export interface SceneLegend {
   readonly uncarried: { readonly boxes: boolean; readonly edges: boolean }
 }
 
+/**
+ * Why a layout was refused rather than drawn (ADR-0054 step 7, owner decision
+ * q81): a request past one of the core's caps (`input-too-large`, `reason`
+ * naming the cap), a number no answer can spell or a host measurer that did
+ * not answer (`malformed`, `non-finite` or `host-measure`).
+ */
+export interface SceneRefusal {
+  readonly code: 'input-too-large' | 'malformed'
+  readonly reason: string
+}
+
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {
   readonly nodes: readonly SceneNode[]
   /** Present only when the board has something to say about its colour. */
   readonly legend?: SceneLegend
+  /**
+   * Present only on a scene drawn in place of a refused layout, whose nodes
+   * are the notice saying so. Data rather than identity, so a surface that
+   * draws the notice its own way (the editor, in screen space past its
+   * chrome) recognises it across a worker's structured clone.
+   */
+  readonly refusal?: SceneRefusal
 }

@@ -283,8 +283,10 @@ const FACE_SLOTS = ['regular', 'bold', 'italic', 'boldItalic'] as const
  * a descriptor naming no held one is measured in, then one face per installed
  * family, which the core's measurer answers every weight and style with as
  * `buildOpentypeMeasurer` does. A face the core's reader cannot read (a WOFF
- * opentype.js inflates) or one past its caps is the core's to decline, and
- * the TypeScript then lays the canvas out.
+ * opentype.js inflates, a collection) is dropped by the core, so a theme
+ * naming its family reports `font-missing` there and draws in Roboto; faces
+ * past the registration's caps together are the core's to decline, and the
+ * TypeScript then lays the canvas out.
  */
 async function describeFaces(
   measure: MeasureText,

@@ -13,6 +13,7 @@ import type { FragmentAsk, FragmentEntry } from './layout/nodes/fragment-ask.js'
 import type { MeasureSpec, MeasureText } from './measure.js'
 import type { LoadedReference } from './references/loaded-reference.js'
 import type { ReferenceExtra } from './references/wire.js'
+import type { LayoutRefusal } from './refusal.js'
 import type { SpatialGeometry } from './theme/spatial-geometry.js'
 import type { SpatialThemeMode } from './theme/spatial-theme.js'
 
@@ -89,10 +90,11 @@ export type CoreDegradation =
     }
 
 /**
- * The core's answer: the layout, or the class of what it declined to answer
- * because it could not answer it exactly as the TypeScript would (a body past
- * the parser's bounds, a request past its caps), which the TypeScript then
- * answers.
+ * The core's answer: the layout; what it refused (a request past its caps, a
+ * number its answer cannot spell, a host measurer that did not answer), which
+ * a surface draws as a refusal under `rust`; or the class of what it declined
+ * to answer because it could not answer it exactly as the TypeScript would (a
+ * body past the parser's bounds), which the TypeScript then answers.
  */
 type CanvasLayoutAnswer =
   | {
@@ -103,6 +105,7 @@ type CanvasLayoutAnswer =
       readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | { readonly declined: string }
+  | { readonly refused: LayoutRefusal }
 
 /**
  * The Rust core's one-call layout, as `@kamiazya/whiteboard-core-wasm`'s

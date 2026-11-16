@@ -1,6 +1,7 @@
 import type { RoutingCore } from '@kamiazya/whiteboard-canvas-render'
 import {
   constantRatioMeasureText,
+  refusalCopy,
   SPATIAL_THEME_FONT_FAMILY,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -14,6 +15,7 @@ import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-u
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
+import { REFUSAL_NOTE, refusalNote } from '../render/refusal-note.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -658,5 +660,65 @@ describe('wb_scene_render and the routing core', () => {
     })
     expect(asked).toBe(1)
     expect(result.svg).toContain('points="123,456 300,25"')
+  })
+})
+
+describe('wb_scene_render of a board the core refuses', () => {
+  test('draws the notice in place of the board and says why beside the SVG', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'kept out' })],
+        edges: [],
+      })
+    })
+    const refused = { code: 'input-too-large', reason: 'too-many-elements' } as const
+    const routing: RoutingCore = {
+      routeLayout: () => {
+        throw new Error('no edge is routed here')
+      },
+    }
+    const deps = {
+      ...(await makeDeps(store)),
+      layoutCore: async () => ({
+        routing,
+        layout: { layoutSpatialCanvas: () => ({ refused }) },
+        impl: { routeLayout: 'ts' as const, layoutSpatialCanvas: 'rust' as const },
+      }),
+    }
+    const input = {
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      comments: false,
+      style: 'clean' as const,
+    }
+    const { [REFUSAL_NOTE]: note, ...output } = await createCanvasRenderSvgTool(deps).execute(input)
+    expect(output.svg).toContain(refusalCopy(refused).title)
+    expect(output.svg).not.toContain('kept out')
+    expect(note).toBe(refusalNote(refused))
+    expect(note).toContain('too-many-elements')
+    // The words ride a symbol key: the structured output keeps its one shape.
+    expect(Object.keys(output).sort()).toEqual(['height', 'svg', 'width'])
+  })
+
+  test('says nothing beside an SVG the core drew', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [textNode({ id: 'a', x: 0, y: 0, width: 100, height: 50, text: 'a' })],
+        edges: [],
+      })
+    })
+    const { [REFUSAL_NOTE]: note } = await createCanvasRenderSvgTool(await makeDeps(store)).execute(
+      {
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        embedReferences: false,
+        comments: false,
+        style: 'clean',
+      },
+    )
+    expect(note).toBeUndefined()
   })
 })

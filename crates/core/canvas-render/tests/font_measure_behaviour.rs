@@ -191,3 +191,17 @@ fn the_wide_ranges_stop_exactly_at_their_edges() {
         assert!(!is_full_width_code_point(code), "{code:x}");
     }
 }
+
+#[test]
+fn a_measurer_holds_the_families_it_has_a_face_of_and_no_other() {
+    let measurer = built!(two("Roboto", "Yomogi", BOLD));
+    assert!(measurer.has_family("Roboto"));
+    assert!(measurer.has_family("Yomogi"));
+    assert!(!measurer.has_family("Caveat"), "measured in Roboto, so never declared");
+    assert!(!FontTableMeasurer::new().has_family("Roboto"));
+    // Every other measurer measures whatever family it is asked about.
+    assert!(ConstantRatioMeasure.has_family("Caveat"));
+    let by_ref: &dyn Measure = &&measurer;
+    assert!(!by_ref.has_family("Caveat"));
+    assert!(by_ref.has_family("Yomogi"));
+}

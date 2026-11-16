@@ -467,6 +467,39 @@ that reference with its id and name but no body or canvas. A later reference
 to a document loaded before the bound was reached still answers with its
 content, since it costs nothing more to read.
 
+## What one picture can hold
+
+A picture of a board or a note — the editor, the preview pane, a row's
+picture, version history, `wb_scene_render`, `canvas_view`'s picture and the
+PNG and SVG export — is laid out in one pass, and that pass holds:
+
+- at most **4,096 boxes, edges and lines** on the board itself (one canvas
+  holds 4,000 at most, so a board written through the tools never reaches it);
+- at most **4,096** more across the boards it shows inside file nodes or
+  `![[…]]` embeds, counted whether or not each is drawn open. A board shown
+  inside another is drawn only up to **4,000** of its own, one maximal
+  board's worth; past that, its file node shows its card;
+- at most **3 MiB of text** — every box's text, every note it shows and each
+  comment thread's opening message together;
+- at most **8 MiB** of everything it is asked to draw, together.
+
+Past any of them, the picture is a **notice** in place of the board or the
+note: a box that says what was too large and what to do about it (split the
+board, show fewer boards or notes inside it). `wb_scene_render` answers the
+notice as its SVG, with the same width and height fields as any render, and
+adds a second text item saying why, ending with the reason it was refused
+(`too-many-elements`, `referenced-elements`, `bodies`, `too-large`,
+`comments`, `proposals` or `fragments`). Nothing is lost: the document is
+unchanged and draws again once it is back within the limits.
+
+Two other things draw the same notice: a position or a size too large to
+draw (no board written through the tools holds one), and, in the browser, a
+page that could not measure its text, which reload answers.
+
+These hold where the layout runs on the Rust core, which is the default; with
+`WHITEBOARD_CORE_LAYOUT=differential` (or `VITE_WHITEBOARD_CORE_LAYOUT`),
+the TypeScript layout draws such a document in full.
+
 ## How many open comment threads and proposed changes one document may hold
 
 One document holds at most **500 open comment threads** and at most **1,000

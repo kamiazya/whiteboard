@@ -114,8 +114,9 @@ fn ask(ask: &Ask) -> Tree {
 }
 
 /// The layout as the `ok` answer, the fragment sources it asked for last when
-/// the request carried a table, or declined when it holds a number JSON
-/// cannot spell.
+/// the request carried a table, or refused when it holds a number JSON cannot
+/// spell, which no canvas the model admits holds (its coordinates are safe
+/// integers).
 pub(super) fn laid_out(
     laid: &LaidOut,
     degradations: &[Degradation],
@@ -130,5 +131,5 @@ pub(super) fn laid_out(
     ];
     items.extend(asked.map(|asked| Tree::List(asked.iter().map(ask).collect())));
     let answer = Tree::List(items);
-    answer.to_json().unwrap_or_else(|_| declined("non-finite"))
+    answer.to_json().unwrap_or_else(|_| refused("malformed", "non-finite"))
 }

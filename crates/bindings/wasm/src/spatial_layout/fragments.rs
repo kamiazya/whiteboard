@@ -19,7 +19,9 @@ pub const MAX_FRAGMENTS: usize = MAX_ELEMENTS;
 /// The most fragment markup one layout may place, in bytes: as much as a
 /// request may hold. The table's own bytes are held by the request's cap, but
 /// one row is placed once per block that asks for it, so a small body
-/// repeating one source could otherwise draw the table many times over.
+/// repeating one source could otherwise draw the table many times over. A
+/// block past it draws its fallback, as one whose source the table lacks does,
+/// and is not asked for, since the table holds it.
 pub const MAX_PLACED_BYTES: usize = LAYOUT_SPATIAL_CANVAS.max_bytes;
 
 /// A source a layout asked for, as canvas-render's `FragmentAsk`.
@@ -59,7 +61,6 @@ pub(crate) struct FragmentTable<'r> {
     rows: &'r [(String, Rendered)],
     asked: RefCell<Asked>,
     placed: Cell<usize>,
-    over: Cell<bool>,
     /// Every ask, answered or not: what the content cache reads to keep no
     /// body that asked the table (`fragmentTableReads`).
     reads: Cell<usize>,
@@ -67,13 +68,7 @@ pub(crate) struct FragmentTable<'r> {
 
 impl<'r> FragmentTable<'r> {
     pub(crate) fn new(rows: &'r [(String, Rendered)]) -> Self {
-        Self {
-            rows,
-            asked: RefCell::default(),
-            placed: Cell::new(0),
-            over: Cell::new(false),
-            reads: Cell::new(0),
-        }
+        Self { rows, asked: RefCell::default(), placed: Cell::new(0), reads: Cell::new(0) }
     }
 
     /// How often the layout has asked the table so far.
@@ -84,11 +79,6 @@ impl<'r> FragmentTable<'r> {
     /// What the layout asked for and the table did not hold.
     pub(crate) fn asked(&self) -> Vec<Ask> {
         self.asked.borrow().order.clone()
-    }
-
-    /// Whether the layout placed more markup than [`MAX_PLACED_BYTES`].
-    pub(crate) fn over(&self) -> bool {
-        self.over.get()
     }
 
     fn answer(&self, ask: Ask) -> Option<Rendered> {
@@ -105,7 +95,6 @@ impl<'r> FragmentTable<'r> {
             Rendered::Markup(svg) | Rendered::Fragment { svg, .. } => svg.len(),
         };
         if !fits(self.placed.get(), bytes) {
-            self.over.set(true);
             return None;
         }
         self.placed.set(self.placed.get() + bytes);

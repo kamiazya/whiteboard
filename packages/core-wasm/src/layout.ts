@@ -48,7 +48,37 @@ type FragmentAsk =
   | { readonly kind: 'math'; readonly value: string }
   | { readonly kind: 'diagram'; readonly lang: string; readonly value: string }
 
-/** The artifact's answer: the layout, or what it declined to answer. */
+/**
+ * A layout the core refused, which a root draws as a refusal (owner decision
+ * q81, D7): a request past one of its caps (`input-too-large`, `reason`
+ * naming the cap), a layout holding a number its answer cannot spell
+ * (`malformed`, `non-finite`), or a host measurer that did not answer
+ * (`malformed`, `host-measure`).
+ */
+interface LayoutRefusal {
+  readonly code: RefusalCode
+  readonly reason: string
+}
+
+/** The refusals a root draws, by code; any other refusal is a defect, and thrown. */
+const DRAWN: Readonly<Record<RefusalCode, (reason: string) => boolean>> = {
+  'input-too-large': () => true,
+  malformed: (reason) => reason === 'non-finite' || reason === 'host-measure',
+}
+
+/** The refusal `answer` spells, when it is one a root draws. */
+export function drawnRefusal([kind, code, reason]: unknown[]): LayoutRefusal | undefined {
+  if (kind !== 'refused' || typeof reason !== 'string') return undefined
+  if (code !== 'input-too-large' && code !== 'malformed') return undefined
+  return DRAWN[code](reason) ? { code, reason } : undefined
+}
+
+/** A request past the entry's bytes, refused here before the core is asked. */
+const TOO_LARGE: { readonly refused: LayoutRefusal } = {
+  refused: { code: 'input-too-large', reason: 'too-large' },
+}
+
+/** The artifact's answer: the layout, what it declined to answer, or what it refused. */
 export type LayoutAnswer =
   | {
       readonly scene: Scene
@@ -58,6 +88,7 @@ export type LayoutAnswer =
       readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | { readonly declined: string }
+  | { readonly refused: LayoutRefusal }
 
 /** The glue calls this module makes. */
 export interface LayoutGlue extends FontsGlue, CachesGlue {
@@ -102,6 +133,9 @@ type Raw =
   | { readonly parsed: unknown[] }
   | { readonly lost: true }
 
+/** What a layout call answers when it is not the caller's own answer. */
+type Unanswered = { readonly declined: string } | { readonly refused: LayoutRefusal }
+
 /** The request text with `rows` as its `codeTokens`, spliced into the mapping the base wire closes. */
 function withTokens(text: string, rows: readonly FenceRow[]): string | undefined {
   if (rows.length === 0) return text
@@ -135,12 +169,14 @@ function call(
  * sent on a second call (at most two); `memo` sends the tokens it holds for
  * the request's fences on the first. A request naming the host's measurer is
  * measured by `measure`, which the core calls mid-layout once per distinct
- * text and font; without one it is declined. Answers `declined` for what the core
- * cannot answer exactly as the TypeScript would, a request or faces past
- * their caps, faces the core's reader cannot read and a fence there is no
- * `highlight` for, which a root answers from the TypeScript; throws `CoreInputRefused` for a request the wire does
- * not carry or an answer that is not one, which for a request canvas-render
- * built is a defect.
+ * text and font; without one it is refused. Answers `refused` for a request
+ * past its caps, a layout holding a number the answer cannot spell and a host
+ * measurer that did not answer, which a root draws as a refusal; `declined`
+ * for what the core cannot answer exactly as the TypeScript would (a body past
+ * the parser's bounds), faces past their caps and a fence there is no
+ * `highlight` for, which a root answers from the TypeScript; throws
+ * `CoreInputRefused` for a request the wire does not carry or an answer that
+ * is not one, which for a request canvas-render built is a defect.
  */
 export function layoutSpatialCanvas(
   glue: LayoutGlue,
@@ -179,11 +215,11 @@ export function layoutWith<A>(
   read: Read<A>,
   hostMeasure: HostMeasure | undefined,
   surface: number | undefined,
-): A | { readonly declined: string } {
+): A | Unanswered {
   const { measure } = request
   const host =
     measure.kind === 'host' && hostMeasure !== undefined ? hostMeasurerOf(hostMeasure) : undefined
-  const once = (): A | { readonly declined: string } | 'lost' => {
+  const once = (): A | Unanswered | 'lost' => {
     const named = measure.kind === 'fonts' ? fonts.handleOf(measure) : undefined
     if (named !== undefined && 'declined' in named) return named
     const measurer = { handle: named?.handle, host, surface }
@@ -212,13 +248,13 @@ function layoutOnce<A>(
   highlight: FenceHighlighter | undefined,
   memo: FenceTokenMemo,
   read: Read<A>,
-): A | { readonly declined: string } | 'lost' {
+): A | Unanswered | 'lost' {
   const encoded = encodeLayoutRequest(request, handle, surface)
   if (encoded === undefined) throw errors.refused(entry, 'malformed', 'wire')
-  const send = (rows: readonly FenceRow[]): Raw | { declined: string } => {
+  const send = (rows: readonly FenceRow[]): Raw | Unanswered => {
     const text = withTokens(encoded, rows)
     if (text === undefined) throw errors.refused(entry, 'malformed', 'wire')
-    if (text.length > MAX_BYTES[entry]) return { declined: 'too-large' }
+    if (text.length > MAX_BYTES[entry]) return TOO_LARGE
     return call(glue, entry, text, host)
   }
   const held = memo.within(encoded)
@@ -228,17 +264,17 @@ function layoutOnce<A>(
     raw = send([...held, ...memo.answer(raw.needs, highlight)])
   }
   if ('lost' in raw) return 'lost'
-  if ('declined' in raw) return raw
+  if ('declined' in raw || 'refused' in raw) return raw
   if ('needs' in raw) return { declined: 'highlight' }
   return read(raw.parsed, errors)
 }
 
 /** The answer one call gave, read. */
-function answerOf([kind, a, b, c, d]: unknown[], errors: LayoutErrors): LayoutAnswer {
+function answerOf(parsed: unknown[], errors: LayoutErrors): LayoutAnswer {
+  const [kind, a, b, c, d] = parsed
   if (kind === 'declined' && typeof a === 'string') return { declined: a }
-  if (kind === 'refused' && a === 'input-too-large' && typeof b === 'string') {
-    return { declined: b }
-  }
+  const refused = drawnRefusal(parsed)
+  if (refused !== undefined) return { refused }
   const asked = d === undefined || isAsks(d)
   if (
     kind === 'ok' &&
@@ -321,7 +357,7 @@ export type MarkdownLayoutRequest = LayoutRequest &
       }
   )
 
-/** The core's markdown layout, what it declined, or a `section` the note does not hold. */
+/** The core's markdown layout, what it declined or refused, or a `section` the note does not hold. */
 export type MarkdownLayoutAnswer =
   | {
       readonly scene: Scene
@@ -330,12 +366,14 @@ export type MarkdownLayoutAnswer =
       readonly fragmentsAsked?: readonly FragmentAsk[]
     }
   | { readonly declined: string }
+  | { readonly refused: LayoutRefusal }
   | { readonly missing: 'section' }
 
 /**
  * A markdown body laid out by the core, over the same calls, caps and
  * answers as `layoutSpatialCanvas`: the scene and its degradations, a
- * `declined` class a root answers from the TypeScript, or `missing` for a
+ * `declined` class a root answers from the TypeScript, a `refused` one it
+ * draws as a refusal, or `missing` for a
  * `section` the note holds no heading for, which a root reports as the
  * TypeScript's section lookup does. Throws `CoreInputRefused` for a request
  * the wire does not carry or an answer that is not one.
@@ -366,7 +404,7 @@ export function layoutMarkdown(
 function markdownAnswerOf(parsed: unknown[], errors: LayoutErrors): MarkdownLayoutAnswer {
   if (parsed[0] === 'missing' && parsed[1] === 'section') return { missing: 'section' }
   const laid = answerOf(parsed, errors)
-  if ('declined' in laid) return laid
+  if ('declined' in laid || 'refused' in laid) return laid
   if (laid.anchors.size > 0) throw errors.refused(OPERATION, 'malformed', 'answer')
   const { scene, degradations, fragmentsAsked } = laid
   return { scene, degradations, ...(fragmentsAsked === undefined ? {} : { fragmentsAsked }) }

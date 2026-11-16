@@ -455,9 +455,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // queries' switch) and `layout/queries.ts` (the editors' geometry through
     // it). Outside the lane for the same reason: every branch driven by
     // `layout/query-switch.test.ts` and mutation-checked by hand.
+    // 140 with `refusal.ts` (S18f), the words a refused layout is drawn with
+    // and the one box that draws them. Outside the lane for the same reason:
+    // every branch driven by `refusal.test.ts` and the switches' tests, and
+    // mutation-checked by hand.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 139,
+      production: 140,
     })
   })
 

@@ -7,6 +7,7 @@ use super::{
 use crate::input_caps::REGISTER_LAYOUT_FONTS;
 use crate::spatial_layout::request::Face;
 use crate::spatial_layout::tests::{ROBOTO, answer, board, m, request, s};
+use whiteboard_canvas_render::measure::Measure;
 
 fn wire_face(from: usize, to: usize) -> Json {
     m(&[
@@ -89,7 +90,44 @@ fn faces_that_are_not_fonts_or_past_the_cap_are_refused() {
     }
     assert_eq!(registered(&[0, 1], &[wire_face(1, 3)]), refused("malformed", "font"));
     assert_eq!(registered(&[0, 1], &[wire_face(0, 4)]), refused("input-too-large", "face-bytes"));
-    assert_eq!(registered(&[0, 1], &[wire_face(0, 2)]), refused("malformed", "font"));
+}
+
+fn family_face(family: &str, from: usize, to: usize) -> Json {
+    m(&[
+        ("family", json!(family)),
+        ("bold", json!(false)),
+        ("italic", json!(false)),
+        ("from", json!(from)),
+        ("to", json!(to)),
+    ])
+}
+
+#[test]
+fn a_face_the_reader_cannot_read_is_dropped_and_its_family_reported_missing() {
+    let len = ROBOTO.len();
+    let mut bytes = ROBOTO.to_vec();
+    bytes.extend_from_slice(b"wOFF not a face this reader reads");
+    let unreadable =
+        registered(&bytes, &[wire_face(0, len), family_face("Yomogi", len, bytes.len())]);
+    assert_eq!(unreadable.get(0), Some(&json!("ok")), "{unreadable}");
+    let twice = ROBOTO.repeat(2);
+    let readable = registered(&twice, &[wire_face(0, len), family_face("Yomogi", len, 2 * len)]);
+    let sketched = |handle: &Json| {
+        let extra = [
+            ("measure", by_handle(handle)),
+            ("style", json!("visual.sketch")),
+            ("fontFamilies", s(vec![json!("Yomogi")])),
+        ];
+        answer(&request(board("hello"), &extra))
+    };
+    let dropped = sketched(unreadable.get(1).unwrap_or(&Json::Null));
+    assert_eq!(dropped.get(3), Some(&json!([{ "kind": "font-missing", "family": "Yomogi" }])));
+    let held = sketched(readable.get(1).unwrap_or(&Json::Null));
+    assert_eq!(held.get(3), Some(&json!([])), "{held}");
+    assert_ne!(dropped.get(1), held.get(1));
+    let only_unreadable = registered(&[0, 1], &[wire_face(0, 2)]);
+    let by_none = laid(by_handle(only_unreadable.get(1).unwrap_or(&Json::Null)));
+    assert_eq!(by_none, laid(m(&[("kind", json!("ratio"))])), "no face read: the ratio estimate");
 }
 
 fn face(from: usize, to: usize) -> Face {
@@ -120,9 +158,10 @@ fn an_instance_holds_a_bounded_count_of_faces_registrations_and_bytes() {
     assert!(fonts.measurer(3).is_none());
     assert!(fonts.measurer(4).is_some());
     // Handle 1 holds Roboto and its one face's family, "F".
-    let past = MAX_HELD_BYTES - (ROBOTO.len() + 1) + 1;
-    assert_eq!(fonts.register(&vec![0; past], Vec::new()), Err(("input-too-large", "held")));
-    assert!(fonts.register(&vec![0; past - 1], Vec::new()).is_ok());
+    let past = MAX_HELD_BYTES - (ROBOTO.len() + 1) - len + 1;
+    let named = |n: usize| vec![Face { family: "F".repeat(n), ..face(0, len) }];
+    assert_eq!(fonts.register(ROBOTO, named(past)), Err(("input-too-large", "held")));
+    assert!(fonts.register(ROBOTO, named(past - 1)).is_ok());
 }
 
 #[test]
@@ -132,17 +171,36 @@ fn a_faces_family_is_held_with_the_bytes() {
     let room = MAX_HELD_BYTES - ROBOTO.len();
     assert_eq!(fonts.register(ROBOTO, vec![named(room + 1)]), Err(("input-too-large", "held")));
     assert_eq!(fonts.register(ROBOTO, vec![named(room)]), Ok(0));
-    assert_eq!(fonts.register(&[0], Vec::new()), Err(("input-too-large", "held")));
+    let one = || vec![face(0, ROBOTO.len())];
+    assert_eq!(fonts.register(ROBOTO, one()), Err(("input-too-large", "held")));
     assert!(fonts.release(0));
-    assert_eq!(fonts.register(&[0], Vec::new()), Ok(1));
+    assert_eq!(fonts.register(ROBOTO, one()), Ok(1));
 }
 
 #[test]
-fn a_face_past_the_readers_own_cap_is_too_large_and_the_last_handle_is_never_minted() {
+fn a_dropped_face_holds_none_of_the_instances_bytes() {
+    let mut fonts = Fonts::new();
+    let mut bytes = vec![0_u8; sfnt::MAX_BYTES + 1];
+    let at = bytes.len();
+    bytes.extend_from_slice(ROBOTO);
+    let one = vec![face(0, at), face(at, bytes.len())];
+    assert_eq!(fonts.register(&bytes, one), Ok(0));
+    assert!(fonts.measurer(0).is_some_and(|measurer| measurer.has_family("F")));
+    // Handle 0 holds Roboto and one family name, "F", and not the face it dropped.
+    let named = Face {
+        family: "F".repeat(MAX_HELD_BYTES - 2 * (ROBOTO.len() + 1)),
+        ..face(0, ROBOTO.len())
+    };
+    assert_eq!(fonts.register(ROBOTO, vec![named]), Ok(1));
+}
+
+#[test]
+fn a_face_past_the_readers_own_cap_is_dropped_and_the_last_handle_is_never_minted() {
     let mut fonts = Fonts::new();
     let face_bytes = vec![0_u8; sfnt::MAX_BYTES + 1];
     let past = vec![face(0, face_bytes.len())];
-    assert_eq!(fonts.register(&face_bytes, past), Err(("input-too-large", "face")));
+    assert_eq!(fonts.register(&face_bytes, past), Ok(0));
+    assert!(fonts.measurer(0).is_some_and(|measurer| !measurer.has_family("F")));
     fonts.next = u32::MAX - 1;
     assert_eq!(fonts.register(&[], Vec::new()), Ok(u32::MAX - 1));
     assert_eq!(fonts.register(&[], Vec::new()), Err(("input-too-large", "handles")));

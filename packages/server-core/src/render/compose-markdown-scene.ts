@@ -1,5 +1,6 @@
 import type {
   LayoutCore,
+  LayoutRefusal,
   MeasureText,
   ReferenceSeams,
   Scene,
@@ -7,6 +8,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import { layoutMarkdownDocument } from '@kamiazya/whiteboard-canvas-render'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
+import { logRefusal } from './refusal-note.js'
 
 /**
  * The measure a markdown document is laid out to. A page, not an object:
@@ -40,6 +42,8 @@ export interface ComposeMarkdownSceneOptions {
   readonly section?: string
   /** The Rust core and its switch (`ServerDeps.layoutCore`); absent, the TypeScript lays it out. */
   readonly core?: LayoutCore
+  /** Told when the core refused the note and the scene is the refusal; it is logged either way. */
+  readonly onRefused?: (refusal: LayoutRefusal) => void
 }
 
 /**
@@ -58,6 +62,10 @@ export function composeMarkdownScene(
     measure,
     maxWidth: MARKDOWN_SCENE_WIDTH_PX,
     mode: 'light',
+    onRefused: (refusal) => {
+      logRefusal(refusal)
+      options?.onRefused?.(refusal)
+    },
     ...(options?.references !== undefined ? { references: options.references } : {}),
     ...(options?.style !== undefined ? { style: options.style } : {}),
     ...(options?.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),

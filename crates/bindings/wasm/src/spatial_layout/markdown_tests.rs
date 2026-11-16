@@ -7,7 +7,12 @@ use whiteboard_model::spatial::SpatialCanvas;
 
 use super::cache::resident;
 use super::tests::{fake, m, s, text_node};
-use super::{MAX_BODY_BYTES, MAX_ELEMENTS, layout_with_host, release_layout_cache};
+use super::{
+    MAX_BODY_BYTES, MAX_ELEMENTS, MAX_REFERENCED_ELEMENTS, layout_with_host, release_layout_cache,
+};
+
+/// The most one body may hold and still be parsed (`whiteboard_markdown::limits::MAX_BYTES`).
+const MAX_PARSE_BYTES: usize = 786_432;
 use crate::json_canvas_wire::canvas_json;
 
 #[cfg(target_arch = "wasm32")]
@@ -136,10 +141,15 @@ fn a_markdown_request_past_its_caps_is_refused() {
     let refused = |what: &str| json!(["refused", "input-too-large", what]);
     assert_eq!(answer(&comment(&long, "comfortable")), refused("bodies"));
     assert_eq!(answer(&note(&long, &[])), refused("bodies"));
-    // At the cap is within it: blank lines parse to nothing, so it costs no layout.
+    // At the cap is within it, and one body that large is past the parser's own
+    // bound, which declines it (D7a's, held behind the switch's retirement).
     let full = "\n".repeat(MAX_BODY_BYTES);
-    assert_eq!(answer(&comment(&full, "comfortable")).get(0), Some(&json!("ok")));
-    assert_eq!(answer(&note(&full, &[])).get(0), Some(&json!("ok")));
+    assert_eq!(answer(&comment(&full, "comfortable")), json!(["declined", "body"]));
+    assert_eq!(answer(&note(&full, &[])), json!(["declined", "body"]));
+    // Blank lines parse to nothing, so a body at the parser's bound costs no layout.
+    let parsed = "\n".repeat(MAX_PARSE_BYTES);
+    assert_eq!(answer(&comment(&parsed, "comfortable")).get(0), Some(&json!("ok")));
+    assert_eq!(answer(&note(&parsed, &[])).get(0), Some(&json!("ok")));
     let half = "a".repeat(MAX_BODY_BYTES / 2 + 1);
     assert_eq!(answer(&note(&half, &[("references", board_wire(&[&half]))])), refused("bodies"));
     let at_cap: Vec<&str> = vec![""; MAX_ELEMENTS];
@@ -148,9 +158,9 @@ fn a_markdown_request_past_its_caps_is_refused() {
     let row = s(vec![json!("math:x"), m(&[("svg", json!("<g/>"))])]);
     let table = s(vec![row; super::MAX_FRAGMENTS]);
     assert_eq!(answer(&note("x", &[("fragments", table)])).get(0), Some(&json!("ok")));
-    let many: Vec<&str> = vec![""; MAX_ELEMENTS + 1];
+    let many: Vec<&str> = vec![""; MAX_REFERENCED_ELEMENTS + 1];
     let elements = answer(&note("x", &[("references", board_wire(&many))]));
-    assert_eq!(elements, refused("too-many-elements"));
+    assert_eq!(elements, refused("referenced-elements"));
     let row = s(vec![json!("math:x"), m(&[("svg", json!("<g/>"))])]);
     let table = s(vec![row; super::MAX_FRAGMENTS + 1]);
     assert_eq!(answer(&note("x", &[("fragments", table)])), refused("fragments"));
@@ -176,7 +186,7 @@ fn a_markdown_request_is_read_strictly_by_its_kind() {
     moded.push(("mode", json!("light")));
     assert_eq!(answer(&m(&moded).to_string()), malformed);
     let host = note("x", &[("measure", m(&[("kind", json!("host"))]))]);
-    assert_eq!(answer(&host), json!(["declined", "host-measure"]));
+    assert_eq!(answer(&host), json!(["refused", "malformed", "host-measure"]));
 }
 
 /// A note naming a surface keeps the bodies of the boards it embeds there.

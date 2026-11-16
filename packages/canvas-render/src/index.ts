@@ -220,6 +220,7 @@ export {
   loadedReferenceToWire,
   loadedReferenceWireSchema,
 } from './references/wire-schema.js'
+export { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds, sceneDocumentBounds } from './scene-bounds.js'
 export type { SceneWalkNode } from './scene-children.js'
 export { sceneChildrenOf } from './scene-children.js'

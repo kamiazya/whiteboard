@@ -11,7 +11,8 @@
 //! surface whose content cache an embedded board's bodies read. Its answer is
 //! the canvas's `["ok", scene, [], degradations, asked?]`, the anchors always
 //! empty; a section the note does not hold answers `["missing", "section"]`.
-//! A body past the parser's bounds is declined, as a canvas's is.
+//! A body past the parser's bounds is declined, as a canvas's is, and a
+//! request past its caps refused.
 
 use whiteboard_canvas_render::comments::CommentOptions;
 use whiteboard_canvas_render::compose_canvas::{LaidOut, LayoutOptions};
@@ -36,8 +37,8 @@ use super::fragments::FragmentTable;
 use super::host_measure::Host;
 use super::request::{MarkdownRequest, Note, Prose};
 use super::{
-    MAX_BODY_BYTES, MAX_ELEMENTS, MAX_FRAGMENTS, measured, outcome, plugin, referenced_bytes,
-    referenced_elements, render_style,
+    MAX_BODY_BYTES, MAX_FRAGMENTS, MAX_REFERENCED_ELEMENTS, held_families, measured, outcome,
+    plugin, referenced_bytes, referenced_elements, render_style,
 };
 
 /// The body a request lays out; see the module's documentation for the wire.
@@ -66,8 +67,8 @@ pub(super) fn layout_markdown(request: &MarkdownRequest, host: Option<&dyn Host>
 /// The content a note carries past its caps, if any.
 fn past_note_caps(request: &MarkdownRequest, note: &Note) -> Option<&'static str> {
     let wire = note.references.as_ref();
-    if wire.map_or(0, referenced_elements) > MAX_ELEMENTS {
-        return Some("too-many-elements");
+    if wire.map_or(0, referenced_elements) > MAX_REFERENCED_ELEMENTS {
+        return Some("referenced-elements");
     }
     if note.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
         return Some("fragments");
@@ -115,7 +116,7 @@ fn lay_out_note(
     };
     let mode = if note.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let appearance = create_spatial_theme(mode, None);
-    let held = |family: &str| note.font_families.iter().any(|held| held == family);
+    let held = held_families(&note.font_families, measure);
     let fragments = note.fragments.as_deref().map(FragmentTable::new);
     let decorations: [&dyn NodeDecoration; 1] = [&StencilBadge { registry }];
     let options = LayoutOptions {

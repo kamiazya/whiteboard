@@ -6,6 +6,7 @@ import type { CoreImpl, CoreMismatch, LayoutCore } from '../../layout/edges/layo
 import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
 import { layoutSpatialCanvasWithAnchors } from '../../layout/spatial-canvas.js'
 import { describeMeasure, type MeasureText } from '../../measure.js'
+import { type LayoutRefusal, refusalScene } from '../../refusal.js'
 import { built, requireWasm, wasmBytes } from './glue.js'
 import { layoutCases } from './layout-cases.js'
 
@@ -110,7 +111,7 @@ describe.runIf(built)('the whole layout through the real core', () => {
     expect(asked).toBeGreaterThan(cases.length)
   })
 
-  it('declines a layout whose host answers a number that is not finite', () => {
+  it('draws the refusal for a layout whose host answers a number that is not finite', () => {
     answered.declined.length = 0
     const [first] = cases
     if (first === undefined) throw new Error('no layout cases')
@@ -120,10 +121,27 @@ describe.runIf(built)('the whole layout through the real core', () => {
         (text, font) => ({ ...own(text, font), ascent: bad }),
         { kind: 'host' },
       )
-      const rust = lay(first.canvas, { ...first.options, measure: host }, 'rust')
+      const heard: LayoutRefusal[] = []
+      const hosted = {
+        ...first.options,
+        measure: host,
+        onRefused: (r: LayoutRefusal) => heard.push(r),
+      }
+      const rust = lay(first.canvas, hosted, 'rust')
       expect(rust.tallies).toEqual(['declined:host-measure'])
       expect(rust.mismatches).toEqual([])
+      const refused = { code: 'malformed', reason: 'host-measure' } as const
+      expect(heard).toEqual([refused])
+      const drawn = (['light', 'dark'] as const).map((mode) =>
+        refusalScene(refused, { measure: host, mode }),
+      )
+      expect(drawn).toContainEqual(rust.scene)
+      // Equal scenes can share one NaN, so the numbers are asked of directly.
+      const baselines = rust.scene.nodes.flatMap((n) => (n.kind === 'textRun' ? [n.baseline] : []))
+      expect(baselines.length).toBeGreaterThan(0)
+      expect(baselines.every(Number.isFinite)).toBe(true)
     }
-    expect(answered.declined).toEqual(['host-measure', 'host-measure'])
+    // A refusal is not a decline: the core answered it.
+    expect(answered.declined).toEqual([])
   })
 })
