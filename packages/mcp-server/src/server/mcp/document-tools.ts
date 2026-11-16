@@ -3,7 +3,7 @@ import { canvasViewPicture, createServer, type ServerDeps } from '@kamiazya/whit
 import type { McpServer } from '@modelcontextprotocol/server'
 import { gatedByMembership } from '../security/mcp-caller.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
-import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
+import { registerToolWithAnnotations, structuredJsonResult, withTextNote } from './tool-support.js'
 
 /**
  * `canvas_view`'s answer: what the model reads, unchanged, and in `_meta` the
@@ -77,11 +77,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     async (args) => {
       const parsed = tools.canvasRenderSvg.inputSchema.parse(args)
       const { output, note } = await tools.canvasRenderSvg.render(parsed)
-      const result = structuredJsonResult(output)
-      // A document drawn as a refusal says so in words beside the SVG.
-      return note === undefined
-        ? result
-        : { ...result, content: [...result.content, { type: 'text' as const, text: note }] }
+      return withTextNote(structuredJsonResult(output), note)
     },
   )
 

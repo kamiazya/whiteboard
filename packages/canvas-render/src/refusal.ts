@@ -77,9 +77,6 @@ const COPY = {
   },
 } as const satisfies Record<string, RefusalCopy>
 
-/** The reasons with words of their own. */
-export const REFUSAL_REASONS = Object.keys(COPY) as readonly (keyof typeof COPY)[]
-
 /** What a refusal whose reason has no words of its own says, by its code. */
 const GENERAL: Readonly<Record<LayoutRefusal['code'], RefusalCopy>> = {
   'input-too-large': {

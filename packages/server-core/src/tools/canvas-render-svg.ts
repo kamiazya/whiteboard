@@ -168,53 +168,54 @@ async function canvasScene(
   return scene
 }
 
-export function createCanvasRenderSvgTool(deps: ServerDeps) {
-  /**
-   * `execute`'s answer, and when the document is drawn as a refusal (the
-   * layout past a cap the core holds it to), the words that say so, which the
-   * MCP answer carries beside the structured output: the output itself is
-   * unchanged, since the SVG is the notice.
-   */
-  async function render(
-    input: CanvasRenderSvgInput,
-  ): Promise<{ readonly output: CanvasRenderSvgOutput; readonly note?: string }> {
-    const refusal = unknownStyleRefusal(input.style)
-    if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
-    await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-    const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-    const measurer = await resolveTextMeasurer(deps)
-    const { measure } = measurer
-    const fontAvailable = fontAvailableOf(measurer)
-    // The doc's own recorded kind wins; the index row is the fallback for
-    // a document that predates kinds (wb_document_get's read path). Neither
-    // known reads as spatial, the kind every pre-kind document was.
-    const kind =
-      readDocumentKind(doc) ??
-      (
-        await deps.documentIndex.resolveDocumentById({
-          workspaceId: input.workspaceId,
-          documentId: input.documentId,
-        })
-      )?.kind
+/**
+ * `execute`'s answer, and when the document is drawn as a refusal (the
+ * layout past a cap the core holds it to), the words that say so, which the
+ * MCP answer carries beside the structured output: the output itself is
+ * unchanged, since the SVG is the notice.
+ */
+async function renderDocument(
+  deps: ServerDeps,
+  input: CanvasRenderSvgInput,
+): Promise<{ readonly output: CanvasRenderSvgOutput; readonly note?: string }> {
+  const refusal = unknownStyleRefusal(input.style)
+  if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
+  await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
+  const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
+  const measurer = await resolveTextMeasurer(deps)
+  const { measure } = measurer
+  const fontAvailable = fontAvailableOf(measurer)
+  // The doc's own recorded kind wins; the index row is the fallback for
+  // a document that predates kinds (wb_document_get's read path). Neither
+  // known reads as spatial, the kind every pre-kind document was.
+  const kind =
+    readDocumentKind(doc) ??
+    (
+      await deps.documentIndex.resolveDocumentById({
+        workspaceId: input.workspaceId,
+        documentId: input.documentId,
+      })
+    )?.kind
 
-    let refused: LayoutRefusal | undefined
-    const onRefused = (said: LayoutRefusal) => {
-      refused = said
-    }
-    const scene =
-      kind === 'markdown'
-        ? await markdownScene(deps, input, doc, measure, fontAvailable, onRefused)
-        : await canvasScene(deps, input, doc, canvas, measure, fontAvailable, onRefused)
-
-    const envelope = sceneEnvelope(scene)
-    const output = {
-      svg: renderSceneToSvg(scene, { viewBox: envelope }),
-      width: envelope.w,
-      height: envelope.h,
-    }
-    return refused === undefined ? { output } : { output, note: refusalNote(refused) }
+  let refused: LayoutRefusal | undefined
+  const onRefused = (said: LayoutRefusal) => {
+    refused = said
   }
+  const scene =
+    kind === 'markdown'
+      ? await markdownScene(deps, input, doc, measure, fontAvailable, onRefused)
+      : await canvasScene(deps, input, doc, canvas, measure, fontAvailable, onRefused)
 
+  const envelope = sceneEnvelope(scene)
+  const output = {
+    svg: renderSceneToSvg(scene, { viewBox: envelope }),
+    width: envelope.w,
+    height: envelope.h,
+  }
+  return refused === undefined ? { output } : { output, note: refusalNote(refused) }
+}
+
+export function createCanvasRenderSvgTool(deps: ServerDeps) {
   return {
     name: 'wb_scene_render' as const,
     description:
@@ -222,9 +223,9 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
-      return (await render(input)).output
+      return (await renderDocument(deps, input)).output
     },
-    render,
+    render: (input: CanvasRenderSvgInput) => renderDocument(deps, input),
   }
 }
 

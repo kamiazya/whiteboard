@@ -1,11 +1,24 @@
 import type { Scene, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { type LayoutRefusal, REFUSAL_REASONS, refusalCopy, refusalScene } from './refusal.js'
+import { type LayoutRefusal, refusalCopy, refusalScene } from './refusal.js'
 import { renderSceneToSvg } from './svg/backend.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 
 const measure = createFakeMeasure()
+
+/** Every class the core refuses a layout with, each owed words of its own. */
+const REFUSAL_REASONS = [
+  'too-many-elements',
+  'referenced-elements',
+  'bodies',
+  'too-large',
+  'comments',
+  'proposals',
+  'fragments',
+  'non-finite',
+  'host-measure',
+] as const
 
 const runs = (scene: Scene) =>
   scene.nodes.filter((node): node is TextRunNode => node.kind === 'textRun')

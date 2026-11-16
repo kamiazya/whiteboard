@@ -30,6 +30,19 @@ export function structuredJsonResult<T extends object>(result: T) {
   }
 }
 
+/**
+ * `result` with `note`, when there is one, as a second text item after its
+ * structured JSON: words a caller should read beside an output whose shape
+ * cannot say them, such as a render drawn as a refusal.
+ */
+export function withTextNote<R extends { content: { type: 'text'; text: string }[] }>(
+  result: R,
+  note: string | undefined,
+): R {
+  if (note === undefined) return result
+  return { ...result, content: [...result.content, { type: 'text' as const, text: note }] }
+}
+
 // Mirrors the modern `_meta.ui.resourceUri` MCP Apps (SEP-1865) linkage
 // into the deprecated `_meta["ui/resourceUri"]` key too, matching what the
 // ext-apps package's own registerAppTool does — a host built before
