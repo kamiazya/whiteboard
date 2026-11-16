@@ -5,7 +5,8 @@
  * past the bodies cap in the markdown preview. Under `rust` the surface draws
  * the notice in place of the layout; under `differential` the TypeScript
  * still draws it, as the oracle, so each case sets `rust` for the layout it
- * draws. Where no core is loaded (a run under `ts`) it skips.
+ * draws. Where no core is loaded (a run under `ts`) it skips, and a run that
+ * asked for one (`CORE_REQUIRED`) fails instead when the core did not load.
  */
 
 import {
@@ -20,6 +21,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { layoutCoreReady } from '../lib/spatial/layout-core.js'
+import { CORE_REQUIRED } from '../test-utils/core-required.js'
 import { MarkdownEditor } from './markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from './spatial-editor/SpatialEditor.js'
 import { VersionPreview } from './VersionPreview.js'
@@ -28,6 +30,10 @@ afterEach(cleanup)
 
 const loaded: LayoutCore | undefined = await layoutCoreReady()
 const LAYOUT = loaded?.impl.layoutSpatialCanvas ?? 'ts'
+
+it.runIf(CORE_REQUIRED)('loads the core the pipeline asked for before a refusal is drawn', () => {
+  expect(loaded).toBeDefined()
+})
 
 /** One more box than a request's own canvas may hold: refused before any layout runs. */
 const PAST_THE_ELEMENT_CAP: SpatialCanvas = {
