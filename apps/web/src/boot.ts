@@ -169,7 +169,9 @@ export async function startBootSequence({
   if (!servedByServerKeeper()) scheduleFileSweep()
   // The Rust core loads beside the font, and is awaited before the first
   // render: every layout is the core's, so a page that rendered before it
-  // loaded would have nothing to draw with.
+  // loaded would have nothing to draw with. The wait is bounded like the
+  // others here: a load that has not settled within CORE_LOAD_TIMEOUT_MS is
+  // abandoned as a failure, and the page renders with the missing-core notice.
   const coreLoaded = loadCore()
   // Bounded await: every on-screen text measurement (SpatialEditor,
   // MarkdownEditor's preview pane, useDocumentSync) must use the same vendored

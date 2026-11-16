@@ -1,6 +1,7 @@
 import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { type CSSProperties, type MutableRefObject, useCallback, useEffect, useMemo } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
+import { useLayoutCoreGeneration } from '../../hooks/use-layout-core-generation.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import {
   type PreviewBlockAnchor,
@@ -94,6 +95,8 @@ export function PreviewPane({
   blocksRef,
   onToggleTask,
 }: PreviewPaneProps) {
+  // Draws again when the page's core loads on a retry after a failed boot load.
+  const coreGeneration = useLayoutCoreGeneration()
   const { keyed, anchors, blocks } = useMemo(
     () =>
       renderMarkdownPreview(value, {
@@ -105,7 +108,7 @@ export function PreviewPane({
         fragments,
         tagLibrary: library,
       }),
-    [value, measure, maxWidth, background, references, theme, fragments, library],
+    [value, measure, maxWidth, background, references, theme, fragments, library, coreGeneration],
   )
   useEffect(() => {
     if (anchorsRef) anchorsRef.current = anchors

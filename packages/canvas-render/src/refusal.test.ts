@@ -19,6 +19,7 @@ const REFUSAL_REASONS = [
   'fragments',
   'non-finite',
   'host-measure',
+  'core-unavailable',
 ] as const
 
 const runs = (scene: Scene) =>
@@ -34,7 +35,9 @@ describe('refusalCopy', () => {
   it('names what happened and what the reader can do, per reason the core refuses with', () => {
     for (const reason of REFUSAL_REASONS) {
       const code =
-        reason === 'non-finite' || reason === 'host-measure' ? 'malformed' : 'input-too-large'
+        reason === 'non-finite' || reason === 'host-measure' || reason === 'core-unavailable'
+          ? 'malformed'
+          : 'input-too-large'
       const { title, detail } = refusalCopy({ code, reason })
       expect(title.length, reason).toBeGreaterThan(0)
       // A sentence that says what was refused, then one that says what to do.

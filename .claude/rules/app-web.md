@@ -449,10 +449,17 @@ before its first layout: the page in `boot.ts` (beside the font, before the
 first render), `layout-worker.ts` before its first message, and the browser
 test setup with a top-level `await`. Every layout reads `currentLayoutCore()`
 through `editorLayoutBase` (or hands it on: `render-preview.ts`, `CommentBody`,
-`VersionPreview`'s `CanvasViewer`, the overlays and the drag preview). A load
-that fails is logged once and `currentLayoutCore()` throws it to every layout
-after, so its surface shows the error; there is no TypeScript to answer in its
-place. A realm that installs no host — a jsdom unit test of a component — gets
+`VersionPreview`'s `CanvasViewer`, the overlays and the drag preview). The
+load is bounded (`CORE_LOAD_TIMEOUT_MS`, 30 s, sized from the gzipped wasm on
+Chrome's Slow 3G preset), so a fetch that never settles cannot hold the boot
+splash. A load that fails or times out is logged once, and `currentLayoutCore()`
+then answers a core that refuses every layout as `core-unavailable`, which each
+surface draws as its refusal notice; there is no TypeScript to answer in its
+place. The first failure schedules one more load `CORE_RETRY_AFTER_MS` (5 s)
+later by itself, a layout asked at least that long after a failure starts one
+too, and the worker asks again before each request; a load that succeeds moves `useLayoutCoreGeneration`, which
+the editor's scene and the preview pane are keyed on, so they draw again
+without a reload. A realm that installs no host — a jsdom unit test of a component — gets
 `undefined`, and canvas-render's TypeScript composer lays out, which is what
 S18h deletes. The core measures through the page's own measurer, which
 canvas-viewer's `createBrowserMeasureText` names `{kind: 'host'}` and the core
