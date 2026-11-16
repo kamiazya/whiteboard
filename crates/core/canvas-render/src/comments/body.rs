@@ -37,7 +37,8 @@ const RESOLVED_LABEL_FONT_PX: f64 = 11.0;
 const RESOLVED_LABEL_GAP_PX: f64 = 2.0;
 
 /// The literal text as the one paragraph a body that will not parse is drawn as.
-fn literal_root(text: &str) -> Root {
+#[must_use]
+pub fn literal_root(text: &str) -> Root {
     Root {
         children: vec![Flow::Paragraph {
             children: vec![Phrasing::Text { value: text.to_owned() }],

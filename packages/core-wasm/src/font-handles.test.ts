@@ -130,7 +130,7 @@ describe('the faces a font-table measurer reads', () => {
     expect(registered).toHaveLength(2)
   })
 
-  it('decline a layout past the caps of a registration or over a font the core cannot read', () => {
+  it('refuse a layout past the caps of a registration, and throw over a font range outside the bytes', () => {
     const refusing = (answer: string) => ({
       ...glueOf().glue,
       register_layout_fonts: () => answer,
@@ -147,7 +147,7 @@ describe('the faces a font-table measurer reads', () => {
         new FontHandles(full, errors),
       ),
     ).toEqual({
-      declined: 'held',
+      refused: { code: 'input-too-large', reason: 'held' },
     })
     // The core keeps the faces it reads and drops the rest, so `malformed font`
     // names a range outside the bytes, which the shim never places: a defect.
@@ -199,7 +199,7 @@ describe('the faces a font-table measurer reads', () => {
         new FontHandles(glue, errors),
       ),
     ).toEqual({
-      declined: 'too-large',
+      refused: { code: 'input-too-large', reason: 'too-large' },
     })
     expect(registered).toEqual([])
   })

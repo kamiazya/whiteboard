@@ -14,13 +14,13 @@ const errors = {
 function glueOf(...answers: string[]) {
   const sent: unknown[] = []
   const glue: LayoutGlue = {
-    layout_spatial_canvas: () => '["declined","whole layout"]',
+    layout_spatial_canvas: () => '["refused","input-too-large","whole layout"]',
     register_layout_fonts: () => '["ok",3]',
     release_layout_fonts: () => true,
     release_layout_cache: () => false,
     layout_query(request) {
       sent.push(JSON.parse(request))
-      return answers[sent.length - 1] ?? '["declined","x"]'
+      return answers[sent.length - 1] ?? '["refused","input-too-large","x"]'
     },
   }
   return { glue, sent }
@@ -90,18 +90,23 @@ describe('a query over the artifact', () => {
     )
     expect(got).toEqual({ numbers: [[42]] })
     expect(JSON.stringify(sent[1])).toContain('"codeTokens"')
-    // Without a highlighter the fences cannot be sent, and the TypeScript answers.
-    expect(ask(glueOf(needs).glue, request)).toEqual({ declined: 'highlight' })
+    // Without a highlighter the fences cannot be sent: a defect in the caller.
+    expect(() => ask(glueOf(needs).glue, request)).toThrow('layout_query malformed highlight')
   })
 
-  it('answers a decline or a refusal past a cap as declined, and throws on anything else', () => {
-    expect(ask(glueOf('["declined","body"]').glue, box)).toEqual({ declined: 'body' })
+  it('answers a refusal a root draws as refused, and throws on anything else', () => {
+    // Nothing declines since D7a: a decline is an answer the shim does not know.
+    expect(() => ask(glueOf('["declined","body"]').glue, box)).toThrow(
+      'layout_query malformed answer',
+    )
     const past = '["refused","input-too-large","runs"]'
-    expect(ask(glueOf(past).glue, box)).toEqual({ declined: 'runs' })
-    // A query answers no scene to draw a refusal in, so its root asks the TypeScript.
+    expect(ask(glueOf(past).glue, box)).toEqual({
+      refused: { code: 'input-too-large', reason: 'runs' },
+    })
+    // A query answers no scene to draw a refusal in: its caller answers it as the query says.
     for (const reason of ['non-finite', 'host-measure']) {
       const refused = JSON.stringify(['refused', 'malformed', reason])
-      expect(ask(glueOf(refused).glue, box)).toEqual({ declined: reason })
+      expect(ask(glueOf(refused).glue, box)).toEqual({ refused: { code: 'malformed', reason } })
     }
     expect(() => ask(glueOf('["refused","malformed","request"]').glue, box)).toThrow(
       'layout_query malformed request',
@@ -111,21 +116,23 @@ describe('a query over the artifact', () => {
     expect(() => ask(glueOf('["ok",[]]').glue, edges)).toThrow('layout_query malformed answer')
   })
 
-  it("declines a geometry query past the entry's bytes without calling it", () => {
+  it("refuses a geometry query past the entry's bytes without calling it", () => {
     const { glue, sent } = glueOf()
     const huge = { ...box, shape: 'x'.repeat(LAYOUT_QUERY_CAPS.maxBytes) }
-    expect(ask(glue, huge)).toEqual({ declined: 'too-large' })
+    expect(ask(glue, huge)).toEqual({ refused: { code: 'input-too-large', reason: 'too-large' } })
     expect(sent).toEqual([])
   })
 
-  it("declines a measured query past the entry's bytes without calling it", () => {
+  it("refuses a measured query past the entry's bytes without calling it", () => {
     const { glue, sent } = glueOf()
     const huge = {
       query: 'node-size',
       measure: { kind: 'ratio' },
       text: 'x'.repeat(LAYOUT_QUERY_CAPS.maxBytes),
     } as const
-    expect(ask(glue, huge as unknown as LayoutQueryRequest)).toEqual({ declined: 'too-large' })
+    expect(ask(glue, huge as unknown as LayoutQueryRequest)).toEqual({
+      refused: { code: 'input-too-large', reason: 'too-large' },
+    })
     expect(sent).toEqual([])
   })
 })

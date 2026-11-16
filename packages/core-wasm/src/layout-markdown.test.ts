@@ -14,7 +14,7 @@ function glueOf(...answers: string[]) {
   const glue: LayoutGlue = {
     layout_spatial_canvas(request) {
       sent.push(JSON.parse(request))
-      return answers[sent.length - 1] ?? '["declined","x"]'
+      return answers[sent.length - 1] ?? '["refused","input-too-large","x"]'
     },
     register_layout_fonts: () => '["ok",3]',
     release_layout_fonts: () => true,
@@ -95,16 +95,17 @@ describe('a markdown body over the artifact', () => {
     expect(lay(plain, comment)).toEqual({ scene, degradations: [] })
   })
 
-  it('reads a missing section, a decline and a cap as the root answers them', () => {
+  it('reads a missing section and a cap as the root answers them, and a decline as no answer', () => {
     expect(lay(glueOf('["missing","section"]').glue, note)).toEqual({ missing: 'section' })
-    expect(lay(glueOf('["declined","body"]').glue, note)).toEqual({ declined: 'body' })
+    // Nothing declines since D7a: a decline is an answer the shim does not know.
+    expect(() => lay(glueOf('["declined","body"]').glue, note)).toThrow(/malformed/)
     const capped = glueOf('["refused","input-too-large","bodies"]').glue
     expect(lay(capped, note)).toEqual({ refused: { code: 'input-too-large', reason: 'bodies' } })
   })
 
-  it('asks the highlighter for the fences the core needs, and declines without one', () => {
+  it('asks the highlighter for the fences the core needs, and throws without one', () => {
     const needs = JSON.stringify(['needs', { code: [['ts', 'x']] }])
-    expect(lay(glueOf(needs).glue, note)).toEqual({ declined: 'highlight' })
+    expect(() => lay(glueOf(needs).glue, note)).toThrow(/malformed highlight/)
     const { glue, sent } = glueOf(needs, JSON.stringify(['ok', { nodes: [] }, [], []]))
     expect(lay(glue, note, () => undefined)).toEqual({ scene: { nodes: [] }, degradations: [] })
     expect(JSON.stringify(sent[1])).toContain('"codeTokens",["s",["s","ts","x",null]]')

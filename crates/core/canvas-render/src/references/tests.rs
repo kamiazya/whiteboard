@@ -6,8 +6,7 @@ use whiteboard_model::mdast::Root;
 use whiteboard_model::spatial::{CanvasLine, LineEnd, LineEndPoint, SpatialCanvas, SpatialNode};
 
 use super::{
-    Expansion, ExtraImage, FenceTokens, LoadedReference, ReferenceExtra, ReferenceWire, Refused,
-    WireHost,
+    Expansion, ExtraImage, FenceTokens, LoadedReference, ReferenceExtra, ReferenceWire, WireHost,
 };
 use crate::canvas_fragment::select_canvas_fragment;
 use crate::compose_node::{ComposeHost, Degradation};
@@ -75,6 +74,7 @@ fn wire() -> ReferenceWire {
                 ReferenceExtra {
                     label: Some("Shown".to_owned()),
                     missing: Some(true),
+                    pending: None,
                     image: Some(ExtraImage {
                         href: "data:x".to_owned(),
                         alt: Some("alt".to_owned()),
@@ -100,7 +100,6 @@ fn a_body_resolves_its_targets_through_the_wire_aliases_ahead_of_the_graph() {
     let want = parsed(body, &[("alias", "D9"), ("other", "D3"), ("note", "D1")]);
     assert_eq!(host.parse_body(body), Ok(want));
     assert_ne!(host.parse_body(body), Ok(parsed(body, &[])));
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -153,7 +152,6 @@ fn an_embed_is_a_body_or_a_canvas_named_by_its_record_or_the_title_table() {
     assert_eq!(host.embed_name("board"), None);
     assert_eq!(host.embedded_canvas("board", None).map(|c| c.nodes.len()), Some(2));
     assert_eq!(host.embedded_canvas("D1", None), None);
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -183,11 +181,9 @@ fn a_fence_a_narrowed_embed_and_a_section_refuse_nothing() {
     let code = WireHost::new(&wire, true);
     assert_eq!(code.tokenize("rust", "fn", None), None);
     assert_eq!(code.embedded_canvas("board", Some("f")), None);
-    assert_eq!(code.refused(), None);
 
     let section = WireHost::new(&wire, true);
     assert!(section.resolve_embed("D1", Some("f")).is_some());
-    assert_eq!(section.refused(), None);
 }
 
 /// Two frames apart and a line: `^n1` selects one frame and keeps the line.
@@ -215,7 +211,6 @@ fn a_canvas_embed_is_narrowed_to_the_part_its_fragment_names() {
     let want = Embedded::Canvas { title: None, canvas: Some(summary) };
     assert_eq!(host.resolve_embed("board", Some("^n1")), Some(want));
     assert_eq!(host.embedded_canvas("board", None), Some(board));
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -227,34 +222,47 @@ fn a_fragment_naming_nothing_is_a_canvas_with_no_part_not_a_refusal() {
     assert_eq!(host.resolve_embed("board", Some("^missing")), Some(want));
     assert_eq!(host.embedded_canvas("gone", Some("^n0")), None);
     assert_eq!(host.resolve_embed("gone", Some("^n0")), None);
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
-fn a_body_past_the_parser_bounds_refuses_the_layout() {
+fn a_body_past_the_parser_bounds_fails_its_own_parse_and_draws_as_its_literal_text_elsewhere() {
     let long = "a".repeat(whiteboard_markdown_max() + 1);
     let wire = ReferenceWire {
         entries: vec![("big".to_owned(), Some(loaded(Some("B"), Some("Big"), Some(&long))))],
         ..ReferenceWire::default()
     };
     let host = WireHost::new(&wire, true);
+    // A node's own body and a comment's: the composer degrades them (D7a).
     assert!(host.parse_body(&long).is_err());
-    assert_eq!(host.refused(), Some(Refused::Body));
-    let host = WireHost::new(&wire, true);
     assert!(host.parse_markdown(&long).is_err());
-    assert_eq!(host.refused(), Some(Refused::Body));
-    let host = WireHost::new(&wire, true);
-    assert_eq!(host.resolve_embed("B", None), None);
-    assert_eq!(host.refused(), Some(Refused::Body));
-    let host = WireHost::new(&wire, true);
-    assert_eq!(host.resolve_reference("big").and_then(|r| r.markdown), None);
-    assert_eq!(host.refused(), Some(Refused::Body));
-    let host = WireHost::new(&wire, true);
+    // A referenced body: one paragraph of its literal text.
+    let literal = crate::comments::body::literal_root(&long);
+    assert_eq!(
+        host.resolve_embed("B", None),
+        Some(Embedded::Document { title: Some("Big".to_owned()), root: literal.clone() })
+    );
+    assert_eq!(host.resolve_reference("big").and_then(|r| r.markdown), Some(literal));
     assert_eq!(
         host.parse_markdown("[[x]]"),
         parse_markdown_body("[[x]]").map_err(|_| unreachable())
     );
-    assert_eq!(host.refused(), None);
+}
+
+#[test]
+fn an_embed_is_pending_while_an_extra_marks_it_so_by_id_or_by_a_target_naming_it() {
+    let mut wire = wire();
+    let pending = ReferenceExtra { pending: Some(true), ..ReferenceExtra::default() };
+    wire.extras.push(("D7".to_owned(), pending.clone()));
+    wire.extras.push(("alias".to_owned(), pending));
+    let not = ReferenceExtra { pending: Some(false), ..ReferenceExtra::default() };
+    wire.extras.push(("D2".to_owned(), not));
+    let host = WireHost::new(&wire, true);
+    assert!(host.embed_pending("D7"), "named by id");
+    assert!(host.embed_pending("D9"), "named by a target the alias table resolves to it");
+    assert!(!host.embed_pending("D2"), "marked not pending");
+    assert!(!host.embed_pending("D1"), "no extra");
+    // A pending extra alone resolves nothing.
+    assert_eq!(host.resolve_reference("D7"), None);
 }
 
 /// The parser's byte bound (`whiteboard_markdown::limits::MAX_BYTES`).
@@ -273,7 +281,6 @@ fn shortcodes_are_answered_from_the_plugin_tables_without_a_refusal() {
     assert_eq!(host.expand_emoji("a :rocket: at 10:30: b"), "a 🚀 at 10:30: b");
     let want = IconRange { from: 2, to: 13, name: "star".to_owned() };
     assert_eq!(host.icon_ranges("😀:icon-star: :icon-nope:"), vec![want]);
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -285,11 +292,6 @@ fn degradations_are_kept_in_order() {
     host.degrade(first.clone());
     host.degrade(second.clone());
     assert_eq!(host.degradations(), vec![first, second]);
-}
-
-#[test]
-fn each_refusal_names_its_class() {
-    assert_eq!(Refused::Body.class(), "body");
 }
 
 fn lines(text: &str) -> CodeTokenLines {
@@ -316,7 +318,6 @@ fn a_fence_the_highlighter_colours_answers_its_tokens_as_the_host_sent_them() {
     assert_eq!(host.tokenize("JS", "let", None), None);
     assert_eq!(host.needs(), vec![("JS".to_owned(), "let".to_owned())]);
     assert_eq!(budget.refused(), 0);
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -331,7 +332,6 @@ fn a_fence_with_no_tokens_is_asked_for_once_and_no_cache_keeps_its_body() {
     let asked = [("python", "z"), ("yaml", "a: 1")].map(|(l, v)| (l.to_owned(), v.to_owned()));
     assert_eq!(host.needs(), asked.to_vec());
     assert_eq!(budget.refused(), 3);
-    assert_eq!(host.refused(), None);
 }
 
 #[test]
@@ -344,7 +344,6 @@ fn a_fence_the_highlighter_would_leave_plain_is_neither_asked_for_nor_refused() 
     }
     assert!(host.needs().is_empty());
     assert_eq!(budget.refused(), 0);
-    assert_eq!(host.refused(), None);
 }
 
 #[test]

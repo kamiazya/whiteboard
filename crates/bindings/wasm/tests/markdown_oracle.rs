@@ -12,9 +12,11 @@
 //! answers them from its highlighter, and holds the core's scene to the
 //! recorded one: a text compared as JSON values, a digest byte for byte.
 //!
-//! A body past the markdown parser's bounds is declined by the core and drawn
-//! by the TypeScript (owner decision q72); those records are listed in
-//! `DECLINED` and must be declined, so the list cannot outlive its cause.
+//! A body past the markdown parser's bounds is drawn by the core as its literal
+//! text (owner decision q81, D7a), where the TypeScript drew remark's reading of
+//! it; those records are a tolerated class, listed in `TOLERATED`: each must be
+//! answered with a scene AND differ from the recording, so the list cannot
+//! outlive its cause.
 
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
@@ -25,9 +27,10 @@ use whiteboard_wasm::json_canvas_wire::value_json;
 use whiteboard_wasm::spatial_layout::layout_spatial_canvas;
 
 /// The bodies the parser refuses, by name: a nesting or delimiter-run bound
-/// past which the core declines rather than read the body differently. Every
-/// record of these, on every surface, is declined, and no other is.
-const DECLINED: &[&str] = &[
+/// past which the core draws the literal text rather than read the body
+/// differently. Every record of these, on every surface, differs from the
+/// recording, and no other does.
+const TOLERATED: &[&str] = &[
     "quote 33 deep",
     "list 39 deep",
     "list 40 deep",
@@ -332,21 +335,24 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
     let digests = jsonl(&dir.join("layout-markdown-digests.jsonl"));
     let mut failures = Vec::new();
     let mut by_surface = Vec::new();
-    let (mut total, mut refusals) = (0_usize, 0_usize);
+    let (mut total, mut literal) = (0_usize, 0_usize);
     for surface in ["comment", "daemon", "outline", "preview", "thumbnail"] {
         let file = read(&dir.join(format!("layout-markdown.{surface}.jsonl")));
         let mut lines = file.lines();
         let meta = parse(lines.next().unwrap_or_default());
-        let (mut answered, mut declined) = (0_usize, 0_usize);
+        let (mut answered, mut tolerated) = (0_usize, 0_usize);
         for line in lines {
             let record = parse(line);
             let id = text(&record, "id").unwrap_or_default();
             let got = answer(&record, &meta, &table);
-            if DECLINED.contains(&body_name(&id)) {
-                if got == r#"["declined","body"]"# {
-                    declined += 1;
+            if TOLERATED.contains(&body_name(&id)) {
+                if !got.starts_with(r#"["ok","#) {
+                    failures.push(format!("{id}: not drawn as its literal text: {got:.80}"));
+                } else if judge(line, &got, &digests).is_none() {
+                    failures
+                        .push(format!("{id}: draws as the TypeScript did; drop it from TOLERATED"));
                 } else {
-                    failures.push(format!("{id}: not declined"));
+                    tolerated += 1;
                 }
                 continue;
             }
@@ -355,11 +361,11 @@ fn every_recorded_markdown_layout_is_answered_as_the_typescript_answered_it() {
                 None => answered += 1,
             }
         }
-        by_surface.push(format!("{surface}: {answered} answered, {declined} declined"));
+        by_surface.push(format!("{surface}: {answered} answered, {tolerated} tolerated"));
         total += answered;
-        refusals += declined;
+        literal += tolerated;
     }
     // Every surface's hand and boundary bodies, and the repository's documents.
-    assert!(total >= 400 && refusals == 50, "{}", by_surface.join("\n"));
+    assert!(total >= 400 && literal == 50, "{}", by_surface.join("\n"));
     assert!(failures.is_empty(), "{} differ:\n{}", failures.len(), failures.join("\n"));
 }

@@ -57,6 +57,7 @@ fn extra_of(value: &Value) -> Option<ReferenceExtra> {
     let extra = ReferenceExtra {
         label: f.field("label", string_of)?,
         missing: f.field("missing", flag_of)?,
+        pending: f.field("pending", flag_of)?,
         image: f.field("image", image_of)?,
         facets: f.field("facets", card_of)?,
     };

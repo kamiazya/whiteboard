@@ -24,10 +24,6 @@ pub(super) fn refused(code: &str, class: &str) -> String {
     outcome("refused", vec![text(code), text(class)])
 }
 
-pub(super) fn declined(class: &str) -> String {
-    outcome("declined", vec![text(class)])
-}
-
 /// What a request named that its content does not hold: a markdown body's
 /// `#Heading` section.
 pub(super) fn missing(what: &str) -> String {

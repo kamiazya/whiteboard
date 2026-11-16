@@ -54,7 +54,9 @@ describe('the queries through the shim over the built artifact', () => {
     }
     const measure = { kind: 'fake', factor: 0.6 } as const
     const request = { query: 'node-size', node, measure, mode: 'dark', floor: 'none' } as const
-    expect(core.layoutQuery(request)).toEqual({ declined: 'highlight' })
+    expect(() => core.layoutQuery(request)).toThrow(
+      'layout_query refused its input: malformed (highlight)',
+    )
     const sized = core.layoutQuery(request, () => [[{ text: 'let x = 1' }]])
     expect('numbers' in sized && sized.numbers).toEqual([[expect.any(Number)]])
   })

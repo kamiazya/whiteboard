@@ -48,7 +48,7 @@ const fake: LayoutRequest = { measure: { kind: 'fake', factor: 0.5 } }
 
 describe('the whole layout over the artifact', () => {
   it('sends the request on the value wire, a font-table measurer by its handle', () => {
-    const { glue, calls } = glueOf('["declined","x"]')
+    const { glue, calls } = glueOf('["refused","input-too-large","x"]')
     const faces = [{ family: 'A', bold: false, italic: false, bytes: new Uint8Array([1, 2]) }]
     const request = { measure: { kind: 'fonts', faces }, mode: 'light' } as LayoutRequest
     layoutSpatialCanvas(glue, errors, request)
@@ -85,10 +85,10 @@ describe('the whole layout over the artifact', () => {
     expect(none).not.toHaveProperty('fragmentsAsked')
   })
 
-  it('declines what the core declined', () => {
-    expect(layoutSpatialCanvas(glueOf('["declined","body"]').glue, errors, fake)).toEqual({
-      declined: 'body',
-    })
+  it('reads a decline as no answer: nothing declines since D7a', () => {
+    expect(() => layoutSpatialCanvas(glueOf('["declined","body"]').glue, errors, fake)).toThrow(
+      'layout_spatial_canvas malformed answer',
+    )
   })
 
   it('reads a refusal a host draws: a cap passed, a number with no spelling, a silent host', () => {
@@ -188,14 +188,14 @@ describe('a fence the core asks for', () => {
     ])
   })
 
-  it('declines the layout with no highlighter, or when the core asks twice', () => {
-    expect(layoutSpatialCanvas(glueAnswering(NEEDS, OK).glue, errors, withBody)).toEqual({
-      declined: 'highlight',
-    })
+  it('throws for a layout with no highlighter, or when the core asks twice: a defect, not an input', () => {
+    expect(() => layoutSpatialCanvas(glueAnswering(NEEDS, OK).glue, errors, withBody)).toThrow(
+      'layout_spatial_canvas malformed highlight',
+    )
     const twice = glueAnswering(NEEDS, NEEDS, OK)
-    expect(layoutSpatialCanvas(twice.glue, errors, withBody, tokens)).toEqual({
-      declined: 'highlight',
-    })
+    expect(() => layoutSpatialCanvas(twice.glue, errors, withBody, tokens)).toThrow(
+      'layout_spatial_canvas malformed highlight',
+    )
     expect(twice.sent).toHaveLength(2)
   })
 

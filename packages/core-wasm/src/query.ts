@@ -8,6 +8,7 @@ import {
   type LayoutErrors,
   type LayoutEvent,
   type LayoutGlue,
+  type LayoutRefusal,
   type LayoutRequest,
   layoutWith,
   type Read,
@@ -63,13 +64,13 @@ type QueryNumbers = number | readonly QueryNumbers[]
 /**
  * The core's answer: an edge layer and what the layout reported beside it;
  * the numbers of any other query, each double exactly as the core computed it
- * (a non-finite one included); or the class of what it declined, which a root
- * answers from the TypeScript.
+ * (a non-finite one included); or what it refused, which a query's caller
+ * answers as the query says, having no scene to draw a refusal in.
  */
 export type LayoutQueryAnswer =
   | { readonly nodes: readonly SceneNode[]; readonly degradations: readonly LayoutEvent[] }
   | { readonly numbers: readonly QueryNumbers[] }
-  | { readonly declined: string }
+  | { readonly refused: LayoutRefusal }
 
 const OPERATION = 'layout_query'
 
@@ -86,17 +87,10 @@ function numbersOf(value: unknown): QueryNumbers | undefined {
   return items.includes(undefined) ? undefined : (items as QueryNumbers[])
 }
 
-/**
- * What the core declined, or refused as a root would draw it, which a query's
- * root answers from the TypeScript: a query answers no scene to draw a
- * refusal in.
- */
-function unanswered(parsed: unknown[]): { readonly declined: string } | undefined {
-  const [kind, a] = parsed
-  if (kind === 'declined' && typeof a === 'string') return { declined: a }
+/** What the core refused, as a root would draw it. */
+function unanswered(parsed: unknown[]): { readonly refused: LayoutRefusal } | undefined {
   const refused = drawnRefusal(parsed)
-  if (refused !== undefined) return { declined: refused.reason }
-  return undefined
+  return refused === undefined ? undefined : { refused }
 }
 
 function refusedDetail([kind, , b]: unknown[]): string {
@@ -104,8 +98,8 @@ function refusedDetail([kind, , b]: unknown[]): string {
 }
 
 const readEdges: Read<LayoutQueryAnswer> = (parsed, errors) => {
-  const declined = unanswered(parsed)
-  if (declined !== undefined) return declined
+  const refused = unanswered(parsed)
+  if (refused !== undefined) return refused
   const [kind, nodes, events] = parsed
   if (kind === 'ok' && Array.isArray(nodes) && Array.isArray(events) && parsed.length === 3) {
     return { nodes: nodes as SceneNode[], degradations: events as LayoutEvent[] }
@@ -114,8 +108,8 @@ const readEdges: Read<LayoutQueryAnswer> = (parsed, errors) => {
 }
 
 const readNumbers: Read<LayoutQueryAnswer> = (parsed, errors) => {
-  const declined = unanswered(parsed)
-  if (declined !== undefined) return declined
+  const refused = unanswered(parsed)
+  if (refused !== undefined) return refused
   const [kind, ...rest] = parsed
   const numbers = numbersOf(rest)
   if (kind === 'ok' && Array.isArray(numbers)) return { numbers }
@@ -147,13 +141,14 @@ export function layoutQuery(
   const { glue, errors } = calls
   if ('measure' in request) {
     const read = request.query === 'edges' ? readEdges : readNumbers
-    const got = layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
-    return 'refused' in got ? { declined: got.refused.reason } : got
+    return layoutWith({ ...calls, entry: OPERATION }, request, read, hostMeasure, undefined)
   }
   const wire = wireOf(request, 0, true)
   if (wire === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')
   const text = JSON.stringify(wire)
-  if (text.length > LAYOUT_QUERY_CAPS.maxBytes) return { declined: 'too-large' }
+  if (text.length > LAYOUT_QUERY_CAPS.maxBytes) {
+    return { refused: { code: 'input-too-large', reason: 'too-large' } }
+  }
   const parsed: unknown = JSON.parse(glue.layout_query(text))
   return readNumbers(Array.isArray(parsed) ? parsed : [], errors)
 }

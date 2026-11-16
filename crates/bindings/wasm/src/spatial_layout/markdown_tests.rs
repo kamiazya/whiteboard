@@ -125,14 +125,17 @@ fn comment(body: &str, density: &str) -> String {
 }
 
 #[test]
-fn a_comment_past_the_parser_bounds_is_declined_and_one_within_is_drawn() {
+fn a_body_past_the_parser_bounds_draws_its_literal_text_and_one_within_is_drawn() {
+    // Owner decision q81, D7a: one paragraph of the literal text, never a decline.
     let deep = format!("{}deep", "> ".repeat(40));
-    assert_eq!(answer(&comment(&deep, "compact")), json!(["declined", "body"]));
+    for literal in [answer(&comment(&deep, "compact")), answer(&note(&deep, &[]))] {
+        assert_eq!(literal.get(0), Some(&json!("ok")), "{literal}");
+        assert_eq!(count(&literal, "deep"), 1, "{literal}");
+        assert!(count(&literal, "> > ") > 0, "the markers are text: {literal}");
+    }
     let drawn = answer(&comment("**bold** and :rocket:", "compact"));
     assert_eq!(drawn.get(0), Some(&json!("ok")), "{drawn}");
     assert_eq!(count(&drawn, "🚀"), 1, "{drawn}");
-    let note_deep = answer(&note(&deep, &[]));
-    assert_eq!(note_deep, json!(["declined", "body"]));
 }
 
 #[test]
@@ -142,10 +145,10 @@ fn a_markdown_request_past_its_caps_is_refused() {
     assert_eq!(answer(&comment(&long, "comfortable")), refused("bodies"));
     assert_eq!(answer(&note(&long, &[])), refused("bodies"));
     // At the cap is within it, and one body that large is past the parser's own
-    // bound, which declines it (D7a's, held behind the switch's retirement).
+    // bound, which draws it as its literal text (D7a).
     let full = "\n".repeat(MAX_BODY_BYTES);
-    assert_eq!(answer(&comment(&full, "comfortable")), json!(["declined", "body"]));
-    assert_eq!(answer(&note(&full, &[])), json!(["declined", "body"]));
+    assert_eq!(answer(&comment(&full, "comfortable")).get(0), Some(&json!("ok")));
+    assert_eq!(answer(&note(&full, &[])).get(0), Some(&json!("ok")));
     // Blank lines parse to nothing, so a body at the parser's bound costs no layout.
     let parsed = "\n".repeat(MAX_PARSE_BYTES);
     assert_eq!(answer(&comment(&parsed, "comfortable")).get(0), Some(&json!("ok")));

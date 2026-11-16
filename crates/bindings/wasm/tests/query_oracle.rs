@@ -190,10 +190,11 @@ fn hex_answer(record: &Value) -> Json {
     json!(["ok", answer])
 }
 
-/// The bodies the markdown parser refuses, by name: the core declines a node
-/// holding one and the TypeScript sizes it (owner decision q72). Every record of
-/// these is declined, and no other is.
-const DECLINED: &[&str] = &["quote 33 deep", "list 39 deep", "list 40 deep"];
+/// The bodies the markdown parser refuses, by name: the core sizes a node
+/// holding one as the literal text it draws (owner decision q81, D7a), where the
+/// TypeScript sized remark's reading of it. Every record of these is answered
+/// and differs from the recording, and no other differs.
+const TOLERATED: &[&str] = &["quote 33 deep", "list 39 deep", "list 40 deep"];
 
 /// The recorded tokens of the fences a `needs` answer names, as `codeTokens` rows.
 fn tokens_for(fences: &[Json], table: &[Value]) -> Value {
@@ -231,21 +232,21 @@ fn the_node_sizes_are_the_recorded_ones() {
     assert_eq!(records.len(), 236, "the recording is read");
     let table = oracle("layout-markdown-fences.jsonl");
     let mut moved = Vec::new();
-    let mut declined = 0;
+    let mut tolerated = 0;
     for record in &records {
         let id = text(record, "id");
         let answer = ask_with_tokens(node_size_request(record), &table);
-        let refused = DECLINED.iter().any(|name| id.contains(&format!("/{name}@")));
-        if refused {
-            declined += 1;
-            if answer != json!(["declined", "body"]) {
+        let literal = TOLERATED.iter().any(|name| id.contains(&format!("/{name}@")));
+        if literal {
+            tolerated += 1;
+            if answer.get(0) != Some(&json!("ok")) || answer == hex_answer(record) {
                 moved.push(id);
             }
         } else if answer != hex_answer(record) {
             moved.push(id);
         }
     }
-    assert_eq!(declined, 24, "each declined body at two widths, four ways");
+    assert_eq!(tolerated, 24, "each tolerated body at two widths, four ways");
     assert!(moved.is_empty(), "{} of {} sizes differ: {moved:?}", moved.len(), records.len());
 }
 
