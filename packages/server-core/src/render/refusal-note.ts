@@ -13,6 +13,16 @@ export function logRefusal({ code, reason }: LayoutRefusal): void {
 }
 
 /**
+ * Where `wb_scene_render`'s result carries `refusalNote`'s words. A symbol
+ * key, so JSON and the strict output schema read past it: the structured
+ * output keeps its one shape, and the words travel with the result through
+ * every wrapper a tool's `execute` passes (the workspace-handle resolution,
+ * the membership gate), which a second method would bypass. The MCP adapter
+ * takes them off and answers them as a second text item.
+ */
+export const REFUSAL_NOTE: unique symbol = Symbol('whiteboard.refusal-note')
+
+/**
  * What a render tells a caller beside the SVG when the document is drawn as a
  * refusal: the same words the notice carries, and the reason the core gave,
  * which is what an agent can act on without reading the picture.

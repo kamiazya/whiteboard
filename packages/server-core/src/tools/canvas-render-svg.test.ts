@@ -15,7 +15,7 @@ import { fileNode, groupNode, textNode } from '@kamiazya/whiteboard-model/test-u
 import { VISUAL_TAGS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { SnapshotNotFoundError } from '../document-io.js'
-import { refusalNote } from '../render/refusal-note.js'
+import { REFUSAL_NOTE, refusalNote } from '../render/refusal-note.js'
 import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -693,13 +693,13 @@ describe('wb_scene_render of a board the core refuses', () => {
       comments: false,
       style: 'clean' as const,
     }
-    const tool = createCanvasRenderSvgTool(deps)
-    const { output, note } = await tool.render(input)
+    const { [REFUSAL_NOTE]: note, ...output } = await createCanvasRenderSvgTool(deps).execute(input)
     expect(output.svg).toContain(refusalCopy(refused).title)
     expect(output.svg).not.toContain('kept out')
     expect(note).toBe(refusalNote(refused))
     expect(note).toContain('too-many-elements')
-    expect(await tool.execute(input)).toEqual(output)
+    // The words ride a symbol key: the structured output keeps its one shape.
+    expect(Object.keys(output).sort()).toEqual(['height', 'svg', 'width'])
   })
 
   test('says nothing beside an SVG the core drew', async () => {
@@ -710,13 +710,15 @@ describe('wb_scene_render of a board the core refuses', () => {
         edges: [],
       })
     })
-    const { note } = await createCanvasRenderSvgTool(await makeDeps(store)).render({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      embedReferences: false,
-      comments: false,
-      style: 'clean',
-    })
+    const { [REFUSAL_NOTE]: note } = await createCanvasRenderSvgTool(await makeDeps(store)).execute(
+      {
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        embedReferences: false,
+        comments: false,
+        style: 'clean',
+      },
+    )
     expect(note).toBeUndefined()
   })
 })

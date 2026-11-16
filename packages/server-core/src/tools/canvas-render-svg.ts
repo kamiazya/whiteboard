@@ -24,7 +24,7 @@ import { loadDocument } from '../document-io.js'
 import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
-import { refusalNote } from '../render/refusal-note.js'
+import { REFUSAL_NOTE, refusalNote } from '../render/refusal-note.js'
 import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import { unknownStyleRefusal } from '../render/unknown-style.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -169,15 +169,16 @@ async function canvasScene(
 }
 
 /**
- * `execute`'s answer, and when the document is drawn as a refusal (the
- * layout past a cap the core holds it to), the words that say so, which the
- * MCP answer carries beside the structured output: the output itself is
- * unchanged, since the SVG is the notice.
+ * `wb_scene_render`'s output, carrying under `REFUSAL_NOTE` the words that say
+ * the document is drawn as a refusal (the layout past a cap the core holds it
+ * to), when it is; the output itself is unchanged, since the SVG is the notice.
  */
+type CanvasRenderSvgAnswer = CanvasRenderSvgOutput & { readonly [REFUSAL_NOTE]?: string }
+
 async function renderDocument(
   deps: ServerDeps,
   input: CanvasRenderSvgInput,
-): Promise<{ readonly output: CanvasRenderSvgOutput; readonly note?: string }> {
+): Promise<CanvasRenderSvgAnswer> {
   const refusal = unknownStyleRefusal(input.style)
   if (refusal !== undefined) throw new UnknownRenderStyleError(refusal)
   await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
@@ -212,7 +213,7 @@ async function renderDocument(
     width: envelope.w,
     height: envelope.h,
   }
-  return refused === undefined ? { output } : { output, note: refusalNote(refused) }
+  return refused === undefined ? output : { ...output, [REFUSAL_NOTE]: refusalNote(refused) }
 }
 
 export function createCanvasRenderSvgTool(deps: ServerDeps) {
@@ -222,10 +223,8 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
       'Render a document as SVG — a canvas as its laid-out scene, a markdown document as a page. A one-way projection: the SVG cannot be parsed back into a document. `embedReferences` draws what it links to (file nodes, `![[path]]` embeds, `#Heading` / `#Group` parts); `fragment` renders one part on its own. Comments are left out unless `comments` is true.',
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
-    async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
-      return (await renderDocument(deps, input)).output
-    },
-    render: (input: CanvasRenderSvgInput) => renderDocument(deps, input),
+    execute: (input: CanvasRenderSvgInput): Promise<CanvasRenderSvgAnswer> =>
+      renderDocument(deps, input),
   }
 }
 

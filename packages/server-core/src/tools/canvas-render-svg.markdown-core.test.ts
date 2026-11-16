@@ -11,7 +11,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, test } from 'vitest'
-import { refusalNote } from '../render/refusal-note.js'
+import { REFUSAL_NOTE, refusalNote } from '../render/refusal-note.js'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, placeUnlessPlaced, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -111,7 +111,7 @@ describe('wb_scene_render of a note and the markdown core', () => {
       layoutCore: async () => core,
     }
     deps.documentIndex = (deps.documentStore as FakeDocumentStore).documentIndex
-    const { output, note } = await createCanvasRenderSvgTool(deps).render({
+    const { [REFUSAL_NOTE]: note, ...output } = await createCanvasRenderSvgTool(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,

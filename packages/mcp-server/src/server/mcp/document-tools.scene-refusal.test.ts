@@ -68,12 +68,13 @@ describe('wb_scene_render of a board the core refuses', () => {
       ops: [{ op: 'document.create', path: 'board', kind: 'spatial' }],
     })
     expect(created.isError, JSON.stringify(created.content)).not.toBe(true)
-    const { workspaceId, results } = created.structuredContent as {
-      workspaceId: string
+    const { results } = created.structuredContent as {
       results: readonly { documentId?: string }[]
     }
     const documentId = results.find((result) => result.documentId !== undefined)?.documentId
-    const args = { workspaceId, documentId }
+    // By its handle, as an agent addresses it: the call goes through the same
+    // handle resolution and membership gate as every other tool call.
+    const args = { workspaceId: 'scene-refusal', documentId }
 
     const drawn = await call(base, 'wb_scene_render', args)
     expect(drawn.isError).not.toBe(true)
