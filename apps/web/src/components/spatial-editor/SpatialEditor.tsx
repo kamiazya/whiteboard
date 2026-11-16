@@ -82,6 +82,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { useLayoutCoreGeneration } from '../../hooks/use-layout-core-generation.js'
 import {
   useEditingFontFamily,
   useThemeFaceFor,
@@ -570,6 +571,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     } = useEditSessionState({ canvas, selectedId, extraIds })
     useCanvasFocusReturn(rootRef, gestureState, linkDialog, canvasPicker)
     const fontsGeneration = useThemeFontsGeneration()
+    const coreGeneration = useLayoutCoreGeneration()
     useThemeFaceFor(canvas)
     const editingFontFamily = useEditingFontFamily(canvas)
     const {
@@ -589,6 +591,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         proposals,
         tagLibrary,
         fontsGeneration,
+        coreGeneration,
       },
       fileSeamOptions,
       seamWire,

@@ -130,10 +130,12 @@ type SceneInputs = Pick<
    * lands; the synchronous path re-runs off `options`.
    */
   readonly fontsGeneration: number | undefined
+  /** Not sent either: the worker reads its own core. A change re-asks it once the page's core loads. */
+  readonly coreGeneration: number | undefined
 }
 
 function layoutRequestFor(id: number, sent: SceneInputs): LayoutRequest {
-  const { fontsGeneration: _notSent, ...request } = sent
+  const { fontsGeneration: _notSent, coreGeneration: _neither, ...request } = sent
   return { type: 'layout', id, ...request }
 }
 
@@ -169,6 +171,12 @@ export function useWorkerScene(
      * names becomes measurable.
      */
     readonly fontsGeneration?: number
+    /**
+     * How many times the page's Rust core became available
+     * (`useLayoutCoreGeneration`): a scene drawn as the missing-core notice
+     * lays out again when a retry loads it.
+     */
+    readonly coreGeneration?: number
   },
   // `commentObstacles` is left out because the worker request cannot carry
   // it: past the offload threshold it would be dropped, and a large canvas
@@ -192,6 +200,7 @@ export function useWorkerScene(
       base.proposals,
       base.tagLibrary,
       base.fontsGeneration,
+      base.coreGeneration,
       fileSeamOptions,
     ],
   )
@@ -234,6 +243,7 @@ export function useWorkerScene(
       proposals: options.proposals,
       tagLibrary: options.tagLibrary,
       fontsGeneration: options.fontsGeneration,
+      coreGeneration: options.coreGeneration,
     }),
     [
       canvas,
@@ -249,6 +259,7 @@ export function useWorkerScene(
       options.proposals,
       options.tagLibrary,
       options.fontsGeneration,
+      options.coreGeneration,
     ],
   )
 
