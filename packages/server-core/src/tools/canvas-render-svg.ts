@@ -1,12 +1,10 @@
-import type { MeasureText, ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
+import type { LayoutCore, MeasureText, ReferenceGraph } from '@kamiazya/whiteboard-canvas-render'
 import {
   renderSceneToSvg,
   type Scene,
   selectCanvasFragment,
-  selectMarkdownSection,
   spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import {
   readAnnotations,
   readDocumentKind,
@@ -115,18 +113,17 @@ async function markdownScene(
   const loaded = input.embedReferences
     ? await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })
     : undefined
-  const references = loaded?.seams
-  const whole = resolveReferences(parseMarkdownBody(body), references?.resolveAlias)
-  const root = input.fragment === undefined ? whole : selectMarkdownSection(whole, input.fragment)
-  if (root === undefined) {
-    throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
-  }
-  const scene = composeMarkdownScene(root, measure, {
-    references,
+  const scene = composeMarkdownScene(body, measure, {
+    references: loaded?.seams,
     style: input.style,
     fontAvailable,
+    ...(input.fragment === undefined ? {} : { section: input.fragment }),
+    ...(await laidOutBy(deps)),
     ...(await drawnTagLibrary(deps, input.workspaceId, [], loaded?.graph)),
   })
+  if (scene === undefined) {
+    throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
+  }
   return scene
 }
 
@@ -146,10 +143,9 @@ async function canvasScene(
   const loaded = input.embedReferences
     ? await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })
     : undefined
-  const core = await deps.layoutCore?.()
   const scene = composeCanvasScene(part, measure, {
     references: loaded?.seams,
-    ...(core === undefined ? {} : { core }),
+    ...(await laidOutBy(deps)),
     style: input.style,
     fontAvailable,
     // Colour by intent (ADR-0040 decision 5).
@@ -202,6 +198,12 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
       }
     },
   }
+}
+
+/** The core `ServerDeps` hands a layout, as a spread for the scene options. */
+async function laidOutBy(deps: ServerDeps): Promise<{ core?: LayoutCore }> {
+  const core = await deps.layoutCore?.()
+  return core === undefined ? {} : { core }
 }
 
 /** The tag library as a spread for the scene options: present only when `drawsATag` says one is read. */

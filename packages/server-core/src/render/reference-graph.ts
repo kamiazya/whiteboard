@@ -2,7 +2,8 @@ import {
   type ReferenceGraph,
   type ReferenceSeams,
   type ReferenceSeeds,
-  referenceSeams,
+  referenceSeamsFromWire,
+  referenceWire,
   walkReferences,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { WorkspaceId } from '@kamiazya/whiteboard-model'
@@ -46,5 +47,8 @@ export async function loadReferenceGraph(
       return null
     },
   })
-  return { graph, seams: referenceSeams(graph) }
+  // Through the wire, which answers exactly as `referenceSeams(graph)` does
+  // (no alias, title or extra table of its own), so the Rust core can be
+  // handed the bundle as data rather than skipping it as functions.
+  return { graph, seams: referenceSeamsFromWire(referenceWire(graph)) }
 }

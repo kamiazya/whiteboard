@@ -35,6 +35,12 @@
  *             profile's corpora: the options are the export's own
  *             (`exportLayoutOptions`), so the dark appearance and the
  *             measurer's `fontAvailable` are the ones the export passes.
+ *   markdown  what `wb_scene_render` hands a markdown DOCUMENT's layout
+ *             (`composeMarkdownScene`: 720px, the document theme, the light
+ *             bundled theme for an embed, the daemon's export measurer), over
+ *             every Markdown file under docs/ and skills/ as a note, whole and
+ *             by its first `##` heading's section, through the core's
+ *             markdown entry (S18c).
  *   installed the export's light options under the `document` style, over the
  *             daemon profile's corpora drawn in the sketch theme, from a fonts
  *             directory holding that theme's family: the core measures with
@@ -59,6 +65,7 @@ import { boards as commentBoards } from '../../../canvas-render/src/test-utils/c
 import { DRAWING_CORPUS } from '../../../canvas-render/src/test-utils/drawing-corpus.ts'
 import { proposalBoards } from '../../../canvas-render/src/test-utils/proposal-oracle/layer-corpus.ts'
 import { layoutCases } from '../../../canvas-render/src/test-utils/wasm/layout-cases.ts'
+import { composeMarkdownScene } from '../../../server-core/src/render/compose-markdown-scene.ts'
 import { exportLayoutOptions } from '../../src/server/export/headless-renderer.ts'
 import { coreLoaders, layoutCoreSettingsFrom } from '../../src/server/export/layout-core.ts'
 import { createExportTextMeasurer } from '../../src/server/export/measure-text.ts'
@@ -76,7 +83,11 @@ export function tallyingCore(base) {
   let reports = []
   const core = {
     ...base,
-    impl: { routeLayout: 'ts', layoutSpatialCanvas: 'differential' },
+    impl: {
+      routeLayout: 'ts',
+      layoutSpatialCanvas: 'differential',
+      layoutMarkdown: 'differential',
+    },
     onMismatch: (report) => reports.push(report),
   }
   const take = () => {
@@ -98,6 +109,46 @@ export function censusOf({ core, take }, cases) {
     for (const name of take()) counts.set(name, (counts.get(name) ?? 0) + 1)
   }
   return { layouts: cases.length, counts }
+}
+
+/**
+ * Every note laid out once as `wb_scene_render` lays a markdown document out
+ * (`composeMarkdownScene`), through `core`, counted by class; a `section` the
+ * note does not hold counts as `missing`.
+ */
+export function markdownCensusOf({ core, take }, measure, notes) {
+  const counts = new Map()
+  for (const { body, section } of notes) {
+    const scene = composeMarkdownScene(body, measure, {
+      core,
+      ...(section === undefined ? {} : { section }),
+    })
+    const taken = take()
+    // A section both sides found missing is answered, and counted as what it is.
+    const names = scene === undefined && taken[0] === 'answered' ? ['missing'] : taken
+    for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1)
+  }
+  return { layouts: notes.length, counts }
+}
+
+/**
+ * Every Markdown file under docs/ and skills/ as a DOCUMENT, whole and by its
+ * first second-level heading's section (`#Heading`).
+ */
+async function markdownNotes() {
+  const files = [
+    ...(await markdownFiles(join(REPO, 'docs'))),
+    ...(await markdownFiles(join(REPO, 'skills'))),
+  ]
+  const notes = []
+  for (const file of files) {
+    const body = await readFile(file, 'utf8')
+    notes.push({ name: relative(REPO, file), body })
+    const heading = /^## +(.+?)\s*$/m.exec(body)?.[1]
+    if (heading !== undefined)
+      notes.push({ name: `${relative(REPO, file)}#${heading}`, body, section: heading })
+  }
+  return notes
 }
 
 async function markdownFiles(dir) {
@@ -239,9 +290,16 @@ async function measureCensus() {
       ...(await exportCorpora('dark')),
       ...(await installedCorpora(installedDir)),
     }
-    return Object.fromEntries(
-      Object.entries(corpora).map(([name, cases]) => [name, censusOf(tallying, cases)]),
-    )
+    return {
+      ...Object.fromEntries(
+        Object.entries(corpora).map(([name, cases]) => [name, censusOf(tallying, cases)]),
+      ),
+      'markdown: docs and skills documents': markdownCensusOf(
+        tallying,
+        measure,
+        await markdownNotes(),
+      ),
+    }
   } finally {
     await rm(fontsDir, { recursive: true, force: true })
     await rm(installedDir, { recursive: true, force: true })

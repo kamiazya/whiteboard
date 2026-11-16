@@ -10,7 +10,7 @@ import {
   layoutCoreSettingsFrom,
   stagedArtifacts,
 } from '../../src/server/export/layout-core.js'
-import { censusOf, tallyingCore } from './layout-census.mjs'
+import { censusOf, markdownCensusOf, tallyingCore } from './layout-census.mjs'
 
 // The rust job and test-unit stage the artifact before this file runs, so on
 // CI its absence is a failure rather than a skip.
@@ -117,4 +117,26 @@ describe('the layout census', () => {
     const { counts } = censusOf(tallyingCore(base), [{ canvas: board('proposed'), options }])
     expect(Object.fromEntries(counts)).toEqual({ answered: 1 })
   })
+
+  it.runIf(built)(
+    'counts a note the core answered, a section it holds no heading for, and a skip',
+    async () => {
+      const base = await coreLoaders(
+        layoutCoreSettingsFrom({ WHITEBOARD_CORE_LAYOUT: 'differential' }),
+      ).layoutCore()
+      if (base === undefined) throw new Error('the core did not load')
+      const measure = createFakeMeasure()
+      const body = '# Plan\n\nShip it.\n\n## Detail\n\nMore.'
+      const described = markdownCensusOf(tallyingCore(base), measure, [
+        { body },
+        { body, section: 'Detail' },
+        { body, section: 'Nowhere' },
+      ])
+      expect(described.layouts).toBe(3)
+      expect(Object.fromEntries(described.counts)).toEqual({ answered: 2, missing: 1 })
+      const unnamed: typeof measure = (text, font) => measure(text, font)
+      const skipped = markdownCensusOf(tallyingCore(base), unnamed, [{ body }])
+      expect(Object.fromEntries(skipped.counts)).toEqual({ 'skipped:measure': 1 })
+    },
+  )
 })

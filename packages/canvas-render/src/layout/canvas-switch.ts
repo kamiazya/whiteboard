@@ -58,7 +58,7 @@ function expansion(
   return [...answers].flatMap(([id, open]) => (open ? [id] : []))
 }
 
-const hasData = (extra: ReferenceExtra): boolean =>
+export const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
 
 const SEAMS = [
@@ -89,7 +89,9 @@ function optionSkip(options: SpatialLayoutOptions): CanvasLayoutSkip | undefined
  * layout asks `fontAvailable` about a theme's family and nothing else, so
  * this list answers every question it would.
  */
-function styleOptions(options: SpatialLayoutOptions): Partial<CanvasLayoutRequest> {
+export function styleOptions(
+  options: Pick<SpatialLayoutOptions, 'style' | 'fontAvailable'>,
+): Pick<CanvasLayoutRequest, 'style' | 'fontFamilies'> {
   const { style } = options
   if (style === undefined || style === 'clean') return {}
   const available = options.fontAvailable ?? ((family) => family === SPATIAL_THEME_FONT_FAMILY)
@@ -239,7 +241,7 @@ function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
   return event.kind === 'body-parse-failed' ? { ...event, err: undefined } : event
 }
 
-const valueAt = (root: unknown, path: string): unknown =>
+export const valueAt = (root: unknown, path: string): unknown =>
   path
     .split('/')
     .slice(1)

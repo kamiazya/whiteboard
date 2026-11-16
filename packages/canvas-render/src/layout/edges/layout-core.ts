@@ -5,6 +5,11 @@ import type {
   CanvasLayoutMismatch,
   CanvasLayoutTally,
 } from '../../canvas-core.js'
+import type {
+  MarkdownLayoutCore,
+  MarkdownLayoutMismatch,
+  MarkdownLayoutTally,
+} from '../../markdown-core.js'
 import type { Rect } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
@@ -56,12 +61,16 @@ interface RouteLayoutRepro {
  * A difference `differential` mode found, or a core that refused a call.
  * `at` is the first position the two canonical answers part at; the
  * answers are given whole so the report needs nothing else to be read.
- * A whole layout the core did not answer is reported on the same sink as a
- * `CanvasLayoutTally`, which is a count rather than a difference.
+ * A whole layout or a note the core did not answer is reported on the same
+ * sink as a `CanvasLayoutTally` or `MarkdownLayoutTally`, which is a count
+ * rather than a difference; a whole layout's or a note's difference is its own
+ * `CanvasLayoutMismatch` or `MarkdownLayoutMismatch`.
  */
 export type CoreMismatch =
   | CanvasLayoutMismatch
   | CanvasLayoutTally
+  | MarkdownLayoutMismatch
+  | MarkdownLayoutTally
   | {
       readonly fn: 'routeLayout'
       readonly kind: 'differs'
@@ -90,7 +99,16 @@ export interface LayoutCore {
    * own switch: absent, either reads `ts`.
    */
   readonly layout?: CanvasLayoutCore
-  readonly impl: { readonly routeLayout: CoreImpl; readonly layoutSpatialCanvas?: CoreImpl }
+  /**
+   * A markdown note in one call (`layoutMarkdownDocument`), with its own
+   * switch: absent, either reads `ts`.
+   */
+  readonly markdown?: MarkdownLayoutCore
+  readonly impl: {
+    readonly routeLayout: CoreImpl
+    readonly layoutSpatialCanvas?: CoreImpl
+    readonly layoutMarkdown?: CoreImpl
+  }
   readonly onMismatch?: (mismatch: CoreMismatch) => void
 }
 

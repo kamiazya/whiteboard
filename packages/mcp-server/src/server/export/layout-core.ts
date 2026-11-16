@@ -6,6 +6,7 @@ import type {
   CanvasLayoutTally,
   CoreMismatch,
   LayoutCore,
+  MarkdownLayoutTally,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   installOkfCore,
@@ -41,7 +42,8 @@ const log = getLogger('layout-core')
  * at boot (`installRustCoresAtBoot`) and refuses to start without it.
  *
  * `WHITEBOARD_CORE_LAYOUT` is the whole layout's own switch
- * (`layoutSpatialCanvasWithAnchors` in one core call), `rust` unless something
+ * (`layoutSpatialCanvasWithAnchors` in one core call, and a markdown note's
+ * `layoutMarkdownDocument` through the core's markdown entry), `rust` unless something
  * sets it, like routing's; the dev scripts and CI's test jobs set
  * `differential`, and `ts` is its rollback. It answers only a layout whose
  * every option the core can be handed as data, and the TypeScript answers the
@@ -100,12 +102,16 @@ export function artifactDirectory(
 }
 
 /** What one line of the log says of a mismatch: where the answers part, never the whole request. */
-function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally>) {
+function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally>) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   if (mismatch.fn === 'layoutSpatialCanvas') {
     const { fn, kind, at, ts, rust } = mismatch
     return { fn, kind, at, ts, rust, nodes: mismatch.repro.canvas.nodes.length }
+  }
+  if (mismatch.fn === 'layoutMarkdown') {
+    const { fn, kind, at, ts, rust } = mismatch
+    return { fn, kind, at, ts, rust, bodyChars: mismatch.repro.body.length }
   }
   return {
     fn: mismatch.fn,
@@ -191,7 +197,8 @@ export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
     layoutCore: memoized(asked, loadCore, (core) => ({
       routing: core,
       layout: core,
-      impl: { routeLayout: routing, layoutSpatialCanvas: layout },
+      markdown: core,
+      impl: { routeLayout: routing, layoutSpatialCanvas: layout, layoutMarkdown: layout },
       onMismatch: reporter(settings),
     })),
   }

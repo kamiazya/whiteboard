@@ -1,0 +1,219 @@
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { describe, expect, it } from 'vitest'
+import { highlightCode } from '../highlight/lowlight.js'
+import type { MarkdownLayoutAnswer, MarkdownNoteRequest } from '../markdown-core.js'
+import { referenceSeams } from '../references/seams.js'
+import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../references/wire.js'
+import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
+import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
+import type { CoreImpl, CoreMismatch, LayoutCore } from './edges/layout-core.js'
+import { layoutMdastBlocks } from './markdown-body.js'
+import {
+  layoutMarkdownDocument,
+  type MarkdownDocumentOptions,
+  markdownLayoutRequest,
+} from './markdown-switch.js'
+
+const measure = createFakeMeasure()
+const body = '# Plan\n\nFirst $x^2$ here.\n\n## Detail\n\nMore words.'
+const base: MarkdownDocumentOptions = { measure, maxWidth: 400 }
+
+/** What the TypeScript draws for `text`, as every surface laid a note out before the switch. */
+const typescript = (text: string) =>
+  layoutMdastBlocks(parseMarkdownBody(text), {
+    measure,
+    maxWidth: 400,
+    fontFamily: SPATIAL_THEME_FONT_FAMILY,
+    theme: MARKDOWN_THEME_DOCUMENT,
+    canvasAppearance: createSpatialTheme({ mode: 'light' }),
+  })
+const reference = typescript(body)
+
+type Answering = (request: MarkdownNoteRequest) => MarkdownLayoutAnswer
+
+function coreOf(impl: CoreImpl, answer: Answering) {
+  const requests: MarkdownNoteRequest[] = []
+  const highlighters: unknown[] = []
+  const mismatches: CoreMismatch[] = []
+  const core: LayoutCore = {
+    routing: {
+      routeLayout: () => {
+        throw new Error('the routing core is not asked here')
+      },
+    },
+    markdown: {
+      layoutMarkdown: (request, highlight) => {
+        requests.push(request)
+        highlighters.push(highlight)
+        return answer(request)
+      },
+    },
+    impl: { routeLayout: 'ts', layoutMarkdown: impl },
+    onMismatch: (mismatch) => mismatches.push(mismatch),
+  }
+  return { core, requests, highlighters, mismatches }
+}
+
+const agreeing: Answering = () => ({ scene: reference, degradations: [] })
+
+function run(
+  impl: CoreImpl,
+  answer: Answering,
+  options: Partial<MarkdownDocumentOptions> = {},
+  text = body,
+) {
+  const { core, requests, highlighters, mismatches } = coreOf(impl, answer)
+  const scene = layoutMarkdownDocument(text, { ...base, ...options, core })
+  return { scene, requests, highlighters, mismatches }
+}
+
+describe('a markdown note through the core switch', () => {
+  it('lays a note out as layoutMdastBlocks does with no core, and under ts asks none', () => {
+    expect(layoutMarkdownDocument(body, base)).toEqual(reference)
+    const { scene, requests } = run('ts', agreeing)
+    expect(scene).toEqual(reference)
+    expect(requests).toEqual([])
+    const { core } = coreOf('rust', agreeing)
+    const unswitched: LayoutCore = { ...core, impl: { routeLayout: 'ts' } }
+    expect(layoutMarkdownDocument(body, { ...base, core: unswitched })).toEqual(reference)
+  })
+
+  it('answers with the core under rust, handing it the default highlighter', () => {
+    const moved = { nodes: reference.nodes.slice(1) }
+    const { scene, requests, highlighters, mismatches } = run('rust', () => ({
+      scene: moved,
+      degradations: [],
+    }))
+    expect(scene).toBe(moved)
+    expect(requests).toEqual([
+      {
+        kind: 'markdown',
+        body,
+        maxWidth: 400,
+        measure: { kind: 'fake', factor: 0.6 },
+        mode: 'light',
+      },
+    ])
+    expect(highlighters).toEqual([highlightCode])
+    expect(mismatches).toEqual([])
+  })
+
+  it('carries every option a surface varies as data', () => {
+    const library = { health: { values: { ok: { color: '4' } } } }
+    const wire = referenceWire(new Map([['b', { documentId: 'D', body: 'x' }]]))
+    const references = referenceSeamsFromWire(wire)
+    const fragments = [['math:x^2', { svg: '<g/>' }]] as const
+    const ask = markdownLayoutRequest(body, {
+      ...base,
+      mode: 'dark',
+      style: 'document',
+      fontAvailable: () => true,
+      tagLibrary: library,
+      references,
+      fragments,
+      section: 'Detail',
+    })
+    expect(ask).toMatchObject({
+      mode: 'dark',
+      style: 'document',
+      tagLibrary: library,
+      references: wire,
+      fragments,
+      section: 'Detail',
+    })
+    expect('fontFamilies' in ask && ask.fontFamilies?.length).toBeGreaterThan(0)
+    expect(markdownLayoutRequest(body, { ...base, onFragmentsAsked: () => {} })).toMatchObject({
+      fragments: [],
+    })
+  })
+
+  it('answers undefined for a section the core reports missing, as the TypeScript does', () => {
+    expect(layoutMarkdownDocument(body, { ...base, section: 'Nowhere' })).toBeUndefined()
+    for (const impl of ['rust', 'differential'] as const) {
+      const { scene, mismatches } = run(impl, () => ({ missing: 'section' }), {
+        section: 'Nowhere',
+      })
+      expect(scene).toBeUndefined()
+      expect(mismatches).toEqual([])
+    }
+  })
+
+  it('hands the fragments the core asked for to the listener under rust', () => {
+    const heard: unknown[] = []
+    run(
+      'rust',
+      () => ({
+        scene: reference,
+        degradations: [],
+        fragmentsAsked: [{ kind: 'math', value: 'x^2' }],
+      }),
+      { onFragmentsAsked: (asks) => heard.push(asks) },
+    )
+    expect(heard).toEqual([[{ kind: 'math', value: 'x^2' }]])
+  })
+
+  it('answers with the TypeScript under differential and reports where the core parts', () => {
+    const agreed = run('differential', agreeing)
+    expect(agreed.scene).toEqual(reference)
+    expect(agreed.mismatches).toEqual([])
+    const parted = run('differential', () => ({ scene: { nodes: [] }, degradations: [] }))
+    expect(parted.scene).toEqual(reference)
+    expect(parted.mismatches).toMatchObject([
+      { fn: 'layoutMarkdown', kind: 'differs', at: '/scene/nodes/0', repro: { body } },
+    ])
+    const missing = run('differential', () => ({ missing: 'section' }))
+    expect(missing.mismatches).toMatchObject([{ kind: 'differs', at: '/scene', rust: 'missing' }])
+  })
+
+  it('compares the fragments asked under differential', () => {
+    const asked = { kind: 'math', value: 'x^2' } as const
+    const heard: unknown[] = []
+    const display = '$$\nx^2\n$$'
+    const { mismatches } = run(
+      'differential',
+      () => ({ scene: typescript(display), degradations: [], fragmentsAsked: [] }),
+      { fragments: [], onFragmentsAsked: (asks) => heard.push(asks) },
+      display,
+    )
+    expect(mismatches).toMatchObject([{ kind: 'differs', at: '/asked/0', ts: asked }])
+    expect(heard).toEqual([[asked]])
+  })
+
+  it('answers from the TypeScript what the core declines or throws on, reporting each', () => {
+    const declined = run('rust', () => ({ declined: 'body' }))
+    expect(declined.scene).toEqual(reference)
+    expect(declined.mismatches).toEqual([
+      { fn: 'layoutMarkdown', kind: 'declined', reason: 'body' },
+    ])
+    const thrown = run('rust', () => {
+      throw new Error('shim')
+    })
+    expect(thrown.scene).toEqual(reference)
+    expect(thrown.mismatches).toMatchObject([{ fn: 'layoutMarkdown', kind: 'refused' }])
+  })
+
+  it('reports a note the request gate skips by its class, asking the core nothing', () => {
+    const unnamed: MarkdownDocumentOptions['measure'] = (text, font) => measure(text, font)
+    const fromGraph = referenceSeams(new Map([['b', { documentId: 'D', body: 'x' }]]))
+    const withContent = referenceSeamsFromWire(
+      overlayReferences(referenceWire(new Map()), { labels: new Map() }),
+    )
+    const carrying = referenceSeamsFromWire({
+      ...referenceWire(new Map()),
+      extras: [['p', { markdown: { type: 'root', children: [] } }]],
+    })
+    const cases = [
+      [{ measure: unnamed }, 'measure'],
+      [{ references: fromGraph }, 'references'],
+      [{ references: carrying }, 'reference-content'],
+    ] as const
+    for (const [options, reason] of cases) {
+      const { requests, mismatches } = run('rust', agreeing, options)
+      expect(requests, reason).toEqual([])
+      expect(mismatches, reason).toEqual([{ fn: 'layoutMarkdown', kind: 'skipped', reason }])
+    }
+    expect(run('rust', agreeing, { references: withContent }).requests).toHaveLength(1)
+  })
+})
