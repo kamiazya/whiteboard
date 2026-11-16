@@ -16,6 +16,7 @@
 // own, so no task can see another's side effects.
 
 import { WORKSPACE_ID } from './fixture.mjs'
+import { loadSpatialReader } from './lib/spatial-reader.mjs'
 
 /**
  * @typedef {{
@@ -81,11 +82,11 @@ const nodeFacetsAt = async (wb, ids, path, match) => {
 let workspacePackagesPromise
 const workspacePackages = () => {
   workspacePackagesPromise ??= Promise.all([
-    import('@kamiazya/whiteboard-codec'),
+    loadSpatialReader(),
     import('@kamiazya/whiteboard-canvas-render'),
     import('@kamiazya/whiteboard-canvas-render/scoring'),
-  ]).then(([codec, render, scoring]) => ({
-    parseSpatial: codec.readJsonCanvasText, // as the widget reads: no Rust core in this script
+  ]).then(([parseSpatial, render, scoring]) => ({
+    parseSpatial,
     scoreFacets: scoring.scoreFacets,
     withDeclaredColours: render.withDeclaredColours,
   }))

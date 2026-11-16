@@ -24,10 +24,6 @@
       "types": "./src/measure-text.ts",
       "import": "./src/measure-text.ts"
     },
-    "./scene": {
-      "types": "./src/scene.ts",
-      "import": "./src/scene.ts"
-    },
     "./widget-canvas-view-result": {
       "types": "./src/widget/canvas-view-result.ts",
       "import": "./src/widget/canvas-view-result.ts"
@@ -46,7 +42,6 @@
     "smoke:widget": "node scripts/smoke-widget.mjs"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-codec": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@modelcontextprotocol/ext-apps": "1.7.5",

@@ -77,8 +77,6 @@ export const xWhiteboardSchema = z.union([
   facetsOnlyExtensionSchema,
 ])
 
-export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
-
 // JSON Canvas 1.0 geometry is specified in integer pixels.
 const positionFieldSchema = integerSchema
 // Sizes reject negatives. Zero stays valid: JSON Canvas 1.0 does not forbid a

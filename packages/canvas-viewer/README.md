@@ -18,9 +18,6 @@ widget, HTML export). Private workspace package — never published to npm.
   node kind still renders, silently.
   Pan/zoom/select are the browser's native SVG behavior; there is no
   editing affordance.
-- `parseViewerScene` (from `./scene`) — a total parser over codec's
-  `readJsonCanvasText` and wire schema; it never throws, it returns a
-  discriminated `{ ok, value | error }` result.
 - `createBrowserMeasureText` (from `./measure-text`) — the browser
   implementation of canvas-render's injected `MeasureText` seam (Canvas 2D
   `measureText`, with a ratio-based fallback for environments with no real

@@ -22,8 +22,8 @@ import { REPO_ROOT } from './scan-roots.js'
 const WIRE_SURFACES: Readonly<Record<string, string>> = {
   'packages/server-core/src/tools/canvas-view.ts':
     "the canvas_view MCP tool's outputSchema — published to every client through tools/list",
-  'packages/canvas-viewer/src/scene.ts':
-    "the published widget's input contract; a third party's JSON Canvas file is what arrives",
+  'packages/canvas-render/src/references/wire-schema.ts':
+    "a referenced canvas inside canvas_view's `references`, published through the same outputSchema",
 }
 
 describe('a surface read from outside this repo names the wire schema, not the model', () => {

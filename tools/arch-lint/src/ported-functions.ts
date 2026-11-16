@@ -53,12 +53,13 @@ const OKF_TYPESCRIPT = [
 
 /**
  * Where the JSON Canvas codec's TypeScript implementation lived, which stage 4
- * requires gone. The widget's TypeScript reader is not it: it answers no daemon
- * or web call, and `spatial-reader-isolation.test.ts` keeps it so.
+ * requires gone — the widget's reader included, once the widget stopped
+ * reading a canvas (ADR-0054 S17).
  */
 const SPATIAL_TYPESCRIPT = [
   'packages/codec/src/spatial/parse.ts',
   'packages/codec/src/spatial/serialize.ts',
+  'packages/codec/src/spatial/read-json-canvas-text.ts',
 ] as const
 
 /**

@@ -297,11 +297,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedThirdParty: ['react', 'zod'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
-    allowedInternalDeps: [
-      '@kamiazya/whiteboard-model',
-      '@kamiazya/whiteboard-codec',
-      '@kamiazya/whiteboard-canvas-render',
-    ],
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-canvas-render'],
     allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
     exemptBoundaryViolationKinds: ['dom-global'],
     exemptBoundaryFiles: {

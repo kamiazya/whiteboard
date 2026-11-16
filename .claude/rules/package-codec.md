@@ -42,12 +42,13 @@ paths:
   declines (past 4 MiB, a lone surrogate, nesting past 64, a link whose host it has no tables for)
   is a failure at stage `json-canvas-schema` carrying the core's reason; a write it declines, or
   that strict mode refuses, is a `ZodError` (one issue at the root for a decline, the core's places
-  for a strict refusal). What TypeScript JSON Canvas code remains, and why: the READER
-  `readJsonCanvasText` (`spatial/read-json-canvas-text.ts`), which only `canvas-viewer` may use
-  because the widget iframe has no core (`tools/arch-lint`'s `spatial-reader-isolation.test.ts`),
-  and the projection (`toJsonCanvas`/`fromJsonCanvas`, the wire schema, the ledgers, the OCIF
-  lift), which the registry's confluence properties judge. There is NO TypeScript writer of
-  JSON Canvas text: the registry's `write` and `writeForForeignReader` call the core.
+  for a strict refusal). What TypeScript JSON Canvas code remains, and why: the projection
+  (`toJsonCanvas`/`fromJsonCanvas`, the wire schema, the ledgers, the OCIF lift), which
+  `canvas_view`'s published output and its reference wire use and the registry's confluence
+  properties judge. There is NO TypeScript reader or writer of JSON Canvas TEXT: the widget's
+  reader went when the widget stopped reading a canvas (ADR-0054 S17, q49), the registry's
+  `write` and `writeForForeignReader` call the core, and `tools/arch-lint`'s `PORTED_FUNCTIONS`
+  holds every file the TypeScript lived in gone.
 - The JSON Canvas PROJECTION ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md)):
   the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
   `JSON_CANVAS_PROJECTION` ledger and the loss tables generated from it
@@ -331,11 +332,10 @@ rather than in a string, so joining its runs yields `tightenthis`.
 ## Tests
 
 - Vitest project: `codec-node` runs every OKF and JSON Canvas suite on the Rust core its setup file
-  installs (it needs the artifact). `parse.test.ts` holds the core and the viewer's TypeScript
-  reader to the same assertions, and `oracle/json-canvas-recorded-oracle.test.ts` replays the
-  frozen recording (taken from the TypeScript codec before its writer was deleted) against the
-  core, whose declines are held to the inputs that earn them (`test-utils/json-canvas-oracle/earned.ts`),
-  and against the viewer reader, which declines nothing.
+  installs (it needs the artifact). `parse.test.ts` holds the core's failure classes, and
+  `oracle/json-canvas-recorded-oracle.test.ts` replays the frozen recording (taken from the
+  TypeScript codec before its writer was deleted) against the core, whose declines are held to
+  the inputs that earn them (`test-utils/json-canvas-oracle/earned.ts`).
 - Round-trip properties: OKF (up to canonical key order), extended JSON Canvas (lossless), and
   markdown body (modulo `normalizeMdast`, over a syntax subset that excludes constructs with
   inherent CommonMark/GFM encoding ambiguities — adjacent same-delimiter inline spans, emphasis/

@@ -15,12 +15,8 @@ export default defineConfig({
   define: { ...rendererBuildDefine },
   resolve: {
     alias: {
-      // Subpath alias must precede the root alias: rollup-alias prefix-matches,
-      // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
-      '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
-        __dirname,
-        '../../packages/canvas-viewer/src/scene.ts',
-      ),
+      // Subpath aliases must precede the root alias: rollup-alias prefix-matches,
+      // so the root entry alone would rewrite '/font' to 'index.ts/font'.
       // The family name, without the loader or the barrel.
       '@kamiazya/whiteboard-canvas-viewer/font': resolve(
         __dirname,
