@@ -109,10 +109,6 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
         kinds: ['test-framework-import'],
         reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
       },
-      'layout/nodes/mdast-blocks.bench.ts': {
-        kinds: ['test-framework-import'],
-        reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',
-      },
       'layout/spatial-canvas.bench.ts': {
         kinds: ['test-framework-import'],
         reason: 'a vitest bench: it runs under `vitest bench` and never ships in the package',

@@ -121,8 +121,7 @@ async function harness(
     blobStore: {} as never,
     documentIndex,
     versions: new FakeVersionHistory(),
-    // The daemon's own seam: every mutating tool takes its write lock.
-    liveDocuments: liveDocuments(),
+    liveDocuments: liveDocuments(), // the daemon's own seam: every mutating tool takes its write lock
     facetRegistry: bundledFacetRegistry,
     layoutCore: async () => testLayoutCore(),
   } as never)

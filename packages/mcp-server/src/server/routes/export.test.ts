@@ -85,9 +85,7 @@ const exportUrl = (documentId: string, workspaceId = 's1') =>
   `/api/workspaces/${workspaceId}/documents/${documentId}/export`
 const EXPORT_URL = exportUrl(CANVAS_A)
 
-// One factory for every app, as the composition root holds one.
-const layoutCore = async () => testLayoutCore()
-
+const layoutCore = async () => testLayoutCore() // one factory, as the root holds one
 function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   const app = new Hono()
   resolvingDocumentIds(

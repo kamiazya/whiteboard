@@ -319,7 +319,8 @@ describe('the canvas-render lane skips the tests that measure cost', () => {
     const files = testFiles(join(RENDER, 'src'))
       .map((file) => relative(RENDER, file).split(sep).join('/'))
       .filter((file) => /(cost|budget)[^/]*\.test\.ts$/.test(file))
-    expect(files.length).toBeGreaterThan(10)
+    // Ten since S18h2 deleted the typesetter's and the overlays' cost tests.
+    expect(files.length).toBeGreaterThanOrEqual(10)
     const exclude = await exclusions()
     expect(files.filter((file) => !exclude.some((glob) => matchesGlob(file, glob)))).toEqual([])
   })

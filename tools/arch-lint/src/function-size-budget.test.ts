@@ -441,7 +441,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 85, // +5: the Move to folder… row and its picker
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
-  'packages/canvas-render/src/layout/comments.ts#composeComments': 106,
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
   // Raised for the layout's routing budget, which the repair pass's routes
   // spend from.
@@ -464,27 +463,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/canvas-render/src/layout/edges/edge-anchors.ts#patchAnchorGroups': 54,
   'packages/canvas-render/src/layout/edges/edge-router.ts#routeEdge': 75,
   'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
-  // +1: the table rows take the inline typesetter by argument, since the
-  // table module may not import the typesetter back.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutBlock': 192, // +2: a paragraph that is one picture is a figure
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutCanvasEmbedBlock': 53,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutListItem': 65,
-  // The inline-run walker's inner steps are NAMED (emitAtomic / placeCollapsed /
-  // clusterCameDown / placeSegment / emitImage / emitWikiLink / emitEmbed /
-  // layoutTableCells), and each carries the rationale that would otherwise be a
-  // comment mid-body. The next real shrink is moving the code-block trio and the
-  // table half into sibling modules, which needs `ResolvedMdastOptions` /
-  // `Cursor` extracted first or it closes a package-internal cycle.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing': 460,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.walk': 73,
-  // `clusterCameDown` and `placeSegment` replace two inline blocks and bring
-  // their doc comments with them.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#layoutPhrasing.wrapAndPush': 87,
-  'packages/canvas-render/src/layout/scale-scene.ts#scaleNode': 88,
-  // +3: one routing budget for the side pass and the final routes together.
-  'packages/canvas-render/src/layout/spatial-canvas.ts#layoutSpatialCanvasInternal': 51, // one line over the budget
-  'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels': 71,
-  'packages/canvas-render/src/layout/translate-scene.ts#translateNode': 65,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,
   'packages/canvas-render/src/references/seams.ts#referenceSeams': 76,
