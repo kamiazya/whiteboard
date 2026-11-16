@@ -4,25 +4,24 @@
 // the reported size, and a consumer sizing a viewport by it clipped the
 // drawing.
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { groupNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { composeCanvasScene, sceneEnvelope } from './compose-canvas-scene.js'
 
 const canvas = (nodes: unknown[], edges: unknown[] = []): SpatialCanvas =>
   ({ nodes, edges }) as unknown as SpatialCanvas
 
-const node = (id: string, x: number, y: number, w = 100, h = 60) => ({
-  id,
-  type: 'text' as const,
-  x,
-  y,
-  width: w,
-  height: h,
-  text: id,
-})
+// Boxes with no resource — frames — which is what this fixture's nodes were
+// laid out as when it was written; only their geometry is under test.
+const node = (id: string, x: number, y: number, width = 100, height = 60) =>
+  groupNode({ id, x, y, width, height })
 
 const dimensionsOf = (c: SpatialCanvas) => {
-  const { x, y, w, h } = sceneEnvelope(composeCanvasScene(c, constantRatioMeasureText))
+  const { x, y, w, h } = sceneEnvelope(
+    composeCanvasScene(c, constantRatioMeasureText, { core: testLayoutCore() }),
+  )
   // The far edge, which for a drawing that starts at the origin is the span.
   return { width: x + w, height: y + h }
 }
@@ -58,7 +57,7 @@ describe('sceneEnvelope', () => {
     // Whatever the route is, the reported size must cover it.
     expect(withEdgeSize.width).toBeGreaterThanOrEqual(nodesOnlySize.width)
     expect(withEdgeSize.height).toBeGreaterThanOrEqual(nodesOnlySize.height)
-    const scene = composeCanvasScene(withEdge, constantRatioMeasureText)
+    const scene = composeCanvasScene(withEdge, constantRatioMeasureText, { core: testLayoutCore() })
     for (const sceneNode of scene.nodes) {
       if (sceneNode.kind !== 'edge') continue
       for (const point of sceneNode.path) {

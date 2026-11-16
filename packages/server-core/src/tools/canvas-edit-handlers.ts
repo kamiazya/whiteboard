@@ -65,7 +65,10 @@ function draftSize(
   const width =
     draft.width ?? (draft.type === 'group' ? size.width : (ctx.s.boardWidth ?? size.width))
   if (draft.height !== undefined) return { width, height: draft.height }
-  if (draft.type !== 'text' || ctx.s.measure === undefined) return { width, height: size.height }
+  // The root resolves the core with the measurer, so either answers whether a node is sized.
+  if (draft.type !== 'text' || ctx.s.measure === undefined || ctx.s.core === undefined) {
+    return { width, height: size.height }
+  }
   return {
     width,
     height: fittedHeight(
@@ -434,7 +437,7 @@ const CANVAS_EDIT_HANDLERS: {
     // through `rest` — see WRITE_EXTENSION.
     const parsed = spatialNodeSchema.safeParse(nodeFromDraft(draft, id, at, width, height))
     if (!parsed.success) fail(index, op.op, ctx.s.issues(parsed.error))
-    if (draft.height !== undefined && ctx.s.measure !== undefined) {
+    if (draft.height !== undefined && ctx.s.measure !== undefined && ctx.s.core !== undefined) {
       assertTextFits(index, op.op, parsed.data, ctx.s.measure, ctx.s.core)
     }
     if (positioned && group !== undefined) {

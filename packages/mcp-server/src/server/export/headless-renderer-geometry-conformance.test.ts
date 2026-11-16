@@ -8,7 +8,7 @@
 import type { Scene } from '@kamiazya/whiteboard-canvas-render'
 import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -40,10 +40,10 @@ describe('mcp-server export geometry conformance', () => {
     const measure = createFakeMeasure(0.6)
     const canvas = fixture()
 
-    const exportScene = buildSpatialScene(canvas, measure)
+    const exportScene = buildSpatialScene(canvas, testLayoutCore(), measure)
     const defaultScene = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure,
-      parseBody: parseMarkdownBody,
       appearance: createSpatialTheme({ mode: 'light' }),
     })
 

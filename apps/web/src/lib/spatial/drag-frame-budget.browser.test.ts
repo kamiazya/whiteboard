@@ -25,8 +25,9 @@ import type { WebCore } from './web-core.js'
  * (ADR-0054 step 7, S16b; owner question q79). The core's frame over its
  * resident content cache was measured at 4.7-5.3 ms on the 30-note working
  * board in Chromium, against the TypeScript's warm 3.0-3.5 ms (S15n): slower,
- * so the web's default moving to the core is held to a budget rather than to
- * parity. The budget is a frame at 60 Hz, 16.7 ms, on the median of the
+ * so the web's default moving to the core was held to a budget rather than to
+ * parity, and with the TypeScript layout deleted (S18h) the budget is all
+ * there is to hold it to. The budget is a frame at 60 Hz, 16.7 ms, on the median of the
  * frames timed — about three times the measurement, the headroom a slower
  * CI machine needs — over the largest board the web-layout set holds, laid
  * out as the editor composes it: the editor's base, its content cache, its
@@ -98,9 +99,7 @@ function gestureMeasure(page: MeasureText): MeasureText {
     memo.set(key, hit)
     return hit
   }
-  const spec = measureSpecOf(page)
-  if (spec !== undefined) describeMeasure(measure, spec)
-  return measure
+  return describeMeasure(measure, measureSpecOf(page))
 }
 
 /** The node whose edges the overlay re-routes most: the one the most edges touch. */
@@ -122,14 +121,11 @@ function timedOverlay(
   board: WebLayoutBoard,
   page: MeasureText,
   cached: boolean,
-  core?: LayoutCore,
+  core: LayoutCore,
 ): number {
   const measure = gestureMeasure(page)
   const base = editorLayoutBase({ measure })
-  const { scene, anchors } = layoutSpatialCanvasWithAnchors(board.canvas, {
-    ...base,
-    core: undefined,
-  })
+  const { scene, anchors } = layoutSpatialCanvasWithAnchors(board.canvas, { ...base, core })
   const moved = busiest(board)
   const carried = new Set(
     board.canvas.edges.filter((e) => e.from.node === moved || e.to.node === moved).map((e) => e.id),
@@ -174,7 +170,7 @@ const median = (values: readonly number[]): number =>
   [...values].sort((a, b) => a - b)[Math.floor(values.length / 2)] ?? Number.NaN
 
 /** Median ms of `ROUNDS` frames of `board`, each laid out as the editor composes one. */
-function timedFrames(board: WebLayoutBoard, measure: MeasureText, core?: LayoutCore): number {
+function timedFrames(board: WebLayoutBoard, measure: MeasureText, core: LayoutCore): number {
   const cache: SpatialContentCache = createSpatialContentCache()
   const lay = (at: number) =>
     layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4), {
@@ -226,15 +222,13 @@ describe('a drag frame laid out by the core', () => {
       const browser = createBrowserMeasureText()
       const { switched, tally } = countedCore(real.core)
       const coreMs = timedFrames(board, browser, switched)
-      const tsMs = timedFrames(board, browser)
-      // Every timed frame was the core's: a declined one is the TypeScript's time.
+      // Every timed frame was one the core laid out: a refused one is drawn as the refusal.
       expect(tally.answered).toBe(3 + ROUNDS)
       await commands.printReading(
         JSON.stringify({
           board: board.name,
           nodes: board.canvas.nodes.length,
           'core frame p50 ms': coreMs.toFixed(2),
-          'ts frame p50 ms': tsMs.toFixed(2),
           'budget ms': FRAME_BUDGET_MS.toFixed(1),
         }),
       )
@@ -261,10 +255,9 @@ describe('a drag frame laid out by the core', () => {
         const mode = cached ? 'cached sides' : 're-siding'
         const coreMs = timedOverlay(board, browser, cached, switched)
         reading[`core ${mode} p50 ms`] = coreMs.toFixed(2)
-        reading[`ts ${mode} p50 ms`] = timedOverlay(board, browser, cached).toFixed(2)
         frames.push(coreMs)
       }
-      // Every timed frame was the core's: a skipped or declined one is the TypeScript's time.
+      // Every timed frame was one the core answered: a refused edge layer is no edges.
       expect(tally.answered).toBe(2 * (3 + ROUNDS))
       await commands.printReading(JSON.stringify(reading))
       for (const ms of frames) expect(ms).toBeLessThan(FRAME_BUDGET_MS)

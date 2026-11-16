@@ -409,7 +409,7 @@ async function editCanvas(deps: ServerDeps, input: CanvasEditInput): Promise<Can
   claimSpatialDocument(doc, input.documentId)
   const measure = await resolveMeasurerFor(deps, input.ops)
   // The core sizes what the measurer would, so it is asked for only then.
-  const core = measure === undefined ? undefined : await deps.layoutCore?.()
+  const core = measure === undefined ? undefined : await deps.layoutCore()
 
   // Every op runs against this session; nothing reaches the doc until
   // the last op has applied. That is what makes the batch all-or-nothing

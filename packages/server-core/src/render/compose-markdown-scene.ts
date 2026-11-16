@@ -40,8 +40,8 @@ export interface ComposeMarkdownSceneOptions {
   readonly tagLibrary?: TagLibrary
   /** Lay out only the section under this heading (`#Heading`). */
   readonly section?: string
-  /** The Rust core (`ServerDeps.layoutCore`); absent, the TypeScript lays it out. */
-  readonly core?: LayoutCore
+  /** The Rust core (`ServerDeps.layoutCore`), which lays the note out. */
+  readonly core: LayoutCore
   /** Told when the core refused the note and the scene is the refusal; it is logged either way. */
   readonly onRefused?: (refusal: LayoutRefusal) => void
 }
@@ -56,7 +56,7 @@ export interface ComposeMarkdownSceneOptions {
 export function composeMarkdownScene(
   body: string,
   measure: MeasureText,
-  options?: ComposeMarkdownSceneOptions,
+  options: ComposeMarkdownSceneOptions,
 ): Scene | undefined {
   return layoutMarkdownDocument(body, {
     measure,
@@ -64,13 +64,13 @@ export function composeMarkdownScene(
     mode: 'light',
     onRefused: (refusal) => {
       logRefusal(refusal)
-      options?.onRefused?.(refusal)
+      options.onRefused?.(refusal)
     },
-    ...(options?.references !== undefined ? { references: options.references } : {}),
-    ...(options?.style !== undefined ? { style: options.style } : {}),
-    ...(options?.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),
-    ...(options?.tagLibrary !== undefined ? { tagLibrary: options.tagLibrary } : {}),
-    ...(options?.section !== undefined ? { section: options.section } : {}),
-    ...(options?.core !== undefined ? { core: options.core } : {}),
+    ...(options.references !== undefined ? { references: options.references } : {}),
+    ...(options.style !== undefined ? { style: options.style } : {}),
+    ...(options.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),
+    ...(options.tagLibrary !== undefined ? { tagLibrary: options.tagLibrary } : {}),
+    ...(options.section !== undefined ? { section: options.section } : {}),
+    core: options.core,
   })
 }

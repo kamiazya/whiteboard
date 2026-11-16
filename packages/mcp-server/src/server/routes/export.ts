@@ -74,7 +74,7 @@ export interface ExportRouterOptions {
   /** Defaults to `absolute`, the local daemon's answer. */
   exportPaths?: ExportPathAnswer
   /** The deps' core, so the file export lays out as `wb_scene_render` does. */
-  layoutCore?: ServerDeps['layoutCore']
+  layoutCore: ServerDeps['layoutCore']
 }
 
 export function createExportRouter(options: ExportRouterOptions) {
@@ -133,7 +133,7 @@ async function renderHeadless(
     workspaceId,
     path,
     scope,
-    ...(layoutCore === undefined ? {} : { layoutCore }),
+    layoutCore,
     options: {
       padding: body.padding,
       scale: body.scale,

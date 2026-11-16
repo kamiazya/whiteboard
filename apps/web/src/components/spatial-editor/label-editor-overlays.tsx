@@ -19,7 +19,7 @@ import {
   FRAME_TITLE_OFFSET_PX,
 } from '../../lib/spatial/frame-interior.js'
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
-import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
 import { edgeRoute } from './node-a11y-name.js'
@@ -74,7 +74,7 @@ function labelEditorCentre(
   canvas: SpatialCanvas,
   sceneNodes: readonly SceneNode[],
 ) {
-  const core = currentLayoutCore()
+  const core = requireLayoutCore()
   const { obstacles } = queryLabelObstacles(core, canvas.nodes, sceneNodes)
   const size = { w: EDGE_LABEL_EDITOR_WIDTH_PX, h: EDGE_LABEL_EDITOR_HEIGHT_PX }
   return queryEdgeLabelPlacement(core, path, size, obstacles)

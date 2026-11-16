@@ -21,6 +21,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { layoutCoreReady } from '../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../lib/spatial/require-layout-core.js'
 import { type WebLayoutBoard, webLayoutBoards } from '../test-utils/web-layout-boards.js'
 import { VersionPreview } from './VersionPreview.js'
 
@@ -94,7 +95,7 @@ it("lays every past board out as the TypeScript composer does, in this browser's
         appearance: createSpatialTheme({ mode }),
         style: 'document' as const,
       }
-      const ts = layoutSpatialCanvas(board.canvas, options)
+      const ts = layoutSpatialCanvas(board.canvas, { ...options, core: requireLayoutCore() })
       expect(ts.nodes.length, board.name).toBeGreaterThan(0)
       expect(
         layoutSpatialCanvas(board.canvas, { ...options, core }),

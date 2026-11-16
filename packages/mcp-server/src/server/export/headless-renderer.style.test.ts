@@ -5,6 +5,7 @@
 // file; the installed half is `headless-renderer.installed-face.test.ts`.
 
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -13,7 +14,7 @@ import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 
 const renderSpatialCanvasToSvg = (
   canvas: Parameters<typeof renderSvgIn>[0],
-  options?: Parameters<typeof renderSvgIn>[2],
+  options: Parameters<typeof renderSvgIn>[2] = { core: testLayoutCore() },
 ) => renderSvgIn(canvas, NO_INSTALLED_FONTS, options)
 
 const themed = (theme: string): SpatialCanvas => ({
@@ -39,6 +40,7 @@ describe('export style', () => {
 
   it("style: 'document' draws the neon halo, in the dark palette when theme is dark", async () => {
     const dark = await renderSpatialCanvasToSvg(themed('visual.neon'), {
+      core: testLayoutCore(),
       style: 'document',
       theme: 'dark',
     })
@@ -47,7 +49,10 @@ describe('export style', () => {
   })
 
   it('a sketch export declares the bundled family, not the handwriting one it cannot measure', async () => {
-    const sketch = await renderSpatialCanvasToSvg(themed('visual.sketch'), { style: 'document' })
+    const sketch = await renderSpatialCanvasToSvg(themed('visual.sketch'), {
+      core: testLayoutCore(),
+      style: 'document',
+    })
     expect(sketch.svg).toContain('stroke-linecap="round"')
     expect(sketch.svg).not.toContain('Yomogi')
     expect(sketch.svg).toContain('font-family="Roboto, system-ui, sans-serif"')
@@ -71,6 +76,7 @@ describe('export paper', () => {
 
   it("a themed export in dark mode comes back on the theme's dark surface", async () => {
     const neon = await renderSpatialCanvasToSvg(themed('visual.neon'), {
+      core: testLayoutCore(),
       style: 'document',
       theme: 'dark',
     })
@@ -83,12 +89,18 @@ describe('export paper', () => {
   })
 
   it("a themed export in light mode comes back on the theme's light surface", async () => {
-    const sketch = await renderSpatialCanvasToSvg(themed('visual.sketch'), { style: 'document' })
+    const sketch = await renderSpatialCanvasToSvg(themed('visual.sketch'), {
+      core: testLayoutCore(),
+      style: 'document',
+    })
     expect(backgroundRect(sketch.svg)).toBe('#fffdf7')
   })
 
   it('a clean export keeps the bundled surface, whatever theme the canvas names', async () => {
-    const clean = await renderSpatialCanvasToSvg(themed('visual.neon'), { theme: 'dark' })
+    const clean = await renderSpatialCanvasToSvg(themed('visual.neon'), {
+      core: testLayoutCore(),
+      theme: 'dark',
+    })
     expect(backgroundRect(clean.svg)).toBe(SPATIAL_DARK_PALETTE.surface)
     const light = await renderSpatialCanvasToSvg(themed('visual.neon'))
     expect(backgroundRect(light.svg)).toBe(SPATIAL_LIGHT_PALETTE.surface)

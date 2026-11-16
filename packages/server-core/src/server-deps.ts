@@ -109,11 +109,9 @@ export interface ServerDeps {
   /**
    * The Rust core every layout, note and query is answered by (ADR-0054). A
    * factory, memoized by the root, so a server that never renders never loads
-   * it; a load that fails rejects, since nothing answers in its place. Every
-   * root sets it. Absent, the TypeScript composer lays out instead, which only
-   * a test composition still asks for (S18g; S18h deletes it).
+   * it; a load that fails rejects, since nothing answers in its place.
    */
-  layoutCore?: () => Promise<LayoutCore>
+  layoutCore: () => Promise<LayoutCore>
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

@@ -18,6 +18,7 @@ import {
 import { createBrowserMeasureText, SceneSvg } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
+import { requireLayoutCore } from '../lib/spatial/require-layout-core.js'
 
 const LIGHT = createSpatialTheme({ mode: 'light' })
 
@@ -39,13 +40,16 @@ export function LegendlessCanvas({
   const measure = useMemo(() => createBrowserMeasureText(), [])
   const svg = useMemo(
     () =>
-      renderSceneToSvg(layoutSpatialCanvas(canvas, { measure, appearance: LIGHT }), {
-        width,
-        height,
-        padding,
-        background: '#ffffff',
-        legend: 'omit',
-      }),
+      renderSceneToSvg(
+        layoutSpatialCanvas(canvas, { measure, appearance: LIGHT, core: requireLayoutCore() }),
+        {
+          width,
+          height,
+          padding,
+          background: '#ffffff',
+          legend: 'omit',
+        },
+      ),
     [canvas, measure, width, height, padding],
   )
   return (

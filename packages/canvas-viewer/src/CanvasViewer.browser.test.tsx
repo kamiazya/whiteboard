@@ -4,6 +4,7 @@
 // real-browser layer for both claims.
 
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { browserLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/browser-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { render } from '@testing-library/react'
@@ -12,6 +13,9 @@ import { CanvasViewer } from './CanvasViewer.js'
 import { VIEWER_FONT_FAMILY } from './font.js'
 import { ensureViewerFontLoaded } from './font-loading.js'
 import { createBrowserMeasureText } from './measure-text.js'
+
+/** The core the host hands the viewer, loaded as the page loads its own. */
+const CORE = await browserLayoutCore()
 
 const goldenCanvas: SpatialCanvas = {
   nodes: [
@@ -40,7 +44,9 @@ const fakeMeasure = createFixedMeasure({
 
 describe('CanvasViewer (real browser)', () => {
   it('mounts and renders a non-empty <svg> with the expected node/edge shapes', async () => {
-    const { container } = render(<CanvasViewer canvas={goldenCanvas} measure={fakeMeasure} />)
+    const { container } = render(
+      <CanvasViewer core={CORE} canvas={goldenCanvas} measure={fakeMeasure} />,
+    )
 
     await expect.poll(() => container.querySelector('svg')).toBeTruthy()
     const svg = container.querySelector('svg')
@@ -105,7 +111,7 @@ describe('CanvasViewer (real browser)', () => {
       edges: [],
     }
 
-    const { container, unmount } = render(<CanvasViewer canvas={canvas} />)
+    const { container, unmount } = render(<CanvasViewer core={CORE} canvas={canvas} />)
 
     // useViewerFontReady's effect kicks off (or joins) the shared load; wait
     // for the component to observe readiness and re-render.
@@ -137,7 +143,7 @@ describe('CanvasViewer fits the box it is given', () => {
   it('draws the whole canvas inside the pane, not off its edge', async () => {
     const { container } = render(
       <div style={{ width: '400px', height: '300px' }}>
-        <CanvasViewer canvas={farCanvas} measure={fakeMeasure} />
+        <CanvasViewer core={CORE} canvas={farCanvas} measure={fakeMeasure} />
       </div>,
     )
     const pane = container.firstElementChild as HTMLElement

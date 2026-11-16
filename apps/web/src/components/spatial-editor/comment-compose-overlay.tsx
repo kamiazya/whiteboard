@@ -15,7 +15,7 @@ import { announceOnCanvas } from '../../lib/canvas-announcer.js'
 import { COMMENT_ANNOUNCEMENTS } from '../../lib/comment-announcements.js'
 import { commentMessageLengthLimit } from '../../lib/comment-message-limit.js'
 import { defaultCreateId } from '../../lib/spatial/element-id.js'
-import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { CommentComposeState } from './canvas-commands.js'
 import type { reduceGesture } from './gestures.js'
@@ -59,7 +59,7 @@ function commentDraftBox(
   obstacles: readonly BoundingBox[],
 ): { x: number; y: number; width: number; height: number } {
   const placed = queryCommentBubble(
-    currentLayoutCore(),
+    requireLayoutCore(),
     anchor,
     { w: COMMENT_COMPOSE_WIDTH_PX, h: COMMENT_COMPOSE_HEIGHT_PX },
     obstacles,

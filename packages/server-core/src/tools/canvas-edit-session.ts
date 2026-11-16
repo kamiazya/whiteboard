@@ -56,7 +56,7 @@ export function fittedHeight(
   node: SpatialNode,
   measure: MeasureText,
   fallback: number,
-  core?: LayoutCore,
+  core: LayoutCore,
 ): number {
   // canvas-render's one fitted height, the same the editor grows a node to,
   // answered by the Rust core the daemon hands it.
@@ -80,7 +80,7 @@ export function assertTextFits(
   opName: string,
   node: SpatialNode,
   measure: MeasureText,
-  core?: LayoutCore,
+  core: LayoutCore,
 ) {
   if (nodeText(node) === undefined) return
   // Whole pixels, as JSON Canvas sizes are; a box short by a fraction of one
@@ -533,6 +533,7 @@ export class CanvasEditSession {
     const updated = parsed.data
     if (
       this.measure !== undefined &&
+      this.core !== undefined &&
       (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
     ) {
       assertTextFits(index, opName, updated, this.measure, this.core)

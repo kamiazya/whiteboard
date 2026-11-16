@@ -1,3 +1,4 @@
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
@@ -16,7 +17,7 @@ const one = (text: string, over = {}): SpatialCanvas => ({
 async function warningsFor(canvas: SpatialCanvas) {
   const capture = captureLogsForTests('warning')
   try {
-    await renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS)
+    await renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, { core: testLayoutCore() })
     return capture.records.filter((r) => r.level === 'warning')
   } finally {
     capture.restore()

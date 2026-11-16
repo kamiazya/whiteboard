@@ -12,6 +12,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
@@ -22,6 +23,9 @@ import { renderSpatialCanvasToSvg } from './headless-renderer.js'
 // Three tokens that fit one 200px-wide node when measured in Roboto and do
 // not when measured in the installed face, whose every glyph is a full em.
 const TEXT = 'xxxx xxxx xxxx'
+// One glyph per code point: a cmap repeating a glyph is a face the core's
+// font reader refuses, and the layout would then measure in Roboto.
+const CARRIED = 'x '
 
 const sketched: SpatialCanvas = {
   nodes: [textNode({ id: 'a', x: 0, y: 0, width: 200, height: 200, text: TEXT })],
@@ -44,7 +48,7 @@ describe('a theme font the user installed', () => {
   beforeAll(async () => {
     fontsDir = installedFontsDir(tempDataDir('wb-export-face-'))
     await mkdir(fontsDir, { recursive: true })
-    await writeFile(join(fontsDir, 'yomogi.ttf'), syntheticFont(TEXT, 'Yomogi'))
+    await writeFile(join(fontsDir, 'yomogi.ttf'), syntheticFont(CARRIED, 'Yomogi'))
   })
 
   afterAll(() => {
@@ -52,7 +56,10 @@ describe('a theme font the user installed', () => {
   })
 
   it('is declared and measured by the same face, so the runs wrap where they are painted', async () => {
-    const sketch = await renderSpatialCanvasToSvg(sketched, fontsDir, { style: 'document' })
+    const sketch = await renderSpatialCanvasToSvg(sketched, fontsDir, {
+      core: testLayoutCore(),
+      style: 'document',
+    })
     expect(sketch.svg).toContain('font-family="Yomogi"')
     expect(sketch.unresolvedFamilies).toEqual([])
     // A full em per glyph: two tokens fit the node's text width, three do not.
@@ -62,14 +69,17 @@ describe('a theme font the user installed', () => {
   it('declares nothing for a keeper whose fonts directory holds no such face', async () => {
     const elsewhere = installedFontsDir(tempDataDir('wb-export-no-face-'))
 
-    const sketch = await renderSpatialCanvasToSvg(sketched, elsewhere, { style: 'document' })
+    const sketch = await renderSpatialCanvasToSvg(sketched, elsewhere, {
+      core: testLayoutCore(),
+      style: 'document',
+    })
 
     expect(sketch.svg).not.toContain('font-family="Yomogi"')
     expect(lines(sketch.svg)).toEqual([TEXT])
   })
 
   it('leaves a clean export measured and declared in the bundled family', async () => {
-    const clean = await renderSpatialCanvasToSvg(sketched, fontsDir)
+    const clean = await renderSpatialCanvasToSvg(sketched, fontsDir, { core: testLayoutCore() })
     expect(clean.svg).toContain('font-family="Roboto, system-ui, sans-serif"')
     expect(lines(clean.svg)).toEqual([TEXT])
   })

@@ -7,11 +7,15 @@
 // grows the a11y projection its README defers.
 
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
+
+/** The core the host hands the viewer. */
+const CORE = testLayoutCore()
 
 const fakeMeasure = createFixedMeasure({
   advance: (text) => text.length * 8,
@@ -28,7 +32,7 @@ const canvas: SpatialCanvas = {
 
 describe('CanvasViewer accessibility', () => {
   it('names the rendered canvas', () => {
-    render(<CanvasViewer canvas={canvas} measure={fakeMeasure} label="Sprint board" />)
+    render(<CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} label="Sprint board" />)
     expect(screen.getByRole('figure', { name: 'Sprint board' })).toBeTruthy()
   })
 
@@ -36,12 +40,12 @@ describe('CanvasViewer accessibility', () => {
     // The viewer cannot know the document's name — that lives in the
     // workspace, never in canvas content — so the caller owns the label and
     // this is only the floor.
-    render(<CanvasViewer canvas={canvas} measure={fakeMeasure} />)
+    render(<CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} />)
     expect(screen.getByRole('figure', { name: 'Canvas' })).toBeTruthy()
   })
 
   it('keeps the rendered text reachable rather than marking it presentational', () => {
-    const { container } = render(<CanvasViewer canvas={canvas} measure={fakeMeasure} />)
+    const { container } = render(<CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} />)
     const figure = screen.getByRole('figure')
     expect(figure.getAttribute('aria-hidden')).toBeNull()
     expect(container.querySelector('svg text')?.textContent).toContain('Hello')

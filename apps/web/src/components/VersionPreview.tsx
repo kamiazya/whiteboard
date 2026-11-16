@@ -7,7 +7,7 @@ import type { TagVocabulary } from '../hooks/use-tag-vocabulary.js'
 import type { FragmentLoaders } from '../lib/fragment-requests.js'
 import { sceneLinkTarget } from '../lib/scene-link.js'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
-import { currentLayoutCore } from '../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../lib/spatial/require-layout-core.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import type { PastDocument } from '../lib/versions-backend.js'
@@ -133,7 +133,7 @@ function PastCanvasPreview({
       >
         <CanvasViewer
           {...drawn}
-          core={currentLayoutCore()}
+          core={requireLayoutCore()}
           theme={theme}
           label="A past state of this document"
         />

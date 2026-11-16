@@ -4,6 +4,7 @@ import { constantRatioMeasureText, fittedTextNodeHeight } from '@kamiazya/whiteb
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { requireLayoutCore } from './require-layout-core.js'
 import { requiredTextNodeHeight } from './scene-render.js'
 
 const node = textNode({
@@ -25,7 +26,7 @@ describe('requiredTextNodeHeight', () => {
     for (const advance of [(t: string) => t.length * 2, (t: string) => t.length * 12]) {
       const measure = createFixedMeasure({ advance, ascent: 10, descent: 2 })
       expect(requiredTextNodeHeight(node, { measure })).toBe(
-        fittedTextNodeHeight(node, { measure, floor: 'none' }),
+        fittedTextNodeHeight(node, { measure, floor: 'none', core: requireLayoutCore() }),
       )
     }
   })
@@ -33,7 +34,7 @@ describe('requiredTextNodeHeight', () => {
   it('fits the narrow face on screen rather than the ratio floor', () => {
     const measure = createFixedMeasure({ advance: (t) => t.length * 2, ascent: 10, descent: 2 })
     expect(requiredTextNodeHeight(node, { measure })).toBeLessThan(
-      fittedTextNodeHeight(node, { measure: constantRatioMeasureText }),
+      fittedTextNodeHeight(node, { measure: constantRatioMeasureText, core: requireLayoutCore() }),
     )
   })
 })

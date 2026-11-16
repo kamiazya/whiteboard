@@ -6,11 +6,15 @@ import {
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure, fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
+
+/** The core the host hands the viewer. */
+const CORE = testLayoutCore()
 
 // The returned queries are bound to document.body, so a render left mounted
 // by the previous test (or the previous REPEAT of this one) answers too.
@@ -30,13 +34,15 @@ const canvas: SpatialCanvas = {
 describe('CanvasViewer', () => {
   it('renders inside a container tagged with the given testId', () => {
     const { getByTestId } = render(
-      <CanvasViewer canvas={canvas} measure={fakeMeasure} testId="my-viewer" />,
+      <CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} testId="my-viewer" />,
     )
     expect(getByTestId('my-viewer')).toBeTruthy()
   })
 
   it('injects a real <svg> element produced by canvas-render', () => {
-    const { getByTestId } = render(<CanvasViewer canvas={canvas} measure={fakeMeasure} />)
+    const { getByTestId } = render(
+      <CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} />,
+    )
     const svg = getByTestId('canvas-viewer').querySelector('svg')
     expect(svg).toBeTruthy()
     expect(svg?.querySelector('rect')).toBeTruthy()
@@ -71,20 +77,26 @@ describe('CanvasViewer', () => {
       ],
       edges: [],
     }
-    const { getByTestId } = render(<CanvasViewer canvas={tagged} measure={fakeMeasure} />)
+    const { getByTestId } = render(
+      <CanvasViewer core={CORE} canvas={tagged} measure={fakeMeasure} />,
+    )
     const svg = getByTestId('canvas-viewer').innerHTML
     expect(svg).toContain('data-wb-legend')
     expect(svg).toContain('>health<')
   })
 
   it('draws no legend for a board whose boxes carry no tag', () => {
-    const { getByTestId } = render(<CanvasViewer canvas={canvas} measure={fakeMeasure} />)
+    const { getByTestId } = render(
+      <CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} />,
+    )
     expect(getByTestId('canvas-viewer').innerHTML).not.toContain('data-wb-legend')
   })
 
   it('renders an empty canvas without throwing', () => {
     const empty: SpatialCanvas = { nodes: [], edges: [] }
-    expect(() => render(<CanvasViewer canvas={empty} measure={fakeMeasure} />)).not.toThrow()
+    expect(() =>
+      render(<CanvasViewer core={CORE} canvas={empty} measure={fakeMeasure} />),
+    ).not.toThrow()
   })
 
   // The document props are the reason canvas-render grew SvgDocumentOptions:
@@ -93,6 +105,7 @@ describe('CanvasViewer', () => {
   it('forwards width, height, padding and background into the rendered document', () => {
     const { getByTestId } = render(
       <CanvasViewer
+        core={CORE}
         canvas={canvas}
         measure={fakeMeasure}
         testId="document-props"
@@ -116,8 +129,10 @@ describe('CanvasViewer', () => {
 
   it('falls back to the browser measurer when none is injected', () => {
     // Exercises the default `measure` branch, which every other test bypasses.
-    expect(() => render(<CanvasViewer canvas={canvas} />)).not.toThrow()
-    const { getByTestId } = render(<CanvasViewer canvas={canvas} testId="default-measure" />)
+    expect(() => render(<CanvasViewer core={CORE} canvas={canvas} />)).not.toThrow()
+    const { getByTestId } = render(
+      <CanvasViewer core={CORE} canvas={canvas} testId="default-measure" />,
+    )
     expect(getByTestId('default-measure').querySelector('svg')).toBeTruthy()
   })
 })
@@ -147,7 +162,9 @@ describe('CanvasViewer frames what it draws', () => {
   }
 
   it('carries a viewBox around the content even when the host gives no size', () => {
-    const { container } = render(<CanvasViewer canvas={offCanvas} measure={fakeMeasure} />)
+    const { container } = render(
+      <CanvasViewer core={CORE} canvas={offCanvas} measure={fakeMeasure} />,
+    )
     const svg = container.querySelector('svg')
     expect(svg).not.toBeNull()
 
@@ -166,7 +183,13 @@ describe('CanvasViewer frames what it draws', () => {
 
   it('still honours an explicit size from the host', () => {
     const { container } = render(
-      <CanvasViewer canvas={offCanvas} measure={fakeMeasure} width={640} height={480} />,
+      <CanvasViewer
+        core={CORE}
+        canvas={offCanvas}
+        measure={fakeMeasure}
+        width={640}
+        height={480}
+      />,
     )
     const svg = container.querySelector('svg')
     expect(svg?.getAttribute('width')).toBe('640')
@@ -186,6 +209,7 @@ describe('CanvasViewer draws the conversations it is handed', () => {
     }
     const { container } = render(
       <CanvasViewer
+        core={CORE}
         canvas={two}
         measure={fakeMeasure}
         threads={[
@@ -222,13 +246,13 @@ describe('CanvasViewer style (ADR-0030 decision 6)', () => {
   }
 
   it('draws the bundled look by default: a widget never pays for a theme unasked', () => {
-    const { getByTestId } = render(<CanvasViewer canvas={neon} measure={fakeMeasure} />)
+    const { getByTestId } = render(<CanvasViewer core={CORE} canvas={neon} measure={fakeMeasure} />)
     expect(getByTestId('canvas-viewer').innerHTML).not.toContain('wb-glow')
   })
 
   it("style: 'document' draws the theme the canvas names", () => {
     const { getByTestId } = render(
-      <CanvasViewer canvas={neon} measure={fakeMeasure} style="document" />,
+      <CanvasViewer core={CORE} canvas={neon} measure={fakeMeasure} style="document" />,
     )
     expect(getByTestId('canvas-viewer').innerHTML).toContain('wb-glow')
   })
@@ -237,14 +261,20 @@ describe('CanvasViewer style (ADR-0030 decision 6)', () => {
 describe('CanvasViewer draws in the theme its host says it is in', () => {
   it('keeps the light palette by default and takes the dark one when the host asks', () => {
     const { getByTestId } = render(
-      <CanvasViewer canvas={canvas} measure={fakeMeasure} testId="viewer-light" />,
+      <CanvasViewer core={CORE} canvas={canvas} measure={fakeMeasure} testId="viewer-light" />,
     )
     const lightRect = getByTestId('viewer-light').querySelector('rect')
     expect(lightRect?.getAttribute('stroke')).toBe(SPATIAL_LIGHT_PALETTE.node.text.stroke)
     cleanup()
 
     const dark = render(
-      <CanvasViewer canvas={canvas} measure={fakeMeasure} theme="dark" testId="viewer-dark" />,
+      <CanvasViewer
+        core={CORE}
+        canvas={canvas}
+        measure={fakeMeasure}
+        theme="dark"
+        testId="viewer-dark"
+      />,
     )
     const darkRect = dark.getByTestId('viewer-dark').querySelector('rect')
     expect(darkRect?.getAttribute('stroke')).toBe(SPATIAL_DARK_PALETTE.node.text.stroke)
@@ -272,6 +302,7 @@ describe("CanvasViewer typesets from the host's fragment table", () => {
     const asked: FragmentAsk[] = []
     const { getByTestId } = render(
       <CanvasViewer
+        core={CORE}
         canvas={typeset}
         measure={fakeMeasure}
         fragments={{
@@ -297,6 +328,7 @@ describe("CanvasViewer typesets from the host's fragment table", () => {
     const asked: FragmentAsk[] = []
     render(
       <CanvasViewer
+        core={CORE}
         canvas={typeset}
         measure={fakeMeasure}
         fragments={{ fragments: [], onFragmentsAsked: (asks) => asked.push(...asks) }}

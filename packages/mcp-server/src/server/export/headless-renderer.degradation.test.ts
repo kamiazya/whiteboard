@@ -1,32 +1,38 @@
-// Confirms mcp-server still observes canvas-render's `layoutSpatialCanvas`
-// degradations via the injected `onDegrade` callback and its own
-// `getLogger`, even though canvas-render itself has no logger to fall back
-// on. Only `parseMarkdownBody('__THROW__')` is mocked to throw; every other
-// input goes through the real parser, isolating this totality behavior from
-// having to find a markdown string that reliably falls outside codec's
-// own versioned mdast subset.
+// Confirms mcp-server still observes the layout's degradations via the
+// injected `onDegrade` callback and its own `getLogger`, even though
+// canvas-render itself has no logger to fall back on. A body the core could
+// not parse is reported by the core and nothing in this package can make it
+// fail, so that case wraps the real core to add the report it would make.
 
+import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils'
-import { describe, expect, it, vi } from 'vitest'
-
+import { describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
+import { renderSpatialCanvasToSvg as render } from './headless-renderer.js'
 import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 
-vi.mock('@kamiazya/whiteboard-codec', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@kamiazya/whiteboard-codec')>()
-  return {
-    ...actual,
-    parseMarkdownBody: (body: string) => {
-      if (body === '__THROW__') throw new Error('simulated unsupported mdast construct')
-      return actual.parseMarkdownBody(body)
-    },
-  }
-})
+const real = testLayoutCore()
 
-const renderer = await import('./headless-renderer.js')
-const renderSpatialCanvasToSvg = (canvas: SpatialCanvas) =>
-  renderer.renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS)
+/** The real core, reporting every body it lays out as one it could not parse. */
+const parseFailing: LayoutCore = {
+  ...real,
+  layout: {
+    layoutSpatialCanvas: (...args: Parameters<LayoutCore['layout']['layoutSpatialCanvas']>) => {
+      const answer = real.layout.layoutSpatialCanvas(...args)
+      if ('refused' in answer) return answer
+      const failed = args[0].canvas.nodes.map((node) => ({
+        kind: 'body-parse-failed' as const,
+        nodeId: node.id,
+      }))
+      return { ...answer, degradations: [...answer.degradations, ...failed] }
+    },
+  },
+}
+
+const renderSpatialCanvasToSvg = (canvas: SpatialCanvas, core: LayoutCore = real) =>
+  render(canvas, NO_INSTALLED_FONTS, { core })
 
 function textNode(overrides: Partial<SpatialNode> = {}): SpatialCanvas {
   return {
@@ -37,7 +43,7 @@ function textNode(overrides: Partial<SpatialNode> = {}): SpatialCanvas {
         y: 0,
         width: 100,
         height: 40,
-        text: '__THROW__',
+        text: 'a body',
         ...overrides,
       }) as SpatialNode,
     ],
@@ -49,7 +55,7 @@ describe('headless-renderer degradation observability', () => {
   it('logs a warning when a text node body fails to parse as markdown', async () => {
     const capture = captureLogsForTests()
     try {
-      await renderSpatialCanvasToSvg(textNode())
+      await renderSpatialCanvasToSvg(textNode(), parseFailing)
       expect(
         capture.records.some(
           (r) => r.level === 'warning' && r.msg.includes('failed to parse as markdown'),

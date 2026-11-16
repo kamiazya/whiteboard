@@ -22,6 +22,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { layoutMarkdownOutline, renderMarkdownPreview } from '../../lib/render-preview.js'
 import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { CommentBody } from '../annotations/CommentBody.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -125,7 +126,7 @@ it("lays the preview's note out as the TypeScript does, in this browser's measur
       references: references(),
       fragments,
     }
-    const ts = layoutMarkdownDocument(NOTE, options)
+    const ts = layoutMarkdownDocument(NOTE, { ...options, core: requireLayoutCore() })
     expect(ts?.nodes.length).toBeGreaterThan(0)
     expect(layoutMarkdownDocument(NOTE, { ...options, core }), mode).toEqual(ts)
   }

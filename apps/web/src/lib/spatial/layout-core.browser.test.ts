@@ -26,6 +26,7 @@ import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js
 import { startLayoutCore } from '../page-layout-core.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
+import { requireLayoutCore } from './require-layout-core.js'
 
 async function loadRealCore() {
   try {
@@ -84,7 +85,9 @@ describe('the real Rust core in a browser', () => {
       }
       const scene = layoutSpatialCanvas(board(style), { ...options, core: counted })
       expect(scene.nodes.length).toBeGreaterThan(0)
-      expect(scene, style).toEqual(layoutSpatialCanvas(board(style), options))
+      expect(scene, style).toEqual(
+        layoutSpatialCanvas(board(style), { ...options, core: requireLayoutCore() }),
+      )
     }
     // The core was asked for every board, so the comparison compared its answers.
     expect(calls).toBe(3)

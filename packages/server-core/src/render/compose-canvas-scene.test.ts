@@ -5,7 +5,7 @@ import {
   layoutSpatialCanvas,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, groupNode, linkNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
@@ -42,7 +42,7 @@ describe('composeCanvasScene', () => {
       ],
     }
 
-    const scene = composeCanvasScene(canvas, constantRatioMeasureText)
+    const scene = composeCanvasScene(canvas, constantRatioMeasureText, { core: testLayoutCore() })
 
     // (a) the file node emits a `kind: 'shape'` scene node at its own bbox.
     const fileChrome = scene.nodes.find(
@@ -104,10 +104,10 @@ describe('composeCanvasScene', () => {
       ],
     }
 
-    const actual = composeCanvasScene(canvas, constantRatioMeasureText)
+    const actual = composeCanvasScene(canvas, constantRatioMeasureText, { core: testLayoutCore() })
     const expected = layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure: constantRatioMeasureText,
-      parseBody: parseMarkdownBody,
       appearance: createSpatialTheme({ mode: 'light' }),
     })
 
@@ -127,7 +127,7 @@ describe('composeCanvasScene', () => {
       edges: [],
     }
 
-    const scene = composeCanvasScene(canvas, constantRatioMeasureText)
+    const scene = composeCanvasScene(canvas, constantRatioMeasureText, { core: testLayoutCore() })
 
     const literalRun = scene.nodes.find(
       (n) => n.kind === 'rawHtml' && n.value === '<div><span></div>',
@@ -155,11 +155,15 @@ describe('composeCanvasScene', () => {
       edges: [],
     }
 
-    const sceneWithoutSink = composeCanvasScene(canvas, constantRatioMeasureText)
+    const sceneWithoutSink = composeCanvasScene(canvas, constantRatioMeasureText, {
+      core: testLayoutCore(),
+    })
 
     const records: unknown[] = []
     setLogSink((record) => records.push(record))
-    const sceneWithSink = composeCanvasScene(canvas, constantRatioMeasureText)
+    const sceneWithSink = composeCanvasScene(canvas, constantRatioMeasureText, {
+      core: testLayoutCore(),
+    })
 
     expect(records).toEqual([
       {
@@ -182,8 +186,8 @@ describe('composeCanvasScene', () => {
       edges: [],
     }
 
-    expect(composeCanvasScene(canvas, constantRatioMeasureText)).toEqual(
-      composeCanvasScene(canvas, constantRatioMeasureText),
-    )
+    expect(
+      composeCanvasScene(canvas, constantRatioMeasureText, { core: testLayoutCore() }),
+    ).toEqual(composeCanvasScene(canvas, constantRatioMeasureText, { core: testLayoutCore() }))
   })
 })

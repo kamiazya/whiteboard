@@ -6,6 +6,7 @@
 // has to simulate full-width advances, and this file is what proves the
 // simulation matches a browser.
 
+import { browserLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/browser-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { render } from '@testing-library/react'
@@ -13,6 +14,9 @@ import { describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
 import { ensureViewerFontLoaded } from './font-loading.js'
 import { createBrowserMeasureText } from './measure-text.js'
+
+/** The core the host hands the viewer, loaded as the page loads its own. */
+const CORE = await browserLayoutCore()
 
 // The node as it was reported from the running app: a box too small for the
 // wrapped body, whose last paragraph painted outside the frame entirely.
@@ -36,7 +40,7 @@ describe('a text node with CJK prose (real browser)', () => {
   it('paints no text below its own frame', async () => {
     await ensureViewerFontLoaded()
     const { container } = render(
-      <CanvasViewer canvas={REPORTED} measure={createBrowserMeasureText()} />,
+      <CanvasViewer core={CORE} canvas={REPORTED} measure={createBrowserMeasureText()} />,
     )
 
     await expect.poll(() => container.querySelector('svg')).toBeTruthy()

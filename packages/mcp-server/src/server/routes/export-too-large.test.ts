@@ -4,6 +4,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { apiErrorReason } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -59,6 +60,7 @@ describe('a PNG export past the pixel budget', () => {
     app.route(
       '/',
       createExportRouter({
+        layoutCore: async () => testLayoutCore(),
         liveDocuments: { exists: async () => true },
         scope: testStoreScope(tempDir),
       }),

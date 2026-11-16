@@ -8,6 +8,8 @@
  * building the body by hand, fails by name. The suites beside each route pin
  * only the code.
  */
+
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -86,6 +88,7 @@ const CASES: readonly {
     build: () =>
       addressed(
         createExportRouter({
+          layoutCore: async () => testLayoutCore(),
           liveDocuments: { exists: async () => true },
           scope: testStoreScope(tmp.dir),
         }),

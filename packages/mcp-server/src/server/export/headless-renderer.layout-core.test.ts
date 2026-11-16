@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -66,7 +67,10 @@ describe.runIf(built)('the file export through the layout core', () => {
   for (const theme of ['light', 'dark'] as const) {
     it(`the core lays the ${theme} export out, to the TypeScript's SVG bytes`, async () => {
       const { core, seen } = await countedCore()
-      const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme })
+      const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, {
+        core: testLayoutCore(),
+        theme,
+      })
       const rust = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { theme, core })
       expect(seen).toEqual({ layouts: 1 })
       expect(rust.svg).toBe(ts.svg)
@@ -74,7 +78,11 @@ describe.runIf(built)('the file export through the layout core', () => {
 
     it(`the core lays the ${theme} PNG out, to the TypeScript's PNG bytes`, async () => {
       const { core, seen } = await countedCore()
-      const ts = await renderSpatialCanvasToPng(board, NO_INSTALLED_FONTS, { theme, scale: 2 })
+      const ts = await renderSpatialCanvasToPng(board, NO_INSTALLED_FONTS, {
+        core: testLayoutCore(),
+        theme,
+        scale: 2,
+      })
       const rust = await renderSpatialCanvasToPng(board, NO_INSTALLED_FONTS, {
         theme,
         scale: 2,
@@ -88,7 +96,10 @@ describe.runIf(built)('the file export through the layout core', () => {
   it("the core lays a document-style export out, to the TypeScript's bytes", async () => {
     const { core, seen } = await countedCore()
     const options = { style: 'document' as const, theme: 'dark' as const }
-    const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, options)
+    const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, {
+      ...options,
+      core: testLayoutCore(),
+    })
     const rust = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, { ...options, core })
     expect(seen).toEqual({ layouts: 1 })
     expect(rust.svg).toBe(ts.svg)

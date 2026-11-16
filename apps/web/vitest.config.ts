@@ -35,6 +35,7 @@ export default defineConfig({
     setupFiles: [
       './vitest.setup.ts',
       '../../packages/codec/src/test-utils/core-setup/node.setup.ts',
+      './src/test-utils/jsdom-layout-core.setup.ts',
     ],
     // Safety net behind vitest.setup.ts's scheduler drain: React's scheduler
     // can still fire deferred work after jsdom teardown (window gone →
