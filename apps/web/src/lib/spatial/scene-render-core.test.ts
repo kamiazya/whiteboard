@@ -30,14 +30,18 @@ const mathBoard: SpatialCanvas = {
 }
 
 describe('renderCanvasToSvgWith', () => {
-  it("draws a text node's math block through the renderMath seam it is handed", () => {
-    const renderMath = vi.fn(() => MATH_FRAGMENT)
-    const { svg } = renderCanvasToSvgWith(mathBoard, { measure, renderMath })
-    expect(renderMath).toHaveBeenCalledWith('x^2')
+  it("draws a text node's math block from the fragment table it is handed", () => {
+    const onFragmentsAsked = vi.fn()
+    const { svg } = renderCanvasToSvgWith(mathBoard, {
+      measure,
+      fragments: [['math:x^2', MATH_FRAGMENT]],
+      onFragmentsAsked,
+    })
     expect(svg).toContain('math-drawn')
+    expect(onFragmentsAsked).not.toHaveBeenCalled()
   })
 
-  it("draws a text node's diagram fence through the renderDiagram seam it is handed", () => {
+  it('hands the sources its table lacks to onFragmentsAsked, drawing their fallback', () => {
     const board: SpatialCanvas = {
       nodes: [
         textNode({
@@ -51,11 +55,17 @@ describe('renderCanvasToSvgWith', () => {
       ],
       edges: [],
     }
-    const { svg } = renderCanvasToSvgWith(board, {
+    const onFragmentsAsked = vi.fn()
+    const { svg } = renderCanvasToSvgWith(board, { measure, fragments: [], onFragmentsAsked })
+    expect(svg).not.toContain('diagram-drawn')
+    expect(onFragmentsAsked).toHaveBeenCalledWith([
+      { kind: 'diagram', lang: 'mermaid', value: 'graph TD; A-->B' },
+    ])
+    const drawn = renderCanvasToSvgWith(board, {
       measure,
-      renderDiagram: (lang) => (lang === 'mermaid' ? DIAGRAM_FRAGMENT : undefined),
+      fragments: [['fence:mermaid:graph TD; A-->B', DIAGRAM_FRAGMENT]],
     })
-    expect(svg).toContain('diagram-drawn')
+    expect(drawn.svg).toContain('diagram-drawn')
   })
 })
 
@@ -74,7 +84,7 @@ describe('renderCanvasForExport through layoutWithFragments', () => {
       new Map([[NOTE_ID, { name: 'Note', body: '```mermaid\ngraph TD; C-->D\n```\n' }]]),
     )
     const { svg } = await layoutWithFragments(
-      (seams) => renderCanvasForExport(board, { measure, references, ...seams }),
+      (table) => renderCanvasForExport(board, { measure, references, ...table }),
       { math, diagram },
     )
     expect(math).toHaveBeenCalledTimes(1)

@@ -46,9 +46,9 @@ export interface RenderCanvasOptions {
   readonly showResolved?: boolean
   /** See RenderCanvasCoreOptions: the conversations this render draws. */
   readonly threads?: readonly CommentThread[]
-  /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
-  readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
-  readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
+  /** See RenderCanvasCoreOptions: the fragments every body is typeset from. */
+  readonly fragments?: RenderCanvasCoreOptions['fragments']
+  readonly onFragmentsAsked?: RenderCanvasCoreOptions['onFragmentsAsked']
 }
 
 /**
@@ -88,9 +88,9 @@ export interface CanvasExportOptions {
   readonly comments?: boolean
   /** Absent is a transparent 1x picture. */
   readonly picture?: PictureExportOptions
-  /** See RenderCanvasCoreOptions: the fragment seams every body is typeset through. */
-  readonly renderMath?: NonNullable<RenderCanvasCoreOptions['renderMath']>
-  readonly renderDiagram?: NonNullable<RenderCanvasCoreOptions['renderDiagram']>
+  /** See RenderCanvasCoreOptions: the fragments every body is typeset from. */
+  readonly fragments?: RenderCanvasCoreOptions['fragments']
+  readonly onFragmentsAsked?: RenderCanvasCoreOptions['onFragmentsAsked']
 }
 
 /**
@@ -101,7 +101,7 @@ export interface CanvasExportOptions {
  * the editor's on-screen gate depends on a zoom a saved file does not have,
  * and this is the policy the daemon's export takes. Synchronous like every
  * layout: the caller that can wait for math and diagrams runs it through
- * `layoutWithFragments` (`lib/fragment-requests.ts`) and hands the seams in.
+ * `layoutWithFragments` (`lib/fragment-requests.ts`) and hands the table in.
  */
 export function renderCanvasForExport(
   canvas: SpatialCanvas,
@@ -112,8 +112,8 @@ export function renderCanvasForExport(
     tagLibrary,
     comments,
     picture,
-    renderMath,
-    renderDiagram,
+    fragments,
+    onFragmentsAsked,
   }: CanvasExportOptions,
 ): { readonly svg: string; readonly bounds: BoundingBox; readonly scale?: number } {
   const drawn = renderCanvasForExportWith(
@@ -125,8 +125,8 @@ export function renderCanvasForExport(
       ...(references === undefined ? {} : { references, expandFileNode: () => true }),
       ...(threads === undefined ? {} : { threads }),
       ...(tagLibrary === undefined ? {} : { tagLibrary }),
-      renderMath,
-      renderDiagram,
+      fragments,
+      onFragmentsAsked,
     },
     backgroundOf(picture),
   )

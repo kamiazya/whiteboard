@@ -27,11 +27,11 @@ const coreSettingsSchema = z.object({
   /**
    * The whole layout's own switch (`VITE_WHITEBOARD_CORE_LAYOUT`, the
    * daemon's `WHITEBOARD_CORE_LAYOUT`): the core lays a canvas out measuring
-   * through the page's own measurer, asked mid-layout. It runs beside the
-   * TypeScript wherever routing runs `differential` and stays TypeScript
-   * elsewhere, a production build included, until the web's default moves
-   * to the core (ADR-0054 step 7, S16b). It needs a loaded core, so under
-   * `impl: 'ts'` it compares nothing whatever it reads.
+   * through the page's own measurer, asked mid-layout. Unset, it follows
+   * routing: `rust` in a production build (ADR-0054 step 7, S16b),
+   * `differential` in the dev server and wherever a test job sets routing
+   * so, `ts` in a test run otherwise. `ts` is the rollback. It needs a
+   * loaded core, so under `impl: 'ts'` it compares nothing whatever it reads.
    */
   layout: coreImplSchema,
   mismatch: z.enum(['log', 'throw']),
@@ -51,7 +51,7 @@ export function coreSettingsFrom(env: CoreEnv): CoreSettings {
   const impl = coreImplSchema.parse(env.VITE_WHITEBOARD_CORE || devDefault)
   return coreSettingsSchema.parse({
     impl,
-    layout: env.VITE_WHITEBOARD_CORE_LAYOUT || (impl === 'differential' ? 'differential' : 'ts'),
+    layout: env.VITE_WHITEBOARD_CORE_LAYOUT || impl,
     mismatch: env.VITE_WHITEBOARD_CORE_MISMATCH || 'log',
   })
 }

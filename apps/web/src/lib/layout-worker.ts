@@ -30,7 +30,6 @@ import { describeThrown } from '@kamiazya/whiteboard-model'
 // `document` on evaluation, and a worker has none — importing it throws
 // `document is not defined` before a single message is handled.
 
-import type { FragmentAsk } from '@kamiazya/whiteboard-canvas-render'
 import {
   ensureViewerFontLoaded,
   registerFontBytes,
@@ -42,7 +41,7 @@ import { decodeSpatialSnapshot } from './decode-spatial-snapshot.js'
 import { outlineFromSpatial } from './document-outline.js'
 import { unhandledKind } from './exhaustive.js'
 import { resolveRectColor } from './favicon.js'
-import { recordingFragmentSeams } from './fragment-requests.js'
+import { recordingFragmentTable } from './fragment-requests.js'
 import { createContentCacheStore } from './layout-content-caches.js'
 import {
   FONT_DEGRADED,
@@ -261,22 +260,6 @@ async function handleMarkdownRail(request: MarkdownRailRequest): Promise<void> {
   }
 }
 
-/**
- * The fragment seams for one layout: answered from what the asking thread
- * rendered, every other source collected to report back. The content
- * cache's key names the rendered set, because a body memoised while its
- * fragment was missing would otherwise keep drawing the fallback.
- */
-function fragmentSeamsFor(entries: LayoutRequest['fragments']) {
-  const rendered = new Map(entries)
-  const asked = new Map<string, FragmentAsk>()
-  const seams = recordingFragmentSeams(
-    (key) => rendered.get(key),
-    (ask, key) => asked.set(key, ask),
-  )
-  return { seams, asked, keys: [...rendered.keys()] }
-}
-
 /** Which file nodes draw their content — a lookup, since the gate that decides read a viewport. */
 function fileNodeExpansion(request: LayoutRequest): (node: { readonly id: string }) => boolean {
   if (request.expandAllFileNodes === true) return () => true
@@ -319,7 +302,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
     // not acted on: only the asking thread can fetch a face (registering it in every realm at
     // once) or load an engine, and a list surface's thread never decodes the canvas.
     const fontsMissing = new Set<string>()
-    const fragments = fragmentSeamsFor(request.fragments)
+    const table = recordingFragmentTable(request.fragments)
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
@@ -327,7 +310,8 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       expandFileNode: references === undefined ? undefined : fileNodeExpansion(request),
       contentCache: contentCacheFor({
         theme: request.theme,
-        wireKey: JSON.stringify([referencesIdentity(request), fragments.keys]),
+        // Names the rendered set, so a body memoised beside one table is never served beside another.
+        wireKey: JSON.stringify([referencesIdentity(request), table.fragments.map(([key]) => key)]),
       }),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       lockedNodeIds: request.lockedNodeIds,
@@ -336,7 +320,8 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       threads: request.threads,
       proposals: request.proposals,
       tagLibrary: request.tagLibrary,
-      ...fragments.seams,
+      fragments: table.fragments,
+      onFragmentsAsked: table.onFragmentsAsked,
       onDegrade: (event) => {
         if (event.kind === 'font-missing') fontsMissing.add(event.family)
       },
@@ -349,7 +334,7 @@ async function handleLayout(request: LayoutRequest): Promise<void> {
       scene,
       anchors,
       ...(fontsMissing.size === 0 ? {} : { fontsMissing: [...fontsMissing] }),
-      ...(fragments.asked.size === 0 ? {} : { fragmentsAsked: [...fragments.asked.values()] }),
+      ...(table.asked.size === 0 ? {} : { fragmentsAsked: [...table.asked.values()] }),
       ...omittedReferences(request, canvas),
     }
     self.postMessage(response)

@@ -448,16 +448,21 @@ throws). Each realm installs its own host through `startLayoutCore()` (the
 page's `boot.ts`, `layout-worker.ts`, the browser test setup) and every layout
 reads `currentLayoutCore()` through `editorLayoutBase`; until the load settles
 it routes in TypeScript. The whole layout rides the same instance under its own
-switch, `VITE_WHITEBOARD_CORE_LAYOUT` (`differential` wherever routing is, `ts`
-in a production build until S16b): the core measures through the page's own
+switch, `VITE_WHITEBOARD_CORE_LAYOUT`, which follows routing unless set (`rust`
+in a production build since S16b, `ts` the rollback): the core measures through the page's own
 measurer, which canvas-viewer's `createBrowserMeasureText` names `{kind:
-'host'}` and the core asks mid-layout through its one import. That does NOT
-make CI's `differential` + `throw` browser run a whole-layout differential of
-the editor: every layout that passes the math and diagram seams as functions
-(the editor's committed scene, drag layers and layout worker, until S16b hands
-them the fragment table) still skips at `seam:renderMath` and is drawn by the
-TypeScript alone. What compares the whole layout under the browser measurer is
-`host-measure-layout.browser.test.ts`, over its own boards. `layout-core-source.ts` is the one module that names
+'host'}` and the core asks mid-layout through its one import. Every spatial
+layout the editor runs — its committed scene, drag layers and layout worker,
+and the export — hands its math and diagrams as canvas-render's fragment
+TABLE (`fragments` + `onFragmentsAsked`, `useMarkdownFragments().table`,
+`recordingFragmentTable`), never as the `renderMath`/`renderDiagram`
+functions the request gate skips, so CI's `differential` + `throw` browser
+run compares the editor's whole layout; `editor-layout-core.browser.test.tsx`
+counts what the switch reports over the editor's composition and requires
+none. Two web surfaces still lay a board out in TypeScript, through S18: a
+board embedded in the markdown preview (`render-preview.ts`; canvas-render
+lays it out with its own `nestedLayoutBudget` seam, skipped as such) and
+`CanvasViewer` (version history), which takes no core. `layout-core-source.ts` is the one module that names
 the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
 `worker.plugins`): every build carries the wasm, because OKF and JSON Canvas have no TypeScript left here. A CI job
 that builds or tests the app restores the artifact with `.github/actions/core-wasm`.

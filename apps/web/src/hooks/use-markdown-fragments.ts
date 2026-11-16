@@ -26,6 +26,7 @@ import { useCallback, useMemo, useState } from 'react'
 import {
   type FragmentLoaders,
   type FragmentSeams,
+  type FragmentTable,
   loadFragment,
   recordingFragmentSeams,
 } from '../lib/fragment-requests.js'
@@ -39,6 +40,12 @@ export interface MarkdownFragments {
   readonly entries: readonly FragmentEntry[]
   /** Sources a layout asked for that `entries` could not answer. */
   readonly onFragmentsAsked: (asks: readonly FragmentAsk[]) => void
+  /**
+   * `entries` as the table a synchronous spatial layout of this surface
+   * takes, whose misses are reported once the render is over. The table, not
+   * `seams`, is what the Rust core can be handed (ADR-0054 step 7).
+   */
+  readonly table: FragmentTable
 }
 
 /** @param loaders Injection seam for tests; defaults to the real MathJax/mermaid loaders. */
@@ -79,5 +86,13 @@ export function useMarkdownFragments(
       ),
     [cache],
   )
-  return { seams, entries, onFragmentsAsked }
+  const table = useMemo<FragmentTable>(
+    () => ({
+      fragments: entries,
+      // A synchronous layout runs during render, where state cannot be set.
+      onFragmentsAsked: (asks) => queueMicrotask(() => onFragmentsAsked(asks)),
+    }),
+    [entries, onFragmentsAsked],
+  )
+  return { seams, entries, onFragmentsAsked, table }
 }

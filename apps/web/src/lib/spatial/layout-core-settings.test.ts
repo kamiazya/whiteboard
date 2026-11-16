@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 import { coreSettingsFrom } from './layout-core-settings.js'
 
 describe('coreSettingsFrom', () => {
-  it('routes in Rust in a production build', () => {
+  it('routes and lays out in Rust in a production build', () => {
     expect(coreSettingsFrom({ DEV: false, MODE: 'production' })).toEqual({
       impl: 'rust',
-      layout: 'ts',
+      layout: 'rust',
       mismatch: 'log',
     })
   })
@@ -17,7 +17,7 @@ describe('coreSettingsFrom', () => {
       VITE_WHITEBOARD_CORE_OKF: 'ts',
       VITE_WHITEBOARD_CORE_SPATIAL: 'ts',
     }
-    expect(coreSettingsFrom(retired)).toEqual({ impl: 'rust', layout: 'ts', mismatch: 'log' })
+    expect(coreSettingsFrom(retired)).toEqual({ impl: 'rust', layout: 'rust', mismatch: 'log' })
   })
 
   it('runs both routings beside each other in the dev server', () => {
@@ -44,18 +44,21 @@ describe('coreSettingsFrom', () => {
     ).toBe('ts')
   })
 
-  it('lays the whole canvas out beside the TypeScript only where routing runs differential', () => {
+  it('lays the whole canvas out as routing runs: in the core in a production build', () => {
     expect(coreSettingsFrom({ DEV: true, MODE: 'development' }).layout).toBe('differential')
     expect(
       coreSettingsFrom({ DEV: true, MODE: 'test', VITE_WHITEBOARD_CORE: 'differential' }).layout,
     ).toBe('differential')
-    expect(coreSettingsFrom({ DEV: false, MODE: 'production' }).layout).toBe('ts')
+    expect(coreSettingsFrom({ DEV: false, MODE: 'production' }).layout).toBe('rust')
     expect(coreSettingsFrom({ DEV: true, MODE: 'test' }).layout).toBe('ts')
+    expect(
+      coreSettingsFrom({ DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE: 'ts' }).layout,
+    ).toBe('ts')
   })
 
   it('lets the environment set the whole layout apart from routing', () => {
-    const env = { DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_LAYOUT: 'rust' }
-    expect(coreSettingsFrom(env)).toMatchObject({ impl: 'rust', layout: 'rust' })
+    const env = { DEV: false, MODE: 'production', VITE_WHITEBOARD_CORE_LAYOUT: 'ts' }
+    expect(coreSettingsFrom(env)).toMatchObject({ impl: 'rust', layout: 'ts' })
     expect(
       coreSettingsFrom({ DEV: true, MODE: 'development', VITE_WHITEBOARD_CORE_LAYOUT: 'ts' })
         .layout,
