@@ -158,6 +158,38 @@ function layoutOf(
  */
 const SCENE_TEXT_LIMIT = 48_000
 
+/** `value` with every object's keys in code-unit order. */
+function sortedKeys(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(sortedKeys)
+  if (typeof value !== 'object' || value === null) return value
+  const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+  return Object.fromEntries(entries.map(([key, item]) => [key, sortedKeys(item)]))
+}
+
+/**
+ * The length and FNV digest of a scene spelled as `answerText` spells it with
+ * every object's keys sorted. A digest record's own `n` and `h` are taken
+ * over the TypeScript's key order, which is the order its objects were BUILT
+ * in and differs between two objects of one kind (a run's `strong` and
+ * `emphasis` follow the nesting they came from), so no writer of the core's
+ * answer can repeat it; sorted, the text is a function of the scene's values
+ * alone.
+ */
+export function sortedSceneDigest(scene: Scene): { readonly n: number; readonly h: number } {
+  const text = answerText(sortedKeys(scene))
+  if (text === undefined) throw new Error('markdown-document-oracle: a non-finite number')
+  return digestOf(text)
+}
+
+/** `sortedSceneDigest` of an input's scene, or undefined for a section that names no heading. */
+export function sortedDigest(
+  input: MarkdownInput,
+  tables: MarkdownTables,
+): { readonly n: number; readonly h: number } | undefined {
+  const scene = layoutOf(input, tables, new Map())
+  return scene === undefined ? undefined : sortedSceneDigest(scene)
+}
+
 export function markdownAnswer(input: MarkdownInput, tables: MarkdownTables): MarkdownRecord {
   const asked = new Map<string, FragmentAsk>()
   const scene = layoutOf(input, tables, asked)

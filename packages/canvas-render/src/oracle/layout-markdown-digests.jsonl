@@ -1,0 +1,121 @@
+{"id":"comment/1024 delimiter runs#comfortable","n":106850,"h":2608715607}
+{"id":"comment/1024 delimiter runs#compact","n":89147,"h":3830036464}
+{"id":"comment/1100 delimiter runs#comfortable","n":103062,"h":2554406358}
+{"id":"comment/1100 delimiter runs#compact","n":127679,"h":2285805731}
+{"id":"daemon/1024 delimiter runs#0","n":78785,"h":3329965138}
+{"id":"daemon/1024 delimiter runs#1","n":78785,"h":3329965138}
+{"id":"daemon/1024 delimiter runs#2","n":78785,"h":3329965138}
+{"id":"daemon/1024 delimiter runs#3","n":78785,"h":3329965138}
+{"id":"daemon/1100 delimiter runs#0","n":80699,"h":2556506158}
+{"id":"daemon/1100 delimiter runs#1","n":80699,"h":2556506158}
+{"id":"daemon/1100 delimiter runs#2","n":80699,"h":2556506158}
+{"id":"daemon/1100 delimiter runs#3","n":80699,"h":2556506158}
+{"id":"daemon/docs/contributing/adr/0002-browser-to-daemon-transport.md","n":207656,"h":474546546}
+{"id":"daemon/docs/contributing/adr/0004-unified-capability-gated-canvas-page.md","n":110488,"h":3724534939}
+{"id":"daemon/docs/contributing/adr/0005-hosted-origin-authorization.md","n":163828,"h":1099111452}
+{"id":"daemon/docs/contributing/adr/0007-canvas-identity-and-store-split.md","n":100373,"h":3381704}
+{"id":"daemon/docs/contributing/adr/0008-slug-derivation-and-rename.md","n":113711,"h":3901702011}
+{"id":"daemon/docs/contributing/adr/0009-mcp-tool-naming.md","n":170020,"h":1314276645}
+{"id":"daemon/docs/contributing/adr/0010-canvas-edit-batch-tool.md","n":111377,"h":1507805410}
+{"id":"daemon/docs/contributing/adr/0011-font-distribution.md","n":80290,"h":1556631614}
+{"id":"daemon/docs/contributing/adr/0012-user-installed-fonts.md","n":66290,"h":468181387}
+{"id":"daemon/docs/contributing/adr/0013-facet-system.md","n":174104,"h":2495835621}
+{"id":"daemon/docs/contributing/adr/0014-reference-index.md","n":49110,"h":2316335199}
+{"id":"daemon/docs/contributing/adr/0015-search-quality-scoreboard.md","n":180755,"h":2160104118}
+{"id":"daemon/docs/contributing/adr/0016-okf-trust-family.md","n":112552,"h":3307716644}
+{"id":"daemon/docs/contributing/adr/0017-okf-bundle-mapping.md","n":59511,"h":4000363266}
+{"id":"daemon/docs/contributing/adr/0018-operation-vs-mechanic.md","n":109097,"h":2482427625}
+{"id":"daemon/docs/contributing/adr/0019-workspace-identity.md","n":131949,"h":3957980846}
+{"id":"daemon/docs/contributing/adr/0020-coordination-boundary.md","n":121470,"h":2925925728}
+{"id":"daemon/docs/contributing/adr/0021-durability-boundary.md","n":133764,"h":226612627}
+{"id":"daemon/docs/contributing/adr/0022-variation-addressing.md","n":58356,"h":2106734072}
+{"id":"daemon/docs/contributing/adr/0023-replica-model.md","n":74264,"h":359014268}
+{"id":"daemon/docs/contributing/adr/0024-canvas-comments.md","n":58122,"h":865704967}
+{"id":"daemon/docs/contributing/adr/0025-comment-editor-ux.md","n":80669,"h":4229373947}
+{"id":"daemon/docs/contributing/adr/0026-annotation-layer.md","n":197808,"h":1064610221}
+{"id":"daemon/docs/contributing/adr/0027-render-broker.md","n":142218,"h":2922986872}
+{"id":"daemon/docs/contributing/adr/0029-proposal-layer.md","n":189613,"h":217437258}
+{"id":"daemon/docs/contributing/adr/0030-render-theme.md","n":171510,"h":669397931}
+{"id":"daemon/docs/contributing/adr/0031-tool-surface-criteria.md","n":690002,"h":3544851050}
+{"id":"daemon/docs/contributing/adr/0032-composition-axis.md","n":48034,"h":1354785910}
+{"id":"daemon/docs/contributing/adr/0033-facet-vocabulary-axis.md","n":75040,"h":355193654}
+{"id":"daemon/docs/contributing/adr/0034-stencil-and-recipe.md","n":246864,"h":2861923900}
+{"id":"daemon/docs/contributing/adr/0035-device-keys-and-keeper.md","n":92255,"h":2372020542}
+{"id":"daemon/docs/contributing/adr/0036-semantic-axes.md","n":131602,"h":980007673}
+{"id":"daemon/docs/contributing/adr/0037-model-and-format.md","n":67129,"h":681311005}
+{"id":"daemon/docs/contributing/adr/0038-ocif-projection.md","n":73032,"h":1538497371}
+{"id":"daemon/docs/contributing/adr/0039-passkey-attestation.md","n":206659,"h":1867734626}
+{"id":"daemon/docs/contributing/adr/0040-scoped-tags.md","n":194826,"h":2369677818}
+{"id":"daemon/docs/contributing/adr/0041-profile-and-authority.md","n":108210,"h":1943861358}
+{"id":"daemon/docs/contributing/adr/0042-offline-revocation.md","n":128434,"h":1929411730}
+{"id":"daemon/docs/contributing/adr/0043-authority-as-keys.md","n":202568,"h":3117647803}
+{"id":"daemon/docs/contributing/adr/0044-workspace-capacity.md","n":85247,"h":1403345384}
+{"id":"daemon/docs/contributing/adr/0045-account-and-user.md","n":85859,"h":3740990577}
+{"id":"daemon/docs/contributing/adr/0046-external-sign-in.md","n":93445,"h":1337326443}
+{"id":"daemon/docs/contributing/adr/0049-managing-people.md","n":65038,"h":1256275723}
+{"id":"daemon/docs/contributing/adr/0050-local-daemon-trust.md","n":139179,"h":2056372578}
+{"id":"daemon/docs/contributing/adr/0051-deleting-a-person.md","n":62823,"h":1074294862}
+{"id":"daemon/docs/contributing/adr/0052-edge-keeper.md","n":193724,"h":1988450132}
+{"id":"daemon/docs/contributing/adr/0053-workspace-segment-namespace.md","n":310465,"h":1223585857}
+{"id":"daemon/docs/contributing/adr/0054-rust-core.md","n":1474668,"h":1208348413}
+{"id":"daemon/docs/contributing/adr/README.md","n":753901,"h":8350483}
+{"id":"daemon/docs/contributing/architecture/canvas-render-decisions.md","n":272132,"h":1369419595}
+{"id":"daemon/docs/contributing/architecture/wire-protocol.md","n":106343,"h":1814131113}
+{"id":"daemon/docs/contributing/deployment/cloudflare-pages.md","n":86270,"h":1577226316}
+{"id":"daemon/docs/contributing/development.md","n":336209,"h":2880583797}
+{"id":"daemon/docs/contributing/mcp-debugging.md","n":185079,"h":1344330103}
+{"id":"daemon/docs/contributing/parity/edge-routing.md","n":523891,"h":4072917280}
+{"id":"daemon/docs/contributing/parity/facet-engine.md","n":332784,"h":1586240495}
+{"id":"daemon/docs/contributing/parity/json-canvas-codec.md","n":442964,"h":3994372613}
+{"id":"daemon/docs/contributing/parity/okf-codec.md","n":557521,"h":1858857860}
+{"id":"daemon/docs/contributing/quality-requirements.md","n":1469199,"h":1030203914}
+{"id":"daemon/docs/contributing/releasing.md","n":298164,"h":987795081}
+{"id":"daemon/docs/contributing/security-baseline.md","n":621957,"h":1961582112}
+{"id":"daemon/docs/contributing/testing.md","n":481426,"h":2623516014}
+{"id":"daemon/docs/explanation/architecture.md","n":138366,"h":1630302722}
+{"id":"daemon/docs/explanation/domain-model.md","n":97357,"h":4017799306}
+{"id":"daemon/docs/explanation/security-model.md","n":326667,"h":1950624482}
+{"id":"daemon/docs/how-to/choose-a-theme.md","n":54370,"h":3661807051}
+{"id":"daemon/docs/how-to/connect-to-local-daemon.md","n":200111,"h":2310770626}
+{"id":"daemon/docs/how-to/define-your-own-stencils.md","n":107304,"h":1532063626}
+{"id":"daemon/docs/how-to/export-a-canvas-from-the-daemon.md","n":57083,"h":1676695480}
+{"id":"daemon/docs/how-to/find-documents-from-chat.md","n":54153,"h":3480508102}
+{"id":"daemon/docs/how-to/link-documents.md","n":56700,"h":2659342505}
+{"id":"daemon/docs/how-to/organize-into-folders.md","n":63376,"h":2530879316}
+{"id":"daemon/docs/how-to/organize-with-tags.md","n":105168,"h":102678933}
+{"id":"daemon/docs/how-to/self-host-with-docker.md","n":566931,"h":2516523126}
+{"id":"daemon/docs/how-to/view-canvas-in-chat.md","n":70834,"h":4144615609}
+{"id":"daemon/docs/reference/configuration.md","n":462039,"h":2495980203}
+{"id":"daemon/docs/reference/export-formats.md","n":462714,"h":3029151618}
+{"id":"daemon/docs/reference/json-canvas-loss.md","n":76722,"h":1027078403}
+{"id":"daemon/docs/reference/keyboard-shortcuts.md","n":197968,"h":3054690062}
+{"id":"daemon/docs/reference/ocif-loss.md","n":67512,"h":3833094914}
+{"id":"daemon/docs/tutorials/getting-started.md","n":52940,"h":3251239080}
+{"id":"daemon/skills/auditing-workspaces/SKILL.md","n":83567,"h":220233846}
+{"id":"daemon/skills/coauthoring-visuals/SKILL.md","n":159264,"h":1530673627}
+{"id":"daemon/skills/coauthoring-visuals/references/diagram-family-selection.md","n":68410,"h":1082523626}
+{"id":"daemon/skills/coauthoring-visuals/references/selection-prompts.md","n":48884,"h":2524880794}
+{"id":"daemon/skills/drawing-visuals/SKILL.md","n":263398,"h":493014284}
+{"id":"daemon/skills/drawing-visuals/references/infrastructure-diagrams.md","n":51501,"h":3491807353}
+{"id":"daemon/skills/drawing-visuals/style-reference.md","n":164072,"h":2258611970}
+{"id":"daemon/skills/drawing-visuals/visual-vocabulary.md","n":246749,"h":1679795591}
+{"id":"daemon/at the body cap","n":1402231,"h":3461724071}
+{"id":"daemon/past the body cap","n":1402232,"h":2157804311}
+{"id":"outline/1024 delimiter runs","n":80747,"h":2605900250}
+{"id":"outline/1100 delimiter runs","n":82649,"h":2924203997}
+{"id":"preview/1024 delimiter runs#0","n":78785,"h":3329965138}
+{"id":"preview/1024 delimiter runs#1","n":87751,"h":2462851705}
+{"id":"preview/1024 delimiter runs#2","n":75647,"h":2413896647}
+{"id":"preview/1100 delimiter runs#0","n":91346,"h":3420829345}
+{"id":"preview/1100 delimiter runs#1","n":77134,"h":324906546}
+{"id":"preview/1100 delimiter runs#2","n":80699,"h":2556506158}
+{"id":"preview/docs/contributing/adr/0007-canvas-identity-and-store-split.md","n":100373,"h":3381704}
+{"id":"preview/docs/contributing/adr/0015-search-quality-scoreboard.md","n":180755,"h":2160104118}
+{"id":"preview/docs/contributing/adr/0023-replica-model.md","n":74264,"h":359014268}
+{"id":"preview/docs/explanation/architecture.md","n":138366,"h":1630302722}
+{"id":"preview/docs/how-to/choose-a-theme.md","n":54370,"h":3661807051}
+{"id":"preview/docs/how-to/link-documents.md","n":56700,"h":2659342505}
+{"id":"preview/docs/how-to/organize-with-tags.md","n":105168,"h":102678933}
+{"id":"preview/skills/auditing-workspaces/SKILL.md","n":83567,"h":220233846}
+{"id":"preview/skills/coauthoring-visuals/references/selection-prompts.md","n":48884,"h":2524880794}
+{"id":"preview/skills/drawing-visuals/SKILL.md","n":263398,"h":493014284}
