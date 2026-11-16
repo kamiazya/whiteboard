@@ -73,10 +73,11 @@ construct scan and the package.json dependency-direction check run against this 
 ## Consumers
 
 Besides `loro-adapter` and `canvas-viewer`, `apps/web` depends on this package directly (its
-markdown-editor preview pane calls `parseMarkdownBody` to feed canvas-render's
-`layoutMdastBlocks`/`renderSceneToSvg`, the same parse path `canvas-viewer` and `mcp-server` use
-for spatial text nodes and export — kept as one renderer instead of a second markdown-to-HTML
-fallback). `apps/web` is a composition root, so this is an allowed forward dependency per
+markdown-editor preview pane lays a note out through canvas-render's `layoutMarkdownDocument`,
+which parses with `parseMarkdownBody` — or hands the body to the Rust core — and draws with
+`renderSceneToSvg`, the same parse path `canvas-viewer` and `mcp-server` use for spatial text
+nodes and export — kept as one renderer instead of a second markdown-to-HTML fallback; the page
+still calls codec itself for block lines, references and the OKF envelope). `apps/web` is a composition root, so this is an allowed forward dependency per
 `architecture-map.md`; it is not source-scanned by `tools/arch-lint` (only the reverse-direction
 guard applies to composition roots), so this note is the boundary's only documentation.
 

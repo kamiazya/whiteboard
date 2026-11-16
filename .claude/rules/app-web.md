@@ -255,8 +255,9 @@ library, so tree-row icons and the favicon still draw a box's own colour.
 
 The markdown PREVIEW pane's own prose is bundled-family too — no theme names a
 family for a note — but a board EMBEDDED in it does, so `render-preview.ts`
-passes `fontAvailable: hasLoadedFace` into `layoutMdastBlocks`, which forwards
-it to the embedded canvas's layout. Without it that miniature declared the
+passes `fontAvailable: hasLoadedFace` into `layoutMarkdownDocument`, which
+forwards it to the embedded canvas's layout (and, to the Rust core, as the
+families it may declare). Without it that miniature declared the
 bundled family while the same board on the canvas declared the theme's.
 
 The PNG export carries a held face the same way it carries the vendored
@@ -459,10 +460,19 @@ TABLE (`fragments` + `onFragmentsAsked`, `useMarkdownFragments().table`,
 functions the request gate skips, so CI's `differential` + `throw` browser
 run compares the editor's whole layout; `editor-layout-core.browser.test.tsx`
 counts what the switch reports over the editor's composition and requires
-none. Two web surfaces still lay a board out in TypeScript, through S18: a
-board embedded in the markdown preview (`render-preview.ts`; canvas-render
-lays it out with its own `nestedLayoutBudget` seam, skipped as such) and
-`CanvasViewer` (version history), which takes no core. `layout-core-source.ts` is the one module that names
+none. A NOTE rides the same switch since S18c: `render-preview.ts` (the
+preview pane, a note's version history, and the worker's rail, outline and
+row picture) lays it out through canvas-render's `layoutMarkdownDocument`,
+and `CommentBody` its prose through `layoutCommentDocument`, both answered
+under `impl.layoutMarkdown`, which the host sets from the same
+`VITE_WHITEBOARD_CORE_LAYOUT` — so a board embedded in a note is laid out
+inside the note's one core request. The preview takes the fragment TABLE too,
+and `useReferenceSeams` rebuilds its bundle from a wire once nothing is in
+flight (a wire cannot say "loading", so while a load is pending the gate
+skips it as `references` and the TypeScript draws the placeholder);
+`markdown-preview-core.browser.test.tsx` holds the count. One web surface
+still lays a board out in TypeScript, through S18: `CanvasViewer` (a past
+board in version history), which takes no core. `layout-core-source.ts` is the one module that names
 the artifact, and `vite-plugin-core-source.ts` fails a build that has none staged (page AND
 `worker.plugins`): every build carries the wasm, because OKF and JSON Canvas have no TypeScript left here. A CI job
 that builds or tests the app restores the artifact with `.github/actions/core-wasm`.
