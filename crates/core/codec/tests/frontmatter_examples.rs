@@ -798,3 +798,32 @@ fn properties_on_lines_of_their_own_are_bounded_by_the_parse_depth() {
     // the subset refusal it was.
     assert_eq!(class("!t\nx\n"), "subset");
 }
+
+#[test]
+fn a_root_scalar_folded_onto_a_document_marker_or_directive_is_indented() {
+    // At the root a scalar's lines start at column 0, so `yaml` indents one
+    // whose text starts a line with `%`, `---` or `...` — but it looks before
+    // folding, and a fold starts new lines. Unindented, `--- ` and `... ` end
+    // the document (YAML 1.2 c-forbidden) and the subset refuses a `%`-led
+    // line, so the value did not read back. Plain, single-quoted and `>` each fold; some width of the run before
+    // the marker lands it at the start of a line in each.
+    let cases = ["%x", "---", "..."].into_iter().flat_map(|marker| {
+        (70..84).flat_map(move |width| {
+            let long = "x".repeat(width);
+            [
+                format!("{long} {marker} yyyyyyyyyy z"),
+                format!("\"{long} {marker} yyyyyyyyyy z"),
+                format!("a\n{long} {marker} yyyyyyyyyy z"),
+            ]
+        })
+    });
+    for value in cases {
+        let written = write(&s(&value));
+        assert_eq!(read(&written), s(&value), "{written:?}");
+    }
+    // The counterexample the property found, as it shrank.
+    let found = "𞗐0A ®\u{a8e0}®ଲ® 𝑖 0ਸ𞠀0౷🌀0\u{16ff0}ぁ𞹝\u{1e01b} 𞺫  $®\u{cca}a >\n  aaaaa aaaaa aaaaaaaaa aaaaaaaaa aaa %aaaaaaaaa aaa aaaaaaaa aaaa aaaaaaaaaaaa\n  aa aaaaaaaaaaaa aaaaaaaa\n    aaaaa aaaaa aaaaaaaaa aaaaaaaaa aaa aaaaaaaaaa aaa aaaaaaaa aaaa aaaaaaaaaaaa aa aaaaaaaaaaaa aaaaaaaa";
+    let value = read(found);
+    let written = write(&value);
+    assert_eq!(read(&written), value, "{written:?}");
+}
