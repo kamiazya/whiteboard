@@ -3,7 +3,7 @@ paths:
   - "packages/canvas-render/**"
 ---
 
-# canvas-render — scene graph, pure layout, SVG backend, sceneDigest
+# canvas-render — the layout switch, SVG backend, sceneDigest
 
 The measurements, rejected alternatives and incident histories behind this file's
 rules are in
@@ -14,50 +14,36 @@ alternative was refused, continues there.
 
 ## What belongs here
 
-`layout/` is split by the two JSON Canvas element kinds it serves, because
-the code that serves them shares nothing:
+**The layout is the Rust core's (ADR-0054 step 7).** S18h2 deleted the
+TypeScript composer (`compose-node.ts`, `node-box.ts`, `compose-file-node.ts`,
+the comment and proposal overlays, the legend's computation) and the
+typesetter (`layout/nodes/mdast-*`, line breaking, the vendored BudouX, and
+the `css-line-break` dependency). What `layout/` holds now is the switch a
+root calls the core through, never an implementation:
 
-- `layout/edges/` — the orthogonal edge router (side choice, cost model,
-  Hanan-grid A*, crossings, jumps, rounding). Pure geometry over boxes; it
-  has no idea what is drawn inside one.
-- `layout/nodes/` — how a node's box is drawn and filled: outline shape,
-  appearance resolution, the markdown body typesetter, truncation.
-- `layout/` itself — the composer that draws on both (`spatial-canvas.ts`
-  walks a canvas, `compose-node.ts` draws one node — text, frame, link and
-  the dispatch — over the box primitives in `node-box.ts`, with a file node's
-  representations in `compose-file-node.ts`), plus the kind-agnostic scene
-  transforms it uses.
+- `layout/spatial-canvas.ts` — `layoutSpatialCanvas(WithAnchors)`,
+  `layoutSpatialEdges`, `naturalNodeContentSize`, each asking
+  `options.core` (required).
+- `layout/canvas-switch.ts`, `markdown-switch.ts`, `query-switch.ts`,
+  `queries.ts`, `fitted-height.ts` — a layout's options as the request the
+  core takes (`CoreUnaskable` for what none carries), and its answer read
+  back: a refusal drawn as `refusalScene`, degradations to `onDegrade`.
+- `layout/layout-options.ts` — `SpatialLayoutOptions`, the vocabulary a
+  caller asks in.
+- `layout/edges/` — the orthogonal router's TypeScript, which S18h3 deletes;
+  until then it answers only canvas-render's own routing tests.
 
-**The composer's own file is not the composer's only file.** Two
-independently-featured OVERLAYS and the options vocabulary have their own
-modules, and the direction between them is the point:
+A measurer nobody named (`describeMeasure`) is the host's: the core asks the
+function itself through its one host import, so any `MeasureText` a root
+holds lays out. Naming it (`ratio`, `fake`, `fonts`) lets the core measure
+without asking, which a worker realm and the content cache key need.
 
-- `layout/layout-options.ts` — `SpatialLayoutOptions` (what a caller asks
-  for), `ResolvedLayoutOptions` (the same thing after the entry point has
-  settled geometry, contributions, theme and recursion path once), and
-  `RegionChrome`. Nothing imports the composer to name them.
-- `layout/comments.ts` — the annotation layer (ADR-0024/0025/0026): the
-  pin, the region outline, the bubble.
-- `layout/proposals.ts` — the proposal layer (ADR-0029 decision 1), which
-  reuses the comment layer's constants deliberately.
-- `layout/scene-extent.ts` — `contentExtent`, the one answer to "how far
-  right and down does this laid-out block reach", which both overlays were
-  computing with the same `Math.max(0, ...)` pair.
-
-Both overlays take the body typesetter as a SEAM (`BodyLayoutSeam`) rather
-than importing it. The markdown options a bubble is laid out with are built
-by the composer, which recurses back into `layoutSpatialCanvas` for an
-embedded canvas — importing it would close a cycle, and passing it keeps
-the dependency pointing one way. `compose-node.ts` takes that entry the same
-way, as `ResolvedLayoutOptions.layoutNestedCanvas`.
-
-The split was made because the two clusters were measured to have ZERO
-production imports between each other while sitting in one flat directory,
-so the directory gave a reader no signal which of two unrelated engines a
-file belonged to. `layout/layer-boundary.test.ts` is what keeps that true:
-the clusters may not import each other, and may not reach up to the
-composer. Tests are exempt — an edge-router test that builds its fixture by
-composing a whole scene is doing setup, not depending on the composer.
+The decision sections below still name the deleted modules where they record
+what was decided and measured: those decisions are what the Rust core ports
+(`crates/core/canvas-render`), and the history is kept, not rewritten. The
+scoreboards that judged them run through the core in `canvas-render-rust`
+(`*.rust.test.ts`); the recorded oracles under `oracle/` and
+`test-utils/*-oracle` are frozen evidence, replayed, never re-recorded.
 
 **The scene-node union stays closed** — every consumer is in this repo, and
 an open union would buy dispatch flexibility nobody has asked for at the
@@ -184,13 +170,13 @@ the table alone.
 ## Dependency rules
 
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
-  edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
-  `parseBody`), `@kamiazya/whiteboard-scene` (the scene vocabulary),
-  `@kamiazya/whiteboard-plugin-visual` (the default render contribution),
-  `@kamiazya/whiteboard-facet-engine` (the theme token contract, zod-only),
-  `css-line-break` (UAX #14 break opportunities), `lowlight` + `highlight.js`
-  (the default tokeniser) and `zod` (via `catalog:`),
-  for `sceneDigestSchema` only.
+  edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (what a
+  reference target is, for the reference wire), `@kamiazya/whiteboard-scene`
+  (the scene vocabulary), `@kamiazya/whiteboard-plugin-visual` (the default
+  render contribution), `@kamiazya/whiteboard-facet-engine` (the theme token
+  contract, zod-only), `lowlight` + `highlight.js` (the tokeniser the core
+  calls back for a code fence) and `zod` (via `catalog:`). The line breaker
+  (`css-line-break`) went with the typesetter (S18h2).
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   reads every source via `import.meta.glob` (`?raw`), so it imports no
@@ -978,13 +964,12 @@ edge's path.
   measurers owe each other (unkerned, unhinted advances), run by each side's
   `measure-text.conformance` test. The viewer vendors Regular only (+0.8 s
   first paint measured for the rest) and ledgers its synthesised emphasis.
-- `layout/spatial-canvas.test.ts`: the union of both former per-consumer
-  suites (chrome shape, content placement, degenerate inputs, degradation
-  reporting via `onDegrade`, document-order emission, appearance-independent
-  geometry) against the single `layoutSpatialCanvas`.
-- `layout/translate-scene.test.ts`: identity/additivity, the wrapper-relative
-  x rule, and the tripwire asserting exactly `listItem`/`tableCell` emit an
-  SVG transform.
+- The layout's own suites (`spatial-canvas.test.ts`, `translate-scene.test.ts`,
+  the typesetter's) went with the TypeScript they tested (S18h2). The core's
+  behaviour is held by the native replays under `crates/` and by the
+  scoreboards in `canvas-render-rust`; what `canvas-render-node` keeps about
+  the layout is the switch: the request each option becomes, and the answer
+  read back.
 - `svg/pixel-golden.browser.test.ts` pixel-level regression harness
   (`toMatchScreenshot`, baselines under `svg/__screenshots__/`) for the
   shape classes a byte-level SVG-string golden cannot protect (sweep-flag/
@@ -1000,7 +985,7 @@ edge's path.
   text-free like the rest, and for a stricter reason: a baseline is compared
   at zero mismatched pixels on machines whose installed fonts differ, so a
   rendered glyph is the one thing in a scene that cannot be reproduced.
-- `layout/nodes/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
+- `layout/nodes/text-wrapping-quality.rust.test.ts` is the text-wrapping SCOREBOARD, the
   same instrument-first shape as the routing one below: 11 corpus cases x 3
   narrow widths, every number pinned EXACTLY. Debt (overflowing runs, worst
   overflow px, blocks whose bbox under-reports their ink) targets zero; price
@@ -1011,21 +996,14 @@ edge's path.
   the scoreboard exists to report. Metrics are an independent oracle
   (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
   and never calls the wrapping code.
-- `layout/spatial-canvas.properties.test.ts`'s live-drag parity property
-  keeps `layoutSpatialEdges` equal to the edge suffix of
-  `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
-  (`test-utils/facet-arbitraries.ts`, a thin shaping of facet-engine's
-  `facetsArbitrary`, which draws each facet from its own Zod schema through
-  model's `arbitraryForSchema`) for all THREE targets — node, canvas and
-  edge — rather than a list of facet names, because what it guards is a
-  second entry point folding over FEWER facets than the committed layout,
-  which a named list cannot cover for a facet registered later.
-  Four guards
-  keep it honest — one fails when a registered facet of any of the three is
-  never drawn, three fail when the drawn node, canvas or edge facets stop
-  changing the layout being compared. Adding a facet needs no
-  edit here; a schema construct the walk cannot express throws at
-  construction naming the path, which is the decision point.
+- The live-drag parity property (`layoutSpatialEdges` equal to the edge
+  suffix of `layoutSpatialCanvas`, over a generator reading the facet
+  REGISTRY through `test-utils/facet-arbitraries.ts`) compared two
+  TypeScript entry points and went with them (S18h2). The edge layer is now
+  the core's query over the whole layout's own request (`edgesThroughCore`
+  builds it with `canvasLayoutRequest`), so the two cannot fold over
+  different facets the way two TypeScript walks could; dropping the
+  property is on owner question q84's list.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall".
   It holds one

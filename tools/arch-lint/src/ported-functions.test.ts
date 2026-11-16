@@ -85,6 +85,26 @@ describe('the realm-dispatched functions at stage 4', () => {
   })
 })
 
+describe('the layout functions at stage 4', () => {
+  const handed = PORTED_FUNCTIONS.filter((f) => f.handed !== undefined)
+
+  it('ask the core they are handed, with their TypeScript gone', () => {
+    expect(handed.map((f) => [f.name, f.stage])).toEqual([
+      ['layoutSpatialCanvas', 4],
+      ['layoutMarkdown', 4],
+      ['layoutSpatialEdges', 4],
+      ['naturalNodeContentSize', 4],
+      ['fittedTextNodeHeight', 4],
+      ['placeCommentBubble', 4],
+    ])
+    for (const f of handed) {
+      // The real files the entry says are gone are gone, so an empty `deleted` list cannot pass.
+      expect(f.handed?.deleted.length).toBeGreaterThanOrEqual(2)
+      for (const path of f.handed?.deleted ?? []) expect(readReal(path), path).toBeUndefined()
+    }
+  })
+})
+
 describe('the ledger checker', () => {
   it('passes the fixture tree', () => {
     expect(checkPortedFunctions([entry], tree())).toEqual([])
@@ -142,6 +162,34 @@ describe('the ledger checker', () => {
     expect(checkPortedFunctions([entry, entry], tree())).toEqual(
       expect.arrayContaining(['routeLayout: listed twice']),
     )
+  })
+
+  describe('a handed core at stage 4', () => {
+    const handed: PortedFunction = { ...entry, stage: 4, handed: { deleted: ['old/impl.ts'] } }
+
+    it('passes when the export is declared and the TypeScript is gone', () => {
+      expect(checkPortedFunctions([handed], tree())).toEqual([])
+    })
+
+    it('fails when a file where the TypeScript lived still exists', () => {
+      const read = tree({ 'old/impl.ts': 'export {}' })
+      expect(checkPortedFunctions([handed], read)).toEqual([
+        expect.stringContaining('old/impl.ts, where the TypeScript lived, still exists'),
+      ])
+    })
+
+    it('fails when the export itself is gone', () => {
+      const read = tree({ [entry.ts.file]: 'export function other() {}\n' })
+      expect(checkPortedFunctions([handed], read)).toEqual([
+        expect.stringContaining('no longer exports a function named routeLayout'),
+      ])
+    })
+
+    it('is stage 4 only', () => {
+      expect(checkPortedFunctions([{ ...handed, stage: 3 }], tree())).toEqual([
+        expect.stringContaining("a handed core is stage 4's shape, not stage 3's"),
+      ])
+    })
   })
 
   describe('a realm dispatcher at stage 4', () => {

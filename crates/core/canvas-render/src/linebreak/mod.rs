@@ -31,8 +31,8 @@
 //! `LB8a` and the emoji-ZWJ rule read the RAW class of the code point itself,
 //! not the folded one.
 //!
-//! The table ([`table`]) is generated from the oracle's own trie by
-//! `packages/canvas-render/scripts/gen-linebreak-table.mjs`; the walk
+//! The table ([`table`]) was generated once from the oracle's own trie, by a
+//! script deleted with the TypeScript (S18h); the walk
 //! ([`Classes::allowed`]) holds LB4 to `LB30b` in the oracle's order. Offsets
 //! are UTF-16 code units, as the layout's `uaxSegments` counts them.
 

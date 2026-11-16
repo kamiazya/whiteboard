@@ -18,12 +18,10 @@ import type { SpatialLayoutOptions } from './layout-options.js'
 /** A query the core answered, in the core's shape. */
 type Answered = Exclude<QueryAnswer, { readonly refused: unknown }>
 
-/** How a query asks the core and reads its answer, and how it is answered otherwise. */
+/** How a query asks the core and reads its answer. */
 export interface Querying<T> {
-  /** The request; built only when the core is asked, and throwing `CoreUnaskable` for one it cannot be. */
+  /** The request; throwing `CoreUnaskable` for one it cannot be. */
   readonly request: () => QueryRequest
-  /** The TypeScript's answer, for a caller that hands no core. */
-  readonly ts: () => T
   /**
    * The answer to a query the core refused (a request past its
    * caps, a number it cannot spell, a host measurer that did not answer): what
@@ -37,13 +35,11 @@ export interface Querying<T> {
 }
 
 /**
- * A query answered by `core`, or by the TypeScript when it is handed none.
- * A query the core refused is answered by `unanswered`; a core
+ * A query answered by `core`. A query the core refused is answered by `unanswered`; a core
  * that throws, or answers in a shape the query does not have, throws to the
  * caller, since either is a defect rather than an input.
  */
-export function queried<T>(core: LayoutCore | undefined, querying: Querying<T>): T {
-  if (core === undefined) return querying.ts()
+export function queried<T>(core: LayoutCore, querying: Querying<T>): T {
   const request = querying.request()
   const answer = core.query.layoutQuery(request, highlightCode, querying.measure)
   if ('refused' in answer) return querying.unanswered()
@@ -72,12 +68,10 @@ export function tupleOf(value: QueryNumbers | undefined, n: number): number[] | 
 export function edgesThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
-  ts: (options: SpatialLayoutOptions) => SceneNode[],
 ): SceneNode[] {
   const unanswered: readonly SceneNode[] = []
   const nodes = queried<readonly SceneNode[]>(options.core, {
     request: () => ({ ...canvasLayoutRequest(stored, options), query: 'edges' }),
-    ts: () => ts(options),
     unanswered: () => unanswered,
     read: (answer) => {
       if (!('nodes' in answer)) return undefined
@@ -109,13 +103,12 @@ const NATURAL_OPTIONS = new Set([
  */
 export function naturalSizeThroughCore(
   node: SpatialNode,
-  options: SpatialLayoutOptions,
-  ts: () => { readonly w: number; readonly h: number },
+  options: Pick<SpatialLayoutOptions, 'measure' | 'appearance' | 'core'> &
+    Partial<Pick<SpatialLayoutOptions, 'style' | 'fontAvailable' | 'fragments'>>,
 ): { readonly w: number; readonly h: number } {
   return queried(options.core, {
     request: () => {
       const measure = measureSpecOf(options.measure)
-      if (measure === undefined) throw new CoreUnaskable('measure')
       const mode = bundledThemeModeOf(options.appearance)
       if (mode === undefined) throw new CoreUnaskable('appearance')
       const set = Object.entries(options).filter(([, value]) => value !== undefined)
@@ -131,7 +124,6 @@ export function naturalSizeThroughCore(
         ...(fragments === undefined ? {} : { fragments }),
       }
     },
-    ts,
     unanswered: () => {
       const inset = 2 * SPATIAL_THEME_GEOMETRY.paddingPx
       return { w: Math.max(0, node.width - inset), h: Math.max(0, node.height - inset) }

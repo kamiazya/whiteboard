@@ -22,13 +22,11 @@ import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
 import type { EdgeAnchorPair } from './edges/edge-sides.js'
-import { usesFragmentTable } from './fragment-table.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 
 // The whole layout through the Rust core (ADR-0054 step 7): the request a
-// layout's options make, and what a surface is answered with. A layout handed
-// a core is the core's, always (S18g retired the switch that could send it to
-// the TypeScript); one handed none is the TypeScript composer's own.
+// layout's options make, and what a surface is answered with. The core is the
+// only layout there is (S18h deleted the TypeScript composer).
 
 /** Every file node of a canvas, the ones of the canvases it nests in a file node included. */
 function fileNodes(canvases: readonly SpatialCanvas[]): SpatialNode[] {
@@ -56,42 +54,28 @@ function expansion(
   return [...answers].flatMap(([id, open]) => (open ? [id] : []))
 }
 
+/**
+ * Whether a layout reads a fragment table: one handed a table, or a listener
+ * for what the table lacks (a listener with no table asks for every source).
+ */
+export const usesFragmentTable = (
+  options: Pick<SpatialLayoutOptions, 'fragments' | 'onFragmentsAsked'>,
+): boolean => options.fragments !== undefined || options.onFragmentsAsked !== undefined
+
 export const hasData = (extra: ReferenceExtra): boolean =>
   extra.canvas === undefined && extra.markdown === undefined
 
-/** The function seams no request can carry, by their option's name. */
-const SEAMS = [
-  'parseBody',
-  'renderContributions',
-  'renderMath',
-  'renderDiagram',
-  'resolveEmbed',
-  'resolveTitle',
-  'resolveAlias',
-  'resolveReference',
-  'nestedLayoutBudget',
-] as const satisfies readonly (keyof SpatialLayoutOptions)[]
-
 /**
- * A layout's options that no request can carry, handed a core: a defect in
- * the root that built them, since only the TypeScript composer sets a seam
- * and only canvas-render's own tests hand an unnamed measurer or appearance.
+ * A layout's options that no request can carry: a measurer or an appearance
+ * nobody named, or a reference bundle not rebuilt from a wire. A defect in
+ * the root that built them, since every root names its measurer and builds
+ * its references from a wire.
  */
 export class CoreUnaskable extends Error {
   constructor(readonly reason: string) {
     super(`the layout's options cannot be handed to the Rust core: ${reason}`)
     this.name = 'CoreUnaskable'
   }
-}
-
-/** The first option no request can carry, since it is a function or a choice the core does not make. */
-function optionSkip(options: SpatialLayoutOptions): string | undefined {
-  const seam = SEAMS.find((name) => options[name] !== undefined)
-  if (seam !== undefined) return `seam:${seam}`
-  if (options.highlightCode !== undefined && options.highlightCode !== highlightCode) {
-    return 'highlighter'
-  }
-  return undefined
 }
 
 /**
@@ -115,20 +99,16 @@ export function styleOptions(
 
 /**
  * `options` as the request the core answers. Throws `CoreUnaskable` for what
- * no request carries: a measurer or an appearance nobody named, a seam that
- * is a function, a highlighter other than the default, and a reference bundle
- * not rebuilt from a wire or one whose extras carry content.
+ * no request carries: an appearance nobody named, and a
+ * reference bundle not rebuilt from a wire or one whose extras carry content.
  */
 export function canvasLayoutRequest(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): CanvasLayoutRequest {
   const measure = measureSpecOf(options.measure)
-  if (measure === undefined) throw new CoreUnaskable('measure')
   const mode = bundledThemeModeOf(options.appearance)
   if (mode === undefined) throw new CoreUnaskable('appearance')
-  const skip = optionSkip(options)
-  if (skip !== undefined) throw new CoreUnaskable(skip)
   const wire = options.references === undefined ? undefined : wireOfSeams(options.references)
   if (options.references !== undefined && wire === undefined) {
     throw new CoreUnaskable('references')
@@ -203,8 +183,7 @@ export function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
 }
 
 /**
- * A canvas laid out by `options.core`, or by the TypeScript composer (`ts`)
- * when it is handed none. The core's degradations reach `onDegrade` and the
+ * A canvas laid out by `options.core`. The core's degradations reach `onDegrade` and the
  * fragment sources it asked for `onFragmentsAsked`; what it refused (owner
  * decision q81, D7) is drawn as the refusal (`refusalScene`) and told to
  * `onRefused`. A core that throws throws to the caller: there is
@@ -213,10 +192,8 @@ export function hostEvent(event: CoreDegradation): SpatialLayoutDegradation {
 export function layoutThroughCore(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
-  ts: (options: SpatialLayoutOptions) => LaidOutCanvas,
 ): LaidOutCanvas {
   const core = options.core
-  if (core === undefined) return ts(options)
   const request = canvasLayoutRequest(stored, options)
   const answer = core.layout.layoutSpatialCanvas(
     request,

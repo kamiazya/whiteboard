@@ -92,14 +92,9 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-scene',
     ],
-    // css-line-break: deciding WHERE a line may break is this package's own
-    // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
-    // which is where Japanese kinsoku lives), not something to hand-roll from
-    // a character table. Pure and DOM-free, so it holds in Node, the browser
-    // and a worker alike — verified before adopting.
-    // BudouX (phrase boundaries for Japanese) is deliberately NOT here: it is
-    // vendored under src/vendor/budoux, because depending on it drags in
-    // linkedom and the native canvas package and breaks the published build.
+    // No line breaker: css-line-break and the vendored BudouX went with the
+    // typesetter (ADR-0054 step 7, S18h2) — the Rust core decides where a
+    // line breaks, from a table generated off css-line-break's own trie.
     // lowlight/highlight.js: the DEFAULT implementation of this package's own
     // `highlightCode` seam, behind the `/highlight` subpath so the barrel
     // never drags a highlighter into a consumer that renders no code. It sits
@@ -108,7 +103,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // Apps widget through it), and export — and the alternative is the same
     // scope-to-role table written out three times. Pure JS, no DOM and no
     // `node:*`, so it holds on Node, the browser and a Worker alike.
-    allowedThirdParty: ['zod', 'css-line-break', 'lowlight', 'highlight.js'],
+    allowedThirdParty: ['zod', 'lowlight', 'highlight.js'],
     exemptBoundaryFiles: {
       'layout/edges/spatial-edges.bench.ts': {
         kinds: ['test-framework-import'],

@@ -1,16 +1,8 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
-import { outlineContentBox } from '../outline/node-outline.js'
 import type { QueryBox, QueryNumbers } from '../query-core.js'
-import { placeCommentBubble, type Size } from './comment-placement.js'
 import type { Point } from './edges/edge-geometry.js'
-import {
-  edgeLabelPlacement,
-  frameTitleObstacles,
-  type LabelObstacle,
-  type LabelSize,
-  labelObstacles,
-} from './edges/edge-label-anchor.js'
+import type { LabelObstacle, LabelSize } from './edges/edge-label-anchor.js'
 import type { LayoutCore } from './edges/layout-core.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
 
@@ -45,7 +37,7 @@ function boxesOf(value: QueryNumbers | undefined): BoundingBox[] | undefined {
 
 /** `edgeLabelPlacement` by `core`: where a label of `size` sits on a drawn path; refused, nowhere. */
 export function queryEdgeLabelPlacement(
-  core: LayoutCore | undefined,
+  core: LayoutCore,
   path: readonly Point[],
   size: LabelSize,
   obstacles: readonly LabelObstacle[],
@@ -61,7 +53,6 @@ export function queryEdgeLabelPlacement(
       obstacles: obstacles.map(boxOf),
       rounded: rounded === true,
     }),
-    ts: () => edgeLabelPlacement(path, size, obstacles, rounded) ?? none,
     unanswered: () => none,
     read: (answer) => {
       const [at] = numbersOf(answer) ?? []
@@ -80,7 +71,7 @@ export function queryEdgeLabelPlacement(
  * layout's own labels avoid; refused, nothing.
  */
 export function queryLabelObstacles(
-  core: LayoutCore | undefined,
+  core: LayoutCore,
   nodes: readonly SpatialNode[],
   sceneNodes: readonly SceneNode[],
 ): { readonly titles: LabelObstacle[]; readonly obstacles: LabelObstacle[] } {
@@ -94,10 +85,6 @@ export function queryLabelObstacles(
           : [],
       ),
     }),
-    ts: () => {
-      const titles = frameTitleObstacles(nodes, sceneNodes)
-      return { titles, obstacles: labelObstacles(nodes, titles) }
-    },
     unanswered: () => ({ titles: [], obstacles: [] }),
     read: (answer) => {
       const [titles, obstacles] = (numbersOf(answer) ?? []).map(boxesOf)
@@ -106,12 +93,18 @@ export function queryLabelObstacles(
   })
 }
 
+/** A comment bubble's width and height. */
+interface Size {
+  readonly w: number
+  readonly h: number
+}
+
 /**
- * `placeCommentBubble` by `core`: the least-covered spot for a bubble of
+ * The comment bubble's place by `core`: the least-covered spot for a bubble of
  * `size` near `anchor`; refused, at the anchor.
  */
 export function queryCommentBubble(
-  core: LayoutCore | undefined,
+  core: LayoutCore,
   anchor: Point,
   size: Size,
   obstacles: readonly BoundingBox[],
@@ -123,7 +116,6 @@ export function queryCommentBubble(
       size: [size.w, size.h],
       obstacles: obstacles.map(boxOf),
     }),
-    ts: () => placeCommentBubble(anchor, size, obstacles),
     unanswered: () => ({ x: anchor.x, y: anchor.y, w: size.w, h: size.h }),
     read: (answer) => boundingBoxOf(numbersOf(answer)?.[0]),
   })
@@ -134,7 +126,7 @@ export function queryCommentBubble(
  * shaped node's content is inscribed in; refused, the node's own box.
  */
 export function queryOutlineContentBox(
-  core: LayoutCore | undefined,
+  core: LayoutCore,
   shapeId: string | undefined,
   box: BoundingBox,
 ): BoundingBox {
@@ -144,7 +136,6 @@ export function queryOutlineContentBox(
       ...(shapeId === undefined ? {} : { shape: shapeId }),
       box: boxOf(box),
     }),
-    ts: () => outlineContentBox(shapeId, box),
     unanswered: () => box,
     read: (answer) => boundingBoxOf(numbersOf(answer)?.[0]),
   })

@@ -15,9 +15,9 @@
 //! [`model`] are units, so those halves are looked up like any other.
 //!
 //! After the TypeScript is deleted this module IS the specification of the
-//! phrase breaker: the tables are generated once from the model it vendored
-//! (`scripts/gen-budoux-model.mjs`) and the recorded `budoux.jsonl` pins what
-//! they answer.
+//! phrase breaker: the tables were generated once from the model it vendored,
+//! by a script deleted with it (S18h), and the recorded `budoux.jsonl` pins
+//! what they answer.
 
 mod model;
 

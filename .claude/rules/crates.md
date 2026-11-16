@@ -213,14 +213,14 @@ steps and cache paths to the scripts.
   `shapes` tables of `SvgDocumentOptions` are not ported (the bundled visual
   plugin's are the Rust tables), and a non-finite coordinate is `NonFinite`
   where the TypeScript throws `RangeError`.
-- **Line breaking is held to a recording and a generated table**:
-  `crates/core/canvas-render/src/linebreak/table.rs` is written from
-  `css-line-break`'s trie by `packages/canvas-render/scripts/gen-linebreak-table.mjs <table.rs>`
-  (`tools/arch-lint`'s `linebreak-table-generated.test.ts` runs it with `--check`), and
-  `src/oracle/linebreak.jsonl` holds the TypeScript's `uaxSegments` breaks for the small
+- **Line breaking is held to a recording and a table generated once**:
+  `crates/core/canvas-render/src/linebreak/table.rs` was written from
+  `css-line-break`'s trie by a script deleted with the TypeScript (S18h), so it is
+  now the table's only copy, and the frozen `src/oracle/linebreak.jsonl` holds the
+  TypeScript's `uaxSegments` breaks for the small
   corpora and one digest per chunk of the large ones, which
   `crates/core/canvas-render/tests/linebreak_oracle.rs` regenerates from its `meta`
-  record; `WHITEBOARD_RECORD_ORACLE=1` re-records it. The port's header lists the holes
+  record. The port's header lists the holes
   of the oracle it preserves.
 - **The font measurer is held to the Node measurer's recording**:
   `packages/mcp-server/src/server/export/oracle/font-measure.jsonl` (recorded by
@@ -253,11 +253,10 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/tests/theme_oracle.rs` replays it; `WHITEBOARD_RECORD_ORACLE=1`
   re-records. Not ported: the layout's read of a canvas's `visual.theme/v0` facet (it waits for
   the composer). The TypeScript's module-level memo is a `ThemedAppearanceCache` per call site.
-- **The BudouX phrase breaker is held to a recording and a generated model**:
-  `crates/core/canvas-render/src/budoux/model.rs` is written by
-  `packages/canvas-render/scripts/gen-budoux-model.mjs <out.rs>` from the
-  vendored `ja-model.ts` (`--check` is `tools/arch-lint`'s byte-equality test),
-  and `packages/canvas-render/src/oracle/budoux.jsonl` records what the vendored
+- **The BudouX phrase breaker is held to a recording and a model generated once**:
+  `crates/core/canvas-render/src/budoux/model.rs` was written from the vendored
+  `ja-model.ts` by a script deleted with the TypeScript (S18h), so it is now the
+  model's only copy, and the frozen `packages/canvas-render/src/oracle/budoux.jsonl` records what the vendored
   parser cut (hand-written corpora, one string aimed at each of the 1,678
   entries, per-prefix and seeded-stream digests); `crates/core/canvas-render/tests/budoux_oracle.rs`
   replays it natively and on wasm32. The model does not know surrogate pairs and

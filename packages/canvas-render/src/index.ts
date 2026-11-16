@@ -72,7 +72,6 @@ export {
   resolveCanvasThemeFontFamily,
   resolveThemeTable,
 } from './layout/canvas-theme.js'
-export { placeCommentBubble } from './layout/comment-placement.js'
 export {
   edgeLabelPlacement,
   frameTitleObstacles,
@@ -87,30 +86,18 @@ export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
-export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
 export {
   type CommentDocumentOptions,
   layoutCommentDocument,
   layoutMarkdownDocument,
 } from './layout/markdown-switch.js'
-export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
-export type {
-  EmbeddedCanvasBox,
-  EmbeddedCanvasMiniature,
-  MdastLayoutOptions,
-} from './layout/nodes/mdast-layout-options.js'
-export { selectMarkdownSection } from './layout/nodes/mdast-section.js'
 export {
   queryCommentBubble,
   queryEdgeLabelPlacement,
   queryLabelObstacles,
   queryOutlineContentBox,
 } from './layout/queries.js'
-export { scaleScene } from './layout/scale-scene.js'
 export type {
-  DecorationContext,
-  NodeDecoration,
-  RenderContribution,
   SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
@@ -121,18 +108,14 @@ export {
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   COMMENT_TEXT_MAX_WIDTH_PX,
-  type CommentBodyLayoutOptions,
   commentAnchor,
   type EdgePathLookup,
-  layoutCommentBody,
   layoutSpatialCanvas,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
-export { translateScene } from './layout/translate-scene.js'
-export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
 export type {
   MarkdownCommentRequest,

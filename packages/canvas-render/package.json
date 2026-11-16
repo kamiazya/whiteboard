@@ -24,6 +24,14 @@
       "types": "./src/test-utils/index.ts",
       "import": "./src/test-utils/index.ts"
     },
+    "./test-utils/browser-core": {
+      "types": "./src/test-utils/browser-layout-core.ts",
+      "import": "./src/test-utils/browser-layout-core.ts"
+    },
+    "./test-utils/node-core": {
+      "types": "./src/test-utils/test-layout-core.ts",
+      "import": "./src/test-utils/test-layout-core.ts"
+    },
     "./package.json": "./package.json"
   },
   "scripts": {
@@ -37,7 +45,6 @@
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "@kamiazya/whiteboard-scene": "workspace:*",
-    "css-line-break": "catalog:",
     "highlight.js": "catalog:",
     "lowlight": "catalog:",
     "zod": "catalog:"

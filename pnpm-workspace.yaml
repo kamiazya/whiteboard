@@ -59,10 +59,6 @@ catalog:
   # (ADR-0054's frontmatter spike). A range would let an install resolve a
   # different oracle from the one the differential measured.
   yaml: "2.9.0"
-  # canvas-render: UAX #14 line breaking + CSS `line-break` (Japanese kinsoku).
-  # One version everywhere, because a break-opportunity difference between the
-  # browser and Node would desync the byte-identical-SVG guarantee.
-  css-line-break: "^2.1.0"
   # Node's type declarations. An optional peer of vitest and vite, so two
   # versions in the lockfile split each of them into two store entries, and a
   # run from inside a package then loads a different vitest than the one

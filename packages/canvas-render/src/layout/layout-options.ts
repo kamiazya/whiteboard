@@ -1,48 +1,25 @@
 /**
- * What a spatial layout is ASKED for, and what it resolves that into.
- *
- * `SpatialLayoutOptions` is the public request — every seam a caller
- * supplies. `ResolvedLayoutOptions` is the same thing after the entry point
- * has settled the geometry, the contribution set and its tables, the theme
- * in force and the recursion path, exactly once per call.
- *
- * Their own module so the overlay layers can name them without importing
- * the layout core that BUILDS them. That is the direction the split exists
- * to fix: `comments.ts` and `proposals.ts` depend on the shape of the
- * options, not on the file that assembles them.
- *
- * `RegionChrome` rides along for the same reason. The comment layer
- * produces it and `ResolvedLayoutOptions` names it, so leaving it in
- * `comments.ts` would point the two new modules at each other.
+ * What a spatial layout is ASKED for: every option is data the Rust core's
+ * request carries (ADR-0054 step 7), or a listener the host keeps. There is
+ * no TypeScript composer left to hand a function seam to (S18h), so the
+ * options that were one — the body parser, the math and diagram renderers,
+ * the reference resolvers, the tokeniser, the contribution set, the nested
+ * layout budget — are gone from the type rather than refused at run time.
  */
 
-import type { AliasResolver } from '@kamiazya/whiteboard-codec'
-import { namespacedIdSchema, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type {
-  AnchorRect,
-  CommentThread,
-  Proposal,
-  SpatialCanvas,
-  SpatialNode,
-} from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { namespacedIdSchema } from '@kamiazya/whiteboard-facet-engine'
+import type { CommentThread, Proposal, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { BoundingBox, RenderContribution, Scene } from '@kamiazya/whiteboard-scene'
+import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
 import type { FragmentAsk, FragmentEntry } from '../fragment-ask.js'
 import type { MeasureText } from '../measure.js'
-import type { ShapeTable } from '../outline/node-outline.js'
-import type { ResolvedReference } from '../references/resolved.js'
 import type { ReferenceSeams } from '../references/seams.js'
 import type { LayoutRefusal } from '../refusal.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
 import type { EdgeAnchorOverride } from './edges/edge-sides.js'
 import type { LayoutCore } from './edges/layout-core.js'
-import type { NestedLayoutBudget } from './nodes/embed-budget.js'
-import type { FittedBlocks } from './nodes/mdast-blocks.js'
-import type { MdastLayoutOptions } from './nodes/mdast-layout-options.js'
-import type { NodePassage } from './passage-highlight.js'
 
 /**
  * A degradation `layoutSpatialCanvas` hit while composing one node, reported
@@ -77,16 +54,6 @@ export type SpatialRenderStyle = z.infer<typeof spatialRenderStyleSchema>
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText
-  /**
-   * How a `text` node's body becomes mdast. Defaults to codec's
-   * `parseMarkdownBody`, which is what EVERY production caller passed —
-   * seven identical lines whose only reason to exist was this package once
-   * being forbidden to depend on codec. It stays injectable because layout
-   * tests deliberately parse with a stub, the same way they measure with
-   * one: a layout assertion should not fail because a markdown parser
-   * changed.
-   */
-  readonly parseBody?: (text: string) => MdastRoot
   readonly appearance: SpatialAppearanceResolver
   /**
    * Geometry constants (padding/label font size/min content width).
@@ -108,12 +75,10 @@ export interface SpatialLayoutOptions {
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
   /**
    * The Rust core (ADR-0054), set by the composition root and read nowhere
-   * ambiently. Given one, it answers the layout and everything the layout
-   * asks; every root hands one. Absent, the TypeScript composer lays the
-   * canvas out, which only canvas-render's own tests and recorders still do
-   * (S18g; S18h deletes it).
+   * ambiently: it answers the layout and everything the layout asks. There
+   * is nothing to answer in its place.
    */
-  readonly core?: LayoutCore
+  readonly core: LayoutCore
   /**
    * Documents already on the embed recursion path when this canvas is
    * itself embedded content — a markdown body's `![[canvas]]`. Seeds the
@@ -121,13 +86,6 @@ export interface SpatialLayoutOptions {
    * markdown/canvas boundary; absent for a top-level canvas.
    */
   readonly embedPath?: readonly string[]
-  /**
-   * The nested-layout budget this canvas spends from when it is itself
-   * embedded content, so one render's embeds share one pool across the
-   * markdown/canvas boundary. Absent for a top-level canvas, which opens a
-   * fresh one (`NESTED_LAYOUT_BUDGET`).
-   */
-  readonly nestedLayoutBudget?: NestedLayoutBudget
   /**
    * Nodes whose BODY the scene must not draw this pass, because a DOM
    * editor overlay owns their text right now. The chrome — silhouette,
@@ -147,26 +105,6 @@ export interface SpatialLayoutOptions {
    * unlocked canvas draws.
    */
   readonly lockedNodeIds?: readonly string[]
-  /**
-   * What plugins contribute to rendering: silhouettes, how they read the
-   * facets that select them, where they want a node's text, and what they
-   * draw on top. Defaults to the bundled `visual` plugin's.
-   *
-   * A DEFAULT rather than an opt-in, for the lowlight reason: measured, this
-   * function has nine call sites and `renderSceneToSvg` nine more, and a
-   * resolution step that many have to remember is one a call site forgets —
-   * silently drawing a plain node rather than failing.
-   *
-   * One object rather than an option each: `shapes`, `shapeFacets` and
-   * `decorations` accumulated one per increment, none ever had a caller
-   * outside this package, and a reader plus text placement would have made
-   * five.
-   *
-   * A TEST seam: every surface draws with the default, and only this
-   * package's tests pass another set — a fake plugin, to pin what the
-   * renderer does with a contribution without depending on `visual`'s.
-   */
-  readonly renderContributions?: readonly RenderContribution[]
   /**
    * Which look this render draws (ADR-0030 decision 6). `'clean'` — the
    * DEFAULT — ignores any theme the document carries: an agent reading
@@ -197,30 +135,11 @@ export interface SpatialLayoutOptions {
    */
   readonly onRefused?: (refusal: LayoutRefusal) => void
   /**
-   * The mdast CONTENT seams, forwarded verbatim to every `typesetMdastBlocks`
-   * call this module makes — a spatial `text` node's body, and a file node's
-   * referenced markdown body.
-   *
-   * Declared here as a passthrough rather than re-specified, because a body
-   * is a body: the same document laid out in the markdown editor and inside
-   * a canvas node must resolve its math, diagram fences and `![[embed]]`s
-   * the same way. Leaving them unforwarded is what made one engine give two
-   * answers depending on which surface called it.
-   *
-   * Absent seams keep `typesetMdastBlocks`'s own documented fallbacks (the
-   * escaped-source math placeholder, a plain code block, an
-   * `embedPlaceholder`), so an export or viewer that wires none renders
-   * exactly as before.
-   */
-  readonly renderMath?: MdastLayoutOptions['renderMath']
-  readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
-  /**
-   * The same two seams as DATA (`layout/fragment-table.ts`): what the caller
-   * rendered ahead, by `fragmentAskKey`, answering every math block and fence
-   * the seams above leave unset. Unlike a function, a table is something the
-   * Rust core can be handed. What it could not answer is drawn as the seams'
-   * fallback and handed to `onFragmentsAsked`, which a caller answers by
-   * rendering those and laying out again.
+   * The rendered math blocks and diagram fences, by `fragmentAskKey`: what
+   * the caller rendered ahead. What the table could not answer is drawn as
+   * its fallback (the escaped source, a plain code block) and handed to
+   * `onFragmentsAsked`, which a caller answers by rendering those and laying
+   * out again.
    */
   readonly fragments?: readonly FragmentEntry[]
   /**
@@ -229,13 +148,11 @@ export interface SpatialLayoutOptions {
    * no table asks for every source.
    */
   readonly onFragmentsAsked?: (asks: readonly FragmentAsk[]) => void
-  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
-  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /**
-   * Every reference seam at once — `resolveReference` for file nodes and
-   * the markdown seams for every body — built by `referenceSeams` from what
-   * a keeper loaded. The form a composition root passes; an individual seam
-   * set beside it wins, for a caller probing one in isolation.
+   * What the canvas's file nodes and its bodies' links and embeds resolve
+   * through, as a bundle rebuilt from a `ReferenceWire` (`referenceWire`):
+   * the request carries the wire, so a bundle built any other way is
+   * `CoreUnaskable`.
    */
   readonly references?: ReferenceSeams
   /**
@@ -246,51 +163,6 @@ export interface SpatialLayoutOptions {
    */
   readonly tagLibrary?: TagLibrary
   /**
-   * What a text node's `[[target]]` resolves to, applied to its parsed body
-   * the way a note's caller applies it before layout. Filled from
-   * `references` when absent; an id names itself, and a target nobody
-   * resolves stays the literal text the author wrote.
-   */
-  readonly resolveAlias?: AliasResolver
-  /**
-   * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
-   * implementation, for the same reason `parseBody` defaults to codec's
-   * parser: every surface that lays a markdown body out wants it, and the one
-   * that forgets it does not fall back to the same picture — it renders code
-   * plain while the others colour it.
-   *
-   * That is not hypothetical. It shipped wired at ONE of the four call sites
-   * and left export — the surface the change was for — drawing every fence
-   * plain. Supplying it was made an opt-in step, and an opt-in step in four
-   * places is a step that gets missed.
-   *
-   * A TEST seam: no surface substitutes a tokeniser — every one draws with
-   * the default — and this package's tests pass a fake or a no-op through it
-   * to pin the wiring and the plain fallback. A port need not expose it.
-   */
-  readonly highlightCode?: MdastLayoutOptions['highlightCode']
-  /**
-   * Resolves one reference — a file node's `file`, or a group's
-   * `background` — to everything the caller knows about it. Absent, or
-   * `undefined` for a reference, keeps the plain chrome+label rendering;
-   * a throw is caught (total-layout rule) and read as `undefined`.
-   *
-   * ONE seam rather than one per content kind, because a caller has ONE
-   * document per reference: the six callbacks this replaced were six
-   * closures over the same lookup, called four times per node for the same
-   * key, and every consumer that wired any of them wired most. Collapsing
-   * them also makes a resolution plain DATA, which a function seam could
-   * never be — the layout worker refuses any canvas whose file seams are
-   * wired precisely because a function cannot cross `postMessage`.
-   *
-   * `expandFileNode` stays separate: it is the caller's POLICY over a node
-   * (the editor decides by on-screen size, export by intrinsic size), not
-   * something known about the reference. `MdastLayoutOptions.resolveEmbed`
-   * likewise stays its own seam — it is keyed by a documentId appearing in
-   * prose, not by a spatial node's reference.
-   */
-  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
-  /**
    * The caller's expansion policy (the LOD gate): called per file node
    * when a resolution carries a `canvas`; `false` (or an absent callback)
    * keeps the card. canvas-render itself has no expansion policy — the
@@ -298,26 +170,13 @@ export interface SpatialLayoutOptions {
    */
   readonly expandFileNode?: (node: SpatialNode) => boolean
   /**
-   * Optional memo for a text node's laid-out body. Content is laid out in
-   * ORIGIN-RELATIVE coordinates and placed by `placeInNode`, so a cached
-   * value is position-independent by construction: keyed by the node's
-   * text and box size only. Everything else that shapes content —
-   * `measure`, the appearance resolver, `geometry`, `parseBody`, the
-   * reference and mdast seams — is deliberately NOT in the key: the CALLER owns the cache's
-   * lifetime and must discard it when any of those change (in practice:
-   * one cache per document+theme, dropped on theme/font switches). Cached
-   * values are shared between scenes and must be treated as immutable,
-   * which scene nodes already are.
-   *
-   * Only the success path is cached. The parse-failure fallback recomputes
-   * every run so `onDegrade` keeps firing — a cache must change timings,
-   * never what the caller is told.
-   *
-   * Measured before building (the instrument-first rule): content layout
-   * is 15-18ms of a 66-125ms full layout on the scene-diff corpus with the
-   * arithmetic test measurer — edge routing dominates — so this memo buys
-   * roughly the content share, more under a real (Canvas/opentype)
-   * measurer whose per-call cost is far above the fake's.
+   * Optional memo for a text node's laid-out body, kept by the core under
+   * this object's identity. A body is laid out in origin-relative
+   * coordinates, so a kept one is position-independent: keyed by the node's
+   * text and box size only. Everything else that shapes content — the
+   * measurer, the theme, the references — is NOT in the key: the CALLER owns
+   * the cache's lifetime and must drop it when any of those change (in
+   * practice one cache per document and theme).
    */
   readonly contentCache?: SpatialContentCache
   /**
@@ -366,99 +225,8 @@ export interface SpatialLayoutOptions {
 }
 
 /**
- * The store behind `SpatialLayoutOptions.contentCache`. Deliberately a
- * plain get/set pair rather than a Map subtype, so a caller can wrap an
- * LRU, a WeakRef map, or a plain object without this package caring.
+ * The caller's content cache (`SpatialLayoutOptions.contentCache`): an object
+ * the core keys its own laid-out bodies by, for as long as the object lives.
+ * Only its identity is read; nothing is stored in it.
  */
-export interface SpatialContentCache {
-  get(key: string): FittedBlocks | undefined
-  set(key: string, value: FittedBlocks): void
-}
-
-/** Internal: options with geometry resolved exactly once per layout call. */
-export interface ResolvedLayoutOptions extends SpatialLayoutOptions {
-  /**
-   * How often a math or diagram seam has been asked in a layout given
-   * `fragments` (`withFragmentTable`); absent without one. The content cache's
-   * key cannot carry the table, so a body laid out with one is kept only when
-   * no seam was asked, and the key says whether there was a table, so a body
-   * laid out without one is never served to a layout with one.
-   */
-  readonly fragmentTableReads?: { readonly count: number }
-  /**
-   * The frames that hold nothing, derived from the canvas being laid out. An
-   * empty frame is its own outline and nothing else, so it is tinted to stay
-   * findable; one with members stays unfilled, since a fill emitted ahead of
-   * its members would otherwise risk covering them.
-   */
-  readonly emptyFrameIds?: ReadonlySet<string>
-  /** `threads`'s node passages, grouped by the node they are about. */
-  readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
-  /**
-   * `threads`'s node sets and regions, by thread id: the box each stands
-   * for on THIS canvas (live node bounds, else the stored rect), which is
-   * where its outline is drawn and where its pin stands.
-   */
-  readonly regionsByThread: ReadonlyMap<string, RegionChrome>
-  /**
-   * How many messages each conversation holds, by thread id — the fact the
-   * pin draws, read off `threads`.
-   */
-  readonly messagesByThread: ReadonlyMap<string, number>
-  /** The contribution set actually in force, defaulted once at the entry
-   *  point so no inner function repeats the `?? [visual]`. */
-  readonly contributions: readonly RenderContribution[]
-  /** Their shapes, composed to namespaced ids. */
-  readonly shapeTable: ShapeTable
-  /**
-   * The silhouette each node of the canvas being laid out resolves to, as a
-   * namespaced shape id — from its facets and the theme's default, resolved
-   * per canvas by `withCanvasTheme`. Threaded onto each node's chrome and
-   * consulted when finishing edge routes (a terminal on the bbox border is
-   * pulled onto the outline rim via `outlineEntryPoint`).
-   */
-  readonly nodeOutlines: Readonly<Record<string, string>> | undefined
-  /** Their theme assets, by namespaced id. */
-  readonly themeTable: Readonly<Record<string, ThemeTokens>>
-  /** The caller's resolver — what a canvas without a theme is painted with. */
-  readonly baseAppearance: SpatialAppearanceResolver
-  /**
-   * The theme in force for the canvas being laid out, resolved by
-   * `withCanvasTheme` at every nesting level: an embedded canvas reads its
-   * own facet first and inherits this only when it names none.
-   */
-  readonly activeTheme?: { readonly id: string; readonly tokens: ThemeTokens }
-  /**
-   * How a NESTED canvas is laid out — the composer's own entry point,
-   * settled here once rather than imported by the code that needs it.
-   *
-   * A file embed and a markdown body's `![[canvas]]` both lay out a child
-   * canvas from `compose-node.ts`, which `spatial-canvas.ts` imports — so
-   * importing the entry back would close a value cycle. Passing it keeps the
-   * dependency pointing one way, exactly as `comments.ts` and `proposals.ts`
-   * take the body typesetter rather than importing it.
-   */
-  readonly layoutNestedCanvas: (canvas: SpatialCanvas, options: ResolvedLayoutOptions) => Scene
-  /** Document references on the CURRENT recursion path, plus its depth. */
-  readonly activeEmbedPath: ReadonlySet<string>
-  readonly embedDepth: number
-  /** The one account every nested layout of this render spends from. */
-  readonly nestedLayoutBudget: NestedLayoutBudget
-  readonly geometry: SpatialGeometry
-  readonly parseBody: (text: string) => MdastRoot
-  /**
-   * Whether content is trimmed to the node's box. INTERNAL — deliberately
-   * not on `SpatialLayoutOptions`, so a normal render can never turn the
-   * fit off by accident. `naturalNodeContentSize` is the one caller that
-   * clears it, and it is a named function precisely so the intent is
-   * legible at the call site instead of being inferred from a degenerate
-   * height.
-   */
-  readonly fitToBox: boolean
-}
-
-/** A node set or region thread, with the box it stands for on this canvas. */
-export interface RegionChrome {
-  readonly rect: AnchorRect
-  readonly resolved: boolean
-}
+export type SpatialContentCache = object

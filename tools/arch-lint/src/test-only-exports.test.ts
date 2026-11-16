@@ -200,7 +200,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
  */
 const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
-  'packages/canvas-render/src/layout/comments.ts#COMMENT_PIN_SIZE_PX',
   'packages/canvas-render/src/outline/node-outline.ts#outlineContains',
   'packages/canvas-render/src/layout/scale-scene.ts#scaleScene',
   'packages/canvas-render/src/measure.ts#isFullWidthCodePoint',
@@ -397,7 +396,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 const DEBT_CEILING = 138
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 12
+const PUBLISHED_CEILING = 11
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>
