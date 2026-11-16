@@ -1,0 +1,110 @@
+import { readFileSync } from 'node:fs'
+import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import { describe, expect, it } from 'vitest'
+import { highlightCode } from '../highlight/lowlight.js'
+import {
+  type MarkdownMeta,
+  type MarkdownRecord,
+  sortedSceneDigest,
+} from '../test-utils/markdown-document-oracle/oracle.js'
+import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
+
+/**
+ * The core's markdown entry against the recorded TypeScript answers
+ * (`layout-markdown.<surface>.jsonl`), through the shim as a root calls it:
+ * each record's request built from its body and options and the file's meta
+ * line, the highlighter answering the fences the core asks for. A recorded
+ * scene is compared as a value, a long one by its sorted-key digest
+ * (`layout-markdown-digests.jsonl`). The bodies past the parser's bounds are
+ * declined, and only those. The native replay
+ * (`crates/bindings/wasm/tests/markdown_oracle.rs`) holds the same.
+ */
+const DIR = new URL('./', import.meta.url)
+const SURFACES = ['comment', 'daemon', 'outline', 'preview', 'thumbnail'] as const
+
+const DECLINED = new Set([
+  'quote 33 deep',
+  'list 39 deep',
+  'list 40 deep',
+  '1024 delimiter runs',
+  '1100 delimiter runs',
+])
+
+/** The body a record's id names: what follows its surface, less its variant. */
+const bodyName = (id: string) => id.split('/').slice(1).join('/').split('#')[0] ?? ''
+
+type Core = ReturnType<typeof coreFrom>
+type Request = Parameters<Core['layoutMarkdown']>[0]
+
+const measure = { kind: 'fake', factor: 0.6 } as const
+
+/** The request a root sends for `record`. */
+function requestOf(record: MarkdownRecord, meta: MarkdownMeta): Request {
+  const head = { body: record.body, maxWidth: record.maxWidth, measure }
+  if (record.surface === 'comment') {
+    return { kind: 'comment', ...head, density: record.density ?? 'comfortable' }
+  }
+  const style = record.surface === 'daemon' ? record.style : 'document'
+  return {
+    kind: 'markdown',
+    ...head,
+    mode: record.mode ?? 'light',
+    ...(style === undefined ? {} : { style }),
+    ...(record.fonts === undefined ? {} : { fontFamilies: record.fonts }),
+    ...(record.references === true ? { references: meta.references } : {}),
+    ...(record.library === true ? { tagLibrary: meta.library } : {}),
+    ...(record.fragments === undefined
+      ? {}
+      : { fragments: record.fragments === 'full' ? meta.fragments : [] }),
+    ...(record.section === undefined ? {} : { section: record.section }),
+  }
+}
+
+function surface(name: string): { meta: MarkdownMeta; records: MarkdownRecord[] } {
+  const [head = '', ...lines] = readFileSync(new URL(`layout-markdown.${name}.jsonl`, DIR), 'utf8')
+    .trimEnd()
+    .split('\n')
+  return { meta: JSON.parse(head) as MarkdownMeta, records: lines.map((l) => JSON.parse(l)) }
+}
+
+const digests = new Map(
+  readFileSync(new URL('layout-markdown-digests.jsonl', DIR), 'utf8')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { id: string; n: number; h: number })
+    .map(({ id, n, h }) => [id, { n, h }] as const),
+)
+
+/** How the core's answer to `record` differs from the recording, if it does. */
+function judged(core: Core, record: MarkdownRecord, meta: MarkdownMeta): string | undefined {
+  const answer = core.layoutMarkdown(requestOf(record, meta), highlightCode)
+  if (DECLINED.has(bodyName(record.id))) {
+    return 'declined' in answer && answer.declined === 'body' ? undefined : 'not declined'
+  }
+  if ('refused' in record) return 'missing' in answer ? undefined : JSON.stringify(answer)
+  if (!('scene' in answer)) return JSON.stringify(answer)
+  const asked = 'asked' in record ? record.asked : undefined
+  if (JSON.stringify(answer.fragmentsAsked) !== JSON.stringify(asked)) return 'asked'
+  if ('scene' in record) {
+    const [got, want] = [answer.scene, JSON.parse(record.scene)].map(sortedSceneDigest)
+    return got?.n === want?.n && got?.h === want?.h ? undefined : 'scene'
+  }
+  const held = digests.get(record.id)
+  const mine = sortedSceneDigest(answer.scene)
+  return held?.n === mine.n && held.h === mine.h && record.n === mine.n ? undefined : 'digest'
+}
+
+describe.runIf(built)('the recorded markdown-document oracle through the core', () => {
+  const core = coreFrom(requireWasm() as unknown as CoreGlue, wasmBytes())
+
+  for (const name of SURFACES) {
+    it(`answers every ${name} record as the TypeScript did`, { timeout: 120_000 }, () => {
+      const { meta, records } = surface(name)
+      const parted = records
+        .map((record) => [record.id, judged(core, record, meta)] as const)
+        .filter(([, why]) => why !== undefined)
+      expect(parted).toEqual([])
+      expect(records.length).toBeGreaterThan(20)
+    })
+  }
+})

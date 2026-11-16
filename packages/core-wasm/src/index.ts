@@ -32,9 +32,13 @@ import {
 } from './json-canvas.js'
 import {
   type LayoutAnswer,
+  type LayoutErrors,
   type LayoutGlue,
   type LayoutRequest,
+  layoutMarkdown,
   layoutSpatialCanvas,
+  type MarkdownLayoutAnswer,
+  type MarkdownLayoutRequest,
 } from './layout.js'
 import { layoutCachesOf } from './layout-caches.js'
 import {
@@ -53,7 +57,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '33'
+export const EXPECTED_ABI = '34'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -216,6 +220,20 @@ export interface Core {
     measure?: HostMeasure,
     cache?: object,
   ): LayoutAnswer
+
+  /**
+   * A markdown note (`layoutMdastBlocks`) or a comment's prose
+   * (`layoutCommentBody`) laid out by the core, through the same calls as
+   * `layoutSpatialCanvas`: the highlighter, the host's measurer and the
+   * content cache, which a note's embedded boards keep their bodies in. Answers
+   * `missing` for a `section` the note holds no heading for.
+   */
+  layoutMarkdown(
+    request: MarkdownLayoutRequest,
+    highlight?: FenceHighlighter,
+    measure?: HostMeasure,
+    cache?: object,
+  ): MarkdownLayoutAnswer
 }
 
 const ends = ['none', 'arrow'] as const
@@ -309,6 +327,46 @@ function routeAt(out: Float64Array, at: number, id: string): ResolvedEdgeNode | 
 }
 
 /**
+ * The layout calls of a core over `layout`: one fences' memo per highlighter,
+ * one set of font handles and one set of content caches, shared by a canvas's
+ * layout and a markdown body's.
+ */
+function layoutCalls(
+  layout: LayoutGlue,
+  errors: LayoutErrors,
+): Pick<Core, 'layoutSpatialCanvas' | 'layoutMarkdown'> {
+  const fences = new FenceTokenMemos()
+  const fonts = new FontHandles(layout, errors)
+  const caches = layoutCachesOf(layout)
+  const surfaceOf = (cache: object | undefined) =>
+    cache === undefined ? undefined : caches.surfaceOf(cache)
+  return {
+    layoutSpatialCanvas: (request, highlight, measure, cache) =>
+      layoutSpatialCanvas(
+        layout,
+        errors,
+        request,
+        highlight,
+        fences.for(highlight),
+        fonts,
+        measure,
+        surfaceOf(cache),
+      ),
+    layoutMarkdown: (request, highlight, measure, cache) =>
+      layoutMarkdown(
+        layout,
+        errors,
+        request,
+        highlight,
+        fences.for(highlight),
+        fonts,
+        measure,
+        surfaceOf(cache),
+      ),
+  }
+}
+
+/**
  * A core over glue that is already loaded, initialised from `source` (the
  * artifact's bytes or a compiled module the composition root holds).
  * Synchronous, for a root that has the glue in hand, such as a worker.
@@ -321,30 +379,17 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
   const spatial: SpatialGlue = glue
   const facets: FacetGlue = glue
   const layout: LayoutGlue = glue
-  const fences = new FenceTokenMemos()
   const errors: OkfErrors & SpatialErrors & FacetErrors = {
     refused: (operation, code, detail) => new CoreInputRefused(operation, code, detail),
     unwritable: (issues) => new CoreOkfUnwritable(issues),
     invalid: (issues) => new CoreSpatialInvalid(issues),
   }
-  const fonts = new FontHandles(layout, errors)
-  const caches = layoutCachesOf(layout)
   return {
     parseSpatial: (text) => parseSpatial(spatial, errors, text),
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),
     facetBucketCheck: (target, bucket, library) =>
       facetBucketCheck(facets, errors, target, bucket, library),
-    layoutSpatialCanvas: (request, highlight, measure, cache) =>
-      layoutSpatialCanvas(
-        layout,
-        errors,
-        request,
-        highlight,
-        fences.for(highlight),
-        fonts,
-        measure,
-        cache === undefined ? undefined : caches.surfaceOf(cache),
-      ),
+    ...layoutCalls(layout, errors),
     parseOkf: (text) => parseOkf(okf, errors, text),
     serializeOkf: (doc) => serializeOkf(okf, errors, doc),
     routeLayout(nodes, edges, styleOf, overrides, budget, labels) {

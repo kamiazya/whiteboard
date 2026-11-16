@@ -28,6 +28,12 @@ pub(super) fn declined(class: &str) -> String {
     outcome("declined", vec![text(class)])
 }
 
+/// What a request named that its content does not hold: a markdown body's
+/// `#Heading` section.
+pub(super) fn missing(what: &str) -> String {
+    outcome("missing", vec![text(what)])
+}
+
 /// The fences, as `[lang, value]`, whose tokens the caller must send.
 pub(super) fn needs(code: &[(String, String)]) -> String {
     let fence = |(lang, value): &(String, String)| Tree::List(vec![text(lang), text(value)]);

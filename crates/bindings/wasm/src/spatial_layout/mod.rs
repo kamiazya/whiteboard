@@ -34,12 +34,19 @@
 //!   `host-measure`).
 //!
 //! A host answers a refusal and a decline from the TypeScript.
+//!
+//! A request naming a `kind` is a markdown body rather than a canvas
+//! ([`markdown`]): a note laid out as `layoutMdastBlocks` lays it out, or a
+//! comment's prose as `layoutCommentBody` does, on the same caps, measurers
+//! and answers, its anchors always none; a note's `#Heading` that names
+//! nothing answers `["missing", "section"]`.
 
 mod answer;
 mod cache;
 mod fonts;
 mod fragments;
 mod host_measure;
+mod markdown;
 mod measure;
 mod request;
 
@@ -56,7 +63,7 @@ use wasm_bindgen::prelude::wasm_bindgen;
 use whiteboard_canvas_render::compose_canvas::{self, LaidOut, LayoutOptions, RenderStyle};
 use whiteboard_canvas_render::compose_node::{BodySeams, ContentCache};
 use whiteboard_canvas_render::measure::Measure;
-use whiteboard_canvas_render::references::{Expansion, WireHost};
+use whiteboard_canvas_render::references::{Expansion, ReferenceWire, WireHost};
 use whiteboard_canvas_render::theme::mode::SpatialThemeMode;
 use whiteboard_canvas_render::theme::spatial_theme::create_spatial_theme;
 use whiteboard_canvas_render::theme::tokens::theme_table;
@@ -77,7 +84,7 @@ use answer::{declined, laid_out, needs, refused};
 use cache::Surface;
 use fragments::FragmentTable;
 use measure::{Unmeasured, with_measurer};
-use request::{Comments, Request, Style, request_of};
+use request::{Asked, Comments, MeasureSpec, Request, Style, asked_of};
 
 /// The most canvas elements (nodes, edges and lines) a request may hold, its
 /// own canvas and every canvas it references together: this entry's
@@ -109,10 +116,16 @@ fn opening_bytes(threads: &[CommentThread]) -> usize {
 }
 
 fn body_total(request: &Request) -> usize {
-    let referenced = request.references.entries.iter().filter_map(|(_, entry)| entry.as_ref());
     let own =
         content_bytes(&request.canvas).saturating_add(opening_bytes(&request.comments.threads));
-    referenced.fold(own, |sum, entry| {
+    own.saturating_add(referenced_bytes(&request.references))
+}
+
+/// The bytes of every body a reference wire carries, a referenced canvas's
+/// nodes' included.
+fn referenced_bytes(wire: &ReferenceWire) -> usize {
+    let referenced = wire.entries.iter().filter_map(|(_, entry)| entry.as_ref());
+    referenced.fold(0, |sum, entry| {
         let body = entry.body.as_ref().map_or(0, String::len);
         let canvas = entry.canvas.as_ref().map_or(0, content_bytes);
         sum.saturating_add(body).saturating_add(canvas)
@@ -125,11 +138,16 @@ fn elements(canvas: &SpatialCanvas) -> usize {
 }
 
 fn element_total(request: &Request) -> usize {
-    let referenced = request.references.entries.iter().filter_map(|(_, entry)| {
+    elements(&request.canvas).saturating_add(referenced_elements(&request.references))
+}
+
+/// The elements of every canvas a reference wire carries.
+fn referenced_elements(wire: &ReferenceWire) -> usize {
+    let referenced = wire.entries.iter().filter_map(|(_, entry)| {
         let canvas = entry.as_ref()?.canvas.as_ref()?;
         Some(elements(canvas))
     });
-    referenced.fold(elements(&request.canvas), usize::saturating_add)
+    referenced.fold(0, usize::saturating_add)
 }
 
 /// How many file-node ids the expansion policy lists. Each names a file node
@@ -358,32 +376,38 @@ pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     let Some(request) = serde_json::from_str(request).ok().as_ref().and_then(json_value) else {
         return refused("malformed", "wire");
     };
-    let Some(request) = request_of(&request) else {
-        return refused("malformed", "request");
-    };
-    if element_total(&request) > MAX_ELEMENTS || expanded_ids(&request) > MAX_ELEMENTS {
-        return refused("input-too-large", "too-many-elements");
+    match asked_of(&request) {
+        Some(Asked::Canvas(request)) => layout_canvas(&request, host),
+        Some(Asked::Markdown(request)) => markdown::layout_markdown(&request, host),
+        None => refused("malformed", "request"),
     }
-    if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
-        return refused("input-too-large", "fragments");
-    }
-    if let Some(what) = past_content_caps(&request) {
-        return refused("input-too-large", what);
-    }
+}
+
+/// The bundled plugin's registry and its themes by namespaced id.
+type Plugin = (&'static Registry, &'static [(String, ThemeTokens)]);
+
+/// The bundled plugin and its themes, or why the request is refused: a family
+/// a theme may name is searched once per theme a canvas draws, so an honest
+/// list is no longer than the theme table.
+fn plugin(font_families: &[String]) -> Result<Plugin, String> {
     let (Some(registry), Some(themes)) = (registry(), themes()) else {
-        return refused("malformed", "registry");
+        return Err(refused("malformed", "registry"));
     };
-    // Each family names one a bundled theme names, so an honest list is no
-    // longer than the theme table; it is searched once per theme a canvas draws.
-    if request.font_families.len() > themes.len() {
-        return refused("input-too-large", "font-families");
+    if font_families.len() > themes.len() {
+        return Err(refused("input-too-large", "font-families"));
     }
-    let surface = request
-        .cache
-        .map(|id| Surface::new(id, &request.measure, request.dark, request.geometry.as_ref()));
-    match with_measurer(&request.measure, host, |measure| {
-        lay_out(&request, measure, surface.as_ref(), registry, themes)
-    }) {
+    Ok((registry, themes))
+}
+
+/// `lay_out` over the measurer `spec` names, keeping the bodies `surface`
+/// wrote when the answer may keep them.
+fn measured(
+    spec: &MeasureSpec,
+    host: Option<&dyn Host>,
+    surface: Option<Surface>,
+    lay_out: impl FnOnce(&dyn Measure, Option<&Surface>) -> String,
+) -> String {
+    match with_measurer(spec, host, |measure| lay_out(measure, surface.as_ref())) {
         Ok(answer) => {
             // Measured throughout, since a host that failed answers `Err`.
             if keeps(&answer)
@@ -398,8 +422,33 @@ pub fn layout_with_host(request: &str, host: Option<&dyn Host>) -> String {
     }
 }
 
+/// A canvas request laid out, or refused past its caps.
+fn layout_canvas(request: &Request, host: Option<&dyn Host>) -> String {
+    if element_total(request) > MAX_ELEMENTS || expanded_ids(request) > MAX_ELEMENTS {
+        return refused("input-too-large", "too-many-elements");
+    }
+    if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
+        return refused("input-too-large", "fragments");
+    }
+    if let Some(what) = past_content_caps(request) {
+        return refused("input-too-large", what);
+    }
+    let (registry, themes) = match plugin(&request.font_families) {
+        Ok(plugin) => plugin,
+        Err(refusal) => return refusal,
+    };
+    let surface = request
+        .cache
+        .map(|id| Surface::new(id, &request.measure, request.dark, request.geometry.as_ref()));
+    measured(&request.measure, host, surface, |measure, surface| {
+        lay_out(request, measure, surface, registry, themes)
+    })
+}
+
 #[cfg(test)]
 mod host_tests;
+#[cfg(test)]
+mod markdown_tests;
 #[cfg(test)]
 mod proposal_tests;
 #[cfg(test)]

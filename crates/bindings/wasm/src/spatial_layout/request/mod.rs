@@ -1,11 +1,13 @@
 //! What `layout_spatial_canvas` is asked, read from the value wire of
 //! [`crate::json_canvas_wire`]: one mapping whose fields are the layout's
-//! options as data. Read strictly, as the canvas is: a key the request does
+//! options as data, a canvas's, or a markdown body's when it names its `kind`
+//! ([`markdown`]). Read strictly, as the canvas is: a key the request does
 //! not name, a field of another kind or a missing required one is no request.
 
 mod code;
 mod comments;
 mod fragments;
+mod markdown;
 mod measure;
 mod options;
 mod proposals;
@@ -25,6 +27,8 @@ use code::code_tokens_of;
 pub(crate) use comments::Comments;
 use comments::comments_of;
 use fragments::fragments_of;
+use markdown::markdown_request_of;
+pub(crate) use markdown::{MarkdownRequest, Note, Prose};
 pub(crate) use measure::{Face, MeasureSpec, face_of};
 use measure::{measure_of, surface_of};
 pub(crate) use options::Style;
@@ -129,4 +133,25 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         cache: f.field("cache", surface_of)?,
     };
     f.all_named().then_some(request)
+}
+
+/// What a request asks for: a canvas laid out, or a markdown body.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) enum Asked {
+    Canvas(Box<Request>),
+    Markdown(MarkdownRequest),
+}
+
+/// Whether a mapping names a `kind`, which only a markdown request does.
+fn names_kind(value: &Value) -> bool {
+    matches!(value, Value::Map(entries) if entries.iter().any(|(key, _)| key == "kind"))
+}
+
+/// The request a value stands for, of either kind, or `None` when it is none.
+pub(crate) fn asked_of(value: &Value) -> Option<Asked> {
+    if names_kind(value) {
+        markdown_request_of(value).map(Asked::Markdown)
+    } else {
+        request_of(value).map(|request| Asked::Canvas(Box::new(request)))
+    }
 }
