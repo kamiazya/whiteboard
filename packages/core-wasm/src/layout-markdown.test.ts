@@ -109,6 +109,23 @@ describe('a markdown body over the artifact', () => {
     expect(JSON.stringify(sent[1])).toContain('"codeTokens",["s",["s","ts","x",null]]')
   })
 
+  it('sends a comment no fence tokens a note left in the memo, and no cache surface', () => {
+    const needs = JSON.stringify(['needs', { code: [['ts', 'return 1']] }])
+    const ok = JSON.stringify(['ok', { nodes: [] }, [], []])
+    const { glue, sent } = glueOf(needs, ok, ok)
+    const memo = new FenceTokenMemo()
+    const fonts = new FontHandles(glue, errors)
+    const tokens = () => [[{ text: 'return 1' }]]
+    const fenced = { ...note, body: '```ts\nreturn 1\n```', section: undefined }
+    layoutMarkdown(glue, errors, fenced, tokens, memo, fonts, undefined, 9)
+    expect(JSON.stringify(sent[1])).toContain('"codeTokens"')
+    expect(JSON.stringify(sent[1])).toContain('"cache",9')
+    const said = { ...comment, body: 'return 1' }
+    layoutMarkdown(glue, errors, said, tokens, memo, fonts, undefined, 9)
+    expect(JSON.stringify(sent[2])).not.toContain('"codeTokens"')
+    expect(JSON.stringify(sent[2])).not.toContain('"cache"')
+  })
+
   it('refuses an answer that carries anchors or is not one', () => {
     const anchored = JSON.stringify(['ok', { nodes: [] }, [['e', {}]], []])
     expect(() => lay(glueOf(anchored).glue, note)).toThrow('malformed answer')
