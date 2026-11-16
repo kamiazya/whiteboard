@@ -451,9 +451,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // reason: a dispatch, a request built from options and a comparison,
     // every branch driven by `layout/markdown-switch.test.ts` and
     // mutation-checked by hand, and it goes when the TypeScript layout does.
+    // 139 with `query-core.ts` (types alone), `layout/query-switch.ts` (the
+    // queries' switch) and `layout/queries.ts` (the editors' geometry through
+    // it). Outside the lane for the same reason: every branch driven by
+    // `layout/query-switch.test.ts` and mutation-checked by hand.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 136,
+      production: 139,
     })
   })
 

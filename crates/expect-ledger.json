@@ -22,8 +22,8 @@
     {
       "crate": "crates/bindings/wasm",
       "lint": "clippy::needless_pass_by_value",
-      "count": 1,
-      "reason": "a wasm-bindgen export takes an imported JS object by value, which is the only way the glue hands one over; the layout borrows it"
+      "count": 2,
+      "reason": "a wasm-bindgen export takes an imported JS object by value, which is the only way the glue hands one over; the layout and the query borrow it"
     },
     {
       "crate": "crates/core/canvas-render",

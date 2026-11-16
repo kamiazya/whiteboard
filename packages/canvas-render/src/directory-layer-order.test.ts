@@ -99,6 +99,8 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   // A markdown note's request and answer, which `LayoutCore` names beside the
   // whole layout's: the same rank as `canvas-core.ts`.
   'markdown-core.ts': 'engines',
+  // A query's request and answer (S18d), which `LayoutCore` names beside both.
+  'query-core.ts': 'engines',
   'det-math.ts': 'leaf',
   'edge-arrows.ts': 'leaf',
   'hit-boxes.ts': 'leaf',

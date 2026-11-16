@@ -72,6 +72,7 @@ function draftSize(
       { ...draftContent(draft), id, x: 0, y: 0, width, height: size.height },
       ctx.s.measure,
       size.height,
+      ctx.s.core,
     ),
   }
 }
@@ -434,7 +435,7 @@ const CANVAS_EDIT_HANDLERS: {
     const parsed = spatialNodeSchema.safeParse(nodeFromDraft(draft, id, at, width, height))
     if (!parsed.success) fail(index, op.op, ctx.s.issues(parsed.error))
     if (draft.height !== undefined && ctx.s.measure !== undefined) {
-      assertTextFits(index, op.op, parsed.data, ctx.s.measure)
+      assertTextFits(index, op.op, parsed.data, ctx.s.measure, ctx.s.core)
     }
     if (positioned && group !== undefined) {
       holdChosenPosition(ctx, index, op.op, group, parsed.data)

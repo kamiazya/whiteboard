@@ -30,6 +30,7 @@ function askingGlue(text: string, key: string) {
     register_layout_fonts: () => '["ok",1]',
     release_layout_fonts: () => true,
     release_layout_cache: () => false,
+    layout_query: () => '',
   }
   return { glue, answers }
 }

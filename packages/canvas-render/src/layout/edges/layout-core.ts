@@ -10,6 +10,7 @@ import type {
   MarkdownLayoutMismatch,
   MarkdownLayoutTally,
 } from '../../markdown-core.js'
+import type { QueryLayoutCore, QueryLayoutMismatch, QueryLayoutTally } from '../../query-core.js'
 import type { Rect } from './edge-geometry.js'
 import { routeEdge } from './edge-router.js'
 import type { EdgeAnchorOverride, EdgeAnchorPair } from './edge-sides.js'
@@ -61,16 +62,19 @@ interface RouteLayoutRepro {
  * A difference `differential` mode found, or a core that refused a call.
  * `at` is the first position the two canonical answers part at; the
  * answers are given whole so the report needs nothing else to be read.
- * A whole layout or a note the core did not answer is reported on the same
- * sink as a `CanvasLayoutTally` or `MarkdownLayoutTally`, which is a count
- * rather than a difference; a whole layout's or a note's difference is its own
- * `CanvasLayoutMismatch` or `MarkdownLayoutMismatch`.
+ * A whole layout, a note or a query the core did not answer is reported on the
+ * same sink as a `CanvasLayoutTally`, `MarkdownLayoutTally` or
+ * `QueryLayoutTally`, which is a count rather than a difference; a whole
+ * layout's, a note's or a query's difference is its own
+ * `CanvasLayoutMismatch`, `MarkdownLayoutMismatch` or `QueryLayoutMismatch`.
  */
 export type CoreMismatch =
   | CanvasLayoutMismatch
   | CanvasLayoutTally
   | MarkdownLayoutMismatch
   | MarkdownLayoutTally
+  | QueryLayoutMismatch
+  | QueryLayoutTally
   | {
       readonly fn: 'routeLayout'
       readonly kind: 'differs'
@@ -104,10 +108,17 @@ export interface LayoutCore {
    * switch: absent, either reads `ts`.
    */
   readonly markdown?: MarkdownLayoutCore
+  /**
+   * The layout pieces a root calls on their own (the drag frame's edge layer,
+   * a node's size, a label's place, a bubble's, a body overlay's box), one
+   * call each, with their own switch: absent, either reads `ts`.
+   */
+  readonly query?: QueryLayoutCore
   readonly impl: {
     readonly routeLayout: CoreImpl
     readonly layoutSpatialCanvas?: CoreImpl
     readonly layoutMarkdown?: CoreImpl
+    readonly layoutQuery?: CoreImpl
   }
   readonly onMismatch?: (mismatch: CoreMismatch) => void
 }

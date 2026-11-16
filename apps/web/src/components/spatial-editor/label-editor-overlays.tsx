@@ -1,8 +1,7 @@
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import {
-  edgeLabelPlacement,
-  frameTitleObstacles,
-  labelObstacles,
+  queryEdgeLabelPlacement,
+  queryLabelObstacles,
   type SceneNode,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -20,6 +19,7 @@ import {
   FRAME_TITLE_OFFSET_PX,
 } from '../../lib/spatial/frame-interior.js'
 import { labelInkCommand } from '../../lib/spatial/ink-commands.js'
+import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
 import { edgeRoute } from './node-a11y-name.js'
@@ -64,6 +64,22 @@ function labelDraft(palette: SpatialPalette, fontFamily: string) {
 
 type ApplyResult = (result: ReturnType<typeof reduceGesture>) => void
 
+/**
+ * Where the label editor opens: where the layout places a label its size, among
+ * the boxes and frame titles the layout's own labels avoid, both answered by the
+ * Rust core where this realm's layout switch says so.
+ */
+function labelEditorCentre(
+  path: readonly { readonly x: number; readonly y: number }[],
+  canvas: SpatialCanvas,
+  sceneNodes: readonly SceneNode[],
+) {
+  const core = currentLayoutCore()
+  const { obstacles } = queryLabelObstacles(core, canvas.nodes, sceneNodes)
+  const size = { w: EDGE_LABEL_EDITOR_WIDTH_PX, h: EDGE_LABEL_EDITOR_HEIGHT_PX }
+  return queryEdgeLabelPlacement(core, path, size, obstacles)
+}
+
 /** The in-place editor for a RELATION's or a STROKE's label, opened where the
  * label sits —
  * the drawn line's midpoint, or beside it when a box is in the way, from the
@@ -102,11 +118,7 @@ export function EdgeLabelEditorOverlay({
     (canvas.lines ?? []).find((entry) => entry.id === editId)
   const path = edgePaths.find((entry) => entry.id === editId)?.path
   if (edge === undefined || path === undefined) return null
-  const mid = edgeLabelPlacement(
-    path,
-    { w: EDGE_LABEL_EDITOR_WIDTH_PX, h: EDGE_LABEL_EDITOR_HEIGHT_PX },
-    labelObstacles(canvas.nodes, frameTitleObstacles(canvas.nodes, sceneNodes)),
-  )
+  const mid = labelEditorCentre(path, canvas, sceneNodes)
   if (mid === undefined) return null
   return (
     <TextNodeEditor

@@ -50,6 +50,7 @@ import {
   serializeOkf,
 } from './okf.js'
 import type { UnwritableIssue } from './okf-unsafe.js'
+import { type LayoutQueryAnswer, type LayoutQueryRequest, layoutQuery } from './query.js'
 import type { AnchorPair, LabelRect, RoutingBudget, SideOverride } from './types.js'
 import { encodeLayout, sideAt } from './wire.js'
 
@@ -57,7 +58,7 @@ import { encodeLayout, sideAt } from './wire.js'
 export type CoreGlue = typeof import('#glue')
 
 /** The ABI this shim was written against; an artifact speaking another is refused at init. */
-export const EXPECTED_ABI = '34'
+export const EXPECTED_ABI = '35'
 
 /**
  * What the test lanes' oracle build (`oracle-surface`: the shipped build plus
@@ -234,6 +235,21 @@ export interface Core {
     measure?: HostMeasure,
     cache?: object,
   ): MarkdownLayoutAnswer
+
+  /**
+   * A layout piece a root calls on its own (ADR-0054 step 7, S18d): the edge
+   * layer of a canvas request, a node's fitted height or natural size, an edge
+   * label's place and the obstacles it avoids, a comment bubble's place, or a
+   * silhouette's content box. A measured query goes through the calls
+   * `layoutSpatialCanvas` makes (the highlighter, the host's measurer, the
+   * faces' handle); a geometry query is one call. Answers `declined` for what
+   * a root answers from the TypeScript.
+   */
+  layoutQuery(
+    request: LayoutQueryRequest,
+    highlight?: FenceHighlighter,
+    measure?: HostMeasure,
+  ): LayoutQueryAnswer
 }
 
 const ends = ['none', 'arrow'] as const
@@ -334,7 +350,7 @@ function routeAt(out: Float64Array, at: number, id: string): ResolvedEdgeNode | 
 function layoutCalls(
   layout: LayoutGlue,
   errors: LayoutErrors,
-): Pick<Core, 'layoutSpatialCanvas' | 'layoutMarkdown'> {
+): Pick<Core, 'layoutSpatialCanvas' | 'layoutMarkdown' | 'layoutQuery'> {
   const fences = new FenceTokenMemos()
   const fonts = new FontHandles(layout, errors)
   const caches = layoutCachesOf(layout)
@@ -362,6 +378,12 @@ function layoutCalls(
         fonts,
         measure,
         surfaceOf(cache),
+      ),
+    layoutQuery: (request, highlight, measure) =>
+      layoutQuery(
+        { glue: layout, errors, highlight, memo: fences.for(highlight), fonts },
+        request,
+        measure,
       ),
   }
 }

@@ -142,6 +142,170 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       member: 'layoutMarkdown',
     },
   },
+  // The layout pieces a root calls on their own (S18d): one export,
+  // `layout_query`, with a tagged query per piece, under one switch key that
+  // rides `WHITEBOARD_CORE_LAYOUT` like the whole layout's. The TypeScript
+  // each is held to is the function the composer still calls without a core.
+  {
+    name: 'layoutSpatialEdges',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
+      export: 'layoutSpatialEdges',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'SpatialLayoutOptions.core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'naturalNodeContentSize',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
+      export: 'naturalNodeContentSize',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'SpatialLayoutOptions.core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'fittedTextNodeHeight',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/fitted-height.ts',
+      export: 'fittedTextNodeHeight',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'fittedTextNodeHeight options.core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'edgeLabelPlacement',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
+      export: 'edgeLabelPlacement',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'queryEdgeLabelPlacement core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'labelObstacles',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
+      export: 'labelObstacles',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'queryLabelObstacles core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'frameTitleObstacles',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
+      export: 'frameTitleObstacles',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'queryLabelObstacles core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'placeCommentBubble',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/comment-placement.ts',
+      export: 'placeCommentBubble',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'queryCommentBubble core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
+  {
+    name: 'outlineContentBox',
+    stage: 2,
+    ts: {
+      file: 'packages/canvas-render/src/layout/nodes/node-outline.ts',
+      export: 'outlineContentBox',
+    },
+    switch: {
+      file: 'packages/canvas-render/src/layout/edges/layout-core.ts',
+      interface: 'LayoutCore',
+      key: 'layoutQuery',
+      option: 'queryOutlineContentBox core',
+    },
+    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
+    shim: {
+      module: '@kamiazya/whiteboard-core-wasm',
+      file: 'packages/core-wasm/src/index.ts',
+      member: 'layoutQuery',
+    },
+  },
   // A body's parse and its reference resolution have no switch of their own:
   // the core reaches them only through the whole layout, whose differential
   // compares every scene they shape, so that export is the shim's member.

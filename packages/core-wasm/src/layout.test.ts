@@ -21,6 +21,7 @@ function glueOf(answer: string) {
     register_layout_fonts: () => '["ok",3]',
     release_layout_fonts: () => true,
     release_layout_cache: () => false,
+    layout_query: () => '',
   }
   return { glue, calls }
 }
@@ -141,6 +142,7 @@ function glueAnswering(...answers: string[]) {
     register_layout_fonts: () => '[]',
     release_layout_fonts: () => false,
     release_layout_cache: () => false,
+    layout_query: () => '',
   }
   return { glue, sent }
 }
@@ -284,6 +286,7 @@ describe('the fence tokens a core keeps', () => {
       register_layout_fonts: () => '[]',
       release_layout_fonts: () => false,
       release_layout_cache: () => false,
+      layout_query: () => '',
     }
     const core = coreFrom(glue, new Uint8Array())
     core.layoutSpatialCanvas(withBody, tokens)

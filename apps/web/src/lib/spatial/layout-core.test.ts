@@ -47,6 +47,7 @@ describe('createLayoutCoreHost', () => {
       routeLayout: 'differential',
       layoutSpatialCanvas: 'ts',
       layoutMarkdown: 'ts',
+      layoutQuery: 'ts',
     })
     expect(host.current()).toBe(core)
     await host.ready()
@@ -70,6 +71,7 @@ describe('createLayoutCoreHost', () => {
       routeLayout: 'rust',
       layoutSpatialCanvas: 'differential',
       layoutMarkdown: 'differential',
+      layoutQuery: 'differential',
     })
   })
 

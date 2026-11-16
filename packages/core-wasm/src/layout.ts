@@ -1,7 +1,11 @@
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { type FenceHighlighter, type FenceRow, FenceTokenMemo } from './fence-tokens.js'
 import type { FontHandles, FontsGlue, LayoutFaces } from './font-handles.js'
-import { LAYOUT_SPATIAL_CANVAS_CAPS, type RefusalCode } from './generated/input-caps.js'
+import {
+  LAYOUT_QUERY_CAPS,
+  LAYOUT_SPATIAL_CANVAS_CAPS,
+  type RefusalCode,
+} from './generated/input-caps.js'
 import { type HostMeasure, type HostMeasurer, hostMeasurerOf } from './host-measure.js'
 import type { CachesGlue } from './layout-caches.js'
 import type { AnchorPair } from './types.js'
@@ -28,7 +32,7 @@ export interface LayoutRequest {
 }
 
 /** One degradation, as the layout reports it. */
-type LayoutEvent =
+export type LayoutEvent =
   | { readonly kind: 'body-parse-failed'; readonly nodeId: string }
   | { readonly kind: 'unknown-theme'; readonly theme: string }
   | { readonly kind: 'font-missing'; readonly family: string }
@@ -58,6 +62,16 @@ export type LayoutAnswer =
 /** The glue calls this module makes. */
 export interface LayoutGlue extends FontsGlue, CachesGlue {
   layout_spatial_canvas(request: string, host?: HostMeasurer): string
+  layout_query(request: string, host?: HostMeasurer): string
+}
+
+/** The two exports a measured request is sent to: the whole layout, and the queries. */
+type LayoutEntry = 'layout_spatial_canvas' | 'layout_query'
+
+/** The most request text each entry reads. */
+const MAX_BYTES: Readonly<Record<LayoutEntry, number>> = {
+  layout_spatial_canvas: LAYOUT_SPATIAL_CANVAS_CAPS.maxBytes,
+  layout_query: LAYOUT_QUERY_CAPS.maxBytes,
 }
 
 /** The errors this module throws, made by the package entry that owns their classes. */
@@ -80,7 +94,7 @@ function encodeLayoutRequest(
   return wire === undefined ? undefined : JSON.stringify(wire)
 }
 
-const OPERATION = 'layout_spatial_canvas'
+const OPERATION: LayoutEntry = 'layout_spatial_canvas'
 
 /** One call's answer as JSON, the fences the core asked for, or a handle it holds nothing under. */
 type Raw =
@@ -97,8 +111,13 @@ function withTokens(text: string, rows: readonly FenceRow[]): string | undefined
     : `${text.slice(0, -1)},"codeTokens",${JSON.stringify(wire)}]`
 }
 
-function call(glue: LayoutGlue, text: string, host: HostMeasurer | undefined): Raw {
-  const parsed: unknown = JSON.parse(glue.layout_spatial_canvas(text, host))
+function call(
+  glue: LayoutGlue,
+  entry: LayoutEntry,
+  text: string,
+  host: HostMeasurer | undefined,
+): Raw {
+  const parsed: unknown = JSON.parse(glue[entry](text, host))
   const answer = Array.isArray(parsed) ? (parsed as unknown[]) : []
   if (answer[0] === 'refused' && answer[2] === 'font-handle') return { lost: true }
   const code = answer[0] === 'needs' && isRecord(answer[1]) ? answer[1].code : undefined
@@ -137,8 +156,12 @@ export function layoutSpatialCanvas(
   return layoutWith(calls, request, answerOf, hostMeasure, surface)
 }
 
-/** What every layout call goes through: the glue, its errors, the fences' memo and the faces' handles. */
-interface Calls {
+/**
+ * What every layout call goes through: the glue, its errors, the fences' memo
+ * and the faces' handles; and the export called, the whole layout's unless named.
+ */
+export interface Calls {
+  readonly entry?: LayoutEntry
   readonly glue: LayoutGlue
   readonly errors: LayoutErrors
   readonly highlight: FenceHighlighter | undefined
@@ -147,11 +170,11 @@ interface Calls {
 }
 
 /** How the last call's answer is read into what the caller is answered. */
-type Read<A> = (parsed: unknown[], errors: LayoutErrors) => A
+export type Read<A> = (parsed: unknown[], errors: LayoutErrors) => A
 
 /** A layout through `calls`, its last answer read by `read`; see `layoutSpatialCanvas`. */
-function layoutWith<A>(
-  { glue, errors, highlight, memo, fonts }: Calls,
+export function layoutWith<A>(
+  { entry = OPERATION, glue, errors, highlight, memo, fonts }: Calls,
   request: LayoutRequest,
   read: Read<A>,
   hostMeasure: HostMeasure | undefined,
@@ -164,13 +187,13 @@ function layoutWith<A>(
     const named = measure.kind === 'fonts' ? fonts.handleOf(measure) : undefined
     if (named !== undefined && 'declined' in named) return named
     const measurer = { handle: named?.handle, host, surface }
-    return layoutOnce(glue, errors, request, measurer, highlight, memo, read)
+    return layoutOnce({ glue, entry, errors }, request, measurer, highlight, memo, read)
   }
   const first = once()
   if (first !== 'lost') return first
   if (measure.kind === 'fonts') fonts.forget(measure)
   const again = once()
-  if (again === 'lost') throw errors.refused(OPERATION, 'malformed', 'font-handle')
+  if (again === 'lost') throw errors.refused(entry, 'malformed', 'font-handle')
   return again
 }
 
@@ -183,8 +206,7 @@ interface Measurer {
 
 /** One layout over `measurer`, the fences asked for included; `lost` when the core holds no faces under its handle. */
 function layoutOnce<A>(
-  glue: LayoutGlue,
-  errors: LayoutErrors,
+  { glue, entry, errors }: { glue: LayoutGlue; entry: LayoutEntry; errors: LayoutErrors },
   request: LayoutRequest,
   { handle, host, surface }: Measurer,
   highlight: FenceHighlighter | undefined,
@@ -192,12 +214,12 @@ function layoutOnce<A>(
   read: Read<A>,
 ): A | { readonly declined: string } | 'lost' {
   const encoded = encodeLayoutRequest(request, handle, surface)
-  if (encoded === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')
+  if (encoded === undefined) throw errors.refused(entry, 'malformed', 'wire')
   const send = (rows: readonly FenceRow[]): Raw | { declined: string } => {
     const text = withTokens(encoded, rows)
-    if (text === undefined) throw errors.refused(OPERATION, 'malformed', 'wire')
-    if (text.length > LAYOUT_SPATIAL_CANVAS_CAPS.maxBytes) return { declined: 'too-large' }
-    return call(glue, text, host)
+    if (text === undefined) throw errors.refused(entry, 'malformed', 'wire')
+    if (text.length > MAX_BYTES[entry]) return { declined: 'too-large' }
+    return call(glue, entry, text, host)
   }
   const held = memo.within(encoded)
   let raw = send(held)

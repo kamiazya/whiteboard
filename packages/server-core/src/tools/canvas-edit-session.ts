@@ -1,4 +1,8 @@
-import { fittedTextNodeHeight, type MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import {
+  fittedTextNodeHeight,
+  type LayoutCore,
+  type MeasureText,
+} from '@kamiazya/whiteboard-canvas-render'
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyNodePatch,
@@ -48,11 +52,17 @@ import { publishedKind } from './published-node-kind.js'
  * breaks the circularity — placement needs a height, and the height needs a
  * width, not a position.
  */
-export function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
-  // canvas-render's one fitted height, the same the editor grows a node to.
+export function fittedHeight(
+  node: SpatialNode,
+  measure: MeasureText,
+  fallback: number,
+  core?: LayoutCore,
+): number {
+  // canvas-render's one fitted height, the same the editor grows a node to,
+  // answered by the Rust core where the daemon's layout switch says so.
   return Math.max(
     fallback,
-    fittedTextNodeHeight(node, { measure, appearance: MCP_SCENE_APPEARANCE }),
+    fittedTextNodeHeight(node, { measure, appearance: MCP_SCENE_APPEARANCE, core }),
   )
 }
 
@@ -70,11 +80,12 @@ export function assertTextFits(
   opName: string,
   node: SpatialNode,
   measure: MeasureText,
+  core?: LayoutCore,
 ) {
   if (nodeText(node) === undefined) return
   // Whole pixels, as JSON Canvas sizes are; a box short by a fraction of one
   // is a box the renderer draws without a fade.
-  const needs = Math.floor(fittedHeight(node, measure, 0))
+  const needs = Math.floor(fittedHeight(node, measure, 0, core))
   if (node.height < needs) {
     fail(
       index,
@@ -193,8 +204,15 @@ export class CanvasEditSession {
    * on first use, and a batch of moves and locks should not pay for that.
    */
   readonly measure: MeasureText | undefined
+  /** The Rust core the measurer's sizing is answered by, when the daemon's switch says so. */
+  readonly core: LayoutCore | undefined
 
-  constructor(canvas: SpatialCanvas, doc: LoroDoc, measure: MeasureText | undefined) {
+  constructor(
+    canvas: SpatialCanvas,
+    doc: LoroDoc,
+    measure: MeasureText | undefined,
+    core?: LayoutCore,
+  ) {
     this.nodes = [...canvas.nodes]
     this.boardWidth = prevailingWidth(canvas.nodes)
     this.edges = [...canvas.edges]
@@ -202,6 +220,7 @@ export class CanvasEditSession {
     this.nodeLocks = new Set(readNodeLocks(doc))
     this.edgeLocks = new Set(readEdgeLocks(doc))
     this.measure = measure
+    this.core = core
   }
 
   private readonly nodeById = lookupById<SpatialNode>()
@@ -516,7 +535,7 @@ export class CanvasEditSession {
       this.measure !== undefined &&
       (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
     ) {
-      assertTextFits(index, opName, updated, this.measure)
+      assertTextFits(index, opName, updated, this.measure, this.core)
     }
     return updated
   }

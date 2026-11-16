@@ -78,6 +78,7 @@ import { createNestedLayoutBudget } from './nodes/embed-budget.js'
 import { outlineEntryPoint, resolveShapeTable, type ShapeTable } from './nodes/node-outline.js'
 import { nodePassagesOf } from './passage-highlight.js'
 import { composeProposals } from './proposals.js'
+import { edgesThroughCore, naturalSizeThroughCore } from './query-switch.js'
 
 export {
   COMMENT_TEXT_MAX_WIDTH_PX,
@@ -358,7 +359,9 @@ export function naturalNodeContentSize(
 ): { readonly w: number; readonly h: number } {
   // A table of rendered fragments answers here as in a layout, or a node
   // would be sized by the source its layout no longer draws.
-  return withFragmentTable(options, (tabled) => naturalSize(node, tabled))
+  return naturalSizeThroughCore(node, options, () =>
+    withFragmentTable(options, (tabled) => naturalSize(node, tabled)),
+  )
 }
 
 function naturalSize(
@@ -697,18 +700,20 @@ export function composeEdgesAndLabels(
 }
 
 /**
- * The edge-and-label suffix of `layoutSpatialCanvas`'s scene, on its own:
- * routing, line jumps, and centered labels through the exact code path the
- * full layout uses, without laying out any node content. This exists for a
- * consumer that already has the node layer rendered and needs ONLY the
- * edges recomputed against updated node positions (the editor's live drag
- * overlay) — a second edge pipeline there would drift from the committed
- * result, which is the one-producer-per-geometry rule this export upholds.
+ * The edge-and-label suffix of `layoutSpatialCanvas`'s scene, on its own: routing, line jumps
+ * and centered labels through the full layout's own code path, laying out no node content, for a
+ * consumer holding the node layer that needs ONLY the edges re-laid against moved nodes (the
+ * editor's live drag overlay); a second edge pipeline would drift from the committed result.
+ * Answered by the Rust core's query entry where `options.core` says so.
  */
 export function layoutSpatialEdges(
   stored: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): SceneNode[] {
+  return edgesThroughCore(stored, options, (settled) => layoutSpatialEdgesTs(stored, settled))
+}
+
+function layoutSpatialEdgesTs(stored: SpatialCanvas, options: SpatialLayoutOptions): SceneNode[] {
   // Through the same theme resolution the full layout applies to this
   // canvas: the ink, the routing default and the paint an edge takes are
   // the theme's, and a second entry point that skipped it drew a live drag

@@ -7,6 +7,7 @@ import type {
   CoreMismatch,
   LayoutCore,
   MarkdownLayoutTally,
+  QueryLayoutTally,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   installOkfCore,
@@ -43,7 +44,9 @@ const log = getLogger('layout-core')
  *
  * `WHITEBOARD_CORE_LAYOUT` is the whole layout's own switch
  * (`layoutSpatialCanvasWithAnchors` in one core call, and a markdown note's
- * `layoutMarkdownDocument` through the core's markdown entry), `rust` unless something
+ * `layoutMarkdownDocument` through the core's markdown entry, and the layout
+ * pieces a tool calls on its own through the core's query entry: a text
+ * node's fitted height for `wb_canvas_edit`), `rust` unless something
  * sets it, like routing's; the dev scripts and CI's test jobs set
  * `differential`, and `ts` is its rollback. It answers only a layout whose
  * every option the core can be handed as data, and the TypeScript answers the
@@ -102,7 +105,9 @@ export function artifactDirectory(
 }
 
 /** What one line of the log says of a mismatch: where the answers part, never the whole request. */
-function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally>) {
+function summarize(
+  mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownLayoutTally | QueryLayoutTally>,
+) {
   if (mismatch.kind !== 'differs')
     return { fn: mismatch.fn, kind: mismatch.kind, err: mismatch.err }
   if (mismatch.fn === 'layoutSpatialCanvas') {
@@ -112,6 +117,10 @@ function summarize(mismatch: Exclude<CoreMismatch, CanvasLayoutTally | MarkdownL
   if (mismatch.fn === 'layoutMarkdown') {
     const { fn, kind, at, ts, rust } = mismatch
     return { fn, kind, at, ts, rust, bodyChars: mismatch.repro.body.length }
+  }
+  if (mismatch.fn === 'layoutQuery') {
+    const { fn, kind, at, ts, rust } = mismatch
+    return { fn, kind, at, ts, rust, query: mismatch.repro.query }
   }
   return {
     fn: mismatch.fn,
@@ -198,7 +207,13 @@ export function coreLoaders(settings: LayoutCoreSettings): CoreLoaders {
       routing: core,
       layout: core,
       markdown: core,
-      impl: { routeLayout: routing, layoutSpatialCanvas: layout, layoutMarkdown: layout },
+      query: core,
+      impl: {
+        routeLayout: routing,
+        layoutSpatialCanvas: layout,
+        layoutMarkdown: layout,
+        layoutQuery: layout,
+      },
       onMismatch: reporter(settings),
     })),
   }

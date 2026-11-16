@@ -15,6 +15,7 @@ import { fittedTextNodeHeight } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
+import { currentLayoutCore } from './layout-core.js'
 import { backgroundOf, type PictureExportOptions } from './picture-options.js'
 import {
   type RenderCanvasCoreOptions,
@@ -59,6 +60,8 @@ export function requiredTextNodeHeight(node: SpatialNode, options: RenderCanvasO
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
     floor: 'none',
+    // Answered by the Rust core where this realm's layout switch says so (S18d).
+    core: currentLayoutCore(),
   })
 }
 

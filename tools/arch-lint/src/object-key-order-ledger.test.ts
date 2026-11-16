@@ -33,6 +33,10 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 2,
     why: "the whole layout's differential walking two answers in step: the walk only finds the first path they part at, which reaches a mismatch report and never a scene, so an edge id that looks like an integer moves which difference is named first, not whether one is; and the bundled theme table, keyed by namespaced theme ids that never look like an integer, walked for the families its themes name, which the core only ever asks membership of",
   },
+  'packages/canvas-render/src/layout/query-switch.ts': {
+    uses: 1,
+    why: "a natural size's layout options asked whether any is one the core's query does not take: the walk answers yes or no, and its order never reaches a request or a scene",
+  },
   'packages/canvas-render/src/references/seams.ts': {
     uses: 1,
     why: 'an emptiness check on the resolved seams, where the count is read and the order never is',

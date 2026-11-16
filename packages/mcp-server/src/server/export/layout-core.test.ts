@@ -196,8 +196,10 @@ describe('the daemon layout core', () => {
         routeLayout: 'rust',
         layoutSpatialCanvas: 'rust',
         layoutMarkdown: 'rust',
+        layoutQuery: 'rust',
       })
       expect(core?.markdown).toBeDefined()
+      expect(core?.query).toBeDefined()
     })
 
     describe('under the default settings, over what the daemon hands a layout', () => {
@@ -285,6 +287,7 @@ describe('the daemon layout core', () => {
         routeLayout: 'ts',
         layoutSpatialCanvas: 'rust',
         layoutMarkdown: 'rust',
+        layoutQuery: 'rust',
       })
       if (core?.layout === undefined) throw new Error('the core has no whole layout')
       const { layout } = core
