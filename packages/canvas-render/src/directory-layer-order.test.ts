@@ -75,6 +75,9 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   'layout/ink': 'ink',
   layout: 'layout',
   svg: 'svg',
+  // The MCP Apps widget's picture contract: what a consumer receives once a
+  // scene is drawn, read by nothing in the pipeline.
+  picture: 'surface',
 }
 
 /** A file whose role differs from its directory's; each reason is in the header. */
@@ -95,6 +98,7 @@ const ROOT_FILES: Readonly<Record<string, Layer>> = {
   'canvas-fragment.ts': 'leaf',
   'det-math.ts': 'leaf',
   'edge-arrows.ts': 'leaf',
+  'hit-boxes.ts': 'leaf',
   'hit-test.ts': 'surface',
   'finite-box.ts': 'leaf',
   'measure.ts': 'leaf',

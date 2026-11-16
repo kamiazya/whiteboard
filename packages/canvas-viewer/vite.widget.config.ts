@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import react from '@vitejs/plugin-react'
 import { defineConfig, type Plugin } from 'vite'
 import { viteSingleFile } from 'vite-plugin-singlefile'
 import {
@@ -49,7 +48,9 @@ export function widgetFontsPlugin(): Plugin {
 }
 
 export default defineConfig({
-  plugins: [react(), widgetFontsPlugin(), viteSingleFile()],
+  // No React plugin: the widget places a picture the daemon drew, so its
+  // module graph holds no component.
+  plugins: [widgetFontsPlugin(), viteSingleFile()],
   build: {
     outDir: 'dist/widget',
     // A single self-contained artifact has no meaningful chunk boundaries;

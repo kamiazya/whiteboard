@@ -21,7 +21,7 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { chromium } from 'playwright'
 import { findExternalResourceUrls } from '../src/widget/check-html.ts'
-import { serializeSceneForScriptTag } from '../src/widget/embed-scene.ts'
+import { serializeForScriptTag } from '../src/widget/embed-picture.ts'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(__dirname, '..')
@@ -47,15 +47,40 @@ const VENDORED_TTF_PATH = join(packageRoot, 'assets', 'fonts', 'Roboto', 'Roboto
 const WIDGET_ORIGIN = 'https://widget.smoke.invalid'
 // Read once; both font scenarios serve these same bytes.
 const fontBytes = readFileSync(VENDORED_TTF_PATH)
-const THEMED_SCENE = {
-  nodes: [{ id: 'text-1', type: 'text', x: 10, y: 10, width: 160, height: 25, text: SAMPLE_TEXT }],
-  edges: [],
-  'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+// The widget lays nothing out (ADR-0054 step 7, q54): what a host hands it is
+// the picture the daemon drew, so the samples here are pictures shaped as
+// canvas-render writes one — an enveloped SVG whose text runs name their
+// family, and the boxes a click is tested against. Hand-written because this
+// script runs under Node's own loader, which cannot import canvas-render's
+// TypeScript.
+const svgOf = (runs) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" width="220" height="80" viewBox="0 0 220 80"><rect x="0" y="0" width="220" height="80" fill="#ffffff" role="presentation"/>${runs}</svg>`
+const run = (family, y, text) =>
+  `<g fill="#404040" font-family="${family}" font-size="16"><text x="10" y="${y}">${text}</text></g>`
+const BOXES = [{ id: 'text-1', box: { x: 10, y: 10, width: 160, height: 25 } }]
+// The themed picture a daemon that HOLDS the face draws: it declares Yomogi,
+// which is what makes the widget fetch it (owner decision q80).
+const THEMED_PICTURE = {
+  svg: svgOf(run('Yomogi, Roboto, system-ui, sans-serif', 28, SAMPLE_TEXT)),
+  boxes: BOXES,
+}
+const THEMED_TOOL_RESULT = {
+  structuredContent: {
+    workspaceId: 'ws-smoke',
+    documentId: 'smoke/board',
+    style: 'document',
+    themeFont: { family: 'Yomogi', url: YOMOGI_URL },
+  },
+  _meta: { 'whiteboard/canvas-view-picture': THEMED_PICTURE },
 }
 
-const SAMPLE_SCENE = {
-  nodes: [
-    { id: 'text-1', type: 'text', x: 10, y: 10, width: 160, height: 25, text: SAMPLE_TEXT },
+const SAMPLE_PICTURE = {
+  svg: svgOf(
+    run('Roboto, system-ui, sans-serif', 28, SAMPLE_TEXT) +
+      run('Roboto, system-ui, sans-serif', 68, JP_TEXT),
+  ),
+  boxes: [
+    ...BOXES,
     // Non-Latin text exercises the browser-fallback glyph path (Roboto's
     // Latin-only vendored subset does not cover CJK) while the zero-network
     // assertion below confirms it never triggers a font fetch.
@@ -69,9 +94,8 @@ const SAMPLE_SCENE = {
     // claim — it shows the widget fetches nothing even when the glyph is
     // genuinely unavailable. CI once apt-installed a CJK font for this and it
     // hung the job in three separate shapes; do not add it back.
-    { id: 'text-jp', type: 'text', x: 10, y: 50, width: 200, height: 25, text: JP_TEXT },
+    { id: 'text-jp', box: { x: 10, y: 50, width: 200, height: 25 } },
   ],
-  edges: [],
 }
 
 function fail(message) {
@@ -216,20 +240,9 @@ async function checkThemedToolResult(browser, injectedHtml) {
   // Delivered through the widget's own tool-result path (the debug hook
   // widget-entry exposes only under __WHITEBOARD_WIDGET_DEBUG__), because
   // no MCP Apps host answers the handshake in this harness.
-  await themedPage.evaluate(
-    (payload) => {
-      window.__whiteboardWidgetToolResult__?.(payload)
-    },
-    {
-      structuredContent: {
-        workspaceId: 'ws-smoke',
-        documentId: 'smoke/board',
-        scene: THEMED_SCENE,
-        style: 'document',
-        themeFont: { family: 'Yomogi', url: YOMOGI_URL },
-      },
-    },
-  )
+  await themedPage.evaluate((payload) => {
+    window.__whiteboardWidgetToolResult__?.(payload)
+  }, THEMED_TOOL_RESULT)
 
   // NOT `document.fonts.check('12px Yomogi')`, which was tried and is
   // vacuous: per the CSS Font Loading spec a family the face set does not
@@ -330,20 +343,9 @@ async function checkUnderHostCsp(browser, injectedHtml) {
   )
   await cspPage.goto(`${WIDGET_ORIGIN}/`)
   await cspPage.waitForSelector('svg')
-  await cspPage.evaluate(
-    (payload) => {
-      window.__whiteboardWidgetToolResult__?.(payload)
-    },
-    {
-      structuredContent: {
-        workspaceId: 'ws-smoke',
-        documentId: 'smoke/board',
-        scene: THEMED_SCENE,
-        style: 'document',
-        themeFont: { family: 'Yomogi', url: YOMOGI_URL },
-      },
-    },
-  )
+  await cspPage.evaluate((payload) => {
+    window.__whiteboardWidgetToolResult__?.(payload)
+  }, THEMED_TOOL_RESULT)
 
   // Both faces, under the declared policy. The face set is the observation
   // that can refute the claim — `document.fonts.check()` cannot, since per
@@ -400,7 +402,7 @@ async function checkUnderHostCsp(browser, injectedHtml) {
  * bundled Chromium does.
  *
  * The 30s budget is headroom rather than taste: CI runners parse and
- * execute the 1.9 MB inline bundle noticeably slower than the file:// pages
+ * execute the ~1 MB inline bundle noticeably slower than the file:// pages
  * this smoke checks first.
  */
 async function waitForWidgetSvg(page) {
@@ -452,7 +454,7 @@ async function checkSrcdocHosting(browser, injectedHtml) {
     iframe.srcdoc = widgetHtml
     document.body.appendChild(iframe)
   }, injectedHtml)
-  // CI runners parse+execute the 1.9 MB inline bundle noticeably slower
+  // CI runners parse+execute the ~1 MB inline bundle noticeably slower
   // than the file:// pages above; give the sandboxed frame extra headroom.
   const srcdocSvgCount = await waitForWidgetSvg(srcdocPage)
   if (srcdocSvgCount === 0) {
@@ -532,12 +534,12 @@ async function main() {
   }
 
   const injectedHtml = html.replace(
-    /(<script type="application\/json" data-whiteboard-scene>)(.*?)(<\/script>)/s,
+    /(<script type="application\/json" data-whiteboard-picture>)(.*?)(<\/script>)/s,
     (_match, open, _placeholder, close) =>
-      `${open}${serializeSceneForScriptTag(SAMPLE_SCENE)}${close}`,
+      `${open}${serializeForScriptTag(SAMPLE_PICTURE)}${close}`,
   )
   if (injectedHtml === html) {
-    fail('could not find the embedded-scene <script> slot to inject the sample scene into')
+    fail('could not find the embedded-picture <script> slot to inject the sample picture into')
     return
   }
 

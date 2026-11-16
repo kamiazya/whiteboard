@@ -2,16 +2,12 @@
  * Maps a click on the widget's rendered SVG to CANVAS coordinates — the
  * anchor a comment stores (ADR-0024).
  *
- * Two render shapes exist and each maps differently:
- *
- * - The widget's default render is the legacy bodyless-root SVG (no
- *   viewBox, no width/height — see canvas-render's decision #5), where one
- *   SVG user unit is one CSS pixel and the origin is the element's own
- *   top-left corner. The offset from the corner IS the canvas point.
- * - A render with a document envelope carries a viewBox; the click maps
- *   linearly through it. ponytail: this branch assumes the CSS box matches
- *   the viewBox's aspect ratio (no preserveAspectRatio letterboxing); solve
- *   with getScreenCTM if an envelope-rendered widget ever ships.
+ * Through the element's screen matrix where the realm has one: the picture
+ * is scaled to the widget's frame with its proportions kept, so it can sit
+ * letterboxed inside its box, and only the matrix knows where the drawing
+ * itself starts. Without one (jsdom), a viewBox maps linearly over the
+ * element's box, and a root with no viewBox is one CSS pixel per unit from
+ * the element's own corner.
  *
  * Answers `undefined` for a degenerate element (a rect with no positive width
  * and height) — a click nobody can map is not an anchor. An unparseable
@@ -25,6 +21,11 @@ export function canvasPointFromClick(
 ): { readonly x: number; readonly y: number } | undefined {
   const rect = svg.getBoundingClientRect()
   if (!(rect.width > 0) || !(rect.height > 0)) return undefined
+  const matrix = typeof svg.getScreenCTM === 'function' ? svg.getScreenCTM() : null
+  if (matrix !== null) {
+    const point = new DOMPoint(clientX, clientY).matrixTransform(matrix.inverse())
+    return { x: Math.round(point.x), y: Math.round(point.y) }
+  }
 
   const viewBox = parseViewBox(svg.getAttribute('viewBox'))
   if (viewBox === undefined) {

@@ -1,8 +1,21 @@
-import { createServer, type ServerDeps } from '@kamiazya/whiteboard-server-core'
+import { CANVAS_VIEW_PICTURE_META_KEY } from '@kamiazya/whiteboard-canvas-render'
+import { canvasViewPicture, createServer, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { gatedByMembership } from '../security/mcp-caller.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
+
+/**
+ * `canvas_view`'s answer: what the model reads, unchanged, and in `_meta` the
+ * picture the MCP Apps widget shows — laid out here from the gated call's own
+ * answer, so the widget lays nothing out (server-core's `canvasViewPicture`).
+ */
+async function canvasViewAnswer(deps: ServerDeps, result: Parameters<typeof canvasViewPicture>[1]) {
+  return {
+    ...structuredJsonResult(result),
+    _meta: { [CANVAS_VIEW_PICTURE_META_KEY]: await canvasViewPicture(deps, result) },
+  }
+}
 
 export function registerDocumentTools(server: McpServer, deps: ServerDeps): void {
   const tools = gatedByMembership(createServer(deps).tools, deps.documentIndex)
@@ -83,8 +96,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.canvasView.inputSchema.parse(args)
-      const result = await tools.canvasView.execute(parsed)
-      return structuredJsonResult(result)
+      return canvasViewAnswer(deps, await tools.canvasView.execute(parsed))
     },
   )
 

@@ -29,8 +29,10 @@ no need to switch to a browser tab to see what the agent drew.
   box reads "Image" rather than the image's storage id. The widget has no store of its own, so
   the server resolves these and sends them in the tool result alongside the scene.
 - One self-contained viewer bundle — no daemon credentials, tokens, or
-  base URLs are ever passed into the widget. The widget only ever receives the scene
-  snapshot plus the resolved references above — nothing else.
+  base URLs are ever passed into the widget. The widget lays nothing out: the server
+  lays the board out (the same layout `wb_scene_render` draws) and hands the widget
+  that picture, with each node's box so a click can name the node it lands on —
+  nothing else.
 - No external network access, with **one exception**: the bundle is fully self-contained
   (the default font and every other asset are inlined), and the only request the view can
   ever make is for the one font family a theme names — from the Google Fonts catalogue's
@@ -38,6 +40,11 @@ no need to switch to a browser tab to see what the agent drew.
   The view declares that single origin to your client so its CSP can allow exactly it and
   nothing else. Hosts that restrict this further are fine: the board then draws in the
   bundled family and nothing else changes.
+- A theme's font is drawn only where the **server** can measure it, because the server lays
+  the board out: on a server that has not installed the family the theme names (Yomogi, for
+  the sketch theme), the view draws the bundled Roboto — exactly as `wb_scene_render` and the
+  PNG/SVG export do — and fetches nothing. Installing the font through the daemon's font
+  installer (Settings > Fonts in the web app) brings it to all three.
 
 ## Refreshing the view
 
@@ -128,9 +135,10 @@ The result's `structuredContent` carries `{ workspaceId, documentId, scene, thre
 markdown embeds or links — and maps each reference to what it resolves to, `{ documentId?, name?, body?, canvas? }` — `name` is the referenced
 document's display name, `body` is present for a markdown document and `canvas` (as JSON Canvas) for a
 spatial one. `style` echoes the style you asked for, and `themeFont` names the resolved theme's font
-family when the server knows where to fetch it. `scene` is a
-shape the canvas-viewer package's `parseViewerScene` accepts, so a supporting client
-renders it immediately. On a client without MCP Apps support, you see this JSON as
-the tool result instead of an inline view.
+family when the server knows where to fetch it. `scene` is the
+board as JSON Canvas. The picture the widget shows travels beside it, in the result's
+`_meta` under `whiteboard/canvas-view-picture` (`{ svg, boxes }`), which MCP Apps hands
+the view and no model reads. On a client without MCP Apps support, you see the
+structured content as the tool result instead of an inline view.
 
 ← Back to [How-to guides](README.md)

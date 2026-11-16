@@ -5,18 +5,23 @@
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
 import {
-  resolveCanvasPalette,
+  type CanvasViewPicture,
+  canvasViewPictureSchema,
+  pictureNodeAt,
   type SpatialRenderStyle,
-  topmostNodeAt,
-} from '@kamiazya/whiteboard-canvas-render'
+} from '@kamiazya/whiteboard-canvas-render/canvas-view-picture'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { dataUriToBytes } from './font-loading.js'
-import { type CanvasViewerHandle, mountCanvasViewer } from './mount.js'
-import { parseViewerScene, type ViewerScene } from './scene.js'
 import { canvasPointFromClick } from './widget/canvas-point.js'
 import { readCanvasViewResult } from './widget/canvas-view-result.js'
 import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
+import {
+  mountPicture,
+  type PictureHandle,
+  pictureDeclaresFamily,
+  pictureSvgElement,
+} from './widget/picture-view.js'
 import { createRefreshControl } from './widget/refresh-control.js'
 import { guardSceneLinks, type SceneLinkGuard } from './widget/scene-links.js'
 import { loadThemeFont } from './widget/theme-font.js'
@@ -81,10 +86,11 @@ function registerFonts(): void {
 }
 
 // MCP Apps (SEP-1865) bridge bootstrap. The host sends the canvas_view tool
-// result via `ui/notifications/tool-result`; `structuredContent` there is
-// the same `{documentId, scene}` shape returned by canvas_view's Zod
-// outputSchema. This widget never receives daemon credentials — only the
-// scene snapshot plus, once connected, the host's own MCP session — so its
+// result via `ui/notifications/tool-result`: `structuredContent` carries the
+// ids and the look the result was drawn under, and `_meta` the picture the
+// daemon laid out (`canvasViewPictureSchema`), which is all this widget
+// draws. It never receives daemon credentials — only that result plus, once
+// connected, the host's own MCP session — so its
 // only outbound path is re-invoking canvas_view through
 // `app.callServerTool`, which is what the Refresh control below does; there
 // is no direct daemon access from this document.
@@ -93,8 +99,8 @@ function registerFonts(): void {
 // directly in a browser, or the widget-smoke harness), `app.connect()`
 // never resolves because no PostMessageTransport peer answers on the other
 // end — `mountFromHost` races that against `HOST_CONNECT_TIMEOUT_MS` below
-// so bootstrap always falls back to mountCanvasViewer's own embedded-scene
-// slot instead of hanging forever.
+// so bootstrap always falls back to the embedded-picture slot instead of
+// hanging forever.
 const HOST_CONNECT_TIMEOUT_MS = 2_000
 
 // Whether a result is an application-level failure rather than a
@@ -109,12 +115,6 @@ function isErrorResult(payload: unknown): boolean {
     (payload as { isError?: unknown }).isError === true
   )
 }
-
-/**
- * The mode the widget draws in — `CanvasViewer`'s own default, restated here
- * because the paper has to be resolved from the same one the layout uses.
- */
-const WIDGET_THEME_MODE = 'light'
 
 /**
  * The delivery half (ADR-0024 decision 5): where the host accepts
@@ -162,9 +162,11 @@ function announceComment(
 type OnValidResult = (
   workspaceId: string | undefined,
   documentId: string | undefined,
-  scene: ViewerScene,
+  picture: CanvasViewPicture,
   style: SpatialRenderStyle | undefined,
 ) => void
+
+type Remount = (mount: () => PictureHandle) => void
 
 // What the person reads when a failure brings no reason of its own: a
 // rejected host call, or a result the server answered without text. Both
@@ -178,69 +180,48 @@ function failureReason(result: unknown, fallback: string): string {
   return (isErrorResult(result) ? toolErrorText(result) : undefined) ?? fallback
 }
 
-/** Counts applied results, so a late font load can tell whether it is stale. */
-let appliedGeneration = 0
-
 // The initial tool-result and every refresh response arrive in the same
 // envelope, so one path applies both and holds the malformed-payload defense
 // and the id commit rule in one place. It validates BEFORE remount: remount
-// disposes the live viewer first, so a malformed payload would otherwise
+// disposes the live view first, so a malformed payload would otherwise
 // trade a working view for an empty container. `onValidResult` fires only
-// once parseViewerScene has accepted the scene, which is what keeps ids from
+// once the picture has been read and checked, which is what keeps ids from
 // an unvalidated result from ever being committed. Reading the envelope
 // itself is `readCanvasViewResult`'s job.
 function applyToolResult(
   payload: unknown,
   container: HTMLElement,
-  remount: (mount: () => CanvasViewerHandle) => void,
+  remount: Remount,
   onValidResult: OnValidResult,
 ): boolean {
   if (isErrorResult(payload)) {
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return false
   }
-  const { workspaceId, documentId, scene, references, threads, style, themeFont } =
-    readCanvasViewResult(payload)
-  const result = parseViewerScene(scene)
-  if (!result.ok) {
+  const { workspaceId, documentId, picture, style, themeFont } = readCanvasViewResult(payload)
+  const element = picture === undefined ? undefined : pictureSvgElement(picture.svg)
+  if (picture === undefined || element === undefined) {
     // Surfaced for host-integration debugging: the widget deliberately
     // keeps the current view on malformed payloads, which would otherwise
     // make a host sending the wrong shape look like a silent no-op.
-    console.error('[whiteboard-widget] ignoring tool-result with invalid scene:', result.error)
+    console.error('[whiteboard-widget] ignoring tool-result with no drawable picture:', payload)
     return false
   }
-  // References ride along with the scene: a file node pointing at a
-  // markdown document renders that document's prose only if the server put
-  // it in the payload, since this widget has no store to read it from.
-  const mount = () =>
-    mountCanvasViewer(container, {
-      scene,
-      // A theme's paper, which no node carries — the one part of a look that
-      // is the ground rather than the ink, and without it a themed canvas is
-      // drawn on whatever the host's chat surface happens to be. Resolved
-      // for the style THIS result was drawn under (absent is the bundled
-      // look, which has paper too) and for the mode the viewer draws in.
-      background: resolveCanvasPalette(result.value, WIDGET_THEME_MODE, {
-        style: style ?? 'clean',
-      }).surface,
-      ...(references === undefined ? {} : { references }),
-      ...(threads === undefined ? {} : { threads }),
-      ...(style === undefined ? {} : { style }),
-    })
-  // Identifies THIS result, so a font that arrives after a newer result has
-  // already drawn cannot redraw the older scene.
-  appliedGeneration += 1
-  const generation = appliedGeneration
-  remount(mount)
-  onValidResult(workspaceId, documentId, result.value, style)
+  remount(() => mountPicture(container, element))
+  onValidResult(workspaceId, documentId, picture, style)
   // The widget's one exception to its zero-network rule (ADR-0011's
   // 2026-09-10 note): a theme's family, from the pinned catalogue origin,
-  // and only while actually drawing that theme. The scene is already on
-  // screen in the bundled family, so this is a redraw, never a gate.
-  if (themeFont !== undefined && style !== undefined && style !== 'clean') {
-    void loadThemeFont(themeFont).then((outcome) => {
-      if (outcome === 'loaded' && generation === appliedGeneration) remount(mount)
-    })
+  // only while drawing that theme, and only when the picture actually names
+  // it — the daemon declares a family only where it measured with it. The
+  // picture is already on screen; once the face loads the browser repaints
+  // its text in it, so this is never a gate and never a redraw.
+  if (
+    themeFont !== undefined &&
+    style !== undefined &&
+    style !== 'clean' &&
+    pictureDeclaresFamily(element, themeFont.family)
+  ) {
+    void loadThemeFont(themeFont)
   }
   return true
 }
@@ -250,31 +231,28 @@ function applyToolResult(
  * node the click landed on is its target, so the pin follows that node.
  */
 function pickAnchor(
-  scene: ViewerScene | undefined,
+  picture: CanvasViewPicture | undefined,
   point: { readonly x: number; readonly y: number },
 ): { anchor: { x: number; y: number; targetNodeId?: string }; label: string } {
-  const target = scene === undefined ? undefined : topmostNodeAt(scene.nodes, point)
+  const target = picture === undefined ? undefined : pictureNodeAt(picture, point)
   const where = `(${point.x}, ${point.y})`
   return target === undefined
     ? { anchor: { ...point }, label: where }
-    : { anchor: { ...point, targetNodeId: target.id }, label: `${target.id} ${where}` }
+    : { anchor: { ...point, targetNodeId: target }, label: `${target} ${where}` }
 }
 
 // `remount` is the single place a mount produced by this bridge happens.
 // `app.connect()` racing HOST_CONNECT_TIMEOUT_MS means a tool-result can
 // legitimately arrive AFTER the caller already decided `connectedToHost`
-// was false and mounted its own embedded-scene fallback (a connect() that
+// was false and mounted its own embedded-picture fallback (a connect() that
 // resolves just past the timeout, or a host that answers the handshake
 // slowly), and a host may deliver tool-results more than once. Routing
-// every mount through the same callback — which disposes whichever handle
-// is currently live and clears the container BEFORE the factory creates
-// the next root — is what keeps two React roots from ever competing for
-// the same container (createRoot on a container whose children still
-// belong to an undisposed root crashes React with a removeChild
-// NotFoundError).
+// every mount through the same callback — which disposes whichever view is
+// live and clears the container BEFORE the factory places the next — is
+// what keeps two pictures from ever stacking in one container.
 async function mountFromHost(
   container: HTMLElement,
-  remount: (mount: () => CanvasViewerHandle) => void,
+  remount: Remount,
   links: SceneLinkGuard,
 ): Promise<boolean> {
   // No parent frame — this document cannot be an embedded MCP Apps view.
@@ -282,7 +260,7 @@ async function mountFromHost(
 
   const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
 
-  // Committed only once a tool-result has actually passed parseViewerScene —
+  // Committed only once a tool-result's picture has been read and checked —
   // unvalidated ids must never enable Refresh or the comment affordance
   // (either would call back into the daemon with ids nobody confirmed are
   // real). BOTH ids, because every follow-up call's strict input schema
@@ -293,17 +271,17 @@ async function mountFromHost(
   // for it again, since `canvas_view` answers the bundled look to a call that
   // names none.
   let committed: { workspaceId: string; documentId: string; style?: SpatialRenderStyle } | undefined
-  // The validated scene, kept for click-to-anchor hit-testing: a click
-  // inside a node's stored box names that node as the comment's target, so
-  // the pin follows the node rather than the spot it happened to occupy.
-  let committedScene: ViewerScene | undefined
+  // The shown picture, kept for click-to-anchor hit-testing: a click inside
+  // a node's stored box names that node as the comment's target, so the pin
+  // follows the node rather than the spot it happened to occupy.
+  let committedPicture: CanvasViewPicture | undefined
   let refreshControl: ReturnType<typeof createRefreshControl> | undefined
   let commentControl: ReturnType<typeof createCommentControl> | undefined
 
-  const commitResult: OnValidResult = (workspaceId, documentId, scene, style) => {
+  const commitResult: OnValidResult = (workspaceId, documentId, picture, style) => {
     if (workspaceId === undefined || documentId === undefined) return
     committed = { workspaceId, documentId, ...(style === undefined ? {} : { style }) }
-    committedScene = scene
+    committedPicture = picture
     refreshControl?.show()
     commentControl?.show()
   }
@@ -429,7 +407,7 @@ async function mountFromHost(
       if (!(svg instanceof SVGSVGElement)) return
       const point = canvasPointFromClick(svg, event.clientX, event.clientY)
       if (point === undefined) return
-      const picked = pickAnchor(committedScene, point)
+      const picked = pickAnchor(committedPicture, point)
       pendingAnchor = picked.anchor
       commentControl.setAnchor(picked.label)
     })
@@ -445,6 +423,29 @@ async function mountFromHost(
   return connected
 }
 
+const EMBEDDED_PICTURE_SELECTOR = 'script[type="application/json"][data-whiteboard-picture]'
+
+/**
+ * The picture a document that is not hosted shows: the shell's
+ * `<script data-whiteboard-picture>` slot, which a step serving the file
+ * directly fills (`serializeForScriptTag`). Nothing drawable there leaves the
+ * splash, and says why.
+ */
+function readEmbeddedPicture(): SVGSVGElement | undefined {
+  const text = document.querySelector(EMBEDDED_PICTURE_SELECTOR)?.textContent ?? ''
+  let value: unknown
+  try {
+    value = JSON.parse(text)
+  } catch (err) {
+    console.error('[whiteboard-widget] embedded picture is not JSON:', err)
+    return undefined
+  }
+  const picture = canvasViewPictureSchema.safeParse(value)
+  const element = picture.success ? pictureSvgElement(picture.data.svg) : undefined
+  if (element === undefined) console.error('[whiteboard-widget] embedded picture is not drawable')
+  return element
+}
+
 async function bootstrap(): Promise<void> {
   registerFonts()
 
@@ -454,10 +455,10 @@ async function bootstrap(): Promise<void> {
   }
 
   const links = guardSceneLinks(container)
-  let handle: CanvasViewerHandle | undefined
-  // Order matters: dispose the live root and clear its DOM BEFORE the
-  // factory creates the next root — see mountFromHost's doc comment.
-  const remount = (mount: () => CanvasViewerHandle): void => {
+  let handle: PictureHandle | undefined
+  // Order matters: dispose the live view and clear its DOM BEFORE the
+  // factory places the next one — see mountFromHost's doc comment.
+  const remount: Remount = (mount) => {
     handle?.dispose()
     container.replaceChildren()
     handle = mount()
@@ -475,12 +476,13 @@ async function bootstrap(): Promise<void> {
 
   const connectedToHost = await mountFromHost(container, remount, links)
   if (!connectedToHost && handle === undefined) {
-    // The embedded-scene fallback goes through the same remount path: a
-    // slow host can deliver a tool-result mount in the gap between the
-    // timeout losing the race and this line, and a bare mountCanvasViewer
-    // here would then stack a second root on the container. The handle
-    // check keeps a just-arrived host scene instead of replacing it.
-    remount(() => mountCanvasViewer(container))
+    // The embedded-picture fallback goes through the same remount path: a
+    // slow host can deliver a tool-result in the gap between the timeout
+    // losing the race and this line, and a bare mount here would then stack
+    // a second view in the container. The handle check keeps a just-arrived
+    // host picture instead of replacing it.
+    const element = readEmbeddedPicture()
+    if (element !== undefined) remount(() => mountPicture(container, element))
   }
 }
 

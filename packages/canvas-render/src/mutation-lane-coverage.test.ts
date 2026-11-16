@@ -441,9 +441,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // Outside the lane for the same reason: one wrapper and the switch's
     // handling of what it asked, every branch driven by
     // `layout/fragment-table.test.ts` and mutation-checked by hand.
+    // 134 with `hit-boxes.ts`, the box half of `hit-test.ts` split out with no
+    // import so the MCP Apps widget can read it, and
+    // `picture/canvas-view-picture.ts`, the widget's picture contract (a schema
+    // and one call into `topmostHit`). Outside the lane as `hit-test.ts` is:
+    // `hit-test.test.ts` and the widget's picture tests pin every branch.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 25,
-      production: 132,
+      production: 134,
     })
   })
 

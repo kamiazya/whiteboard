@@ -207,3 +207,27 @@ enforces the same bound), and `smoke-widget.mjs`, which still asserts **zero**
 requests for a plain render and asserts **exactly one**, to that URL, for a
 themed one. A host that narrows CSP further simply gets the bundled family —
 the degradation ADR-0030 already declares.
+
+**2026-11-16 — correction to the 2026-09-10 note: the widget no longer
+measures, so the fetch no longer decides the lettering (owner decision q80,
+provisional, under ADR-0054's q54).** The widget lays nothing out any more:
+the daemon lays the board out with its own measurer and hands the widget the
+SVG (ADR-0054 step 7, S17). A family is therefore declared only where the
+DAEMON holds a face for it — the rule `wb_scene_render` and the export already
+followed — and on a default daemon, which has not installed Yomogi, a
+sketch-themed board in the widget draws in the bundled Roboto again, exactly as
+the daemon's SVG and PNG do. That reverts the user-visible half of the note
+above for the default install; installing the family through the daemon's
+font installer brings it back to all three surfaces at once. The other options
+were the daemon fetching the catalogue face on demand for `canvas_view` (a
+render-path download this ADR says the daemon never makes) and keeping a
+TypeScript layout in the widget for this one case (refused by q54).
+
+What stays of the exception: the widget still fetches a theme's family, from
+the same pinned origin and under the same CSP, but only when the picture it was
+handed DECLARES that family — a face the daemon did not measure with is a
+download nothing would draw with. A redraw on arrival is gone with the layout:
+the face is added to the frame and the browser repaints the picture's text in
+it. The decision is kept easy to revisit: if the owner chooses the on-demand
+fetch instead, the daemon declares the family and the widget's half already
+fetches it.
