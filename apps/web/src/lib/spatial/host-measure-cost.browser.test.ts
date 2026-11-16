@@ -342,19 +342,25 @@ function timedDrag(board: WebLayoutBoard, real: WebCore, rounds = 15) {
     ['warm', (at: number) => lay(at, hosted, coreCache, core)],
   ] as const
   const answeredBefore = tally.answered
+  // Each round as it ran, so a reader can check the medians and any order effect.
+  const log: string[] = []
   for (let i = 0; i < rounds; i += 1) {
     const at = i + 3
+    const ran: string[] = []
     // Each round starts from the next variant, so none always runs first.
     for (let k = 0; k < variants.length; k += 1) {
       const [name, run] = variants[(i + k) % variants.length] as (typeof variants)[number]
       const start = performance.now()
       run(at)
-      times[name].push(performance.now() - start)
+      const ms = performance.now() - start
+      times[name].push(ms)
+      ran.push(`${name} ${ms.toFixed(2)}`)
     }
+    log.push(ran.join(', '))
   }
   expect(tally.reports, board.name).toEqual([])
   expect(tally.answered - answeredBefore, board.name).toBe(2 * rounds)
-  return { ts: median(times.ts), cold: median(times.cold), warm: median(times.warm) }
+  return { ts: median(times.ts), cold: median(times.cold), warm: median(times.warm), log }
 }
 
 describe.runIf(RUN)('a drag frame through the core, with and without its content cache', () => {
@@ -366,13 +372,14 @@ describe.runIf(RUN)('a drag frame through the core, with and without its content
     const real = await loadWebCore(fetch)
     await ensureViewerFontLoaded()
     const rows = webLayoutBoards().map((board) => {
-      const { ts, cold, warm } = timedDrag(board, real)
+      const { ts, cold, warm, log } = timedDrag(board, real)
       return {
         board: board.name,
         'ts warm ms': ts.toFixed(2),
         'core, no cache ms': cold.toFixed(2),
         'core, cache ms': warm.toFixed(2),
         'cache / no cache': (warm / cold).toFixed(2),
+        rounds: log,
       }
     })
     expect(rows).toHaveLength(webLayoutBoards().length)
