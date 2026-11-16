@@ -36,7 +36,7 @@ import {
   type LayoutRequest,
   layoutSpatialCanvas,
 } from './layout.js'
-import { LayoutCaches } from './layout-caches.js'
+import { layoutCachesOf } from './layout-caches.js'
 import {
   type OkfDocument,
   type OkfErrors,
@@ -328,7 +328,7 @@ export function coreFrom(glue: CoreGlue, source: BufferSource | WebAssembly.Modu
     invalid: (issues) => new CoreSpatialInvalid(issues),
   }
   const fonts = new FontHandles(layout, errors)
-  const caches = new LayoutCaches(layout)
+  const caches = layoutCachesOf(layout)
   return {
     parseSpatial: (text) => parseSpatial(spatial, errors, text),
     serializeSpatial: (canvas, mode) => serializeSpatial(spatial, errors, canvas, mode),

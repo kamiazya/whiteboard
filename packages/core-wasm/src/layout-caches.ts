@@ -41,3 +41,20 @@ export class LayoutCaches {
     return surface
   }
 }
+
+const BY_INSTANCE = new WeakMap<CachesGlue, LayoutCaches>()
+
+/**
+ * The surfaces `glue`'s instance names. One per glue, not per core:
+ * wasm-bindgen's `initSync` answers the instance it already holds, so every
+ * core built over one glue shares the instance's store, and two allocators
+ * would hand two caches one surface.
+ */
+export function layoutCachesOf(glue: CachesGlue): LayoutCaches {
+  let caches = BY_INSTANCE.get(glue)
+  if (caches === undefined) {
+    caches = new LayoutCaches(glue)
+    BY_INSTANCE.set(glue, caches)
+  }
+  return caches
+}
