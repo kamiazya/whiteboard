@@ -16,6 +16,7 @@
 
 import {
   type FragmentAsk,
+  type FragmentEntry,
   fragmentAskKey,
   type RenderedSvgFragment,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -64,20 +65,36 @@ export function recordingFragmentSeams(
   }
 }
 
-/** Runs `layout` once with recording seams; the distinct sources it asked for, in order. */
-function recordFragmentAsks<T>(layout: (seams: FragmentSeams) => T): {
-  readonly result: T
-  readonly asks: readonly FragmentAsk[]
+/**
+ * The two layout options that carry fragments as data: what has rendered,
+ * and a listener for the sources it could not answer. This is the shape
+ * every spatial layout this app runs takes, because a function seam is one
+ * the Rust core cannot be handed (the request gate skips it), and a table is.
+ */
+export interface FragmentTable {
+  readonly fragments: readonly FragmentEntry[]
+  readonly onFragmentsAsked: (asks: readonly FragmentAsk[]) => void
+}
+
+/**
+ * A table over `entries` that collects every source a layout could not
+ * answer, once each, in the order asked — for a layout whose caller reads
+ * the asks after it returns (the worker reports them, an export renders them).
+ */
+export function recordingFragmentTable(entries: readonly FragmentEntry[] = []): FragmentTable & {
+  readonly asked: ReadonlyMap<string, FragmentAsk>
 } {
   const asked = new Map<string, FragmentAsk>()
-  const seams = recordingFragmentSeams(
-    () => undefined,
-    (ask, key) => {
-      if (!asked.has(key)) asked.set(key, ask)
+  return {
+    fragments: entries,
+    onFragmentsAsked: (asks) => {
+      for (const ask of asks) {
+        const key = fragmentAskKey(ask)
+        if (!asked.has(key)) asked.set(key, ask)
+      }
     },
-  )
-  const result = layout(seams)
-  return { result, asks: [...asked.values()] }
+    asked,
+  }
 }
 
 /**
@@ -87,23 +104,22 @@ function recordFragmentAsks<T>(layout: (seams: FragmentSeams) => T): {
  * fallback, as it does on screen. Nothing asked, the first pass is the answer.
  */
 export async function layoutWithFragments<T>(
-  layout: (seams: FragmentSeams) => T,
+  layout: (table: FragmentTable) => T,
   loaders: FragmentLoaders,
 ): Promise<T> {
-  const { result, asks } = recordFragmentAsks(layout)
-  if (asks.length === 0) return result
-  const rendered = new Map(
-    await Promise.all(
-      asks.map(
-        async (ask) =>
-          [fragmentAskKey(ask), await loadFragment(ask, loaders).catch(() => undefined)] as const,
-      ),
+  const first = recordingFragmentTable()
+  const result = layout(first)
+  if (first.asked.size === 0) return result
+  const rendered = await Promise.all(
+    [...first.asked].map(
+      async ([key, ask]) => [key, await loadFragment(ask, loaders).catch(() => undefined)] as const,
     ),
   )
   return layout(
-    recordingFragmentSeams(
-      (key) => rendered.get(key),
-      () => {},
+    recordingFragmentTable(
+      rendered.flatMap(([key, fragment]): FragmentEntry[] =>
+        fragment === undefined ? [] : [[key, fragment]],
+      ),
     ),
   )
 }

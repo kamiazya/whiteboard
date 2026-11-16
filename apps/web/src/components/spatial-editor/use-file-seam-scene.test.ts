@@ -342,7 +342,7 @@ describe('useFileSeamScene reference chrome', () => {
     expect(after.svg).toContain('Deep label')
   })
 
-  it("hands the core the editor's own layout options as a request, labels and dangling marks as extras", async () => {
+  it("hands the core the editor's own layout options as a request, extras and fragment table included", async () => {
     const { result } = renderHook(() =>
       useFileSeamScene({
         canvas: board,
@@ -355,7 +355,6 @@ describe('useFileSeamScene reference chrome', () => {
       }),
     )
     await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fa']))
-    const { renderMath, renderDiagram, ...referenceOptions } = result.current.fileSeamOptions
     const ask = (options: Partial<SpatialLayoutOptions>) => {
       const asked: CanvasLayoutRequest[] = []
       const skipped: string[] = []
@@ -376,9 +375,9 @@ describe('useFileSeamScene reference chrome', () => {
       layoutSpatialCanvasWithAnchors(board, { ...base, ...options, core })
       return { asked, skipped }
     }
-    // The fragment seams are this surface's other function (typeset math and
-    // diagrams); with them set aside, nothing about references holds it back.
-    const { asked, skipped } = ask(referenceOptions)
+    // Every option the editor lays out with, its typeset math and diagrams
+    // included: they ride as a table, which the core answers from.
+    const { asked, skipped } = ask(result.current.fileSeamOptions)
     expect(skipped).toEqual([])
     expect(asked).toHaveLength(1)
     expect(asked[0]?.expand).toEqual(['fa'])
@@ -387,8 +386,6 @@ describe('useFileSeamScene reference chrome', () => {
       'doc-b': { label: 'Beta' },
       'doc-gone': { missing: true },
     })
-    expect(ask({ ...referenceOptions, renderMath, renderDiagram }).skipped).toEqual([
-      'seam:renderMath',
-    ])
+    expect(asked[0]?.fragments).toEqual([])
   })
 })

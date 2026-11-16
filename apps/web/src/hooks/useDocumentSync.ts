@@ -563,8 +563,8 @@ export function useDocumentSync(
       // Waits for every math block and diagram fence the layout asks for —
       // a text node's, a file node's note's — so the file is typeset as the screen is.
       const drawn = await layoutWithFragments(
-        (seams) =>
-          renderCanvasForExport(exported, { ...options, measure, threads, ...seams, comments }),
+        (table) =>
+          renderCanvasForExport(exported, { ...options, measure, threads, ...table, comments }),
         FRAGMENT_ENGINES,
       )
       await codecsReady()

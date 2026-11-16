@@ -109,13 +109,17 @@ export interface RenderCanvasCoreOptions {
    */
   readonly onDegrade?: SpatialLayoutOptions['onDegrade']
   /**
-   * Typeset math blocks and diagram fences in every body the layout reaches
-   * (canvas-render's seams, threaded verbatim). Synchronous: a host answers
-   * from fragments it rendered ahead (`lib/fragment-requests.ts`). Absent,
-   * math keeps its source placeholder and a fence is a plain code block.
+   * Typeset math blocks and diagram fences in every body the layout reaches,
+   * from the fragments this realm has rendered (canvas-render's table, the
+   * same data the Rust core answers from). A source the table lacks keeps
+   * its fallback and is handed to `onFragmentsAsked`, once each per layout;
+   * a host renders it ahead (`lib/fragment-requests.ts`) and lays out again.
+   * Data rather than the `renderMath`/`renderDiagram` function seams, which
+   * the core's request gate skips. Both absent, math keeps its source and a
+   * fence is a plain code block.
    */
-  readonly renderMath?: SpatialLayoutOptions['renderMath']
-  readonly renderDiagram?: SpatialLayoutOptions['renderDiagram']
+  readonly fragments?: SpatialLayoutOptions['fragments']
+  readonly onFragmentsAsked?: SpatialLayoutOptions['onFragmentsAsked']
 }
 
 export interface RenderedCanvas {
@@ -180,8 +184,8 @@ export function renderCanvasToSvgWith(
     proposals: options.proposals,
     onDegrade: options.onDegrade,
     tagLibrary: options.tagLibrary,
-    renderMath: options.renderMath,
-    renderDiagram: options.renderDiagram,
+    fragments: options.fragments,
+    onFragmentsAsked: options.onFragmentsAsked,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

@@ -1,9 +1,10 @@
 // @vitest-environment node
 
-import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import type { CanvasLayoutRequest, LayoutCore } from '@kamiazya/whiteboard-canvas-render'
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { recordingFragmentTable } from '../fragment-requests.js'
 import { currentLayoutCore } from './layout-core.js'
 import { editorLayoutBase, renderCanvasToSvgWith } from './scene-render-core.js'
 
@@ -58,5 +59,47 @@ describe('the editor layout base', () => {
     vi.mocked(currentLayoutCore).mockReturnValue(core)
     renderCanvasToSvgWith(canvas, { measure })
     expect(asked).toEqual([1])
+  })
+})
+
+describe('the whole layout the editor and its worker hand the core', () => {
+  beforeEach(() => vi.mocked(currentLayoutCore).mockReset())
+
+  it('carries their math and diagram fragments as a table, never a skipped seam', () => {
+    const asked: CanvasLayoutRequest[] = []
+    const skipped: string[] = []
+    vi.mocked(currentLayoutCore).mockReturnValue({
+      routing: recordingCore().core.routing,
+      layout: {
+        layoutSpatialCanvas: (request) => {
+          asked.push(request)
+          return { declined: 'recording' } as never
+        },
+      },
+      impl: { routeLayout: 'ts', layoutSpatialCanvas: 'differential' },
+      onMismatch: (mismatch) => {
+        if (mismatch.kind === 'skipped') skipped.push(mismatch.reason)
+      },
+    })
+    const fragment = { svg: '<g/>', width: 4, height: 4 }
+    const table = recordingFragmentTable([['math:x^2', fragment]])
+    const math = {
+      nodes: [
+        textNode({
+          id: 'm',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 160,
+          text: '$$\nx^2\n$$\n\n$$\ny\n$$\n',
+        }),
+      ],
+      edges: [],
+    }
+    renderCanvasToSvgWith(math, { measure, ...table })
+    expect(skipped).toEqual([])
+    expect(asked.map((request) => request.fragments)).toEqual([[['math:x^2', fragment]]])
+    // The core declined, so the TypeScript drew it and reported what the table lacked.
+    expect([...table.asked.values()]).toEqual([{ kind: 'math', value: 'y' }])
   })
 })

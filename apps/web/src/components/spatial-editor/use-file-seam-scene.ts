@@ -165,11 +165,11 @@ function useBodySeams(
   references: ReferenceSeams | undefined,
   fragmentLoaders: FragmentLoaders | undefined,
 ) {
-  const { seams, entries, onFragmentsAsked } = useMarkdownFragments(fragmentLoaders)
+  const { table, entries, onFragmentsAsked } = useMarkdownFragments(fragmentLoaders)
   const contentCache = useMemo(
     () => createSpatialContentCache(),
-    [measure, theme, references, seams],
+    [measure, theme, references, table],
   )
-  const options = useMemo(() => ({ contentCache, ...seams }), [contentCache, seams])
+  const options = useMemo(() => ({ contentCache, ...table }), [contentCache, table])
   return { options, wire: { fragments: entries, onFragmentsAsked } }
 }
