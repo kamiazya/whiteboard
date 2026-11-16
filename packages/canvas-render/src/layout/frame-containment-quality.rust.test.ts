@@ -1,12 +1,15 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { describeMeasure } from '../measure.js'
 import {
   CORPUS_WIDTHS_PX,
+  corpusMarkdown,
   createCorpusMeasure,
   TEXT_WRAPPING_CORPUS,
 } from '../test-utils/text-wrapping-corpus.js'
+import { oracleLayoutCore } from '../test-utils/wasm/oracle-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, naturalNodeContentSize } from './spatial-canvas.js'
 
 /**
@@ -42,18 +45,7 @@ import { layoutSpatialCanvas, naturalNodeContentSize } from './spatial-canvas.js
 
 const HEIGHT_FRACTIONS: readonly number[] = [1.2, 0.8, 0.4]
 
-/** The corpus bodies are mdast; the node carries its case NAME as text. */
-function parseByName(text: string): MdastRoot {
-  const entry = TEXT_WRAPPING_CORPUS.find((candidate) => candidate.name === text)
-  if (entry === undefined) throw new Error(`no corpus case named ${text}`)
-  return entry.root
-}
-
-const APPEARANCE = {
-  resolveNode: () => ({}),
-  resolveEdge: () => ({}),
-  resolveLabel: () => ({}),
-}
+const APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 interface Debt {
   readonly hidden: number
@@ -61,21 +53,26 @@ interface Debt {
 }
 
 function scoreCase(name: string, width: number, fraction: number): Debt {
-  const measure = createCorpusMeasure().measure
-  const options = { measure, parseBody: parseByName, appearance: APPEARANCE }
-  const node = (height: number) => textNode({ id: 'n', x: 0, y: 0, width, height, text: name })
+  const measure = describeMeasure(createCorpusMeasure().measure, { kind: 'host' })
+  const options = { measure, appearance: APPEARANCE }
+  const entry = TEXT_WRAPPING_CORPUS.find((candidate) => candidate.name === name)
+  if (entry === undefined) throw new Error(`no corpus case named ${name}`)
+  const text = corpusMarkdown(entry.root)
+  const node = (height: number) => textNode({ id: 'n', x: 0, y: 0, width, height, text })
 
-  const natural = naturalNodeContentSize(node(1), options)
+  const natural = naturalNodeContentSize(node(1), { ...options, core: oracleLayoutCore() })
   // +2 padding is what `naturalNodeContentSize` documents as containing it.
   const height = Math.max(1, Math.round((natural.h + 16) * fraction))
   const canvas: SpatialCanvas = { nodes: [node(height)], edges: [] }
 
-  const painted = layoutSpatialCanvas(canvas, options).nodes.filter(
-    (entry) => entry.kind !== 'shape' && entry.kind !== 'edge',
-  )
-  const whole = layoutSpatialCanvas({ nodes: [node(100_000)], edges: [] }, options).nodes.filter(
-    (entry) => entry.kind !== 'shape' && entry.kind !== 'edge',
-  )
+  const painted = layoutSpatialCanvas(canvas, {
+    ...options,
+    core: oracleLayoutCore(),
+  }).nodes.filter((entry) => entry.kind !== 'shape' && entry.kind !== 'edge')
+  const whole = layoutSpatialCanvas(
+    { nodes: [node(100_000)], edges: [] },
+    { ...options, core: oracleLayoutCore() },
+  ).nodes.filter((entry) => entry.kind !== 'shape' && entry.kind !== 'edge')
   const crossed = painted.some((entry) => entry.bbox.y + entry.bbox.h > height)
 
   return { hidden: whole.length - painted.length, crossed: crossed ? 1 : 0 }

@@ -13,32 +13,14 @@ import type { BoundingBox, Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { oracleLayoutCore } from '../test-utils/wasm/oracle-layout-core.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({ radius: 4 }),
-  resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-  resolveComment: () => ({
-    pin: { fill: '#d97706' },
-    bubble: { fill: '#fef3c7', stroke: '#d97706' },
-    leader: { stroke: '#d97706', strokeWidth: 1 },
-    passage: { fill: '#d97706' },
-    region: { fill: 'none', stroke: '#d97706' },
-    pinCount: { fill: '#fef3c7' },
-    resolvedOverlay: {
-      pin: { fill: '#d97706' },
-      bubble: { fill: '#fef3c7' },
-      leader: { stroke: '#d97706' },
-      passage: { fill: '#d97706' },
-      region: { fill: 'none', stroke: '#d97706' },
-      pinCount: { fill: '#fef3c7' },
-    },
-  }),
-}
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 interface LabelCase {
   readonly name: string
@@ -111,12 +93,9 @@ function overlap(a: BoundingBox, b: BoundingBox): number {
 
 function coveredLabelArea(entry: LabelCase): number {
   const scene = layoutSpatialCanvas(entry.canvas, {
+    core: oracleLayoutCore(),
     measure,
     appearance,
-    parseBody: (text) => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
     threads: threadsOf(entry.comments),
   })
   const labels = labelBoxes(scene)

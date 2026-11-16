@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneEntries } from './scene-entry-keys.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
+import { oracleLayoutCore } from './test-utils/wasm/oracle-layout-core.js'
 import { createSpatialTheme } from './theme/spatial-theme.js'
 
 /**
@@ -78,6 +79,7 @@ function buildCanvas(): { canvas: SpatialCanvas; leafId: string; hubId: string }
 
 const layout = (canvas: SpatialCanvas): Scene =>
   layoutSpatialCanvas(canvas, {
+    core: oracleLayoutCore(),
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: 'light' }),
   })
@@ -190,6 +192,7 @@ describe('decorated-scene column (outline decorations vs group reuse)', () => {
         }),
       },
       {
+        core: oracleLayoutCore(),
         measure: createFakeMeasure(),
         appearance: createSpatialTheme({ mode: 'light' }),
       },

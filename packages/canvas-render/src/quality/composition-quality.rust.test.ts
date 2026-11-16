@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
 import { DRAWING_CORPUS } from '../test-utils/drawing-corpus.js'
+import { oracleLayoutCore } from '../test-utils/wasm/oracle-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type CompositionScore, scoreComposition } from './composition-score.js'
 
@@ -19,7 +20,10 @@ const appearance = createSpatialTheme({ mode: 'light' })
 const scores = new Map(
   DRAWING_CORPUS.map((c) => [
     c.name,
-    scoreComposition(c.canvas, layoutSpatialCanvas(c.canvas, { measure, appearance })),
+    scoreComposition(
+      c.canvas,
+      layoutSpatialCanvas(c.canvas, { core: oracleLayoutCore(), measure, appearance }),
+    ),
   ]),
 )
 const of = (name: string) => scores.get(name) as CompositionScore

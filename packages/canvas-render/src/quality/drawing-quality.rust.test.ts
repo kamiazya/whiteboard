@@ -20,6 +20,7 @@ import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
 import { DRAWING_CORPUS, type DrawingCase } from '../test-utils/drawing-corpus.js'
+import { oracleLayoutCore } from '../test-utils/wasm/oracle-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type DrawingScore, scoreDrawing } from './drawing-score.js'
 
@@ -31,7 +32,10 @@ const appearance = createSpatialTheme({ mode: 'light' })
 const scores = new Map(
   DRAWING_CORPUS.map((c) => [
     c.name,
-    scoreDrawing(c.canvas, layoutSpatialCanvas(c.canvas, { measure, appearance })),
+    scoreDrawing(
+      c.canvas,
+      layoutSpatialCanvas(c.canvas, { core: oracleLayoutCore(), measure, appearance }),
+    ),
   ]),
 )
 
@@ -424,7 +428,7 @@ describe('drawing quality across the corpus', () => {
     }
     const free = scoreDrawing(
       withoutSides,
-      layoutSpatialCanvas(withoutSides, { measure, appearance }),
+      layoutSpatialCanvas(withoutSides, { core: oracleLayoutCore(), measure, appearance }),
     )
     // With the sides as the model named them the board used to owe two
     // edges through API gateway; a named pair whose route runs through
@@ -514,7 +518,10 @@ describe('drawing quality: the instrument orders what a reader would', () => {
       ),
       edges: [],
     }
-    const s = scoreDrawing(scattered, layoutSpatialCanvas(scattered, { measure, appearance }))
+    const s = scoreDrawing(
+      scattered,
+      layoutSpatialCanvas(scattered, { core: oracleLayoutCore(), measure, appearance }),
+    )
     expect(s).toMatchObject(DEBT_FREE)
     expect(s.density).toBeLessThan(0.01)
   })

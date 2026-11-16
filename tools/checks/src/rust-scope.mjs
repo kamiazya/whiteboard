@@ -19,6 +19,11 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/det-math.ts',
     'packages/canvas-render/src/det-math.rust.test.ts',
     'packages/canvas-render/vitest.rust.config.ts',
+    'packages/canvas-render/src/layout/nodes/text-wrapping-quality.rust.test.ts',
+    'packages/canvas-render/src/layout/annotation-density-quality.rust.test.ts',
+    'packages/canvas-render/src/layout/comment-label-quality.rust.test.ts',
+    'packages/canvas-render/src/layout/frame-containment-quality.rust.test.ts',
+    'packages/canvas-render/src/scene-diff-quality.rust.test.ts',
     // The bundled plugin's manifest, which the Rust crate embeds and loads.
     'packages/plugin-visual/src/visual.manifest.json',
   ],
@@ -30,6 +35,12 @@ export const RUST_SCOPE = {
     // canvas-render-rust re-runs the edge suites against the Rust router.
     'packages/canvas-render/src/layout/edges',
     'packages/canvas-render/src/test-utils/wasm',
+    // The layout scoreboards judge the core in canvas-render-rust (S18h): the
+    // instruments they score with, the corpora they read, and the recordings
+    // the core is replayed against.
+    'packages/canvas-render/src/quality',
+    'packages/canvas-render/src/oracle',
+    'packages/canvas-render/src/test-utils',
     // The shim over the artifact, tested in the rust job (core-wasm-rust).
     'packages/core-wasm',
     // The Rust codec replays the OKF recordings that live beside the codec's
