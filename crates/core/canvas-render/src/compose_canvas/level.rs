@@ -1,4 +1,4 @@
-//! What ONE canvas settles before anything is drawn (`withCanvasTheme` and
+//! What ONE canvas settles before anything is drawn (the canvas-theme wrapper and
 //! `canvasTheme`): the theme it is drawn in, the appearance that theme paints
 //! with, the face its text is declared in, and the silhouette each node takes.
 //! Settled from the canvas being laid out, never handed down as an option, so
@@ -26,7 +26,7 @@ fn positive_or(value: f64, fallback: f64) -> f64 {
     if value.is_finite() && value > 0.0 { value } else { fallback }
 }
 
-/// The geometry a layout uses (`resolveGeometry`): each field of an override
+/// The geometry a layout uses (`resolve_geometry`): each field of an override
 /// that is not finite and in range falls back to the shared default on its own,
 /// so a bad override never puts a NaN or a negative size into the layout.
 #[must_use]

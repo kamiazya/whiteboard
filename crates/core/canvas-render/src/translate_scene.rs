@@ -1,4 +1,4 @@
-//! Scene-to-scene translation (`layout/translate-scene.ts`): a node's content is
+//! Scene-to-scene translation (the TypeScript scene translation): a node's content is
 //! laid out relative to its own origin, and placing it at the node's position
 //! shifts the whole tree.
 //!

@@ -1,5 +1,5 @@
-//! A comment bubble's body (`layout/comment-body.ts` and the resolved collapse
-//! in `layout/comments.ts`): the opening message typeset as markdown at the
+//! A comment bubble's body (the TypeScript comment-body layout and the resolved collapse
+//! in the TypeScript comment layer): the opening message typeset as markdown at the
 //! node theme's metrics, wrapped at the bubble's width, and for a settled
 //! thread cut to its first line, repainted with the resolved overlay's text and
 //! followed by a small "Resolved" label.

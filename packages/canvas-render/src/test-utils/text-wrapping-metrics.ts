@@ -31,7 +31,7 @@ type WalkNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNod
  * the only renderers that emit an SVG `transform`, each translating its
  * subtree by its own `bbox.x`, so their descendants are stored
  * wrapper-RELATIVE. Walking without re-applying that offset under-reports
- * exactly the nested content most likely to overflow. `translate-scene.ts`
+ * exactly the nested content most likely to overflow. The TypeScript scene translation
  * owns the tripwire test that fails if this set ever changes; a third
  * translating renderer has to be added here too.
  */

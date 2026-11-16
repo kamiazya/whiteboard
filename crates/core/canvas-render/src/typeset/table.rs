@@ -1,4 +1,4 @@
-//! A GFM table, ported from `mdast-table.ts`: column widths from the cells'
+//! A GFM table, ported from the TypeScript table typesetter: column widths from the cells'
 //! natural widths, scaled into the column when they do not fit, and a row per
 //! `tableRow` whose cells hold their runs RELATIVE to the cell (the SVG backend
 //! translates a cell by its own `bbox.x`).

@@ -1,5 +1,5 @@
 //! Where a quote occurs in a text when every run of whitespace on either side
-//! compares equal to any other (`layout/loose-occurrences.ts`): what a
+//! compares equal to any other (the TypeScript loose-occurrence finder): what a
 //! `word\s+word` regex finds, without the regex's cost. Both sides' whitespace
 //! runs are squashed to one space, which turns the loose comparison into an
 //! exact one, and an index map carries each squashed position back.

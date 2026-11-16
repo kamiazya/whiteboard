@@ -1,5 +1,5 @@
 //! The longest prefix that fits, found by galloping search, ported from
-//! `longest-fit.ts`.
+//! the TypeScript longest-fit search.
 
 /// More rounds than any of the three loops can take on a `usize` range: a
 /// doubling step or a halving gap is exhausted within `usize::BITS` rounds,

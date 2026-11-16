@@ -1,4 +1,4 @@
-//! The board's legend (`legend/canvas-legend.ts`, ADR-0040 decision 6),
+//! The board's legend (the TypeScript legend, ADR-0040 decision 6),
 //! derived from the colour readings ([`channels`]) so it can only name a
 //! distinction the drawing keeps: a scoped-tag key is listed when a
 //! population's colour is carried by it, each value with the swatch its class

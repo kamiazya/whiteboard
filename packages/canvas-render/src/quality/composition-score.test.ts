@@ -1,7 +1,7 @@
 // Calibration of the composition score against KNOWN truths, the way
 // `drawing-score.test.ts` calibrates the drawing score: a board with one
 // planted compositional mistake reports it in the column that names it, and
-// nowhere else. `composition-quality.test.ts` is the scoreboard that pins
+// nowhere else. `composition-quality.rust.test.ts` is the scoreboard that pins
 // this over the real corpus; this file is what says it can be believed
 // there — an instrument trusted before it is calibrated is how
 // `worstStallMs` reported 0.3ms for a 200ms stall.

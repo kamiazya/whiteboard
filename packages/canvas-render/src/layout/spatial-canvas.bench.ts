@@ -41,7 +41,7 @@ const OPTIONS: SpatialLayoutOptions = {
   core: testLayoutCore(),
   measure: createFakeMeasure(),
   // A fixed body rather than a real parse: markdown parsing is
-  // `mdast-blocks.bench.ts`'s subject, and leaving it in here would be the
+  // the deleted typesetter's bench's subject, and leaving it in here would be the
   // same drowning problem the edge search causes.
   appearance: { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) },
 }

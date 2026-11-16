@@ -153,7 +153,7 @@ with every tool call, tool-error text, token and cost figure.
   prints every non-zero DEBT column by name — `overlaps 1 straddles 1
   nearMisses 5` — with the full score under `drawing` in `--out`. A pass
   with debt is a drawing the verifier accepted and a reader would not;
-  the column says which mistake, and `drawing-quality.test.ts`'s drafted
+  the column says which mistake, and `drawing-quality.rust.test.ts`'s drafted
   rows show what each looks like on a board. `--dry-run --out=<file>`
   scores the fixture's own boards with no model call, which is how the
   wiring is checked.

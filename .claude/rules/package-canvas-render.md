@@ -15,7 +15,7 @@ alternative was refused, continues there.
 ## What belongs here
 
 **The layout is the Rust core's (ADR-0054 step 7).** S18h2 deleted the
-TypeScript composer (`compose-node.ts`, `node-box.ts`, `compose-file-node.ts`,
+TypeScript composer (the TypeScript node composer, the TypeScript node box, the TypeScript file-node composer,
 the comment and proposal overlays, the legend's computation) and the
 typesetter (`layout/nodes/mdast-*`, line breaking, the vendored BudouX, and
 the `css-line-break` dependency). What `layout/` holds now is the switch a
@@ -88,7 +88,7 @@ fence past 4096² summed squared runs, or a layout past 4× that, renders plain.
 Ids are COMPOSED from the declaring facet's key plus its bare payload kind,
 never stored whole, so nothing migrates and a plugin cannot name another
 plugin's geometry. The remaining asymmetry is recorded at
-`resolveNodeOutlines`: the bundled facet is read through `resolveNodeShape`
+`resolve_node_outlines`: the bundled facet is read through `resolveNodeShape`
 (compat chain + schema) while a caller-declared one is read raw and gated by
 the table alone.
 
@@ -115,17 +115,17 @@ the table alone.
   vocabulary since both halves read them.
 - Pure layout functions: spatial-canvas edge routing (`layout/edges/edge-router.ts`
   under `layout/edges/spatial-edges.ts`'s side-choice search) and mdast block
-  layout (`layout/nodes/mdast-blocks.ts`) — the single mdast -> scene-graph
+  layout (the TypeScript typesetter) — the single mdast -> scene-graph
   render path shared by preview / spatial text node / export.
 - `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
   `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
   the browser viewer) — see the resolved decision below.
-- `translateScene` (`layout/translate-scene.ts`): the pure scene -> scene
+- `translate_scene` (the TypeScript scene translation): the pure scene -> scene
   translation used to place a node's laid-out content at its absolute
   position, alongside the renderers whose x-transform-boundary convention
   it must agree with (see decision #5 and `svg/backend.ts`).
-- `scaleScene` (`layout/scale-scene.ts`): the multiplicative sibling of
-  `translateScene` — uniform scaling about the origin for composing a
+- `scaleScene` (the TypeScript scene scaling): the multiplicative sibling of
+  `translate_scene` — uniform scaling about the origin for composing a
   resolved child canvas into a parent node's box (scale-then-translate).
   Uniform scaling commutes with the x-transform-boundary representation,
   so unlike translation it needs no wrapper special-casing. Size-bearing
@@ -232,8 +232,8 @@ the table alone.
    cyclic ones. It was first stated over a `ResolvedDocBundle` in a
    module of its own whose only caller was its own property test; that
    module (embed-recursion) is deleted, and the
-   contract lives where the content is laid out: `compose-node.ts` for a
-   file node's canvas and `mdast-blocks.ts` for a body's embeds, each
+   contract lives where the content is laid out: the TypeScript node composer for a
+   file node's canvas and the TypeScript typesetter for a body's embeds, each
    pinning the cap and the path-local cycle rule:
    `MdastLayoutOptions.resolveEmbed?: (canvasId) => { title?, root:
    MdastRoot } | undefined` (same injected-resolver class as `renderMath` /
@@ -245,7 +245,7 @@ the table alone.
    cycle semantics mirror this decision exactly, and a missing/throwing
    resolver degrades to an `embedPlaceholder('unresolvable')`. Both guards
    are pinned by a property over dense random embed graphs
-   (`mdast-blocks.properties.test.ts`), each mutation-checked separately —
+   (the deleted typesetter's properties), each mutation-checked separately —
    the cap alone also bounds nesting, so a depth assertion by itself would
    let the cycle guard rot.
 5. **Document envelope** (`sceneBounds` in `scene-bounds.ts`,
@@ -330,13 +330,13 @@ the table alone.
    reported only through an optional `onDegrade` callback; mcp-server wires
    it to `getLogger`, canvas-viewer omits it and degrades silently by
    choice — an omitted callback must never change the returned `Scene`, only
-   whether the caller is told. `translateScene` (`layout/translate-scene.ts`)
+   whether the caller is told. `translate_scene` (the TypeScript scene translation)
    moved here verbatim from mcp-server's former `scene-transform.ts`: it
    encodes the same x-transform-boundary rule as `sceneBounds`'s
    `subtreeOffsetX` (decision #5), so both must keep agreeing on which
    renderers (`listItem`, `tableCell`) emit their own SVG `transform` — the
    tripwire test asserting that exact set now lives in
-   `translate-scene.test.ts` alongside the function it guards.
+   the deleted scene-translation test alongside the function it guards.
 
 8. **The theme layer** (`theme/spatial-geometry.ts`, `theme/spatial-palette.ts`,
    `theme/spatial-theme.ts`, `theme/font-family.ts`): ONE `SpatialAppearanceResolver`
@@ -565,18 +565,18 @@ the table alone.
       test. The property catches it now.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
-      (`layout/compose-node.ts`) — synchronous, optional, caller-supplied,
+      (the TypeScript node composer) — synchronous, optional, caller-supplied,
       total (a throw or `undefined` degrades to the plain chrome+label
       rendering rather than aborting layout).
       `FacetCardData` (`{ title?: string; rows: ReadonlyArray<{ label:
       string; value: string }> }`) is plain TS, not Zod — it never crosses a
       process boundary; the caller maps its own facet data
       (`coreFacetsSchema` and friends) into it in-process, and this package
-      learns nothing about what a facet MEANS. `composeFileFacets` is
-      checked LAST in the file-node pre-pass — after `composeFileImage`,
-      `composeFileEmbed` and `composeFileMarkdown` — so a resolved image,
+      learns nothing about what a facet MEANS. the file node's facet composition is
+      checked LAST in the file-node pre-pass — after the file node's image composition,
+      `compose_file_embed` and the file node's markdown composition — so a resolved image,
       canvas embed or markdown body always outranks a facet card, and the
-      card in turn always outranks the plain label it replaces. Card text goes through `typesetMdastBlocks`
+      card in turn always outranks the plain label it replaces. Card text goes through `typeset_mdast_blocks`
       (`heading`+`paragraph` blocks only, never `list`/`table`, to stay out
       of the `subtreeOffsetX` transform-boundary class); content that
       overflows the node's padded box is truncated at whole-block
@@ -616,7 +616,7 @@ the table alone.
     reference, and it serves markdown documents with no file nodes at all.
 
 12. **Line breaking is UAX #14, not a hand-rolled character table**
-    (`layout/nodes/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
+    (the TypeScript typesetter, `break_segments`). `css-line-break` with
     `lineBreak: 'strict'` supplies the break opportunities, which is what
     makes CJK wrap at all (the previous wrapper split on ASCII spaces, so a
     Japanese paragraph had no break opportunity anywhere and was emitted as
@@ -628,7 +628,7 @@ the table alone.
     Unicode standard. It is pure and DOM-free, so Node, the browser and a
     worker agree, which is what the byte-identical-SVG guarantee needs.
     Consequences worth knowing:
-    - **`wordBreak` stays `normal`.** `break-all` would also break English
+    - **the word-break rule stays `normal`.** `break-all` would also break English
       mid-word. A segment that alone exceeds `maxWidth` is instead expanded to
       CODE POINTS at the point it arises, so only the string that needs it
       pays. A single code point wider than `maxWidth` is the one irreducible
@@ -640,16 +640,16 @@ the table alone.
       split** — an interior space in a code span is not a word boundary — so
       it can still overflow. Truncating it belongs to a later ellipsis/fade
       slice, not to the line breaker.
-    - **A block's declared width covers its ink** (`blockWidth`). A block
+    - **A block's declared width covers its ink** (`block_width`). A block
       claiming `maxWidth` while an atomic run paints past it is what let
       `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
       all agree on a size nothing actually fitted in.
     - **Kinsoku holds across an INLINE BOUNDARY, not only inside a run**
-      (`layout/nodes/inline-junction.ts`). Every inline node is its own `emit`
+      (the TypeScript inline-junction rule). Every inline node is its own `emit`
       call, so the junction between two was a break opportunity by accident:
       `。` after `` `code` ``, after `**強調**` or after an icon opened a
       line, which this decision forbids. It is asked of
-      `uaxSegments` — the same authority, not a table of its own — and a break
+      `uax_segments` — the same authority, not a table of its own — and a break
       it forbids relocates the stretch already on the line rather than
       splitting a pair no line may split. `forbiddenLineStarts` 4 -> 0, at +2
       runs and +2 lines on the two rows that relocate. A run that PAINTS
@@ -686,12 +686,12 @@ the table alone.
     published mcp-server bundle then fails to build at all. Tree-shaking
     cannot help — esbuild resolves the whole graph before eliminating
     anything — and the deep import is blocked by budoux's `exports` map.
-    **What cannot wrap is CUT, not left to overflow** (`layout/nodes/truncate.ts`,
-    `fitToWidth`): a node label (one line is what makes it a label) and an
+    **What cannot wrap is CUT, not left to overflow** (the TypeScript truncation,
+    `fit_to_width`): a node label (one line is what makes it a label) and an
     atomic run. The run keeps the longest prefix that fits and is marked
     `truncated`, which the SVG backend paints as a fade — never an ellipsis,
     because a label is cut precisely where width is scarce and three dots
-    spend the width they save. `fitToWidth` never returns the empty string for
+    spend the width they save. `fit_to_width` never returns the empty string for
     non-empty input: one glyph over the edge still says a label is there.
     **The cut falls between GRAPHEMES**, the never-empty unit included: a lone
     👨 is not a narrower family emoji. It is GATED, since segmenting is not
@@ -727,7 +727,7 @@ the table alone.
     The signal differing had none, and it left the commonest case silent:
     three paragraphs in a box holding two rendered as a tidy two-paragraph
     box, while a cut LINE faded. Anything removed now marks the last surviving
-    run (`markLastRun`), so a dropped block, a trimmed list item and a cut
+    run (`mark_last_run`), so a dropped block, a trimmed list item and a cut
     line all say the same thing.
     `sceneDigest` DOES report it now, as `truncated` on the node entry. This
     reverses the earlier "add it when a reader has a reason to act on it" —
@@ -736,18 +736,18 @@ the table alone.
     SHAPE because a node's content is a SIBLING of its chrome in the flat
     scene list, so a digest walking top-level nodes could never correlate the
     two on its own.
-    **Where the cut is DECIDED is `mdast-blocks.ts`** (`fitBlocksToHeight`),
+    **Where the cut is DECIDED is the TypeScript typesetter** (`fit_blocks_to_height`),
     not the spatial fitter that calls it: "which part of a block is a line"
     is that module's own knowledge. Granularity steps down blocks -> lines
     (a paragraph's runs) -> list items; `blockquote`/`table`/`code` stay
     whole-block, their children not being lines. Whole-block alone leaves the
     commonest body unbounded — a single long paragraph is ONE block, measured
     at 112px in a 60px node before lines were reachable. Keep-first ("a text
-    node never renders empty") stays in `compose-node.ts`, being a
+    node never renders empty") stays in the TypeScript node composer, being a
     spatial-node policy rather than a block one.
-    `layout/frame-containment-quality.test.ts` counts what the law hides —
+    `layout/frame-containment-quality.rust.test.ts` counts what the law hides —
     a bound says nothing about how often its escape is taken.
-    `layout/nodes/text-wrapping-quality.test.ts` is its scoreboard; see the
+    `layout/nodes/text-wrapping-quality.rust.test.ts` is its scoreboard; see the
     Tests section.
 
 14. **`references/` is the one producer of the reference seams.**
@@ -786,14 +786,14 @@ the table alone.
     directory.
 
 15. **A canvas's theme is resolved IN LAYOUT, per canvas** (ADR-0030
-    decisions 4-6; `withCanvasTheme` in `layout/spatial-canvas.ts`,
+    decisions 4-6; the canvas-theme wrapper in `layout/spatial-canvas.ts`,
     `theme/theme-asset.ts`). A `RenderContribution` may register `themes`
     (token bundles by bare name, namespaced like `shapes`) and a `readTheme`
     that answers the id the CANVAS names; `SpatialLayoutOptions.style`
     decides whether that is honoured — `'clean'` (the DEFAULT: decision #10's
     agent never pays unasked) ignores it, `'document'` draws it, and a theme
     id draws that theme unsaved (the session override). Resolution happens at
-    the top of `layoutSpatialCanvasInternal`, so an embedded canvas reads its
+    the top of the composer's internal entry, so an embedded canvas reads its
     OWN facet first and inherits the host's only when it names none — the
     same side of the line `visual.edges`/`visual.shape` already stand on in
     an embed, and deliberately NOT a layout option spread downward through
@@ -810,7 +810,7 @@ the table alone.
     (never a group, which is a frame), `groupFrame` on group chrome.
     A body's FURNITURE is themed with its prose: the palette's optional
     `markdownChrome` becomes the `MarkdownTheme`'s `chromeColor` for every
-    body `mdastOptionsFor` composes (`markdownTheme` in `theme-asset.ts`), so
+    body the typesetter-options builder composes (`markdownTheme` in `theme-asset.ts`), so
     a code panel, an inline-code backdrop, a blockquote rail, a table's rules
     and a task checkbox belong to the theme rather than to one bundled slate
     — a palette naming none keeps `#818b98`, which is what leaves every
@@ -840,7 +840,7 @@ the table alone.
     `layoutSpatialEdges` — it shipped without it, and a drag drew every
     edge crisp and straight over a pencilled, curved committed render.
     A canvas embedded in a MARKDOWN body resolves the same way, through
-    `layoutMdastBlocks`'s (`layout/markdown-body.ts`) own `style` — a
+    `layoutMdastBlocks`'s (the TypeScript markdown-body layout) own `style` — a
     markdown host carries no theme, so `'document'` means the embed's own,
     and the library default stays `'clean'` so every headless caller's bytes
     are unchanged. It shipped without that, and the same board was pencilled
@@ -964,7 +964,7 @@ edge's path.
   measurers owe each other (unkerned, unhinted advances), run by each side's
   `measure-text.conformance` test. The viewer vendors Regular only (+0.8 s
   first paint measured for the rest) and ledgers its synthesised emphasis.
-- The layout's own suites (`spatial-canvas.test.ts`, `translate-scene.test.ts`,
+- The layout's own suites (the deleted composer's test, the deleted scene-translation test,
   the typesetter's) went with the TypeScript they tested (S18h2). The core's
   behaviour is held by the native replays under `crates/` and by the
   scoreboards in `canvas-render-rust`; what `canvas-render-node` keeps about
@@ -1187,7 +1187,7 @@ uneven gaps, envelope and density as PRICE. The other instruments here each judg
 its own terms; this one judges what any of them, or a model through the
 tool surface, actually drew, and the MCP eval lane records it per board
 as its `drawing` column. Calibrated in `drawing-score.test.ts` by planting
-one defect and reading one; pinned in `drawing-quality.test.ts` over
+one defect and reading one; pinned in `drawing-quality.rust.test.ts` over
 `test-utils/drawing-corpus.ts`, where each diagram the lane asks for is
 drawn as a reference, as a first attempt, and after tidy. Its polyline
 geometry is `quality/polyline-geometry.ts`, shared with the routing
@@ -1439,7 +1439,7 @@ construction, the third because 450k drawings found it uninformative.
 **The columns stay a vector, and the scoreboard pins the known blind
 spot**: a board scattered so far apart that a reader would reject it
 scores debt-free, with `density` its only witness — pinned as such in
-`drawing-quality.test.ts` rather than papered over, because the same
+`drawing-quality.rust.test.ts` rather than papered over, because the same
 readings can be produced by drawings nobody would accept. Beyond
 calibration, three tests make the instrument believable: each reference
 owes no more than its draft on any debt column, tidy never adds debt, and
@@ -1596,7 +1596,7 @@ every board read as spending nothing, the very answer the corpus was expected
 to give.
 
 **The legend is the layout's answer, read off the score** (ADR-0040 decision
-6; `legend/canvas-legend.ts`). `canvasLegend(canvas, appearance)` lists every
+6; the TypeScript legend). `canvasLegend(canvas, appearance)` lists every
 scoped-tag key a population's colour is `carried` by, each value with the
 swatch its class is drawn in — resolved by the same appearance the layout
 paints with, so a legend can never show a colour the box does not wear — and
@@ -1635,6 +1635,6 @@ resolves the theme: a live drag drew edges in the stored colour over a
 committed scene that drew them by intent, and the live-drag parity property
 now draws a library and tagged edges (its stub resolver reads `edge.color`,
 or the step would be invisible to it). In the mutation lane.
-Nested canvases too (`layoutSpatialCanvasInternalScene`).
+Nested canvases too (the composer's internal scene entry).
 
 Recorded oracle: `src/oracle/`; decisions.

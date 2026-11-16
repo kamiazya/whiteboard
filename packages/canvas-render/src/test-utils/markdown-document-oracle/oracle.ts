@@ -69,7 +69,7 @@ export interface MarkdownInput {
   /** The daemon's `#Heading` part. */
   readonly section?: string
   readonly density?: 'comfortable' | 'compact'
-  /** Hold the answer as a digest rather than as text; set by the recorder past `SCENE_TEXT_LIMIT`. */
+  /** Hold the answer as a digest rather than as text; set by the recorder past the scene text limit. */
   readonly digest?: true
 }
 

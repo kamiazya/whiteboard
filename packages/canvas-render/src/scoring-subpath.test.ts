@@ -5,7 +5,7 @@
 // import, and a symbol exported from it is part of every one of those graphs'
 // public surface whether or not anything reads it.
 //
-// `scoreFacets` is also used INSIDE the package by `legend/canvas-legend.ts`,
+// `scoreFacets` is also used INSIDE the package by the TypeScript legend,
 // by a relative import. That is why leaving the barrel is a surface change and
 // not a size one: the module still ships with the legend.
 import { describe, expect, it } from 'vitest'

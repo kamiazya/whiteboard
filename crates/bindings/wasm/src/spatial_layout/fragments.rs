@@ -1,5 +1,5 @@
 //! The math and diagram renderers over a request's `fragments` table: what
-//! canvas-render's `withFragmentTable` answers in the TypeScript, a source the
+//! canvas-render's fragment-table wrapper answers in the TypeScript, a source the
 //! table does not hold drawn as the renderer's fallback and recorded, once
 //! each in the order asked, for the answer to carry back.
 

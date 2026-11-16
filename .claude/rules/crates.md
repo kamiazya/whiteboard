@@ -217,7 +217,7 @@ steps and cache paths to the scripts.
   `crates/core/canvas-render/src/linebreak/table.rs` was written from
   `css-line-break`'s trie by a script deleted with the TypeScript (S18h), so it is
   now the table's only copy, and the frozen `src/oracle/linebreak.jsonl` holds the
-  TypeScript's `uaxSegments` breaks for the small
+  TypeScript's `uax_segments` breaks for the small
   corpora and one digest per chunk of the large ones, which
   `crates/core/canvas-render/tests/linebreak_oracle.rs` regenerates from its `meta`
   record. The port's header lists the holes
@@ -255,34 +255,34 @@ steps and cache paths to the scripts.
   the composer). The TypeScript's module-level memo is a `ThemedAppearanceCache` per call site.
 - **The BudouX phrase breaker is held to a recording and a model generated once**:
   `crates/core/canvas-render/src/budoux/model.rs` was written from the vendored
-  `ja-model.ts` by a script deleted with the TypeScript (S18h), so it is now the
+  the vendored BudouX model by a script deleted with the TypeScript (S18h), so it is now the
   model's only copy, and the frozen `packages/canvas-render/src/oracle/budoux.jsonl` records what the vendored
   parser cut (hand-written corpora, one string aimed at each of the 1,678
   entries, per-prefix and seeded-stream digests); `crates/core/canvas-render/tests/budoux_oracle.rs`
   replays it natively and on wasm32. The model does not know surrogate pairs and
   may cut between their halves, as the TypeScript does.
 - **The text primitives are held to one recording**:
-  `src/oracle/text-primitives.jsonl` holds `uaxSegments`, `longestFittingCount` (with
-  its probe sequence), `fitToWidth` (kept text, flags, widths as hex doubles and the
+  `src/oracle/text-primitives.jsonl` holds `uax_segments`, `longest_fitting_count` (with
+  its probe sequence), `fit_to_width` (kept text, flags, widths as hex doubles and the
   length of every text it measured, through the fake measurer) and the inline
   junction (seeded operation sequences with each answer and the final position of
   every run), plus digests for the large corpora and for `Intl.Segmenter` against
   `unicode-segmentation`; `crates/core/canvas-render/tests/text_primitives_oracle.rs` replays it and
   `WHITEBOARD_RECORD_ORACLE=1` re-records it. A `&str` holds no lone surrogate, so
-  those answers are recorded for `uaxSegments` only.
+  those answers are recorded for `uax_segments` only.
 - **The markdown typesetter is held to a recording and asks its host through a trait**:
   `packages/canvas-render/src/oracle/typeset.jsonl` holds, per input, the model tree, the width and
   theme, the answers of every host seam the input can reach (`InlineSeams`: emoji and icon
   shortcodes, document titles, embed names, a picture's source; their TypeScript is the plugin's and
-  the keeper's, neither in Rust) and what `typesetMdastBlocks` laid out: the scene as `dumpScene`
+  the keeper's, neither in Rust) and what `typeset_mdast_blocks` laid out: the scene as `dumpScene`
   text (every double as 16 hex digits) or, for the large sets, its length and FNV digest, and how
   many times it asked the measurer, which pins the width search's probe sequence.
   `crates/core/canvas-render/tests/typeset_oracle.rs` replays it exactly, writing a Rust scene with
   a test-only dumper (`crates/core/canvas-render/tests/typeset_support`); `WHITEBOARD_RECORD_ORACLE=1` re-records. The
   corpora are read at record time only (the markdown oracle's parsed bodies, the wrapping
-  corpus, hand-written cases, a seeded generator whose seed rides the `meta` record). A NaN is held as the positive quiet NaN on both sides, since its sign is the engine's choice. A list item and a table cell store their children relative to themselves (the backend translates by the wrapper's `bbox.x`), which the dump holds exactly; `scene_walk` already reads that set and the typesetter adds no third wrapper. The embed target tables ride each record: the documents a tree embeds, and in turn theirs. The nested-layout account is the typesetter's own (`NestedLayoutBudget`: 128 layouts, 4,000 canvas elements). `typeset.jsonl` writes each distinct set of host answers once, as a `seams` line the records name by key. `fit.jsonl` holds laid-out bodies as data with what `fitBlocksToHeight` and `firstLineOfBlocks` keep of each at every height (the edge of every block, a hair either side, NaN, negative, infinite), as a digest and the two signals, and as text for the scenes written by hand; `markLastRun` reads only `runs`, `children` and `items`, so a body ending in a table is cut but left unmarked, which the recording holds. `section.jsonl` records, per document and fragment, which blocks `selectMarkdownSection` keeps.
+  corpus, hand-written cases, a seeded generator whose seed rides the `meta` record). A NaN is held as the positive quiet NaN on both sides, since its sign is the engine's choice. A list item and a table cell store their children relative to themselves (the backend translates by the wrapper's `bbox.x`), which the dump holds exactly; `scene_walk` already reads that set and the typesetter adds no third wrapper. The embed target tables ride each record: the documents a tree embeds, and in turn theirs. The nested-layout account is the typesetter's own (`NestedLayoutBudget`: 128 layouts, 4,000 canvas elements). `typeset.jsonl` writes each distinct set of host answers once, as a `seams` line the records name by key. `fit.jsonl` holds laid-out bodies as data with what `fit_blocks_to_height` and `first_line_of_blocks` keep of each at every height (the edge of every block, a hair either side, NaN, negative, infinite), as a digest and the two signals, and as text for the scenes written by hand; `mark_last_run` reads only `runs`, `children` and `items`, so a body ending in a table is cut but left unmarked, which the recording holds. `section.jsonl` records, per document and fragment, which blocks `select_markdown_section` keeps.
   BudouX reads UTF-16 units and can name a boundary inside a surrogate pair; neither side
-  takes one (the TypeScript's `withoutPairCuts`, Rust's `splits_pair`), so no run holds half
+  takes one (the TypeScript's pair-cut filter, Rust's `splits_pair`), so no run holds half
   a character.
 - **The markdown parser is held to `parseMarkdownBody`'s model tree**:
   `packages/codec/src/markdown/oracle/mdast.jsonl` records the digest of each

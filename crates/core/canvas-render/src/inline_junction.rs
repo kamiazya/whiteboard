@@ -1,5 +1,5 @@
 //! Where a line may be cut, carried ACROSS inline nodes, ported from
-//! `inline-junction.ts`.
+//! the TypeScript inline-junction rule.
 //!
 //! The wrapper decides breaks one inline node at a time, so without this the
 //! junction between two of them is a break opportunity by accident: `` `code` ``

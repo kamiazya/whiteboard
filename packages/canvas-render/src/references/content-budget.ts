@@ -24,7 +24,7 @@ export const REFERENCE_CHARS_BUDGET = 4 * MARKDOWN_MAX_CHARS
  * one maximal board's worth, the same figure as the layout's
  * `NESTED_ELEMENT_BUDGET`, because loading a board the layout will refuse
  * to draw buys nothing. Spelled from the model here because references sit
- * below the layout; `embed-budget.test.ts` holds the two equal.
+ * below the layout; the deleted embed-budget test holds the two equal.
  */
 export const REFERENCE_ELEMENTS_BUDGET = CANVAS_MAX_NODES + CANVAS_MAX_EDGES_AND_LINES
 

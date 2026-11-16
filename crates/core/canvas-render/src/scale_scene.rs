@@ -1,4 +1,4 @@
-//! A laid-out scene fitted into a box (`layout/scale-scene.ts`): moved to the
+//! A laid-out scene fitted into a box (the TypeScript scene scaling): moved to the
 //! origin, scaled down uniformly about it, and moved to the box's corner. A
 //! canvas drawn inside a file node and one drawn inside a body's embed are the
 //! same picture in two frames, so both are fitted here.

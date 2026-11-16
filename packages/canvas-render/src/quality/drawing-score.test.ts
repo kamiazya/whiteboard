@@ -1,5 +1,5 @@
 // Calibration of the drawing score against KNOWN truths: a board with one
-// planted defect reports exactly one. `drawing-quality.test.ts` is the
+// planted defect reports exactly one. `drawing-quality.rust.test.ts` is the
 // scoreboard that pins the score over real diagrams; this file is what says
 // the score can be believed there — an instrument trusted before it is
 // calibrated is how `worstStallMs` reported 0.3ms for a 200ms stall.

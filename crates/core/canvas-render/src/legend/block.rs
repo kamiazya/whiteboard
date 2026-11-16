@@ -1,5 +1,5 @@
 //! The legend as scene nodes, for a board drawn inside something else
-//! (`legend/legend-scene.ts`'s `legendSceneBlock`): a note can embed several
+//! (the TypeScript legend scene's `legendSceneBlock`): a note can embed several
 //! boards, each with its own legend, so an embed's legend is ordinary content
 //! placed under its board rather than document chrome in a corner.
 //!

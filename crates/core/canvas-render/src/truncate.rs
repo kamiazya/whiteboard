@@ -1,4 +1,4 @@
-//! Cutting a text to a width between graphemes, ported from `truncate.ts`.
+//! Cutting a text to a width between graphemes, ported from the TypeScript truncation.
 
 use std::str::CharIndices;
 

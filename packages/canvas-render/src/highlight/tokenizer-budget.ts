@@ -6,7 +6,7 @@
 // identifier, 1.06e9 squared characters and 6.3s for one render.
 //
 // Pure and free of the highlighter itself, so the layout's per-render account
-// (`layout/nodes/embed-budget.ts`) can open one without importing a grammar.
+// (the TypeScript embed budget) can open one without importing a grammar.
 
 /**
  * The running account. A counter rather than a value threaded functionally,

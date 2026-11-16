@@ -435,7 +435,7 @@ record still holds — silently, which is the failure this repo has already
 corrected once, in `lowlight`.
 
 **The contributed edge-router seam is deleted (2026-11-06).**
-`RenderContribution.routers` / `readRouting` had no consumer after
+`RenderContribution.routers` / the routing-facet reader had no consumer after
 `visual.path/v0` left; keeping it would have committed the renderer's
 reimplementation to a router-plugin ABI nothing exercised. Edge routing —
 computed routes and stored bends — is canvas-render's alone.

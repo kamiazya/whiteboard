@@ -1,5 +1,5 @@
 //! What a caller hands the typesetter and what a laid-out stretch of inline
-//! content answers, ported from `mdast-layout-options.ts`.
+//! content answers, ported from the TypeScript typesetter's options.
 
 use whiteboard_scene::{Appearance, TextRunNode};
 

@@ -299,7 +299,7 @@ Two things it measured:
   green again.
   Three things the burn-down measured, none of which a reading would have
   found. **Most of the work was already done and pointed at one collection**
-  — the renderer draws a line's label (`composeEdgeLabel` takes a relation
+  — the renderer draws a line's label (`compose_edge_label` takes a relation
   or a line), the bend affordance reads only `{id, bends}`, and the double
   press already armed the label editor; four reads of `canvas.edges` were
   what made each look absent. **Building a verb is how its blocker is

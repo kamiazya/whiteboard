@@ -10,7 +10,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
  * Boards for the annotation-density scoreboard.
  *
  * It covers BOTH residents of ADR-0026's annotation layer, because they
- * share one bubble placer: a change to `comment-placement.ts` reaches a
+ * share one bubble placer: a change to the TypeScript comment-bubble placement reaches a
  * comment and a proposal alike, and measuring only one of them is how the
  * other's damage goes unseen.
  *

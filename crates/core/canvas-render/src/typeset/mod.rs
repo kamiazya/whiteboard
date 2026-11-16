@@ -1,4 +1,4 @@
-//! The markdown typesetter, ported from `layout/nodes/mdast-blocks.ts` and its
+//! The markdown typesetter, ported from the TypeScript typesetter and its
 //! neighbours (ADR-0054 step 7): a model mdast tree laid out as scene
 //! nodes, held to the recorded `typeset.jsonl` (`tests/typeset_oracle.rs`).
 //!

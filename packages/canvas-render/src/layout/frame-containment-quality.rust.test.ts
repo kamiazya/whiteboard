@@ -16,7 +16,7 @@ import { layoutSpatialCanvas, naturalNodeContentSize } from './spatial-canvas.js
  * The frame-containment SCOREBOARD — how much content is HIDDEN to keep the
  * containment law, and how often the law's escape is taken.
  *
- * The properties in `spatial-canvas.properties.test.ts` state the law: at
+ * The properties in the deleted composer's properties state the law: at
  * most one element may cross the frame, and only when nothing fits. That is
  * a BOUND, and a bound says nothing about frequency — every node in the
  * product could start taking that escape and the properties would stay

@@ -1,4 +1,4 @@
-//! The comment layer (`layout/comments.ts`, ADR-0024/0025/0026): the outline a
+//! The comment layer (the TypeScript comment layer, ADR-0024/0025/0026): the outline a
 //! node set or region thread draws, then per comment a dashed leader, a pin on
 //! its anchor, the pin's count, and a bubble holding the opening message,
 //! placed where it covers least. Drawn over the canvas the caller asked for and

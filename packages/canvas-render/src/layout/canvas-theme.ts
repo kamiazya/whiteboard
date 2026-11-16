@@ -2,7 +2,7 @@
  * WHICH theme a canvas is drawn in, and what it resolves to — the palette an
  * editor chrome previews, the family a tool echoes, and the active theme and
  * face one level of the layout applies (ADR-0030). Resolution only: applying
- * it to the layout options is `withCanvasTheme`, in `spatial-canvas.ts`,
+ * it to the layout options is the canvas-theme wrapper, in `spatial-canvas.ts`,
  * because it also re-derives the silhouettes that module owns.
  */
 

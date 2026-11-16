@@ -78,7 +78,7 @@ export const MUTATED = [
   // rather than restating it.
   'src/tidy-axis.ts',
   'src/tidy-bands.ts',
-  // Moved out of `comment-placement.ts` and `edge-rules.ts` (S18h1), both in
+  // Moved out of the TypeScript comment-bubble placement and `edge-rules.ts` (S18h1), both in
   // the lane, so leaving them out would shrink what it sees.
   'src/comment-geometry.ts',
   'src/containment.ts',
