@@ -1,3 +1,4 @@
+import { CANVAS_VIEW_PICTURE_META_KEY } from '@kamiazya/whiteboard-canvas-render/canvas-view-picture'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // A link drawn in a node is a live `<a>` in the widget's own frame: a bare
@@ -28,8 +29,9 @@ vi.mock('@modelcontextprotocol/ext-apps', () => ({
   }),
 }))
 
-vi.mock('./mount.js', () => ({
-  mountCanvasViewer: vi.fn(() => ({ dispose: vi.fn() })),
+vi.mock('./widget/picture-view.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./widget/picture-view.js')>()),
+  mountPicture: vi.fn(() => ({ dispose: vi.fn() })),
 }))
 
 class FakeFontFace {
@@ -76,7 +78,12 @@ async function bootInHost(): Promise<void> {
     structuredContent: {
       workspaceId: 'ws-1',
       documentId: 'ws/path',
-      scene: { nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 10, height: 10 }] },
+    },
+    _meta: {
+      [CANVAS_VIEW_PICTURE_META_KEY]: {
+        svg: '<svg xmlns="http://www.w3.org/2000/svg"/>',
+        boxes: [{ id: 'a', box: { x: 0, y: 0, width: 10, height: 10 } }],
+      },
     },
   })
 }
@@ -84,7 +91,7 @@ async function bootInHost(): Promise<void> {
 describe('a link drawn in the canvas_view widget', () => {
   beforeAll(async () => {
     await Promise.all([
-      import('@kamiazya/whiteboard-canvas-render'),
+      import('@kamiazya/whiteboard-canvas-render/canvas-view-picture'),
       import('./widget/comment-control.js'),
       import('./widget/font-registration.js'),
     ])

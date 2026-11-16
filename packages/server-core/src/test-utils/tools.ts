@@ -8,11 +8,7 @@ import { createThreadEditTool } from '../tools/thread-edit.js'
 import { makeTestDeps } from './make-test-deps.js'
 
 export { canvasSnapshotSchema } from '../tools/canvas-snapshot.js'
-export {
-  canvasViewInputSchema,
-  canvasViewOutputSchema,
-  createCanvasViewTool,
-} from '../tools/canvas-view.js'
+export { canvasViewInputSchema, canvasViewOutputSchema } from '../tools/canvas-view.js'
 export { createFacetListTool } from '../tools/facet-list.js'
 export { createVersionListTool } from '../tools/version-list.js'
 export { createVersionRestoreTool, versionRestoreOutputSchema } from '../tools/version-restore.js'

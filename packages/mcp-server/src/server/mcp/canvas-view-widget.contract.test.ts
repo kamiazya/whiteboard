@@ -2,16 +2,10 @@
 // wants by hand because canvas-viewer cannot import server-core. Neither side's
 // type-check sees the other, so a key renamed on one side would leave the widget
 // drawing an empty board while every test on each side stayed green. This is the
-// one place the real tool output meets the widget's reader.
+// one place the real tool's REGISTERED answer — the picture in `_meta` included —
+// meets the widget's reader, through a real McpServer and Client.
 
-import {
-  constantRatioMeasureText,
-  createSpatialTheme,
-  layoutSpatialCanvas,
-  loadedReferenceFromWire,
-  renderSceneToSvg,
-} from '@kamiazya/whiteboard-canvas-render'
-import { parseViewerScene } from '@kamiazya/whiteboard-canvas-viewer/scene'
+import { CANVAS_VIEW_PICTURE_META_KEY } from '@kamiazya/whiteboard-canvas-render'
 import { readCanvasViewResult } from '@kamiazya/whiteboard-canvas-viewer/widget-canvas-view-result'
 import {
   writeCommentThread,
@@ -28,13 +22,13 @@ import {
   type ServerDeps,
   TAG_LIBRARY_PATH,
 } from '@kamiazya/whiteboard-server-core'
-import {
-  canvasViewOutputSchema,
-  createCanvasViewTool,
-} from '@kamiazya/whiteboard-server-core/test-utils/tools'
+import { canvasViewOutputSchema } from '@kamiazya/whiteboard-server-core/test-utils/tools'
+import { Client } from '@modelcontextprotocol/client'
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../routes/_test-helpers.js'
+import { registerDocumentTools } from './document-tools.js'
 
 vi.mock('../config.js', () => ({
   get DATA_DIR() {
@@ -67,6 +61,23 @@ async function save(
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
   })
+}
+
+/** `canvas_view` as a host calls it: through the registered tool, over JSON-RPC. */
+async function callCanvasView(deps: ServerDeps, args: Record<string, unknown>) {
+  const server = new McpServer({ name: 'whiteboard-canvas-view', version: '0.0.0' })
+  registerDocumentTools(server, deps)
+  const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
+  await server.connect(serverSide)
+  const client = new Client({ name: 'widget-host', version: '0.0.0' })
+  await client.connect(clientSide)
+  try {
+    const result = await client.callTool({ name: 'canvas_view', arguments: args })
+    if (result.isError === true) throw new Error(JSON.stringify(result.content))
+    return result
+  } finally {
+    await client.close()
+  }
 }
 
 const thread = {
@@ -112,41 +123,47 @@ async function seedBoard(deps: ServerDeps, workspaceId: string): Promise<string>
 }
 
 describe("canvas_view's result read by the widget's reader", () => {
-  it('recovers the scene, threads, references, style and theme font the tool sent', async () => {
+  it('recovers the ids, the style, the theme font and the picture the tool sent', async () => {
     const deps = await resolveTestServerDeps(tmp.dir)
     const workspaceId = freshWorkspaceId()
     const documentId = await seedBoard(deps, workspaceId)
 
-    const result = await createCanvasViewTool(deps).execute({
-      workspaceId,
-      documentId,
-      style: 'document',
-    })
-    // The subject is present before anything is compared against it: a reader
-    // that dropped an absent key would otherwise "agree" with an empty tool.
-    expect(result.threads).toHaveLength(1)
-    expect(Object.keys(result.references)).toHaveLength(1)
-    expect(result.themeFont?.family).toBe('Yomogi')
-
-    // Through JSON, as it crosses the host boundary.
-    const wire = JSON.parse(JSON.stringify(canvasViewOutputSchema.parse(result)))
-    const read = readCanvasViewResult({ structuredContent: wire })
+    const result = await callCanvasView(deps, { workspaceId, documentId, style: 'document' })
+    const read = readCanvasViewResult(result)
 
     expect(read.workspaceId).toBe(workspaceId)
     expect(read.documentId).toBe(documentId)
-    expect(parseViewerScene(read.scene)).toBeDefined()
-    expect(read.scene).toEqual(wire.scene)
-    expect(read.threads).toEqual(result.threads)
-    expect(read.references).toEqual(
-      Object.fromEntries(
-        Object.entries(result.references).map(([key, value]) => [
-          key,
-          loadedReferenceFromWire(value),
-        ]),
-      ),
-    )
     expect(read.style).toBe('document')
-    expect(read.themeFont).toEqual(result.themeFont)
+    expect(read.themeFont?.family).toBe('Yomogi')
+    // The picture is drawn from everything the model reads beside it: the
+    // file node's note, and the conversation.
+    expect(read.picture?.svg).toContain('Shipped it.')
+    expect(read.picture?.svg).toContain('both of these')
+    expect(read.picture?.boxes.map((box) => box.id).sort()).toEqual(['f1', 't1'])
+  })
+
+  it('leaves what the model reads exactly as the output schema says, with no picture in it', async () => {
+    const deps = await resolveTestServerDeps(tmp.dir)
+    const workspaceId = freshWorkspaceId()
+    const documentId = await seedBoard(deps, workspaceId)
+
+    const result = await callCanvasView(deps, { workspaceId, documentId })
+    const structured = canvasViewOutputSchema.parse(result.structuredContent)
+
+    // The text a model reads is the structured content and nothing else, and
+    // the picture rides `_meta` alone.
+    expect(result.content).toEqual([
+      { type: 'text', text: JSON.stringify(result.structuredContent) },
+    ])
+    expect(Object.keys(structured).sort()).toEqual([
+      'documentId',
+      'references',
+      'scene',
+      'threads',
+      'workspaceId',
+    ])
+    expect(JSON.stringify(result.content)).not.toContain('<svg')
+    expect(result._meta?.[CANVAS_VIEW_PICTURE_META_KEY]).toBeDefined()
   })
 })
 
@@ -201,17 +218,12 @@ async function seedTaggedBoard(
   return board.documentId
 }
 
-// What the widget does with a canvas_view result: read it, then lay the scene
-// out with `CanvasViewer`'s own layout call — which has no library to give.
-function viewerSvg(structuredContent: unknown): string {
-  const read = readCanvasViewResult({ structuredContent })
-  const parsed = parseViewerScene(read.scene)
-  if (!parsed.ok) throw new Error('canvas_view sent a scene the widget cannot parse')
-  const scene = layoutSpatialCanvas(parsed.value, {
-    measure: constantRatioMeasureText,
-    appearance: createSpatialTheme({ mode: 'light' }),
-  })
-  return renderSceneToSvg(scene, { width: 800, height: 400, padding: 0 })
+// What the widget shows for a canvas_view call: the picture it reads.
+async function viewerSvg(deps: ServerDeps, workspaceId: string, documentId: string) {
+  const svg = readCanvasViewResult(await callCanvasView(deps, { workspaceId, documentId })).picture
+    ?.svg
+  if (svg === undefined) throw new Error('canvas_view sent no picture the widget can read')
+  return svg
 }
 
 const PAINTED = /(?:fill|stroke)="(#[0-9a-f]{6})"/gi
@@ -233,15 +245,7 @@ describe('canvas_view draws a board as wb_scene_render does (colour by intent)',
       comments: false,
       style: 'clean',
     })
-    const viewed = viewerSvg(
-      JSON.parse(
-        JSON.stringify(
-          canvasViewOutputSchema.parse(
-            await createCanvasViewTool(deps).execute({ workspaceId, documentId }),
-          ),
-        ),
-      ),
-    )
+    const viewed = await viewerSvg(deps, workspaceId, documentId)
 
     // The subject is present: the export itself is coloured and has a legend,
     // so a viewer that agreed with an uncoloured export would not pass.
@@ -263,15 +267,7 @@ describe('canvas_view draws a board as wb_scene_render does (colour by intent)',
     const workspaceId = freshWorkspaceId()
     const documentId = await seedTaggedBoard(deps, workspaceId, false)
 
-    const viewed = viewerSvg(
-      JSON.parse(
-        JSON.stringify(
-          canvasViewOutputSchema.parse(
-            await createCanvasViewTool(deps).execute({ workspaceId, documentId }),
-          ),
-        ),
-      ),
-    )
+    const viewed = await viewerSvg(deps, workspaceId, documentId)
     for (const colour of DECLARED_FILLS) expect(paintedColours(viewed).has(colour)).toBe(false)
     expect(viewed).not.toContain('data-wb-legend')
   })

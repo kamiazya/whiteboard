@@ -101,7 +101,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'packages/canvas-render/src/tidy-units.ts#mostlyInside',
   'packages/canvas-viewer/src/font-embedding.ts#fontBytesToDataUri',
   'packages/canvas-viewer/src/font-embedding.ts#viewerFontDataUri',
-  'packages/canvas-viewer/src/mount.ts#ViewerSceneError',
   'packages/codec/src/spatial/codecs.ts#roundTrip',
   'packages/codec/src/spatial/json-canvas.ts#jsonCanvasNodeSchema',
   'packages/daemon-client/src/api-contracts/document-url.ts#WORKSPACE_DOCUMENT_API_ACTIONS',
@@ -217,6 +216,8 @@ const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
 
 /** Kept on purpose, each with why. */
 const INTENTIONAL: Readonly<Record<string, string>> = {
+  'packages/canvas-viewer/src/scene.ts#parseViewerScene':
+    "the TypeScript JSON Canvas reader the MCP Apps widget no longer reads through (it shows the daemon's picture, ADR-0054 S17); apps/web's doc snapshots still parse their hand-written .canvas sources with it, and S17's second step deletes it with codec's readJsonCanvasText",
   'packages/canvas-render/src/layout/canvas-switch.ts#canvasLayoutRequest':
     "which options the Rust core can be handed: the whole layout's switch calls it, canvas-switch.test.ts holds each declined option apart, and the recorder of the crate's native replay builds its requests with it, so the replay asks what the switch would",
   'packages/canvas-render/src/layout/canvas-switch.ts#firstDifference':
@@ -398,7 +399,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 138
+const DEBT_CEILING = 137
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 14

@@ -23,7 +23,7 @@ describe('exemptedBoundaryViolationKinds', () => {
         'node-ambient-global',
       ),
     ).toBe(true)
-    for (const other of ['mount.ts', 'widget-entry.ts', 'widget/canvas-point.ts']) {
+    for (const other of ['widget-entry.ts', 'widget/picture-view.ts', 'widget/canvas-point.ts']) {
       expect(exemptedBoundaryViolationKinds(name, other).has('node-ambient-global'), other).toBe(
         false,
       )

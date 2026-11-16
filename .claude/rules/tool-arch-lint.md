@@ -128,7 +128,7 @@ right for `dom-global` in a package that is DOM code throughout (`canvas-viewer`
 and wrong for a use that lives in one file (`apps/extension`'s is `content.ts`'s
 alone). `canvas-viewer` carried `node-ambient-global` package-wide
 for a single `Buffer` in `widget/build-fonts-module.ts`, while the rule said
-one file: `process.env.X` or `__dirname` in `mount.ts` or `widget-entry.ts` —
+one file: `process.env.X` or `__dirname` in the since-deleted mount module or `widget-entry.ts` —
 which ship into the browser and the widget iframe — passed (measured, both).
 `exemptBoundaryFiles` keys the exemption by path under `src/`, and `per-file
 boundary exemptions` fails an entry whose file is gone or no longer contains

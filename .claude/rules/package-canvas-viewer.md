@@ -9,8 +9,10 @@ paths:
 
 - `scene.ts`: `ViewerScene` (model's `SpatialCanvas`, re-exported —
   never redeclared), the total `parseViewerScene`, delegating to
-  codec's `readJsonCanvasText`, the TypeScript JSON Canvas reader the widget iframe keeps
-  because it has no Rust core. The daemon and the web app read through the core
+  codec's `readJsonCanvasText`, the TypeScript JSON Canvas reader. The widget no
+  longer reads a canvas (it shows the daemon's picture, ADR-0054 S17); what still
+  calls it is apps/web's doc snapshots and the eval scripts, and it goes with
+  S17's second step. The daemon and the web app read through the core
   (`parseSpatial`); arch-lint keeps them off this reader.
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
@@ -37,21 +39,25 @@ paths:
   `renderSceneToSvg`, injecting the resulting string through `SceneSvg`.
 - `SceneSvg.tsx`: the ONE component that turns a scene's SVG string into
   DOM; apps/web imports it too.
-- `mount.ts`: the imperative `mountCanvasViewer` API for non-React hosts
-  (the MCP Apps widget), converting `parseViewerScene`'s result into a
-  thrown `ViewerSceneError` at this one imperative boundary.
-- `widget/`: the self-contained single-file MCP Apps widget build —
+- `widget/`: the self-contained single-file MCP Apps widget build. It lays
+  NOTHING out (ADR-0054 S17, owner decision q54): `canvas_view`'s registration
+  lays the board out on the daemon and sends `{ svg, boxes }` in the result's
+  `_meta` (canvas-render's `canvasViewPictureSchema`, imported through the
+  `./canvas-view-picture` subpath so the bundle takes none of the layout), and
+  `picture-view.ts` parses that SVG, refuses anything in it that could run,
+  and places it in a named `<figure>`. The widget holds —
   build-time font embedding (`build-fonts-module.ts`), the widget entry
   bootstrap, the refresh/comment controls, the click-to-canvas-point
   mapping (`canvas-point.ts`), `widget-tool-calls.ts` (the builders of the
   widget's `canvas_view` / `wb_canvas_edit` requests — import-free so
   mcp-server's contract test and e2e smoke parse the very bytes the widget
-  sends), `tool-error-text.ts` (the reason an `isError` result carries, shown on the comment control's alert line — the widget's one status line, for refused comments and failed refreshes alike), `canvas-view-result.ts` (the reader of `canvas_view`'s result,
+  sends), `tool-error-text.ts` (the reason an `isError` result carries, shown on the comment control's alert line — the widget's one status line, for refused comments and failed refreshes alike), `canvas-view-result.ts` (the reader of `canvas_view`'s result — ids, style and theme font from `structuredContent`, the picture from `_meta` —
   the other half of that contract — mcp-server's
   `canvas-view-widget.contract.test.ts` runs the real tool's output
   through it), and `theme-font.ts`: the widget's ONE
   outbound request (ADR-0011's 2026-09-10 note), gated on a pinned
-  catalogue origin the widget holds itself.
+  catalogue origin the widget holds itself, and made only when the picture
+  declares the family (ADR-0011's 2026-11-16 correction, q80).
 
 ## What does NOT belong here
 
@@ -139,7 +145,7 @@ paths:
 
 ## Render style (ADR-0030)
 
-- `CanvasViewer` and `mountCanvasViewer` take `style` (`'clean' | 'document' |
+- `CanvasViewer` takes `style` (`'clean' | 'document' |
   <theme id>`), forwarded to `layoutSpatialCanvas`. Absent is `'clean'`: the
   MCP Apps widget and any embedding host never pay for a theme's jitter or
   glow unasked, the same default as the headless export. A host that wants
@@ -153,12 +159,9 @@ paths:
   export could not, and a face the two sides disagree on moves every
   wrapped line.
 
-- The widget PAINTS the theme's paper: `widget-entry.ts` resolves
-  `resolveCanvasPalette(scene, 'light', { style }).surface` and passes it
-  to `mountCanvasViewer`'s `background`, which is canvas-render's
-  background rect rather than a CSS colour. `'light'` restates
-  `CanvasViewer`'s own default, since the paper has to come from the mode
-  the layout drew in.
+- The widget's picture carries the theme's paper: server-core's
+  `canvasViewPicture` resolves `resolveCanvasPalette(canvas, 'light', { style }).surface`
+  into canvas-render's background rect, in the light mode it lays out in.
 
 - `registerFontBytes(family, bytes)` registers a face from bytes in THIS
   realm — a window's document or a worker's global — and records the family

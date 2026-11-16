@@ -19,6 +19,7 @@ import { fileURLToPath } from 'node:url'
 // the runtime step cannot drift from the widget by being a second hand copy.
 import { canvasViewCall, threadAddCall } from '@kamiazya/whiteboard-canvas-viewer/widget-tool-calls'
 import { assertCanonicalWorkspaceId } from './lib/canonical-workspace-id.mjs'
+import { canvasViewHandsTheWidgetItsPicture } from './lib/canvas-view-picture.mjs'
 import { canvasViewDrawsTheThemeAndKeepsItOnRefresh } from './lib/canvas-view-theme.mjs'
 import { watchChild } from './lib/child-watch.mjs'
 import { assertCanvasFacetWritesRefused } from './lib/facet-write-refusals.mjs'
@@ -1759,6 +1760,7 @@ async function canvasViewAnswersTheWidget(ctx) {
     throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
   }
   console.log('[e2e] canvas_view → scene + references + both ids for the widget')
+  await canvasViewHandsTheWidgetItsPicture(rpc, WORKSPACE_ID, documentId)
   // The look is the widget's to draw, so the tool only echoes it — and the
   // SDK validates that echo against the outputSchema.
   const viewedStyled = await callTool('canvas_view', {

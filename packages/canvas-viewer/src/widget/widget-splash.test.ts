@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
-// The widget is a self-contained single file; until mountCanvasViewer's
-// first commit replaces #root's children, whatever sits inside #root is the
+// The widget is a self-contained single file; until the first picture
+// replaces #root's children, whatever sits inside #root is the
 // loading state. These pin the mini-splash contract (BRAND.md): the bare
 // signature, drawn once then breathing, no container (the widget frame IS
 // the container), fully inline (no external resources), reduced-motion

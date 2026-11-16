@@ -102,17 +102,20 @@ the tab. A note's thumbnail does not fetch it for a board the note embeds: until
 theme has been opened or drawn as its own thumbnail in this tab, the miniature inside the note
 uses the bundled family.
 
-For the daemon's own rendering — `wb_scene_render` and the export routes — open **Settings →
+For the daemon's own rendering — `wb_scene_render`, the export routes and the inline canvas
+view — open **Settings →
 Fonts** while connected and install **Yomogi**. The daemon keeps the file, and lays text out
 with that face as well as naming it, so a wrapped line breaks where it is drawn; it reads the
 directory when it warms its renderer, so a face installed while it is running is used from its
 next start. The web app takes the daemon's copy when it has one, and the catalogue source
 otherwise.
 
-The inline canvas view in an MCP client does the same: when it draws a board in a theme that
-names a family, it fetches that one family from the same catalogue source — nothing else, ever,
-and nothing at all for an unthemed board. Some hosts restrict what a widget may load; where that
-happens the view keeps the bundled family and the rest of the theme is unaffected.
+The inline canvas view in an MCP client shows what the daemon's own rendering shows: the
+server lays the board out, so the view draws Yomogi only where the daemon has it installed, and
+the bundled Roboto otherwise. Where the daemon drew in Yomogi, the view fetches that one family
+from the same catalogue source to paint it — nothing else, ever, and nothing at all for an
+unthemed board. Some hosts restrict what a widget may load; where that happens the view paints
+in the bundled family and the rest of the theme is unaffected.
 
 Offline, or where the source cannot be reached, the theme still draws its hand-drawn strokes and
 the lettering uses the bundled family. The SVG names the family that was actually measured,

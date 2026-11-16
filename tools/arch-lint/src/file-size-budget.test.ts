@@ -548,7 +548,8 @@ const SCRIPT_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // packages/mcp-server/scripts/smoke/lib/folder-rename.mjs.
   // +8: the retired comment.add refused, and canvas_view's threads checked whole now that its scene carries none.
   // +3: wb_workspace_edit and canvas_view checked to answer the canonical id; the check is smoke/lib/canonical-workspace-id.mjs.
-  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2734,
+  // +2: canvas_view's widget picture in `_meta`; the check is smoke/lib/canvas-view-picture.mjs.
+  'packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs': 2736,
   // The server backup/restore/support-bundle CLI scenarios, which share one
   // seeded data dir, two spawned servers and one leak pass over everything
   // they printed. What has left: the JWT, TLS, CLI-runner and readiness

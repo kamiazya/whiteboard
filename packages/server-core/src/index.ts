@@ -45,6 +45,7 @@ export type {
 } from './server-deps.js'
 export { createCanvasEditTool } from './tools/canvas-edit.js'
 export { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
+export { canvasViewPicture } from './tools/canvas-view-picture.js'
 export { WorkspaceNotFoundForCallerError } from './tools/document-crud.errors.js'
 export {
   wbDocumentCreate,

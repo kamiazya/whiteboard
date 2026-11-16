@@ -1,6 +1,6 @@
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { boxContains, topmostHit, topmostNodeAt } from './hit-test.js'
+import { boxContains, hitBoxesOf, topmostHit } from './hit-test.js'
 
 const box = (x: number, y: number, width: number, height: number) => ({ x, y, width, height })
 
@@ -44,7 +44,7 @@ describe('boxContains', () => {
   })
 })
 
-describe('topmostNodeAt', () => {
+describe('topmostHit over hitBoxesOf', () => {
   const frame = groupNode({ id: 'frame', x: 0, y: 0, width: 400, height: 300 })
   const member = textNode({ id: 'a', x: 90, y: 50, width: 40, height: 30, text: '' })
 
@@ -53,17 +53,17 @@ describe('topmostNodeAt', () => {
       [frame, member],
       [member, frame],
     ]) {
-      expect(topmostNodeAt(nodes, { x: 100, y: 60 })?.id).toBe('a')
+      expect(topmostHit(hitBoxesOf(nodes), { x: 100, y: 60 })).toBe('a')
     }
   })
 
   it('names the frame in its padding and nothing outside it', () => {
-    expect(topmostNodeAt([member, frame], { x: 300, y: 200 })?.id).toBe('frame')
-    expect(topmostNodeAt([member, frame], { x: 500, y: 500 })).toBeUndefined()
+    expect(topmostHit(hitBoxesOf([member, frame]), { x: 300, y: 200 })).toBe('frame')
+    expect(topmostHit(hitBoxesOf([member, frame]), { x: 500, y: 500 })).toBeUndefined()
   })
 })
 
-describe('topmostNodeAt with nested frames', () => {
+describe('topmostHit over hitBoxesOf, with nested frames', () => {
   // The ids sort against the nesting, so a scan in stored order names the
   // wrong frame whichever way the document happens to list them.
   const outer = groupNode({ id: 'z-outer', x: 0, y: 0, width: 400, height: 300 })
@@ -75,18 +75,18 @@ describe('topmostNodeAt with nested frames', () => {
 
   it('names the innermost frame whichever of the two the document stores first', () => {
     for (const nodes of bothStoredOrders) {
-      expect(topmostNodeAt(nodes, { x: 60, y: 60 })?.id).toBe('a-inner')
+      expect(topmostHit(hitBoxesOf(nodes), { x: 60, y: 60 })).toBe('a-inner')
     }
   })
 
   it('names the outer frame in its own padding', () => {
     for (const nodes of bothStoredOrders) {
-      expect(topmostNodeAt(nodes, { x: 350, y: 250 })?.id).toBe('z-outer')
+      expect(topmostHit(hitBoxesOf(nodes), { x: 350, y: 250 })).toBe('z-outer')
     }
   })
 
   it('names a member over both frames', () => {
     const member = textNode({ id: 'm', x: 60, y: 60, width: 20, height: 20, text: '' })
-    expect(topmostNodeAt([member, inner, outer], { x: 65, y: 65 })?.id).toBe('m')
+    expect(topmostHit(hitBoxesOf([member, inner, outer]), { x: 65, y: 65 })).toBe('m')
   })
 })

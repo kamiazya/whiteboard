@@ -49,7 +49,7 @@ export type {
 export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
-export { boxContains, type HitBox, topmostHit, topmostNodeAt } from './hit-test.js'
+export { boxContains, type HitBox, hitBoxesOf, topmostHit } from './hit-test.js'
 export {
   resolveCanvasPalette,
   resolveCanvasThemeFontFamily,
@@ -148,6 +148,11 @@ export {
   describeMeasure,
   isFullWidthCodePoint,
 } from './measure.js'
+export {
+  CANVAS_VIEW_PICTURE_META_KEY,
+  type CanvasViewPicture,
+  canvasViewPictureSchema,
+} from './picture/canvas-view-picture.js'
 export {
   createReferenceContentAccount,
   REFERENCE_CHARS_BUDGET,

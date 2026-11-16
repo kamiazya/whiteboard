@@ -30,8 +30,7 @@ export type ViewerTheme = SpatialThemeMode
  * would re-run every layout.
  *
  * `light` is the default because it is the mode a surface with no theme of
- * its own wants — the MCP Apps widget, and anything embedding a scene into a
- * document — and because export must never vary with a person's UI theme
+ * its own wants — anything embedding a scene into a document — and because export must never vary with a person's UI theme
  * (see apps/web's `editor-appearance.ts`).
  */
 const VIEWER_APPEARANCES = {
@@ -54,9 +53,8 @@ export interface CanvasViewerProps {
    *
    * Synchronous by canvas-render's contract, which is why this package
    * takes the resolution as data rather than fetching it: the viewer is
-   * read-only and has no store. The host supplies it — the MCP Apps widget
-   * from `canvas_view`'s `references` payload, since the server is the only
-   * side that can read another document. Absent keeps the plain reference
+   * read-only and has no store. The host supplies it, since the keeper is
+   * the only side that can read another document. Absent keeps the plain reference
    * card.
    */
   references?: ReferenceSeams
@@ -64,7 +62,7 @@ export interface CanvasViewerProps {
    * Typesets a math block in any body this canvas lays out. Synchronous by
    * canvas-render's contract, so a host with an async engine answers from
    * what it has already rendered. Absent keeps the escaped-source
-   * placeholder — the MCP Apps widget ships no engine.
+   * placeholder.
    */
   renderMath?: SpatialLayoutOptions['renderMath']
   /** Draws a diagram fence, on the same terms as `renderMath`; absent is a plain code block. */
@@ -155,10 +153,9 @@ export function CanvasViewer({
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
 
   // Kicks off (or joins) the shared viewer-font load and flips true once the
-  // real face is loaded — a `mount.ts`-only host (the MCP Apps widget, which
-  // registers its own fonts before mounting, or a standalone
-  // mountCanvasViewer caller) never goes through apps/web's main.tsx bound
-  // wait, so this component is the fallback seam that still eventually
+  // real face is loaded — a host that never goes through apps/web's
+  // main.tsx bound wait (a test, an embedding page) gets it here, so this
+  // component is the fallback seam that still eventually
   // re-measures with the real face instead of staying on fallback metrics
   // for its whole lifetime. Included in the svg memo's deps so the SVG is
   // recomputed exactly when readiness ticks, not on every render.

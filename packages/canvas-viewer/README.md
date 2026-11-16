@@ -18,10 +18,6 @@ widget, HTML export). Private workspace package — never published to npm.
   node kind still renders, silently.
   Pan/zoom/select are the browser's native SVG behavior; there is no
   editing affordance.
-- `mountCanvasViewer(container, options)` — imperative mount with an
-  embedded-scene slot (`<script data-whiteboard-scene>` or
-  `window.__WHITEBOARD_VIEWER_SCENE__`).
-  Throws a `ViewerSceneError` if the scene payload fails schema validation.
 - `parseViewerScene` (from `./scene`) — a total parser over codec's
   `readJsonCanvasText` and wire schema; it never throws, it returns a
   discriminated `{ ok, value | error }` result.
@@ -29,23 +25,24 @@ widget, HTML export). Private workspace package — never published to npm.
   implementation of canvas-render's injected `MeasureText` seam (Canvas 2D
   `measureText`, with a ratio-based fallback for environments with no real
   2D context).
-- `serializeSceneForScriptTag` (from `./widget/embed-scene`) — the required
-  serializer for a downstream consumer injecting scene JSON into the widget
-  build's embedded-scene `<script>` slot (see "Widget build" below). Plain
+- `serializeForScriptTag` (from `./widget/embed-picture`) — the required
+  serializer for a downstream consumer injecting a picture into the widget
+  build's embedded-picture `<script>` slot (see "Widget build" below). Plain
   `JSON.stringify` is unsafe there: HTML terminates a `<script>` element at
-  the literal `</script` byte sequence even inside a JSON string, so scene
+  the literal `</script` byte sequence even inside a JSON string, so SVG
   text containing that sequence could break out of the tag.
 
 ## Widget build
 
 `pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget` produces `dist/widget/canvas-viewer.html`: one
 self-contained file with all JS, CSS, and the fonts it needs inlined as
-base64 data URIs. It mounts via `mountCanvasViewer`, sourcing its scene
-exclusively from the embedded-scene slot — a downstream consumer (HTML
-export, MCP Apps `ui://` resource) injects the real scene JSON into that
-placeholder `<script>` tag without touching the rest of the file, using
-`serializeSceneForScriptTag` rather than raw `JSON.stringify` to avoid a
-`</script>` breakout.
+base64 data URIs. It lays nothing out: an MCP Apps host hands it
+`canvas_view`'s result, whose `_meta` carries the picture the daemon laid out
+(`{ svg, boxes }`, canvas-render's `canvasViewPictureSchema`), and the widget
+places that SVG. With no host it shows the embedded-picture slot instead — a
+downstream consumer injects a picture into that placeholder `<script>` tag
+without touching the rest of the file, using `serializeForScriptTag` rather
+than raw `JSON.stringify` to avoid a `</script>` breakout.
 
 `pnpm --filter @kamiazya/whiteboard-canvas-viewer smoke:widget` is the runtime gate: it loads the built HTML over
 `file://` with full network interception and asserts zero HTTP(S) requests,

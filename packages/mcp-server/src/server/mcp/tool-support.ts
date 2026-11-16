@@ -55,6 +55,12 @@ export type ToolHandlerReturn<O extends z.ZodTypeAny | undefined> = O extends z.
           structuredContent: z.infer<O>
           content: CallToolResult['content']
           isError?: false
+          /**
+           * What a result carries for an MCP Apps view and no model reads —
+           * `canvas_view`'s laid-out picture. Outside `outputSchema` by
+           * design: the model-visible surface stays the structured content.
+           */
+          _meta?: CallToolResult['_meta']
         }
       | {
           isError: true
