@@ -18,7 +18,6 @@ import {
 } from './lib/browser-workspace-id.js'
 import { scheduleFileSweep } from './lib/file-sweep-schedule.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
-import { currentLayoutCore } from './lib/spatial/layout-core.js'
 import { clearNamedDb } from './test-utils/browser-document.js'
 import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
@@ -319,9 +318,15 @@ describe('startBootSequence — the Rust core', () => {
         signal?.addEventListener('abort', () => reject(signal.reason))
       })) as typeof fetch
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    // The host is installed once per module instance and keeps the fetch and
+    // the failure it saw; a fresh instance per run is what makes a repeat
+    // exercise a first load rather than the previous run's settled one.
+    vi.resetModules()
+    const { startBootSequence: boot } = await import('./boot.js')
+    const { currentLayoutCore: current } = await import('./lib/spatial/layout-core.js')
     try {
       let rendered = false
-      const booted = startBootSequence({
+      const booted = boot({
         rootEl: rootEl(),
         resolveWorkspaceId: async () => 'ws',
         loadFont: async () => undefined,
@@ -338,11 +343,7 @@ describe('startBootSequence — the Rust core', () => {
       await booted
       expect(asked[0]?.aborted).toBe(true)
       expect(
-        currentLayoutCore()?.layout.layoutSpatialCanvas(
-          {} as never,
-          () => undefined,
-          (() => ({})) as never,
-        ),
+        current()?.layout.layoutSpatialCanvas({} as never, () => undefined, (() => ({})) as never),
       ).toEqual({ refused: { code: 'malformed', reason: 'core-unavailable' } })
     } finally {
       vi.useRealTimers()

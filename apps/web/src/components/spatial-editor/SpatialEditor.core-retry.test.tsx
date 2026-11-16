@@ -24,7 +24,14 @@ vi.mock('../../lib/spatial/layout-core.js', async (importOriginal) => ({
   },
 }))
 
-afterEach(cleanup)
+// A fresh realm per run: a repeat that started at the last run's generation
+// would announce no change, and the redraw it asserts would never be asked for.
+afterEach(() => {
+  cleanup()
+  realm.core = undefined
+  realm.generation = 0
+  realm.listeners.clear()
+})
 
 /** What a layout draws when the realm's core did not load. */
 const CORE_UNAVAILABLE = { code: 'malformed', reason: 'core-unavailable' } as const
