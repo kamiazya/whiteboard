@@ -16,6 +16,7 @@ import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import { describe, expect, it } from 'vitest'
 import { commands } from 'vitest/browser'
+import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { createSpatialContentCache } from '../content-cache.js'
 import { editorLayoutBase } from './scene-render-core.js'
@@ -33,8 +34,8 @@ import type { WebCore } from './web-core.js'
  * out as the editor composes it: the editor's base, its content cache, its
  * fragment table, its comments and proposals.
  *
- * Where the pipeline set VITE_WHITEBOARD_CORE a missing artifact FAILS this
- * file; elsewhere it skips and says so (as layout-core.browser.test.ts does).
+ * Where the run asks for a core (`CORE_REQUIRED`: `differential` or `rust`) a
+ * missing artifact FAILS this file; elsewhere, `ts` included, it skips and says so (as layout-core.browser.test.ts does).
  */
 
 const FRAME_BUDGET_MS = 1000 / 60
@@ -45,8 +46,6 @@ declare module 'vitest/browser' {
     printReading: (line: string) => Promise<void>
   }
 }
-
-const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 
 async function loadRealCore(): Promise<{ core: WebCore } | { failure: unknown }> {
   try {
@@ -223,7 +222,7 @@ const largest = (): WebLayoutBoard =>
   )[0] as WebLayoutBoard
 
 describe('a drag frame laid out by the core', () => {
-  it.runIf(REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
+  it.runIf(CORE_REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
     if ('failure' in real) throw real.failure
   })
 

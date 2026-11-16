@@ -3,9 +3,9 @@
 // out beside the TypeScript with every difference thrown. The jsdom suites
 // pin the switch against a fake core; only here does the artifact itself run.
 //
-// The artifact is built in the pipeline, never committed. Where CI sets
-// VITE_WHITEBOARD_CORE a missing artifact FAILS these tests; elsewhere it
-// skips and says so, because a person without the Rust toolchain has no
+// The artifact is built in the pipeline, never committed. Where the run asks
+// for a core (`CORE_REQUIRED`: `differential` or `rust`) a missing artifact
+// FAILS these tests; elsewhere, `ts` included, it skips and says so, because a person without the Rust toolchain has no
 // artifact to load.
 
 import { constantRatioMeasureText, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
@@ -22,13 +22,12 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it, vi } from 'vitest'
+import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { codecsReady } from '../codec-cores.js'
 import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js'
 import { startLayoutCore } from '../page-layout-core.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
-
-const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 
 async function loadRealCore() {
   try {
@@ -63,7 +62,7 @@ const board = (routing: 'orthogonal' | 'curved' | 'straight'): SpatialCanvas =>
   }) as SpatialCanvas
 
 describe('the real Rust core in a browser', () => {
-  it.runIf(REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
+  it.runIf(CORE_REQUIRED)('finds the staged artifact where the pipeline promised it', () => {
     if ('failure' in real) throw real.failure
   })
 
@@ -164,7 +163,7 @@ describe('the real Rust core reading and writing JSON Canvas in a browser', () =
   })
 })
 
-describe.runIf(REQUIRED)('the page core', () => {
+describe.runIf(CORE_REQUIRED)('the page core', () => {
   it('loads although the page has since replaced fetch, which knows nothing of the wasm', async () => {
     startLayoutCore()
     vi.stubGlobal('fetch', async () => new Response(null, { status: 404 }))
@@ -176,7 +175,7 @@ describe.runIf(REQUIRED)('the page core', () => {
   })
 })
 
-describe.skipIf(!REQUIRED)('the layout worker with the core on', () => {
+describe.skipIf(!CORE_REQUIRED)('the layout worker with the core on', () => {
   it('lays a board out through its own loaded core without a mismatch', async () => {
     const request: LayoutRequest = {
       type: 'layout',

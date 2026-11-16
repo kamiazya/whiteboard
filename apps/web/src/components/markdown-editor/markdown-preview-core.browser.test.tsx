@@ -11,7 +11,8 @@
  * this counts them and requires none, with the core asked for every note.
  * Under the CI browser job's `differential` + `throw` a difference fails the
  * layout. Where no core is loaded (a run under `ts`) it skips, and a run that
- * set `VITE_WHITEBOARD_CORE` fails instead when the core did not load.
+ * asked for one (`differential` or `rust`, `CORE_REQUIRED`) fails instead
+ * when the core did not load.
  */
 
 import {
@@ -27,17 +28,17 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { layoutMarkdownOutline, renderMarkdownPreview } from '../../lib/render-preview.js'
 import { layoutCoreReady } from '../../lib/spatial/layout-core.js'
+import { CORE_REQUIRED } from '../../test-utils/core-required.js'
 import { webLayoutBoards } from '../../test-utils/web-layout-boards.js'
 import { CommentBody } from '../annotations/CommentBody.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(cleanup)
 
-const REQUIRED = (import.meta.env.VITE_WHITEBOARD_CORE ?? '') !== ''
 const loaded: LayoutCore | undefined = await layoutCoreReady()
 const MARKDOWN = loaded?.impl.layoutMarkdown ?? 'ts'
 
-it.runIf(REQUIRED)('loads the core the pipeline asked for before a note is laid out', () => {
+it.runIf(CORE_REQUIRED)('loads the core the pipeline asked for before a note is laid out', () => {
   expect(loaded).toBeDefined()
 })
 
