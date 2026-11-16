@@ -232,6 +232,39 @@ mod tests {
         assert_eq!((drawn.w, drawn.h), (22.0 + 29.0 * 7.0, 54.0));
     }
 
+    /// Each key opens its own row under the last value of the one before,
+    /// and each muted note takes a row of its own after the keys.
+    #[test]
+    fn keys_and_notes_each_take_the_next_row_down() {
+        let keys = vec![
+            key(LegendKind::Boxes, LegendSwatch::default()),
+            key(LegendKind::Edges, LegendSwatch::default()),
+        ];
+        let legend = SceneLegend { keys, uncarried: Uncarried { boxes: true, edges: true } };
+        let drawn = legend_scene_block(&legend, &ink()).unwrap_or_else(|| panic!("a block"));
+        let rows: Vec<(f64, &str)> = drawn
+            .nodes
+            .iter()
+            .filter(|node| matches!(node, SceneNode::TextRun(_)))
+            .map(|node| {
+                let (bbox, text, _, _) = run(node);
+                (bbox.y, text)
+            })
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (0.0, "health"),
+                (18.0, "untagged"),
+                (36.0, "health"),
+                (54.0, "untagged"),
+                (72.0, "box colour: no key carries it"),
+                (90.0, "edge colour: no key carries it"),
+            ]
+        );
+        assert_eq!((drawn.w, drawn.h), (22.0 + 30.0 * 7.0, 108.0));
+    }
+
     #[test]
     fn a_legend_with_nothing_to_key_draws_no_block() {
         let legend =

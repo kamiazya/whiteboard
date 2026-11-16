@@ -136,8 +136,18 @@ fn a_markdown_request_past_its_caps_is_refused() {
     let refused = |what: &str| json!(["refused", "input-too-large", what]);
     assert_eq!(answer(&comment(&long, "comfortable")), refused("bodies"));
     assert_eq!(answer(&note(&long, &[])), refused("bodies"));
+    // At the cap is within it: blank lines parse to nothing, so it costs no layout.
+    let full = "\n".repeat(MAX_BODY_BYTES);
+    assert_eq!(answer(&comment(&full, "comfortable")).get(0), Some(&json!("ok")));
+    assert_eq!(answer(&note(&full, &[])).get(0), Some(&json!("ok")));
     let half = "a".repeat(MAX_BODY_BYTES / 2 + 1);
     assert_eq!(answer(&note(&half, &[("references", board_wire(&[&half]))])), refused("bodies"));
+    let at_cap: Vec<&str> = vec![""; MAX_ELEMENTS];
+    let within = answer(&note("x", &[("references", board_wire(&at_cap))]));
+    assert_eq!(within.get(0), Some(&json!("ok")));
+    let row = s(vec![json!("math:x"), m(&[("svg", json!("<g/>"))])]);
+    let table = s(vec![row; super::MAX_FRAGMENTS]);
+    assert_eq!(answer(&note("x", &[("fragments", table)])).get(0), Some(&json!("ok")));
     let many: Vec<&str> = vec![""; MAX_ELEMENTS + 1];
     let elements = answer(&note("x", &[("references", board_wire(&many))]));
     assert_eq!(elements, refused("too-many-elements"));
