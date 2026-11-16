@@ -19,6 +19,7 @@ function glueOf(...answers: string[]) {
     register_layout_fonts: () => '["ok",3]',
     release_layout_fonts: () => true,
     release_layout_cache: () => false,
+    layout_query: () => '',
   }
   return { glue, sent }
 }

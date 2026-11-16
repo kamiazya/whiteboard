@@ -48,6 +48,7 @@ mod fragments;
 mod host_measure;
 mod markdown;
 mod measure;
+mod query;
 mod request;
 
 pub use cache::{MAX_CACHED_BODIES, MAX_CACHED_BYTES, release_layout_cache};
@@ -56,6 +57,7 @@ pub use fonts::{
 };
 pub use fragments::{MAX_FRAGMENTS, MAX_PLACED_BYTES};
 pub use host_measure::{Host, HostMeasurer, font_key};
+pub use query::{MAX_RUNS, layout_query, query_with_host};
 
 use std::sync::OnceLock;
 
@@ -279,8 +281,22 @@ fn lay_out(
     request: &Request,
     measure: &dyn Measure,
     surface: Option<&Surface>,
-    registry: &Registry,
-    themes: &[(String, ThemeTokens)],
+    plugin: Plugin,
+) -> String {
+    with_options(request, measure, surface, plugin, &mut |options, host, fragments| {
+        let laid = compose_canvas::layout_spatial_canvas(&request.canvas, options);
+        outcome(&laid, host, fragments)
+    })
+}
+
+/// `then` over the composer's options as `request` names them, with the host
+/// its bodies resolve through and the fragment table it carries.
+fn with_options(
+    request: &Request,
+    measure: &dyn Measure,
+    surface: Option<&Surface>,
+    (registry, themes): Plugin,
+    then: &mut dyn FnMut(&LayoutOptions<'_>, &WireHost<'_>, Option<&FragmentTable<'_>>) -> String,
 ) -> String {
     let mode = if request.dark { SpatialThemeMode::Dark } else { SpatialThemeMode::Light };
     let held = |family: &str| request.font_families.iter().any(|held| held == family);
@@ -318,18 +334,28 @@ fn lay_out(
         budget: None,
         embed_path: &request.embed_path,
     };
-    let laid = compose_canvas::layout_spatial_canvas(&request.canvas, &options);
-    outcome(&laid, &host, fragments.as_ref())
+    then(&options, &host, fragments.as_ref())
 }
 
 /// What a layout through `host` and `fragments` answers.
 fn outcome(laid: &LaidOut, host: &WireHost<'_>, fragments: Option<&FragmentTable<'_>>) -> String {
+    let ok = || laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked));
+    settled(host, fragments, ok)
+}
+
+/// What a layout through `host` and `fragments` answers when `ok` is its laid-out answer:
+/// declined for what the core cannot answer exactly, else the fences it must be sent.
+fn settled(
+    host: &WireHost<'_>,
+    fragments: Option<&FragmentTable<'_>>,
+    ok: impl FnOnce() -> String,
+) -> String {
     let asked = host.needs();
     match host.refused() {
         Some(why) => declined(why.class()),
         None if fragments.is_some_and(FragmentTable::over) => declined("fragments"),
         None if !asked.is_empty() => needs(&asked),
-        None => laid_out(laid, &host.degradations(), fragments.map(FragmentTable::asked)),
+        None => ok(),
     }
 }
 
@@ -422,18 +448,23 @@ fn measured(
     }
 }
 
-/// A canvas request laid out, or refused past its caps.
-fn layout_canvas(request: &Request, host: Option<&dyn Host>) -> String {
+/// What of a canvas request is past this entry's caps, if anything.
+fn past_canvas_caps(request: &Request) -> Option<&'static str> {
     if element_total(request) > MAX_ELEMENTS || expanded_ids(request) > MAX_ELEMENTS {
-        return refused("input-too-large", "too-many-elements");
+        return Some("too-many-elements");
     }
     if request.fragments.as_ref().is_some_and(|table| table.len() > MAX_FRAGMENTS) {
-        return refused("input-too-large", "fragments");
+        return Some("fragments");
     }
-    if let Some(what) = past_content_caps(request) {
+    past_content_caps(request)
+}
+
+/// A canvas request laid out, or refused past its caps.
+fn layout_canvas(request: &Request, host: Option<&dyn Host>) -> String {
+    if let Some(what) = past_canvas_caps(request) {
         return refused("input-too-large", what);
     }
-    let (registry, themes) = match plugin(&request.font_families) {
+    let plugin = match plugin(&request.font_families) {
         Ok(plugin) => plugin,
         Err(refusal) => return refusal,
     };
@@ -441,7 +472,7 @@ fn layout_canvas(request: &Request, host: Option<&dyn Host>) -> String {
         .cache
         .map(|id| Surface::new(id, &request.measure, request.dark, request.geometry.as_ref()));
     measured(&request.measure, host, surface, |measure, surface| {
-        lay_out(request, measure, surface, registry, themes)
+        lay_out(request, measure, surface, plugin)
     })
 }
 
@@ -451,5 +482,7 @@ mod host_tests;
 mod markdown_tests;
 #[cfg(test)]
 mod proposal_tests;
+#[cfg(test)]
+mod query_tests;
 #[cfg(test)]
 mod tests;

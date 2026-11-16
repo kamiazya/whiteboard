@@ -26,6 +26,7 @@ function glueOf(...answers: string[]) {
       return `["ok",${6 + registered.length}]`
     },
     release_layout_cache: () => false,
+    layout_query: () => '',
     release_layout_fonts(handle) {
       released.push(handle)
       return true

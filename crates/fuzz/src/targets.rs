@@ -656,6 +656,35 @@ pub fn layout_spatial_canvas_wasm(data: &[u8]) {
     }
 }
 
+/// The query export: a request, read up to the first NUL, a host-measured one
+/// measured by [`StandInHost`]. Every answer is laid out, refused, declined or
+/// the fences whose tokens the host must send, and a call past the cap is
+/// refused before it is read.
+///
+/// # Panics
+///
+/// On an answer that is none of those, or an input past the cap that is not
+/// refused.
+pub fn layout_query_wasm(data: &[u8]) {
+    use whiteboard_wasm::input_caps::LAYOUT_QUERY;
+    use whiteboard_wasm::spatial_layout::query_with_host;
+
+    let at = data.iter().position(|&b| b == 0).unwrap_or(data.len());
+    let Ok(request) = std::str::from_utf8(data.get(..at).unwrap_or_default()) else {
+        return;
+    };
+    let answer = query_with_host(request, Some(&StandInHost));
+    if request.len() > LAYOUT_QUERY.max_bytes {
+        assert_eq!(answer, "[\"refused\",\"input-too-large\",\"too-large\"]");
+        return;
+    }
+    let laid = answer.starts_with("[\"ok\",[") && answer.ends_with(']');
+    let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");
+    let declined = answer.starts_with("[\"declined\",\"") && answer.ends_with("\"]");
+    let needs = answer.starts_with("[\"needs\",{\"code\":[") && answer.ends_with("]}]");
+    assert!(laid || refused || declined || needs, "{answer:.120} is not an answer");
+}
+
 fn assert_layout_answer(answer: &str) {
     let laid = answer.starts_with("[\"ok\",{\"nodes\":[") && answer.ends_with("]]");
     let refused = answer.starts_with("[\"refused\",\"") && answer.ends_with("\"]");

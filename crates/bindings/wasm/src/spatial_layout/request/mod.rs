@@ -1,7 +1,7 @@
 //! What `layout_spatial_canvas` is asked, read from the value wire of
 //! [`crate::json_canvas_wire`]: one mapping whose fields are the layout's
 //! options as data, a canvas's, or a markdown body's when it names its `kind`
-//! ([`markdown`]). Read strictly, as the canvas is: a key the request does
+//! ([`markdown`]); and what `layout_query` is asked ([`query`]). Read strictly, as the canvas is: a key the request does
 //! not name, a field of another kind or a missing required one is no request.
 
 mod code;
@@ -11,6 +11,7 @@ mod markdown;
 mod measure;
 mod options;
 mod proposals;
+mod query;
 mod references;
 
 use whiteboard_canvas_render::references::{Expansion, FenceTokens, ReferenceWire};
@@ -34,6 +35,7 @@ use measure::{measure_of, surface_of};
 pub(crate) use options::Style;
 use options::{dark_of, expansion_of, geometry_of, override_of, style_of, tag_key_of};
 use proposals::proposals_of;
+pub(crate) use query::{NodeSize, Query, Run, query_of};
 use references::references_of;
 
 /// A layout request.
@@ -108,7 +110,13 @@ fn table_of<T>(value: &Value, read: impl Fn(&Value) -> Option<T>) -> Option<Vec<
 /// The request a value stands for, or `None` when it is none.
 pub(crate) fn request_of(value: &Value) -> Option<Request> {
     let mut f = Fields::of(value)?;
-    let request = Request {
+    let request = request_from(&mut f)?;
+    f.all_named().then_some(request)
+}
+
+/// A canvas request's fields read from `f`, which may hold others its caller reads.
+pub(crate) fn request_from(f: &mut Fields<'_>) -> Option<Request> {
+    Some(Request {
         canvas: f.field("canvas", canvas_of)??,
         measure: f.field("measure", measure_of)??,
         dark: f.field("mode", dark_of)??,
@@ -128,11 +136,10 @@ pub(crate) fn request_of(value: &Value) -> Option<Request> {
         expand: f.field("expand", expansion_of)??,
         code_tokens: f.field("codeTokens", code_tokens_of)?.unwrap_or_default(),
         proposals: f.field("proposals", proposals_of)?.unwrap_or_default(),
-        comments: comments_of(&mut f)?,
+        comments: comments_of(f)?,
         fragments: f.field("fragments", fragments_of)?,
         cache: f.field("cache", surface_of)?,
-    };
-    f.all_named().then_some(request)
+    })
 }
 
 /// What a request asks for: a canvas laid out, or a markdown body.

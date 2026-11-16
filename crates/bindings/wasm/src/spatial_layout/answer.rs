@@ -98,6 +98,11 @@ fn event(event: &Degradation) -> Tree {
     Tree::Object(f)
 }
 
+/// The degradations a layout reported, in order.
+pub(super) fn events(reported: &[Degradation]) -> Tree {
+    Tree::List(reported.iter().map(event).collect())
+}
+
 /// One fragment source as the TypeScript's `FragmentAsk`.
 fn ask(ask: &Ask) -> Tree {
     Tree::Object(match ask {
@@ -111,13 +116,17 @@ fn ask(ask: &Ask) -> Tree {
 /// The layout as the `ok` answer, the fragment sources it asked for last when
 /// the request carried a table, or declined when it holds a number JSON
 /// cannot spell.
-pub(super) fn laid_out(laid: &LaidOut, events: &[Degradation], asked: Option<Vec<Ask>>) -> String {
+pub(super) fn laid_out(
+    laid: &LaidOut,
+    degradations: &[Degradation],
+    asked: Option<Vec<Ask>>,
+) -> String {
     let anchors = laid.anchors.iter().map(|(id, pair)| Tree::List(vec![text(id), anchor(pair)]));
     let mut items = vec![
         text("ok"),
         scene_tree(&laid.scene),
         Tree::List(anchors.collect()),
-        Tree::List(events.iter().map(event).collect()),
+        events(degradations),
     ];
     items.extend(asked.map(|asked| Tree::List(asked.iter().map(ask).collect())));
     let answer = Tree::List(items);

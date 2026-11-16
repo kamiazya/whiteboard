@@ -20,6 +20,10 @@ declare module '#glue' {
     request: string,
     host?: { measure(text: string, fontKey: string): number[] },
   ): string
+  export function layout_query(
+    request: string,
+    host?: { measure(text: string, fontKey: string): number[] },
+  ): string
   export function register_layout_fonts(bytes: Uint8Array, faces: string): string
   export function release_layout_fonts(handle: number): boolean
   export function release_layout_cache(surface: number): boolean
