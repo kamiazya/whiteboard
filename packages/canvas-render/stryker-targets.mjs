@@ -336,11 +336,45 @@ export const KNOWN_EQUIVALENT = {
   // reads. And `strokeCurve`'s empty-input return is dead: every outline
   // that reaches it carries 13 or 24 sampled vertices. Each hand-verified by
   // applying the edit and running the ink suites, which stay green.
+  // Freedoms the nearest point does not depend on, written beside the code:
+  // which end a segment is walked from, which of two equally near points a
+  // tie keeps, and two guards the code after them already implies (no node
+  // has an undefined id; an empty path answers the stored point). Each
+  // hand-verified against `comment-geometry.property.test.ts`, which stays
+  // green under every one and goes red under the module's other eleven.
+  'src/comment-geometry.ts': {
+    'ArithmeticOperator: i + 1 -> i - 1': 1,
+    'EqualityOperator: distance < bestDistance -> distance <= bestDistance': 1,
+    'ConditionalExpression: comment.targetNodeId !== undefined -> true': 1,
+    'EqualityOperator: path.length > 0 -> path.length >= 0': 1,
+    'ConditionalExpression: path.length > 0 -> true': 1,
+  },
   'src/ink/sketch.ts': {
     'ConditionalExpression: rounded === 0 -> false': 1,
     'ConditionalExpression: n === 0 -> false': 1,
     'ConditionalExpression: i < ARC_SAMPLES -> true': 1,
     'EqualityOperator: i < ARC_SAMPLES -> i <= ARC_SAMPLES': 1,
+    // The dead empty-curve return's own value.
+    'StringLiteral: \'\' -> "Stryker was here!"': 1,
+    // The clip's redundant checks, the hatch's last ruling, the dense arrow
+    // list and an unmatched jump — each invariant is beside its code, each
+    // hand-verified green under `ink/sketch.test.ts`, whose hatch replay
+    // and degenerate-input examples kill the clip's other mutants.
+    'EqualityOperator: area >= 0 -> area > 0': 1,
+    'ArithmeticOperator: -ey * inwardSign -> -ey / inwardSign': 1,
+    'ArithmeticOperator: ex * inwardSign -> ex / inwardSign': 1,
+    'ConditionalExpression: numerator < 0 -> false': 1,
+    'EqualityOperator: denominator > 0 -> denominator >= 0': 1,
+    'ConditionalExpression: tEnter > tExit -> false': 1,
+    'EqualityOperator: tEnter > tExit -> tEnter >= tExit': 1,
+    'EqualityOperator: tExit - tEnter < 1 -> tExit - tEnter <= 1': 1,
+    'LogicalOperator: !Number.isFinite(tEnter) || !Number.isFinite(tExit) -> !Number.isFinite(tEnter) && !Number.isFinite(tExit)': 1,
+    'EqualityOperator: offset <= reach -> offset < reach': 1,
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 1,
+    'ConditionalExpression: tip === undefined -> false': 1,
+    'ConditionalExpression: left === undefined -> false': 1,
+    'ConditionalExpression: tip === undefined || left === undefined -> false': 1,
+    'LogicalOperator: tip === undefined || left === undefined -> tip === undefined && left === undefined': 1,
   },
   // Belt-and-braces guards whose removal is masked by a guarantee the caller
   // already makes, plus type tests that a second test repeats. The load-bearing
