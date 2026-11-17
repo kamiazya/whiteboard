@@ -38,12 +38,17 @@ import type { WebCore } from './web-core.js'
  * TypeScript layout; with it deleted, measuring in the wasm is the one
  * comparison left that isolates the crossing.) The third is a drag frame:
  * each board laid out again with one node moved, the core handed no content
- * cache against the core handed the caller's (S15n).
+ * cache against the core handed the caller's (S15n). The fourth splits the
+ * largest board's warm drag frame into its phases (S18k): the request's
+ * encode, the wasm, the host measurer it calls back and the answer's decode,
+ * then the same frames without edge labels and without edges, interleaved, so
+ * routing's share is a difference rather than a guess.
  *
  * A measurement, not a guard: it asserts only that it measured something,
  * and runs when `VITE_MEASURE_HOST_COST=1` (a timing loop has no place in
- * every CI run). Run from apps/web:
- *   VITE_MEASURE_HOST_COST=1 pnpm vitest run --project web-browser host-measure-cost
+ * every CI run). Run from the repository root (the project is the root
+ * config's; from apps/web the filter matches nothing):
+ *   VITE_MEASURE_HOST_COST=1 pnpm vitest run --project web-browser apps/web/src/lib/spatial/host-measure-cost
  */
 const RUN = import.meta.env.VITE_MEASURE_HOST_COST === '1'
 
@@ -380,5 +385,188 @@ describe.runIf(RUN)('a drag frame through the core, with and without its content
     })
     expect(rows).toHaveLength(webLayoutBoards().length)
     for (const row of rows) await commands.printReading(JSON.stringify(row))
+  })
+})
+
+/** `canvas` with every edge's label dropped: what a frame pays for its labels is the difference. */
+const unlabelled = (board: WebLayoutBoard): WebLayoutBoard => ({
+  ...board,
+  canvas: {
+    ...board.canvas,
+    edges: board.canvas.edges.map(({ label: _, ...edge }) => edge),
+  },
+})
+
+/** `canvas` with no edges: what a frame pays for its routing is the difference. */
+const edgeless = (board: WebLayoutBoard): WebLayoutBoard => ({
+  ...board,
+  canvas: { ...board.canvas, edges: [] },
+})
+
+/** Where one batch of frames spent its time, each phase as a mean ms per frame. */
+interface Phases {
+  frame: number
+  coreCall: number
+  encode: number
+  decode: number
+  host: number
+  hostCalls: number
+}
+
+/**
+ * `JSON.parse` and `JSON.stringify` timed while `run` runs, restored after:
+ * the shim encodes a request with the one and reads the answer with the other.
+ */
+function timingJson<T>(run: (spent: { parse: number; stringify: number }) => T): T {
+  const { parse, stringify } = JSON
+  const spent = { parse: 0, stringify: 0 }
+  JSON.parse = ((...args: Parameters<typeof parse>) => {
+    const start = performance.now()
+    const value = parse(...args)
+    spent.parse += performance.now() - start
+    return value
+  }) as typeof parse
+  JSON.stringify = ((...args: Parameters<typeof stringify>) => {
+    const start = performance.now()
+    const text = stringify(...args)
+    spent.stringify += performance.now() - start
+    return text
+  }) as typeof stringify
+  try {
+    return run(spent)
+  } finally {
+    JSON.parse = parse
+    JSON.stringify = stringify
+  }
+}
+
+/**
+ * A warm drag frame of `board` split into its phases: the whole frame, the
+ * core's call (encode, the wasm, decode), the encode and decode inside it,
+ * and the host measurer the wasm calls back, by time and by count. Means over
+ * `rounds` frames, each one the core answered.
+ */
+function phasesOf(board: WebLayoutBoard, real: WebCore, rounds = 30): Phases {
+  const browser = createBrowserMeasureText()
+  const rec = recording(browser)
+  const hosted = describeMeasure(rec.counted, { kind: 'host' })
+  let inCore = 0
+  let answered = 0
+  const layout: CanvasLayoutCore = {
+    layoutSpatialCanvas(request, highlight, measure, cache) {
+      const start = performance.now()
+      const answer = real.layoutSpatialCanvas(request, highlight, measure, cache)
+      inCore += performance.now() - start
+      if (!('refused' in answer)) answered += 1
+      return answer
+    },
+  }
+  const core: LayoutCore = { routing: real, layout, markdown: real, query: real }
+  const cache = memo()
+  const lay = (at: number) =>
+    layoutSpatialCanvasWithAnchors(frameOf(board, (at % 40) * 4).canvas, {
+      ...editorLayoutBase({ measure: hosted }),
+      core,
+      contentCache: cache,
+      threads: board.threads,
+      proposals: board.proposals,
+    })
+  for (let at = 0; at < 3; at += 1) lay(at)
+  rec.reset()
+  inCore = 0
+  answered = 0
+  return timingJson((spent) => {
+    const start = performance.now()
+    for (let at = 3; at < 3 + rounds; at += 1) lay(at)
+    const frame = performance.now() - start
+    expect(answered, board.name).toBe(rounds)
+    return {
+      frame: frame / rounds,
+      coreCall: inCore / rounds,
+      encode: spent.stringify / rounds,
+      decode: spent.parse / rounds,
+      host: rec.spent() / rounds,
+      hostCalls: rec.calls.length / rounds,
+    }
+  })
+}
+
+/**
+ * Medians of `rounds` interleaved warm drag frames of each variant: `board`
+ * as it is, without its edge labels, and without its edges. The differences
+ * size what labels and routing cost a frame inside the wasm.
+ */
+function timedAblations(board: WebLayoutBoard, real: WebCore, rounds = 21) {
+  const { core, tally } = countedCore(real)
+  const variants = [
+    ['as drawn', board],
+    ['no edge labels', unlabelled(board)],
+    ['no edges', edgeless(board)],
+  ] as const
+  const lays = variants.map(([name, variant]) => {
+    const hosted = describeMeasure(createBrowserMeasureText(), { kind: 'host' })
+    const cache = memo()
+    const lay = (at: number) =>
+      layoutSpatialCanvasWithAnchors(frameOf(variant, (at % 40) * 4).canvas, {
+        ...editorLayoutBase({ measure: hosted }),
+        core,
+        contentCache: cache,
+        threads: variant.threads,
+        proposals: variant.proposals,
+      })
+    for (let at = 0; at < 3; at += 1) lay(at)
+    return [name, lay, [] as number[]] as const
+  })
+  const before = tally.answered
+  for (let i = 0; i < rounds; i += 1) {
+    // Each round starts from the next variant, so none always runs first.
+    for (let k = 0; k < lays.length; k += 1) {
+      const [, lay, times] = lays[(i + k) % lays.length] as (typeof lays)[number]
+      const start = performance.now()
+      lay(i + 3)
+      times.push(performance.now() - start)
+    }
+  }
+  expect(tally.answered - before, board.name).toBe(rounds * lays.length)
+  return Object.fromEntries(lays.map(([name, , times]) => [name, median(times)]))
+}
+
+describe.runIf(RUN)('a warm drag frame through the core, split into its phases', () => {
+  it('splits the largest board’s frame into encode, wasm, host measure and decode', {
+    timeout: 120_000,
+  }, async () => {
+    // lazy-import: the module names the artifact, which a person without the Rust toolchain has not built
+    const { loadWebCore } = await import('./layout-core-source.js')
+    const real = await loadWebCore(fetch)
+    await ensureViewerFontLoaded()
+    const board = [...webLayoutBoards()].sort(
+      (a, b) => b.canvas.nodes.length - a.canvas.nodes.length,
+    )[0] as WebLayoutBoard
+    const p = phasesOf(board, real)
+    const wasm = p.coreCall - p.encode - p.decode - p.host
+    const pct = (ms: number) => `${((ms / p.frame) * 100).toFixed(1)}%`
+    await commands.printReading(
+      JSON.stringify({
+        board: board.name,
+        'frame ms': p.frame.toFixed(3),
+        'outside the core call ms': (p.frame - p.coreCall).toFixed(3),
+        'encode (JSON.stringify) ms': `${p.encode.toFixed(3)} (${pct(p.encode)})`,
+        'wasm, less host measure ms': `${wasm.toFixed(3)} (${pct(wasm)})`,
+        'host measure ms': `${p.host.toFixed(3)} (${pct(p.host)})`,
+        'host calls per frame': p.hostCalls.toFixed(1),
+        'decode (JSON.parse) ms': `${p.decode.toFixed(3)} (${pct(p.decode)})`,
+      }),
+    )
+    const ablated = timedAblations(board, real)
+    await commands.printReading(
+      JSON.stringify({
+        board: board.name,
+        ...Object.fromEntries(
+          Object.entries(ablated).map(([k, v]) => [`${k} p50 ms`, v.toFixed(2)]),
+        ),
+      }),
+    )
+    expect(p.hostCalls).toBeGreaterThan(0)
+    expect(p.coreCall).toBeLessThanOrEqual(p.frame)
   })
 })
