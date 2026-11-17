@@ -7,7 +7,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark, unified, yaml, zod |
 | `packages/scene` | the scene VOCABULARY and the renderer/plugin contract — what a laid-out document is, and the shape a plugin contributes. Types only; it exists for its position, below both sides | model, facet-engine |
-| `packages/canvas-render` | layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) — the scene vocabulary it produces is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, lowlight, highlight.js |
+| `packages/canvas-render` | the SVG backend, sceneDigest, tidy, hit testing and the render theme layer (ADR-0030), plus the requests a root asks the Rust layout core and the answers it reads back (ADR-0054) — the scene vocabulary is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, lowlight, highlight.js |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/core-wasm` | the Rust core's wasm artifact behind a thin shim: init from bytes or a module a root hands it, an ABI check, one typed call per operation (ADR-0054) | model, scene |
@@ -146,12 +146,14 @@ which is now EMPTY.
 It carried one entry: a source-level loop between `plugin-visual` and `canvas-render` closed only by type-only imports, which no manifest can see. The dissolution landed as `packages/scene`; the history, with a correction, is `package-scene.md`. The guard did not retire with the cycle: `plugin-visual/src/renderer-independence.test.ts` pins that there is no import of the renderer AT ALL, type-only or otherwise.
 
 
-`lowlight` is a DEFAULT, not an opt-in: `layoutSpatialCanvas` supplies this
-package's own tokeniser the way it supplies codec's markdown parser, because
-every surface that lays a body out wants it. It shipped opt-in first, behind a
-subpath, and a step repeated at four call sites got missed — export drew every
-fence plain while the editor coloured it. `highlightCode` remains an option, so a
-caller can substitute a tokeniser or pass a no-op.
+`lowlight` is the HOST's tokeniser, and a DEFAULT, not an opt-in: the Rust
+layout core asks its host for a code fence's tokens rather than holding a
+highlighter (owner decision q75), and every request canvas-render builds hands
+it the one host module, `highlight/lowlight.ts`'s `highlightCode`. It shipped
+opt-in first, behind a subpath, and a step repeated at four call sites got
+missed — export drew every fence plain while the editor coloured it. No caller
+substitutes a tokeniser any more: the option went with the TypeScript layout,
+so every surface colours a fence alike.
 
 
 **What a document points at is resolved in ONE place, and passed as a

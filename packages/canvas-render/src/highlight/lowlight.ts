@@ -1,11 +1,9 @@
-// The default implementation of this package's own `highlightCode` seam.
-//
-// Lives behind the `/highlight` subpath, not the barrel: the seam exists so a
-// caller can supply any tokeniser, and the main entry must not drag a
-// highlighter into a consumer that renders no code. Three surfaces need the
-// same one — the editor, the read-only viewer (and through it the MCP Apps
-// widget), and export — and canvas-render is the only package all three can
-// see, so a shared default beats the same table written out three times.
+// The host's tokeniser: the Rust layout core asks its host for a code fence's
+// tokens rather than holding a highlighter, and every request this package
+// builds hands it `highlightCode`. Three surfaces need the same one — the
+// editor, the read-only viewer (and through it the MCP Apps widget), and
+// export — and canvas-render is the only package all three can see, so one
+// host module beats the same table written out three times.
 //
 // lowlight (highlight.js) rather than shiki, decided by measurement: for the
 // same six languages and the same five roles, shiki's smallest viable build

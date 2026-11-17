@@ -484,7 +484,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 21
 //
 // 107 -> 106: the composer and typesetter were deleted (ADR-0054 S18h2); the
 // intro that mapped their files became a page on the switch that asks the core.
-const CANVAS_RENDER_BUDGET = 106
+//
+// 106 -> 96: the decisions whose TypeScript went with the layout (the embed
+// contract, the builder, the reference seam, line breaking, the cut) are a
+// line each here, their text moved to the decisions page (ADR-0054 S18j).
+const CANVAS_RENDER_BUDGET = 96
 
 // The rule that loads for every edit under `tools/arch-lint/**` — 119-odd test
 // files, so every session that adds a guard reads it, and it grows in exactly

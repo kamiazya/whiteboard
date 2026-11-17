@@ -1,5 +1,5 @@
 //! `BudouX`'s phrase segmenter over the Japanese model, ported from
-//! `packages/canvas-render/src/vendor/budoux` (ADR-0054 step 7).
+//! the copy canvas-render vendored until ADR-0054 step 7 deleted it.
 //!
 //! A text is scored at every UTF-16 index from 1: thirteen features each look
 //! up the substring of a fixed window around the index in their group's table

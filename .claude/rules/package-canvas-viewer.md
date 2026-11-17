@@ -10,8 +10,7 @@ paths:
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
   (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls
-  canvas-render's `createSpatialTheme` directly, with layout's default
-  markdown parser and no `onDegrade` (this package degrades silently
+  canvas-render's `createSpatialTheme` directly, with no `onDegrade` (this package degrades silently
   by choice). It builds BOTH modes once at module scope and picks between
   them with the `theme` prop, defaulting to `light`. The viewer has no
   theme switch of its own — that is exactly why the host has to say: the
@@ -28,13 +27,13 @@ paths:
   browser measurer and the widget's build-time font embedding.
 - `CanvasViewer.tsx`: builds a scene via canvas-render's shared
   `layoutSpatialCanvas` (with the theme's `VIEWER_APPEARANCES` entry; the
-  body parser is layout's default) and renders it via canvas-render's
+  core parses a body itself) and renders it via canvas-render's
   `renderSceneToSvg`, injecting the resulting string through `SceneSvg`.
   It takes its math and diagrams as canvas-render's fragment TABLE
-  (`fragments` + `onFragmentsAsked`), never the `renderMath`/`renderDiagram`
-  functions the core's request gate skips, and lays out through the `core`
-  its host hands it (ADR-0054 step 7, S18e) — the host owns the wasm
-  instance and its switch. `core` is required: there is no TypeScript
+  (`fragments` + `onFragmentsAsked`), never `renderMath`/`renderDiagram`
+  functions, which the layout options no longer have, and lays out through
+  the `core` its host hands it (ADR-0054 step 7, S18e) — the host owns the
+  wasm instance. `core` is required: there is no TypeScript
   layout to answer without one (S18h).
 - `SceneSvg.tsx`: the ONE component that turns a scene's SVG string into
   DOM; apps/web imports it too.
@@ -112,9 +111,10 @@ paths:
   a deliberate, documented duplication (see `font.ts`'s comment). A font
   swap on one side without the other silently desyncs browser/Node export
   metrics rather than failing loudly.
-- Emission order (nodes, then edges, document order) is canvas-render's
-  `layoutSpatialCanvas`'s own convention now, not something this package
-  re-implements — see package-canvas-render.md's resolved decision.
+- Emission order (groups first, then the rest in document order, then
+  edges) is the Rust layout core's convention, reached through
+  `layoutSpatialCanvas`, not something this package re-implements — see
+  package-canvas-render.md's resolved decision #7.
 
 ## Tests
 

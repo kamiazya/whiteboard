@@ -487,14 +487,18 @@ Past any of them, the picture is a **notice** in place of the board or the
 note: a box that says what was too large and what to do about it (split the
 board, show fewer boards or notes inside it). `wb_scene_render` answers the
 notice as its SVG, with the same width and height fields as any render, and
-adds a second text item saying why, ending with the reason it was refused
-(`too-many-elements`, `referenced-elements`, `bodies`, `too-large`,
-`comments`, `proposals` or `fragments`). Nothing is lost: the document is
+adds a second text item with the notice's own words and the reason it was
+refused, in the form `The SVG shows a notice in place of the document:
+<title>. <what to do> (reason: <reason>)`. The reason for a limit is
+`too-many-elements`, `referenced-elements`, `bodies`, `too-large`,
+`comments`, `proposals` or `fragments`. Nothing is lost: the document is
 unchanged and draws again once it is back within the limits.
 
 Two other things draw the same notice: a position or a size too large to
-draw (no board written through the tools holds one), and, in the browser, a
-page that could not measure its text, which reload answers.
+draw (no board written through the tools holds one; `wb_scene_render`'s
+reason is `non-finite`), and, in the browser, a page that could not measure
+its text or did not finish loading what it draws with, which reload
+answers.
 
 ## How many open comment threads and proposed changes one document may hold
 

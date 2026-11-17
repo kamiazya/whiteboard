@@ -12,7 +12,6 @@ import type {
   TextRunNode,
 } from '@kamiazya/whiteboard-scene'
 import { isFiniteBox } from '../finite-box.js'
-import type { ShapeTable } from '../outline/node-outline.js'
 import { sceneBounds, sceneDocumentBounds } from '../scene-bounds.js'
 import { TEXT_HALO_PAD_PX } from '../theme/text-halo.js'
 import { documentHref, embedHref } from './document-href.js'
@@ -446,7 +445,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
     case 'edge':
       return renderEdge(node)
     case 'shape':
-      return renderShape(node, tables)
+      return renderShape(node)
     case 'icon':
       return (
         renderIconUse(
@@ -493,11 +492,6 @@ export interface SvgDocumentOptions {
    *  vendored set (see `IconTable`). A resolution input, not document
    *  chrome — it does NOT activate the envelope. */
   readonly icons?: IconTable
-  /** Silhouettes by namespaced id, merged over the built-in table. The same
-   *  table layout was handed: layout uses it for the content box and edge
-   *  anchoring, this backend to draw. A resolution input, not document
-   *  chrome — it does NOT activate the envelope. */
-  readonly shapes?: ShapeTable
   /** `'omit'`: the host draws the legend itself (the editor's overlay). Not an envelope option. */
   readonly legend?: 'omit'
   /** Device pixels per user unit the document will be rasterised at (a PNG
@@ -587,7 +581,7 @@ export function buildSvgDocumentParts(
   // they preserve `defs` declarations on rebuilt nodes, so the order is not
   // load-bearing. Applied per top-level node: passes are group-local by
   // construction (see transform.ts).
-  const tables: ResolveTables = { icons: options?.icons, shapes: options?.shapes }
+  const tables: ResolveTables = { icons: options?.icons }
   const rendered = scene.nodes
     .map((node) => renderNode(node, tables))
     .map((node) => applyOptimizationPasses(node))

@@ -146,10 +146,10 @@ interface RoutedLayout {
 /** An initialised core: one call per user operation (QR-22b). */
 export interface Core {
   /**
-   * One layout's edge routing, as canvas-render's composer runs it between
-   * `assignEdgeAnchors` and its per-edge `routeEdge`: every edge of `edges`
-   * routed in order, on `budget`, whose four accounts are written back,
-   * with the anchors the composer hands on to the editor.
+   * One layout's edge routing, as the core's own layout runs it (the side
+   * search, then every edge routed between its anchors): every edge of
+   * `edges` routed in order, on `budget`, whose four accounts are written
+   * back, with the anchors the editor freezes a drag from.
    */
   routeLayout(
     nodes: readonly SpatialNode[],

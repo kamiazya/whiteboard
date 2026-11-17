@@ -18,7 +18,7 @@ import { EDGE_JUMP_RADIUS_PX } from '../edge-path/edge-flatten.js'
 import { isFiniteBox } from '../finite-box.js'
 import { GLOW_STD_DEVIATION_RATIO, glowReachPx } from '../ink/glow.js'
 import { SKETCH_INK_REACH_PX, SKETCH_PASSES, sketchEdge, sketchShape } from '../ink/sketch.js'
-import { nodeOutline, type ShapeTable } from '../outline/node-outline.js'
+import { nodeOutline } from '../outline/node-outline.js'
 import { formatCoord } from './format.js'
 import type { IconTable } from './icon.js'
 import {
@@ -36,13 +36,13 @@ import { el, type SvgChild, type SvgDef, type SvgVNode, withDefs } from './vnode
 
 /**
  * The resolution inputs a render pass carries: tables merged over this
- * package's built-in ones. One object rather than a positional argument each,
- * because every one of them threads through the same eight recursive call
- * sites and a second positional parameter is how the third gets forgotten.
+ * package's built-in ones. An object rather than a positional argument,
+ * because it threads through the same eight recursive call sites and a
+ * second positional parameter is how the next one gets forgotten. Silhouettes
+ * are not among them: they are the bundled table alone (`nodeOutline`).
  */
 export interface ResolveTables {
   readonly icons?: IconTable
-  readonly shapes?: ShapeTable
 }
 
 /**
@@ -164,10 +164,10 @@ export function glowOf(
  * layout bug this package must not crash on — it renders as nothing rather
  * than reaching `formatCoord`, which throws by contract.
  */
-export function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
+export function renderShape(node: ShapeSceneNode): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
-  if (node.ink?.style === 'sketch') return renderSketchShape(node, node.ink, tables)
-  return renderCrispShape(node, tables)
+  if (node.ink?.style === 'sketch') return renderSketchShape(node, node.ink)
+  return renderCrispShape(node)
 }
 
 /** Presence-only: attach a glow's filter reference and definition to an element. */
@@ -182,9 +182,8 @@ function withGlow(element: SvgVNode, glow: ReturnType<typeof glowOf>): SvgChild 
  * read as one pencil line. Comment chrome never arrives here — the layout
  * inks document content only — so the drop-shadow branch stays crisp.
  */
-function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: ResolveTables): SvgChild {
-  const outline =
-    node.shape === undefined ? null : nodeOutline(node.shape, node.bbox, tables?.shapes)
+function renderSketchShape(node: ShapeSceneNode, ink: SceneInk): SvgChild {
+  const outline = node.shape === undefined ? null : nodeOutline(node.shape, node.bbox)
   const strokes = sketchShape(outline, node.bbox, ink.seed, { hatch: ink.fill === 'hatch' })
   const paint = appearanceAttrs(node.appearance)
   const strokeAttrs = {
@@ -201,19 +200,14 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
   const tint: SvgChild =
     paint.fill === undefined || paint.fill === 'none'
       ? []
-      : renderCrispShape(
-          {
-            ...node,
-            radius: undefined,
-            appearance: {
-              fill: paint.fill,
-              ...(paint['fill-opacity'] === undefined
-                ? {}
-                : { fillOpacity: paint['fill-opacity'] }),
-            },
+      : renderCrispShape({
+          ...node,
+          radius: undefined,
+          appearance: {
+            fill: paint.fill,
+            ...(paint['fill-opacity'] === undefined ? {} : { fillOpacity: paint['fill-opacity'] }),
           },
-          tables,
-        )
+        })
   const hatch: SvgChild =
     strokes.hatch === undefined
       ? []
@@ -260,12 +254,12 @@ function passOpacity(
   return own === undefined ? SECOND_PASS_OPACITY : own * SECOND_PASS_OPACITY
 }
 
-function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
+function renderCrispShape(node: ShapeSceneNode): SvgChild {
   // Non-rect silhouettes come from the shared decomposition (one producer
   // for drawing and hit-testing — outline/node-outline.ts); an absent
   // `shape` stays the historic rect byte-for-byte.
   if (node.shape !== undefined) {
-    const outline = nodeOutline(node.shape, node.bbox, tables?.shapes)
+    const outline = nodeOutline(node.shape, node.bbox)
     // A null outline here can only mean the id resolves to nothing — the
     // non-finite box is already handled above — so the node falls back to
     // its rect. Drawing NOTHING was correct while ids came from a closed
