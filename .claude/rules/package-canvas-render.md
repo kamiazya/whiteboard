@@ -3,7 +3,7 @@ paths:
   - "packages/canvas-render/**"
 ---
 
-# canvas-render — the layout switch, SVG backend, sceneDigest
+# canvas-render — the SVG backend, sceneDigest, tidy, and the requests a root asks the layout core
 
 The measurements, rejected alternatives and incident histories behind this file's
 rules are in
@@ -14,73 +14,119 @@ alternative was refused, continues there.
 
 ## What belongs here
 
-**The layout is the Rust core's (ADR-0054 step 7).** S18h2 deleted the
-TypeScript composer (the TypeScript node composer, the TypeScript node box, the TypeScript file-node composer,
-the comment and proposal overlays, the legend's computation) and the
-typesetter (`layout/nodes/mdast-*`, line breaking, the vendored BudouX, and
-the `css-line-break` dependency). What `layout/` holds now is the switch a
-root calls the core through, never an implementation:
+**The layout is the Rust core's (ADR-0054 step 7).** Every board, note,
+comment and query is laid out by `crates/core/canvas-render` (with
+`crates/core/edge-routing` for edges), reached through
+`@kamiazya/whiteboard-core-wasm`. This package holds no layout of its own:
+S18h2 deleted the composer and the typesetter, S18h3 the exports they left
+behind, S18h3b the edge router (`layout/edges/`), and S18i the layout's half
+of the render contribution. What it holds is what is still TypeScript, by
+D10's decision, and the thin TypeScript a root asks the core through:
 
-- `layout/spatial-canvas.ts` — `layoutSpatialCanvas(WithAnchors)`,
-  `layoutSpatialEdges`, `naturalNodeContentSize`, each asking
-  `options.core` (required).
-- `layout/canvas-switch.ts`, `markdown-switch.ts`, `query-switch.ts`,
-  `queries.ts`, `fitted-height.ts` — a layout's options as the request the
-  core takes (`CoreUnaskable` for what none carries), and its answer read
-  back: a refusal drawn as `refusalScene`, degradations to `onDegrade`.
-- `layout/layout-options.ts` — `SpatialLayoutOptions`, the vocabulary a
-  caller asks in.
-- `edge-routing.ts`, `layout-core.ts` (package root) — the routing contract
-  the core answers and the core as a root hands it: the sides, anchors and
-  budget a caller passes and reads back, `LayoutCore`, and `routeLayout`, one
-  call into the core the caller hands it (the web editor's connect preview).
-  The router's TypeScript (`layout/edges/`) is deleted (S18h3b): the editor's
-  connect preview was its last caller, and only in a realm with no core,
-  which after boot no realm is. Its examples and scoreboards judge the core in
-  `canvas-render-rust` from `routing/*.rust.test.ts`, through the oracle
-  exports' shims in `test-utils/wasm/`; the recording it was held to
-  (`route_layout.f64`) is frozen and replayed.
+- **The requests and answers** (`layout/`, `layout-core.ts`,
+  `edge-routing.ts`, `canvas-core.ts`, `markdown-core.ts`, `query-core.ts`).
+  `layoutSpatialCanvas(WithAnchors)`, `layoutSpatialEdges`,
+  `naturalNodeContentSize`, `layoutMarkdownDocument`,
+  `layoutCommentDocument`, `fittedTextNodeHeight` and the `query*` helpers
+  each turn a caller's options into the request the core takes
+  (`canvasLayoutRequest`, `markdownLayoutRequest`; `CoreUnaskable` for an
+  option no request carries), ask `options.core` (required), and read the
+  answer back: a refusal drawn as `refusalScene` (`refusal.ts`, its words
+  `refusalCopy`), degradations to `onDegrade`, fragment asks to
+  `onFragmentsAsked`. `SpatialLayoutOptions` (`layout/layout-options.ts`) is
+  the vocabulary a caller asks in. `routeLayout` is one call into the core
+  its caller hands it; `edge-routing.ts` is the sides, anchors and budget a
+  caller passes and reads back.
+- **The measurer contract** (`measure.ts`): `FontDescriptor`,
+  `TextMetrics`, `MeasureText`, `constantRatioMeasureText`, and
+  `describeMeasure`/`measureSpecOf`. A measurer nobody named is the host's:
+  the core asks the function itself through its one host import, so any
+  `MeasureText` a root holds lays out. Naming it (`ratio`, `fake`, `fonts`)
+  lets the core measure without asking, which a worker realm and the content
+  cache key need.
+- **The host's tokeniser** (`highlight/lowlight.ts`): the core asks its host
+  for a code fence's tokens rather than holding a highlighter (owner decision
+  q75), and every request this package builds hands it `highlightCode`.
+  Highlighting is budgeted: highlight.js is quadratic in a long word run, so
+  a fence past 4096² summed squared runs, or a layout past 4× that, renders
+  plain.
+- **The SVG backend** (`svg/`): scene -> SVG string, one implementation
+  shared by Node, the browser and Workers. `svg/backend.ts` +
+  `svg/format.ts` serialise, `svg/shapes.ts` draws a node's silhouette and an
+  edge's line (crisp or pencilled, with the glow either takes) from
+  `outline/node-outline.ts` and `ink/`, `svg/paint.ts` holds the
+  presence-only paint helpers, `svg/keyed.ts` is the editor's keyed form, and
+  `svg/legend.ts` draws the legend the core lays out. The edge path
+  flatteners (`edge-path/`) and `edgeArrowPolygons` are the backend's and the
+  hit test's one curve.
+- **`sceneDigest`** (`scene-digest.ts`) and **`sceneBounds`** /
+  `sceneDocumentBounds` (`scene-bounds.ts`). The digest is the AI-facing
+  spatial digest, the one Zod-schematized output of this package. It reports
+  one entry per ADDRESSABLE node — the chrome shapes carrying a document
+  `id` — because the reader's only way to act on what it sees is a tool that
+  takes a node id. Content laid out inside a node (its text runs, a facet
+  card's rows) carries a bbox too but is deliberately excluded: reporting it
+  made a three-node canvas answer with six entries, each "contained in"
+  another, and none of the extra three could be acted on. A scene with no
+  identified shape at all (hand-built, a fragment) keeps the older behaviour
+  of taking every bbox-carrying node named by position — there is nothing
+  better to name them by, and the alternative is answering with nothing.
+- **Tidy** (`tidy.ts`, `tidy-units.ts`, `tidy-bands.ts`, `tidy-axis.ts`):
+  no Rust port, and the sections below are its rules.
+- **Hit testing and paint order** (`hit-boxes.ts`, `hit-test.ts`,
+  `paint-order.ts`, `containment.ts`), over the scene the core answers.
+- **The theme layer** (`theme/`, `layout/canvas-theme.ts`): the palettes,
+  `createSpatialTheme`, `resolveCanvasPalette`,
+  `resolveCanvasThemeFontFamily` and `resolveThemeTable` — what a chrome
+  that PREVIEWS paint (the editor's paper and swatches, the export
+  background, `canvas_view`) reads, and what a request carries as the theme
+  table the core draws from.
+- **The reference wire** (`references/`): decision #14.
+- **Declared colours and the fragment table**: `withDeclaredColours`
+  (`tags/`), the fragment asks a root answers (`fragment-ask.ts`) and
+  `canvas-fragment.ts`.
+- **The scoring instruments** (`quality/`, the `/scoring` subpath): the
+  drawing, composition and facet scores, read over a scene the core laid
+  out.
+- **The recorded oracles** (`src/oracle/`, `src/test-utils/*-oracle`).
+  Where the TypeScript they recorded is deleted, they are FROZEN: kept as the
+  evidence the Rust port is held to, replayed natively under `crates/` and,
+  where a shim exists, through core-wasm, and never re-recorded, since there
+  is nothing left to re-record from. Where the TypeScript remains — the SVG
+  backend (`svg.jsonl`, `svg-edge-cases.jsonl`), the digest
+  (`scene-digest.jsonl`), the theme table (`theme.jsonl`), the canvas
+  fragment, the fence tokens the native markdown replay answers from, and the
+  fake measurer — `WHITEBOARD_RECORD_ORACLE=1` still re-records after a
+  deliberate change, as the decisions page describes. Their scoreboards run
+  through the core in `canvas-render-rust` (`*.rust.test.ts`).
 
-A measurer nobody named (`describeMeasure`) is the host's: the core asks the
-function itself through its one host import, so any `MeasureText` a root
-holds lays out. Naming it (`ratio`, `fake`, `fonts`) lets the core measure
-without asking, which a worker realm and the content cache key need.
-
-The decision sections below still name the deleted modules where they record
-what was decided and measured: those decisions are what the Rust core ports
-(`crates/core/canvas-render`), and the history is kept, not rewritten. The
-scoreboards that judged them run through the core in `canvas-render-rust`
-(`*.rust.test.ts`); the recorded oracles under `oracle/` and
-`test-utils/*-oracle` are frozen evidence, replayed, never re-recorded.
+The decision sections below still name deleted modules where they record what
+was decided and measured: those decisions are what the Rust core ports, and a
+decision whose TypeScript is gone says so in its first line and points at the
+Rust that carries it.
 
 **The scene-node union stays closed** — every consumer is in this repo, and
 an open union would buy dispatch flexibility nobody has asked for at the
 cost of the exhaustiveness checking the SVG backend relies on. That has not
-changed and should not.
+changed and should not. The union itself is `packages/scene`'s
+(`scene-graph.ts`), the core's answer type.
 
-Shapes are now a TABLE keyed by namespaced id (`ShapeTable`,
-`outline/node-outline.ts`), merged over the built-ins by both
-`SpatialLayoutOptions.shapes` and `SvgDocumentOptions.shapes`, exactly as
-`icons` already worked.
+**Silhouettes are the bundled table** (`BUNDLED_SHAPE_TABLE`,
+`outline/node-outline.ts`), keyed by namespaced id and built from the
+`visual` plugin's `ShapeContribution`s. The SVG backend takes no table of its
+own: the core lays out, anchors edges and contains content against its port
+of the same silhouettes, so a caller's table could only draw an outline the
+core never used. An unknown id draws a plain rect.
 
-It cost less than the old paragraph implies because the outline functions
-never knew a shape's name: containment switches on the returned
-`NodeOutline`'s kind and edge anchoring bisects against that, both the Rust
-core's now. Only the geometry is per-shape — which is the whole of
-`ShapeContribution`.
-
-**Decorations are the second contribution point, and the Rust core's.** A
-decoration is handed a node plus its CONTENT box and the resolved label
-appearance, and returns scene nodes drawn after the node's own content. They
-COMPOSE — several plugins marking one node is a stack, not a competition — so
-order answers by contribution order and no conflict rule is needed, unlike a
-silhouette. The contract is the `NodeDecoration` trait in `whiteboard-scene`,
-and `visual`'s stencil badge implements it in `crates/core/plugin-visual`. The
-TypeScript form went with the TypeScript layout that asked it (ADR-0054 step
-7, S18i), as did the shape and text-placement readers `RenderContribution`
-carried for the layout; what is left of `RenderContribution` is what this
-package still reads: `shapes` for the SVG backend and `themes`/`readTheme`
-for palette resolution.
+**Decorations are the Rust core's.** A decoration is handed a node plus its
+CONTENT box and the resolved label appearance, and returns scene nodes drawn
+after the node's own content. They COMPOSE — several plugins marking one node
+is a stack, not a competition — so order answers by contribution order and no
+conflict rule is needed, unlike a silhouette. The contract is the
+`NodeDecoration` trait in `whiteboard-scene`, and `visual`'s stencil badge
+implements it in `crates/core/plugin-visual`. What is left of the TypeScript
+`RenderContribution` is what this package still reads: `shapes` for the SVG
+backend and `themes`/`readTheme` for palette resolution.
 
 **An icon contribution carries its coordinate space and paint**, not geometry
 alone (`IconContribution`, `svg/backend.ts`). Geometry means nothing without
@@ -88,71 +134,28 @@ the box it is drawn in and the convention it is authored for; holding both as
 constants here made a contributed icon in any other space render wrong-sized
 and a fill-authored one render invisible. The bundled set declares its own, so
 the renderer's fallback (24x24, stroke-only) is only for a table that says
-neither.
+neither. The default is the bundled plugin's set, NOT an opt-in, for the
+lowlight reason recorded in `architecture-map.md`: a resolution step four call
+sites have to remember is one a call site forgets, and the surface that
+forgets does not fall back to the same picture — it silently draws less.
 
-The default is the bundled plugin's set, NOT an opt-in, for the lowlight
-reason recorded in `architecture-map.md`: a resolution step four call sites
-have to remember is one a call site forgets, and the surface that forgets does
-not fall back to the same picture — it silently draws less. Highlighting is
-budgeted (`highlight/`): highlight.js is quadratic in a long word run, so a
-fence past 4096² summed squared runs, or a layout past 4× that, renders plain.
+Shape ids are COMPOSED from the declaring facet's key plus its bare payload
+kind, never stored whole, so nothing migrates and a plugin cannot name another
+plugin's geometry; the core reads them in `resolve_node_outlines`.
 
-Ids are COMPOSED from the declaring facet's key plus its bare payload kind,
-never stored whole, so nothing migrates and a plugin cannot name another
-plugin's geometry. The remaining asymmetry is recorded at
-`resolve_node_outlines`: the bundled facet is read through `resolveNodeShape`
-(compat chain + schema) while a caller-declared one is read raw and gated by
-the table alone.
-
-- Plain-TS scene graph types (`scene-graph.ts`): resolved bounding boxes,
-  shape kind, text runs, list/heading/table structure, the SVG-fragment
-  (math/diagram) seam node, resolved edges.
-- The edge router's structure, as its TypeScript had it and the Rust port
-  (`crates/core/edge-routing`) keeps it module for module: a geometry
-  vocabulary with no opinion about routing (`edge_geometry.rs`), the side
-  vocabulary and first guess (`edge_sides.rs`), the anchor pass
-  (`edge_anchors.rs`), the router between two placed anchors
-  (`edge_router.rs`) and the side-choice search over them all
-  (`spatial_edges.rs`), the dependency pointing one way.
-- `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
-  `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
-  the browser viewer) — see the resolved decision below.
-- `translate_scene` (the TypeScript scene translation): the pure scene -> scene
-  translation used to place a node's laid-out content at its absolute
-  position, alongside the renderers whose x-transform-boundary convention
-  it must agree with (see decision #5 and `svg/backend.ts`).
-- `scale_scene` (the TypeScript scene scaling): the multiplicative sibling of
-  `translate_scene` — uniform scaling about the origin for composing a
-  resolved child canvas into a parent node's box (scale-then-translate).
-  Uniform scaling commutes with the x-transform-boundary representation,
-  so unlike translation it needs no wrapper special-casing. Size-bearing
-  paint fields (fontSize/strokeWidth/radius/baseline) scale with the
-  geometry; `svgFragment` payloads and backend-derived arrowhead sizing
-  deliberately do not (documented, test-pinned). Total: factor 1 is the
-  identity, non-finite/non-positive factors return the input unchanged.
-- The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
-  `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
-- The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
-  one implementation shared by Node/browser/Workers. `svg/shapes.ts` draws a
-  node's silhouette and an edge's line (crisp or pencilled, with the glow
-  either takes); `svg/paint.ts` holds the presence-only paint helpers.
-- `sceneDigest` (`scene-digest.ts`): the AI-facing spatial digest, the one
-  Zod-schematized output of this package. It reports one entry per
-  ADDRESSABLE node — the chrome shapes carrying a document `id` — because
-  the reader's only way to act on what it sees is a tool that takes a node
-  id. Content laid out inside a node (its text runs, a facet card's rows)
-  carries a bbox too but is deliberately excluded: reporting it made a
-  three-node canvas answer with six entries, each "contained in" another,
-  and none of the extra three could be acted on. A scene with no identified
-  shape at all (hand-built, a fragment) keeps the older behaviour of taking
-  every bbox-carrying node named by position — there is nothing better to
-  name them by, and the alternative is answering with nothing.
+The scene translation and scaling (`translate_scene.rs`, `scale_scene.rs` in
+`crates/core/canvas-render`) are the core's: they place a node's laid-out
+content and compose an embedded canvas into its box, and agree with the SVG
+backend's x-transform-boundary convention (decision #5).
 
 ## What does NOT belong here
 
+- A layout of any kind. A layout question goes to the core through a request;
+  a TypeScript composer, typesetter, line breaker or router beside it would be
+  a second answer.
 - MathJax (or any math typesetting engine) invocation — composition roots
-  own that; this package only defines the SVG-fragment node type and the
-  seam for a composition root to inject an already-rendered fragment.
+  own that; this package only carries the fragment a root renders
+  (`FragmentEntry`) to the core, which places it.
 - The theme TOKEN CONTRACT itself — that is facet-engine's
   (`themeTokensSchema`, ADR-0030 decision 3); this package maps tokens onto
   its palette (`theme/theme-asset.ts`) and never re-declares them.
@@ -168,12 +171,15 @@ the table alone.
 
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (what a
-  reference target is, for the reference wire), `@kamiazya/whiteboard-scene`
-  (the scene vocabulary), `@kamiazya/whiteboard-plugin-visual` (the default
-  render contribution), `@kamiazya/whiteboard-facet-engine` (the theme token
-  contract, zod-only), `lowlight` + `highlight.js` (the tokeniser the core
-  calls back for a code fence) and `zod` (via `catalog:`). The line breaker
-  (`css-line-break`) went with the typesetter (S18h2).
+  reference target is, and the JSON Canvas a reference wire carries),
+  `@kamiazya/whiteboard-scene` (the scene vocabulary),
+  `@kamiazya/whiteboard-plugin-visual` (the default render contribution, the
+  icon set, the tag library type), `@kamiazya/whiteboard-facet-engine` (the
+  theme token contract, zod-only), `lowlight` + `highlight.js` (the tokeniser
+  the core calls back for a code fence) and `zod` (via `catalog:`). The line
+  breaker (`css-line-break`) and the vendored BudouX went with the typesetter
+  (S18h2); the core's tables are generated from them and frozen with the
+  crate.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   reads every source via `import.meta.glob` (`?raw`), so it imports no
@@ -220,31 +226,14 @@ the table alone.
    is worse than the estimate. A real measurer therefore falls back to the
    estimator PER CODE POINT for anything the face does not carry, detected
    by glyph index rather than by comparing advances.
-4. **The embed contract.** Root depth is `0`; a 4th nesting level is the cap
-   hit (depth cap `3`). Cycle detection is PATH-LOCAL — a re-visit on the
-   *current* recursion path is a placeholder, but the same doc reached
-   again via a disjoint path renders normally. A missing or unresolvable
-   target degrades to the same placeholder mechanism. Layout is total: it
-   never throws and never infinite-loops, on any graph including dense
-   cyclic ones. It was first stated over a `ResolvedDocBundle` in a
-   module of its own whose only caller was its own property test; that
-   module (embed-recursion) is deleted, and the
-   contract lives where the content is laid out: the TypeScript node composer for a
-   file node's canvas and the TypeScript typesetter for a body's embeds, each
-   pinning the cap and the path-local cycle rule:
-   `MdastLayoutOptions.resolveEmbed?: (canvasId) => { title?, root:
-   MdastRoot } | undefined` (same injected-resolver class as `renderMath` /
-   `resolveReference`). A paragraph whose SOLE child is an `embed` node lays
-   the resolved body out inline under an `embedResolved` node whose
-   children stay ABSOLUTE (no SVG transform — the listItem/tableCell
-   transform-boundary set is untouched); an embed mixed into prose stays a
-   link run, labeled with `title` when known. Depth cap and path-local
-   cycle semantics mirror this decision exactly, and a missing/throwing
-   resolver degrades to an `embedPlaceholder('unresolvable')`. Both guards
-   are pinned by a property over dense random embed graphs
-   (the deleted typesetter's properties), each mutation-checked separately —
-   the cap alone also bounds nesting, so a depth assertion by itself would
-   let the cycle guard rot.
+4. **The embed contract** — HISTORY: the TypeScript is deleted (S18h2) and the
+   Rust core carries the contract, a file node's canvas in
+   `crates/core/canvas-render/src/compose_node/embed.rs` and a body's
+   `![[embed]]` in `typeset/embed.rs`, under the same rules: root depth `0`,
+   depth cap `3`, PATH-LOCAL cycle detection, a missing target degrading to the
+   placeholder, and a layout that never throws. The TypeScript statement and
+   its properties are on the decisions page.
+
 5. **Document envelope** (`sceneBounds` in `scene-bounds.ts`,
    `SvgDocumentOptions` in `svg/backend.ts`): `renderSceneToSvg(scene)`
    with no options, or an options object with every field `undefined`,
@@ -302,38 +291,18 @@ the table alone.
    `shape` emits no `transform`, so it needs no entry in
    `subtreeOffsetX` and the two-renderer tripwire above is unaffected.
 
-7. **`layoutSpatialCanvas` is the single SpatialCanvas -> Scene builder**
-   (`layout/spatial-canvas.ts`), replacing two independently-grown builders
-   in mcp-server and canvas-viewer. A markdown parser is a seam: `parseBody`
-   defaults to codec's `parseMarkdownBody` (decision #13) and stays
-   overridable, so layout tests can parse with a stub. Appearance is likewise injected via a
-   `SpatialAppearanceResolver` (`theme/spatial-appearance.ts`) — a set of
-   FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static
-   per-kind record, because appearance keys off both `node.type` and an
-   authored `node.color`/`x-whiteboard` hint. (Geometry constants —
-   `paddingPx`/`labelFontSizePx`/`minContentWidthPx` — used to live on this
-   same interface; decision #8 below moved them out into
-   `SpatialLayoutOptions.geometry`, since a surface being free to pick its
-   own geometry is exactly the bug decision #8 exists to prevent.) No
-   default resolver is exported — appearance stays assigned, not invented,
-   per decision #6. Emission order is
-   DOCUMENT order (nodes in array order, shape then content per node, then
-   all edges), never sorted by position: z-order is authored, not derived,
-   so a position sort would silently reorder authored z-order. Export
-   reproducibility does not need a sort to hold — document order is
-   already a total function of a deterministic canvas. Because this
-   package has no logger (a shared layer has no ambient platform API), a
-   degradation (a body-parse failure, an unrecognized node kind) is
-   reported only through an optional `onDegrade` callback; mcp-server wires
-   it to `getLogger`, canvas-viewer omits it and degrades silently by
-   choice — an omitted callback must never change the returned `Scene`, only
-   whether the caller is told. `translate_scene` (the TypeScript scene translation)
-   moved here verbatim from mcp-server's former `scene-transform.ts`: it
-   encodes the same x-transform-boundary rule as `sceneBounds`'s
-   `subtreeOffsetX` (decision #5), so both must keep agreeing on which
-   renderers (`listItem`, `tableCell`) emit their own SVG `transform` — the
-   tripwire test asserting that exact set now lives in
-   the deleted scene-translation test alongside the function it guards.
+7. **`layoutSpatialCanvas` is the single SpatialCanvas -> Scene entry**
+   (`layout/spatial-canvas.ts`) — HISTORY for the builder it named: the
+   TypeScript composer is deleted (S18h2) and the core composes
+   (`crates/core/canvas-render/src/compose_canvas`). What stays true here: every
+   consumer asks through this one entry and its `options.core`; emission order
+   is DOCUMENT order (groups first, decision "Paint order is not stored
+   order"), never a position sort, since z-order is authored; and because this
+   package has no logger, a degradation reaches the caller only through
+   `onDegrade` — an omitted callback never changes the returned `Scene`, only
+   whether the caller is told. Appearance is still a `SpatialAppearanceResolver`
+   a caller passes (decision #8). The builder's own history is on the decisions
+   page.
 
 8. **The theme layer** (`theme/spatial-geometry.ts`, `theme/spatial-palette.ts`,
    `theme/spatial-theme.ts`, `theme/font-family.ts`): ONE `SpatialAppearanceResolver`
@@ -467,7 +436,7 @@ the table alone.
       the instant the final pass aligns it — a reported canvas settled on a
       route scoring `[0,0,0,0,267,3,5]` aligned, while a candidate already
       in its own ranked list scored `[0,0,0,0,0,1,3]`; the search adopted
-      neither number because it saw neither. So `assignEdgeAnchors` hands
+      neither number because it saw neither. So `assign_edge_anchors` hands
       the settled configuration back through the SAME search once more with
       `align: true`. Alignment is constant within each run, so neither can
       oscillate — the rejected variant was alignment that varied *during* a
@@ -561,7 +530,8 @@ the table alone.
       test. The property catches it now.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
-      (the TypeScript node composer) — synchronous, optional, caller-supplied,
+      (read by the core's file-node composition, `compose_node/file.rs`, since
+      the TypeScript node composer was deleted) — synchronous, optional, caller-supplied,
       total (a throw or `undefined` degrades to the plain chrome+label
       rendering rather than aborting layout).
       `FacetCardData` (`{ title?: string; rows: ReadonlyArray<{ label:
@@ -584,167 +554,52 @@ the table alone.
       so it stays a pure function of the canvas snapshot, exactly parallel
       to the style opt-in above.
 
-11. **ONE reference seam, not one per content kind.** `SpatialLayoutOptions`
-    carries a single `resolveReference?: (ref: string) => ResolvedReference
-    | undefined`, where `ResolvedReference` is a record of independent
-    optional fields — `label`, `missing`, `image`, `canvas`, `markdown`,
-    `facets` — ranked in that order by `composeNode`. It replaced six
-    parallel callbacks (`resolveFileLabel`/`Missing`/`Canvas`/`Image`/
-    `Markdown`/`Facets`).
-    Three things the six could not do. A caller has ONE document per
-    reference, so six closures over the same lookup meant the same key was
-    resolved four times per file node. A record is plain DATA, which a
-    function can never be — a function cannot cross `postMessage`, so the
-    layout worker receives the records (decision #14's wire) and both
-    threads build one seam from them. And a content kind added
-    later is a field rather than a seventh callback threaded through every
-    consumer, of which there are four.
-    The price, stated because it is a real behaviour change: one resolver
-    means one failure. A throw used to cost the reference one RANK and now
-    costs it the whole resolution, falling straight to the plain label. A
-    caller that can partially fail has to handle that in its own lookup,
-    which is where it has the information to.
-    `expandFileNode` stays a separate seam: it is the caller's POLICY over a
-    node (the editor decides by on-screen size, export by intrinsic size),
-    not something known about the reference.
-    `MdastLayoutOptions.resolveEmbed` also stays its own — it is keyed by a
-    canvasId appearing in PROSE, a different key space from a spatial node's
-    reference, and it serves markdown documents with no file nodes at all.
+11. **ONE reference seam, not one per content kind** — HISTORY: the
+    function seam (`resolveReference`) left `SpatialLayoutOptions` with the
+    TypeScript composer; a caller hands `references`, the bundle decision #14
+    builds, which crosses to the core as a `ReferenceWire`. What the decision
+    bought survives in that shape: one record per reference (`ResolvedReference`,
+    `references/resolved.ts`), plain DATA that crosses `postMessage`, and a
+    content kind added later as a field. `expandFileNode` stays a separate
+    option: it is the caller's POLICY over a node, not something known about the
+    reference. The decision as taken is on the decisions page.
 
-12. **Line breaking is UAX #14, not a hand-rolled character table**
-    (the TypeScript typesetter, `break_segments`). `css-line-break` with
-    `lineBreak: 'strict'` supplies the break opportunities, which is what
-    makes CJK wrap at all (the previous wrapper split on ASCII spaces, so a
-    Japanese paragraph had no break opportunity anywhere and was emitted as
-    one run painting straight through the node border) and what supplies
-    Japanese kinsoku for free: a closing character never opens a line, an
-    opening character never ends one. This is the one third-party dependency
-    besides `zod`, registered in `tools/arch-lint`'s allowed list — deciding
-    WHERE a line may break is this package's own job and the answer is a
-    Unicode standard. It is pure and DOM-free, so Node, the browser and a
-    worker agree, which is what the byte-identical-SVG guarantee needs.
-    Consequences worth knowing:
-    - **the word-break rule stays `normal`.** `break-all` would also break English
-      mid-word. A segment that alone exceeds `maxWidth` is instead expanded to
-      CODE POINTS at the point it arises, so only the string that needs it
-      pays. A single code point wider than `maxWidth` is the one irreducible
-      overflow and is left to overflow rather than dropped.
-    - **A line is ONE run.** Emitting a run per break opportunity also fits,
-      and multiplies the SVG's `<text>` elements by the character count of
-      every CJK paragraph.
-    - **An ATOMIC run (inline code, raw HTML, inline math) is still never
-      split** — an interior space in a code span is not a word boundary — so
-      it can still overflow. Truncating it belongs to a later ellipsis/fade
-      slice, not to the line breaker.
-    - **A block's declared width covers its ink** (`block_width`). A block
-      claiming `maxWidth` while an atomic run paints past it is what let
-      `sceneBounds`, the export viewBox and the editor's grow-only auto-fit
-      all agree on a size nothing actually fitted in.
-    - **Kinsoku holds across an INLINE BOUNDARY, not only inside a run**
-      (the TypeScript inline-junction rule). Every inline node is its own `emit`
-      call, so the junction between two was a break opportunity by accident:
-      `。` after `` `code` ``, after `**強調**` or after an icon opened a
-      line, which this decision forbids. It is asked of
-      `uax_segments` — the same authority, not a table of its own — and a break
-      it forbids relocates the stretch already on the line rather than
-      splitting a pair no line may split. `forbiddenLineStarts` 4 -> 0, at +2
-      runs and +2 lines on the two rows that relocate. A run that PAINTS
-      answers U+FFFC at both edges: its EM SPACE placeholder would otherwise
-      read to UAX #14 as a space. Left, measured: an ATOMIC run is cut against
-      the width left when PLACED, so a relocated one can fade on a roomy line;
-      moving it down instead costs `inline-code@320` a line and moves no
-      defect column.
-    On top of UAX #14, **BudouX narrows the candidates to phrase (文節)
-    boundaries for Japanese**, a strict subset of the UAX opportunities, so
-    preferring them costs nothing in fit and buys a line that breaks where a
-    reader would pause rather than mid-word. Applied only to text containing
-    KANA — Chinese and Korean stay on UAX #14, since BudouX ships a separate
-    model per script and this package has no evidence yet that it needs them.
-    The parser is built on first Japanese text, NOT at module load: its
-    constructor turns a ~24KB model into a Map, and charging that to whichever
-    lazily-imported chunk pulls this module in turned two apps/web browser
-    tests red before it was made lazy.
+12. **Line breaking is UAX #14, not a hand-rolled character table** — HISTORY:
+    the TypeScript typesetter and the `css-line-break` dependency are deleted
+    (S18h2), and the Rust core carries the decision byte for byte
+    (`crates/core/canvas-render/src/linebreak`, a table generated off
+    css-line-break's own trie and frozen with the crate; `uax_segments.rs`,
+    `inline_junction.rs`, and BudouX's phrase boundaries in `budoux/`). Its
+    consequences (`normal` word breaking, a line as one run, atomic runs never
+    split, a block's width covering its ink, kinsoku across an inline boundary)
+    and the measurements are on the decisions page.
 
-13. **`parseBody` DEFAULTS to codec's `parseMarkdownBody`** and stays
-    overridable. It was a required injected seam only because this package was
-    forbidden to depend on codec, and every production caller passed that one
-    function — seven identical lines across apps/web (x3), canvas-viewer,
-    server-core and mcp-server, plus an option threaded through apps/web's
-    `scene-render-core.ts` for a worker chunk that imported codec directly
-    anyway. It remains injectable because layout tests parse with a stub for
-    the same reason they measure with one: a layout assertion should not fail
-    because a markdown parser changed. No bundle grew — every one of those
-    consumers already bundled codec in order to pass the function in. BudouX is VENDORED
-    (`src/vendor/budoux/`, Apache-2.0, with the equivalence check that was run
-    before the dependency was dropped recorded in its README) and NOT a
-    dependency: its only entry point re-exports the HTML processor, which
-    imports `linkedom` and from there the native `canvas` package, and the
-    published mcp-server bundle then fails to build at all. Tree-shaking
-    cannot help — esbuild resolves the whole graph before eliminating
-    anything — and the deep import is blocked by budoux's `exports` map.
-    **What cannot wrap is CUT, not left to overflow** (the TypeScript truncation,
-    `fit_to_width`): a node label (one line is what makes it a label) and an
-    atomic run. The run keeps the longest prefix that fits and is marked
-    `truncated`, which the SVG backend paints as a fade — never an ellipsis,
-    because a label is cut precisely where width is scarce and three dots
-    spend the width they save. `fit_to_width` never returns the empty string for
-    non-empty input: one glyph over the edge still says a label is there.
-    **The cut falls between GRAPHEMES**, the never-empty unit included: a lone
-    👨 is not a narrower family emoji. It is GATED, since segmenting is not
-    free — text with no code point at or above U+0300 and no CR cannot hold a
-    cluster, so it walks code points; measured on the bench's
-    overflowing-label rows, ASCII pays 1.2x and an emoji-bearing label 5.8x.
-    Coarse on purpose, and a
-    tighter gate is a dead end worth not re-walking: "can this character join
-    something" answers yes for every precomposed Hangul syllable, since one
-    may follow a jamo L. Only the segmenter can say whether a string HAS a
-    cluster, which is the work being avoided. None of this transfers to
-    `packages/search`'s snippet cut, which cuts at an arbitrary interior
-    offset where a bounded window loses the context regional-indicator
-    pairing needs.
-    Two carve-outs:
-    - **Inline MATH is neither split nor cut.** `a + b + c` cut to `a + b`
-      reads as a complete formula that is simply wrong, where cut code or cut
-      markup reads as cut. It is the one thing still allowed to overflow, and
-      the scoreboard's zeroes are pinned knowing it.
-    - **An EDGE label is not cut**, because it floats on the edge rather than
-      inside a box, so there is no width to fit it to.
-    The fade itself is ONE `<mask>` in `<defs>` with
-    `maskContentUnits="objectBoundingBox"`, so it scales to every referencing
-    element instead of needing a definition per run, and it is emitted only
-    when something is truncated — presence-only, exactly like an absent
-    appearance attribute, which is what keeps every existing golden
-    byte-identical. Verified honoured by resvg (the PNG export path) as well
-    as browsers. A page embedding several of these SVGs repeats the mask id,
-    which is harmless precisely because every copy is byte-identical.
-    **The SIGNAL is one fact with three readers, and that is the part to keep
-    uniform.** The POLICIES above differ for reasons — math is not cut, an
-    edge label has no box, a single code point has nothing below it to split.
-    The signal differing had none, and it left the commonest case silent:
-    three paragraphs in a box holding two rendered as a tidy two-paragraph
-    box, while a cut LINE faded. Anything removed now marks the last surviving
-    run (`mark_last_run`), so a dropped block, a trimmed list item and a cut
-    line all say the same thing.
-    `sceneDigest` DOES report it now, as `truncated` on the node entry. This
-    reverses the earlier "add it when a reader has a reason to act on it" —
-    an agent authoring and reading canvases is that reader, and the fade is
-    only legible to someone looking at pixels. The fact rides the chrome
-    SHAPE because a node's content is a SIBLING of its chrome in the flat
-    scene list, so a digest walking top-level nodes could never correlate the
-    two on its own.
-    **Where the cut is DECIDED is the TypeScript typesetter** (`fit_blocks_to_height`),
-    not the spatial fitter that calls it: "which part of a block is a line"
-    is that module's own knowledge. Granularity steps down blocks -> lines
-    (a paragraph's runs) -> list items; `blockquote`/`table`/`code` stay
-    whole-block, their children not being lines. Whole-block alone leaves the
-    commonest body unbounded — a single long paragraph is ONE block, measured
-    at 112px in a 60px node before lines were reachable. Keep-first ("a text
-    node never renders empty") stays in the TypeScript node composer, being a
-    spatial-node policy rather than a block one.
+13. **What cannot wrap is CUT, and the cut is one signal** — HISTORY for the
+    parser default and the cutting itself: `parseBody` left with the TypeScript
+    layout (the core parses a body itself), BudouX's vendored copy went with
+    the typesetter, and the cut is the core's (`truncate.rs`, `typeset/fit.rs`;
+    graphemes, gated; inline math and an edge label never cut). The decision as
+    taken is on the decisions page. What stays TypeScript is the cut's two
+    readers here:
+    - **The fade is ONE `<mask>` in `<defs>`** with
+      `maskContentUnits="objectBoundingBox"`, so it scales to every referencing
+      element instead of needing a definition per run, and it is emitted only
+      when something is truncated — presence-only, exactly like an absent
+      appearance attribute, which is what keeps every existing golden
+      byte-identical. Verified honoured by resvg (the PNG export path) as well
+      as browsers. A page embedding several of these SVGs repeats the mask id,
+      which is harmless precisely because every copy is byte-identical. Never
+      an ellipsis: a label is cut precisely where width is scarce, and three
+      dots spend the width they save.
+    - **`sceneDigest` reports it, as `truncated` on the node entry.** An agent
+      authoring and reading canvases is a reader with a reason to act on it,
+      and the fade is only legible to someone looking at pixels. The fact rides
+      the chrome SHAPE because a node's content is a SIBLING of its chrome in
+      the flat scene list, so a digest walking top-level nodes could never
+      correlate the two on its own.
     `layout/frame-containment-quality.rust.test.ts` counts what the law hides —
-    a bound says nothing about how often its escape is taken.
-    `layout/nodes/text-wrapping-quality.rust.test.ts` is its scoreboard; see the
-    Tests section.
+    a bound says nothing about how often its escape is taken —
+    and `layout/nodes/text-wrapping-quality.rust.test.ts` is its scoreboard.
 
 14. **`references/` is the one producer of the reference seams.**
     `LoadedReference` is the record a keeper answers for one referenced
@@ -780,14 +635,15 @@ the table alone.
     directory.
 
 15. **A canvas's theme is resolved IN LAYOUT, per canvas** (ADR-0030
-    decisions 4-6; the canvas-theme wrapper in `layout/spatial-canvas.ts`,
-    `theme/theme-asset.ts`). A `RenderContribution` may register `themes`
+    decisions 4-6; `layout/canvas-theme.ts` builds the theme table a request
+    carries, `theme/theme-asset.ts` maps tokens to a palette, and the core
+    resolves). A `RenderContribution` may register `themes`
     (token bundles by bare name, namespaced like `shapes`) and a `readTheme`
     that answers the id the CANVAS names; `SpatialLayoutOptions.style`
     decides whether that is honoured — `'clean'` (the DEFAULT: decision #10's
     agent never pays unasked) ignores it, `'document'` draws it, and a theme
-    id draws that theme unsaved (the session override). Resolution happens at
-    the top of the composer's internal entry, so an embedded canvas reads its
+    id draws that theme unsaved (the session override). Resolution happens in
+    the core per canvas (`compose_canvas`), so an embedded canvas reads its
     OWN facet first and inherits the host's only when it names none — the
     same side of the line `visual.edges`/`visual.shape` already stand on in
     an embed, and deliberately NOT a layout option spread downward through
@@ -809,7 +665,7 @@ the table alone.
     and a task checkbox belong to the theme rather than to one bundled slate
     — a palette naming none keeps `#818b98`, which is what leaves every
     un-themed board byte-identical. A comment or proposal body is NOT themed
-    by it: `layoutCommentBody` sets the theme its density picks, and that
+    by it: `layoutCommentDocument` sets the theme its density picks, and that
     chrome stays chrome. A mono FAMILY is deliberately not a token — a family
     needs a face on every surface (ADR-0011/0012) and the declared family
     must be the measured one, so it is its own slice, recorded as a
@@ -832,7 +688,7 @@ the table alone.
     `layoutSpatialEdges` — it shipped without it, and a drag drew every
     edge crisp and straight over a pencilled, curved committed render.
     A canvas embedded in a MARKDOWN body resolves the same way, through
-    `layoutMdastBlocks`'s (the TypeScript markdown-body layout) own `style` — a
+    the markdown request's own `style` (`markdownLayoutRequest`) — a
     markdown host carries no theme, so `'document'` means the embed's own,
     and the library default stays `'clean'` so every headless caller's bytes
     are unchanged. It shipped without that, and the same board was pencilled
@@ -884,8 +740,8 @@ the table alone.
     working one.
 
 **An edge drawn through its STORED bends is the renderer's own**
-(`bend_route.rs`, the TypeScript bend route's port, taken inside `routeEdge` before the self-edge
-shape and before any computed routing). Every other routing here computes a
+(`bend_route.rs` in `crates/core/edge-routing`, taken inside `route_edge` before
+the self-edge shape and before any computed routing). Every other routing here computes a
 path from two boxes and the obstacles between them, so none of them can
 honour a point somebody placed; this is what happens INSTEAD of choosing one,
 whenever `edge.bends` says where the line goes. It declines — and a route is
@@ -923,13 +779,13 @@ only producers of an edge's path.
   list `ordered`/`depth`/`ordinal`, `LinkProvenance` for link/wikiLink/
   embed) as a first-class field — never flatten to visual-only attributes.
   A future a11y parallel-DOM projection reads these fields directly.
-- Layout functions are pure: no ambient platform API, only their arguments
-  plus the injected `measure`/`renderMath` callbacks.
-- `routeEdge`, `resolveEmbed`, `layoutMdastBlocks`, `sceneDigest`, and
-  `renderSceneToSvg` never throw on malformed/degenerate input (missing
-  endpoints, cycles, zero-sized nodes) — they degrade to a documented
-  fallback instead, so one bad reference never aborts layout for the rest
-  of the canvas.
+- What this package runs is pure: no ambient platform API, only its
+  arguments plus the injected `measure` and the core a caller hands it.
+- `sceneDigest`, `renderSceneToSvg` and tidy never throw on
+  malformed/degenerate input (missing endpoints, cycles, zero-sized nodes) —
+  they degrade to a documented fallback instead, so one bad reference never
+  aborts the rest of the canvas. The core holds the same rule for layout; a
+  layout it cannot draw comes back as a refusal, which `refusalScene` draws.
 - **One producer per geometry, or a parity test.** Any geometry consumed
   by more than one surface — painted by the SVG backend AND hit-tested,
   bounded, translated, or exported — has exactly one producing function;
@@ -1006,10 +862,10 @@ only producers of an edge's path.
   gone around — strictly over the named corpus, and COUNTS violations over
   2000 deterministic synthetic layouts, split by which search should have
   stopped each: `own-endpoint` (invisible to `best_candidate`, since
-  `routeEdge` drops both endpoint nodes from its obstacle list),
+  `route_edge` drops both endpoint nodes from its obstacle list),
   `foreign` (`best_candidate`'s last fallback returning the shortest BLOCKED
   candidate when none of its six is clear), `degenerate` (coincident
-  anchors). The exemption is `routeEdge`'s own: a rect STRICTLY containing
+  anchors). The exemption is `route_edge`'s own: a rect STRICTLY containing
   an anchor cannot be routed around; a rect merely touched on its border
   can. The counts are pinned EXACTLY, not as a ceiling, so an improvement is
   as loud as a regression — they are a debt figure whose target is three
@@ -1136,14 +992,14 @@ only producers of an edge's path.
   containment/cluster/free-region derivation instead of the documented
   explicit sort + tie-breaker — makes the AI-facing JSON non-reproducible.
 - Importing MathJax, opentype.js, or any font/DOM API directly instead of
-  going through the `measure`/`renderMath` injection seams.
+  going through the `measure` seam and the fragment table a root answers.
 - Treating every non-endpoint node as a routing obstacle: a rect that
   CONTAINS an edge's endpoint (a group enclosing its members) can never
   be routed around — every detour still has to reach the point inside
   it — so it must be excluded from the obstacle set, or the router falls
   back to a garbage shortest-detour around the whole frame. This applies
-  to the COST MODEL as much as to the router: `optimize_side_choices`'s
-  its foreign-body list used to omit the `fullyContains` filter `routeEdge`
+  to the COST MODEL as much as to the router: `optimize_side_choices`'s foreign-body
+  list used to omit the `fullyContains` filter `route_edge`
   applies, so the search priced ink through a group frame the router had
   correctly ignored, and could be talked into a dogleg to "save" ink no
   route could avoid. A cost model that disagrees with the router about
@@ -1489,7 +1345,7 @@ overruled** (seventh reading: a model pinned `bottom/top` on every edge,
 same-row pairs included, and the same-row one drew a stub down and a
 diagonal up through both its boxes, 140px). A named side asks where the
 line attaches, and a line through the box it attaches to satisfies
-nobody, so `optimize_side_choices` treats such an edge as free; `routeEdge`
+nobody, so `optimize_side_choices` treats such an edge as free; `route_edge`
 now lets the anchor pass's side win over the edge's own, since the two
 differ only where the search overruled — the overrule has to reach the
 trial that adopts it and the final render alike. The search is no
@@ -1591,13 +1447,14 @@ every board read as spending nothing, the very answer the corpus was expected
 to give.
 
 **The legend is the layout's answer, read off the score** (ADR-0040 decision
-6; the TypeScript legend). `canvasLegend(canvas, appearance)` lists every
+6; the core's `crates/core/canvas-render/src/legend`, since the TypeScript
+legend went with the composer). The legend lists every
 scoped-tag key a population's colour is `carried` by, each value with the
 swatch its class is drawn in — resolved by the same appearance the layout
 paints with, so a legend can never show a colour the box does not wear — and
 one `uncarried` flag per population for colour spent with no key. A frame, a
 kind or a stencil that carries the colour is NOT listed: it has no values a
-legend can name. `layoutSpatialCanvas` attaches it to the top-level scene as
+legend can name. The core attaches it to the top-level scene as
 `scene.legend` (never to a miniature), the SVG backend draws it in the
 top-left corner of an ENVELOPED document (`svg/legend.ts`, sized by a glyph
 estimate since the backend has no measurer) and leaves a fragment alone, and
@@ -1630,6 +1487,6 @@ resolves the theme: a live drag drew edges in the stored colour over a
 committed scene that drew them by intent, and the live-drag parity property
 now draws a library and tagged edges (its stub resolver reads `edge.color`,
 or the step would be invisible to it). In the mutation lane.
-Nested canvases too (the composer's internal scene entry).
+Nested canvases too (the core applies it per canvas).
 
 Recorded oracle: `src/oracle/`; decisions.

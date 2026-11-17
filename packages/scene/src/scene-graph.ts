@@ -519,7 +519,7 @@ export interface ResolvedEdgeNode {
   readonly path: readonly { readonly x: number; readonly y: number }[]
   readonly fromSide: EdgeSide
   readonly toSide: EdgeSide
-  // Always resolved by the producer (routeEdge applies the JSON Canvas
+  // Always resolved by the producer (the core's router applies the JSON Canvas
   // defaults: fromEnd 'none', toEnd 'arrow') — required here so no scene
   // constructor can forget which ends carry an arrowhead.
   readonly fromEnd: 'none' | 'arrow'

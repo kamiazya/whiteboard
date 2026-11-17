@@ -65,9 +65,8 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedThirdParty: [],
   },
   '@kamiazya/whiteboard-canvas-render': {
-    // codec: the mdast body parser this package DEFAULTS to. Every consumer
-    // already bundles codec to pass it in, so the dependency adds nothing to
-    // any bundle and removes the same line from seven call sites.
+    // codec: what a reference target is (`findNextReference`) and the JSON
+    // Canvas a reference wire carries a referenced board as.
     // plugin-visual: resolveCanvasEdgeStyle is the DEFAULT read for edge
     // style (facet first, legacy x-whiteboard.edgeRouting fallback) — the
     // lowlight lesson again: an opt-in resolution step at four call sites
@@ -95,14 +94,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // No line breaker: css-line-break and the vendored BudouX went with the
     // typesetter (ADR-0054 step 7, S18h2) — the Rust core decides where a
     // line breaks, from a table generated off css-line-break's own trie.
-    // lowlight/highlight.js: the DEFAULT implementation of this package's own
-    // `highlightCode` seam, behind the `/highlight` subpath so the barrel
-    // never drags a highlighter into a consumer that renders no code. It sits
-    // here because canvas-render is the only package all three surfaces that
-    // render a markdown body can see — the editor, the viewer (and the MCP
-    // Apps widget through it), and export — and the alternative is the same
-    // scope-to-role table written out three times. Pure JS, no DOM and no
-    // `node:*`, so it holds on Node, the browser and a Worker alike.
+    // lowlight/highlight.js: the host's tokeniser, `highlightCode`, which the
+    // Rust layout core calls back for a code fence's tokens and every request
+    // this package builds hands it. It sits here because canvas-render is the
+    // only package all three surfaces that render a markdown body can see —
+    // the editor, the viewer (and the MCP Apps widget through it), and
+    // export — and the alternative is the same scope-to-role table written
+    // out three times. Pure JS, no DOM and no `node:*`, so it holds on Node,
+    // the browser and a Worker alike.
     allowedThirdParty: ['zod', 'lowlight', 'highlight.js'],
     exemptBoundaryFiles: {
       'layout/spatial-canvas.bench.ts': {
@@ -145,8 +144,8 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // The Rust core's wasm artifact behind a thin shim (ADR-0054): init from
   // bytes or a compiled module a composition root hands it, an ABI check, one
   // typed call per user operation. Below canvas-render's consumers but never
-  // importing canvas-render: the composer will take its implementation
-  // through layout options, so the dependency points this way.
+  // importing canvas-render: a root hands canvas-render the core it loaded
+  // (`SpatialLayoutOptions.core`), so the dependency points this way.
   '@kamiazya/whiteboard-core-wasm': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-scene'],
     allowedThirdParty: [],

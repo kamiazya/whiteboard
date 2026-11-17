@@ -69,16 +69,17 @@ in TypeScript: the wasm artifact, a shim, and init. The logic is Rust's
     count is checked BEFORE anything is allocated, since it is the
     artifact's word.
 
-  A composition root answers either refusal from the TypeScript for routing (canvas-render's
-  `routeLayout`). For OKF and JSON Canvas there is no TypeScript: codec's
+  No TypeScript answers either refusal in the core's place (ADR-0054 step 7 deleted the
+  router and the layout): a refused routing call throws to the caller of canvas-render's
+  `routeLayout`, and a refused layout is drawn as the refusal notice. For OKF and JSON Canvas: codec's
   `parseOkf`/`serializeOkf`/`parseSpatial`/`serializeSpatial` turn a decline into a read failure and
   a typed write refusal.
 
 ## What does NOT belong here
 
-- Anything that imports canvas-render. The composer will take this package's
-  implementation through its layout options, so the dependency points from
-  the roots to both, never from here to canvas-render. Its input types are
+- Anything that imports canvas-render. A root hands canvas-render the core
+  this package loads (`SpatialLayoutOptions.core`), so the dependency points
+  from the roots to both, never from here to canvas-render. Its input types are
   declared structurally in `types.ts` for that reason.
 - Recovery from a trapped instance: `cargo xtask poison-recover` names the
   module that will own it and fails until it exists.

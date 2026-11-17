@@ -2,7 +2,7 @@
 //! routing examples and scoreboards (`src/routing`) run against the Rust router
 //! through `test-utils/wasm/edge-router.ts` (ADR-0054 step 5). One call per
 //! edge, which is the spike's measured-slow shape and a test surface only:
-//! the layout will cross the wire once.
+//! a layout crosses the wire once (`edge_route_layout`).
 
 use crate::edge_primitives::{count, points_len_of};
 use crate::routing_wire::{Malformed, Wire, side_index, side_of};

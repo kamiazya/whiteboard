@@ -13,45 +13,16 @@
  */
 
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
-import type {
-  BoundingBox,
-  NodeOutline,
-  RenderContribution,
-  ShapeContribution,
-  ShapeTable,
-} from '@kamiazya/whiteboard-scene'
+import type { BoundingBox, NodeOutline, ShapeTable } from '@kamiazya/whiteboard-scene'
 import { isFiniteBox } from '../finite-box.js'
 
-export type { NodeOutline, ShapeContribution, ShapeTable }
+export type { NodeOutline }
 
 /**
- * A caller's table is MERGED OVER the built-ins, never a replacement — an id
- * it does not carry still resolves, and an id it does overrides. Done as a
- * fallback lookup rather than an object spread because this runs per node
- * per layout, and because it keeps the merge correct for a direct caller
- * (the SVG backend, a test) that never went through the layout entry point.
- */
-const lookup = (shapes: ShapeTable, shapeId: string): ShapeContribution | undefined =>
-  shapes[shapeId] ?? BUNDLED_SHAPE_TABLE[shapeId]
-
-/**
- * The composed shape table a contribution set resolves to — what the SVG
- * backend must be handed alongside the scene.
- */
-export function resolveShapeTable(contributions: readonly RenderContribution[]): ShapeTable {
-  const table: Record<string, ShapeContribution> = {}
-  for (const contribution of contributions) {
-    for (const [name, shape] of Object.entries(contribution.shapes ?? {})) {
-      table[`${contribution.namespace}.${name}`] = shape
-    }
-  }
-  return table
-}
-
-/**
- * The bundled `visual` plugin's silhouettes, resolved the way any
- * contribution's are — the default a direct caller (hit-testing, a test)
- * gets, and the fallback a partial table is merged over.
+ * The bundled `visual` plugin's silhouettes by namespaced id, the only table
+ * there is: the Rust core lays out against its port of the same silhouettes,
+ * so a table of a caller's own would draw an outline the core never anchored
+ * an edge to or contained content in.
  *
  * Resolved from the plugin rather than written out here, because this
  * module held a second copy of that table for as long as "until the plugin
@@ -60,18 +31,19 @@ export function resolveShapeTable(contributions: readonly RenderContribution[]):
  * fallback below hid that. One producer per geometry, or a parity test —
  * this is the one producer.
  */
-export const BUNDLED_SHAPE_TABLE: ShapeTable = resolveShapeTable([visualRenderContribution])
+export const BUNDLED_SHAPE_TABLE: ShapeTable = Object.fromEntries(
+  Object.entries(visualRenderContribution.shapes ?? {}).map(([name, shape]) => [
+    `${visualRenderContribution.namespace}.${name}`,
+    shape,
+  ]),
+)
 
 /**
  * An unknown id degrades to `null` — a plain rect — like any other malformed
  * input, because the VALUE arrives from a stored facet payload and a document
  * naming a shape this build does not carry is ordinary, not exceptional.
  */
-export function nodeOutline(
-  shapeId: string,
-  box: BoundingBox,
-  shapes: ShapeTable = BUNDLED_SHAPE_TABLE,
-): NodeOutline | null {
+export function nodeOutline(shapeId: string, box: BoundingBox): NodeOutline | null {
   if (!isFiniteBox(box)) return null
-  return lookup(shapes, shapeId)?.outline(box) ?? null
+  return BUNDLED_SHAPE_TABLE[shapeId]?.outline(box) ?? null
 }

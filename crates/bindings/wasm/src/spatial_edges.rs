@@ -1,6 +1,7 @@
-//! The side-choice search over the routing wire, for the layer-2
-//! differential that holds it to `assignEdgeAnchors` (ADR-0054 step 5,
-//! QR-21 layer 2). A test surface like [`crate::edge_anchors`].
+//! The side-choice search over the routing wire, for canvas-render's routing
+//! suites, which call it through `test-utils/wasm/spatial-edges.ts`
+//! (ADR-0054 step 5; the TypeScript-against-Rust differential it first served
+//! went with the TypeScript router). A test surface like [`crate::edge_anchors`].
 
 use crate::edge_anchors::{entry_values, pin};
 use crate::edge_primitives::{count, points_len_of};

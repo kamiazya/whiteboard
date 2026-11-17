@@ -344,8 +344,8 @@ export function useDragLayers({
    * start snapshot plus the live pointer. Move/resize never read `canvas`
    * (see drag-preview.ts for why, and for the single-source
    * `resizeBoxByDelta` guarantee it documents); the connecting branch does —
-   * it routes the prospective edge through the committed producer, a few
-   * routeEdge calls per frame.
+   * it routes the prospective edge through the committed producer, one
+   * routing call into the core per frame.
    */
   const dragPreview = useMemo(() => {
     // A SETTLING frame is no longer being pointed at, so its geometry comes

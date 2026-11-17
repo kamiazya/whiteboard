@@ -66,7 +66,7 @@ export interface SpatialLayoutOptions {
    */
   readonly geometry?: SpatialGeometry
   /**
-   * Frozen edge-side choices, threaded to `assignEdgeAnchors`: the caller
+   * Frozen edge-side choices, threaded to the core's side search: the caller
    * trades crossing optimization for route stability (the live drag
    * overlay pins the committed sides so routes do not flip mid-gesture and
    * pointer frames skip the improvement loop). Absent means sides settle

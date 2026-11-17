@@ -470,8 +470,8 @@ asks mid-layout through its one import. Every spatial layout the editor runs
 — its committed scene, drag layers and layout worker, and the export — hands
 its math and diagrams as canvas-render's fragment TABLE (`fragments` +
 `onFragmentsAsked`, `useMarkdownFragments().table`, `recordingFragmentTable`),
-never as the `renderMath`/`renderDiagram` functions no request carries (one
-would throw `CoreUnaskable`); `editor-layout-core.browser.test.tsx` mounts the
+never as `renderMath`/`renderDiagram` functions, which `SpatialLayoutOptions`
+no longer has (a layout option no request carries throws `CoreUnaskable`); `editor-layout-core.browser.test.tsx` mounts the
 editor's composition and requires the core asked. A NOTE rides the core's
 markdown entry: `render-preview.ts` (the preview pane, a note's version
 history, and the worker's rail, outline and row picture) lays it out through

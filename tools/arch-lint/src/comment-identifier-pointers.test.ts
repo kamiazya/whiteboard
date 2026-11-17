@@ -155,10 +155,6 @@ const DELIBERATELY_GONE: Readonly<Record<string, string>> = {
     'a history sentence about the seam both implementations used to share',
   '.claude/rules/coverage-ledger.md#StateDotTone':
     'a worked example of a closed vocabulary, naming a type since removed',
-  '.claude/rules/package-canvas-render.md#ResolvedDocBundle':
-    'a history sentence about the shape an invariant was first stated over',
-  '.claude/rules/package-canvas-render.md#resolveFileLabel':
-    'a history sentence about the parallel callbacks the references bundle replaced',
   '.claude/rules/package-facet-engine.md#facetPayloadSamples':
     'names the form-derived sampler the plugin-supplied one replaced',
   '.claude/rules/vocabulary.md#OpenCanvas': 'the retired name, spelled in order to retire it',

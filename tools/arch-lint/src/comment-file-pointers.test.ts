@@ -146,8 +146,6 @@ const DELIBERATE: Record<string, string> = {
   // The `.claude/**/*.md` half. Every one of these is a sentence whose
   // SUBJECT is the file's absence — a rule explaining why a surface went.
   // Correcting the name would make each say the opposite of what it says.
-  '.claude/rules/package-canvas-render.md#scene-transform.ts':
-    "mcp-server's FORMER file, named to say where `layout/translate-scene.ts` came from",
   '.claude/rules/package-canvas-render.md#spatial-scene-appearance.ts':
     'one of the three per-surface resolvers the theme layer deleted; the sentence is the list of what it replaced',
   '.claude/rules/package-canvas-render.md#viewer-appearance.ts': 'same list, canvas-viewer half',
