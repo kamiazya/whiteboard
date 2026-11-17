@@ -9,7 +9,7 @@ import { createReferencedDocumentLoader } from './resolve-file-references.js'
 const load = vi.fn<(target: string) => Promise<LoadedReference | null>>()
 vi.mock('./resolve-file-references.js', () => ({ createReferencedDocumentLoader: vi.fn() }))
 vi.mocked(createReferencedDocumentLoader).mockReturnValue(load)
-const deps = {} as ServerDeps
+const deps = { documentIndex: { listDocuments: async () => [] } } as unknown as ServerDeps
 const workspaceId = 'ws' as WorkspaceId
 
 afterEach(() => {

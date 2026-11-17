@@ -4,11 +4,12 @@ import {
   loadedReferenceToWire,
   loadedReferenceWireSchema,
   type ReferenceGraph,
-  referenceTargets,
+  type ReferenceWire,
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
   themeFontSchema,
   withDeclaredColours,
+  writtenTargets,
 } from '@kamiazya/whiteboard-canvas-render'
 import { jsonCanvasDocumentSchema, toJsonCanvas } from '@kamiazya/whiteboard-codec'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
@@ -104,6 +105,22 @@ function referenceWireEntry(
 }
 
 /**
+ * What a target the walk never loaded — past its budget — is known as
+ * anyway: the id and name the workspace index answered for it, which is a
+ * record with no content, as the loader answers past its content account. So
+ * a link the canvas writes keeps its target and title however many it writes.
+ */
+function namedOnly(wire: ReferenceWire): (target: string) => LoadedReference | null | undefined {
+  const aliases = new Map(wire.aliases)
+  const titles = new Map(wire.titles)
+  return (target) => {
+    const documentId = documentIdSchema.safeParse(target).success ? target : aliases.get(target)
+    const name = documentId === undefined ? undefined : titles.get(documentId)
+    return documentId === undefined || name === undefined ? undefined : { documentId, name }
+  }
+}
+
+/**
  * What the widget draws — `canvas` and every canvas the reference graph
  * loaded — each with the colour its tags declare in the workspace's library,
  * so a board drawn inside a file node or an embed is coloured as it is on its
@@ -114,11 +131,12 @@ async function colouredDrawing(
   deps: ServerDeps,
   workspaceId: string,
   canvas: SpatialCanvas,
-): Promise<{ canvas: SpatialCanvas; graph: ReferenceGraph }> {
-  const { graph } = await loadReferenceGraph(deps, workspaceId, { canvases: [canvas] })
+): Promise<{ canvas: SpatialCanvas; graph: ReferenceGraph; wire: ReferenceWire }> {
+  const { graph, wire } = await loadReferenceGraph(deps, workspaceId, { canvases: [canvas] })
   const library = await taggedDrawingLibrary(deps, workspaceId, [canvas], graph)
-  if (library === undefined) return { canvas, graph }
+  if (library === undefined) return { canvas, graph, wire }
   return {
+    wire,
     canvas: withDeclaredColours(canvas, library),
     graph: new Map(
       [...graph].map(([target, ref]) => [
@@ -158,6 +176,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const drawn = await colouredDrawing(deps, input.workspaceId, canvas)
+      const named = namedOnly(drawn.wire)
       // Resolved from the style the CALLER asked for, not from the document's
       // facet alone: a canvas naming a theme drawn under the bundled look
       // has nothing to fetch, and a `style` naming a theme the document does
@@ -176,7 +195,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         threads: readAnnotations(doc),
         ...(input.style === undefined ? {} : { style: input.style }),
         ...(themeFont === undefined ? {} : { themeFont }),
-        // Everything THIS canvas names, through the one definition of a
+        // Everything THIS canvas writes, through the one definition of a
         // reference rather than a node-kind filter: its file nodes AND what
         // its text nodes embed or link. Seeded without `loaded`, so it stops
         // at what the canvas itself says — not the transitive closure the
@@ -185,9 +204,11 @@ export function createCanvasViewTool(deps: ServerDeps) {
         // body. Filtering by node kind instead is what left a text node's
         // `![[note]]` a bracket literal here while the same canvas resolved
         // it through `wb_scene_render`, which passes the whole bundle.
+        // Written rather than loaded targets: one past the walk's budget
+        // still answers the index's id and name.
         references: Object.fromEntries(
-          referenceTargets({ canvases: [canvas] }).flatMap((target) =>
-            referenceWireEntry(target, drawn.graph.get(target)),
+          writtenTargets({ canvases: [canvas] }).flatMap((target) =>
+            referenceWireEntry(target, drawn.graph.get(target) ?? named(target)),
           ),
         ),
       }
