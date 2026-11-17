@@ -108,6 +108,39 @@ describe.runIf(built)('the whole layout over a content cache kept in the core', 
     }
   })
 
+  it('never serves warm a body whose fence spent the tokenizer account', () => {
+    // Each fence costs 9 + 4090² of the render's 4 × 4096² identifier-run
+    // account, so four are coloured and the fifth is drawn plain. A body that
+    // spent from the account and was kept would be served warm unspent,
+    // leaving the fifth enough to be coloured.
+    const fences = [...'abcde'].map((letter, at) =>
+      textNode({
+        id: `f${at}`,
+        x: at * 320,
+        y: 0,
+        width: 260,
+        height: 200,
+        text: `\`\`\`js\nlet ${letter.repeat(4090)}\n\`\`\``,
+      }),
+    ) as SpatialNode[]
+    const fenced: SpatialCanvas = { nodes: fences, edges: [] }
+    const reference = layoutSpatialCanvasWithAnchors(fenced, {
+      core: testLayoutCore(),
+      measure,
+      appearance,
+    })
+    const coloured = reference.scene.nodes.filter(
+      (node) => node.kind === 'codeBlock' && (node.runs?.length ?? 0) > 1,
+    )
+    expect(coloured).toHaveLength(4)
+    const cache = memo()
+    for (const pass of ['cold', 'warm']) {
+      expect(lay(fenced, { measure, appearance, contentCache: cache }).scene, pass).toEqual(
+        reference.scene,
+      )
+    }
+  })
+
   it('never serves a body measured by one measurer to a layout measured by another', () => {
     const cache = memo()
     const wide = createFakeMeasure(0.9)

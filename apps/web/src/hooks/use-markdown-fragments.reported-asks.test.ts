@@ -14,14 +14,13 @@ function loaders(overrides: Partial<FragmentLoaders> = {}): FragmentLoaders {
 }
 
 describe('useMarkdownFragments, fed the asks a layout reports', () => {
-  it('renders what a layout asked the seams for, then answers it synchronously', async () => {
+  it('renders what a layout asked the table for, then answers it from the table', async () => {
     const l = loaders()
     const { result } = renderHook(() => useMarkdownFragments(l))
     // A layout's first ask misses: the scene keeps its fallback for now.
-    act(() => {
-      expect(result.current.seams.renderMath('x^2')).toBeUndefined()
-    })
-    await waitFor(() => expect(result.current.seams.renderMath('x^2')).toEqual(FRAGMENT))
+    expect(result.current.table.fragments).toEqual([])
+    act(() => result.current.table.onFragmentsAsked([{ kind: 'math', value: 'x^2' }]))
+    await waitFor(() => expect(result.current.table.fragments).toEqual([['math:x^2', FRAGMENT]]))
     expect(l.math).toHaveBeenCalledTimes(1)
     expect(l.math).toHaveBeenCalledWith('x^2')
     expect(result.current.entries).toEqual([['math:x^2', FRAGMENT]])
@@ -36,7 +35,7 @@ describe('useMarkdownFragments, fed the asks a layout reports', () => {
       result.current.onFragmentsAsked([ask])
     })
     await waitFor(() =>
-      expect(result.current.seams.renderDiagram('mermaid', 'graph TD; A-->B')).toEqual(FRAGMENT),
+      expect(result.current.entries).toEqual([['fence:mermaid:graph TD; A-->B', FRAGMENT]]),
     )
     act(() => result.current.onFragmentsAsked([ask]))
     await act(async () => {})
@@ -50,13 +49,11 @@ describe('useMarkdownFragments, fed the asks a layout reports', () => {
     const { result } = renderHook(() =>
       useMarkdownFragments(loaders({ math: math as unknown as FragmentLoaders['math'] })),
     )
-    act(() => {
-      result.current.seams.renderMath('\\bad')
-    })
+    act(() => result.current.table.onFragmentsAsked([{ kind: 'math', value: '\\bad' }]))
     await waitFor(() => expect(math).toHaveBeenCalledTimes(1))
     await act(async () => {})
     act(() => {
-      result.current.seams.renderMath('\\bad')
+      result.current.table.onFragmentsAsked([{ kind: 'math', value: '\\bad' }])
       result.current.onFragmentsAsked([{ kind: 'math', value: '\\bad' }])
     })
     await act(async () => {})
