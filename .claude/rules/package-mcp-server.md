@@ -215,6 +215,16 @@ one-shot (~40-60ms stall, 150-220ms wall) and is not registry work.
 `env.WHITEBOARD_*` and `env.MCP_*`, so a new variable of any of those shapes
 needs its documentation in the same increment.
 
+The Rust core has ONE variable, `WHITEBOARD_CORE_DIR` (where the glue and the
+wasm are; `export/layout-core.ts`), and no switch: the daemon loads the core at
+boot (`installRustCoresAtBoot`) and refuses to start without it, since nothing
+TypeScript answers a layout, a codec call or a facet write in its place
+(ADR-0054 step 7). The switches that once chose — `WHITEBOARD_CORE`,
+`WHITEBOARD_CORE_LAYOUT`, `WHITEBOARD_CORE_MISMATCH`, `WHITEBOARD_CORE_OKF`,
+`WHITEBOARD_CORE_SPATIAL`, `WHITEBOARD_CORE_FACETS` — are read by nothing;
+the docs that still name them do so as gone, and `env-docs-contract.test.ts`
+lists each among the names no source reads, with that reason.
+
 A root arms server-core's log sink explicitly: `createApp` for both HTTP
 roots, `startStdioServer` for stdio, both through `routeServerCoreLogs()`.
 Loading the tool registry arms nothing; `composition-roots.guard.test.ts`

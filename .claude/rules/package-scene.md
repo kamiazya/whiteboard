@@ -10,13 +10,16 @@ paths:
 - `scene-graph.ts`: what a laid-out spatial document IS — the closed
   `SceneNode` union and everything it is built from (`BoundingBox`,
   `Appearance`, the block nodes a markdown body becomes, `ResolvedEdgeNode`,
-  `Scene`). Plain TypeScript types, never Zod: a scene does not cross a
+  `Scene`). It is the Rust layout core's ANSWER type: core-wasm decodes the
+  core's scene into it, and the SVG backend, `sceneDigest`, hit testing and
+  the web editor read it. Plain TypeScript types, never Zod: a scene does not cross a
   process boundary, so per zod-schema-discipline it needs no runtime schema.
 - `contribution.ts`: what a plugin registers with the TypeScript renderer —
   `NodeOutline`, `ShapeContribution`/`ShapeTable` (the silhouettes the SVG
-  backend paints), `RoutableElement`, and `RenderContribution` itself, which
-  is now a namespace, those shapes, theme assets and the `readTheme` palette
-  resolution asks. The layout's half of the contract (a node's shape and
+  backend paints, the bundled plugin's alone since the backend stopped taking
+  a caller's table), `RoutableElement` (what core-wasm's routing call takes),
+  and `RenderContribution` itself, which is now a namespace, those shapes,
+  theme assets and the `readTheme` palette resolution asks. The layout's half of the contract (a node's shape and
   text-placement readers, and `NodeDecoration`/`DecorationContext`) was
   deleted with the TypeScript layout (ADR-0054 step 7, S18i): the Rust core
   reads those through the plugin's own Rust twin.
@@ -49,7 +52,8 @@ prediction about what one caller's signature would force.
   is a change to the renderer and to every plugin at once. A contract is a
   shape, and keeping it shapeless is what keeps it cheap.
 - Layout, painting, hit-testing, digests — those PRODUCE and CONSUME the
-  vocabulary and are `canvas-render`'s.
+  vocabulary: layout is the Rust core's (ADR-0054 step 7), the rest
+  `canvas-render`'s.
 - A plugin's own facet schemas or resolvers, which are the plugin's.
 
 ## Dependency rules
@@ -65,10 +69,10 @@ prediction about what one caller's signature would force.
 
 ## Conventions
 
-- `canvas-render` RE-EXPORTS everything it moved, so its own public surface
-  is unchanged and its ~80 consumers were untouched by the extraction. A new
-  consumer may import from either; prefer this package when what it wants is
-  the contract rather than the renderer.
+- `canvas-render` RE-EXPORTS the scene-graph types, so its consumers were
+  untouched by the extraction; the contribution types are imported from here.
+  A new consumer may import a scene type from either; prefer this package when
+  what it wants is the contract rather than the renderer.
 - A type added here is a contract change for both sides at once. That is the
   cost of the position, and the reason to add one only when a plugin
   genuinely needs to speak it.

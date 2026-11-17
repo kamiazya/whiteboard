@@ -74,7 +74,7 @@ construct scan and the package.json dependency-direction check run against this 
 
 Besides `loro-adapter` and `canvas-viewer`, `apps/web` depends on this package directly (its
 markdown-editor preview pane lays a note out through canvas-render's `layoutMarkdownDocument`,
-which parses with `parseMarkdownBody` — or hands the body to the Rust core — and draws with
+which hands the body to the Rust core to parse and lay out, and draws with
 `renderSceneToSvg`, the same parse path `canvas-viewer` and `mcp-server` use for spatial text
 nodes and export — kept as one renderer instead of a second markdown-to-HTML fallback; the page
 still calls codec itself for block lines, references and the OKF envelope). `apps/web` is a composition root, so this is an allowed forward dependency per
@@ -84,7 +84,7 @@ guard applies to composition roots), so this note is the boundary's only documen
 The "one renderer" half of that has a second caller now, and it is worth naming because the
 obvious reuse was the wrong one. A COMMENT's body is markdown too (ADR-0026's 2026-09-06
 supplement), so `apps/web`'s comment card and rail draw it through canvas-render as well — but
-through `layoutCommentBody`, NOT through the preview renderer. The two differ in the markdown
+through `layoutCommentDocument`, NOT through the preview renderer. The two differ in the markdown
 THEME: the preview lays out at the core's DOCUMENT scale (30px h1, 16px block gap) and a comment
 takes the NODE theme the canvas bubble takes (24px, 12px). Reaching for "the markdown renderer"
 would have given a comment document typography and read as a design choice. There is still no

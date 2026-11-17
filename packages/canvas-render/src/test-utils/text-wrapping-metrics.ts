@@ -100,8 +100,8 @@ function collect(
  * infix-separator classes, in both the CJK and the ASCII forms this corpus
  * uses.
  *
- * Written out rather than asked of `css-line-break`, which is what the
- * WRAPPER uses: an oracle sharing its subject's machinery agrees with its
+ * Written out rather than asked of the line-break table the core's WRAPPER
+ * walks: an oracle sharing its subject's machinery agrees with its
  * mistakes by construction, the failure `routing-metrics.ts` and
  * `polyline-geometry.independence.test.ts` are each shaped to avoid.
  */
