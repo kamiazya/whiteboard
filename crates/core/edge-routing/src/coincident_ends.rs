@@ -1,6 +1,6 @@
 //! The coincident-ends repair, ported from canvas-render's
-//! `coincident-ends.ts` and the `anchorsWithoutCoincidentEnds` pass in
-//! `spatial-edges.ts` that drives it: an edge whose two anchors land on one
+//! the TypeScript coincident-ends repair and the `anchorsWithoutCoincidentEnds` pass in
+//! the TypeScript side-choice search that drives it: an edge whose two anchors land on one
 //! point (a member flush with the border of the box holding it) is re-sided
 //! onto the side pair that routes best, so no connection is drawn as a dot.
 #![expect(clippy::float_cmp, reason = "the TypeScript compares with ===")]

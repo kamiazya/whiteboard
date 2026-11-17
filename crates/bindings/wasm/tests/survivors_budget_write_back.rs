@@ -1,7 +1,7 @@
 //! The budget each test export writes back, which cargo-mutants showed no
 //! other test pinned: an account the caller sets is the one spent, not the
 //! layout default beside it. Every expected value is what canvas-render's
-//! `buildPairwiseScores` and `routeEdge` leave in the account they are
+//! `build_pairwise_scores` and `routeEdge` leave in the account they are
 //! handed.
 
 use whiteboard_wasm::edge_crossing_sweep::edge_pairwise_scores;

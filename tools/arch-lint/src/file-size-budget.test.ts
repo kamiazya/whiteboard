@@ -160,14 +160,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // lines were for, so it is not met that way.
   // +2: `tagLibrary`, so a board the preview embeds is coloured by intent.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 905, // +1: the formatting bar's roving-tab wiring
-  // The ink TERMS left for `edge-ink.ts` — how a path's ink is
-  // measured, separately from what the named rules charge for it. The next
-  // shrink is the PREFERENCE half (candidate generation, from
-  // `facingLaneWindow` through `shouldAdoptCandidate`) as a sibling the same
-  // way: it reads only `fullyContains` from the penalty half, which moves to
-  // `edge-geometry.ts` first, and the penalty half (`PENALTY_RULES` and the
-  // cost tuple) reads `bendCount` and `fullyContains` and none of the rest.
-  'packages/canvas-render/src/layout/edges/edge-rules.ts': 845,
   // The file browser's host: the column area's four views as a discriminated
   // union built once and drawn by one switch, and `refreshAndSelect`, the one
   // rule five flows used to repeat. Its pieces — the toolbar, the last-write
@@ -223,18 +215,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // snapshot still holding the retired comments plane is refused there, next
   // to the corrupt-record refusal it mirrors.
   'apps/web/src/lib/document-sync-session.ts': 1297, // +20: a document a live update made unreadable takes no further write, queued ones included
-  // The side-choice SEARCH: the cost model's application to a whole canvas,
-  // the trial machinery of `createConfigScore`, the repair pass and the
-  // regions. The side vocabulary (`edge-sides.ts`), the anchor pass
-  // (`edge-anchors.ts`) and the router (`edge-router.ts`) are sibling modules
-  // — measured before cutting, the search reads all three and none reads the
-  // search, so the vocabulary went first and no module imports the file it
-  // left. What remains over budget is the search's own, and the next shrink
-  // is the trial scorer as a module of its own. The anchor contract's doc sits
-  // here too, on `assignEdgeAnchors`, the export a reader hovers. Raised by 34
-  // for the layout's routing budget, which every search and route here spends
-  // from and so is threaded through each of them.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 1097,
   // The gesture REDUCER: every pointer phase's decision for every tool and
   // every kind of element, each arm carrying the reason it is where it is.
   // What has already left: the per-kind hit-tests (`element-pick.ts`,
@@ -390,8 +370,6 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/DaemonIndexPage.test.tsx': 2077,
   'apps/web/src/pages/SettingsPage.test.tsx': 839,
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1253,
-  'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
-  'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
   // The curved-line layout case: the seam the
   // freehand pen rides, from facet through style to a rounded scene node.
   'packages/canvas-render/src/quality/drawing-score.test.ts': 844, // +1: the layout core it lays out through (S18h2)

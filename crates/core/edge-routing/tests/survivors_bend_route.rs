@@ -1,7 +1,7 @@
 //! Where a bent edge meets its boxes when nothing names the point or the
 //! side: the border nearest the bend next to it. cargo-mutants showed the
 //! left and right borders were pinned by no test. The expected values are
-//! what canvas-render's `bend-route.ts` returns for the same input.
+//! what canvas-render's TypeScript bend route returns for the same input.
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;

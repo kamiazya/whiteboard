@@ -1,6 +1,7 @@
-//! The crossing sweep over flat arrays, for the layer-2 differential that
-//! holds it to canvas-render's `edge-crossing-sweep.ts` (ADR-0054 step 5,
-//! QR-21 layer 2). A test surface like [`crate::edge_router_leaves`].
+//! The crossing sweep over flat arrays, built for the layer-2 differential
+//! that held it to canvas-render's TypeScript crossing sweep (ADR-0054 step 5,
+//! QR-21 layer 2), which went with that TypeScript in step 7 (S18h3b).
+//! A test surface like [`crate::edge_router_leaves`].
 
 use crate::edge_primitives::{count, points_len_of};
 use crate::routing_wire::Wire;
@@ -18,7 +19,7 @@ fn paths(wire: &mut Wire<'_>) -> Option<Vec<Vec<Point>>> {
         .collect()
 }
 
-/// `buildPairwiseScores`, then `sharedCorners` of every ordered pair.
+/// `build_pairwise_scores`, then `sharedCorners` of every ordered pair.
 ///
 /// In: a path count and per path a point count and x, y per point; then the
 /// pairs account as a set flag and its value. Out: `[pairs left (0 when

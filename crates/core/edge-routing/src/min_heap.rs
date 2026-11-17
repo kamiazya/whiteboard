@@ -1,5 +1,5 @@
 //! The smallest binary min-heap a priority search needs: canvas-render's
-//! `layout/edges/min-heap.ts`, ported sift for sift.
+//! the TypeScript min-heap, ported sift for sift.
 //!
 //! Ties are NOT broken, exactly as there: two entries of equal cost pop in
 //! whatever order the sift leaves them. The route search has several optimal
@@ -105,7 +105,7 @@ mod tests {
 
     #[test]
     fn equal_costs_pop_in_the_order_the_sift_leaves_them() {
-        // [0, 2, 3, 1] is what min-heap.ts answers for these four pushes,
+        // [0, 2, 3, 1] is what the TypeScript min-heap answered for these four pushes,
         // read off the TypeScript heap rather than derived; a tie-broken heap
         // would answer 0, 1, 2, 3.
         let mut heap = MinHeap::default();

@@ -12,14 +12,14 @@ import type { CommentThread, Proposal, SpatialNode } from '@kamiazya/whiteboard-
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import { z } from 'zod'
+import type { EdgeAnchorOverride } from '../edge-routing.js'
 import type { FragmentAsk, FragmentEntry } from '../fragment-ask.js'
+import type { LayoutCore } from '../layout-core.js'
 import type { MeasureText } from '../measure.js'
 import type { ReferenceSeams } from '../references/seams.js'
 import type { LayoutRefusal } from '../refusal.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import type { SpatialGeometry } from '../theme/spatial-geometry.js'
-import type { EdgeAnchorOverride } from './edges/edge-sides.js'
-import type { LayoutCore } from './edges/layout-core.js'
 
 /**
  * A degradation `layoutSpatialCanvas` hit while composing one node, reported

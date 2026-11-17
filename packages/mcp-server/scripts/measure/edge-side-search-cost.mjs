@@ -36,7 +36,7 @@
  * Straight routing prices the same parallel board at 15ms and 60ms: the
  * cost is the orthogonal router and the scoring it feeds, run per trial.
  *
- * Before and after the trial and repair accounts (`routing-budget.ts`), the
+ * Before and after the trial and repair accounts (`routing_budget.rs`), the
  * lane rank by binary search and the patched repair, interleaved twice on a
  * quiet machine:
  *

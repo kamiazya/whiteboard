@@ -117,7 +117,7 @@ describe('a doc block is the only doc block above its declaration', () => {
     // A scan over an empty list reports clean, which reads as a rule being kept.
     expect(files.length).toBeGreaterThan(1_200)
     expect(files).toContain('apps/web/src/lib/browser-backend.ts')
-    expect(files).toContain('packages/canvas-render/src/layout/edges/grid-route.ts')
+    expect(files).toContain('packages/canvas-render/src/tidy.ts')
     expect(files.some((file) => file.endsWith('.test.ts'))).toBe(false)
   })
 

@@ -1,5 +1,5 @@
 //! Side rankings and lane windows that cargo-mutants showed no other test
-//! pinned. Every expected value is what canvas-render's `edge-rules.ts`
+//! pinned. Every expected value is what canvas-render's TypeScript edge rules
 //! (`composeSidePairs`, `facingLaneWindow`) returns for the same input.
 
 #[cfg(target_arch = "wasm32")]

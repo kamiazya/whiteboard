@@ -17,21 +17,19 @@ import { type CanvasEdge, frameHolds, isFrame, RESOURCE_KINDS } from '@kamiazya/
  */
 
 import {
-  assignEdgeAnchors,
   createRoutingBudget,
   type EdgeSides,
   edgeArrowPolygons,
   flattenDrawnEdgePath,
   type LabelObstacle,
   type LayoutCore,
-  routeEdge,
   routeLayout,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import type { Box, NodeBox } from '../../lib/spatial/geometry.js'
 import { hitTest, resizeBoxByDelta } from '../../lib/spatial/geometry.js'
-import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { GestureState } from './gestures.js'
 
@@ -71,8 +69,9 @@ export interface ConnectPreviewContext {
   readonly frameTitles?: readonly LabelObstacle[]
   /**
    * The Rust core to route the tentative edge through (ADR-0054); absent,
-   * this realm's own. Without it the preview would draw another line than
-   * the one the drop lays out.
+   * this realm's own, which every realm has loaded before it draws. There is
+   * no TypeScript routing to fall back to (step 7, S18h3b), and the drop's
+   * layout is the core's, so the preview draws the line the drop lays out.
    */
   readonly core?: LayoutCore
 }
@@ -137,7 +136,7 @@ export function computeDragPreview(
       // committed scene keeps drawing every node meanwhile.
       if (box === undefined || connect === undefined || livePoint === null) return undefined
       // Route the PROSPECTIVE edge through the same producer the drop
-      // uses (routeEdge + assignEdgeAnchors over the tentative edge set),
+      // uses (the core's routing over the tentative edge set),
       // so the preview attaches where the committed edge will — the old
       // center-to-pointer line implied edges attach at the node center,
       // which fan-out, sliding, and exposed-side selection all contradict.
@@ -198,19 +197,15 @@ function previewLine(
   // unbounded on each frame of the gesture.
   const budget = createRoutingBudget()
   const titles = connect.frameTitles ?? []
-  const core = connect.core ?? currentLayoutCore()
-  const routed =
-    core === undefined
-      ? routeTentativeOnly(nodes, canvas.edges, tentative, routingStyle, connect, budget, titles)
-      : routedByCore(
-          core,
-          nodes,
-          [...canvas.edges, tentative],
-          routingStyle,
-          connect,
-          budget,
-          titles,
-        )
+  const routed = routedByCore(
+    connect.core ?? requireLayoutCore(),
+    nodes,
+    [...canvas.edges, tentative],
+    routingStyle,
+    connect,
+    budget,
+    titles,
+  )
   if (routed === undefined) return { kind: 'line', path: [], arrows: [] }
   return {
     kind: 'line',
@@ -250,40 +245,6 @@ function routedByCore(
     if (err instanceof Error && err.name === 'CoreInputRefused') return undefined
     throw err
   }
-}
-
-/**
- * The TypeScript's routing of the tentative edge alone, for a realm that holds
- * no core (a jsdom unit test). The edge routing is the one layout piece whose
- * TypeScript ADR-0054 step 7 kept (`routeLayout` at stage 2), so this path
- * stays: the side search sees every edge, but only this one is routed.
- */
-function routeTentativeOnly(
-  nodes: SpatialCanvas['nodes'],
-  existing: SpatialCanvas['edges'],
-  tentative: CanvasEdge,
-  routingStyle: ReturnType<typeof resolveCanvasEdgeStyle>['style'],
-  connect: ConnectPreviewContext,
-  budget: ReturnType<typeof createRoutingBudget>,
-  titles: readonly LabelObstacle[],
-) {
-  const anchors = assignEdgeAnchors(
-    nodes,
-    [...existing, tentative],
-    routingStyle,
-    connect.frozenEdgeSides,
-    budget,
-    titles,
-  )
-  return routeEdge(
-    nodes,
-    tentative,
-    routingStyle,
-    anchors.get(tentative.id),
-    undefined,
-    budget,
-    titles,
-  )
 }
 
 /**

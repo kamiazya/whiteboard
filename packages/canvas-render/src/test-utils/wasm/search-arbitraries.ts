@@ -1,8 +1,11 @@
 import { type EdgeRoutingStyle, edgeSideSchema, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { Rect } from '../../layout/edges/edge-geometry.js'
-import type { EdgeAnchorOverride, EdgeAnchorPair } from '../../layout/edges/edge-sides.js'
-import { createRoutingBudget } from '../../layout/edges/routing-budget.js'
+import {
+  createRoutingBudget,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+} from '../../edge-routing.js'
+import type { Rect } from '../../generated/geometry.zod.js'
 import { fc } from '../fast-check.js'
 import { rect } from './edge-arbitraries.js'
 import type { encodeRouting } from './routing-wire.js'

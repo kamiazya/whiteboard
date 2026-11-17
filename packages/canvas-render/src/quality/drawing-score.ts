@@ -22,11 +22,11 @@ import { area, contains, overlapArea, type Rect, rectOf, round2 } from './rect.j
  * "can a model draw an architecture diagram" from a verdict on the store
  * into a distance from a drawing someone would put in a report.
  *
- * Read from geometry only. The layout's own scorers (`edge-rules.ts`'s
+ * Read from geometry only. The layout's own scorers (`edge_rules.rs`'s
  * penalties, tidy's overlap test) are never consulted, so a rule that is
  * wrong cannot pass by agreeing with itself. The polyline geometry is
  * `polyline-geometry.ts`, shared with the scoreboards' oracles and, by a
- * guarded contract, with nothing under `layout/`.
+ * guarded contract, with no production module outside the instruments.
  *
  * DEBT metrics target zero and each names a thing a reader would call a
  * mistake. PRICE metrics have no target: an edge that goes around a box

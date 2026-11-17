@@ -4,17 +4,29 @@
 // left behind at the start position. Real pointer input, assertions taken
 // MID-drag before any pointerup.
 
-import { assignEdgeAnchors } from '@kamiazya/whiteboard-canvas-render'
+import { createRoutingBudget } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
+
+/** The anchors this realm's core settles for `canvas`'s edges, as a committed layout routes them. */
+const committedAnchors = (canvas: SpatialCanvas) =>
+  requireLayoutCore().routing.routeLayout(
+    canvas.nodes,
+    canvas.edges,
+    () => 'straight',
+    undefined,
+    createRoutingBudget(),
+    [],
+  ).anchors
 
 const start: SpatialCanvas = {
   nodes: [
@@ -391,7 +403,7 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
       svg: '<svg xmlns="http://www.w3.org/2000/svg"/>',
       bounds: { x: 0, y: 0, w: 10, h: 10 },
       scene: { nodes: [] },
-      anchors: assignEdgeAnchors(big(60).nodes, big(60).edges),
+      anchors: committedAnchors(big(60)),
     })
     await frame()
     await frame()
@@ -537,7 +549,7 @@ it('keeps a bystander that steps round on its committed route mid-drag', async (
       { id: 'a5_b2', from: { node: 'a5' }, to: { node: 'b2' } },
     ],
   }
-  const committed = assignEdgeAnchors(board.nodes, board.edges, 'straight')
+  const committed = committedAnchors(board)
   expect(board.edges.some((edge) => committed.get(edge.id)?.around === true)).toBe(true)
 
   const { Host } = makeEditorHost({ initial: board, size: SIZE })

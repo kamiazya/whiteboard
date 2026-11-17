@@ -4,29 +4,14 @@
 // it has to open the routing account a layout would. Without one, a board
 // that drives every route to the grid search runs it unbounded per frame.
 
-import * as render from '@kamiazya/whiteboard-canvas-render'
+import { createRoutingBudget, type LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { computeDragPreview } from './drag-preview.js'
-
-vi.mock('@kamiazya/whiteboard-canvas-render', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@kamiazya/whiteboard-canvas-render')>()
-  return {
-    ...actual,
-    routeEdge: vi.fn(actual.routeEdge),
-    assignEdgeAnchors: vi.fn(actual.assignEdgeAnchors),
-  }
-})
-
-// A realm whose core has not loaded yet, which is when the connect preview
-// routes in TypeScript (`currentLayoutCore` answers nothing until the load
-// settles).
-vi.mock('../../lib/spatial/layout-core.js', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('../../lib/spatial/layout-core.js')>()),
-  currentLayoutCore: () => undefined,
-}))
 
 const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
   textNode({ id, x, y, width: w, height: h, text: '' })
@@ -45,7 +30,27 @@ function cagedBoard(): SpatialCanvas {
   return { nodes, edges: [], facets: { 'visual.edges/v0': { routing: 'orthogonal' } } }
 }
 
-function previewOnto(canvas: SpatialCanvas) {
+type Budget = ReturnType<typeof createRoutingBudget>
+
+/** This realm's core, recording the account each routing call is handed and what it leaves. */
+function recordingCore(): { core: LayoutCore; asked: Budget[]; left: Budget[] } {
+  const realm = requireLayoutCore()
+  const asked: Budget[] = []
+  const left: Budget[] = []
+  const core = fakeLayoutCore({
+    routing: {
+      routeLayout(nodes, edges, styleOf, overrides, budget, labels) {
+        asked.push(budget)
+        const routed = realm.routing.routeLayout(nodes, edges, styleOf, overrides, budget, labels)
+        left.push({ ...budget })
+        return routed
+      },
+    },
+  })
+  return { core, asked, left }
+}
+
+function previewOnto(canvas: SpatialCanvas, core: LayoutCore) {
   const selectableBoxes: NodeBox[] = canvas.nodes.map((n) => ({
     id: n.id,
     box: { x: n.x, y: n.y, width: n.width, height: n.height },
@@ -54,34 +59,25 @@ function previewOnto(canvas: SpatialCanvas) {
     { kind: 'connecting', fromNodeId: 'A' },
     selectableBoxes,
     { x: 1050, y: 50 },
-    { canvas, selectableBoxes },
+    { canvas, selectableBoxes, core },
   )
 }
 
-const routeEdge = vi.mocked(render.routeEdge)
-const assignEdgeAnchors = vi.mocked(render.assignEdgeAnchors)
-
 describe('computeDragPreview — routing budget', () => {
-  beforeEach(() => {
-    routeEdge.mockClear()
-    assignEdgeAnchors.mockClear()
-  })
-
   it('routes the connect preview from one budget it charges', () => {
-    expect(previewOnto(cagedBoard())?.kind).toBe('line')
+    const { core, asked, left } = recordingCore()
+    expect(previewOnto(cagedBoard(), core)?.kind).toBe('line')
 
-    expect(routeEdge).toHaveBeenCalledTimes(1)
-    const budget = routeEdge.mock.calls[0]?.[5]
-    expect(budget).toBeDefined()
-    expect(assignEdgeAnchors.mock.calls[0]?.[4]).toBe(budget)
+    expect(asked).toHaveLength(1)
     // The caged target sends the route to the grid, which spends from it.
-    expect(budget?.grid).toBeLessThan(render.createRoutingBudget().grid)
+    expect(left[0]?.grid).toBeLessThan(createRoutingBudget().grid)
   })
 
   it('opens a fresh budget for each pointer move', () => {
-    previewOnto(cagedBoard())
-    previewOnto(cagedBoard())
-    const [first, second] = routeEdge.mock.calls.map((call) => call[5])
+    const { core, asked } = recordingCore()
+    previewOnto(cagedBoard(), core)
+    previewOnto(cagedBoard(), core)
+    const [first, second] = asked
     expect(first).toBeDefined()
     expect(second).not.toBe(first)
   })

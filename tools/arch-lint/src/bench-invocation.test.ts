@@ -89,7 +89,8 @@ describe('benchmark invocations print their numbers and reach their files', () =
   it('reads the real benchmark projects and files', () => {
     expect(benchProjects.has('canvas-render-node (bench)')).toBe(true)
     expect(benchProjects.size).toBeGreaterThanOrEqual(2)
-    expect(benchFiles.length).toBeGreaterThanOrEqual(4)
+    // Three since the TypeScript router's bench went with it (S18h3b).
+    expect(benchFiles.length).toBeGreaterThanOrEqual(3)
   })
 
   it('reads a filter and a reporter in each spelling a script uses', () => {

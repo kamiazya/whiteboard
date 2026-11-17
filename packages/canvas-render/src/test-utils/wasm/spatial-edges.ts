@@ -1,29 +1,27 @@
 import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { edgeSideSchema } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { Rect } from '../../layout/edges/edge-geometry.js'
-import type {
-  EdgeAnchorOverride,
-  EdgeAnchorPair,
-  EdgeStyleOf,
-} from '../../layout/edges/edge-sides.js'
-import { createRoutingBudget, type RoutingBudget } from '../../layout/edges/routing-budget.js'
+import {
+  createRoutingBudget,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+  type RoutingBudget,
+} from '../../edge-routing.js'
+import type { Rect } from '../../generated/geometry.zod.js'
 import { requireWasm } from './glue.js'
 import { encodeRouting } from './routing-wire.js'
 
 /**
- * `assignEdgeAnchors` answered by the Rust port through the wasm artifact,
- * with the TypeScript signature, so canvas-render-rust runs every suite that
- * reaches the side-choice search — the routing scoreboards through
- * `layoutSpatialCanvas` included — against Rust unchanged (ADR-0054 step 5,
- * QR-21 layer 1). vitest.rust.config.ts aliases `./spatial-edges.js` and
- * `./edges/spatial-edges.js` to this module; the rest of spatial-edges.ts's
- * surface is re-exported as written.
+ * `assignEdgeAnchors` answered by the Rust port through the wasm artifact's
+ * oracle-surface export (`edge_assign_anchors`), with the signature the
+ * deleted TypeScript side search had, so canvas-render-rust's routing
+ * examples and scoreboards (`src/routing/*.rust.test.ts`) read the anchors
+ * the core settles (ADR-0054 step 5, QR-21 layer 1; the TypeScript went in
+ * step 7, S18h3b). Test-only: no shipped artifact carries the export.
  */
-export {
-  anchorsWithoutCoincidentEnds,
-  routeCacheKey,
-} from '../../layout/edges/spatial-edges.js'
+
+/** How ONE edge is routed: per edge, since an edge's own facet narrows the canvas's. */
+type EdgeStyleOf = (edge: RoutableElement) => EdgeRoutingStyle
 
 const SIDES = edgeSideSchema.options
 const STYLES: Record<EdgeRoutingStyle, number> = { straight: 0, orthogonal: 1, curved: 2 }

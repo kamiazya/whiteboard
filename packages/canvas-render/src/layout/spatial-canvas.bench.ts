@@ -1,6 +1,6 @@
-// The PER-NODE half of the layout budget. `spatial-edges.bench.ts` measures
-// the edge search, which grows with the square of the canvas and drowns
-// everything else; this file deliberately keeps the edge set tiny so what is
+// The PER-NODE half of the layout budget. The edge search, which grows with
+// the square of the canvas and drowns everything else, is the Rust core's and
+// measured with it; this file deliberately keeps the edge set tiny so what is
 // left is what layout spends per node — including the facet reads that decide
 // a node's silhouette, its badge and its text placement.
 //

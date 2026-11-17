@@ -39,7 +39,7 @@ that kills the first shape of an idea has not killed the idea.
 
 That distinction is worth the words because this list used to end with the
 re-score's FIRST verdict, as though it were the final one, while the third
-shape was already in `spatial-edges.ts`.
+shape was already in the side-choice search (`spatial_edges.rs` now).
 
 ## First decide WHAT KIND of benefit you are claiming
 
@@ -117,8 +117,8 @@ column first, then the numbers, and name what the change does NOT claim.
 For "does this look better", one canvas cannot answer — it says the fix
 worked, never whether the failure moved somewhere nobody looked.
 
-Build a corpus plus an aggregate. `packages/canvas-render/src/layout/edges/edge-routing-quality.test.ts`
-is the worked example.
+Build a corpus plus an aggregate. `packages/canvas-render/src/routing/edge-routing-quality.rust.test.ts`
+is the worked example (it judges the Rust router, through the oracle core).
 
 - **Metrics live in an independent oracle.** `test-utils/routing-metrics.ts`
   computes geometry directly and never calls the production scorer, so a
@@ -154,7 +154,7 @@ The bench API — a `bench` test-context fixture inside `test()` with `bench.com
 bench test, and why the project is filtered as `"canvas-render-node (bench)"` — is
 `testing-techniques/resources/configuration.md` › Benchmarks.
 
-`pnpm bench` (`packages/canvas-render/src/layout/edges/spatial-edges.bench.ts`),
+`pnpm bench` (`packages/canvas-render/src/layout/spatial-canvas.bench.ts`),
 never a hand-rolled `performance.now()` loop — you need the variance and the
 sample count to know whether you measured anything.
 

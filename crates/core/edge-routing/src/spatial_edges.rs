@@ -1,4 +1,4 @@
-//! The side-choice search, ported from canvas-render's `spatial-edges.ts`:
+//! The side-choice search, ported from canvas-render's TypeScript side-choice search:
 //! which sides every edge leaves from and arrives at, chosen together so the
 //! routes cross, overlap and retrace as little as the cost model prices. It
 //! runs twice per region (unaligned, then a repair over the drawn geometry)
@@ -419,7 +419,7 @@ fn optimize_across_regions(
 }
 
 /// `sides` with each overridden edge's frozen pair (a side the edge names
-/// itself still wins), and the edges that froze, as `withOverrides`.
+/// itself still wins), and the edges that froze, as `with_overrides`.
 fn with_overrides(
     sides: &JsMap<EdgeId, SidePair>,
     edges: &[RoutableEdge],

@@ -1,5 +1,5 @@
 import { type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
-import type { LayoutCore } from '../../layout/edges/layout-core.js'
+import type { LayoutCore } from '../../layout-core.js'
 import { requireWasm, wasmBytes } from './glue.js'
 
 let loaded: LayoutCore | undefined

@@ -327,9 +327,11 @@ describe('the canvas-render lane skips the tests that measure cost', () => {
   })
 
   // A literal path that names no file excludes nothing and reads as if it did.
+  // There is none today: the one there was, the routing scoreboard, became a
+  // `*.rust.test.ts` with the TypeScript router's deletion (S18h3b) and is
+  // excluded by that glob. So this holds a literal added later.
   it('names no excluded file that does not exist', async () => {
     const literal = (await exclusions()).filter((glob) => !/[*?{[]/.test(glob))
-    expect(literal.length).toBeGreaterThan(0)
     expect(literal.filter((path) => !existsSync(resolve(RENDER, path)))).toEqual([])
   })
 })

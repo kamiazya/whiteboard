@@ -1,7 +1,8 @@
-//! The router's leaf modules over flat arrays, for the property
-//! differential that holds them to canvas-render's `side-slides.ts`,
-//! `straight-detour.ts`, `edge-sides.ts`, `edge-contact.ts` and
-//! `bend-route.ts` (ADR-0054 step 5, QR-21 layer 2). Batched test
+//! The router's leaf modules over flat arrays, an oracle-surface test export:
+//! the property differential that held them to canvas-render's TypeScript side
+//! slides, corner search, side vocabulary, contact mark and bend route
+//! (ADR-0054 step 5, QR-21 layer 2) went with that TypeScript in step 7
+//! (S18h3b). Batched test
 //! surface like [`crate::edge_primitives`]. A side travels as its index in
 //! `edgeSideSchema.options` order (top, right, bottom, left).
 

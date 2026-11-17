@@ -1,5 +1,5 @@
 //! The named rules side choice and routing are judged by: canvas-render's
-//! `layout/edges/edge-rules.ts`, ported rule for rule.
+//! the TypeScript edge rules, ported rule for rule.
 //!
 //! The reasoning behind each rule is written once, in the TypeScript. Two
 //! things differ in shape, not in answer:
@@ -202,7 +202,7 @@ fn u_hook_span_exposed_first(ctx: &PreferenceContext<'_>) -> Vec<SidePair> {
 }
 
 /// The ranked candidate side pairs, as `composeSidePairs` over
-/// `SIDE_PREFERENCE_RULES`: each candidate rule in order, a pair already
+/// the side preference rules: each candidate rule in order, a pair already
 /// ranked skipped. The two tiebreak rules generate nothing.
 #[must_use]
 pub fn compose_side_pairs(ctx: &PreferenceContext<'_>) -> Vec<SidePair> {
@@ -380,7 +380,7 @@ pub fn less_cost(a: &Cost, b: &Cost) -> bool {
     a.iter().zip(b).find(|(x, y)| x != y).is_some_and(|(x, y)| x < y)
 }
 
-/// `hasRepairableProblem`: a non-zero term on any tier but the last.
+/// `has_repairable_problem`: a non-zero term on any tier but the last.
 #[must_use]
 pub fn has_repairable_problem(cost: &Cost) -> bool {
     cost.iter().take(TIERS - 1).any(|&c| c != 0.0)

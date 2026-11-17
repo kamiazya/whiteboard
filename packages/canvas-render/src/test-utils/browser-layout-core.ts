@@ -1,6 +1,6 @@
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
 import wasmUrl from '@kamiazya/whiteboard-core-wasm/wasm?url'
-import type { LayoutCore } from '../layout/edges/layout-core.js'
+import type { LayoutCore } from '../layout-core.js'
 
 let loading: Promise<LayoutCore> | undefined
 

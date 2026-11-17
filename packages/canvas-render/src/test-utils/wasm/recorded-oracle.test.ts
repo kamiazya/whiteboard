@@ -1,27 +1,29 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
+import { testLayoutCore } from '../test-layout-core.js'
 import { encodeRecording, recordedDraws, routeLayoutCase } from './route-layout-oracle.js'
 
 /**
- * The committed recording of the TypeScript's routing answers equals what
- * the TypeScript answers today, byte for byte. The Rust crate replays that
- * recording natively (`crates/bindings/wasm/tests/recorded_oracle.rs`) so
- * cargo-mutants can judge its mutants by it; a recording left behind a
- * TypeScript change would judge them against an answer nobody gives.
+ * The committed recording of the routing answers, replayed through the core
+ * every root loads. The recording was taken from the TypeScript router while
+ * it existed and is frozen since its deletion (ADR-0054 step 7, S18h3b; D13).
+ * The Rust crate replays it natively (`crates/bindings/wasm/tests/recorded_oracle.rs`)
+ * so cargo-mutants can judge its mutants by it; this replay regenerates the
+ * same draws and asks `@kamiazya/whiteboard-core-wasm`'s typed `routeLayout`,
+ * so the wire that shim encodes and the answer it decodes are held to the
+ * recording too, byte for byte.
  *
- * In this project no alias replaces `edge-router`, `spatial-edges` or
- * `grid-route`, so the answers are the TypeScript's own.
- *
- * Re-record after a deliberate routing change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node recorded-oracle`.
+ * Nothing re-records it: a deliberate routing change is a change to the
+ * recording, made and reviewed as one.
  */
 // Kept here, not beside the Rust test: this tree is in the Rust jobs' path
-// scope, so a re-recording runs both sides, while a crate change does not
-// run this package's projects (affected.mjs reads a path a source names).
+// scope, so a change to the recording runs both sides, while a crate change
+// does not run this package's projects (affected.mjs reads a path a source names).
 const FILE = new URL('./oracle/route_layout.f64', import.meta.url)
 
 describe('the recorded routing oracle', () => {
-  const cases = recordedDraws().map(({ draw, grid }) => routeLayoutCase(draw, grid))
+  const core = testLayoutCore().routing
+  const cases = recordedDraws().map(({ draw, grid }) => routeLayoutCase(core, draw, grid))
   const bytes = encodeRecording(cases)
 
   it('holds the corpus and the generated draws, and reaches what the router branches on', () => {
@@ -32,11 +34,10 @@ describe('the recorded routing oracle', () => {
     expect(cut, 'layouts that run an account dry').toBeGreaterThan(5)
   })
 
-  it('equals what the TypeScript answers today', () => {
-    if (process.env.WHITEBOARD_RECORD_ORACLE === '1') writeFileSync(FILE, bytes)
+  it('equals what the core answers through the shim today', () => {
     const committed = new Uint8Array(readFileSync(FILE))
     expect(committed.length).toBe(bytes.length)
     const at = committed.findIndex((b, i) => b !== bytes[i])
-    expect(at, 'the first byte the recording parts from the TypeScript at').toBe(-1)
+    expect(at, 'the first byte the recording parts from the core at').toBe(-1)
   })
 })

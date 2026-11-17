@@ -1,5 +1,5 @@
 //! The geometry vocabulary the edge layer is written in: canvas-render's
-//! `layout/edges/edge-geometry.ts`, ported function for function.
+//! the TypeScript edge geometry, ported function for function.
 //!
 //! The reasoning behind each function is written once, in the TypeScript.
 //! This file says only where Rust has to work to give the same answer:

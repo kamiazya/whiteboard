@@ -2,7 +2,8 @@
 //! each diagonal chord strictly inside each rect, it moves with the board,
 //! and it reads nothing off an axis-aligned path, which the axis terms own.
 //!
-//! The TypeScript twin is `diagonal-ink.properties.test.ts`. The oracle samples
+//! The TypeScript twin was the diagonal clip property suite, deleted with the
+//! TypeScript router (ADR-0054 step 7, S18h3b). The oracle samples
 //! the segment instead of clipping it, so it shares no arithmetic with the
 //! Liang-Barsky clip under test; lengths are a plain `sqrt`, never det's hypot.
 

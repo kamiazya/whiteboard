@@ -3,7 +3,6 @@ import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wa
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import { beforeAll, describe, expect, it } from 'vitest'
-import type { LayoutCore } from '../layout/edges/layout-core.js'
 import { fittedTextNodeHeight } from '../layout/fitted-height.js'
 import {
   queryCommentBubble,
@@ -12,6 +11,7 @@ import {
   queryOutlineContentBox,
 } from '../layout/queries.js'
 import { layoutSpatialEdges, naturalNodeContentSize } from '../layout/spatial-canvas.js'
+import type { LayoutCore } from '../layout-core.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { editorOptions } from '../test-utils/query-oracle/boards.js'

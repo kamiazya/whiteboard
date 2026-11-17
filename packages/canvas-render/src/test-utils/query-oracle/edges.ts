@@ -1,5 +1,5 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { EdgeAnchorOverride } from '../../layout/edges/edge-sides.js'
+import type { EdgeAnchorOverride } from '../../edge-routing.js'
 import type { EditorProfile } from './boards.js'
 
 /**

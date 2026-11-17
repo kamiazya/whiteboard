@@ -154,7 +154,7 @@
       "allowedThirdParty": {
         "serde": "the derive the generated contract types use (contracts/geometry); no I/O, builds unchanged on wasm32 and native"
       },
-      "absorbs": ["packages/canvas-render/src/layout/edges"]
+      "absorbs": ["packages/canvas-render/src/routing"]
     },
     "whiteboard-canvas-render": {
       "path": "crates/core/canvas-render",

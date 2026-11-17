@@ -1,8 +1,8 @@
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { Point } from '../generated/geometry.zod.js'
+import type { LayoutCore } from '../layout-core.js'
 import type { QueryBox, QueryNumbers } from '../query-core.js'
-import type { Point } from './edges/edge-geometry.js'
-import type { LayoutCore } from './edges/layout-core.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
 
 // The geometry an editor asks of the layout on its own (ADR-0054 step 7,

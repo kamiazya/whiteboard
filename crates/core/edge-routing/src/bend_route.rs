@@ -1,5 +1,5 @@
 //! An edge drawn through its stored bends: canvas-render's
-//! `layout/edges/bend-route.ts`, ported function for function. The
+//! the TypeScript bend route, ported function for function. The
 //! reasoning is written once, in the TypeScript.
 
 use crate::edge_geometry::{Side, side_point};

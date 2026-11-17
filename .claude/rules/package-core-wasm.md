@@ -109,5 +109,7 @@ check, `typecheck:abi` (`abi-conformance.ts` beside `src`, compiled in the
 - canvas-render's `canvas-render-rust` loads the oracle build from
   `target/dist-oracle`, not `artifacts/`; the shipped artifact is never
   asked for an export only a test calls.
-- What the shim ROUTES is held to the TypeScript composer by canvas-render's
-  `route-layout.rust.test.ts`, which goes through `coreFrom`.
+- What the shim ROUTES is held to the frozen recording of the TypeScript
+  composer's routing (`route_layout.f64`) by canvas-render's
+  `recorded-oracle.test.ts`, which asks the shim's typed `routeLayout` over the
+  shipped artifact; the TypeScript itself went in ADR-0054 step 7 (S18h3b).

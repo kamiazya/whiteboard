@@ -5,7 +5,7 @@
 //! cover, so the second layout must equal the first, and so must a layout
 //! under the default account, which these boards never exhaust.
 //!
-//! The TypeScript twin is `routing-budget.properties.test.ts`; here the layout
+//! The canvas-render-rust twin is `routing-budget.properties.rust.test.ts`; here the layout
 //! is [`route_layout`], the one call the composer makes.
 
 use whiteboard_edge_routing::edge_router::RoutingStyle;

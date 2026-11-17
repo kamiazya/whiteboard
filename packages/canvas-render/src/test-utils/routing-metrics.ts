@@ -1,11 +1,11 @@
 /**
  * Independent geometric oracle for routing quality. Deliberately never calls
- * `edge-rules.ts` or any other production scorer, so a test asserting against
+ * `edge_rules.rs` or any other production scorer, so a test asserting against
  * it cannot be satisfied by a broken rule agreeing with itself — the same
  * contract `reversal-count.ts` holds for the `path-reversal` rule. The
  * polyline primitives come from `quality/polyline-geometry.ts`, shared with
- * the drawing score and guarded against any import from `layout/`, so the
- * contract holds there too.
+ * the drawing score and guarded against any import from a production module
+ * outside the instruments, so the contract holds there too.
  *
  * Where the penalty rules answer "which candidate wins", these answer "how
  * good is the drawing", in units a reader can check against a picture:

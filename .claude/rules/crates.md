@@ -88,17 +88,13 @@ under the `oracle-surface` cargo feature: no shipped artifact has them, and
 test lanes load. After both wasm builds the `rust`
 job runs `canvas-render-rust` (QR-21 layer 2, against the oracle build): canvas-render's
 `det-math.rust.test.ts` holds `det-math.ts` to `whiteboard-det` through the
-wasm artifact, exact on every double, and fails on CI if the artifact is absent; the
-`test-utils/wasm/*.rust.test.ts` beside it do the same for each edge module
-ported so far (grid-route, the geometry and ink primitives, edge-rules, the
-router's leaves, the router, the anchor pass, the coincident-ends repair, the crossing sweep, the side-choice search, and
-`edge_route_layout`, the whole layout's routing in one call). The same
-project re-runs every `layout/edges` suite, scoreboards included, with
-`./grid-route.js`, `./edge-router.js` and `./spatial-edges.js` aliased to the
-Rust ports through the wasm (QR-21 layer 1; those suites are included only when
-the artifact exists), so the routing scoreboards judge the Rust side-choice
-search, repair and router together; the two `*.cost.test.ts` files that count
-TypeScript internals are excluded there, since under Rust they count nothing. Every target runs nightly
+wasm artifact, exact on every double, and fails on CI if the artifact is absent.
+The edge modules' TypeScript-against-Rust differentials went with the
+TypeScript router (ADR-0054 step 7, S18h3b); what was QR-21 layer 1, the
+router's examples and scoreboards, runs on in the same project from
+`packages/canvas-render/src/routing/*.rust.test.ts`, reaching the Rust
+side-choice search, repair and router through the oracle exports' shims in
+`test-utils/wasm/`, so the routing scoreboards judge the Rust router alone. Every target runs nightly
 in `.github/workflows/rust-fuzz-nightly.yml`, whose cache entry the PR job
 restores read-only. The OKF envelope's and the JSON Canvas codec's differentials went with their
 TypeScript (owner decision q40): their suites run in `codec-node` against the
@@ -194,13 +190,13 @@ steps and cache paths to the scripts.
   message (q43; `docs/contributing/parity/facet-engine.md`).
 - **The TypeScript's answers are recorded for native tests**:
   `packages/canvas-render/src/test-utils/wasm/oracle/route_layout.f64` is
-  what the TypeScript composer answers to 309 layouts, replayed bit for bit
-  by `crates/bindings/wasm/tests/recorded_oracle.rs`, so cargo-mutants and the coverage floor judge
-  the edge crate by the same oracle as the wasm differentials.
-  canvas-render's `recorded-oracle.test.ts` (node project, nothing aliased to
-  Rust) fails when the recording no longer equals today's TypeScript;
-  re-record with `WHITEBOARD_RECORD_ORACLE=1` after a deliberate routing
-  change.
+  what the TypeScript composer answered to 309 layouts, replayed bit for bit
+  by `crates/bindings/wasm/tests/recorded_oracle.rs`, so cargo-mutants and the
+  coverage floor judge the edge crate by it. The TypeScript is deleted
+  (S18h3b) and the recording is frozen: canvas-render's
+  `recorded-oracle.test.ts` replays it through the core-wasm shim's typed
+  `routeLayout` over the shipped artifact, and nothing re-records it; a
+  deliberate routing change is a change to the recording, reviewed as one.
 - **The SVG backend is held to two recordings**:
   `packages/canvas-render/src/oracle/svg.jsonl` (the goldens and the laid-out
   scenes, 179 records) and `svg-edge-cases.jsonl` (small scenes aimed at one

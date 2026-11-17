@@ -9,8 +9,9 @@ export default defineProject({
     setupFiles: ['../../packages/codec/src/test-utils/core-setup/node.setup.ts'],
     include: ['src/**/*.test.ts'],
     exclude: ['src/**/*.browser.test.ts', 'src/**/*.rust.test.ts'],
-    // Vitest's default is 5s, which this project never chose — and the
-    // live-drag parity property sits right at it. Measured: 1427/1642/1512ms
+    // Vitest's default is 5s, which this project never chose. It was set for
+    // the live-drag parity property, which sat right at it (the property has
+    // since left this project with the TypeScript layout). Measured: 1427/1642/1512ms
     // with its file alone, 4654ms with all vitest projects running, so the
     // margin is a few hundred milliseconds of noise and the same run is red
     // or green by luck. It timed out twice that way, each time reading as a
@@ -30,13 +31,12 @@ export default defineProject({
     // that full string is what `--project` has to be given (`pnpm bench`).
     benchmark: {
       include: ['src/**/*.bench.ts'],
-      // The TypeScript-against-Rust bench needs the wasm artifact; it runs
-      // under canvas-render-rust instead.
+      // A `*.rust.bench.ts` (the core's drag frame) needs the oracle wasm
+      // artifact; it runs under canvas-render-rust instead.
       exclude: ['src/**/*.rust.bench.ts'],
-      // Vite's module runner serves ESM exports through getters, and the
-      // edge search calls its own helpers (edge-rules, edge-geometry) tens
-      // of millions of times per run, so vitest warns that the getters skew
-      // the numbers. The two fixes it offers do not apply here: a local
+      // Vite's module runner serves ESM exports through getters, and a bench
+      // that calls a source module's helpers in a hot loop makes vitest warn
+      // that the getters skew the numbers. The two fixes it offers do not apply here: a local
       // alias in the bench file only bypasses the bench file's OWN imports,
       // not the source's internal ones, and native ESM cannot resolve this
       // package's `.js` specifiers to `.ts` sources. The overhead is the

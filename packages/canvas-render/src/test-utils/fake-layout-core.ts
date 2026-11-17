@@ -1,4 +1,4 @@
-import type { LayoutCore } from '../layout/edges/layout-core.js'
+import type { LayoutCore } from '../layout-core.js'
 
 const unasked = (entry: string) => () => {
   throw new Error(`the core's ${entry} is not asked here`)

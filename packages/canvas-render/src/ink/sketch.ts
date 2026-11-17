@@ -34,7 +34,7 @@ import { cos, hypot, sin } from '../det-math.js'
 import type { ArrowPolygon } from '../edge-arrows.js'
 import { flattenDrawnEdgePath } from '../edge-path/edge-flatten.js'
 import { isFiniteBox } from '../finite-box.js'
-import type { Point } from '../layout/edges/edge-geometry.js'
+import type { Point } from '../generated/geometry.zod.js'
 import type { NodeOutline } from '../outline/node-outline.js'
 import { styleRandomFromSeed } from './seed.js'
 

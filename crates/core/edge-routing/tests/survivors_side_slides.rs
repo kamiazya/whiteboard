@@ -1,6 +1,6 @@
 //! Concrete answers of the side-slide helpers that cargo-mutants showed no
 //! other test pinned. Every expected value is what canvas-render's
-//! `side-slides.ts` returns for the same input.
+//! the TypeScript side slides returns for the same input.
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;

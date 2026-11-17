@@ -1,7 +1,7 @@
 //! The anchor pass's answers that cargo-mutants showed no other test
 //! pinned: when a facing pair is slid onto one lane, and what a pin writes
 //! over a placed entry. Every expected value is what canvas-render's
-//! `computeAnchorsFor` returns for the same input.
+//! `compute_anchors_for` returns for the same input.
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;
@@ -22,7 +22,7 @@ const fn sides(from_side: Side, to_side: Side) -> SidePair {
 }
 
 /// One edge from box 0 to box 1 on the given sides, its entry as
-/// `computeAnchorsFor(ctx, sides, align, pins)` places it.
+/// `compute_anchors_for(ctx, sides, align, pins)` places it.
 fn anchors(
     boxes: [Rect; 2],
     chosen: SidePair,

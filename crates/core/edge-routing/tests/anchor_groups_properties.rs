@@ -3,7 +3,8 @@
 //! exactly the partition `build_anchor_groups` derives from scratch, and a
 //! re-side to the sides an edge already has must change nothing.
 //!
-//! The TypeScript twin is `anchor-groups.properties.test.ts`.
+//! The TypeScript twin was the anchor groups property suite, deleted with the
+//! TypeScript router (ADR-0054 step 7, S18h3b).
 
 use whiteboard_edge_routing::edge_anchors::{
     AnchorGroups, anchor_context, build_anchor_groups, patch_anchor_groups,

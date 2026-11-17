@@ -1,4 +1,4 @@
-//! The anchor pass, ported from canvas-render's `edge-anchors.ts`: WHERE on
+//! The anchor pass, ported from canvas-render's TypeScript anchor pass: WHERE on
 //! its chosen side an edge attaches, given every other edge sharing that
 //! (node, side). Ends sharing a side are spread along it in a stable order
 //! and leave through distinct stub lanes (`build_anchor_groups`); a trial
@@ -184,7 +184,7 @@ fn first_index_where(sorted: &[f64], holds: impl Fn(f64) -> bool) -> usize {
     lo
 }
 
-/// The whole partition, placed, as `buildAnchorGroups`.
+/// The whole partition, placed, as `build_anchor_groups`.
 #[must_use]
 pub fn build_anchor_groups(
     ctx: &AnchorContext<'_>,
@@ -359,7 +359,7 @@ fn pinned_entry(entry: EdgeAnchorPair, pin: &EdgeAnchorOverride) -> EdgeAnchorPa
     }
 }
 
-/// `copyAround`, then the pins, as `computeAnchorsFor`'s `applyPins`.
+/// `copyAround`, then the pins, as `compute_anchors_for`'s `apply_pins`.
 fn apply_pins(
     anchors: &mut JsMap<EdgeId, EdgeAnchorPair>,
     sides: &JsMap<EdgeId, SidePair>,
@@ -378,7 +378,7 @@ fn apply_pins(
 }
 
 /// Grouping, fan-out and lane depths for a FIXED side configuration, as
-/// `computeAnchorsFor`; `placement` is a partition already placed for
+/// `compute_anchors_for`; `placement` is a partition already placed for
 /// exactly these sides, when the caller has one.
 #[must_use]
 pub fn compute_anchors_for(
@@ -454,8 +454,8 @@ mod tests {
     }
 
     /// `patchAnchorGroups` is a second producer of the partition
-    /// `buildAnchorGroups` produces, so the two must agree, as the
-    /// TypeScript's `anchor-groups.properties.test.ts` holds them. Each case
+    /// `build_anchor_groups` produces, so the two must agree, as the
+    /// TypeScript's anchor groups property suite holds them. Each case
     /// re-sides one edge: off a crowded side, onto one, and off a side it
     /// held alone (emptying that group).
     #[test]

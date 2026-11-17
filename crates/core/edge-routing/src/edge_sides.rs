@@ -1,5 +1,5 @@
 //! Which side an edge leaves from and arrives at, and the first guess the
-//! side-choice search starts from: canvas-render's `layout/edges/edge-sides.ts`,
+//! side-choice search starts from: canvas-render's TypeScript side vocabulary,
 //! ported function for function. The reasoning is written once, in the
 //! TypeScript.
 //!
@@ -30,7 +30,7 @@ fn facing_sides(dx: f64, dy: f64) -> FacingSides {
 }
 
 /// The edge's default sides between two placed boxes, as
-/// `deriveDefaultSides`: the ranked pair's first, each end moved to the next
+/// `derive_default_sides`: the ranked pair's first, each end moved to the next
 /// facing side when a bystander covers its midpoint.
 #[must_use]
 pub fn derive_default_sides(

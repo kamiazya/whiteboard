@@ -5,12 +5,12 @@
  * same text at the same width.
  */
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { LayoutCore } from '../layout-core.js'
 import type { MeasureText } from '../measure.js'
 import { measureSpecOf } from '../measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
 import { bundledThemeModeOf, createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable } from './canvas-switch.js'
-import type { LayoutCore } from './edges/layout-core.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
 
 /** Metrics do not vary by UI mode, so the light theme stands for both. */

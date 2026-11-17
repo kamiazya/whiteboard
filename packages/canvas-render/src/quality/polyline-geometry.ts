@@ -10,10 +10,10 @@ import { hypot } from '../det-math.js'
  * What it must never be used by is the thing those instruments judge. An
  * oracle that shared a primitive with the router would agree with the
  * router's mistakes by construction — the whole reason the oracles exist
- * is to disagree — so nothing under `layout/` imports this module, and
- * `polyline-geometry.independence.test.ts` fails the first import that
- * does. The router keeps its own `edge-geometry.ts`, `edge-rules.ts`'s
- * `interiorInkThrough` and the crossing sweep; the duplication between
+ * is to disagree — so no production module outside the instruments imports
+ * this module, and `polyline-geometry.independence.test.ts` fails the first
+ * import that does. The router, the Rust core's now, keeps its own geometry
+ * (`edge_geometry.rs`), ink terms and crossing sweep; the duplication between
  * those and this file is the independence, not an oversight.
  */
 

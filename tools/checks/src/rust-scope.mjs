@@ -1,8 +1,9 @@
 /**
  * The Cargo workspace's files at the root and the trees under it, and the
- * TypeScript the Rust jobs load: the det differential, the edge suites
- * canvas-render-rust re-runs against the Rust router, and since ADR-0054
- * step 7's S18h every layout scoreboard and recorded replay, with the
+ * TypeScript the Rust jobs load: the det differential, the routing examples
+ * and scoreboards canvas-render-rust runs against the Rust router (`src/routing`,
+ * since the TypeScript router went in S18h3b), and since ADR-0054 step 7's
+ * S18h every layout scoreboard and recorded replay, with the
  * TypeScript that builds the core's request (the switches, the measurer's
  * spec, the reference wire, the theme) and the instruments that score its
  * answer. A change here is attributed to the Rust jobs; one under a pnpm
@@ -33,6 +34,8 @@ export const RUST_SCOPE = {
     'packages/canvas-render/src/comment-geometry.ts',
     'packages/canvas-render/src/containment.ts',
     'packages/canvas-render/src/edge-arrows.ts',
+    'packages/canvas-render/src/edge-routing.ts',
+    'packages/canvas-render/src/layout-core.ts',
     'packages/canvas-render/src/finite-box.ts',
     'packages/canvas-render/src/measure.ts',
     'packages/canvas-render/src/refusal.ts',
@@ -52,10 +55,11 @@ export const RUST_SCOPE = {
     'contracts',
     'packages/canvas-render/src/generated',
     // What builds the core's request and reads its answer back (the canvas,
-    // markdown and query switches, the fitted height, the layout options), the
-    // scoreboards beside them, and the edge suites canvas-render-rust re-runs
-    // against the Rust router.
+    // markdown and query switches, the fitted height, the layout options) and
+    // the scoreboards beside them.
     'packages/canvas-render/src/layout',
+    // The routing examples and scoreboards, run against the Rust router.
+    'packages/canvas-render/src/routing',
     // The reference wire a request carries, and its replay.
     'packages/canvas-render/src/references',
     // The theme and geometry a request carries.

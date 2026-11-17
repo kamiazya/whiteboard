@@ -1,5 +1,5 @@
 //! Moving an anchor along its own side: canvas-render's
-//! `layout/edges/side-slides.ts`, ported function for function. The
+//! the TypeScript side slides, ported function for function. The
 //! reasoning is written once, in the TypeScript; `Math.min`/`Math.max` are
 //! [`js_min`]/[`js_max`] here, and every comparison is the TypeScript's own.
 

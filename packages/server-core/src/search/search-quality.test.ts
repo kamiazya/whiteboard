@@ -1,6 +1,6 @@
 // The search quality scoreboard: what stage-0 lexical retrieval actually
 // answers on a judged corpus, pinned EXACTLY so an improvement is as loud
-// as a regression (same discipline as edge-routing-quality.test.ts).
+// as a regression (same discipline as edge-routing-quality.rust.test.ts).
 //
 // Its reason to exist is a decision, not a guard. The research report that
 // scheduled search deferred stage 2 (embeddings, ~120MB first download)

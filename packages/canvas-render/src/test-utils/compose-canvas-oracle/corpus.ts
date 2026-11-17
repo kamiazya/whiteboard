@@ -1,6 +1,6 @@
 import type { CanvasEdge, CanvasLine, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
-import type { EdgeAnchorOverride } from '../../layout/edges/edge-sides.js'
+import type { EdgeAnchorOverride } from '../../edge-routing.js'
 
 /**
  * The inputs of the compose-canvas recording: whole canvases laid out by

@@ -14,6 +14,7 @@ import type {
   CoreProposal,
   CoreThread,
 } from '../canvas-core.js'
+import type { EdgeAnchorPair } from '../edge-routing.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import { measureSpecOf } from '../measure.js'
 import { type ReferenceExtra, wireOfSeams } from '../references/wire.js'
@@ -21,7 +22,6 @@ import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { bundledThemeModeOf, type SpatialThemeMode } from '../theme/spatial-theme.js'
 import { resolveThemeTable } from './canvas-theme.js'
-import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
 
 // The whole layout through the Rust core (ADR-0054 step 7): the request a

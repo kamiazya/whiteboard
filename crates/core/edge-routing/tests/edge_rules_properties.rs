@@ -6,7 +6,8 @@
 //! ink tiers never charge one segment twice, and `has_repairable_problem`
 //! reads every tier but the last.
 //!
-//! The TypeScript twin is `edge-rules.properties.test.ts`. The tier indices
+//! The TypeScript twin was the edge rules property suite, deleted with the
+//! TypeScript router (ADR-0054 step 7, S18h3b). The tier indices
 //! are restated here from `PENALTY_RULES`' declaration, since the Rust port
 //! has no rule list to look them up in.
 

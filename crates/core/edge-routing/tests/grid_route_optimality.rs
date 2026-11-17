@@ -10,7 +10,7 @@
 //! never the path: equal-cost routes are the norm on a lattice, and which one
 //! a search finds is an artifact of its exploration order.
 //!
-//! The TypeScript twin is `grid-route.optimality.properties.test.ts`.
+//! The canvas-render-rust twin is `grid-route.optimality.properties.rust.test.ts`.
 
 // Grid coordinates and border lines are compared exactly, as the router does.
 #![expect(clippy::float_cmp, reason = "the router compares coordinates with ===")]

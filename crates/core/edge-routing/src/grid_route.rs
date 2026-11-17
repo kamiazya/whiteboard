@@ -1,5 +1,5 @@
 //! A rectilinear shortest path around rectangles: canvas-render's
-//! `layout/edges/grid-route.ts`, ported structure for structure (ADR-0054
+//! the TypeScript grid router, ported structure for structure (ADR-0054
 //! step 5, the routing spike).
 //!
 //! The reasoning behind each constant and each pass is written once, in the

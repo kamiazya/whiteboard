@@ -13,7 +13,6 @@ export type {
   NodeOutline,
   RenderContribution,
   RoutableElement,
-  ScenePoint,
   ShapeContribution,
   ShapeTable,
 } from './contribution.js'

@@ -1,5 +1,5 @@
-//! How an edge's ink is measured: canvas-render's `layout/edges/edge-ink.ts`
-//! and `diagonal-ink.ts`, ported function for function.
+//! How an edge's ink is measured: canvas-render's TypeScript ink terms
+//! and the TypeScript diagonal clip, ported function for function.
 //!
 //! Every term but the diagonal one is in the `COST_QUANTUM`-quantized space,
 //! so it is integral by construction. Rust works for the same answer in two
@@ -11,7 +11,7 @@
 use crate::geometry::{Point, Rect};
 use whiteboard_det::math::{hypot, js_max, js_min, js_round};
 
-/// Quarter-pixel quantization, as `COST_QUANTUM` in edge-ink.ts.
+/// Quarter-pixel quantization, as `COST_QUANTUM` in the TypeScript ink terms.
 pub const COST_QUANTUM: f64 = 4.0;
 
 #[must_use]
@@ -19,7 +19,7 @@ pub fn quantize(n: f64) -> f64 {
     js_round(n * COST_QUANTUM)
 }
 
-/// An axis-aligned segment's orientation, as `SegmentAxis` in edge-ink.ts.
+/// An axis-aligned segment's orientation, as `SegmentAxis` in the TypeScript ink terms.
 #[derive(Clone, Copy)]
 enum Axis {
     Horizontal,
@@ -106,13 +106,13 @@ pub fn ink_along_rects(
     total
 }
 
-/// border-tracing's predicate in edge-rules.ts: on either border.
+/// border-tracing's predicate in the TypeScript edge rules: on either border.
 #[must_use]
 pub fn on_either_border(fixed: f64, near: f64, far: f64) -> bool {
     fixed == near || fixed == far
 }
 
-/// endpoint-body-ink's predicate in edge-rules.ts: strictly between the borders.
+/// endpoint-body-ink's predicate in the TypeScript edge rules: strictly between the borders.
 #[must_use]
 pub fn strictly_between(fixed: f64, near: f64, far: f64) -> bool {
     near < fixed && fixed < far
