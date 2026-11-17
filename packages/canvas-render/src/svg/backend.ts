@@ -305,7 +305,8 @@ function renderSvgFragment(node: SvgFragmentNode): SvgChild {
   // A nested <svg> carries the position: the fragment's own coordinates
   // stay untouched, the wrapper's x/y move them into document flow, and
   // this deliberately does NOT use a transform so the listItem/tableCell
-  // x-transform-boundary set (translate-scene.ts) stays exactly two —
+  // x-transform-boundary set (`subtreeOffsetX`, and the core's translate_scene.rs)
+  // stays exactly two —
   // a fragment has no scene-graph children for that machinery to see.
   // overflow stays visible so a fragment taller than its reported size
   // renders rather than silently clipping. A non-finite bbox degrades

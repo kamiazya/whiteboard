@@ -23,7 +23,6 @@ export type {
   LinkProvenance,
   ListBlockNode,
   ListItemNode,
-  ParagraphBlockNode,
   RawHtmlNode,
   ResolvedEdgeNode,
   Scene,
@@ -58,7 +57,7 @@ export {
 export type { CodeToken, CodeTokenLines, CodeTokenRole } from './highlight/code-token.js'
 export { boxContains, type HitBox, hitBoxesOf, topmostHit } from './hit-test.js'
 export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './ink/glow.js'
-export { seedFromId, styleRandomFromSeed } from './ink/seed.js'
+export { styleRandomFromSeed } from './ink/seed.js'
 export {
   SKETCH_INK_REACH_PX,
   type SketchEdgeOptions,
@@ -72,13 +71,6 @@ export {
   resolveCanvasThemeFontFamily,
   resolveThemeTable,
 } from './layout/canvas-theme.js'
-export { placeCommentBubble } from './layout/comment-placement.js'
-export {
-  edgeLabelPlacement,
-  frameTitleObstacles,
-  type LabelObstacle,
-  labelObstacles,
-} from './layout/edges/edge-label-anchor.js'
 export { routeEdge } from './layout/edges/edge-router.js'
 export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
 export type { LayoutCore, RoutingCore } from './layout/edges/layout-core.js'
@@ -87,52 +79,36 @@ export { createRoutingBudget } from './layout/edges/routing-budget.js'
 export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
 export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
-export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
 export {
   type CommentDocumentOptions,
   layoutCommentDocument,
   layoutMarkdownDocument,
 } from './layout/markdown-switch.js'
-export type { FittedBlocks } from './layout/nodes/mdast-blocks.js'
-export type {
-  EmbeddedCanvasBox,
-  EmbeddedCanvasMiniature,
-  MdastLayoutOptions,
-} from './layout/nodes/mdast-layout-options.js'
-export { selectMarkdownSection } from './layout/nodes/mdast-section.js'
 export {
+  type LabelObstacle,
   queryCommentBubble,
   queryEdgeLabelPlacement,
   queryLabelObstacles,
   queryOutlineContentBox,
 } from './layout/queries.js'
-export { scaleScene } from './layout/scale-scene.js'
 export type {
-  DecorationContext,
-  NodeDecoration,
-  RenderContribution,
   SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
   SpatialRenderStyle,
 } from './layout/spatial-canvas.js'
 export {
-  COMMENT_BUBBLE_OFFSET_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   COMMENT_TEXT_MAX_WIDTH_PX,
-  type CommentBodyLayoutOptions,
   commentAnchor,
   type EdgePathLookup,
-  layoutCommentBody,
   layoutSpatialCanvas,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
-export { translateScene } from './layout/translate-scene.js'
-export { canvasLegend } from './legend/canvas-legend.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
 export type {
   MarkdownCommentRequest,
@@ -151,9 +127,6 @@ export type { ShapeContribution, ShapeTable } from './outline/node-outline.js'
 export {
   type NodeOutline,
   nodeOutline,
-  outlineContains,
-  outlineContentBox,
-  outlineEntryPoint,
   resolveShapeTable,
 } from './outline/node-outline.js'
 export { paintOrderOf } from './paint-order.js'
@@ -230,13 +203,7 @@ export { renderSceneToKeyedSvg } from './svg/keyed.js'
 export { withDeclaredColours } from './tags/declared-colours.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 export type { MarkdownTheme } from './theme/markdown-theme.js'
-export {
-  BODY_FONT_SIZE_PX,
-  BODY_LINE_HEIGHT_PX,
-  MARKDOWN_THEME_COMPACT,
-  MARKDOWN_THEME_DOCUMENT,
-  MARKDOWN_THEME_NODE,
-} from './theme/markdown-theme.js'
+export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX } from './theme/markdown-theme.js'
 export type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
@@ -252,8 +219,7 @@ export type {
 export { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-theme.js'
 export { createSpatialTheme, spatialThemeModeSchema } from './theme/spatial-theme.js'
-export type { ThemedAppearanceOptions } from './theme/theme-asset.js'
-export { createThemedAppearance, paletteFromTokens } from './theme/theme-asset.js'
+export { paletteFromTokens } from './theme/theme-asset.js'
 export { type ThemeFont, themeFontSchema } from './theme/theme-font.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyBoxes, tidyNodes } from './tidy.js'

@@ -5,6 +5,7 @@
 // read back was not the picture a user exported. `ServerDeps.measure` is
 // what closed that, and this is the test that keeps it closed.
 
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
@@ -18,7 +19,7 @@ import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 
 const renderSpatialCanvasToSvg = (
   canvas: Parameters<typeof renderSvgIn>[0],
-  options?: Parameters<typeof renderSvgIn>[2],
+  options: Parameters<typeof renderSvgIn>[2] = { core: testLayoutCore() },
 ) => renderSvgIn(canvas, NO_INSTALLED_FONTS, options)
 
 // Glyph-width sensitive on purpose: a constant-ratio measurer cannot tell
@@ -84,7 +85,10 @@ describe('wb_scene_render / export parity', () => {
       comments: false,
       style: 'clean',
     })
-    const viaExport = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
+    const viaExport = await renderSpatialCanvasToSvg(canvas, {
+      core: testLayoutCore(),
+      theme: 'light',
+    })
 
     // The envelopes differ by design (the exporter adds padding and a
     // background); the drawing inside them must not.

@@ -15,6 +15,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -97,6 +98,7 @@ describe('an export after an agent edit', () => {
     await writeThroughToolPath('日本語のテキスト')
 
     const { svg } = await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: WORKSPACE,
       path: PATH,
@@ -125,6 +127,7 @@ describe('an export after an agent edit', () => {
     await writeThroughToolPath('from the agent')
 
     const { svg } = await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: WORKSPACE,
       path: PATH,
@@ -140,6 +143,7 @@ describe('an export after an agent edit', () => {
     await writeThroughToolPath('hello')
 
     const { svg } = await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: WORKSPACE,
       path: PATH,

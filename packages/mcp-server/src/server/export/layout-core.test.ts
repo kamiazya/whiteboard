@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createSpatialTheme, layoutSpatialCanvas } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   installOkfCore,
   installSpatialCore,
@@ -161,7 +162,7 @@ describe('the daemon layout core', () => {
       const { measure } = await createExportTextMeasurer({ fontsDir: emptyDir() })
       const themed = { measure, appearance: createSpatialTheme({ mode: 'light' }) }
       expect(layoutSpatialCanvas(board, { ...themed, core })).toEqual(
-        layoutSpatialCanvas(board, themed),
+        layoutSpatialCanvas(board, { ...themed, core: testLayoutCore() }),
       )
       expect(answers).toEqual(['laid out'])
     })
@@ -178,7 +179,7 @@ describe('the daemon layout core', () => {
       }
       for (const canvas of [board, marked]) {
         expect(layoutSpatialCanvas(canvas, { ...themed, core })).toEqual(
-          layoutSpatialCanvas(canvas, themed),
+          layoutSpatialCanvas(canvas, { ...themed, core: testLayoutCore() }),
         )
       }
       expect(answers).toEqual(['laid out', 'laid out'])

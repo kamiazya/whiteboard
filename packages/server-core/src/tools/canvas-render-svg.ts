@@ -229,9 +229,8 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
 }
 
 /** The core `ServerDeps` hands a layout, as a spread for the scene options. */
-async function laidOutBy(deps: ServerDeps): Promise<{ core?: LayoutCore }> {
-  const core = await deps.layoutCore?.()
-  return core === undefined ? {} : { core }
+async function laidOutBy(deps: ServerDeps): Promise<{ core: LayoutCore }> {
+  return { core: await deps.layoutCore() }
 }
 
 /** The tag library as a spread for the scene options: present only when `drawsATag` says one is read. */

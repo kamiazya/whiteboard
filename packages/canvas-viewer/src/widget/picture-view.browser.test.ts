@@ -12,10 +12,14 @@ import {
   renderSceneToSvg,
 } from '@kamiazya/whiteboard-canvas-render'
 import { pictureNodeAt } from '@kamiazya/whiteboard-canvas-render/canvas-view-picture'
+import { browserLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/browser-core'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, describe, expect, it } from 'vitest'
 import { canvasPointFromClick } from './canvas-point.js'
 import { mountPicture, pictureDeclaresFamily, pictureSvgElement } from './picture-view.js'
+
+/** The core the host hands the viewer, loaded as the page loads its own. */
+const CORE = await browserLayoutCore()
 
 // A wide board in a frame shaped like the widget's (600x480): the picture
 // keeps its proportions, so it is letterboxed above and below.
@@ -31,6 +35,7 @@ const canvas = {
 /** The picture `canvas_view` hands over, drawn the way the daemon draws it. */
 function daemonPicture(): CanvasViewPicture {
   const scene = layoutSpatialCanvas(canvas, {
+    core: CORE,
     measure: constantRatioMeasureText,
     appearance: createSpatialTheme({ mode: 'light' }),
   })

@@ -1,7 +1,11 @@
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { FragmentEntry } from '../../fragment-ask.js'
-import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
+import type { SpatialLayoutOptions as LayoutOptions } from '../../layout/layout-options.js'
+
+/** A case's options: what the caller hands, the core joined at the call. */
+type SpatialLayoutOptions = Omit<LayoutOptions, 'core'>
+
 import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wire.js'
 
 /**

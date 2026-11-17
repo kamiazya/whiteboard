@@ -72,9 +72,8 @@ export interface CanvasViewerProps {
   /**
    * The Rust core (ADR-0054), which this package never loads itself: the
    * host owns the wasm instance and hands it over, and it lays the board out.
-   * Absent (a host that holds none, a unit test), the TypeScript does.
    */
-  core?: LayoutCore
+  core: LayoutCore
   /**
    * The document's conversations, for the chrome the flat comments inside
    * `canvas` cannot carry — a passage's highlight, a node set's outline.
@@ -182,7 +181,7 @@ export function CanvasViewer({
       ...(references === undefined ? {} : { references, expandFileNode: () => true }),
       ...(threads === undefined ? {} : { threads }),
       ...fragments,
-      ...(core === undefined ? {} : { core }),
+      core,
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).

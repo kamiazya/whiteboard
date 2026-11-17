@@ -1,58 +1,39 @@
-// The style-randomness primitive's contract (decision #10): seeded,
-// id-keyed, and pure. Geometry is deliberately NOT an input — that is
+// The style-randomness stream's contract (decision #10): seeded and pure.
+// The seed is the core's hash of a node's id (`seed_from_id`, replayed by
+// `node_box_oracle.rs`); geometry is deliberately NOT an input — that is
 // what makes styled output invariant under translate/scale and immune to
 // edits of unrelated nodes.
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { seedFromId, styleRandomFromSeed } from './seed.js'
+import { styleRandomFromSeed } from './seed.js'
 
-describe('seedFromId', () => {
-  fcTest.prop([fc.string()], withDefaults())('is a pure function of the id', (id) => {
-    expect(seedFromId(id)).toBe(seedFromId(id))
-  })
+/** Every seed a scene node can carry: an unsigned 32-bit integer. */
+const seed = () => fc.integer({ min: 0, max: 2 ** 32 - 1 })
 
-  fcTest.prop([fc.string()], withDefaults())(
-    'always yields a finite 32-bit unsigned integer, any input',
-    (id) => {
-      const seed = seedFromId(id)
-      expect(Number.isInteger(seed)).toBe(true)
-      expect(seed).toBeGreaterThanOrEqual(0)
-      expect(seed).toBeLessThan(2 ** 32)
-    },
-  )
-
-  it('separates nearby ids (no trivial collisions on suffix counters)', () => {
-    const seeds = new Set(Array.from({ length: 1000 }, (_, i) => seedFromId(`node-${i}`)))
-    expect(seeds.size).toBe(1000)
-  })
-})
-
-const createStyleRandom = (id: string) => styleRandomFromSeed(seedFromId(id))
-
-describe('a style random stream keyed by node identity', () => {
-  fcTest.prop([fc.string()], withDefaults())(
-    'identical ids replay identical sequences (byte-identical reruns)',
-    (id) => {
-      const a = createStyleRandom(id)
-      const b = createStyleRandom(id)
+describe('a style random stream keyed by a seed', () => {
+  fcTest.prop([seed()], withDefaults())(
+    'identical seeds replay identical sequences (byte-identical reruns)',
+    (s) => {
+      const a = styleRandomFromSeed(s)
+      const b = styleRandomFromSeed(s)
       for (let i = 0; i < 16; i++) expect(a()).toBe(b())
     },
   )
 
-  fcTest.prop([fc.string(), fc.string()], withDefaults())(
+  fcTest.prop([seed(), seed()], withDefaults())(
     "a node's stream is unaffected by other nodes existing or being consumed",
-    (id, other) => {
-      const alone = createStyleRandom(id)
-      const otherStream = createStyleRandom(other)
+    (s, other) => {
+      const alone = styleRandomFromSeed(s)
+      const otherStream = styleRandomFromSeed(other)
       otherStream()
       otherStream()
-      const afterOthers = createStyleRandom(id)
+      const afterOthers = styleRandomFromSeed(s)
       for (let i = 0; i < 8; i++) expect(afterOthers()).toBe(alone())
     },
   )
 
-  fcTest.prop([fc.string()], withDefaults())('every draw is finite and in [0, 1)', (id) => {
-    const random = createStyleRandom(id)
+  fcTest.prop([seed()], withDefaults())('every draw is finite and in [0, 1)', (s) => {
+    const random = styleRandomFromSeed(s)
     for (let i = 0; i < 64; i++) {
       const value = random()
       expect(Number.isFinite(value)).toBe(true)

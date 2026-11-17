@@ -16,6 +16,7 @@ import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { CodeBlockNode, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
@@ -45,6 +46,7 @@ function runsOf(block: CodeBlockNode): readonly TextRunNode[] {
 
 it('keeps a code run inside its own panel wherever the node sits', () => {
   const scene = layoutSpatialCanvas(canvasAt(2000, 1500), {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: 'dark' }),
   })
@@ -61,8 +63,12 @@ it('moves a code run by exactly what it moves the panel by', () => {
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: 'dark' }),
   }
-  const here = findCodeBlock(layoutSpatialCanvas(canvasAt(0, 0), options).nodes)
-  const there = findCodeBlock(layoutSpatialCanvas(canvasAt(2000, 1500), options).nodes)
+  const here = findCodeBlock(
+    layoutSpatialCanvas(canvasAt(0, 0), { ...options, core: testLayoutCore() }).nodes,
+  )
+  const there = findCodeBlock(
+    layoutSpatialCanvas(canvasAt(2000, 1500), { ...options, core: testLayoutCore() }).nodes,
+  )
   const panelShift = { x: there.bbox.x - here.bbox.x, y: there.bbox.y - here.bbox.y }
   expect(panelShift).toEqual({ x: 2000, y: 1500 })
 

@@ -13,7 +13,7 @@ import { outlineBlocks } from './document-outline.js'
 import type { FragmentTable } from './fragment-requests.js'
 import { PREVIEW_PADDING_PX } from './preview-padding.js'
 import type { RailBlock } from './rail-geometry.js'
-import { currentLayoutCore } from './spatial/layout-core.js'
+import { requireLayoutCore } from './spatial/require-layout-core.js'
 import type { ResolvedTheme } from './theme.js'
 
 export interface RenderMarkdownPreviewOptions {
@@ -213,7 +213,7 @@ function layoutMarkdownScene(
       // is held, exactly as `editorLayoutBase` answers for the canvas
       // surfaces (ADR-0011's invariant).
       fontAvailable: hasLoadedFace,
-      core: currentLayoutCore(),
+      core: requireLayoutCore(),
       ...(references !== undefined ? { references } : {}),
       ...(fragments !== undefined
         ? { fragments: fragments.fragments, onFragmentsAsked: fragments.onFragmentsAsked }

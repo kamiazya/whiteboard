@@ -40,7 +40,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { createEditorAppearance } from './editor-appearance.js'
-import { currentLayoutCore } from './layout-core.js'
+import { requireLayoutCore } from './require-layout-core.js'
 
 export interface RenderCanvasCoreOptions {
   readonly measure: MeasureText
@@ -159,7 +159,7 @@ export function editorLayoutBase(options: {
     // worker await before their first layout: every layout here takes the
     // same core, the worker's and the drag layers' alike, or the committed
     // scene and the overlay floating over it would route apart.
-    core: currentLayoutCore(),
+    core: requireLayoutCore(),
   }
 }
 

@@ -5,6 +5,7 @@ import {
   naturalNodeContentSize,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   readDocumentKind,
   readEdgeLocks,
@@ -1414,6 +1415,7 @@ describe('wb_canvas_edit — a node created without a height', () => {
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     const node = canvas.nodes[0]
     const natural = naturalNodeContentSize(node, {
+      core: testLayoutCore(),
       measure: constantRatioMeasureText,
       appearance: createSpatialTheme({ mode: 'light' }),
     })

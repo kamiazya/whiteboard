@@ -6,14 +6,12 @@
  */
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MeasureText } from '../measure.js'
-import { constantRatioMeasureText, measureSpecOf } from '../measure.js'
+import { measureSpecOf } from '../measure.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
-import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { bundledThemeModeOf, createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable } from './canvas-switch.js'
 import type { LayoutCore } from './edges/layout-core.js'
 import { numbersOf, queried, tupleOf } from './query-switch.js'
-import { naturalNodeContentSize } from './spatial-canvas.js'
 
 /** Metrics do not vary by UI mode, so the light theme stands for both. */
 const DEFAULT_APPEARANCE = createSpatialTheme({ mode: 'light' })
@@ -27,8 +25,8 @@ const DEFAULT_APPEARANCE = createSpatialTheme({ mode: 'light' })
  * the drawing score that judges it, so the floor is what makes
  * "fits" mean one thing wherever the canvas is drawn.
  *
- * Position does not matter: `naturalNodeContentSize` lays the content out
- * unbounded, so only the width it wraps against is an input.
+ * Position does not matter: the content is laid out unbounded, so only the
+ * width it wraps against is an input.
  */
 export function fittedTextNodeHeight(
   node: SpatialNode,
@@ -43,30 +41,22 @@ export function fittedTextNodeHeight(
      */
     readonly floor?: 'ratio' | 'none'
     /**
-     * The Rust core, whose query entry answers the height (S18d); absent, the
-     * TypeScript does. A height the core refused is the node's own, so a
-     * caller growing the node to it leaves the node as it is.
+     * The Rust core, whose query entry answers the height. A height the core
+     * refused is the node's own, so a caller growing the node to it leaves
+     * the node as it is.
      */
-    readonly core?: LayoutCore
+    readonly core: LayoutCore
   },
 ): number {
   const appearance = options.appearance ?? DEFAULT_APPEARANCE
   const floor = options.floor ?? 'ratio'
-  const ts = () => {
-    const under = (measure: MeasureText) => naturalNodeContentSize(node, { measure, appearance }).h
-    const own = under(options.measure)
-    const natural = floor === 'none' ? own : Math.max(own, under(constantRatioMeasureText))
-    return natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx
-  }
   return queried(options.core, {
     request: () => {
       const measure = measureSpecOf(options.measure)
-      if (measure === undefined) throw new CoreUnaskable('measure')
       const mode = bundledThemeModeOf(appearance)
       if (mode === undefined) throw new CoreUnaskable('appearance')
       return { query: 'node-size', node, measure, mode, floor }
     },
-    ts,
     unanswered: () => node.height,
     read: (answer) => tupleOf(numbersOf(answer)?.[0], 1)?.[0],
     measure: options.measure,

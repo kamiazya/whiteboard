@@ -1,5 +1,6 @@
 import { refusalCopy } from '@kamiazya/whiteboard-canvas-render'
 import { fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { act, cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { fakeMeasure } from '../../test-utils/fake-measure.js'
@@ -45,9 +46,8 @@ it('draws the note again once a retry loads the core it drew the notice without'
   expect(container.textContent).toContain(notice.title)
   expect(container.textContent).not.toContain('Hello')
 
-  // The retry loaded it: this realm has no core artifact, so the note is the
-  // TypeScript composer's, which is what a realm with no core draws.
-  realm.core = undefined
+  // The retry loaded it: the realm's core, which draws the note.
+  realm.core = testLayoutCore()
   realm.generation = 1
   act(() => {
     for (const listener of realm.listeners) listener()

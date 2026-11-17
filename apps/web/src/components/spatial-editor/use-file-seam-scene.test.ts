@@ -11,10 +11,7 @@ import {
   constantRatioMeasureText,
   layoutSpatialCanvasWithAnchors,
   type MeasureText,
-  type ResolvedReference,
-  referenceSeamsFromWire,
   referenceWire,
-  referenceWireFor,
   type SpatialLayoutOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure, fakeLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils'
@@ -153,40 +150,6 @@ describe('useFileSeamScene fragments', () => {
   })
 })
 
-/**
- * What the editor composed before the chrome rode the wire: the host's
- * `resolveReference` with the label table and the dangling set layered over
- * it as a function. Restated here as the BEFORE half, since that function
- * could never reach a worker's request gate or the core.
- */
-function overlayAsFunction(
-  content: (ref: string) => ResolvedReference | undefined,
-  labels: ReadonlyMap<string, string>,
-  missing: ReadonlySet<string>,
-): (ref: string) => ResolvedReference | undefined {
-  return (ref) => {
-    const resolved = content(ref)
-    const label = labels.get(ref)
-    if (resolved === undefined && label === undefined && !missing.has(ref)) return undefined
-    return {
-      ...resolved,
-      ...(label !== undefined ? { label } : {}),
-      ...(missing.has(ref) ? { missing: true } : {}),
-    }
-  }
-}
-
-/**
- * The scene the editor drew with that function: canvas-render's layout under
- * the editor's own base, since the editor's options no longer take one.
- */
-function functionOverlayScene(canvas: SpatialCanvas, options: Partial<SpatialLayoutOptions>) {
-  return layoutSpatialCanvasWithAnchors(canvas, {
-    ...editorLayoutBase({ measure: fixedMeasure }),
-    ...options,
-  }).scene
-}
-
 describe('useFileSeamScene reference chrome', () => {
   const inner: SpatialCanvas = canvasOf([
     buildTextNode({ id: 'i', x: 0, y: 0, width: 120, height: 60, text: 'inside' }),
@@ -211,114 +174,6 @@ describe('useFileSeamScene reference chrome', () => {
     { file: 'doc-elsewhere', label: 'Not on this board' },
   ]
   const missingFileRef = (file: string) => file === 'doc-gone'
-
-  it('draws labelled, resolved and dangling file nodes as the function overlay did, from a wire alone', async () => {
-    const { result } = renderHook(() =>
-      useFileSeamScene({
-        canvas: board,
-        zoom: 1,
-        references: wire,
-        fileRefOptions,
-        missingFileRef,
-        resolvedMeasure: fixedMeasure,
-        theme: 'light',
-      }),
-    )
-    await waitFor(() => expect(result.current.wire.expandedFileIds).toEqual(['fa']))
-    const { fileSeamOptions } = result.current
-    // No function seam: the bundle is rebuilt from a wire the request gate can hand on.
-    expect(fileSeamOptions).not.toHaveProperty('resolveReference')
-
-    const seams = referenceSeamsFromWire(referenceWireFor(wire, { canvases: [board] }))
-    const labels = new Map(fileRefOptions.map((option) => [option.file, option.label]))
-    const before = functionOverlayScene(board, {
-      references: seams,
-      resolveReference: overlayAsFunction(seams.resolveReference, labels, new Set(['doc-gone'])),
-      expandFileNode: fileSeamOptions.expandFileNode,
-    })
-    const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
-    expect(after.scene).toEqual(before)
-
-    // The chrome is what this board is about: without it the board draws otherwise.
-    const bare = renderCanvasToSvg(board, {
-      measure: fixedMeasure,
-      references: seams,
-      expandFileNode: fileSeamOptions.expandFileNode,
-    })
-    expect(bare.scene).not.toEqual(before)
-    expect(after.svg).toContain('Beta')
-    expect(after.svg).not.toContain('Extra B')
-  })
-
-  it('draws the chrome a host hands without a wire, as the function overlay did', () => {
-    const { result } = renderHook(() =>
-      useFileSeamScene({
-        canvas: board,
-        zoom: 1,
-        references: undefined,
-        fileRefOptions,
-        missingFileRef,
-        resolvedMeasure: fixedMeasure,
-        theme: 'light',
-      }),
-    )
-    const { fileSeamOptions } = result.current
-    expect(fileSeamOptions.expandFileNode).toBeUndefined()
-    const labels = new Map(fileRefOptions.map((option) => [option.file, option.label]))
-    const before = functionOverlayScene(board, {
-      resolveReference: overlayAsFunction(() => undefined, labels, new Set(['doc-gone'])),
-    })
-    const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
-    expect(after.scene).toEqual(before)
-    expect(after.svg).toContain('Alpha')
-  })
-
-  it('keeps the chrome of file nodes past the loading budget, which bounds content only', () => {
-    // 256 is the walk's loading budget (REFERENCE_BUDGET): two more distinct
-    // references than that, the last two labelled and dangling.
-    const many = canvasOf(
-      Array.from({ length: 258 }, (_, i) =>
-        buildFileNode({
-          id: `n${i}`,
-          file: `doc-${i}`,
-          x: (i % 20) * 60,
-          y: Math.floor(i / 20) * 40,
-          width: 50,
-          height: 30,
-        }),
-      ),
-    )
-    const options = [{ file: 'doc-256', label: 'Past the budget' }]
-    const { result } = renderHook(() =>
-      useFileSeamScene({
-        canvas: many,
-        zoom: 1,
-        references: referenceWire(new Map()),
-        fileRefOptions: options,
-        missingFileRef: (file) => file === 'doc-257',
-        resolvedMeasure: fixedMeasure,
-        theme: 'light',
-      }),
-    )
-    const extras = Object.fromEntries(result.current.wire.references?.extras ?? [])
-    expect(extras['doc-256']).toEqual({ label: 'Past the budget' })
-    expect(extras['doc-257']).toEqual({ missing: true })
-    const seams = referenceSeamsFromWire(referenceWire(new Map()))
-    const before = functionOverlayScene(many, {
-      references: seams,
-      expandFileNode: result.current.fileSeamOptions.expandFileNode,
-      resolveReference: overlayAsFunction(
-        seams.resolveReference,
-        new Map([['doc-256', 'Past the budget']]),
-        new Set(['doc-257']),
-      ),
-    })
-    const after = renderCanvasToSvg(many, {
-      measure: fixedMeasure,
-      ...result.current.fileSeamOptions,
-    })
-    expect(after.scene).toEqual(before)
-  })
 
   it('labels a file node inside a canvas the board loads, as the function overlay did', async () => {
     const nested = canvasOf([
@@ -346,6 +201,94 @@ describe('useFileSeamScene reference chrome', () => {
       ...result.current.fileSeamOptions,
     })
     expect(after.svg).toContain('Deep label')
+  })
+
+  /** The one request a layout with `options` hands the core, through the editor's own base. */
+  function requestFor(canvas: SpatialCanvas, options: Partial<SpatialLayoutOptions>) {
+    const asked: CanvasLayoutRequest[] = []
+    const core = fakeLayoutCore({
+      layout: {
+        layoutSpatialCanvas: (request) => {
+          asked.push(request)
+          return { scene: { nodes: [] }, anchors: new Map(), degradations: [] }
+        },
+      },
+    })
+    const base = editorLayoutBase({ measure: constantRatioMeasureText })
+    layoutSpatialCanvasWithAnchors(canvas, { ...base, ...options, core })
+    expect(asked).toHaveLength(1)
+    return asked[0]
+  }
+
+  it('keeps the chrome of file nodes past the loading budget, which bounds content only', () => {
+    // 256 is the walk's loading budget (REFERENCE_BUDGET): two more distinct
+    // references than that, the last two labelled and dangling. The budget
+    // bounds what is LOADED; a label and a dangling mark are chrome the host
+    // already holds, so they ride the wire for every node on the board.
+    const many = canvasOf(
+      Array.from({ length: 258 }, (_, i) =>
+        buildFileNode({
+          id: `n${i}`,
+          file: `doc-${i}`,
+          x: (i % 20) * 60,
+          y: Math.floor(i / 20) * 40,
+          width: 50,
+          height: 30,
+        }),
+      ),
+    )
+    const options = [{ file: 'doc-256', label: 'Past the budget' }]
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: many,
+        zoom: 1,
+        references: referenceWire(new Map()),
+        fileRefOptions: options,
+        missingFileRef: (file) => file === 'doc-257',
+        resolvedMeasure: constantRatioMeasureText,
+        theme: 'light',
+      }),
+    )
+    const extras = Object.fromEntries(result.current.wire.references?.extras ?? [])
+    expect(extras['doc-256']).toEqual({ label: 'Past the budget' })
+    expect(extras['doc-257']).toEqual({ missing: true })
+    // And the request the core is handed carries the same chrome.
+    const request = requestFor(many, result.current.fileSeamOptions)
+    const asked = Object.fromEntries(request?.references?.extras ?? [])
+    expect(asked['doc-256']).toEqual({ label: 'Past the budget' })
+    expect(asked['doc-257']).toEqual({ missing: true })
+  })
+
+  it('hands the core the chrome a host holds without a wire, and draws its labels', () => {
+    const { result } = renderHook(() =>
+      useFileSeamScene({
+        canvas: board,
+        zoom: 1,
+        references: undefined,
+        fileRefOptions,
+        missingFileRef,
+        resolvedMeasure: fixedMeasure,
+        theme: 'light',
+      }),
+    )
+    const { fileSeamOptions, wire: handed } = result.current
+    // Nothing to expand into: a host with no wire resolves no content.
+    expect(fileSeamOptions.expandFileNode).toBeUndefined()
+    // The chrome rides a wire of its own: the board's labels and its dangling
+    // reference, never a label for a file this board does not show.
+    const chrome = {
+      'doc-a': { label: 'Alpha' },
+      'doc-b': { label: 'Beta' },
+      'doc-gone': { missing: true },
+    }
+    expect(Object.fromEntries(handed.references?.extras ?? [])).toEqual(chrome)
+    expect(handed.references?.entries).toEqual([])
+    expect(
+      Object.fromEntries(requestFor(board, fileSeamOptions)?.references?.extras ?? []),
+    ).toEqual(chrome)
+    const after = renderCanvasToSvg(board, { measure: fixedMeasure, ...fileSeamOptions })
+    expect(after.svg).toContain('Alpha')
+    expect(after.svg).toContain('Beta')
   })
 
   it("hands the core the editor's own layout options as a request, extras and fragment table included", async () => {

@@ -1,7 +1,7 @@
 import {
   type CanvasLayoutCore,
+  constantRatioMeasureText,
   describeMeasure,
-  type FittedBlocks,
   type FontDescriptor,
   type LayoutCore,
   layoutSpatialCanvasWithAnchors,
@@ -14,6 +14,7 @@ import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/mea
 import { describe, expect, it } from 'vitest'
 import { commands } from 'vitest/browser'
 import { type WebLayoutBoard, webLayoutBoards } from '../../test-utils/web-layout-boards.js'
+import { requireLayoutCore } from './require-layout-core.js'
 import { editorLayoutBase } from './scene-render-core.js'
 import type { WebCore } from './web-core.js'
 
@@ -22,19 +23,22 @@ import type { WebCore } from './web-core.js'
  * (ADR-0054 step 7, owner decision q77): a synchronous host import, called
  * from inside the wasm once per distinct (text, font) a layout asks for.
  *
- * Per board it counts the measure calls the TypeScript layout makes and the
- * distinct pairs among them, times that layout and the time it spends in the
- * measurer, and prices one crossing: a wasm module whose import does what the
+ * Per board it counts the measure calls the core's layout makes through the
+ * import and the distinct pairs among them, times that layout and the time it
+ * spends in the measurer, and prices one crossing: a wasm module whose import does what the
  * wasm-bindgen glue does for `(text: &str, font: &str) -> [f64; 4]` — decode
  * both strings from linear memory, find the descriptor by its key, measure,
  * write four doubles back — timed with the measurer stubbed (the crossing
  * alone) and with the real one.
  *
- * The second measurement is the import itself, once built: each board laid
- * out by the real core under `rust`, the browser's measurer asked through
- * the import, against the TypeScript's layout, interleaved round by round.
- * The third is a drag frame: each board laid out again with one node moved,
- * over the content cache the core keeps for the caller's (S15n).
+ * The second measurement is what the import costs the whole layout: each
+ * board laid out by the real core with the browser's measurer asked through
+ * the import, against the same core measuring by the ratio estimate inside
+ * the wasm, interleaved round by round. (Until S18h this leg was the
+ * TypeScript layout; with it deleted, measuring in the wasm is the one
+ * comparison left that isolates the crossing.) The third is a drag frame:
+ * each board laid out again with one node moved, the core handed no content
+ * cache against the core handed the caller's (S15n).
  *
  * A measurement, not a guard: it asserts only that it measured something,
  * and runs when `VITE_MEASURE_HOST_COST=1` (a timing loop has no place in
@@ -100,7 +104,11 @@ const median = (values: number[]): number => {
   return sorted[Math.floor(sorted.length / 2)] ?? Number.NaN
 }
 
-function layOut(board: WebLayoutBoard, measure: MeasureText, core?: LayoutCore): void {
+function layOut(
+  board: WebLayoutBoard,
+  measure: MeasureText,
+  core: LayoutCore = requireLayoutCore(),
+): void {
   layoutSpatialCanvasWithAnchors(board.canvas, {
     ...editorLayoutBase({ measure }),
     core,
@@ -159,14 +167,16 @@ async function crossingMicros(calls: readonly Call[], measure: MeasureText): Pro
 const STUB: MeasureText = () => ({ advanceWidth: 1, ascent: 1, descent: 1, lineGap: 0 })
 
 describe.runIf(RUN)('the browser measurer as a host import: what it would cost', () => {
-  it('prices the crossing against each board’s TypeScript layout', {
+  it('prices the crossing against each board’s layout through the core', {
     timeout: 120_000,
   }, async () => {
     await ensureViewerFontLoaded()
     const browser = createBrowserMeasureText()
     const rows: Record<string, number | string>[] = []
     for (const board of webLayoutBoards()) {
+      // Named `host`: the core asks it, so the calls are the ones the import would carry.
       const rec = recording(browser)
+      describeMeasure(rec.counted, { kind: 'host' })
       for (let i = 0; i < 3; i += 1) layOut(board, rec.counted)
       const totals: number[] = []
       const inMeasure: number[] = []
@@ -183,7 +193,7 @@ describe.runIf(RUN)('the browser measurer as a host import: what it would cost',
       ]
       const crossUs = await crossingMicros(distinct, STUB)
       const measuredUs = await crossingMicros(distinct, browser)
-      const tsMs = median(totals)
+      const layoutMs = median(totals)
       const measureMs = median(inMeasure)
       // What the core would spend measuring: each distinct pair once, through the crossing.
       const hostMs = (distinct.length * measuredUs) / 1000
@@ -191,12 +201,12 @@ describe.runIf(RUN)('the browser measurer as a host import: what it would cost',
         board: board.name,
         calls: calls.length,
         distinct: distinct.length,
-        'ts layout ms': tsMs.toFixed(2),
-        'ts in measure ms': measureMs.toFixed(2),
+        'core layout ms': layoutMs.toFixed(2),
+        'core in measure ms': measureMs.toFixed(2),
         'crossing µs': crossUs.toFixed(3),
         'crossing+measure µs': measuredUs.toFixed(3),
         'core host ms (projected)': hostMs.toFixed(3),
-        'crossing share of ts layout': `${(((distinct.length * crossUs) / 1000 / tsMs) * 100).toFixed(2)}%`,
+        'crossing share of core layout': `${(((distinct.length * crossUs) / 1000 / layoutMs) * 100).toFixed(2)}%`,
       })
       expect(calls.length).toBeGreaterThan(0)
     }
@@ -214,7 +224,7 @@ function countedCore(real: WebCore) {
   const layout: CanvasLayoutCore = {
     layoutSpatialCanvas(request, highlight, measure, cache) {
       const answer = real.layoutSpatialCanvas(request, highlight, measure, cache)
-      if (!('declined' in answer)) tally.answered += 1
+      if (!('refused' in answer)) tally.answered += 1
       return answer
     },
   }
@@ -223,11 +233,12 @@ function countedCore(real: WebCore) {
 }
 
 /**
- * Medians of `rounds` interleaved TypeScript and core layouts of `board`, and
- * the host calls one core layout made. Every timed core round must be one the
- * core answered, with nothing reported, or the round timed the TypeScript.
+ * Medians of `rounds` interleaved core layouts of `board`, measured by the
+ * browser through the import and by the ratio estimate inside the wasm, and
+ * the host calls one hosted layout made. Every timed round must be one the
+ * core answered, or the round timed a refusal.
  */
-function timedAgainstCore(board: WebLayoutBoard, real: WebCore, rounds = 15) {
+function timedAgainstRatio(board: WebLayoutBoard, real: WebCore, rounds = 15) {
   const { core, tally } = countedCore(real)
   const browser = createBrowserMeasureText()
   let asked = 0
@@ -239,32 +250,32 @@ function timedAgainstCore(board: WebLayoutBoard, real: WebCore, rounds = 15) {
     { kind: 'host' },
   )
   for (let i = 0; i < 3; i += 1) {
-    layOut(board, browser)
+    layOut(board, constantRatioMeasureText, core)
     layOut(board, counted, core)
   }
-  const ts: number[] = []
-  const rust: number[] = []
+  const inWasm: number[] = []
+  const hosted: number[] = []
   const answeredBefore = tally.answered
   for (let i = 0; i < rounds; i += 1) {
     let start = performance.now()
-    layOut(board, browser)
-    ts.push(performance.now() - start)
+    layOut(board, constantRatioMeasureText, core)
+    inWasm.push(performance.now() - start)
     asked = 0
     start = performance.now()
     layOut(board, counted, core)
-    rust.push(performance.now() - start)
+    hosted.push(performance.now() - start)
   }
-  expect(tally.answered - answeredBefore, board.name).toBe(rounds)
+  expect(tally.answered - answeredBefore, board.name).toBe(2 * rounds)
   return {
-    tsMs: median(ts),
-    rustMs: median(rust),
+    ratioMs: median(inWasm),
+    hostMs: median(hosted),
     asked,
     answered: tally.answered - answeredBefore,
   }
 }
 
 describe.runIf(RUN)('the browser measurer as a host import: what it costs, built', () => {
-  it('times each board through the real core against the TypeScript', {
+  it('times each board measured through the import against measured in the wasm', {
     timeout: 120_000,
   }, async () => {
     // lazy-import: the module names the artifact, which a person without the Rust toolchain has not built
@@ -272,14 +283,14 @@ describe.runIf(RUN)('the browser measurer as a host import: what it costs, built
     const real = await loadWebCore(fetch)
     await ensureViewerFontLoaded()
     const rows = webLayoutBoards().map((board) => {
-      const { tsMs, rustMs, asked, answered } = timedAgainstCore(board, real)
+      const { ratioMs, hostMs, asked, answered } = timedAgainstRatio(board, real)
       return {
         board: board.name,
         'core answers': answered,
         'host calls': asked,
-        'ts ms': tsMs.toFixed(2),
-        'core ms': rustMs.toFixed(2),
-        'core / ts': (rustMs / tsMs).toFixed(2),
+        'in-wasm ratio ms': ratioMs.toFixed(2),
+        'host import ms': hostMs.toFixed(2),
+        'host / ratio': (hostMs / ratioMs).toFixed(2),
       }
     })
     expect(rows.every((row) => row['host calls'] > 0)).toBe(true)
@@ -298,40 +309,35 @@ const frameOf = (board: WebLayoutBoard, dx: number): WebLayoutBoard => ({
 
 /** A content cache as the editor keeps one (`lib/content-cache.ts`), uncapped for a measurement. */
 function memo(): SpatialContentCache {
-  const held = new Map<string, FittedBlocks>()
-  return { get: (key) => held.get(key), set: (key, value) => void held.set(key, value) }
+  return {}
 }
 
 /**
- * Medians of `rounds` interleaved drag frames of `board`: the TypeScript over
- * a warm content cache, the core handed none, and the core handed the
- * caller's (ADR-0054 step 7, S15n), every core frame one the core answered.
+ * Medians of `rounds` interleaved drag frames of `board`: the core handed no
+ * content cache, and the core handed the caller's (ADR-0054 step 7, S15n),
+ * every frame one the core answered.
  */
 function timedDrag(board: WebLayoutBoard, real: WebCore, rounds = 15) {
   const { core, tally } = countedCore(real)
-  const browser = createBrowserMeasureText()
-  const hosted = describeMeasure(browser, { kind: 'host' })
-  const tsCache = memo()
+  const hosted = describeMeasure(createBrowserMeasureText(), { kind: 'host' })
   const coreCache = memo()
   const frame = (at: number) => frameOf(board, (at % 40) * 4)
-  const lay = (at: number, measure: MeasureText, cache?: SpatialContentCache, by?: LayoutCore) =>
+  const lay = (at: number, cache?: SpatialContentCache) =>
     layoutSpatialCanvasWithAnchors(frame(at).canvas, {
-      ...editorLayoutBase({ measure }),
-      core: by,
+      ...editorLayoutBase({ measure: hosted }),
+      core,
       contentCache: cache,
       threads: board.threads,
       proposals: board.proposals,
     })
   for (let i = 0; i < 3; i += 1) {
-    lay(i, browser, tsCache)
-    lay(i, hosted, undefined, core)
-    lay(i, hosted, coreCache, core)
+    lay(i)
+    lay(i, coreCache)
   }
-  const times = { ts: [] as number[], cold: [] as number[], warm: [] as number[] }
+  const times = { cold: [] as number[], warm: [] as number[] }
   const variants = [
-    ['ts', (at: number) => lay(at, browser, tsCache)],
-    ['cold', (at: number) => lay(at, hosted, undefined, core)],
-    ['warm', (at: number) => lay(at, hosted, coreCache, core)],
+    ['cold', (at: number) => lay(at)],
+    ['warm', (at: number) => lay(at, coreCache)],
   ] as const
   const answeredBefore = tally.answered
   // Each round as it ran, so a reader can check the medians and any order effect.
@@ -351,11 +357,11 @@ function timedDrag(board: WebLayoutBoard, real: WebCore, rounds = 15) {
     log.push(ran.join(', '))
   }
   expect(tally.answered - answeredBefore, board.name).toBe(2 * rounds)
-  return { ts: median(times.ts), cold: median(times.cold), warm: median(times.warm), log }
+  return { cold: median(times.cold), warm: median(times.warm), log }
 }
 
 describe.runIf(RUN)('a drag frame through the core, with and without its content cache', () => {
-  it('times each board moved frame by frame against the TypeScript', {
+  it('times each board moved frame by frame, cached against uncached', {
     timeout: 120_000,
   }, async () => {
     // lazy-import: the module names the artifact, which a person without the Rust toolchain has not built
@@ -363,10 +369,9 @@ describe.runIf(RUN)('a drag frame through the core, with and without its content
     const real = await loadWebCore(fetch)
     await ensureViewerFontLoaded()
     const rows = webLayoutBoards().map((board) => {
-      const { ts, cold, warm, log } = timedDrag(board, real)
+      const { cold, warm, log } = timedDrag(board, real)
       return {
         board: board.name,
-        'ts warm ms': ts.toFixed(2),
         'core, no cache ms': cold.toFixed(2),
         'core, cache ms': warm.toFixed(2),
         'cache / no cache': (warm / cold).toFixed(2),

@@ -330,6 +330,17 @@ export const SUBPATH_POLICY: Readonly<Record<string, SubpathPolicy>> = {
   '@kamiazya/whiteboard-model/test-utils': { consumers: [], reason: TEST_ONLY_HELPER },
   '@kamiazya/whiteboard-ports/test-utils': { consumers: [], reason: TEST_ONLY_HELPER },
   '@kamiazya/whiteboard-canvas-render/test-utils': { consumers: [], reason: TEST_ONLY_HELPER },
+  // The core for a test realm: one reads the staged artifact with `node:fs`,
+  // the other fetches it through Vite's `?url`, so each is its own subpath
+  // and neither reaches the other realm through `./test-utils`.
+  '@kamiazya/whiteboard-canvas-render/test-utils/browser-core': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
+  '@kamiazya/whiteboard-canvas-render/test-utils/node-core': {
+    consumers: [],
+    reason: TEST_ONLY_HELPER,
+  },
   '@kamiazya/whiteboard-server-core/test-utils/embedder-contract': {
     consumers: [],
     reason: TEST_ONLY_HELPER,

@@ -8,39 +8,16 @@
 // pin/bubble ids exist or not.
 
 import type { Proposal } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { sceneDigest } from './scene-digest.js'
 import { type CommentBoard, layoutBoard } from './test-utils/comment-board.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
+import { testLayoutCore } from './test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from './theme/spatial-appearance.js'
+import { createSpatialTheme } from './theme/spatial-theme.js'
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({}),
-  resolveEdge: () => ({}),
-  resolveLabel: () => ({ fill: '#000', fontFamily: 'sans-serif' }),
-  resolveProposal: () => ({
-    outline: { stroke: '#4f46e5', strokeDasharray: '6 4' },
-    bubble: { fill: '#ffffff', stroke: '#4f46e5' },
-    leader: { stroke: '#4f46e5' },
-  }),
-  resolveComment: () => ({
-    pin: { fill: '#d97706' },
-    bubble: { fill: '#fef3c7', stroke: '#d97706' },
-    leader: { stroke: '#d97706' },
-    resolvedOverlay: {
-      pin: { fill: '#d97706', fillOpacity: 0.45 },
-      bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
-      leader: { stroke: '#d97706', strokeOpacity: 0.45 },
-    },
-  }),
-}
-
-const parseBody = (text: string): MdastRoot => ({
-  type: 'root',
-  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-})
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 const canvasWithOneCommentedNode: CommentBoard = {
   nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 100, height: 60, text: 'n1' })],
@@ -51,8 +28,8 @@ const canvasWithOneCommentedNode: CommentBoard = {
 const digestOf = (canvas: CommentBoard, proposals?: readonly Proposal[]) =>
   sceneDigest(
     layoutBoard(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
-      parseBody,
       appearance,
       geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
       ...(proposals === undefined ? {} : { proposals }),

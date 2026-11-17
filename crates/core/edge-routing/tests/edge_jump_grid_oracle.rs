@@ -1,6 +1,6 @@
 //! The line jumps' broad phase (`place`, `SegmentGrid`) against the recorded
 //! TypeScript answers (`edge-jump-grid.jsonl`): over each board, driven as
-//! `computeEdgeJumps` drives it, where every run is placed, which levels and
+//! the line jumps drive it, where every run is placed, which levels and
 //! cells each reaches, which runs it is handed as candidates, and the work
 //! counted after each step, to the last bit — through to the budget being
 //! spent.
@@ -58,7 +58,7 @@ fn ranges(indices: &[usize]) -> Value {
     json!(out)
 }
 
-/// One edge as `computeEdgeJumps` takes it; answers whether the budget is spent.
+/// One edge as the line jumps take it; answers whether the budget is spent.
 fn step_edge(grid: &mut SegmentGrid, runs: &[Option<Placed>], steps: &mut Vec<Value>) -> bool {
     let reached: Vec<Option<Vec<Reach>>> =
         runs.iter().map(|p| p.as_ref().map(|p| grid.reach(p))).collect();

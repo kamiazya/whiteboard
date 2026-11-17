@@ -41,7 +41,7 @@ pub trait InlineSeams {
     /// The name the loaded document carries (`resolveEmbed(id)?.title`).
     fn embed_name(&self, document_id: &str) -> Option<String>;
 
-    /// An embed target asked for and not yet answered (`isEmbedPending`).
+    /// An embed target asked for and not yet answered.
     fn embed_pending(&self, document_id: &str) -> bool;
 
     /// What `resolveReference(url)?.image` answers.

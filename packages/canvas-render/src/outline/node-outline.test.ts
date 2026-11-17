@@ -1,11 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  BUNDLED_SHAPE_TABLE,
-  nodeOutline,
-  outlineContains,
-  outlineContentBox,
-  outlineEntryPoint,
-} from './node-outline.js'
+import { BUNDLED_SHAPE_TABLE, nodeOutline } from './node-outline.js'
 
 const box = { x: 10, y: 20, w: 100, h: 60 }
 
@@ -47,25 +41,6 @@ describe('nodeOutline — the ONE producer of non-rect node silhouettes', () => 
       rx: 0,
       ry: 0,
     })
-  })
-})
-
-describe('outlineContains — the hit-test half of the same producer', () => {
-  it('ellipse: center inside, bbox corner outside', () => {
-    expect(outlineContains('visual.ellipse', box, { x: 60, y: 50 })).toBe(true)
-    // A bbox corner is outside the inscribed ellipse — exactly the visual-
-    // accuracy gap this function exists to close over plain box containment.
-    expect(outlineContains('visual.ellipse', box, { x: 12, y: 22 })).toBe(false)
-  })
-
-  it('diamond: center inside, corner outside, boundary-adjacent points behave', () => {
-    expect(outlineContains('visual.diamond', box, { x: 60, y: 50 })).toBe(true)
-    expect(outlineContains('visual.diamond', box, { x: 14, y: 24 })).toBe(false)
-    expect(outlineContains('visual.diamond', box, { x: 60, y: 21 })).toBe(true)
-  })
-
-  it('is total on non-finite input (never throws, answers false)', () => {
-    expect(outlineContains('visual.ellipse', box, { x: Number.NaN, y: 0 })).toBe(false)
   })
 })
 
@@ -155,12 +130,6 @@ describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
     })
   })
 
-  it('octagon: a cut corner is outside, the flat side next to it is inside', () => {
-    expect(outlineContains('visual.octagon', box, { x: 12, y: 22 })).toBe(false)
-    expect(outlineContains('visual.octagon', box, { x: 10, y: 50 })).toBe(true)
-    expect(outlineContains('visual.octagon', box, { x: 60, y: 20 })).toBe(true)
-  })
-
   it('cylinder: bbox plus a capped lid radius, never more than a quarter of the height', () => {
     expect(nodeOutline('visual.cylinder', box)).toEqual({
       kind: 'cylinder',
@@ -179,162 +148,17 @@ describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
       ry: 6,
     })
   })
-
-  it('containment: hexagon corner outside, cylinder body inside, cap regions honoured', () => {
-    expect(outlineContains('visual.hexagon', box, { x: 12, y: 22 })).toBe(false)
-    expect(outlineContains('visual.hexagon', box, { x: 60, y: 50 })).toBe(true)
-    expect(outlineContains('visual.parallelogram', box, { x: 12, y: 22 })).toBe(false)
-    expect(outlineContains('visual.cylinder', box, { x: 60, y: 50 })).toBe(true)
-    // Above the top cap's crown is outside; the crown's own center is inside.
-    expect(outlineContains('visual.cylinder', box, { x: 12, y: 21 })).toBe(false)
-    expect(outlineContains('visual.cylinder', box, { x: 60, y: 21 })).toBe(true)
-  })
 })
 
-describe('outlineEntryPoint — where a segment entering the box first meets the outline', () => {
-  it('ellipse: a horizontal approach lands on the rim, not the bbox border', () => {
-    // Approaching the box's left edge midpoint from the left: the rim IS
-    // the border there (tangent point), so the point stays put.
-    const tangent = outlineEntryPoint('visual.ellipse', box, { x: -40, y: 50 }, { x: 10, y: 50 })
-    expect(tangent.x).toBeCloseTo(10, 3)
-    expect(tangent.y).toBeCloseTo(50, 3)
-    // Approaching a corner-adjacent border point: the rim sits INSIDE the
-    // bbox along the approach line, so the entry point is pulled inward.
-    const pulled = outlineEntryPoint('visual.ellipse', box, { x: 60, y: -40 }, { x: 85, y: 20 })
-    expect(outlineContains('visual.ellipse', box, pulled)).toBe(true)
-    expect(pulled.y).toBeGreaterThan(20)
-    // The returned point is ON the boundary: nudging back along the
-    // approach direction leaves the outline.
-    expect(outlineContains('visual.ellipse', box, { x: pulled.x - 0.5, y: pulled.y - 1.2 })).toBe(
-      false,
-    )
+describe('the bundled table and unsupported shapes', () => {
+  it('every bundled silhouette draws an outline for an ordinary box', () => {
+    const ids = Object.keys(BUNDLED_SHAPE_TABLE)
+    expect(ids.length).toBeGreaterThanOrEqual(5)
+    for (const id of ids) expect(nodeOutline(id, box), id).not.toBeNull()
   })
 
-  it('diamond: a corner-ward approach is pulled to the sloped side', () => {
-    const pulled = outlineEntryPoint('visual.diamond', box, { x: -40, y: -10 }, { x: 20, y: 26 })
-    expect(outlineContains('visual.diamond', box, pulled)).toBe(true)
-    expect(pulled.x).toBeGreaterThan(20)
-  })
-
-  it('an off-center approach reaches the near rim instead of overshooting past the far one', () => {
-    // The probe walks the ray's CLOSEST APPROACH to the center, not the
-    // distance to it. A tall diamond entered low on its left border is the
-    // case that separates them: the distance overshoots past the right rim,
-    // the probe lands outside, and the bisection gives up — leaving the
-    // arrowhead on the bbox border with nothing drawn under it.
-    const tall = { x: 500, y: 200, w: 200, h: 200 }
-    const pulled = outlineEntryPoint('visual.diamond', tall, { x: 220, y: 380 }, { x: 500, y: 380 })
-    expect(outlineContains('visual.diamond', tall, pulled)).toBe(true)
-    // The diamond's left border at height h below its vertex is x = 500 + h.
-    expect(pulled.x).toBeCloseTo(580, 3)
-    expect(pulled.y).toBeCloseTo(380, 3)
-  })
-
-  it('a grazing approach lands on the single tangent point it touches', () => {
-    // y = 20 is the ellipse's topmost line, so the extension meets it at
-    // exactly one point. "First meets the outline at or beyond `to`" names
-    // that point; stopping at the corner leaves the terminal off the rim.
-    const grazed = outlineEntryPoint('visual.ellipse', box, { x: -40, y: 20 }, { x: 10, y: 20 })
-    expect(grazed.x).toBeCloseTo(60, 3)
-    expect(grazed.y).toBeCloseTo(20, 3)
-  })
-
-  it('is total: a terminal whose approach points AWAY from the outline is unchanged', () => {
-    // Leaving the box at its corner: nothing lies at or beyond `to`.
-    const kept = outlineEntryPoint('visual.ellipse', box, { x: 60, y: 50 }, { x: 10, y: 20 })
-    expect(kept).toEqual({ x: 10, y: 20 })
-    expect(
-      outlineEntryPoint(
-        'visual.ellipse',
-        { x: Number.NaN, y: 0, w: 1, h: 1 },
-        { x: 0, y: 0 },
-        { x: 1, y: 1 },
-      ),
-    ).toEqual({ x: 1, y: 1 })
-  })
-})
-
-describe('degenerate boxes and unsupported shapes', () => {
-  it('a zero-area polygon outline contains ONLY its collapsed vertex, like the ellipse rule', () => {
-    const collapsed = { x: 5, y: 5, w: 0, h: 0 }
-    expect(outlineContains('visual.diamond', collapsed, { x: 5, y: 5 })).toBe(true)
-    expect(outlineContains('visual.diamond', collapsed, { x: 6, y: 5 })).toBe(false)
-    expect(outlineContains('visual.hexagon', collapsed, { x: 40, y: -3 })).toBe(false)
-  })
-
-  it('an unsupported runtime shape value degrades to null / false, never a throw', () => {
+  it('an unsupported runtime shape value degrades to null, never a throw', () => {
     const bogus = 'blob' as unknown as Parameters<typeof nodeOutline>[0]
     expect(nodeOutline(bogus, box)).toBeNull()
-    expect(outlineContains(bogus, box, { x: 60, y: 50 })).toBe(false)
-    expect(outlineEntryPoint(bogus, box, { x: -40, y: 50 }, { x: 10, y: 50 })).toEqual({
-      x: 10,
-      y: 50,
-    })
-  })
-
-  it('a one-axis-degenerate polygon contains only its own segment, not the infinite line', () => {
-    // Collinear vertices zero every cross product, so without a bounds
-    // check the loop accepts the whole line through the segment.
-    const zeroWidth = { x: 5, y: 0, w: 0, h: 60 }
-    expect(outlineContains('visual.diamond', zeroWidth, { x: 5, y: 45 })).toBe(true)
-    expect(outlineContains('visual.diamond', zeroWidth, { x: 5, y: 1000 })).toBe(false)
-    expect(outlineContains('visual.diamond', zeroWidth, { x: 5, y: -1 })).toBe(false)
-    const zeroHeight = { x: 0, y: 5, w: 60, h: 0 }
-    expect(outlineContains('visual.hexagon', zeroHeight, { x: 30, y: 5 })).toBe(true)
-    expect(outlineContains('visual.hexagon', zeroHeight, { x: 1000, y: 5 })).toBe(false)
-  })
-
-  it('cylinder entry: an approach into the top-left cap region lands on the cap boundary', () => {
-    // The cap is the one region where containment is not a single convex
-    // quadratic — this pins that the bisection's convex-along-the-ray
-    // assumption holds for the composite silhouette too.
-    const pulled = outlineEntryPoint('visual.cylinder', box, { x: -40, y: 0 }, { x: 14, y: 22 })
-    expect(outlineContains('visual.cylinder', box, pulled)).toBe(true)
-    expect(outlineContains('visual.cylinder', box, { x: pulled.x - 1, y: pulled.y - 0.5 })).toBe(
-      false,
-    )
-  })
-})
-
-describe('outlineContentBox — the inscribed box content must stay inside', () => {
-  // Read off the table rather than written out again. This list was a fifth
-  // copy of the silhouette vocabulary (ADR-0036 decision 4 retired three
-  // others), and a copy is what lets kind N+1 ship with its inscription
-  // unchecked — which is exactly what these two invariants are for.
-  const kinds = Object.keys(BUNDLED_SHAPE_TABLE)
-
-  it('every corner of the content box lies inside the outline, for every kind', () => {
-    for (const kind of kinds) {
-      const content = outlineContentBox(kind, box)
-      const corners = [
-        { x: content.x, y: content.y },
-        { x: content.x + content.w, y: content.y },
-        { x: content.x + content.w, y: content.y + content.h },
-        { x: content.x, y: content.y + content.h },
-      ]
-      for (const corner of corners) {
-        expect(outlineContains(kind, box, corner), `${kind} corner ${JSON.stringify(corner)}`).toBe(
-          true,
-        )
-      }
-    }
-  })
-
-  it('strictly narrows the box for every kind — a shaped node never keeps the full rect', () => {
-    for (const kind of kinds) {
-      const content = outlineContentBox(kind, box)
-      expect(content.w * content.h, kind).toBeLessThan(box.w * box.h)
-      expect(content.w, kind).toBeGreaterThan(0)
-      expect(content.h, kind).toBeGreaterThan(0)
-    }
-  })
-
-  it('no outline (a plain rect) answers the box unchanged', () => {
-    expect(outlineContentBox(undefined, box)).toEqual(box)
-  })
-
-  it('is total: an unsupported runtime value degrades to the box, never a throw', () => {
-    const bogus = 'blob' as unknown as Parameters<typeof nodeOutline>[0]
-    expect(outlineContentBox(bogus, box)).toEqual(box)
   })
 })

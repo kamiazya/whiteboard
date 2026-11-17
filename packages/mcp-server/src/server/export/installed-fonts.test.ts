@@ -10,6 +10,7 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
@@ -120,11 +121,17 @@ describe('an installed font reaches both the renderer and the report', () => {
   // own assertion — on the PIXELS, since that is the only place the answer
   // exists.
   it('renders glyphs the vendored face lacks', async () => {
-    const tofu = await renderSpatialCanvasToPng(CANVAS, fontsDir, { theme: 'light' })
+    const tofu = await renderSpatialCanvasToPng(CANVAS, fontsDir, {
+      core: testLayoutCore(),
+      theme: 'light',
+    })
 
     await mkdir(fontsDir, { recursive: true })
     await writeSyntheticFont(join(fontsDir, 'covered.ttf'))
-    const drawn = await renderSpatialCanvasToPng(CANVAS, fontsDir, { theme: 'light' })
+    const drawn = await renderSpatialCanvasToPng(CANVAS, fontsDir, {
+      core: testLayoutCore(),
+      theme: 'light',
+    })
 
     // Same canvas, same size, different ink. Byte equality would mean resvg
     // painted the identical tofu box — which is exactly what happens when the

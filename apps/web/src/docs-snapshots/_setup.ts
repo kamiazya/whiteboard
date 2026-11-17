@@ -9,6 +9,7 @@ import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach } from 'vitest'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
+import { startLayoutCore } from '../lib/page-layout-core.js'
 import { seedMathRandom } from './_helpers.js'
 
 // No snapshot test runs the boot chain that resolves the browser workspace
@@ -57,3 +58,9 @@ afterEach(() => {
   restoreCaret?.()
   restoreCaret = null
 })
+
+/**
+ * The page boots its Rust core before it lays anything out, so a snapshot
+ * realm does the same before its first figure.
+ */
+await startLayoutCore()

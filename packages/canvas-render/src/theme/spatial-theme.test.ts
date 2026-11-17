@@ -2,7 +2,6 @@ import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { textNode as buildTextNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
-import { MARKDOWN_THEME_NODE } from './markdown-theme.js'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './spatial-palette.js'
 import { createSpatialTheme } from './spatial-theme.js'
 
@@ -167,11 +166,8 @@ describe('createSpatialTheme', () => {
       { palette: SPATIAL_DARK_PALETTE, bg: '#0a0a0a' },
     ]
     for (const { palette, bg } of cases) {
-      const surface = composite(
-        MARKDOWN_THEME_NODE.chromeColor,
-        bg,
-        MARKDOWN_THEME_NODE.panelOpacity,
-      )
+      // The node theme's code-panel chrome and its opacity (`markdown-theme.ts`).
+      const surface = composite('#818b98', bg, 0.12)
       for (const role of ['keyword', 'string', 'number', 'comment'] as const) {
         expect(contrastRatio(palette.syntax[role], surface)).toBeGreaterThanOrEqual(4.5)
       }

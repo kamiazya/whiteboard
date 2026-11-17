@@ -1,22 +1,20 @@
 /**
- * What the layout asks a keeper to resolve as a stored picture is a subset of
- * what the file GC keeps. The two answers come from different packages (the
- * renderer asks per node as it draws, the GC reads the stored document), so
- * the oracle here is the layout's own recorded asks, not the walk the GC
- * shares with the loader.
- *
- * The asks are recorded through the `references` bundle, the form a
- * composition root passes: a bare `resolveReference` option reaches file
- * nodes and frame backgrounds only, so an inline `![](asset:…)` in a text
- * node would never be asked and that arm would check nothing.
+ * What the layout draws as a stored picture is a subset of what the file GC
+ * keeps. The two answers come from different places (the Rust core draws
+ * each node, the GC reads the stored document), so the oracle here is what
+ * the core actually DREW, not the walk the GC shares with the loader: every
+ * `asset:` ref spelled anywhere in the canvas is offered a picture through
+ * the reference wire, the form a composition root passes, and the drawn ones
+ * are read back off the scene's image hrefs.
  */
 import {
   createSpatialTheme,
   layoutSpatialCanvas,
-  referenceSeams,
+  referenceSeamsFromWire,
+  referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createFakeMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { collectImageRefIds, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import {
   imageRefId,
@@ -80,21 +78,22 @@ const node: fc.Arbitrary<(n: number) => SpatialNode> = fc.oneof(
   ),
 )
 
-/** Lays `c` out and answers every stored-picture ref it asked a keeper for. */
+/** Lays `c` out and answers every stored-picture ref the core drew, in the order drawn. */
 function drawnImageRefs(c: SpatialCanvas): string[] {
-  const asked: string[] = []
-  layoutSpatialCanvas(c, {
+  // Every ref the canvas spells, found by its text alone: offering a picture
+  // for one the layout does not draw is harmless, and missing one would hide it.
+  const spelled = [...new Set(JSON.stringify(c).match(/asset:[A-Za-z0-9_-]+/g) ?? [])]
+  const extras = new Map(spelled.map((ref) => [ref, { image: { href: `blob:${ref}` } }] as const))
+  const scene = layoutSpatialCanvas(c, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(0.6),
-    parseBody: parseMarkdownBody,
     appearance: createSpatialTheme({ mode: 'light' }),
-    references: referenceSeams(new Map(), {
-      extra: (ref) => {
-        if (isImageRef(ref)) asked.push(ref)
-        return { image: { href: `blob:${ref}` } }
-      },
-    }),
+    references: referenceSeamsFromWire(referenceWire(new Map(), { extras })),
   })
-  return asked
+  // A file node or a frame background draws an image node (`href`); an inline
+  // image paints its run (`src`).
+  const drawn = JSON.stringify(scene).matchAll(/"(?:href|src)":"blob:(asset:[A-Za-z0-9_-]+)"/g)
+  return [...new Set([...drawn].map((match) => match[1] as string))].filter(isImageRef)
 }
 
 const canvas: fc.Arbitrary<SpatialCanvas> = fc

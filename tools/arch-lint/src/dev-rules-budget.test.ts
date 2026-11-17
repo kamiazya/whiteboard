@@ -481,7 +481,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 21
 //
 // 108 -> 107: the contributed edge-router seam was deleted, and the three
 // paragraphs that argued for keeping it went with it.
-const CANVAS_RENDER_BUDGET = 107
+//
+// 107 -> 106: the composer and typesetter were deleted (ADR-0054 S18h2); the
+// intro that mapped their files became a page on the switch that asks the core.
+const CANVAS_RENDER_BUDGET = 106
 
 // The rule that loads for every edit under `tools/arch-lint/**` — 119-odd test
 // files, so every session that adds a guard reads it, and it grows in exactly

@@ -1,25 +1,16 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  type ComposeCommentsRecord,
-  composeCommentsRecords,
-} from '../test-utils/compose-comments-oracle/oracle.js'
+import type { ComposeCommentsRecord } from '../test-utils/compose-comments-oracle/oracle.js'
 import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
 
 /**
- * The committed recording of what the comment and proposal layers draw over a whole canvas
- * equals what it draws today, and the Rust port replays it exactly
- * (`tests/compose_canvas_support/comments.rs` in `crates/core/canvas-render`). Re-record
- * after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node compose-comments-recorded`.
+ * The committed recording of what the comment and proposal layers drew over a
+ * whole canvas, taken from the TypeScript before it was deleted (ADR-0054 step
+ * 7, S18h) and frozen. The Rust port replays it exactly
+ * (`tests/compose_canvas_support/comments.rs` in `crates/core/canvas-render`).
+ * This test holds the recording to the outcomes it must reach.
  */
 const FILE = new URL('./compose-comments.jsonl', import.meta.url)
-
-const fresh = composeCommentsRecords()
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, `${fresh.map((r) => JSON.stringify(r)).join('\n')}\n`)
-}
 
 const records = readFileSync(FILE, 'utf8')
   .trimEnd()
@@ -90,17 +81,5 @@ describe('the recorded compose-comments oracle', () => {
       cases.some((c) => c.answer.events.some((e) => e.nodeId === 'p-throws')),
       'a label that does not parse',
     ).toBe(true)
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const parted = records.findIndex((r, i) => JSON.stringify(fresh[i]) !== JSON.stringify(r))
-    const record = records[parted]
-    expect(
-      record === undefined
-        ? undefined
-        : `${parted}: ${record.kind === 'case' ? record.id : 'meta'}`,
-      'the first record the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
-    expect(records).toHaveLength(fresh.length)
   })
 })

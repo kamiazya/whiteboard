@@ -77,8 +77,4 @@ describe('the recorded fence tokens of the markdown-document oracle', () => {
       'plain',
     ).toBe(true)
   })
-
-  it('equals what the highlighter answers today', () => {
-    expect(readFileSync(FILE, 'utf8')).toBe(text(fresh))
-  })
 })

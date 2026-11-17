@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   answerUnhandled,
   apiErrorBodySchema,
@@ -84,6 +85,7 @@ const exportUrl = (documentId: string, workspaceId = 's1') =>
   `/api/workspaces/${workspaceId}/documents/${documentId}/export`
 const EXPORT_URL = exportUrl(CANVAS_A)
 
+const layoutCore = async () => testLayoutCore() // one factory, as the root holds one
 function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   const app = new Hono()
   resolvingDocumentIds(
@@ -93,6 +95,7 @@ function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   app.route(
     '/',
     createExportRouter({
+      layoutCore,
       liveDocuments: { exists: mockDocumentExists },
       scope,
     }),

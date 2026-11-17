@@ -7,7 +7,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark, unified, yaml, zod |
 | `packages/scene` | the scene VOCABULARY and the renderer/plugin contract — what a laid-out document is, and the shape a plugin contributes. Types only; it exists for its position, below both sides | model, facet-engine |
-| `packages/canvas-render` | layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) — the scene vocabulary it produces is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, css-line-break, lowlight, highlight.js |
+| `packages/canvas-render` | layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) — the scene vocabulary it produces is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, lowlight, highlight.js |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/core-wasm` | the Rust core's wasm artifact behind a thin shim: init from bytes or a module a root hands it, an ABI check, one typed call per operation (ADR-0054) | model, scene |
@@ -37,13 +37,13 @@ arch-map`. Its table, gates and mechanics are the path-scoped
 been checked against it — not a cap, and not a statement that the shared layer
 is closed. A package that runs unchanged on all three runtimes and does not
 break the published build may be added; say in the entry what you checked, the
-way `css-line-break`'s does ("Pure and DOM-free, so it holds in Node, the
-browser and a worker alike — verified before adopting").
+way `lowlight`'s does ("Pure JS, no DOM and no `node:*`, so it holds on Node,
+the browser and a Worker alike").
 
 What the criterion actually rejects is worth reading, because it is not
-weight: BudouX is *vendored* rather than depended on because depending on it
-drags in linkedom and the native canvas package and breaks the published
-build. Nothing here has ever been refused for being one dependency too many.
+weight: BudouX was *vendored* rather than depended on (until the Rust core
+took line breaking over) because depending on it drags in linkedom and the
+native canvas package and breaks the published build. Nothing here has ever been refused for being one dependency too many.
 A shared package's SOURCE is also read against this table: `source-direction-check.test.ts` fails a workspace import the row does not allow, even one declared as a devDependency.
 
 This is worded explicitly because the list-shaped enforcement teaches the

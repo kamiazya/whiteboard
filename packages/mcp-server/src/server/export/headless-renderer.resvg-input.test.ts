@@ -19,6 +19,7 @@ vi.mock('@resvg/resvg-js', async (importOriginal) => {
   return { ...actual, Resvg: RecordingResvg }
 })
 
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { withoutExternalImages } from './external-images.js'
 import { renderSpatialCanvasToPng } from './headless-renderer.js'
 
@@ -37,13 +38,15 @@ describe('the image hrefs resvg is given', () => {
   it('keeps a data: image', async () => {
     const onePixel =
       'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
-    await renderSpatialCanvasToPng(canvasNaming(onePixel), FONTS_DIR)
+    await renderSpatialCanvasToPng(canvasNaming(onePixel), FONTS_DIR, { core: testLayoutCore() })
     expect(constructed.svgs).toHaveLength(1)
     expect(constructed.svgs[0]).toContain(`href="${onePixel}"`)
   })
 
   it('drops every href that is not a data: URI before resvg sees it', async () => {
-    await renderSpatialCanvasToPng(canvasNaming('https://example.com/x.png'), FONTS_DIR)
+    await renderSpatialCanvasToPng(canvasNaming('https://example.com/x.png'), FONTS_DIR, {
+      core: testLayoutCore(),
+    })
     expect(constructed.svgs).toHaveLength(1)
     expect(constructed.svgs[0]).toContain('<image')
     expect(constructed.svgs[0]).not.toContain('example.com')
@@ -73,7 +76,9 @@ describe('the size of the target resvg is asked for', () => {
   }
 
   it('refuses a board past the pixel budget without constructing resvg', async () => {
-    await expect(renderSpatialCanvasToPng(huge, FONTS_DIR, { scale: 8 })).rejects.toMatchObject({
+    await expect(
+      renderSpatialCanvasToPng(huge, FONTS_DIR, { core: testLayoutCore(), scale: 8 }),
+    ).rejects.toMatchObject({
       name: 'ExportTooLargeError',
     })
     expect(constructed.svgs).toHaveLength(0)
@@ -84,16 +89,21 @@ describe('the size of the target resvg is asked for', () => {
       nodes: [textNode({ id: 'a', x: 0, y: 0, width: 3000, height: 100, text: 'wide' })],
       edges: [],
     }
-    await expect(renderSpatialCanvasToPng(wide, FONTS_DIR, { scale: 8 })).rejects.toMatchObject({
+    await expect(
+      renderSpatialCanvasToPng(wide, FONTS_DIR, { core: testLayoutCore(), scale: 8 }),
+    ).rejects.toMatchObject({
       name: 'ExportTooLargeError',
     })
     expect(constructed.svgs).toHaveLength(0)
-    await renderSpatialCanvasToPng(wide, FONTS_DIR)
+    await renderSpatialCanvasToPng(wide, FONTS_DIR, { core: testLayoutCore() })
     expect(constructed.svgs).toHaveLength(1)
   })
 
   it('renders an ordinary board at the largest scale', async () => {
-    const result = await renderSpatialCanvasToPng(canvasNaming('data:,'), FONTS_DIR, { scale: 8 })
+    const result = await renderSpatialCanvasToPng(canvasNaming('data:,'), FONTS_DIR, {
+      core: testLayoutCore(),
+      scale: 8,
+    })
     expect(constructed.svgs).toHaveLength(1)
     expect(result.width).toBeGreaterThan(240 * 8)
   })

@@ -1,6 +1,4 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
-import { COMMENT_TEXT_MAX_WIDTH_PX } from '../comment-geometry.js'
 import { highlightCode } from '../highlight/lowlight.js'
 import type {
   MarkdownCommentRequest,
@@ -13,12 +11,8 @@ import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../ref
 import { refusalScene } from '../refusal.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
-import { MARKDOWN_THEME_DOCUMENT } from '../theme/markdown-theme.js'
-import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { CoreUnaskable } from './canvas-switch.js'
-import { layoutCommentBody } from './comment-body.js'
-import { layoutMdastBlocks } from './markdown-body.js'
 import {
   layoutCommentDocument,
   layoutMarkdownDocument,
@@ -28,18 +22,12 @@ import {
 
 const measure = createFakeMeasure()
 const body = '# Plan\n\nFirst $x^2$ here.\n\n## Detail\n\nMore words.'
-const base: MarkdownDocumentOptions = { measure, maxWidth: 400 }
+const base: MarkdownDocumentOptions = { core: testLayoutCore(), measure, maxWidth: 400 }
 
-/** What the TypeScript draws for `text`, as every surface laid a note out before the switch. */
-const typescript = (text: string) =>
-  layoutMdastBlocks(parseMarkdownBody(text), {
-    measure,
-    maxWidth: 400,
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    theme: MARKDOWN_THEME_DOCUMENT,
-    canvasAppearance: createSpatialTheme({ mode: 'light' }),
-  })
-const reference = typescript(body)
+/** A note's scene, as a canned answer a fake core gives. */
+const laid = layoutMarkdownDocument(body, base)
+if (laid === undefined) throw new Error('the note has no section to miss')
+const reference = laid
 
 type Answering = (
   request: MarkdownNoteRequest | MarkdownCommentRequest,
@@ -48,16 +36,18 @@ type Answering = (
 function coreOf(answer: Answering) {
   const requests: (MarkdownNoteRequest | MarkdownCommentRequest)[] = []
   const highlighters: unknown[] = []
+  const measurers: unknown[] = []
   const core = fakeLayoutCore({
     markdown: {
-      layoutMarkdown: (request, highlight) => {
+      layoutMarkdown: (request, highlight, measurer) => {
         requests.push(request)
         highlighters.push(highlight)
+        measurers.push(measurer)
         return answer(request)
       },
     },
   })
-  return { core, requests, highlighters }
+  return { core, requests, highlighters, measurers }
 }
 
 const agreeing: Answering = () => ({ scene: reference, degradations: [] })
@@ -69,10 +59,6 @@ function run(answer: Answering, options: Partial<MarkdownDocumentOptions> = {}, 
 }
 
 describe('a markdown note through the core', () => {
-  it('lays a note out as layoutMdastBlocks does when handed no core', () => {
-    expect(layoutMarkdownDocument(body, base)).toEqual(reference)
-  })
-
   it('answers with the core, handing it the default highlighter', () => {
     const moved = { nodes: reference.nodes.slice(1) }
     const { scene, requests, highlighters } = run(() => ({ scene: moved, degradations: [] }))
@@ -156,7 +142,6 @@ describe('a markdown note through the core', () => {
   })
 
   it('throws for options no request can carry, asking the core nothing', () => {
-    const unnamed: MarkdownDocumentOptions['measure'] = (text, font) => measure(text, font)
     const fromGraph = referenceSeams(new Map([['b', { documentId: 'D', body: 'x' }]]))
     const withContent = referenceSeamsFromWire(
       overlayReferences(referenceWire(new Map()), { labels: new Map() }),
@@ -166,7 +151,6 @@ describe('a markdown note through the core', () => {
       extras: [['p', { markdown: { type: 'root', children: [] } }]],
     })
     const cases = [
-      [{ measure: unnamed }, 'measure'],
       [{ references: fromGraph }, 'references'],
       [{ references: carrying }, 'reference-content'],
     ] as const
@@ -183,9 +167,6 @@ describe('a markdown note through the core', () => {
 
 describe("a comment's prose through the core", () => {
   const prose = 'Please **tighten** this, and `rename` it.'
-  /** What the TypeScript draws, as `CommentBody.tsx` laid a comment out before the core. */
-  const commentTs = (density: 'comfortable' | 'compact' = 'comfortable', maxWidth = 260) =>
-    layoutCommentBody(prose, { measure, fontFamily: SPATIAL_THEME_FONT_FAMILY, maxWidth, density })
   const lay = (answer: Answering, density?: 'compact') => {
     const { core, requests } = coreOf(answer)
     const scene = layoutCommentDocument(prose, {
@@ -197,13 +178,6 @@ describe("a comment's prose through the core", () => {
     return { scene, requests }
   }
   const sceneOf = { nodes: [] }
-
-  it('lays a comment out as layoutCommentBody does when handed no core', () => {
-    expect(layoutCommentDocument(prose, { measure, maxWidth: 260 })).toEqual(commentTs())
-    expect(layoutCommentDocument(prose, { measure })).toEqual(
-      commentTs('comfortable', COMMENT_TEXT_MAX_WIDTH_PX),
-    )
-  })
 
   it("answers with the core, handing it a comment's request", () => {
     const { scene, requests } = lay(() => ({ scene: sceneOf, degradations: [] }), 'compact')
@@ -253,12 +227,12 @@ describe("a comment's prose through the core", () => {
     expect(() => lay(() => ({ missing: 'section' }))).toThrow(/missing its section/)
   })
 
-  it('throws for a measurer nobody named, asking the core nothing', () => {
-    const { core, requests } = coreOf(() => ({ scene: sceneOf, degradations: [] }))
+  it('names a measurer nobody named as the host, and hands the core that measurer', () => {
+    const { core, requests, measurers } = coreOf(() => ({ scene: sceneOf, degradations: [] }))
     const unnamed = (...args: Parameters<typeof measure>) => measure(...args)
-    expect(() => layoutCommentDocument(prose, { measure: unnamed, maxWidth: 260, core })).toThrow(
-      new CoreUnaskable('measure'),
-    )
-    expect(requests).toEqual([])
+    layoutCommentDocument(prose, { measure: unnamed, maxWidth: 260, core })
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toMatchObject({ kind: 'comment', measure: { kind: 'host' } })
+    expect(measurers).toEqual([unnamed])
   })
 })

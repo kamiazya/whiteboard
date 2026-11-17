@@ -8,7 +8,7 @@
 //! theme id against.
 //!
 //! One difference from the TypeScript, on purpose: nothing here is a global.
-//! `createSpatialTheme`'s frozen per-mode singletons and `createThemedAppearance`'s
+//! `createSpatialTheme`'s frozen per-mode singletons and the themed resolver's
 //! `WeakMap` exist so an editor that re-renders every frame is handed the SAME
 //! object; here a theme is a value, built where it is needed, and
 //! [`asset::ThemedAppearanceCache`] gives a layout (or any other call site that

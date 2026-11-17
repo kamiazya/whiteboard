@@ -71,15 +71,13 @@ interface HeadlessCanvasExportArgs {
   options?: HeadlessCanvasExportOptions
   /**
    * The composition root's `ServerDeps.layoutCore`, so the file export lays
-   * out through the same loaded core as `wb_scene_render`. Absent (a test
-   * composition), the layout is the TypeScript composer's.
+   * out through the same loaded core as `wb_scene_render`.
    */
-  layoutCore?: () => Promise<LayoutCore>
+  layoutCore: () => Promise<LayoutCore>
 }
 
-async function coreOf(args: HeadlessCanvasExportArgs): Promise<{ core?: LayoutCore }> {
-  const core = await args.layoutCore?.()
-  return core === undefined ? {} : { core }
+async function coreOf(args: HeadlessCanvasExportArgs): Promise<{ core: LayoutCore }> {
+  return { core: await args.layoutCore() }
 }
 
 export async function exportCanvasHeadless(

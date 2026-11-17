@@ -20,6 +20,14 @@ vi.mock('@kamiazya/whiteboard-canvas-render', async (importOriginal) => {
   }
 })
 
+// A realm whose core has not loaded yet, which is when the connect preview
+// routes in TypeScript (`currentLayoutCore` answers nothing until the load
+// settles).
+vi.mock('../../lib/spatial/layout-core.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../lib/spatial/layout-core.js')>()),
+  currentLayoutCore: () => undefined,
+}))
+
 const box = (id: string, x: number, y: number, w: number, h: number): SpatialNode =>
   textNode({ id, x, y, width: w, height: h, text: '' })
 

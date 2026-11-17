@@ -1,5 +1,5 @@
 //! Break opportunities per UAX #14 under CSS `line-break: strict`, as the
-//! segments a text divides into, ported from `uax-segments.ts`.
+//! segments a text divides into, ported from the TypeScript line breaker.
 //!
 //! Each segment carries its own trailing whitespace. This is a reading of
 //! [`segment_ends`](crate::linebreak::segment_ends), the one producer of "where

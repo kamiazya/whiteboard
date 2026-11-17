@@ -4,6 +4,7 @@
 // names the key. Through the real renderer, because the option is threaded
 // through two functions the mocked export test cannot see.
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
@@ -13,7 +14,7 @@ import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
 
 const renderSpatialCanvasToSvg = (
   canvas: Parameters<typeof renderSvgIn>[0],
-  options?: Parameters<typeof renderSvgIn>[2],
+  options: Parameters<typeof renderSvgIn>[2] = { core: testLayoutCore() },
 ) => renderSvgIn(canvas, NO_INSTALLED_FONTS, options)
 
 const canvas: SpatialCanvas = {
@@ -37,7 +38,10 @@ const library: TagLibrary = {
 
 describe('export under a tag library', () => {
   it('paints a tagged box in its declared colour and lists the key in the legend', async () => {
-    const { svg } = await renderSpatialCanvasToSvg(canvas, { tagLibrary: library })
+    const { svg } = await renderSpatialCanvasToSvg(canvas, {
+      core: testLayoutCore(),
+      tagLibrary: library,
+    })
     expect(svg).toContain(`fill="${SPATIAL_LIGHT_PALETTE.presets['4'].fill}"`)
     expect(svg).toContain(`fill="${SPATIAL_LIGHT_PALETTE.presets['1'].fill}"`)
     expect(svg).toContain('data-wb-legend')

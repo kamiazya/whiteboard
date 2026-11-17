@@ -10,17 +10,20 @@ import { parseSource } from './ast-helpers.js'
  * longer exists fails, and once the stage reaches `rust` the TypeScript export
  * must be a re-export of the shim rather than an implementation. The layout's
  * per-function switch (`LayoutCore['impl']`) was retired in step 7's S18g: the
- * core answers every layout a root hands it, and the TypeScript left is the
- * composer's own, reached only by canvas-render's tests and recorders until
- * S18h deletes it and moves these entries to stage 4.
+ * core answers every layout a root hands it. S18h2 deleted the composer and
+ * the typesetter, moving the layout and its node queries to stage 4; S18h3
+ * deleted the edge label's placement, moving its queries there too.
  *
- * Stage 4 has two shapes. A function whose callers can import the shim
+ * Stage 4 has three shapes. A function whose callers can import the shim
  * re-exports it. One whose callers are synchronous and reach it by import from
  * a shared package that must not import the shim (it would carry the wasm glue
  * to every consumer, and the shim initialises asynchronously) declares a
  * `realm` instead: the export is a dispatcher over the one core each realm
  * installs, never an implementation, and the files that held the
  * TypeScript must be gone. The OKF envelope, the JSON Canvas codec and the facet write are the second shape.
+ * The third is canvas-render's layout: the export takes the core it asks
+ * (`options.core`, which every root holds), so there is nothing to install;
+ * it declares `handed`, and the files that held the TypeScript must be gone.
  */
 export interface PortedFunction {
   /** The name the function goes by in the TypeScript. */
@@ -41,6 +44,11 @@ export interface PortedFunction {
    * `deleted` (where the TypeScript lived) no longer exists.
    */
   readonly realm?: { readonly install: string; readonly deleted: readonly string[] }
+  /**
+   * Stage 4's third shape: the export asks the core its caller hands it, and
+   * every file in `deleted` (where the TypeScript lived) no longer exists.
+   */
+  readonly handed?: { readonly deleted: readonly string[] }
 }
 
 /** Where the OKF envelope's TypeScript lived, which stage 4 requires gone. */
@@ -74,6 +82,42 @@ const FACET_WRITE_TYPESCRIPT = [
   'packages/server-core/src/tools/facet-write.core.test.ts',
 ] as const
 
+/** Where the composer lived (S18h2), which stage 4 requires gone. */
+const COMPOSER_TYPESCRIPT = [
+  'packages/canvas-render/src/layout/compose-node.ts',
+  'packages/canvas-render/src/layout/compose-file-node.ts',
+  'packages/canvas-render/src/layout/node-box.ts',
+  'packages/canvas-render/src/layout/comments.ts',
+  'packages/canvas-render/src/layout/proposals.ts',
+  'packages/canvas-render/src/legend/canvas-legend.ts',
+] as const
+
+/** Where the typesetter lived (S18h2), which stage 4 requires gone. */
+const TYPESETTER_TYPESCRIPT = [
+  'packages/canvas-render/src/layout/markdown-body.ts',
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts',
+  'packages/canvas-render/src/layout/nodes/mdast-section.ts',
+  'packages/canvas-render/src/layout/nodes/uax-segments.ts',
+  'packages/canvas-render/src/vendor/budoux/parser.ts',
+] as const
+
+/** Where the comment bubble's placement lived (S18h2), which stage 4 requires gone. */
+const COMMENT_TYPESCRIPT = [
+  'packages/canvas-render/src/layout/comment-placement.ts',
+  'packages/canvas-render/src/layout/comment-body.ts',
+] as const
+
+/**
+ * Where an edge label's placement and what it avoids lived, with their own
+ * suites (S18h3), which stage 4 requires gone.
+ */
+const LABEL_TYPESCRIPT = [
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.test.ts',
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.properties.test.ts',
+  'packages/canvas-render/src/layout/edges/edge-label-anchor.cost.test.ts',
+] as const
+
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'routeLayout',
@@ -92,9 +136,8 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'layoutSpatialCanvas',
     // The core answers it on every root (S16a, S16b; the switch retired in
-    // S18g), and the crate replays the recording. Stays 2 for routing's
-    // reason until S18h2.
-    stage: 2,
+    // S18g), and the crate replays the recording; the composer is gone (S18h2).
+    stage: 4,
     ts: {
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
       export: 'layoutSpatialCanvasWithAnchors',
@@ -105,28 +148,33 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutSpatialCanvas',
     },
+    handed: { deleted: COMPOSER_TYPESCRIPT },
   },
   {
     // A markdown NOTE (S18c): the core's markdown entry, a `kind: 'markdown'`
     // request on the whole layout's export (S18b). The TypeScript it was held
-    // to is `layoutMdastBlocks` over the parsed body. Stays 2 for routing's
-    // reason until S18h2.
+    // to, `layoutMdastBlocks` over the parsed body, is gone (S18h2).
     name: 'layoutMarkdown',
-    stage: 2,
-    ts: { file: 'packages/canvas-render/src/layout/markdown-body.ts', export: 'layoutMdastBlocks' },
+    stage: 4,
+    ts: {
+      file: 'packages/canvas-render/src/layout/markdown-switch.ts',
+      export: 'layoutMarkdownDocument',
+    },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/mod.rs', fn: 'layout_spatial_canvas' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutMarkdown',
     },
+    handed: { deleted: TYPESETTER_TYPESCRIPT },
   },
   // The layout pieces a root calls on their own (S18d): one export,
-  // `layout_query`, with a tagged query per piece. The TypeScript each was
-  // held to is the function the composer still calls without a core.
+  // `layout_query`, with a tagged query per piece. Those the composer answered
+  // went to stage 4 with it (S18h2), and the edge label's with its own
+  // module (S18h3).
   {
     name: 'layoutSpatialEdges',
-    stage: 2,
+    stage: 4,
     ts: {
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
       export: 'layoutSpatialEdges',
@@ -137,10 +185,11 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: COMPOSER_TYPESCRIPT },
   },
   {
     name: 'naturalNodeContentSize',
-    stage: 2,
+    stage: 4,
     ts: {
       file: 'packages/canvas-render/src/layout/spatial-canvas.ts',
       export: 'naturalNodeContentSize',
@@ -151,10 +200,11 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: COMPOSER_TYPESCRIPT },
   },
   {
     name: 'fittedTextNodeHeight',
-    stage: 2,
+    stage: 4,
     ts: {
       file: 'packages/canvas-render/src/layout/fitted-height.ts',
       export: 'fittedTextNodeHeight',
@@ -165,77 +215,59 @@ export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: TYPESETTER_TYPESCRIPT },
   },
   {
     name: 'edgeLabelPlacement',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
-      export: 'edgeLabelPlacement',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryEdgeLabelPlacement' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: LABEL_TYPESCRIPT },
   },
   {
     name: 'labelObstacles',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
-      export: 'labelObstacles',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryLabelObstacles' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: LABEL_TYPESCRIPT },
   },
   {
     name: 'frameTitleObstacles',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/edges/edge-label-anchor.ts',
-      export: 'frameTitleObstacles',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryLabelObstacles' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: LABEL_TYPESCRIPT },
   },
   {
     name: 'placeCommentBubble',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/layout/comment-placement.ts',
-      export: 'placeCommentBubble',
-    },
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout/queries.ts', export: 'queryCommentBubble' },
     rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'layoutQuery',
     },
+    handed: { deleted: COMMENT_TYPESCRIPT },
   },
-  {
-    name: 'outlineContentBox',
-    stage: 2,
-    ts: {
-      file: 'packages/canvas-render/src/outline/node-outline.ts',
-      export: 'outlineContentBox',
-    },
-    rust: { file: 'crates/bindings/wasm/src/spatial_layout/query.rs', fn: 'layout_query' },
-    shim: {
-      module: '@kamiazya/whiteboard-core-wasm',
-      file: 'packages/core-wasm/src/index.ts',
-      member: 'layoutQuery',
-    },
-  },
+  // The outline content box query has no entry: its TypeScript was one
+  // function and the shape table's per-silhouette members, deleted from files
+  // that remain (S18h3), which none of stage 4's shapes can state.
   // A body's parse and its reference resolution have no entry of their own:
   // the core reaches them only through the whole layout, so that export is
   // the shim's member.
@@ -397,6 +429,25 @@ export function switchKeys(text: string, interfaceName: string): string[] | unde
 const declaresRustFn = (text: string, name: string): boolean =>
   new RegExp(`\\bpub\\s+fn\\s+${name}\\s*[(<]`).test(text)
 
+/** Stage 4's third shape: the export asks the core it is handed, and the TypeScript gone. */
+function checkHanded(
+  f: PortedFunction,
+  handed: NonNullable<PortedFunction['handed']>,
+  declared: Set<string>,
+  read: ReadFile,
+): string[] {
+  const problems: string[] = []
+  if (!declared.has(f.ts.export)) {
+    problems.push(`${f.name}: ${f.ts.file} no longer exports a function named ${f.ts.export}`)
+  }
+  for (const path of handed.deleted) {
+    if (read(path) !== undefined) {
+      problems.push(`${f.name}: stage 4 but ${path}, where the TypeScript lived, still exists`)
+    }
+  }
+  return problems
+}
+
 /** Stage 4's second shape: a dispatcher over the realm's installed core, and the TypeScript gone. */
 function checkRealm(
   f: PortedFunction,
@@ -432,6 +483,11 @@ function checkTsExport(f: PortedFunction, read: ReadFile): string[] {
     return declared.has(f.ts.export)
       ? []
       : [`${f.name}: ${f.ts.file} no longer exports a function named ${f.ts.export}`]
+  }
+  if (f.handed !== undefined) {
+    return f.stage === 4
+      ? checkHanded(f, f.handed, declared, read)
+      : [`${f.name}: a handed core is stage 4's shape, not stage ${f.stage}'s`]
   }
   if (f.realm !== undefined) {
     return f.stage === 4

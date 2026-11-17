@@ -1,22 +1,9 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import { type EdgesRecord, edgesAnswer, edgesInputs } from '../test-utils/query-oracle/edges.js'
-import {
-  type LabelPlacementRecord,
-  labelPlacementAnswer,
-  labelPlacementRecords,
-} from '../test-utils/query-oracle/label-placement.js'
-import {
-  type NodeSizeInput,
-  type NodeSizeRecord,
-  nodeSizeAnswer,
-  nodeSizeInputs,
-} from '../test-utils/query-oracle/node-size.js'
-import {
-  type OutlineContentBoxRecord,
-  outlineContentBoxAnswer,
-  outlineContentBoxRecords,
-} from '../test-utils/query-oracle/outline-content-box.js'
+import type { EdgesRecord } from '../test-utils/query-oracle/edges.js'
+import type { LabelPlacementRecord } from '../test-utils/query-oracle/label-placement.js'
+import type { NodeSizeRecord } from '../test-utils/query-oracle/node-size.js'
+import type { OutlineContentBoxRecord } from '../test-utils/query-oracle/outline-content-box.js'
 
 /**
  * The committed recordings of the layout pieces the web and the daemon call
@@ -32,37 +19,19 @@ import {
  * `placeCommentBubble`, the compose bubble's placement, is already recorded
  * with every input it takes in `comment-placement.jsonl`.
  *
- * Each record holds its inputs, so the freshness checks read no corpus.
- * Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node query-recorded`.
+ * Taken from the TypeScript before it was deleted (S18h) and frozen. Each
+ * record holds its inputs: canvas-render-rust's `query-switch.rust.test.ts`
+ * lays every one out again through the queries over the real core, and the
+ * crate replays them natively; this test holds them to what they must reach.
  */
-const RECORD = process.env.WHITEBOARD_RECORD_ORACLE === '1'
-
-function recording<T>(name: string, fresh: () => readonly T[]) {
+function recording<T>(name: string) {
   const file = new URL(`./${name}.jsonl`, import.meta.url)
-  if (RECORD)
-    writeFileSync(
-      file,
-      `${fresh()
-        .map((r) => JSON.stringify(r))
-        .join('\n')}\n`,
-    )
   const lines = readFileSync(file, 'utf8').trimEnd().split('\n')
   return { lines, records: lines.map((line) => JSON.parse(line) as T) }
 }
 
-/** The id of the first record whose re-computed answer is not the recorded line. */
-function firstMoved<T>(
-  { lines, records }: { lines: string[]; records: T[] },
-  answer: (record: T) => unknown,
-  name: (record: T, i: number) => string,
-): string | undefined {
-  const parted = records.findIndex((r, i) => JSON.stringify(answer(r)) !== lines[i])
-  return parted === -1 ? undefined : name(records[parted] as T, parted)
-}
-
 describe('the recorded drag-frame edge layer', () => {
-  const file = recording<EdgesRecord>('layout-spatial-edges', () => edgesInputs().map(edgesAnswer))
+  const file = recording<EdgesRecord>('layout-spatial-edges')
 
   it('reaches every corpus, both override kinds, labels and the library', () => {
     const ids = file.records.map((r) => r.id)
@@ -81,19 +50,10 @@ describe('the recorded drag-frame edge layer', () => {
     expect(file.records.some((r) => r.overrides.some(([, o]) => o.from !== undefined))).toBe(true)
     expect(file.records.some((r) => r.profile.library === true)).toBe(true)
   })
-
-  it('equals what the TypeScript answers today', () => {
-    const moved = firstMoved(
-      file,
-      ({ answer: _, ...input }) => edgesAnswer(input),
-      (r) => r.id,
-    )
-    expect(moved, 'the first frame the TypeScript no longer answers as recorded').toBeUndefined()
-  })
 })
 
 describe('the recorded node sizes', () => {
-  const file = recording<NodeSizeRecord>('node-size', () => nodeSizeInputs().map(nodeSizeAnswer))
+  const file = recording<NodeSizeRecord>('node-size')
 
   it('reaches both queries, both floors, the silhouettes and a fragment table', () => {
     const ids = file.records.map((r) => r.id)
@@ -108,19 +68,10 @@ describe('the recorded node sizes', () => {
       ),
     ).toBe(true)
   })
-
-  it('equals what the TypeScript answers today', () => {
-    const moved = firstMoved(
-      file,
-      ({ answer: _, ...input }) => nodeSizeAnswer(input as NodeSizeInput),
-      (r) => r.id,
-    )
-    expect(moved, 'the first size the TypeScript no longer answers as recorded').toBeUndefined()
-  })
 })
 
 describe('the recorded edge label placements', () => {
-  const file = recording<LabelPlacementRecord>('edge-label-placement', labelPlacementRecords)
+  const file = recording<LabelPlacementRecord>('edge-label-placement')
 
   it('reaches the boards, frame titles, slides and the hand-written edges', () => {
     const placed = file.records.flatMap((r) => (r.kind === 'place' ? [r] : []))
@@ -133,26 +84,13 @@ describe('the recorded edge label placements', () => {
     expect(titled.length, 'boards with a frame title').toBeGreaterThan(2)
     expect(placed.filter((r) => r.id.startsWith('hand/')).length).toBeGreaterThan(10)
   })
-
-  it('equals what the TypeScript answers today', () => {
-    const moved = firstMoved(file, labelPlacementAnswer, (r) => r.id)
-    expect(
-      moved,
-      'the first placement the TypeScript no longer answers as recorded',
-    ).toBeUndefined()
-  })
 })
 
 describe('the recorded outline content boxes', () => {
-  const file = recording<OutlineContentBoxRecord>('outline-content-box', outlineContentBoxRecords)
+  const file = recording<OutlineContentBoxRecord>('outline-content-box')
 
   it('reaches every silhouette, and some box that is not its own content box', () => {
     expect(new Set(file.records.map((r) => r.shape)).size).toBeGreaterThan(8)
     expect(file.records.some((r) => r.answer.join() !== r.box.join())).toBe(true)
-  })
-
-  it('equals what the TypeScript answers today', () => {
-    const moved = firstMoved(file, outlineContentBoxAnswer, (r, i) => `${r.shape}#${i}`)
-    expect(moved, 'the first box the TypeScript no longer answers as recorded').toBeUndefined()
   })
 })

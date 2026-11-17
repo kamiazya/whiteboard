@@ -256,7 +256,7 @@ function passages(): Board {
 }
 
 /** The text the recording's body parser throws on. */
-export const THROWING_BODY = '<<throw>>'
+const THROWING_BODY = '<<throw>>'
 
 /**
  * Settled threads whose bodies open with every block a first line is cut from

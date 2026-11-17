@@ -16,8 +16,8 @@
 // summed per pair key, enumeration-order-independent.
 
 import { compareNumbers, hypot } from '../../det-math.js'
+import { EDGE_JUMP_RADIUS_PX } from '../../edge-path/edge-flatten.js'
 import type { Point } from './edge-geometry.js'
-import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import type { RoutingBudget } from './routing-budget.js'
 
 /** Matches `edge-ink.ts`'s COST_QUANTUM discipline (quarter-pixel integers). */

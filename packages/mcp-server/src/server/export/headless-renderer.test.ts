@@ -44,17 +44,18 @@ async function importRenderer() {
     ...renderer,
     renderSpatialCanvasToPng: (
       canvas: Parameters<typeof renderer.renderSpatialCanvasToPng>[0],
-      options?: Parameters<typeof renderer.renderSpatialCanvasToPng>[2],
+      options: Parameters<typeof renderer.renderSpatialCanvasToPng>[2] = { core: testLayoutCore() },
     ) => renderer.renderSpatialCanvasToPng(canvas, NO_INSTALLED_FONTS, options),
     renderSpatialCanvasToSvg: (
       canvas: Parameters<typeof renderer.renderSpatialCanvasToSvg>[0],
-      options?: Parameters<typeof renderer.renderSpatialCanvasToSvg>[2],
+      options: Parameters<typeof renderer.renderSpatialCanvasToSvg>[2] = { core: testLayoutCore() },
     ) => renderer.renderSpatialCanvasToSvg(canvas, NO_INSTALLED_FONTS, options),
     prewarmHeadlessExporter: () => renderer.prewarmHeadlessExporter(NO_INSTALLED_FONTS),
   }
 }
 
 import { renderSceneToSvg, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { buildSpatialScene } from './headless-renderer.js'
 import { loadExportFonts } from './measure-text.js'
 import { NO_INSTALLED_FONTS } from './test-utils/no-installed-fonts.js'
@@ -92,6 +93,7 @@ describe('emphasis survives the whole export pipeline', () => {
         ],
         edges: [],
       },
+      testLayoutCore(),
       measure,
     )
     const svg = renderSceneToSvg(scene)
@@ -129,15 +131,21 @@ describe('headless-renderer', () => {
   it('renders a dark canvas background when theme="dark"', async () => {
     const { renderSpatialCanvasToPng, renderSpatialCanvasToSvg } = await importRenderer()
     const canvas = rectCanvas()
-    const light = await renderSpatialCanvasToPng(canvas, { theme: 'light' })
-    const dark = await renderSpatialCanvasToPng(canvas, { theme: 'dark' })
+    const light = await renderSpatialCanvasToPng(canvas, { core: testLayoutCore(), theme: 'light' })
+    const dark = await renderSpatialCanvasToPng(canvas, { core: testLayoutCore(), theme: 'dark' })
     // Same canvas rendered with two themes must not produce byte-identical PNGs.
     expect(dark.png.equals(light.png)).toBe(false)
 
     // The background reaches the SVG as a leading background rect — assert
     // the fill color directly rather than decoding rendered PNG pixels.
-    const lightSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'light' })
-    const darkSvg = await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })
+    const lightSvg = await renderSpatialCanvasToSvg(canvas, {
+      core: testLayoutCore(),
+      theme: 'light',
+    })
+    const darkSvg = await renderSpatialCanvasToSvg(canvas, {
+      core: testLayoutCore(),
+      theme: 'dark',
+    })
     expect(lightSvg.svg).toContain('fill="#ffffff"')
     expect(darkSvg.svg).toContain('fill="#0a0a0a"')
   })
@@ -145,9 +153,9 @@ describe('headless-renderer', () => {
   it('produces PNG dimensions proportional to scale', async () => {
     const { renderSpatialCanvasToPng } = await importRenderer()
     const canvas = rectCanvas()
-    const base = await renderSpatialCanvasToPng(canvas, { scale: 1 })
+    const base = await renderSpatialCanvasToPng(canvas, { core: testLayoutCore(), scale: 1 })
     for (const scale of [2, 3]) {
-      const scaled = await renderSpatialCanvasToPng(canvas, { scale })
+      const scaled = await renderSpatialCanvasToPng(canvas, { core: testLayoutCore(), scale })
       expect(Math.abs(scaled.width - Math.round(base.width * scale))).toBeLessThanOrEqual(1)
       expect(Math.abs(scaled.height - Math.round(base.height * scale))).toBeLessThanOrEqual(1)
     }
@@ -156,9 +164,9 @@ describe('headless-renderer', () => {
   it('degrades a degenerate scale to an unscaled render instead of throwing', async () => {
     const { renderSpatialCanvasToPng } = await importRenderer()
     const canvas = rectCanvas()
-    const base = await renderSpatialCanvasToPng(canvas, { scale: 1 })
+    const base = await renderSpatialCanvasToPng(canvas, { core: testLayoutCore(), scale: 1 })
     for (const scale of [0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
-      const degenerate = await renderSpatialCanvasToPng(canvas, { scale })
+      const degenerate = await renderSpatialCanvasToPng(canvas, { core: testLayoutCore(), scale })
       expect(degenerate.width).toBe(base.width)
       expect(degenerate.height).toBe(base.height)
     }
@@ -183,7 +191,9 @@ describe('headless-renderer', () => {
       ],
     }
     const { renderSpatialCanvasToSvg } = await importRenderer()
-    const darkSvg = (await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })).svg
+    const darkSvg = (
+      await renderSpatialCanvasToSvg(canvas, { core: testLayoutCore(), theme: 'dark' })
+    ).svg
     // Dark palette chrome (canvas-render SPATIAL_DARK_PALETTE).
     expect(darkSvg).toContain('stroke="#9BA3AF"')
     expect(darkSvg).toContain('fill="#E6E8EB"')
@@ -192,7 +202,9 @@ describe('headless-renderer', () => {
     expect(darkSvg).toMatch(/<svg [^>]*fill="#E6E8EB">/)
 
     // The light export is byte-stable: no root fill, light chrome only.
-    const lightSvg = (await renderSpatialCanvasToSvg(canvas, { theme: 'light' })).svg
+    const lightSvg = (
+      await renderSpatialCanvasToSvg(canvas, { core: testLayoutCore(), theme: 'light' })
+    ).svg
     expect(lightSvg).toContain('stroke="#737373"')
     expect(lightSvg).not.toMatch(/<svg [^>]*fill=/)
   })
@@ -257,8 +269,12 @@ describe('headless-renderer', () => {
       const [, , w, h] = match[1].split(' ').map(Number)
       return { w, h }
     }
-    const none = extractViewBox((await renderSpatialCanvasToSvg(canvas, { padding: 0 })).svg)
-    const fifty = extractViewBox((await renderSpatialCanvasToSvg(canvas, { padding: 50 })).svg)
+    const none = extractViewBox(
+      (await renderSpatialCanvasToSvg(canvas, { core: testLayoutCore(), padding: 0 })).svg,
+    )
+    const fifty = extractViewBox(
+      (await renderSpatialCanvasToSvg(canvas, { core: testLayoutCore(), padding: 50 })).svg,
+    )
     expect(fifty.w - none.w).toBe(100)
     expect(fifty.h - none.h).toBe(100)
   })
@@ -267,7 +283,7 @@ describe('headless-renderer', () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const canvas = rectCanvas()
     const byDefault = await renderSpatialCanvasToSvg(canvas)
-    const explicit = await renderSpatialCanvasToSvg(canvas, { padding: 10 })
+    const explicit = await renderSpatialCanvasToSvg(canvas, { core: testLayoutCore(), padding: 10 })
     expect(byDefault.svg).toBe(explicit.svg)
   })
 
@@ -414,7 +430,7 @@ describe('an export says which declared families it could not provide', () => {
 
   it('reports the mono chain a fenced block declares, while undrawable stays empty', async () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
-    const result = await renderSpatialCanvasToSvg(CODE_CANVAS, {})
+    const result = await renderSpatialCanvasToSvg(CODE_CANVAS, { core: testLayoutCore() })
     expect(result.undrawable).toEqual([])
     expect(result.unresolvedFamilies.join(' ')).toContain('ui-monospace')
   })
@@ -430,7 +446,9 @@ describe('an export says which declared families it could not provide', () => {
       nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 120, text: 'plain prose' })],
       edges: [],
     }
-    expect((await renderSpatialCanvasToSvg(plain, {})).unresolvedFamilies).toEqual([])
+    expect(
+      (await renderSpatialCanvasToSvg(plain, { core: testLayoutCore() })).unresolvedFamilies,
+    ).toEqual([])
   })
 })
 
@@ -451,7 +469,7 @@ describe('an export colours code the way the editor does', () => {
 
   it('paints keyword, string and comment runs from the light syntax palette', async () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
-    const { svg } = await renderSpatialCanvasToSvg(CODE_CANVAS, {})
+    const { svg } = await renderSpatialCanvasToSvg(CODE_CANVAS, { core: testLayoutCore() })
     const { syntax } = SPATIAL_LIGHT_PALETTE
     expect(svg).toContain(syntax.keyword)
     expect(svg).toContain(syntax.string)
@@ -460,7 +478,7 @@ describe('an export colours code the way the editor does', () => {
 
   it('splits one source line into several runs, which is what colour requires', async () => {
     const { renderSpatialCanvasToSvg } = await importRenderer()
-    const { svg } = await renderSpatialCanvasToSvg(CODE_CANVAS, {})
+    const { svg } = await renderSpatialCanvasToSvg(CODE_CANVAS, { core: testLayoutCore() })
     // Three source lines; colouring the middle one costs it extra <text>
     // elements, so a plain render cannot reach this count.
     expect(svg.match(/<text/g)?.length ?? 0).toBeGreaterThan(3)
@@ -474,7 +492,7 @@ describe('an export colours code the way the editor does', () => {
       ],
       edges: [],
     }
-    const { svg } = await renderSpatialCanvasToSvg(plain, {})
+    const { svg } = await renderSpatialCanvasToSvg(plain, { core: testLayoutCore() })
     expect(svg).not.toContain(SPATIAL_LIGHT_PALETTE.syntax.keyword)
   })
 })

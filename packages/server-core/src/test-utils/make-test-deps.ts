@@ -1,3 +1,4 @@
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { InMemoryDocumentIndex, InMemoryDocumentStore } from '@kamiazya/whiteboard-ports/test-utils'
 import type { ServerDeps } from '../server-deps.js'
@@ -49,6 +50,8 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     versions: unusedVersionHistory(),
     liveDocuments: unusedLiveDocuments(),
     workspaceDocuments: unusedWorkspaceDocuments(),
+    // The core every root hands, from the staged artifact.
+    layoutCore: async () => testLayoutCore(),
     // The bundled plugins, as a root composing no plugin set of its own gets.
     ...overrides,
     facetRegistry: overrides.facetRegistry ?? bundledFacetRegistry,

@@ -3,8 +3,8 @@
 import {
   constantRatioMeasureText,
   flattenDrawnEdgePath,
-  frameTitleObstacles,
   layoutSpatialCanvas,
+  queryLabelObstacles,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -181,7 +181,7 @@ describe('computeDragPreview — connecting past a frame title', () => {
   it('previews the line the drop draws', () => {
     // The titles as the editor reads them: off the scene it has committed.
     const committed = layoutSpatialCanvas(canvas, layout)
-    const frameTitles = frameTitleObstacles(canvas.nodes, committed.nodes)
+    const frameTitles = queryLabelObstacles(layout.core, canvas.nodes, committed.nodes).titles
     expect(frameTitles).toHaveLength(1)
     const preview = computeDragPreview(
       connectingState({ fromNodeId: 'above' }),

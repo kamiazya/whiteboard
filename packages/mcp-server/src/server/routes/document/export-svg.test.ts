@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   answerUnhandled,
   apiErrorBodySchema,
@@ -79,6 +80,7 @@ function makeApp(scope: StoreScope = testStoreScope(tempDir)) {
   app.route(
     '/',
     createDocumentSvgExportRouter({
+      layoutCore: async () => testLayoutCore(),
       liveDocuments: { exists: mockDocumentExists },
       scope,
     }),

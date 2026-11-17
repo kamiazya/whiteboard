@@ -1,4 +1,8 @@
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type {
+  MdastFlowContent,
+  MdastPhrasingContent,
+  MdastRoot,
+} from '@kamiazya/whiteboard-model/mdast'
 import {
   type FontDescriptor,
   isFullWidthCodePoint,
@@ -215,3 +219,27 @@ export const TEXT_WRAPPING_CORPUS: readonly CorpusCase[] = [
 
 /** Narrow on purpose — see the corpus comment above. */
 export const CORPUS_WIDTHS_PX: readonly number[] = [120, 200, 320]
+
+const inlineText = (node: MdastFlowContent | MdastPhrasingContent): string => {
+  switch (node.type) {
+    case 'text':
+      return node.value
+    case 'inlineCode':
+      return `\`${node.value}\``
+    case 'strong':
+      return `**${node.children.map(inlineText).join('')}**`
+    case 'paragraph':
+      return node.children.map(inlineText).join('')
+    case 'heading':
+      return `${'#'.repeat(node.depth)} ${node.children.map(inlineText).join('')}`
+    case 'list':
+      return node.children.map((item) => `- ${item.children.map(inlineText).join('')}`).join('\n')
+    default:
+      throw new Error(`text-wrapping-corpus: the corpus grew a ${node.type}`)
+  }
+}
+
+/** A wrapping-corpus root as the markdown a text node would hold. */
+/** A case's tree as the markdown a text node holds, for a surface that parses its own body. */
+export const corpusMarkdown = (root: MdastRoot): string =>
+  root.children.map(inlineText).join('\n\n')

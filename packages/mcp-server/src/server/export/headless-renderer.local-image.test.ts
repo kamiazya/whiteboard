@@ -10,6 +10,7 @@
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Resvg } from '@resvg/resvg-js'
@@ -63,7 +64,9 @@ describe('a markdown image naming a path on the daemon host', () => {
   })
 
   it('is not drawn into the PNG export', async () => {
-    const result = await renderSpatialCanvasToPng(canvasNaming(imagePath), fontsDir)
+    const result = await renderSpatialCanvasToPng(canvasNaming(imagePath), fontsDir, {
+      core: testLayoutCore(),
+    })
     expect(redPixels(result.png, result.width, result.height)).toBe(0)
   })
 
@@ -77,12 +80,15 @@ describe('a markdown image naming a path on the daemon host', () => {
     const result = await renderSpatialCanvasToPng(
       canvasNaming(`data:image/svg+xml;base64,${nested}`),
       fontsDir,
+      { core: testLayoutCore() },
     )
     expect(redPixels(result.png, result.width, result.height)).toBe(0)
   })
 
   it('is not emitted as an image href in the SVG export', async () => {
-    const { svg } = await renderSpatialCanvasToSvg(canvasNaming(imagePath), fontsDir)
+    const { svg } = await renderSpatialCanvasToSvg(canvasNaming(imagePath), fontsDir, {
+      core: testLayoutCore(),
+    })
     expect(svg).not.toContain('<image href="/')
     expect(svg).not.toContain(imagePath)
   })

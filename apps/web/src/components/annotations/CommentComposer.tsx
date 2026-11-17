@@ -115,7 +115,7 @@ export function CommentComposer({
       className={cn(
         'w-full rounded border bg-background',
         // `text-sm`, matching what a comment's prose is DRAWN at on a dense
-        // surface (`MARKDOWN_THEME_COMPACT`, 14px). At `text-xs` the reply
+        // surface (the core's compact theme, 14px). At `text-xs` the reply
         // you were typing was smaller than the reply once sent.
         compact ? 'text-sm' : 'text-inherit',
         className,

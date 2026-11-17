@@ -9,6 +9,7 @@ import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboa
 import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
@@ -29,10 +30,10 @@ const canvasIn = (theme: string | undefined): SpatialCanvas => ({
   ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
 })
 
-function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
+function options(over?: Partial<Omit<SpatialLayoutOptions, 'core'>>): SpatialLayoutOptions {
   return {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: () => ({ type: 'root', children: [] }),
     appearance: createSpatialTheme({ mode: 'dark' }),
     ...over,
   }

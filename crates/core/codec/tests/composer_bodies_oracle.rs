@@ -25,7 +25,7 @@ const CANVAS: &str =
 const COMMENTS: &str =
     include_str!("../../../../packages/canvas-render/src/oracle/compose-comments.jsonl");
 
-/// `compose-node-oracle/corpus.ts`'s `resolveAlias`.
+/// the TypeScript compose-node recorder's corpus's `resolveAlias`.
 const NODE_ALIASES: [(&str, &str); 2] =
     [("doc", "01HZX3Q8K9V2M4N5P6R7S8T9WA"), ("board", "01HZX3Q8K9V2M4N5P6R7S8T9WB")];
 

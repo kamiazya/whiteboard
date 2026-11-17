@@ -92,10 +92,9 @@ export interface HeadlessExportOptions {
   tagLibrary?: TagLibrary
   /**
    * The Rust core (`ServerDeps.layoutCore`, resolved by the caller), so a
-   * file export is laid out by whatever lays out `wb_scene_render`. Absent
-   * (a test composition), the layout is the TypeScript composer's.
+   * file export is laid out by whatever lays out `wb_scene_render`.
    */
-  core?: LayoutCore
+  core: LayoutCore
 }
 
 const DEFAULT_PADDING_PX = 10
@@ -215,16 +214,16 @@ function onDegrade(event: SpatialLayoutDegradation): void {
  */
 export function buildSpatialScene(
   canvas: SpatialCanvas,
+  core: LayoutCore,
   measure: MeasureText,
   mode: ExportThemeMode = 'light',
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
   tagLibrary?: TagLibrary,
-  core?: LayoutCore,
 ): Scene {
   return layoutSpatialCanvas(canvas, {
     ...exportLayoutOptions(measure, mode, style, fontAvailable, tagLibrary),
-    ...(core === undefined ? {} : { core }),
+    core,
   })
 }
 
@@ -235,7 +234,7 @@ function exportLayoutOptions(
   style?: SpatialRenderStyle,
   fontAvailable?: (family: string) => boolean,
   tagLibrary?: TagLibrary,
-): SpatialLayoutOptions {
+): Omit<SpatialLayoutOptions, 'core'> {
   return {
     measure,
     appearance: EXPORT_APPEARANCE_BY_MODE[mode],
@@ -266,12 +265,12 @@ function buildSvg(
   const background = palette.surface
   const scene = buildSpatialScene(
     canvas,
+    options.core,
     measure,
     mode,
     options.style,
     fontAvailable,
     options.tagLibrary,
-    options.core,
   )
   const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
@@ -464,7 +463,7 @@ function getHeadlessExporter(fontsDir: string): Promise<HeadlessExporter> {
 export async function renderSpatialCanvasToPng(
   canvas: SpatialCanvas,
   fontsDir: string,
-  options: HeadlessExportOptions = {},
+  options: HeadlessExportOptions,
 ): Promise<HeadlessExportResult> {
   const exporter = await getHeadlessExporter(fontsDir)
   return exporter.render(canvas, options)
@@ -473,7 +472,7 @@ export async function renderSpatialCanvasToPng(
 export async function renderSpatialCanvasToSvg(
   canvas: SpatialCanvas,
   fontsDir: string,
-  options: HeadlessExportOptions = {},
+  options: HeadlessExportOptions,
 ): Promise<HeadlessSvgExportResult> {
   const exporter = await getHeadlessExporter(fontsDir)
   return exporter.renderSvg(canvas, options)

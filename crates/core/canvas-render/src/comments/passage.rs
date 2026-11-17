@@ -1,5 +1,5 @@
 //! The annotation layer's projection onto a text node's laid-out text
-//! (`layout/passage-highlight.ts`): the passage a thread is about, highlighted
+//! (the TypeScript passage highlight): the passage a thread is about, highlighted
 //! behind the words it quotes.
 //!
 //! The passage is re-found in the RENDERED text rather than mapped from its
@@ -199,7 +199,7 @@ fn source_occurrence(source: &PassageSource<'_>, quote: &TextQuote) -> Option<So
     Some(SourceOccurrence { index, count: starts.len() })
 }
 
-/// Where the quote sits in the rendered text (`findPassage`): the
+/// Where the quote sits in the rendered text (`find_passage`): the
 /// same-numbered occurrence as the one the model resolves in the source, while
 /// rendering kept every occurrence (one inside an HTML comment it does not);
 /// otherwise the best-scored by remembered context among those nearest that

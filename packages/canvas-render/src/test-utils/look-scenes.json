@@ -1,0 +1,193 @@
+{
+  "sketch": {
+    "nodes": [
+      {
+        "kind": "shape",
+        "id": "frame",
+        "bbox": { "x": 0, "y": 0, "w": 260, "h": 200 },
+        "radius": 2,
+        "appearance": {
+          "fill": "none",
+          "stroke": "#3d3d3d",
+          "strokeWidth": 1.4,
+          "strokeDasharray": "7 5"
+        },
+        "ink": { "style": "sketch", "seed": 3523899814 }
+      },
+      {
+        "kind": "shape",
+        "id": "preset",
+        "bbox": { "x": 40, "y": 60, "w": 160, "h": 80 },
+        "radius": 2,
+        "appearance": { "fill": "#cffafe", "stroke": "#0891b2", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 4111477022, "fill": "hatch" }
+      },
+      {
+        "kind": "shape",
+        "id": "plain",
+        "bbox": { "x": 400, "y": 60, "w": 160, "h": 80 },
+        "radius": 2,
+        "appearance": { "fill": "#ffffff", "stroke": "#3d3d3d", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 3552460647 }
+      },
+      {
+        "kind": "shape",
+        "id": "sink",
+        "bbox": { "x": 40, "y": 320, "w": 160, "h": 80 },
+        "radius": 2,
+        "appearance": { "fill": "#ffffff", "stroke": "#3d3d3d", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 298998226 }
+      },
+      {
+        "kind": "shape",
+        "id": "oval",
+        "bbox": { "x": 400, "y": 320, "w": 160, "h": 80 },
+        "radius": 2,
+        "shape": "visual.ellipse",
+        "appearance": { "fill": "#ffffff", "stroke": "#3d3d3d", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 1206745685 }
+      },
+      {
+        "kind": "edge",
+        "id": "across",
+        "path": [{ "x": 200, "y": 100 }, { "x": 400, "y": 100 }],
+        "fromSide": "right",
+        "toSide": "left",
+        "fromEnd": "none",
+        "toEnd": "arrow",
+        "appearance": { "stroke": "#3d3d3d", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 3043475748 }
+      },
+      {
+        "kind": "edge",
+        "id": "falling",
+        "path": [{ "x": 120, "y": 140 }, { "x": 480, "y": 320 }],
+        "fromSide": "bottom",
+        "toSide": "top",
+        "fromEnd": "none",
+        "toEnd": "arrow",
+        "appearance": { "stroke": "#3d3d3d", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 1789023592 }
+      },
+      {
+        "kind": "edge",
+        "id": "rising",
+        "path": [{ "x": 120, "y": 320 }, { "x": 480, "y": 140 }],
+        "fromSide": "top",
+        "toSide": "bottom",
+        "fromEnd": "none",
+        "toEnd": "arrow",
+        "appearance": { "stroke": "#3d3d3d", "strokeWidth": 1.4 },
+        "ink": { "style": "sketch", "seed": 1838359547 },
+        "jumps": [{ "segment": 0, "x": 300, "y": 230 }]
+      }
+    ]
+  },
+  "neon": {
+    "nodes": [
+      {
+        "kind": "shape",
+        "id": "frame",
+        "bbox": { "x": 0, "y": 0, "w": 260, "h": 200 },
+        "radius": 6,
+        "appearance": { "fill": "none", "stroke": "#64748b", "strokeWidth": 1.8 }
+      },
+      {
+        "kind": "shape",
+        "id": "preset",
+        "bbox": { "x": 40, "y": 60, "w": 160, "h": 80 },
+        "radius": 6,
+        "appearance": {
+          "fill": "#062a33",
+          "stroke": "#67e8f9",
+          "strokeWidth": 1.8,
+          "glow": { "radiusPx": 6 }
+        }
+      },
+      {
+        "kind": "shape",
+        "id": "plain",
+        "bbox": { "x": 400, "y": 60, "w": 160, "h": 80 },
+        "radius": 6,
+        "appearance": {
+          "fill": "#0b1220",
+          "stroke": "#7dd3fc",
+          "strokeWidth": 1.8,
+          "glow": { "radiusPx": 6 }
+        }
+      },
+      {
+        "kind": "shape",
+        "id": "sink",
+        "bbox": { "x": 40, "y": 320, "w": 160, "h": 80 },
+        "radius": 6,
+        "appearance": {
+          "fill": "#0b1220",
+          "stroke": "#7dd3fc",
+          "strokeWidth": 1.8,
+          "glow": { "radiusPx": 6 }
+        }
+      },
+      {
+        "kind": "shape",
+        "id": "oval",
+        "bbox": { "x": 400, "y": 320, "w": 160, "h": 80 },
+        "radius": 6,
+        "shape": "visual.ellipse",
+        "appearance": {
+          "fill": "#0b1220",
+          "stroke": "#7dd3fc",
+          "strokeWidth": 1.8,
+          "glow": { "radiusPx": 6 }
+        }
+      },
+      {
+        "kind": "edge",
+        "id": "across",
+        "path": [
+          { "x": 93.33333333333333, "y": 140 },
+          { "x": 93.33333333333333, "y": 172 },
+          { "x": 453.3333333333333, "y": 172 },
+          { "x": 453.3333333333333, "y": 140 }
+        ],
+        "fromSide": "bottom",
+        "toSide": "bottom",
+        "fromEnd": "none",
+        "toEnd": "arrow",
+        "appearance": { "stroke": "#38bdf8", "strokeWidth": 1.8, "glow": { "radiusPx": 6 } }
+      },
+      {
+        "kind": "edge",
+        "id": "falling",
+        "path": [
+          { "x": 146.66666666666666, "y": 140 },
+          { "x": 146.66666666666666, "y": 160 },
+          { "x": 480, "y": 160 },
+          { "x": 480, "y": 320 }
+        ],
+        "fromSide": "bottom",
+        "toSide": "top",
+        "fromEnd": "none",
+        "toEnd": "arrow",
+        "appearance": { "stroke": "#38bdf8", "strokeWidth": 1.8, "glow": { "radiusPx": 6 } },
+        "jumps": [{ "segment": 1, "x": 453.33333333333326, "y": 160 }]
+      },
+      {
+        "kind": "edge",
+        "id": "rising",
+        "path": [
+          { "x": 120, "y": 320 },
+          { "x": 120, "y": 300 },
+          { "x": 506.66666666666663, "y": 300 },
+          { "x": 506.66666666666663, "y": 140 }
+        ],
+        "fromSide": "top",
+        "toSide": "bottom",
+        "fromEnd": "none",
+        "toEnd": "arrow",
+        "appearance": { "stroke": "#38bdf8", "strokeWidth": 1.8, "glow": { "radiusPx": 6 } },
+        "jumps": [{ "segment": 1, "x": 480.00000000000006, "y": 300 }]
+      }
+    ]
+  }
+}

@@ -48,7 +48,7 @@ switch in canvas-render), #2176 (daemon), #2177 (web editor).
 |---|---|
 | Port shape | Structure-preserving. The Rust files follow the TypeScript modules one to one (`edge_router.rs` / `edge-router.ts`, `spatial_edges.rs` / `spatial-edges.ts`, ...), so a reviewer reads them side by side; `js_map.rs` exists to keep the TypeScript's `Map` iteration order. |
 | TypeScript deletion deadline | The release after the one in which the switch first defaults to `rust`. No later date is requested. |
-| Rollback | None since ADR-0054 step 7's S18g, which retired `WHITEBOARD_CORE` and `VITE_WHITEBOARD_CORE` with the rest of the layout's switches (q40: delete once migrated): the core routes on every root, and the TypeScript routing remains only as the composer canvas-render's own tests reach, until S18h3 deletes it. While it existed, the rollback was `WHITEBOARD_CORE=ts` (daemon, read at start) or a web build with `VITE_WHITEBOARD_CORE=ts`. |
+| Rollback | None since ADR-0054 step 7's S18g, which retired `WHITEBOARD_CORE` and `VITE_WHITEBOARD_CORE` with the rest of the layout's switches (q40: delete once migrated): the core routes on every root. S18h3 kept the TypeScript routing rather than deleting it: the web editor's connect preview runs it in a realm that holds no core, and canvas-render's route-layout differential holds the core to it, so `routeLayout` stays at stage 2. While it existed, the rollback was `WHITEBOARD_CORE=ts` (daemon, read at start) or a web build with `VITE_WHITEBOARD_CORE=ts`. |
 | Freeze lift | `packages/canvas-render/src/layout/edges` is frozen for feature work until the switch is `rust` and the TypeScript is deleted; after that, features go to Rust only (ADR-0054 decision 23). |
 
 ## Boundary cost (QR-22b)

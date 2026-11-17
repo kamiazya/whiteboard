@@ -22,7 +22,7 @@ import type { RoutingBudget } from './types.js'
  * The shim over the artifact `stage:wasm` copied into artifacts/: it loads
  * from bytes and from a compiled module, agrees with the artifact on the
  * ABI, and calls nothing the artifact does not export. What it routes is
- * held to the TypeScript composer by canvas-render's route-layout
+ * held to the TypeScript edge routing by canvas-render's route-layout
  * differential, which goes through this shim.
  */
 

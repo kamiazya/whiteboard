@@ -10,6 +10,7 @@
 
 import {
   type CanvasLayoutCore,
+  describeMeasure,
   type LayoutCore,
   layoutSpatialCanvasWithAnchors,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -31,26 +32,63 @@ async function loadRealCore(): Promise<{ core: WebCore } | { failure: unknown }>
 }
 const real = await loadRealCore()
 
-/** `board` laid out through the core and by the TypeScript composer, the core's answers counted. */
+/**
+ * `board` laid out through the core with the browser's measurer, named `host`,
+ * so the core asks it mid-layout: the core's answers counted, and every
+ * advance the measurer answered recorded by the text it was asked for.
+ */
 function lay(core: WebCore, board: WebLayoutBoard) {
   let answered = 0
   const layout: CanvasLayoutCore = {
     layoutSpatialCanvas(request, highlight, measure) {
       const answer = core.layoutSpatialCanvas(request, highlight, measure)
-      if (!('declined' in answer)) answered += 1
+      if (!('refused' in answer)) answered += 1
       return answer
     },
   }
   const switched: LayoutCore = { routing: core, layout, markdown: core, query: core }
-  const measure = createBrowserMeasureText()
-  const options = {
+  const browser = createBrowserMeasureText()
+  const advances = new Map<string, Set<number>>()
+  const measure = describeMeasure(
+    (text, font) => {
+      const metrics = browser(text, font)
+      const seen = advances.get(text) ?? new Set<number>()
+      seen.add(metrics.advanceWidth)
+      advances.set(text, seen)
+      return metrics
+    },
+    { kind: 'host' },
+  )
+  const laid = layoutSpatialCanvasWithAnchors(board.canvas, {
     ...editorLayoutBase({ measure }),
     threads: board.threads,
     proposals: board.proposals,
+    core: switched,
+  })
+  return { laid, advances, answered }
+}
+
+/** Every text run in `nodes`, at any depth. */
+function textRuns(nodes: readonly unknown[]): { text: string; w: number }[] {
+  const runs: { text: string; w: number }[] = []
+  const visit = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      for (const item of value) visit(item)
+      return
+    }
+    if (typeof value !== 'object' || value === null) return
+    const node = value as { kind?: unknown; text?: unknown; bbox?: { w?: unknown } }
+    if (
+      node.kind === 'textRun' &&
+      typeof node.text === 'string' &&
+      typeof node.bbox?.w === 'number'
+    ) {
+      runs.push({ text: node.text, w: node.bbox.w })
+    }
+    for (const child of Object.values(value)) visit(child)
   }
-  const laid = layoutSpatialCanvasWithAnchors(board.canvas, { ...options, core: switched })
-  const reference = layoutSpatialCanvasWithAnchors(board.canvas, { ...options, core: undefined })
-  return { laid, reference, answered }
+  visit(nodes)
+  return runs
 }
 
 describe('the whole layout measured by the browser through the core', () => {
@@ -58,18 +96,30 @@ describe('the whole layout measured by the browser through the core', () => {
     if ('failure' in real) throw real.failure
   })
 
-  it.skipIf('failure' in real)('answers every editor board as the TypeScript does', async () => {
+  // The TypeScript layout this was compared against is gone (S18h), so what is
+  // left to hold is that the browser's answers ARE the geometry: a run the core
+  // measured whole is as wide as the browser said that text is. A host import
+  // that fell back to an estimate, or lost the answer crossing back, draws
+  // runs at widths the browser never answered.
+  it.skipIf('failure' in real)('draws each board at the widths the browser answered', async () => {
     if ('failure' in real) return
     await ensureViewerFontLoaded()
     const boards = webLayoutBoards()
+    let matched = 0
     for (const board of boards) {
       const rust = lay(real.core, board)
       expect(rust.answered, board.name).toBe(1)
-      expect(rust.laid.scene, board.name).toEqual(rust.reference.scene)
-      expect(Object.fromEntries(rust.laid.anchors), board.name).toEqual(
-        Object.fromEntries(rust.reference.anchors),
-      )
+      expect(rust.advances.size, board.name).toBeGreaterThan(0)
+      for (const run of textRuns(rust.laid.scene.nodes)) {
+        const answered = rust.advances.get(run.text)
+        if (answered === undefined) continue
+        const closest = Math.min(...[...answered].map((w) => Math.abs(w - run.w)))
+        expect(closest, `${board.name}: ${JSON.stringify(run.text)}`).toBeLessThan(1e-6)
+        matched += 1
+      }
     }
     expect(boards.length).toBeGreaterThanOrEqual(8)
+    // Enough runs measured whole that the check above is not vacuous.
+    expect(matched).toBeGreaterThan(boards.length)
   })
 })

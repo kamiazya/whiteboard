@@ -14,6 +14,7 @@ import { overlayReferences, referenceSeamsFromWire, referenceWire } from '../ref
 import { type LayoutRefusal, refusalScene } from '../refusal.js'
 import { fakeLayoutCore } from '../test-utils/fake-layout-core.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { CoreUnaskable, canvasLayoutRequest } from './canvas-switch.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './layout-options.js'
@@ -40,7 +41,7 @@ const canvas: SpatialCanvas = {
   edges: [{ id: 'e1', from: { node: 'a' }, to: { node: 'b' } }],
 }
 
-const base: SpatialLayoutOptions = { measure, appearance }
+const base: SpatialLayoutOptions = { core: testLayoutCore(), measure, appearance }
 const reference = layoutSpatialCanvasWithAnchors(canvas, base)
 
 type Answering = CanvasLayoutCore['layoutSpatialCanvas']
@@ -157,8 +158,8 @@ describe('the whole layout through the core', () => {
   it('throws for options no request can carry, asking the core nothing', () => {
     const { core, requests } = coreOf(agreeing)
     expect(() =>
-      layoutSpatialCanvasWithAnchors(canvas, { ...base, core, renderMath: () => undefined }),
-    ).toThrow(new CoreUnaskable('seam:renderMath'))
+      layoutSpatialCanvasWithAnchors(canvas, { ...base, core, appearance: { ...appearance } }),
+    ).toThrow(new CoreUnaskable('appearance'))
     expect(requests).toEqual([])
   })
 
@@ -278,20 +279,9 @@ describe('what the core can be handed', () => {
     })
   })
 
-  it('names why it cannot hand over a function, a choice the core does not make, or an unnamed value', () => {
+  it('names why it cannot hand over an unnamed appearance or a bundle not rebuilt from a wire', () => {
     const skipped: [Partial<SpatialLayoutOptions>, string][] = [
-      [{ measure: () => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }) }, 'measure'],
       [{ appearance: { ...appearance } }, 'appearance'],
-      [{ parseBody: () => ({ type: 'root', children: [] }) }, 'seam:parseBody'],
-      [{ renderContributions: [] }, 'seam:renderContributions'],
-      [{ renderMath: () => undefined }, 'seam:renderMath'],
-      [{ renderDiagram: () => undefined }, 'seam:renderDiagram'],
-      [{ resolveEmbed: () => undefined }, 'seam:resolveEmbed'],
-      [{ resolveTitle: () => undefined }, 'seam:resolveTitle'],
-      [{ resolveAlias: () => null }, 'seam:resolveAlias'],
-      [{ resolveReference: () => undefined }, 'seam:resolveReference'],
-      [{ nestedLayoutBudget: { remaining: 1 } as never }, 'seam:nestedLayoutBudget'],
-      [{ highlightCode: () => undefined }, 'highlighter'],
       [{ references: referenceSeams(new Map()) }, 'references'],
     ]
     for (const [options, reason] of skipped) {
@@ -332,16 +322,10 @@ describe('what the core can be handed', () => {
     )
   })
 
-  it('names the first reason when several hold, the measurer before the rest', () => {
+  it('names the first reason when several hold, the appearance before the references', () => {
     expect(
-      request({
-        measure: () => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 }),
-        style: 'document',
-      }),
-    ).toEqual({ skip: 'measure' })
-    expect(request({ renderMath: () => undefined, style: 'document' })).toEqual({
-      skip: 'seam:renderMath',
-    })
+      request({ appearance: { ...appearance }, references: referenceSeams(new Map()) }),
+    ).toEqual({ skip: 'appearance' })
   })
 
   it('carries a wire-built reference bundle, unless an extra carries content', () => {
@@ -362,21 +346,13 @@ describe('what the core can be handed', () => {
     }
   })
 
-  it("hands a surface's labels and dangling marks over as extras, where a composed function was skipped", () => {
+  it("hands a surface's labels and dangling marks over as extras", () => {
     const withFiles = {
       ...canvas,
       nodes: [...canvas.nodes, fileNode('fa', 'doc-a'), fileNode('fg', 'doc-gone')],
     }
     const wire = referenceWire(new Map([['doc-a', { name: 'Stored' }]]))
     const chrome = { labels: new Map([['doc-a', 'Alpha']]), missing: new Set(['doc-gone']) }
-    const seams = referenceSeamsFromWire(wire)
-    const composed = (ref: string) => {
-      const label = chrome.labels.get(ref)
-      return { ...seams.resolveReference(ref), ...(label === undefined ? {} : { label }) }
-    }
-    expect(askOf(withFiles, { references: seams, resolveReference: composed })).toEqual({
-      skip: 'seam:resolveReference',
-    })
     const overlaid = overlayReferences(wire, chrome)
     const asked = canvasLayoutRequest(withFiles, {
       ...base,
@@ -446,6 +422,18 @@ describe('what the core can be handed', () => {
       kind: 'ratio',
     })
     expect(request({ measure: named })).toMatchObject({ measure: { kind: 'ratio' } })
+  })
+
+  it('names a measurer nobody named as the host: the core asks the function itself', () => {
+    const unnamed = () => ({ advanceWidth: 1, ascent: 1, descent: 0, lineGap: 0 })
+    expect(request({ measure: unnamed, style: 'document' })).toMatchObject({
+      measure: { kind: 'host' },
+      style: 'document',
+    })
+    const { core, requests, measurers } = coreOf(agreeing)
+    layoutSpatialCanvasWithAnchors(canvas, { ...base, measure: unnamed, core })
+    expect(requests).toMatchObject([{ measure: { kind: 'host' } }])
+    expect(measurers).toEqual([unnamed])
   })
 
   it('hands the core the measurer a host-named request leaves it to ask', () => {

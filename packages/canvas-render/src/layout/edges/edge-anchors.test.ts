@@ -8,7 +8,9 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboar
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 import { routeEdge } from './edge-router.js'
 import { assignEdgeAnchors } from './spatial-edges.js'
@@ -23,15 +25,10 @@ const node = (id: string, x: number, y: number): SpatialNode =>
     text: id,
   })
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({}),
-  resolveEdge: () => ({}),
-  resolveLabel: () => ({}),
-}
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 const layoutOptions = {
   measure: createFakeMeasure(),
-  parseBody: () => ({ type: 'root' as const, children: [] }),
   appearance,
 }
 
@@ -159,7 +156,7 @@ describe('anchor fan-out through layoutSpatialCanvas', () => {
         },
       ],
     }
-    const scene = layoutSpatialCanvas(canvas, layoutOptions)
+    const scene = layoutSpatialCanvas(canvas, { ...layoutOptions, core: testLayoutCore() })
     const edgeNodes = scene.nodes.filter((n) => n.kind === 'edge')
     expect(edgeNodes).toHaveLength(2)
     const [r1, r2] = edgeNodes

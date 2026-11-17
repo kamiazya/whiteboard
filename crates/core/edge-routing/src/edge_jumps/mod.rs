@@ -1,4 +1,4 @@
-//! Line jumps (canvas-render's `layout/edges/edge-jumps.ts`): where one routed
+//! Line jumps (ported from canvas-render's deleted TypeScript): where one routed
 //! edge crosses an EARLIER one in document order, the later edge, the one
 //! painted on top, hops over it. Pure segment-pair intersection over
 //! already-routed polylines; rounded corners re-use the same points, since a

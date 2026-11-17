@@ -29,7 +29,7 @@ import type { TagLibrary } from '@kamiazya/whiteboard-plugin-visual'
 import { useEffect, useMemo, useRef } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
-import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import { editorLayoutBase, renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -68,9 +68,7 @@ function gestureMeasure(page: MeasureText): MeasureText {
     metricsCache.set(key, metrics)
     return metrics
   }
-  const spec = measureSpecOf(page)
-  if (spec !== undefined) describeMeasure(measure, spec)
-  return measure
+  return describeMeasure(measure, measureSpecOf(page))
 }
 
 /**
@@ -80,7 +78,7 @@ function gestureMeasure(page: MeasureText): MeasureText {
  */
 function useFrameTitles(nodes: SpatialCanvas['nodes'], committed: Scene) {
   return useMemo(
-    () => queryLabelObstacles(currentLayoutCore(), nodes, committed.nodes).titles,
+    () => queryLabelObstacles(requireLayoutCore(), nodes, committed.nodes).titles,
     [nodes, committed],
   )
 }

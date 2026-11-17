@@ -1,4 +1,4 @@
-//! A markdown DOCUMENT laid out (`layout/markdown-body.ts`'s
+//! A markdown DOCUMENT laid out (the TypeScript markdown-body layout's
 //! `layoutMdastBlocks`): the typesetter at the document theme, with a body's
 //! `![[canvas]]` drawn by the composer as a whole board, its legend under it,
 //! and one nested-layout account shared by the note and every canvas it

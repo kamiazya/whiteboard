@@ -5,23 +5,16 @@
 // could see "these two overlap" and had no way to say which two.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneDigest } from './scene-digest.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
+import { testLayoutCore } from './test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from './theme/spatial-appearance.js'
+import { createSpatialTheme } from './theme/spatial-theme.js'
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({}),
-  resolveEdge: () => ({}),
-  resolveLabel: () => ({ fill: '#000', fontFamily: 'sans-serif' }),
-}
-const parseBody = (text: string): MdastRoot => ({
-  type: 'root',
-  children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-})
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 /** Fixed coordinates per id, so removing a node moves nothing that remains. */
 const PLACES: Record<string, { x: number; y: number }> = {
@@ -48,8 +41,8 @@ const canvasWith = (ids: readonly string[]): SpatialCanvas =>
 const digestOf = (canvas: SpatialCanvas) =>
   sceneDigest(
     layoutSpatialCanvas(canvas, {
+      core: testLayoutCore(),
       measure: createFakeMeasure(),
-      parseBody,
       appearance,
       geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
     }),

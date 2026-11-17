@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { afterAll, describe, expect, it } from 'vitest'
@@ -89,8 +90,10 @@ describe.runIf(built)('a family the user installed, under the Rust layout', () =
     expect(answers).toEqual(['laid out', 'laid out'])
     expect(faces[0]).toEqual([...ROBOTO, 'Yomogi false false'])
     expect(svg.svg).toContain('font-family="Yomogi"')
-    expect(svg.svg).toBe((await renderSpatialCanvasToSvg(sketched, fontsDir, options)).svg)
-    expect(png.png.equals((await renderSpatialCanvasToPng(sketched, fontsDir, options)).png)).toBe(
+    // The same export through a core that records nothing: the recording wrapper changes no byte.
+    const plain = { ...options, core: testLayoutCore() }
+    expect(svg.svg).toBe((await renderSpatialCanvasToSvg(sketched, fontsDir, plain)).svg)
+    expect(png.png.equals((await renderSpatialCanvasToPng(sketched, fontsDir, plain)).png)).toBe(
       true,
     )
   })

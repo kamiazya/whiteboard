@@ -22,6 +22,7 @@ vi.mock('@resvg/resvg-js', async (importOriginal) => {
   return { ...actual, Resvg: RecordingResvg }
 })
 
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { boundedDataImages } from './data-image-budget.js'
 import { EXPORT_MAX_PIXELS } from './export-budget.js'
 import { renderSpatialCanvasToPng } from './headless-renderer.js'
@@ -134,7 +135,9 @@ afterEach(() => {
 describe('a data: image whose header declares more pixels than the export budget', () => {
   it('refuses a JPEG declaring 65535x65535 before resvg is constructed', async () => {
     const bomb = dataUrl('image/jpeg', jpegHeader(65535, 65535))
-    await expect(renderSpatialCanvasToPng(canvasNaming(bomb), FONTS_DIR)).rejects.toMatchObject({
+    await expect(
+      renderSpatialCanvasToPng(canvasNaming(bomb), FONTS_DIR, { core: testLayoutCore() }),
+    ).rejects.toMatchObject({
       name: 'ExportTooLargeError',
     })
     expect(constructed.svgs).toHaveLength(0)
@@ -142,7 +145,9 @@ describe('a data: image whose header declares more pixels than the export budget
 
   it('refuses a PNG declaring 16384x16384 before resvg is constructed', async () => {
     const bomb = dataUrl('image/png', pngHeader(16384, 16384))
-    await expect(renderSpatialCanvasToPng(canvasNaming(bomb), FONTS_DIR)).rejects.toMatchObject({
+    await expect(
+      renderSpatialCanvasToPng(canvasNaming(bomb), FONTS_DIR, { core: testLayoutCore() }),
+    ).rejects.toMatchObject({
       name: 'ExportTooLargeError',
     })
     expect(constructed.svgs).toHaveLength(0)
@@ -269,13 +274,17 @@ describe('a data: image the exporter cannot size', () => {
   })
 
   it('hands resvg a readable image unchanged', async () => {
-    await renderSpatialCanvasToPng(canvasNaming(ONE_PIXEL_PNG), FONTS_DIR)
+    await renderSpatialCanvasToPng(canvasNaming(ONE_PIXEL_PNG), FONTS_DIR, {
+      core: testLayoutCore(),
+    })
     expect(constructed.svgs).toHaveLength(1)
     expect(constructed.svgs[0]).toContain(`href="${ONE_PIXEL_PNG}"`)
   })
 
   it('hands resvg no unreadable image', async () => {
-    await renderSpatialCanvasToPng(canvasNaming('data:image/png;base64,AA'), FONTS_DIR)
+    await renderSpatialCanvasToPng(canvasNaming('data:image/png;base64,AA'), FONTS_DIR, {
+      core: testLayoutCore(),
+    })
     expect(constructed.svgs).toHaveLength(1)
     expect(constructed.svgs[0]).toContain('<image')
     expect(constructed.svgs[0]).not.toContain('data:image/png;base64,AA')
@@ -415,7 +424,7 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
       '<mask id="m"><rect width="10000000" height="10000000" fill="white"/></mask><g mask="url(#m)"><rect width="10000000" height="10000000"/></g>',
       'width="1" height="1"',
     )
-    await renderSpatialCanvasToPng(canvasNaming(masked), FONTS_DIR)
+    await renderSpatialCanvasToPng(canvasNaming(masked), FONTS_DIR, { core: testLayoutCore() })
     expect(constructed.svgs).toHaveLength(1)
     expect(constructed.svgs[0]).toContain('<image')
     expect(constructed.svgs[0]).not.toContain(masked)
@@ -425,7 +434,7 @@ describe('a data: SVG image that asks resvg for work its size does not bound', (
     const filtered = svgImage(
       '<filter id="f"><feMorphology radius="1"/></filter><rect width="10" height="10" filter="url(#f)"/>',
     )
-    await renderSpatialCanvasToPng(canvasNaming(filtered), FONTS_DIR)
+    await renderSpatialCanvasToPng(canvasNaming(filtered), FONTS_DIR, { core: testLayoutCore() })
     expect(constructed.svgs).toHaveLength(1)
     expect(constructed.svgs[0]).toContain('<image')
     expect(constructed.svgs[0]).not.toContain(filtered)

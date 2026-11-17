@@ -6,7 +6,11 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
-import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
+import type { SpatialLayoutOptions as LayoutOptions } from '../../layout/layout-options.js'
+
+/** A case's options: what the caller hands, the core joined at the call. */
+type SpatialLayoutOptions = Omit<LayoutOptions, 'core'>
+
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { createFakeMeasure } from '../fake-measure.js'
 import { proposalBoards } from '../proposal-oracle/layer-corpus.js'

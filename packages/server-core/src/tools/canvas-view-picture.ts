@@ -35,7 +35,7 @@ export async function canvasViewPicture(
 ): Promise<CanvasViewPicture> {
   const canvas = fromJsonCanvas(result.scene)
   const measurer = await resolveTextMeasurer(deps)
-  const core = await deps.layoutCore?.()
+  const core = await deps.layoutCore()
   const style = result.style ?? 'clean'
   const graph = new Map(
     Object.entries(result.references).map(([target, wire]) => [
@@ -49,7 +49,7 @@ export async function canvasViewPicture(
     threads: result.threads,
     style,
     fontAvailable: fontAvailableOf(measurer),
-    ...(core === undefined ? {} : { core }),
+    core,
   })
   return {
     // `padding: 0` asks for the derived envelope: the scene's own bounds,

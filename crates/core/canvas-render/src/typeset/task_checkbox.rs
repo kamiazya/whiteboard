@@ -1,4 +1,4 @@
-//! A task item's checkbox, ported from `task-checkbox.ts`: drawn from a rounded
+//! A task item's checkbox, ported from the TypeScript task checkbox: drawn from a rounded
 //! rect and a tick rather than a glyph, since no font a measurer is handed is
 //! guaranteed to hold one and the box has to be the size layout reserved.
 

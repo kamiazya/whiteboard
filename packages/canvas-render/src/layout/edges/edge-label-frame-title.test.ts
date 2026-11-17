@@ -7,8 +7,10 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
+import { queryLabelObstacles } from '../queries.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
-import { frameTitleObstacles } from './edge-label-anchor.js'
 
 // The edge runs from a box above the frame into one inside it, straight down
 // through the title's row; its midpoint lies on the title.
@@ -23,16 +25,9 @@ const board = (): SpatialCanvas => ({
 
 const runs = (canvas: SpatialCanvas) =>
   layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: (text: string) => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
-    appearance: {
-      resolveNode: () => ({}),
-      resolveEdge: () => ({ stroke: '#606060' }),
-      resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-    },
+    appearance: createSpatialTheme({ mode: 'light' }),
     geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
   }).nodes.filter((n): n is TextRunNode => n.kind === 'textRun')
 
@@ -59,20 +54,14 @@ describe('an edge label beside a frame title', () => {
   })
 })
 
-describe('frameTitleObstacles', () => {
+describe('the label obstacles query', () => {
   it('reads each frame title box off the laid-out scene, and nothing else', () => {
     const canvas = board()
+    const core = testLayoutCore()
     const scene = layoutSpatialCanvas(canvas, {
+      core,
       measure: createFakeMeasure(),
-      parseBody: (text: string) => ({
-        type: 'root',
-        children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-      }),
-      appearance: {
-        resolveNode: () => ({}),
-        resolveEdge: () => ({ stroke: '#606060' }),
-        resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-      },
+      appearance: createSpatialTheme({ mode: 'light' }),
       geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
     })
     const title = scene.nodes.find(
@@ -80,8 +69,8 @@ describe('frameTitleObstacles', () => {
         n.kind === 'textRun' && n.annotates?.kind === 'node' && n.annotates.id === 'tier',
     )
     expect(title).toBeDefined()
-    const obstacles = frameTitleObstacles(canvas.nodes, scene.nodes)
-    expect(obstacles).toEqual([
+    const { titles } = queryLabelObstacles(core, canvas.nodes, scene.nodes)
+    expect(titles).toEqual([
       { x: title!.bbox.x, y: title!.bbox.y, w: title!.bbox.w, h: title!.bbox.h },
     ])
   })

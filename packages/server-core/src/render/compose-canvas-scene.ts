@@ -81,11 +81,8 @@ export interface ComposeCanvasSceneOptions {
    * document, the library, did.
    */
   readonly tagLibrary?: TagLibrary
-  /**
-   * The Rust core (`ServerDeps.layoutCore`, resolved by the caller). Absent,
-   * the TypeScript composer lays it out.
-   */
-  readonly core?: LayoutCore
+  /** The Rust core (`ServerDeps.layoutCore`, resolved by the caller), which lays the canvas out. */
+  readonly core: LayoutCore
   /**
    * Told when the core refused the layout and the scene is the refusal
    * (canvas-render's `onRefused`); the refusal is logged either way.
@@ -112,23 +109,23 @@ export interface ComposeCanvasSceneOptions {
 export function composeCanvasScene(
   canvas: SpatialCanvas,
   measure: MeasureText,
-  options?: ComposeCanvasSceneOptions,
+  options: ComposeCanvasSceneOptions,
 ): Scene {
-  const references = options?.references
+  const references = options.references
   return layoutSpatialCanvas(canvas, {
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
     onRefused: (refusal) => {
       logRefusal(refusal)
-      options?.onRefused?.(refusal)
+      options.onRefused?.(refusal)
     },
-    ...(options?.style === undefined ? {} : { style: options.style }),
-    ...(options?.fontAvailable === undefined ? {} : { fontAvailable: options.fontAvailable }),
-    ...(options?.threads === undefined ? {} : { threads: options.threads }),
-    ...(options?.commentLayer === undefined ? {} : { commentLayer: options.commentLayer }),
-    ...(options?.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
-    ...(options?.core === undefined ? {} : { core: options.core }),
+    ...(options.style === undefined ? {} : { style: options.style }),
+    ...(options.fontAvailable === undefined ? {} : { fontAvailable: options.fontAvailable }),
+    ...(options.threads === undefined ? {} : { threads: options.threads }),
+    ...(options.commentLayer === undefined ? {} : { commentLayer: options.commentLayer }),
+    ...(options.tagLibrary === undefined ? {} : { tagLibrary: options.tagLibrary }),
+    core: options.core,
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's
     // words: a node's intrinsic size, not its zoom.

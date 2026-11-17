@@ -14,6 +14,7 @@
 // The numbers are pinned EXACTLY. An improvement has to be as loud as a
 // regression, because the point is that someone says why it moved.
 
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { writeCoreFacets, writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
@@ -120,9 +121,9 @@ async function harness(
     blobStore: {} as never,
     documentIndex,
     versions: new FakeVersionHistory(),
-    // The daemon's own seam: every mutating tool takes its write lock.
-    liveDocuments: liveDocuments(),
+    liveDocuments: liveDocuments(), // the daemon's own seam: every mutating tool takes its write lock
     facetRegistry: bundledFacetRegistry,
+    layoutCore: async () => testLayoutCore(),
   } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)

@@ -1,5 +1,5 @@
 //! Where a comment's bubble sits relative to its anchor
-//! (`layout/comment-placement.ts`). A bubble floats beside the anchor and must
+//! (the TypeScript comment-bubble placement). A bubble floats beside the anchor and must
 //! not cover what the comment is about: candidates are scored by how much of
 //! each lies over an obstacle, and the least-covered wins, the earliest on a
 //! tie. The four diagonal quadrants come first, so a board with room answers

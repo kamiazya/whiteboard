@@ -3,9 +3,7 @@
 // above content on every surface — widget, viewer, export — with no per-
 // surface wiring. Placement floats near the anchor; nothing here is stored.
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CanvasComment, CommentThread, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type {
   BoundingBox,
@@ -17,56 +15,30 @@ import type {
 import { describe, expect, it } from 'vitest'
 import { type CommentBoard, layoutBoard, threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../theme/spatial-appearance.js'
-import {
-  COMMENT_BUBBLE_OFFSET_PX,
-  COMMENT_PIN_SIZE_PX,
-  layoutSpatialCanvas,
-  type SpatialLayoutOptions,
-} from './spatial-canvas.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
+
+/** The comment chrome the bundled light theme the core draws in gives every pin. */
+const THEME_COMMENT = createSpatialTheme({ mode: 'light' }).resolveComment?.()
+
+/** The pin's side, as the core draws it. */
+const COMMENT_PIN_SIZE_PX = 20
+
+/** The anchor-to-bubble gap the core places by (`COMMENT_BUBBLE_OFFSET_PX` in `comments/placement.rs`). */
+const COMMENT_BUBBLE_OFFSET_PX = 14
 
 const measure = createFakeMeasure()
 
-const fakeAppearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({ radius: 4 }),
-  resolveEdge: () => ({ stroke: '#606060', strokeWidth: 1.5 }),
-  resolveLabel: () => ({ fill: '#303030', fontFamily: 'sans-serif' }),
-  resolveComment: () => ({
-    pin: { fill: '#d97706' },
-    bubble: { fill: '#fef3c7', stroke: '#d97706' },
-    leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
-    passage: { fill: '#d97706', fillOpacity: 0.22 },
-    region: { fill: 'none', stroke: '#d97706', strokeWidth: 1.5, strokeDasharray: '6 4' },
-    pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif' },
-    resolvedOverlay: {
-      pin: { fill: '#d97706', fillOpacity: 0.45 },
-      bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
-      leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3', strokeOpacity: 0.45 },
-      passage: { fill: '#d97706', fillOpacity: 0.1 },
-      region: {
-        fill: 'none',
-        stroke: '#d97706',
-        strokeWidth: 1.5,
-        strokeDasharray: '6 4',
-        strokeOpacity: 0.45,
-      },
-      pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif', fillOpacity: 0.45 },
-    },
-  }),
-}
+const fakeAppearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
-function fakeParseBody(text: string): MdastRoot {
+function baseOptions(
+  overrides: Partial<Omit<SpatialLayoutOptions, 'core'>> = {},
+): SpatialLayoutOptions {
   return {
-    type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-  }
-}
-
-function baseOptions(overrides: Partial<SpatialLayoutOptions> = {}): SpatialLayoutOptions {
-  return {
+    core: testLayoutCore(),
     measure,
-    parseBody: fakeParseBody,
     appearance: fakeAppearance,
     geometry: { paddingPx: 8, labelFontSizePx: 14, minContentWidthPx: 1 },
     ...overrides,
@@ -152,7 +124,7 @@ describe('comment layer', () => {
     expect(pin?.bbox.y).toBe(60 - COMMENT_PIN_SIZE_PX / 2)
     // A circle: the rect chrome with radius = half its side.
     expect(pin?.radius).toBe(COMMENT_PIN_SIZE_PX / 2)
-    expect(pin?.appearance).toEqual({ fill: '#d97706' })
+    expect(pin?.appearance).toEqual(THEME_COMMENT?.pin)
 
     const bubble = bubbleOf(scene.nodes, 'c1')
     expect(bubble).toBeDefined()
@@ -205,23 +177,6 @@ describe('comment layer', () => {
     const leaderIndex = scene.nodes.indexOf(leader as ResolvedEdgeNode)
     expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(pin as ShapeSceneNode))
     expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(bubble as ShapeSceneNode))
-  })
-
-  it('a bare resolver still gets the leader geometry, carrying no appearance', () => {
-    const bare: SpatialAppearanceResolver = {
-      resolveNode: () => ({}),
-      resolveEdge: () => undefined,
-      resolveLabel: () => ({}),
-    }
-    const scene = layoutBoard(
-      canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still tied' }]),
-      baseOptions({ appearance: bare }),
-    )
-    const leader = scene.nodes.find(
-      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
-    )
-    expect(leader).toBeDefined()
-    expect(leader?.appearance).toBeUndefined()
   })
 
   it('follows the target node when it resolves, and falls back to the anchor when it is gone', () => {
@@ -298,26 +253,6 @@ describe('comment layer', () => {
     expect(explicitEmpty).toEqual(plain)
   })
 
-  it('renders pins without appearance when the resolver does not know comments', () => {
-    // A resolver predating the layer (or a caller's custom one) must not
-    // break layout — appearance is assigned, never invented, so the pins
-    // simply carry none.
-    const bare: SpatialAppearanceResolver = {
-      resolveNode: () => ({}),
-      resolveEdge: () => undefined,
-      resolveLabel: () => ({}),
-    }
-    const scene = layoutBoard(
-      canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still drawn' }]),
-      baseOptions({ appearance: bare }),
-    )
-    const pin = pinOf(scene.nodes, 'c1')
-    expect(pin).toBeDefined()
-    expect(pin?.commentChrome).toBe(true)
-    expect(pin?.appearance).toBeUndefined()
-    expect(runsOf(scene.nodes).map((run) => run.text)).toContain('still drawn')
-  })
-
   it('draws a resolved comment muted, with ids, when showResolved is on — unresolved stays base', () => {
     const scene = layoutBoard(
       canvasWith([
@@ -328,7 +263,7 @@ describe('comment layer', () => {
     )
 
     const openPin = pinOf(scene.nodes, 'c1')
-    expect(openPin?.appearance).toEqual({ fill: '#d97706' })
+    expect(openPin?.appearance).toEqual(THEME_COMMENT?.pin)
 
     const resolvedPin = pinOf(scene.nodes, 'c2')
     const resolvedBubble = bubbleOf(scene.nodes, 'c2')
@@ -336,22 +271,13 @@ describe('comment layer', () => {
     expect(resolvedPin?.commentChrome).toBe(true)
     expect(resolvedBubble).toBeDefined()
     expect(resolvedBubble?.commentChrome).toBe(true)
-    expect(resolvedPin?.appearance).toEqual({ fill: '#d97706', fillOpacity: 0.45 })
-    expect(resolvedBubble?.appearance).toEqual({
-      fill: '#fef3c7',
-      stroke: '#d97706',
-      fillOpacity: 0.45,
-    })
+    expect(resolvedPin?.appearance).toEqual(THEME_COMMENT?.resolvedOverlay.pin)
+    expect(resolvedBubble?.appearance).toEqual(THEME_COMMENT?.resolvedOverlay.bubble)
 
     const resolvedLeader = scene.nodes.find(
       (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c2/leader',
     )
-    expect(resolvedLeader?.appearance).toEqual({
-      stroke: '#d97706',
-      strokeWidth: 1,
-      strokeDasharray: '4 3',
-      strokeOpacity: 0.45,
-    })
+    expect(resolvedLeader?.appearance).toEqual(THEME_COMMENT?.resolvedOverlay.leader)
 
     const texts = runsOf(scene.nodes).map((run) => run.text)
     expect(texts).toContain('done already')
@@ -367,25 +293,6 @@ describe('comment layer', () => {
       baseOptions({ showResolved: false }),
     )
     expect(withFlagOff).toEqual(withoutFlag)
-  })
-
-  it('a bare resolver composes a resolved comment under showResolved too, carrying no appearance', () => {
-    const bare: SpatialAppearanceResolver = {
-      resolveNode: () => ({}),
-      resolveEdge: () => undefined,
-      resolveLabel: () => ({}),
-    }
-    const scene = layoutBoard(
-      canvasWith([{ id: 'c1', x: 5, y: 5, text: 'done, no theme', resolved: true }]),
-      baseOptions({ appearance: bare, showResolved: true }),
-    )
-    const pin = pinOf(scene.nodes, 'c1')
-    const bubble = bubbleOf(scene.nodes, 'c1')
-    expect(pin).toBeDefined()
-    expect(pin?.appearance).toBeUndefined()
-    expect(bubble).toBeDefined()
-    expect(bubble?.appearance).toBeUndefined()
-    expect(runsOf(scene.nodes).map((run) => run.text)).toContain('done, no theme')
   })
 
   it('wraps long comment text within the bubble width instead of one endless line', () => {
@@ -771,11 +678,12 @@ it('draws a comment body as markdown at the bubble metrics, through the shared p
     canvasWith([{ id: 'c1', x: 400, y: 40, text: '# Heading' }]),
     // codec's real parser, not the fixture's paragraph-wrapping stub: the
     // claim is about what markdown MEANS here.
-    baseOptions({ parseBody: parseMarkdownBody }),
+    baseOptions({}),
   )
   const heading = scene.nodes.find((node) => node.kind === 'heading')
   expect(heading).toBeDefined()
   const run = (heading as { runs?: readonly TextRunNode[] }).runs?.[0]
   expect(run?.text).toBe('Heading')
-  expect(run?.appearance?.fontSize).toBe(MARKDOWN_THEME_NODE.headingFontSizePx[1])
+  // The node theme's h1 (`markdown-theme.ts`), which a comment bubble takes.
+  expect(run?.appearance?.fontSize).toBe(24)
 })

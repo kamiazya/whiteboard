@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolvingDocumentIds, testStoreScope } from './_test-helpers.js'
@@ -43,13 +44,27 @@ const ROUTES = [
     format: 'png',
     action: 'export',
     mount: (app: Hono, scope: ReturnType<typeof testStoreScope>) =>
-      app.route('/', createExportRouter({ liveDocuments: { exists: missing }, scope })),
+      app.route(
+        '/',
+        createExportRouter({
+          layoutCore: async () => testLayoutCore(),
+          liveDocuments: { exists: missing },
+          scope,
+        }),
+      ),
   },
   {
     format: 'svg',
     action: 'export-svg',
     mount: (app: Hono, scope: ReturnType<typeof testStoreScope>) =>
-      app.route('/', createDocumentSvgExportRouter({ liveDocuments: { exists: missing }, scope })),
+      app.route(
+        '/',
+        createDocumentSvgExportRouter({
+          layoutCore: async () => testLayoutCore(),
+          liveDocuments: { exists: missing },
+          scope,
+        }),
+      ),
   },
 ] as const
 

@@ -66,7 +66,7 @@ class EmojiWidget extends WidgetType {
 /**
  * Positions inside code, where a shortcode is the SUBJECT rather than a use.
  *
- * The renderer draws the same line: `mdast-blocks.ts` expands a text node and
+ * The renderer draws the same line: the TypeScript typesetter expands a text node and
  * deliberately never an `inlineCode`. Read off the syntax tree rather than by
  * matching backticks, because the tree is what the markdown grammar already
  * decided and a second parse of the same delimiters would disagree at the

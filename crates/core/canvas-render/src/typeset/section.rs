@@ -1,4 +1,4 @@
-//! A markdown section by heading, ported from `mdast-section.ts`: the heading
+//! A markdown section by heading, ported from the TypeScript section selector: the heading
 //! whose text is the fragment, case-folded when no heading matches exactly, and
 //! everything under it up to the next heading of the same or a shallower depth.
 

@@ -1,7 +1,7 @@
 // Calibration of the composition score against KNOWN truths, the way
 // `drawing-score.test.ts` calibrates the drawing score: a board with one
 // planted compositional mistake reports it in the column that names it, and
-// nowhere else. `composition-quality.test.ts` is the scoreboard that pins
+// nowhere else. `composition-quality.rust.test.ts` is the scoreboard that pins
 // this over the real corpus; this file is what says it can be believed
 // there — an instrument trusted before it is calibrated is how
 // `worstStallMs` reported 0.3ms for a 200ms stall.
@@ -15,13 +15,14 @@ import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type CompositionScore, scoreComposition } from './composition-score.js'
 
 const measure = constantRatioMeasureText
 const appearance = createSpatialTheme({ mode: 'light' })
 const layout = (canvas: SpatialCanvas): Scene =>
-  layoutSpatialCanvas(canvas, { measure, appearance })
+  layoutSpatialCanvas(canvas, { core: testLayoutCore(), measure, appearance })
 const score = (canvas: SpatialCanvas): CompositionScore => scoreComposition(canvas, layout(canvas))
 
 const box = (id: string, x: number, y: number, width = 200, height = 80): SpatialNode =>

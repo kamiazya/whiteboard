@@ -1,5 +1,5 @@
-//! How ONE node is drawn and filled (`layout/compose-node.ts` and
-//! `layout/compose-file-node.ts`): the text body, the frame with its
+//! How ONE node is drawn and filled (the TypeScript node composer and
+//! the TypeScript file-node composer): the text body, the frame with its
 //! background, the link card, the file node's representations, the lock badge,
 //! and [`compose_node`], which chooses between them by the node's kind.
 //!

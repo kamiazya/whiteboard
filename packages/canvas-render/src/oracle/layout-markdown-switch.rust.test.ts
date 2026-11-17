@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   layoutCommentDocument,
@@ -14,6 +15,7 @@ import {
   type MarkdownMeta,
   type MarkdownRecord,
   PAST_THE_PARSER,
+  sortedSceneDigest,
 } from '../test-utils/markdown-document-oracle/oracle.js'
 import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
 
@@ -27,6 +29,15 @@ import { built, requireWasm, wasmBytes } from '../test-utils/wasm/glue.js'
 const DIR = new URL('./', import.meta.url)
 const SURFACES = ['daemon', 'preview', 'outline', 'thumbnail', 'comment'] as const
 
+/** The digests of the recorded scenes too long to hold whole (`layout-markdown-digests.jsonl`). */
+const digests = new Map(
+  readFileSync(new URL('layout-markdown-digests.jsonl', DIR), 'utf8')
+    .trimEnd()
+    .split('\n')
+    .map((line) => JSON.parse(line) as { id: string; n: number; h: number })
+    .map(({ id, n, h }) => [id, { n, h }] as const),
+)
+
 function surface(name: string): { meta: MarkdownMeta; records: MarkdownRecord[] } {
   const [head = '', ...lines] = readFileSync(new URL(`layout-markdown.${name}.jsonl`, DIR), 'utf8')
     .trimEnd()
@@ -35,7 +46,10 @@ function surface(name: string): { meta: MarkdownMeta; records: MarkdownRecord[] 
 }
 
 /** The options a root hands the switch for `record`, rebuilt from the record and its file's meta line. */
-function optionsOf(record: MarkdownRecord, meta: MarkdownMeta): MarkdownDocumentOptions {
+function optionsOf(
+  record: MarkdownRecord,
+  meta: MarkdownMeta,
+): Omit<MarkdownDocumentOptions, 'core'> {
   const fonts = new Set(record.fonts ?? [])
   const style = record.surface === 'daemon' ? record.style : 'document'
   return {
@@ -71,29 +85,40 @@ describe.runIf(built)('the recorded notes through the core', () => {
         maxWidth: record.maxWidth,
         density: record.density ?? 'comfortable',
       } as const
-      const scene = layoutCommentDocument(record.body, { ...options, core })
-      return { scene, reference: layoutCommentDocument(record.body, options) }
+      return layoutCommentDocument(record.body, { ...options, core })
     }
-    const scene = layoutMarkdownDocument(record.body, { ...optionsOf(record, meta), core })
-    const reference = layoutMarkdownDocument(record.body, optionsOf(record, meta))
-    return { scene, reference }
+    return layoutMarkdownDocument(record.body, { ...optionsOf(record, meta), core })
   }
 
+  /** The recorded scene's sorted digest; undefined for a section it missed, or a record held only as a digest. */
+  const recorded = (record: MarkdownRecord) =>
+    'scene' in record ? sortedSceneDigest(JSON.parse(record.scene)) : undefined
+  const drawn = (scene: Scene | undefined) =>
+    scene === undefined ? undefined : sortedSceneDigest(scene)
+
   for (const name of SURFACES) {
-    it(`answers every ${name} note as the TypeScript does`, { timeout: 120_000 }, () => {
+    it(`answers every ${name} note as the TypeScript recorded it`, { timeout: 120_000 }, () => {
       const { meta, records } = surface(name)
-      let answered = 0
+      // Every branch asserts: a record that fell through would read as
+      // replayed. A long scene is held by its digest alone.
       for (const record of records) {
-        const { scene, reference } = lay(record, meta)
-        if (PAST_THE_PARSER.has(bodyName(record.id))) {
+        const scene = lay(record, meta)
+        if ('refused' in record) {
+          expect(scene, record.id).toBeUndefined()
+        } else if (PAST_THE_PARSER.has(bodyName(record.id))) {
           expect(scene?.refusal, record.id).toBeUndefined()
-          expect(scene, record.id).not.toEqual(reference)
+          const held = 'scene' in record ? recorded(record) : digests.get(record.id)
+          expect(held, `${record.id} has a recording`).toBeDefined()
+          expect(drawn(scene), record.id).not.toEqual(held)
+        } else if ('scene' in record) {
+          expect(drawn(scene), record.id).toEqual(recorded(record))
         } else {
-          answered += 1
-          expect(scene, record.id).toEqual(reference)
+          const held = digests.get(record.id)
+          expect(held, `${record.id} has a digest`).toBeDefined()
+          expect(drawn(scene), record.id).toEqual(held)
         }
       }
-      expect(answered).toBeGreaterThan(20)
+      expect(records.length).toBeGreaterThan(20)
     })
   }
 })

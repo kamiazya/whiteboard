@@ -1,16 +1,13 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
-import { outlineContains } from '../../outline/node-outline.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
 import type { SpatialAppearanceResolver } from '../../theme/spatial-appearance.js'
+import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 
-const appearance: SpatialAppearanceResolver = {
-  resolveNode: () => ({}),
-  resolveEdge: () => undefined,
-  resolveLabel: () => ({}),
-}
+const appearance: SpatialAppearanceResolver = createSpatialTheme({ mode: 'light' })
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -46,7 +43,7 @@ const layout = (ellipse?: 'ellipse') =>
             node.id === 'a' ? { ...node, facets: { 'visual.shape/v0': { kind: ellipse } } } : node,
           ),
         },
-    { measure: createFakeMeasure(), appearance },
+    { core: testLayoutCore(), measure: createFakeMeasure(), appearance },
   )
 
 describe('a node silhouette in layout', () => {
@@ -70,8 +67,10 @@ describe('a node silhouette in layout', () => {
     const baselineLast = baseline.path[baseline.path.length - 1]
     // The bbox-border terminal moved…
     expect(last).not.toEqual(baselineLast)
-    // …onto the ellipse boundary (containment is boundary-inclusive).
-    expect(outlineContains('visual.ellipse', { x: 0, y: 0, w: 100, h: 60 }, last)).toBe(true)
+    // …onto the ellipse inscribed in the 100x60 box (boundary-inclusive).
+    const nx = ((last?.x ?? Number.NaN) - 50) / 50
+    const ny = ((last?.y ?? Number.NaN) - 30) / 30
+    expect(nx * nx + ny * ny).toBeLessThanOrEqual(1)
     // The source node has no outline kind, so its end stays put.
     expect(adjusted.path[0]).toEqual(baseline.path[0])
   })

@@ -60,21 +60,17 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { resolveCanvasPalette } from '../layout/canvas-theme.js'
-import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
-import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
-import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { createFakeMeasure } from './fake-measure.js'
+import LOOK_SCENES from './look-scenes.json?raw'
 
 const EDGE_APPEARANCE = { stroke: '#1f2933', strokeWidth: 2 } as const
 
 /**
  * Two crossing edges: an earlier vertical edge and a later horizontal edge
- * that hops over it. `computeEdgeJumps` — the real edge pipeline's jump
- * producer, the same one `layoutSpatialCanvas` calls — derives the hop
- * point rather than a hand-authored jump, so this fixture exercises the
- * actual jump-detection geometry, not just the backend's drawing of one.
- * The crossing point (50, 20) is deliberately an intersection of two
- * integer-coordinate axis-aligned segments, so it lands on an integer too.
+ * that hops over it. The hop is the one the layout's line jumps place there
+ * (the core's, held to `oracle/edge-jumps.jsonl`): on the later edge's only
+ * segment, at the crossing. The crossing point (50, 20) is deliberately an
+ * intersection of two integer-coordinate axis-aligned segments, so it lands
+ * on an integer too.
  */
 export function buildJumpHopScene(): Scene {
   const earlier: ResolvedEdgeNode = {
@@ -90,7 +86,7 @@ export function buildJumpHopScene(): Scene {
     toEnd: 'none',
     appearance: EDGE_APPEARANCE,
   }
-  const laterDraft: ResolvedEdgeNode = {
+  const later: ResolvedEdgeNode = {
     kind: 'edge',
     id: 'horizontal',
     path: [
@@ -102,9 +98,8 @@ export function buildJumpHopScene(): Scene {
     fromEnd: 'none',
     toEnd: 'none',
     appearance: EDGE_APPEARANCE,
+    jumps: [{ segment: 0, x: 50, y: 20 }],
   }
-  const jumps = computeEdgeJumps([earlier, laterDraft]).get(laterDraft.id)
-  const later: ResolvedEdgeNode = jumps !== undefined ? { ...laterDraft, jumps } : laterDraft
   return { nodes: [earlier, later] }
 }
 
@@ -230,8 +225,13 @@ export function buildIconSetScene(): Scene {
  * mismatched pixels across machines whose installed FONTS differ (CI paints
  * with the system Google Chrome on a runner carrying neither this
  * container's font set nor the themes' own faces), so a rendered glyph is
- * the one thing in a scene that cannot be reproduced. Bodies are therefore
- * laid out through an empty parse.
+ * the one thing in a scene that cannot be reproduced.
+ *
+ * The scenes themselves are FROZEN (`look-scenes.json`): laid out from this
+ * canvas by the TypeScript composer before it was deleted (ADR-0054 step 7,
+ * S18h), as `svg.jsonl` recorded them. The layout is the Rust core's now,
+ * and the browser realm these goldens paint in has no core to ask; what they
+ * judge is the SVG backend's ink and glow, which is still this package's.
  */
 const LOOK_CANVAS: SpatialCanvas = {
   nodes: [
@@ -280,21 +280,13 @@ export interface LookScene {
   readonly background: string
 }
 
-function buildLookScene(theme: string, mode: 'light' | 'dark'): LookScene {
+function buildLookScene(theme: 'sketch' | 'neon', mode: 'light' | 'dark'): LookScene {
   const canvas: SpatialCanvas = {
     ...LOOK_CANVAS,
-    facets: { ...LOOK_CANVAS.facets, 'visual.theme/v0': { theme } },
+    facets: { ...LOOK_CANVAS.facets, 'visual.theme/v0': { theme: `visual.${theme}` } },
   }
   return {
-    scene: layoutSpatialCanvas(canvas, {
-      measure: createFakeMeasure(),
-      // Text-free by construction — see LOOK_CANVAS.
-      parseBody: () => ({ type: 'root', children: [] }),
-      appearance: createSpatialTheme({ mode }),
-      // The bundled themes reach the canvas through the DEFAULT render
-      // contributions; `document` is what honours the facet at all.
-      style: 'document',
-    }),
+    scene: (JSON.parse(LOOK_SCENES) as Record<typeof theme, Scene>)[theme],
     // Read from the theme rather than restated as a hex here: a paper colour
     // written twice is the drift class this package already names, and the
     // second copy is the one nothing would have caught.
@@ -305,11 +297,11 @@ function buildLookScene(theme: string, mode: 'light' | 'dark'): LookScene {
 /** `visual.sketch` on its own paper: jittered two-pass outlines, a hatched
  *  preset node, a dashed group frame, straight routing. */
 export function buildSketchLookScene(): LookScene {
-  return buildLookScene('visual.sketch', 'light')
+  return buildLookScene('sketch', 'light')
 }
 
 /** `visual.neon` on its own deep ground: crisp geometry under a halo of each
  *  element's own paint, orthogonal routing. */
 export function buildNeonLookScene(): LookScene {
-  return buildLookScene('visual.neon', 'dark')
+  return buildLookScene('neon', 'dark')
 }

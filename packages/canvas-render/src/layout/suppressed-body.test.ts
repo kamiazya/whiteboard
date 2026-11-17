@@ -10,17 +10,16 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
-const APPEARANCE = { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) }
+const APPEARANCE = createSpatialTheme({ mode: 'light' })
 
-function options(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
+function options(over?: Partial<Omit<SpatialLayoutOptions, 'core'>>): SpatialLayoutOptions {
   return {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: (text: string) => ({
-      type: 'root',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
-    }),
     appearance: APPEARANCE,
     ...over,
   }

@@ -17,8 +17,6 @@ import {
   commentThreadSchema,
   compareMessages,
   movedAnchor,
-  type SpatialAnchor,
-  spatialAnchorRect,
   TEXT_ANCHOR_CONTEXT_MAX_CHARS,
   TEXT_ANCHOR_QUOTE_LIMIT_PHRASE,
   TEXT_ANCHOR_QUOTE_MAX_CHARS,
@@ -400,6 +398,11 @@ describe("a thread's pin on the board", () => {
     expect(projectOne(region)).toMatchObject({ x: 110, y: 20 })
   })
 
+  it('projects a set with no node alive and no rect stored at its point: it stands for no area', () => {
+    const bare = opened({ kind: 'spatial', nodeIds: ['n-gone', 'n-gone-too'], x: 10, y: 20 })
+    expect(projectOne(bare, board)).toMatchObject({ x: 10, y: 20 })
+  })
+
   it('projects nothing for the document itself: the panel is its only surface', () => {
     expect(projectOne(opened({ kind: 'document' }), board)).toBeUndefined()
   })
@@ -452,53 +455,6 @@ describe("a thread's pin on the board", () => {
         )
       }),
     )
-  })
-})
-
-describe('spatialAnchorRect', () => {
-  const nodes = new Map([
-    ['a', { id: 'a', x: 0, y: 0, width: 10, height: 10 }],
-    ['b', { id: 'b', x: 50, y: 30, width: 20, height: 5 }],
-  ])
-  const nodeById = (id: string) => nodes.get(id)
-
-  it('is the union of the live nodes for a set, whatever rect was stored', () => {
-    const anchor: SpatialAnchor = {
-      kind: 'spatial',
-      nodeIds: ['a', 'b'],
-      x: 9,
-      y: 9,
-      width: 1,
-      height: 1,
-    }
-    expect(spatialAnchorRect(anchor, nodeById)).toEqual({ x: 0, y: 0, width: 70, height: 35 })
-  })
-
-  it('falls back to the stored rect once every node of a set is gone, and for a bare region', () => {
-    const gone: SpatialAnchor = {
-      kind: 'spatial',
-      nodeIds: ['x', 'y'],
-      x: 1,
-      y: 2,
-      width: 3,
-      height: 4,
-    }
-    expect(spatialAnchorRect(gone, nodeById)).toEqual({ x: 1, y: 2, width: 3, height: 4 })
-    expect(spatialAnchorRect({ kind: 'spatial', x: 1, y: 2, width: 3, height: 4 })).toEqual({
-      x: 1,
-      y: 2,
-      width: 3,
-      height: 4,
-    })
-  })
-
-  it('is undefined for a point, a node and an edge: they stand for no area', () => {
-    expect(spatialAnchorRect({ kind: 'spatial', x: 1, y: 2 })).toBeUndefined()
-    expect(
-      spatialAnchorRect({ kind: 'spatial', nodeId: 'a', x: 1, y: 2 }, nodeById),
-    ).toBeUndefined()
-    // A set with no rect stored and no node alive has nowhere to be drawn.
-    expect(spatialAnchorRect({ kind: 'spatial', nodeIds: ['x', 'y'], x: 1, y: 2 })).toBeUndefined()
   })
 })
 

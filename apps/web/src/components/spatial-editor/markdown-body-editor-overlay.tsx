@@ -15,7 +15,7 @@ import {
   type SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { Box } from '../../lib/spatial/geometry.js'
-import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
@@ -38,7 +38,7 @@ function contentBoxOf(
     w: selectionBox.width,
     h: selectionBox.height,
   }
-  const inner = queryOutlineContentBox(currentLayoutCore(), shapeId, bbox)
+  const inner = queryOutlineContentBox(requireLayoutCore(), shapeId, bbox)
   return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
 }
 

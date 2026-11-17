@@ -1,5 +1,5 @@
 //! How far right and down a laid-out block reaches from its own origin
-//! (`layout/scene-extent.ts`): what a bubble is sized around. An edge reaches
+//! (the TypeScript scene extent): what a bubble is sized around. An edge reaches
 //! nothing, its extent being its route, which a bubble never wraps.
 
 use whiteboard_det::math::js_max;

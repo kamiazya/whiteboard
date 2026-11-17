@@ -1,32 +1,19 @@
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
-import {
-  decodeLines,
-  encodeLines,
-  type RenderRecord,
-  renderAnswer,
-  renderInputs,
-} from '../test-utils/render-oracle/oracle.js'
+import { decodeLines, type RenderRecord, renderAnswer } from '../test-utils/render-oracle/oracle.js'
 
 /**
  * The committed recording of what `layoutSpatialCanvas` and the SVG renderers
- * answer for a canvas — the scene (every field, every number as its 64 IEEE
- * bits), the SVG, the keyed groups and the scene digest — equals what the
- * TypeScript answers today. The Rust composer (ADR-0054 slice S13) replays it
- * natively and is held to it byte for byte; a recording left behind a
- * TypeScript change would hold it to an answer nobody gives. The Rust replay
- * tests arrive with those slices, not here.
- *
- * The recording holds its inputs as well as its answers, so this test draws
- * nothing and reads no corpus. Re-record after a deliberate rendering change
- * with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node recorded-oracle`.
+ * answered for a canvas — the scene (every field, every number as its 64 IEEE
+ * bits), the SVG, the keyed groups and the scene digest — taken from the
+ * TypeScript composer before it was deleted (ADR-0054 step 7, S18h) and
+ * frozen: the layout is now the Rust core's, so a re-recording would be the
+ * core judging itself. Each line is laid out again through canvas-render's
+ * entry over the real core, and drawn and digested again by the TypeScript
+ * SVG backend and digest, which are still this package's. A change that
+ * moves an answer must say so by editing the recording.
  */
 const FILE = new URL('./render.jsonl', import.meta.url)
-
-if (process.env.WHITEBOARD_RECORD_ORACLE === '1') {
-  writeFileSync(FILE, encodeLines(renderInputs().map(renderAnswer)))
-}
 
 describe('the recorded render oracle', () => {
   const text = readFileSync(FILE, 'utf8')
@@ -57,7 +44,7 @@ describe('the recorded render oracle', () => {
     expect(new Set(recorded.map((r) => r.options.mode)).size, 'modes').toBe(2)
   })
 
-  it('equals what the TypeScript answers today', () => {
+  it('equals what the core lays out and the backend draws today', { timeout: 120_000 }, () => {
     const lines = text.trimEnd().split('\n')
     const parted = recorded.findIndex(
       (r, i) =>
@@ -66,7 +53,7 @@ describe('the recorded render oracle', () => {
     )
     expect(
       recorded[parted]?.id,
-      'the first recorded case the TypeScript no longer answers as recorded',
+      'the first recorded case no longer answered as recorded',
     ).toBeUndefined()
   })
 })

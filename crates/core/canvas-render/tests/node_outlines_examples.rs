@@ -1,4 +1,4 @@
-//! `resolve_node_outlines` (`resolveNodeOutlines`): a node's own
+//! `resolve_node_outlines` (`resolve_node_outlines`): a node's own
 //! `visual.shape/v0` composed under the plugin's namespace, else the theme's
 //! default shape for anything but a frame, else nothing. Each expected table is
 //! what the TypeScript composes for the same nodes; the reader itself is held to

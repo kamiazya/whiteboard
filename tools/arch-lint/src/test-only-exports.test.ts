@@ -87,14 +87,11 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/theme-fonts.ts#themeFontFamilies',
   'apps/web/src/lib/user-settings-store.ts#defaultUserSettings',
   'apps/web/src/lib/user-settings-store.ts#migrateV4',
-  'packages/canvas-render/src/layout/comment-placement.ts#commentBubbleCandidates',
   'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreSegmentPair',
   'packages/canvas-render/src/layout/edges/edge-router.ts#DETOUR_REACH_PX',
   'packages/canvas-render/src/layout/edges/edge-router.ts#detourCandidates',
   'packages/canvas-render/src/layout/edges/edge-rules.ts#dominantAxisOrder',
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeCacheKey',
-  'packages/canvas-render/src/layout/nodes/inline-junction.ts#tailCharacter',
-  'packages/canvas-render/src/layout/passage-highlight.ts#passageBoxes',
   'packages/canvas-render/src/quality/polyline-geometry.ts#Point',
   'packages/canvas-render/src/quality/polyline-geometry.ts#Rect',
   'packages/canvas-render/src/quality/polyline-geometry.ts#segmentLength',
@@ -200,9 +197,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
  */
 const PUBLISHED_WITHOUT_CONSUMER: readonly string[] = [
   'apps/web/src/lib/commit-debounce.ts#COMMIT_DEBOUNCE_MS',
-  'packages/canvas-render/src/layout/comments.ts#COMMENT_PIN_SIZE_PX',
-  'packages/canvas-render/src/outline/node-outline.ts#outlineContains',
-  'packages/canvas-render/src/layout/scale-scene.ts#scaleScene',
   'packages/canvas-render/src/measure.ts#isFullWidthCodePoint',
   'packages/canvas-render/src/quality/composition-score.ts#CompositionScore',
   'packages/canvas-render/src/quality/drawing-score.ts#DrawingScore',
@@ -241,10 +235,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "the host a realm installs over the build's artifact (`installLayoutCore`); exported so its load-failure policy is driven with a fake source, which the real artifact cannot be made to fail within one run",
   'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
     'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
-  'packages/canvas-render/src/layout/spatial-canvas.ts#composeEdgesAndLabels':
-    'the edge pass its Rust port is held to (test-utils/compose-edges-oracle records compose-edges.jsonl, ADR-0054 step 7); layoutSpatialCanvas and layoutSpatialEdges are its production callers, in its own file',
-  'packages/canvas-render/src/layout/edges/edge-jumps.ts#SegmentGrid':
-    "the line jumps' broad phase its Rust port is held to (test-utils/edge-jump-grid-oracle records edge-jump-grid.jsonl, ADR-0054 step 7); computeEdgeJumps is its production caller, in its own file",
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
     'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
   'packages/canvas-render/src/generated/geometry.zod.ts#rectSchema':
@@ -259,10 +249,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "production reaches it through createWorkspaceDocumentAtPath, the subtree import and the restore; exported so a property can hold which folders it reuses and creates to an oracle over the raw tree, which the placed document's path alone cannot show",
   'packages/loro-adapter/src/content-sync.ts#jsonEqual':
     'production reaches it through the content sync; exported so a property can hold the explicit-stack comparison to the recursive one it replaced, at depths no recursion survives',
-  'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_LAYOUT_BUDGET':
-    'the per-render bound on nested layouts; production reads it in its own module, and the embed-budget test asserts every fan-out shape stays under the named bound rather than a copied number',
-  'packages/canvas-render/src/layout/nodes/embed-budget.ts#NESTED_ELEMENT_BUDGET':
-    'the per-render bound on the elements nested canvases lay out; production reads it in its own module, and the embed-budget test derives every expected miniature count from it rather than a copied number',
   'packages/canvas-render/src/references/content-budget.ts#REFERENCE_CHARS_BUDGET':
     "one reference walk's bound on the characters it loads; production reads it in its own module, and server-core's canvas_view cost test sizes how many notes load whole from it rather than a copied number",
   'packages/canvas-render/src/references/content-budget.ts#REFERENCE_ELEMENTS_BUDGET':
@@ -394,10 +380,10 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 138
+const DEBT_CEILING = 135
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
-const PUBLISHED_CEILING = 12
+const PUBLISHED_CEILING = 9
 
 describe('what counts as an export only a test uses, on fixture files', () => {
   const found = (files: Record<string, string>): string[] =>

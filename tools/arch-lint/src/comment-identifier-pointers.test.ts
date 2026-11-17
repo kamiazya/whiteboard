@@ -476,8 +476,6 @@ const isProductSource = (path: string): boolean =>
 
 /** Retired tools a product comment names as history, each with the sentence that makes it so. */
 const RETIRED_TOOL_HISTORY: Readonly<Record<string, string>> = {
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts#wb_scene_digest':
-    'narrates what an agent reading the digest tool was told while the defect this closes was open',
   'packages/mcp-server/src/server/mcp/document-tools.ts#wb_document_create':
     'says which standalone tools the batch tool replaced, and why',
   'packages/mcp-server/src/server/mcp/document-tools.ts#wb_document_set': 'same sentence',

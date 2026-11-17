@@ -28,7 +28,7 @@ beforeAll(async () => {
 })
 
 // The diamond's inscribed content box is only half the node's width (see
-// the contentBox comment below), so at the label font size (16px) the real
+// the content-box comment below), so at the label font size (16px) the real
 // vendored Roboto face — the one every on-screen measurement in the app
 // agrees on, per beforeAll above — measures a 10-character word like
 // 'shapedbody' at ~86px against an 84px box: an unforced, environment-
@@ -75,7 +75,7 @@ it("the editor sits in the diamond's inscribed content box, not the full bbox", 
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
 
   const host = container.querySelector('[data-testid="text-node-editor"]') as HTMLElement
-  // visual.diamond's contentBox: the maximal inscribed rect (x+w/4, y+h/4, w/2, h/2).
+  // The diamond's content box, as the core inscribes it: (x+w/4, y+h/4, w/2, h/2).
   expect(host.style.left).toBe('150px')
   expect(host.style.top).toBe('125px')
   expect(host.style.width).toBe('100px')

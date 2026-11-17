@@ -2,7 +2,7 @@
  * WHICH theme a canvas is drawn in, and what it resolves to — the palette an
  * editor chrome previews, the family a tool echoes, and the active theme and
  * face one level of the layout applies (ADR-0030). Resolution only: applying
- * it to the layout options is `withCanvasTheme`, in `spatial-canvas.ts`,
+ * it to the layout options is the canvas-theme wrapper, in `spatial-canvas.ts`,
  * because it also re-derives the silhouettes that module owns.
  */
 
@@ -10,7 +10,6 @@ import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import type { RenderContribution } from '@kamiazya/whiteboard-scene'
-import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
@@ -18,7 +17,7 @@ import {
 } from '../theme/spatial-palette.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
 import { paletteFromTokens } from '../theme/theme-asset.js'
-import type { ResolvedLayoutOptions, SpatialRenderStyle } from './layout-options.js'
+import type { SpatialRenderStyle } from './layout-options.js'
 
 /** The theme a canvas names for itself: the first contribution that reads one. */
 function ownThemeId(
@@ -65,7 +64,7 @@ export function resolveCanvasPalette(
 ): SpatialPalette {
   const contributions = options.contributions ?? [visualRenderContribution]
   const own = ownThemeId(canvas, contributions)
-  const themeId = pickThemeId(options.style ?? 'document', own, undefined)
+  const themeId = pickThemeId(options.style ?? 'document', own)
   const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
   if (tokens === undefined) return mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
   return paletteFromTokens(tokens.palette[mode])
@@ -90,7 +89,7 @@ export function resolveCanvasThemeFontFamily(
 ): string | undefined {
   const contributions = options.contributions ?? [visualRenderContribution]
   const own = ownThemeId(canvas, contributions)
-  const themeId = pickThemeId(options.style, own, undefined)
+  const themeId = pickThemeId(options.style, own)
   const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
   return tokens?.fontFamily
 }
@@ -98,47 +97,13 @@ export function resolveCanvasThemeFontFamily(
 /**
  * The theme id a canvas draws in, under the style the caller asked for:
  * `'clean'` never has one; a theme id IS one; `'document'` takes the
- * canvas's own, else the host's (an embed inherits), else none.
+ * canvas's own, else none.
  */
 function pickThemeId(
   style: SpatialRenderStyle | undefined,
   own: string | undefined,
-  inherited: string | undefined,
 ): string | undefined {
   if (style === undefined || style === 'clean') return undefined
-  if (style === 'document') return own ?? inherited
+  if (style === 'document') return own
   return style
-}
-
-/**
- * WHICH theme one canvas is drawn in: the canvas's own, the inherited one, or
- * none, as the style decides — reporting a named theme this build does not
- * carry, which then draws clean.
- */
-export function canvasTheme(
-  canvas: SpatialCanvas,
-  resolved: ResolvedLayoutOptions,
-): ResolvedLayoutOptions['activeTheme'] {
-  const own = ownThemeId(canvas, resolved.contributions)
-  const themeId = pickThemeId(resolved.style, own, resolved.activeTheme?.id)
-  if (themeId === undefined) return undefined
-  const tokens = resolved.themeTable[themeId]
-  if (tokens === undefined) {
-    resolved.onDegrade?.({ kind: 'unknown-theme', theme: themeId })
-    return undefined
-  }
-  return { id: themeId, tokens }
-}
-
-/**
- * The family a theme's text is DECLARED in: the one it names when this
- * surface holds that face, and the bundled one otherwise — reporting the face
- * it had to replace. The declared family must be the measured one.
- */
-export function themeFace(wanted: string | undefined, resolved: ResolvedLayoutOptions): string {
-  if (wanted === undefined) return SPATIAL_THEME_FONT_FAMILY
-  const available = resolved.fontAvailable ?? ((family) => family === SPATIAL_THEME_FONT_FAMILY)
-  if (available(wanted)) return wanted
-  resolved.onDegrade?.({ kind: 'font-missing', family: wanted })
-  return SPATIAL_THEME_FONT_FAMILY
 }

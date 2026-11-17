@@ -10,10 +10,12 @@ import { defineConfig } from 'vitest/config'
  * ~22s of the project's ~30s, and it is an aggregate SCOREBOARD (counts
  * pinned exactly over a 2000-layout corpus) rather than a correctness test —
  * a mutant it kills is one the properties beside it should have killed on
- * their own. `text-wrapping-quality.test.ts` is the same instrument for
- * wrapping. Excluding both is what makes the lane finish; the mutants they
+ * their own. Excluding it is what makes the lane finish; the mutants it
  * would have caught still have to be caught by something, which is exactly
- * the report this lane exists to produce.
+ * the report this lane exists to produce. The `*.rust.test.ts` suites (the
+ * other scoreboards among them) are excluded as the node project excludes
+ * them: they need the oracle artifact, and judge the Rust core, not a line
+ * Stryker mutates here.
  *
  * Every cost and budget test is excluded too (`*cost*`, `*budget*`). Each
  * bounds how much WORK a layout does on an input sized to make a quadratic
@@ -31,7 +33,7 @@ import { defineConfig } from 'vitest/config'
  * the overlap axis to one direction leaves the result separated, on-grid,
  * idempotent and deterministic while dragging boxes 50% further. Adding the
  * scoreboard took it to 80.70%. A cheap scoreboard belongs in the lane; an
- * expensive one is what these two exclusions are about.
+ * expensive one is what the scoreboard exclusions are about.
  */
 export default defineConfig({
   test: {
@@ -42,7 +44,7 @@ export default defineConfig({
     exclude: [
       'src/**/*.browser.test.ts',
       'src/layout/edges/edge-routing-quality.test.ts',
-      'src/layout/nodes/text-wrapping-quality.test.ts',
+      'src/**/*.rust.test.ts',
       'src/**/*cost*.test.ts',
       'src/**/*budget*.test.ts',
     ],

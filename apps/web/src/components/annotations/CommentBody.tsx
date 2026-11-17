@@ -31,7 +31,7 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useKeyedSvg } from '../../hooks/use-keyed-svg.js'
-import { currentLayoutCore } from '../../lib/spatial/layout-core.js'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { cn } from '../../lib/utils.js'
 
 /**
@@ -80,7 +80,7 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
   const keyed = useMemo(() => {
     const scene = layoutCommentDocument(body, {
       measure: resolvedMeasure,
-      core: currentLayoutCore(),
+      core: requireLayoutCore(),
       maxWidth: (width ?? UNMEASURED_WIDTH_PX) - 2 * BODY_PADDING_PX,
       // What `compact` has always claimed and, until this, did not do: it
       // set a `text-xs` class the SVG never reads, so a rail whose chrome

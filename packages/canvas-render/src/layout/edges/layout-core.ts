@@ -35,9 +35,12 @@ export interface RoutingCore {
 /**
  * The Rust core as a layout is handed it (`SpatialLayoutOptions.core`): one
  * implementation behind each entry, which a composition root holds and hands
- * over. Given one, the core answers every layout, note and query it is asked;
- * a layout handed none is the TypeScript composer's own (ADR-0054 step 7,
- * S18g), which only canvas-render's own tests and recorders still reach.
+ * over. Every layout, note and query is the core's: `SpatialLayoutOptions.core`
+ * is required, and there is no TypeScript composer behind it (ADR-0054 step 7,
+ * S18h). The one layout piece whose TypeScript remains is the edge routing
+ * (`routeLayout`, ledgered at stage 2, over `assignEdgeAnchors` and
+ * `routeEdge`), which the web editor's connect preview runs in a realm that
+ * holds no core.
  */
 export interface LayoutCore {
   /** An edge set routed in one call (`routeLayout`). */
@@ -71,8 +74,8 @@ function routeLayoutTs(
 
 /**
  * One layout's edge routing: by the core when one is given, its budget
- * written back as the TypeScript's would be, else by the TypeScript composer's
- * own routing.
+ * written back as the TypeScript's would be, else by the TypeScript routing
+ * (`routeLayoutTs`), which stays at stage 2 while ADR-0054 step 7 keeps it.
  */
 export function routeLayout(
   core: LayoutCore | undefined,

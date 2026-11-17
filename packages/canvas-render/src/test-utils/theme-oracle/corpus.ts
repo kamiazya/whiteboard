@@ -36,7 +36,7 @@ export interface ThemeCorpus {
   /** `null` is a node or edge that carries no colour. */
   readonly colors: readonly (string | null)[]
   readonly resolvers: readonly ResolverSpec[]
-  /** Pairs asked of `markdownTheme`: a theme (or none) and a mode (or none). */
+  /** Pairs the markdown chrome was asked for: a theme (or none) and a mode (or none). */
   readonly markdown: readonly (readonly [string | null, SpatialThemeMode | null])[]
 }
 

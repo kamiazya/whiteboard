@@ -4,11 +4,12 @@
 // the same obstacles, so it opens where the comment will settle. Real
 // browser, because the compose box is DOM geometry over a rendered scene.
 
-import { placeCommentBubble } from '@kamiazya/whiteboard-canvas-render'
+import { queryCommentBubble } from '@kamiazya/whiteboard-canvas-render'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { requireLayoutCore } from '../../lib/spatial/require-layout-core.js'
 import { type CommentBoard, makeEditorHost } from '../../test-utils/spatial-editor-host.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
@@ -60,7 +61,7 @@ it('"Comment here" beside a node opens the draft in a free quadrant, not over th
   // size over the node — the draft and the settled bubble use one producer.
   // The draft's box is 216 x 64 (its width stays fixed; the height is the
   // one-line box it opens at, before the field grows with the text).
-  const expected = placeCommentBubble({ x: 300, y: 300 }, { w: 216, h: 64 }, [
+  const expected = queryCommentBubble(requireLayoutCore(), { x: 300, y: 300 }, { w: 216, h: 64 }, [
     { x: 320, y: 320, w: 220, h: 120 },
   ])
   expect(origin).toEqual({ x: expected.x, y: expected.y })

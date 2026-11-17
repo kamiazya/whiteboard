@@ -69,10 +69,6 @@ const LEDGER: Readonly<Record<string, LedgerEntry>> = {
     uses: 1,
     why: 'theme names a contribution registers, which the table composes into namespaced ids before anything is ordered by them',
   },
-  'packages/canvas-render/src/vendor/budoux/parser.ts': {
-    uses: 2,
-    why: 'the BudouX model copied into Maps that are only ever looked up by key, so the walk order never reaches a line break',
-  },
   'packages/canvas-render/src/tags/declared-colours.ts': {
     uses: 1,
     why: 'an emptiness check on the tag library, where the count is read and the order never is',

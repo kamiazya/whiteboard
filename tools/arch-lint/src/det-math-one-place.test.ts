@@ -27,12 +27,7 @@ interface LedgerEntry {
 }
 
 /** Each entry is held from both sides: a count that stops matching fails. */
-const LEDGER: Readonly<Record<string, LedgerEntry>> = {
-  'packages/canvas-render/src/layout/edges/edge-jumps.ts': {
-    uses: 1,
-    why: 'Math.log2 is only the first guess of a grid level that the two loops after it correct against cellAt, so its last bit cannot reach the answer',
-  },
-}
+const LEDGER: Readonly<Record<string, LedgerEntry>> = {}
 
 const DET_MATH = 'packages/canvas-render/src/det-math.ts'
 const REASON = /^(\S+\s+){7,}\S+/

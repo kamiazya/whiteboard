@@ -1,4 +1,4 @@
-//! A fenced code block, ported from `mdast-code-block.ts`: one run per SOURCE
+//! A fenced code block, ported from the TypeScript code-block typesetter: one run per SOURCE
 //! line, each line cut rather than wrapped, tokenised through the host's
 //! highlighter when it has one.
 //!

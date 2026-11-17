@@ -4,30 +4,27 @@ import { describe, expect, it } from 'vitest'
  * Every production module of this package sits in one rank, and a module
  * imports its own rank or one below it:
  *
- *   theme < highlight < leaf < quality < legend < engines < ink
+ *   theme < highlight < leaf < quality < engines < ink
  *     < scene-bounds < layout < svg < surface
  *
  * `theme/` decides appearance and geometry tokens and reads nothing else;
  * `highlight/` tokenises a code fence; `leaf` is everything that reads no
- * other stage (references, tags, the vendored line-breaker, the generated
+ * other stage (references, tags, the generated
  * contract types, the small root helpers, the legend's measurements, a
  * node's silhouette in `outline/` and a drawn edge's path in `edge-path/`);
  * `quality/` scores a drawing;
- * `legend/` lays out the legend panel; `engines` are `layout/edges/` and
- * `layout/nodes/`, which `layout/layer-boundary.test.ts` keeps free of each
- * other; `ink` is `ink/`, which draws on both; `scene-bounds` is the
+ * `engines` is `layout/edges/`, the routing the core's own replaced; `ink`
+ * is `ink/`; `scene-bounds` is the
  * root module that knows how far a drawn node or edge reaches, so it sits
  * above the ink it measures and below the composers and the SVG backend that
- * ask it; `layout` composes the scene; `svg` draws it; `surface` is what a
+ * ask it; `layout` asks the Rust core for the scene (ADR-0054 step 7);
+ * `svg` draws it; `surface` is what a
  * consumer calls on a finished scene and nothing in the pipeline reads.
  *
- * Ranking is by role, not only by directory, because three files sit in a
- * directory whose rank is not theirs: `legend/legend-geometry.ts` reads
- * nothing and `scene-bounds` reads it, while `quality/drawing-score.ts` reads
- * `scene-bounds`. Left at directory grain that is a loop
- * legend -> quality -> scene-bounds -> legend no per-file check sees.
- * `ink/seed.ts` is the id-keyed random primitive: it reads nothing, and
- * `ink/` and `layout/node-box.ts` both draw from it.
+ * Ranking is by role, not only by directory, because two files sit in a
+ * directory whose rank is not theirs: `quality/drawing-score.ts` reads
+ * `scene-bounds`, which reads `legend/legend-geometry.ts`; and `ink/seed.ts`
+ * is the id-keyed random primitive, which reads nothing.
  *
  * A file in a ranked directory inherits its rank. A root file must be named
  * in `ROOT_FILES`, so a new one is placed on purpose: one in none fails
@@ -50,7 +47,6 @@ const LAYERS = [
   'highlight',
   'leaf',
   'quality',
-  'legend',
   'engines',
   'ink',
   'scene-bounds',
@@ -68,12 +64,10 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   highlight: 'highlight',
   references: 'leaf',
   tags: 'leaf',
-  vendor: 'leaf',
   generated: 'leaf',
   quality: 'quality',
-  legend: 'legend',
+  legend: 'leaf',
   'layout/edges': 'engines',
-  'layout/nodes': 'engines',
   ink: 'ink',
   outline: 'leaf',
   'edge-path': 'leaf',
@@ -86,7 +80,6 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
 
 /** A file whose role differs from its directory's; each reason is in the header. */
 const FILE_LAYERS: Readonly<Record<string, Layer>> = {
-  'legend/legend-geometry.ts': 'leaf',
   'ink/seed.ts': 'leaf',
   'quality/drawing-score.ts': 'surface',
 }
@@ -234,16 +227,16 @@ describe('render pipeline layers', () => {
 
   it('reports a planted back edge, in a value import, a type import and a dynamic import', () => {
     const planted = {
-      './theme/a.ts': "import type { X } from '../layout/nodes/spatial-appearance.js'",
-      './highlight/b.ts': "export type { Y } from '../layout/nodes/mdast-layout-options.js'",
-      './layout/nodes/c.ts': "export const m = () => import('../../svg/format.js')",
-      './layout/nodes/ok.ts': "import { z } from '../../theme/z.js'",
+      './theme/a.ts': "import type { X } from '../layout/edges/spatial-appearance.js'",
+      './highlight/b.ts': "export type { Y } from '../layout/edges/mdast-layout-options.js'",
+      './layout/edges/c.ts': "export const m = () => import('../../svg/format.js')",
+      './layout/edges/ok.ts': "import { z } from '../../theme/z.js'",
       './svg/ok.ts': "import { w } from '../layout/w.js'",
     }
     expect(backEdges(planted)).toEqual([
-      './theme/a.ts (theme) imports ../layout/nodes/spatial-appearance.js (engines)',
-      './highlight/b.ts (highlight) imports ../layout/nodes/mdast-layout-options.js (engines)',
-      './layout/nodes/c.ts (engines) imports ../../svg/format.js (svg)',
+      './theme/a.ts (theme) imports ../layout/edges/spatial-appearance.js (engines)',
+      './highlight/b.ts (highlight) imports ../layout/edges/mdast-layout-options.js (engines)',
+      './layout/edges/c.ts (engines) imports ../../svg/format.js (svg)',
     ])
   })
 

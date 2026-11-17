@@ -1,4 +1,4 @@
-//! How ONE node's box is drawn, whatever it holds (`layout/node-box.ts`): the
+//! How ONE node's box is drawn, whatever it holds (the TypeScript node box): the
 //! chrome shape, the label run, where content sits inside the box and a
 //! container's label above it, the content bounds a silhouette inscribes, and
 //! the fit that cuts what cannot fit. The text, frame, link and file nodes are
@@ -50,7 +50,7 @@ impl NodeOutlines {
     }
 }
 
-/// The silhouette per node (`resolveNodeOutlines`): its own `visual.shape/v0`,
+/// The silhouette per node (`resolve_node_outlines`): its own `visual.shape/v0`,
 /// composed under the plugin's namespace so a document cannot name another
 /// plugin's geometry, else the theme's default shape, which a frame never takes.
 #[must_use]

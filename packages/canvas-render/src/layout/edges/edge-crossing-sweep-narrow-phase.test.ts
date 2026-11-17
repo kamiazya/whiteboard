@@ -14,9 +14,9 @@
 // slip. What it cannot catch is the specification being wrong, which is the
 // examples' job, so both are here.
 import { describe, expect, it } from 'vitest'
+import { EDGE_JUMP_RADIUS_PX } from '../../edge-path/edge-flatten.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
-import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 
 /**
  * Restated from the definition rather than imported, on purpose: an oracle

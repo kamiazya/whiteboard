@@ -87,20 +87,16 @@ describe('scan roots', () => {
     expect(unscanned).toEqual([])
   })
 
-  it('excludes history, vendored and worktree directories by their path inside the repo', () => {
+  it('excludes history and worktree directories by their path inside the repo', () => {
     expect(
       isExcludedPath(join(REPO_ROOT, 'packages/mcp-server/src/server/store/db/migrations/0001.ts')),
     ).toBe(true)
-    expect(isExcludedPath(join(REPO_ROOT, 'packages/canvas-render/src/vendor/budoux/ja.ts'))).toBe(
-      true,
-    )
     expect(isExcludedPath(join(REPO_ROOT, WORKTREES_PATH, 'other/packages/x/src/a.ts'))).toBe(true)
     expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/a.ts'))).toBe(false)
   })
 
   it('does not exclude a directory that only shares the name of an excluded one', () => {
     expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/migrations/0001.ts'))).toBe(false)
-    expect(isExcludedPath(join(REPO_ROOT, 'packages/x/src/vendor/budoux/ja.ts'))).toBe(false)
   })
 
   // Guarded from both sides: an entry for a directory that was moved or
@@ -110,7 +106,8 @@ describe('scan roots', () => {
       (segment) => segment !== `/${WORKTREES_PATH}/` && !existsSync(join(REPO_ROOT, segment)),
     )
     expect(missing).toEqual([])
-    expect(EXCLUDED_DIR_SEGMENTS.length).toBeGreaterThan(2)
+    // Migrations and worktrees, since the vendored BudouX went with the typesetter (S18h2).
+    expect(EXCLUDED_DIR_SEGMENTS).toHaveLength(2)
   })
 
   it('does not read where the checkout lives as part of the path it judges', () => {

@@ -1,8 +1,11 @@
 import { fittedTextNodeHeight } from '@kamiazya/whiteboard-canvas-render'
 import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-utils'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
 import { fittedHeight } from './canvas-edit-session.js'
+
+const core = testLayoutCore()
 
 const node = textNode({
   id: 'n',
@@ -21,11 +24,11 @@ describe('fittedHeight', () => {
     ['wider than the ratio floor', (t: string) => t.length * 12],
   ])('is the shared fitted height for a face %s', (_label, advance) => {
     const measure = createFixedMeasure({ advance, ascent: 10, descent: 2 })
-    expect(fittedHeight(node, measure, 0)).toBe(fittedTextNodeHeight(node, { measure }))
+    expect(fittedHeight(node, measure, 0, core)).toBe(fittedTextNodeHeight(node, { measure, core }))
   })
 
   it('never answers below the fallback it was given', () => {
     const measure = createFixedMeasure({ advance: 1, ascent: 1, descent: 0 })
-    expect(fittedHeight(node, measure, 10_000)).toBe(10_000)
+    expect(fittedHeight(node, measure, 10_000, core)).toBe(10_000)
   })
 })

@@ -13,9 +13,6 @@ import type { Point } from './generated/geometry.zod.js'
 export const COMMENT_BUBBLE_PADDING_PX = 8
 export const COMMENT_BUBBLE_RADIUS_PX = 8
 
-/** Gap (px) from the anchor point to the bubble's nearest corner. */
-export const COMMENT_BUBBLE_OFFSET_PX = 14
-
 /**
  * The width a comment's prose is measured to when its surface names none.
  *

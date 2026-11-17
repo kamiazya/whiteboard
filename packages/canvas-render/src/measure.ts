@@ -155,18 +155,26 @@ export type MeasureSpec =
 const SPECS = new WeakMap<MeasureText, MeasureSpec>()
 
 /**
- * Names `measure` as `spec`, for the measurer's own maker to call: a measure
- * nobody named is a function the core cannot repeat, and a layout handed one
- * is answered by the TypeScript.
+ * Names `measure` as `spec`, for the measurer's own maker to call. Naming is
+ * what lets the core measure as the function does without asking it — the
+ * only way a layout off the host's thread (a worker, the core's own query
+ * entry) can repeat it — and what keeps a body the core laid out with one
+ * named measurer reusable by the next layout naming the same spec.
  */
 export function describeMeasure(measure: MeasureText, spec: MeasureSpec): MeasureText {
   SPECS.set(measure, spec)
   return measure
 }
 
-/** What `measure` was named as, if anything. */
-export function measureSpecOf(measure: MeasureText): MeasureSpec | undefined {
-  return SPECS.get(measure)
+const HOST: MeasureSpec = { kind: 'host' }
+
+/**
+ * What `measure` was named as; a measurer nobody named is `host`, so the core
+ * asks the function itself, mid-layout. There is no layout behind the core to
+ * answer for one it cannot repeat, and a host measurer is one any function is.
+ */
+export function measureSpecOf(measure: MeasureText): MeasureSpec {
+  return SPECS.get(measure) ?? HOST
 }
 
 describeMeasure(constantRatioMeasureText, { kind: 'ratio' })

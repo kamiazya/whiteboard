@@ -1,6 +1,10 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
-import type { SpatialLayoutOptions } from '../../layout/layout-options.js'
+import type { SpatialLayoutOptions as LayoutOptions } from '../../layout/layout-options.js'
+
+/** A case's options: what the caller hands, the core joined at the call. */
+type SpatialLayoutOptions = Omit<LayoutOptions, 'core'>
+
 import { type ReferenceWire, referenceSeamsFromWire } from '../../references/wire.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import {
@@ -41,7 +45,7 @@ import { proposalCases } from './layout-proposal-cases.js'
  * core something new adds a topic and a recording rather than re-recording
  * the others.
  */
-export type LayoutTopic =
+type LayoutTopic =
   | 'composer'
   | 'bodies'
   | 'shortcode'

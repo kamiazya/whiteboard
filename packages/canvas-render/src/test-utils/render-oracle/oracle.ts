@@ -1,9 +1,4 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type {
-  MdastFlowContent,
-  MdastPhrasingContent,
-  MdastRoot,
-} from '@kamiazya/whiteboard-model/mdast'
 import { spatialCanvasArbitrary, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { layoutSpatialCanvas } from '../../layout/spatial-canvas.js'
@@ -35,7 +30,8 @@ import {
   stackedFrameLayouts,
   syntheticLayouts,
 } from '../routing-corpus.js'
-import { CORPUS_WIDTHS_PX, TEXT_WRAPPING_CORPUS } from '../text-wrapping-corpus.js'
+import { testLayoutCore } from '../test-layout-core.js'
+import { CORPUS_WIDTHS_PX, corpusMarkdown, TEXT_WRAPPING_CORPUS } from '../text-wrapping-corpus.js'
 import { buildEveryKindScene } from './every-kind-scene.js'
 import { dumpScene } from './scene-dump.js'
 
@@ -89,6 +85,7 @@ function keyedAnswer(scene: Scene, options?: SvgDocumentOptions) {
 
 function layoutRecorded(canvas: SpatialCanvas, options: RenderOptions): Scene {
   return layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
     appearance: createSpatialTheme({ mode: options.mode }),
     ...(options.style === undefined ? {} : { style: options.style }),
@@ -119,28 +116,6 @@ export function svgAnswer(input: SvgInput): SvgRecord {
   }
 }
 
-const inlineText = (node: MdastFlowContent | MdastPhrasingContent): string => {
-  switch (node.type) {
-    case 'text':
-      return node.value
-    case 'inlineCode':
-      return `\`${node.value}\``
-    case 'strong':
-      return `**${node.children.map(inlineText).join('')}**`
-    case 'paragraph':
-      return node.children.map(inlineText).join('')
-    case 'heading':
-      return `${'#'.repeat(node.depth)} ${node.children.map(inlineText).join('')}`
-    case 'list':
-      return node.children.map((item) => `- ${item.children.map(inlineText).join('')}`).join('\n')
-    default:
-      throw new Error(`render-oracle: the wrapping corpus grew a ${node.type}`)
-  }
-}
-
-/** A wrapping-corpus root as the markdown a text node would hold. */
-const markdownOf = (root: MdastRoot): string => root.children.map(inlineText).join('\n\n')
-
 /** Markdown bodies reaching the block kinds the wrapping corpus does not. */
 const BODIES: readonly string[] = [
   '# Title\n\n> quoted *text* with `code`\n\n---\n\n```ts\nconst a: number = 1 // c\nfunction f(x) { return "s" + x }\n```',
@@ -167,7 +142,7 @@ const OPTION_CYCLE: readonly RenderOptions[] = [
   { mode: 'light', style: 'clean' },
 ]
 
-export function renderInputs(): readonly RenderInput[] {
+function renderInputs(): readonly RenderInput[] {
   const named: { id: string; canvas: SpatialCanvas }[] = [
     ...ROUTING_CORPUS.map((c) => ({ id: `routing/${c.name}`, canvas: canvasOf(c.nodes, c.edges) })),
     ...syntheticLayouts(12).map((c) => ({
@@ -187,7 +162,7 @@ export function renderInputs(): readonly RenderInput[] {
       CORPUS_WIDTHS_PX.map((width) => ({
         id: `wrapping/${c.name}@${width}`,
         canvas: canvasOf(
-          [textNode({ id: 'n', x: 0, y: 0, width, height: 240, text: markdownOf(c.root) })],
+          [textNode({ id: 'n', x: 0, y: 0, width, height: 240, text: corpusMarkdown(c.root) })],
           [],
         ),
       })),

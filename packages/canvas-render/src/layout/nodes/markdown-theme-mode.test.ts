@@ -6,34 +6,25 @@
 // contrast tests that guard the rest of it.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
+import { testLayoutCore } from '../../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'
 
-const BODY: MdastRoot = {
-  type: 'root',
-  children: [
-    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Head' }] },
-    { type: 'paragraph', children: [{ type: 'text', value: 'prose' }] },
-    {
-      type: 'blockquote',
-      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'quoted' }] }],
-    },
-  ],
-}
+/** A heading, prose and a quote: every body colour the mode decides. */
+const BODY = '## Head\n\nprose\n\n> quoted'
 
 function bodyRuns(mode: 'light' | 'dark'): TextRunNode[] {
   const canvas: SpatialCanvas = {
-    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 320, text: 'x' })],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 320, text: BODY })],
     edges: [],
   }
   const scene: Scene = layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: () => BODY,
     appearance: createSpatialTheme({ mode }),
   })
   const out: TextRunNode[] = []
@@ -56,12 +47,12 @@ function bodyRuns(mode: 'light' | 'dark'): TextRunNode[] {
 
 function quoteBlock(mode: 'light' | 'dark') {
   const canvas: SpatialCanvas = {
-    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 320, text: 'x' })],
+    nodes: [textNode({ id: 'n1', x: 0, y: 0, width: 320, height: 320, text: BODY })],
     edges: [],
   }
   const scene = layoutSpatialCanvas(canvas, {
+    core: testLayoutCore(),
     measure: createFakeMeasure(),
-    parseBody: () => BODY,
     appearance: createSpatialTheme({ mode }),
   })
   const found: { appearance?: { fillOpacity?: number } }[] = []

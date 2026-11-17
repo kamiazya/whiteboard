@@ -10,6 +10,14 @@ heading it came from, so a rule that ends mid-argument continues in the section 
 same name below. A passage is in the rule or here, never both. Figures are as measured
 when the decision was taken and describe the code of that day; the rule, the tests and
 the scoreboards are what is current.
+
+The TypeScript composer and typesetter these decisions were first taken in were deleted in
+ADR-0054 step 7 (S18h2): the Rust core under `crates/core/canvas-render` lays out every
+board, note and comment, and ports the decisions below. Where a passage names a deleted
+module (`compose-node.ts`, `mdast-blocks.ts`, `node-box.ts`, the legend's computation, the
+vendored BudouX, `css-line-break`), it records what was decided and measured there, which is
+why it is kept as written.
+
 ## What belongs here
 
 ### The scene-node union and the shape table

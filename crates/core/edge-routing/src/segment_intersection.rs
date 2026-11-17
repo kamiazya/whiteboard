@@ -1,5 +1,6 @@
 //! The interior intersection the line jumps hop over: canvas-render's
-//! `layout/edges/segment-intersection.ts`, ported as written. Plain
+//! TypeScript narrow phase, ported as written and kept as its reference in
+//! `test-utils/wasm/segment-intersection.ts`. Plain
 //! arithmetic in the TypeScript's own evaluation order, with [`hypot`] for
 //! the length.
 

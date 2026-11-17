@@ -7,14 +7,14 @@
  * untouched: only what it embeds is drawn without one.
  */
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fileNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import { type LoadedReference, referenceSeams } from '../index.js'
+import { type LoadedReference, referenceSeamsFromWire, referenceWire } from '../index.js'
 import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
@@ -26,8 +26,12 @@ const board: SpatialCanvas = {
   edges: [],
 }
 
-const references = referenceSeams(
-  new Map<string, LoadedReference>([[BOARD, { documentId: BOARD, name: 'Board', canvas: board }]]),
+const references = referenceSeamsFromWire(
+  referenceWire(
+    new Map<string, LoadedReference>([
+      [BOARD, { documentId: BOARD, name: 'Board', canvas: board }],
+    ]),
+  ),
 )
 
 /** Every comment-chrome shape and every run of text, however deep. */
@@ -53,7 +57,6 @@ function walk(nodes: readonly SceneNode[]): { chrome: number; text: string[] } {
 
 const base = {
   measure: createFakeMeasure(),
-  parseBody: parseMarkdownBody,
   appearance: createSpatialTheme({ mode: 'light' }),
 }
 
@@ -82,7 +85,13 @@ describe('a canvas embedded in another document draws none of the host’s comme
     { id: 'h1', x: 700, y: 40, text: 'host remark' },
   ])
   const laid = () =>
-    layoutSpatialCanvas(host, { ...base, references, threads, expandFileNode: () => true }).nodes
+    layoutSpatialCanvas(host, {
+      core: testLayoutCore(),
+      ...base,
+      references,
+      threads,
+      expandFileNode: () => true,
+    }).nodes
 
   it('draws the host’s own threads, so the fixture has a layer to keep out', () => {
     const drawn = walk(laid())
@@ -142,6 +151,7 @@ describe('a canvas embedded in another document draws none of the host’s propo
 
   it('outlines the change on the host and inside neither embed', () => {
     const scene = layoutSpatialCanvas(host, {
+      core: testLayoutCore(),
       ...base,
       references,
       expandFileNode: () => true,

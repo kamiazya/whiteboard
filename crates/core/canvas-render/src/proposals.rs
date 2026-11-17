@@ -1,4 +1,4 @@
-//! The proposal layer (`layout/proposals.ts`, ADR-0029 decision 1): every
+//! The proposal layer (the TypeScript proposal layer, ADR-0029 decision 1): every
 //! OPEN change outlined where it would land, and one bubble per proposal
 //! saying how many changes it holds and how many need a look.
 //!

@@ -4,7 +4,7 @@ import type { BoundingBox, Scene, SceneNode, ShapeSceneNode } from '@kamiazya/wh
  * The annotation-density scoreboard's independent oracle, for both
  * residents of ADR-0026's annotation layer.
  *
- * It reads GEOMETRY off the scene and never calls `comment-placement.ts`'s
+ * It reads GEOMETRY off the scene and never calls the TypeScript comment-bubble placement's
  * own `coveredArea`, so a broken placement rule cannot satisfy the
  * scoreboard by agreeing with itself (same contract as `routing-metrics.ts`
  * and `text-wrapping-metrics.ts`).

@@ -124,7 +124,7 @@ describe('a finished shortcode is drawn as its emoji', () => {
 
   /**
    * Inside a code span the shortcode is the SUBJECT, and the renderer says
-   * so too — `mdast-blocks.ts` expands text nodes and never `inlineCode`.
+   * so too — the TypeScript typesetter expands text nodes and never `inlineCode`.
    * The editor showing an emoji where the render shows text would make the
    * pane a preview of something that does not happen.
    */

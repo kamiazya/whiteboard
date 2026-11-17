@@ -9,7 +9,6 @@
  * scene is.
  */
 export type {
-  DecorationContext,
   NodeDecoration,
   NodeOutline,
   RenderContribution,

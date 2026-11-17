@@ -27,10 +27,10 @@ import {
   selfRetracedInk,
   tunnelledInk,
 } from '../../layout/edges/edge-ink.js'
-import { segmentIntersection } from '../../layout/edges/segment-intersection.js'
 import { fc, fcTest, withDefaults } from '../fast-check.js'
 import { coordinate, firstDifference, pathAndRects, point, rect } from './edge-arbitraries.js'
 import { built, requireWasm } from './glue.js'
+import { segmentIntersection } from './segment-intersection.js'
 
 /**
  * The edge layer's geometry and ink primitives against their Rust port

@@ -223,17 +223,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // snapshot still holding the retired comments plane is refused there, next
   // to the corrupt-record refusal it mirrors.
   'apps/web/src/lib/document-sync-session.ts': 1297, // +20: a document a live update made unreadable takes no further write, queued ones included
-  // The markdown typesetter: one block per mdast kind, the inline run walker
-  // (`layoutPhrasing`) with its emoji, icon and image projections, embeds, and
-  // the fit that decides what is cut when a body does not fit. Each inner step
-  // is a named function carrying its reason, which is where the lines go. The
-  // code block (`mdast-code-block.ts`), the table (`mdast-table.ts`) and the
-  // vocabulary they share with the typesetter (`mdast-layout-options.ts`) are
-  // sibling modules; the vocabulary went first, so neither imports the
-  // typesetter back. The next shrink is the inline writer out of
-  // `layoutPhrasing`, benched before and after. Raised by 9 for the nested-
-  // layout budget, which has to be spent where an embed is resolved.
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1395, // +44: a stand-alone picture laid out at its natural size (layoutFigure)
   // The side-choice SEARCH: the cost model's application to a whole canvas,
   // the trial machinery of `createConfigScore`, the repair pass and the
   // regions. The side vocabulary (`edge-sides.ts`), the anchor pass
@@ -403,12 +392,9 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/use-browser-document-controller.test.ts': 1253,
   'packages/canvas-render/src/layout/edges/edge-rules.properties.test.ts': 843,
   'packages/canvas-render/src/layout/edges/edge-rules.test.ts': 1061,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.test.ts': 1331,
-  'packages/canvas-render/src/layout/spatial-canvas.properties.test.ts': 965,
   // The curved-line layout case: the seam the
   // freehand pen rides, from facet through style to a rounded scene node.
-  'packages/canvas-render/src/layout/spatial-canvas.test.ts': 1259, // +19: the empty-frame tint case
-  'packages/canvas-render/src/quality/drawing-score.test.ts': 843,
+  'packages/canvas-render/src/quality/drawing-score.test.ts': 844, // +1: the layout core it lays out through (S18h2)
   'packages/canvas-render/src/svg/backend.test.ts': 1185,
   // +1: the import of `afterAllFloor`, which keeps the reach floor from failing
   // a run that filtered the property feeding it away.
@@ -470,7 +456,7 @@ const TEST_FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // The describes that stand alone (`region.set`, `node.add within a group`,
   // line ops) live in `canvas-edit.<topic>.test.ts` siblings over
   // `_test-canvas-edit.ts`; what remains is the tool's core and sizing cases.
-  'packages/server-core/src/tools/canvas-edit.test.ts': 1948,
+  'packages/server-core/src/tools/canvas-edit.test.ts': 1950, // +2: the layout core it sizes through (S18h2)
   'packages/server-core/src/tools/facet-set.test.ts': 1320,
 }
 

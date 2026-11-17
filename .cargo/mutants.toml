@@ -74,10 +74,10 @@ exclude_re = [
   # rather than surviving; every detour test hangs on it.
   'straight_detour\.rs:\d+:\d+: replace nearest_open -> Option<usize> with Some\(0\)$',
   # segment_intersection: a `t` that passes the range test leaves x and y both
-  # finite or both NaN, never one alone. LINE-pinned, because 30:29 has the
+  # finite or both NaN, never one alone. LINE-pinned, because 31:29 has the
   # same description and is judged; an edit above it makes this entry stale,
   # which the gate reports rather than hiding.
-  'segment_intersection\.rs:34:29: replace \|\| with && in segment_intersection$',
+  'segment_intersection\.rs:35:29: replace \|\| with && in segment_intersection$',
   # spatial_edges: every OR in the Morton interleave joins operands with
   # disjoint bits, so `|` is `^`.
   'spatial_edges\.rs:\d+:\d+: replace \| with \^ in interleave$',

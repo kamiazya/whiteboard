@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { LayoutCore } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import {
   writeDocumentKind,
   writeFacets,
@@ -70,7 +71,9 @@ describe('exportCanvasHeadless', () => {
     const doc = spatialTextDoc('n1', 'hello')
     await saveDocument('01TYGJP26XH16QHBBVNW85QCE0', 'design', doc)
 
+    const core = testLayoutCore()
     await exportCanvasHeadless({
+      layoutCore: async () => core,
       scope: testStoreScope(),
       workspaceId: '01TYGJP26XH16QHBBVNW85QCE0',
       path: 'design',
@@ -82,7 +85,7 @@ describe('exportCanvasHeadless', () => {
     expect(canvas.nodes.map((n) => n.id)).toEqual(['n1'])
     // The renderer is keyed by the fonts directory of the scope being served.
     expect(fontsDir).toBe(testStoreScope().layout.fontsDir)
-    expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark' })
+    expect(options).toEqual({ padding: 20, scale: 2, theme: 'dark', core })
   })
 
   it('refuses, rather than exporting an empty canvas, a doc holding entries in the retired elements list', async () => {
@@ -97,6 +100,7 @@ describe('exportCanvasHeadless', () => {
 
     await expect(
       exportCanvasHeadless({
+        layoutCore: async () => testLayoutCore(),
         scope: testStoreScope(),
         workspaceId: '0149W95NTZ1DZPVKF0NG8BBBRH',
         path: 'design',
@@ -142,12 +146,14 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
     await saveDocument('01Y3XV9F48P3BK66R4W49E93D4', 'tags', libraryDoc())
     await saveDocument('01Y3XV9F48P3BK66R4W49E93D4', 'design', board(['health:ok']))
     await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: '01Y3XV9F48P3BK66R4W49E93D4',
       path: 'design',
     })
     expect(optionsOf(renderSvgSpy)?.tagLibrary).toEqual(library)
     await exportCanvasHeadless({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: '01Y3XV9F48P3BK66R4W49E93D4',
       path: 'design',
@@ -158,6 +164,7 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
   it('hands none when no document sits at `tags` — and creates none by asking', async () => {
     await saveDocument('01TNM0J8GGXEV9V96R9C3H5FCP', 'design', board(['health:ok']))
     await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: '01TNM0J8GGXEV9V96R9C3H5FCP',
       path: 'design',
@@ -172,6 +179,7 @@ describe('the workspace tag library reaches the export (ADR-0040 decision 5)', (
     await saveDocument('01D0MK07WPE105NGQT6GA5ANCF', 'tags', libraryDoc())
     await saveDocument('01D0MK07WPE105NGQT6GA5ANCF', 'design', board())
     await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: '01D0MK07WPE105NGQT6GA5ANCF',
       path: 'design',
@@ -186,6 +194,7 @@ describe('exportCanvasHeadlessSvg', () => {
     await saveDocument('01KR4HFA5KRXT4QEFYG44FX09X', 'design', doc)
 
     const result = await exportCanvasHeadlessSvg({
+      layoutCore: async () => testLayoutCore(),
       scope: testStoreScope(),
       workspaceId: '01KR4HFA5KRXT4QEFYG44FX09X',
       path: 'design',
@@ -223,15 +232,5 @@ describe('the layout core reaches the renderer', () => {
       layoutCore: async () => core,
     })
     expect(renderSvgSpy.mock.calls[0]?.[2]?.core).toBe(core)
-  })
-
-  it('hands no core when there is no factory (a test composition)', async () => {
-    await saveDocument('01KR4HFA5KRXT4QEFYG44FX0A3', 'design', spatialTextDoc('n1', 'hello'))
-    await exportCanvasHeadlessSvg({
-      scope: testStoreScope(),
-      workspaceId: '01KR4HFA5KRXT4QEFYG44FX0A3',
-      path: 'design',
-    })
-    expect(renderSvgSpy.mock.calls[0]?.[2]).not.toHaveProperty('core')
   })
 })

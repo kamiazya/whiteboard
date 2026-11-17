@@ -60,17 +60,18 @@ describe('the mutation lane covers what it says it covers', () => {
   })
 
   it('names exactly the modules it mutates, out of exactly this many', () => {
-    // 57 rather than 56 since `layout/comment-body.ts`, and the lane
-    // deliberately does NOT cover it: what that module decides is which
-    // markdown theme a comment takes and what a body that will not parse
-    // degrades to, and both are pinned by named tests that were
-    // mutation-checked by hand (swapping in the document theme fails them
-    // with `expected 30 to be 24`). The rest is delegation to
-    // `typesetMdastBlocks`, which the lane already mutates.
+    // 57 rather than 56 since the comment-body layout module (deleted with
+    // the composer in S18h2), which the lane deliberately did NOT cover: what
+    // it decided was which markdown theme a comment took and what a body that
+    // would not parse degraded to, and both were pinned by named tests that
+    // were mutation-checked by hand (swapping in the document theme failed
+    // them with `expected 30 to be 24`). The rest was delegation to the
+    // typesetter, which the lane then mutated.
     //
-    // 58 since `layout/nodes/task-checkbox.ts`, and outside the lane for the
-    // same shape of reason: it is geometry with no branch worth mutating
-    // beyond ticked-vs-not, and that one IS pinned by name — removing the
+    // 58 since the task checkbox module (deleted with the typesetter in
+    // S18h2), outside the lane for the same shape of reason: it was geometry
+    // with no branch worth mutating beyond ticked-vs-not, and that one WAS
+    // pinned by name — removing the
     // filled rect fails `fills the box for a ticked item` and returning no
     // marker at all fails the preview guard in apps/web. What a mutation
     // score would add here is a number over two rects.
@@ -160,21 +161,21 @@ describe('the mutation lane covers what it says it covers', () => {
     // prototype-inherited name answering a function) with a named example
     // apiece, plus construction the pixel goldens compare byte for byte.
     // 73 since the wrapper's line-break seam was split in two, and the two
-    // go opposite ways. `layout/nodes/inline-junction.ts` is IN, for the
-    // reason its own entry gives: it is a rule whose every decision is
-    // mutation-shaped, not a ladder of ways to decline.
-    // `layout/nodes/uax-segments.ts` is OUT and always will be — it is the
-    // `LineBreaker` call plus the code-point to UTF-16 offset walk that
-    // slices each segment (pinned by a differential property against the
-    // library's own `Break.slice()`), and it exists only so the wrapper's granularity ladder and the
-    // junction rule cannot come to disagree about where a line may break.
+    // went opposite ways. The inline-junction rule went IN, for the reason
+    // its own entry gave: a rule whose every decision is mutation-shaped,
+    // not a ladder of ways to decline. The UAX #14 segmenter stayed OUT — it
+    // was the `LineBreaker` call plus the code-point to UTF-16 offset walk
+    // that sliced each segment (pinned by a differential property against the
+    // library's own `Break.slice()`), there only so the wrapper's granularity
+    // ladder and the junction rule could not come to disagree about where a
+    // line may break. Both were deleted with the typesetter in S18h2.
     // 76 since the legend (ADR-0040 decision 6), all three modules outside
     // the lane. `legend/legend-geometry.ts` is constants and the panel's row
     // list, pinned by the band tests' exact viewBox numbers — a survivor
     // there is a different constant, which those numbers refuse.
-    // `legend/canvas-legend.ts` is a reading OFF the facet score —
-    // which keys it lists and which swatch each class gets — pinned by
-    // examples that plant one board each (a carried key, an uncarried
+    // The legend's computation (deleted with the composer in S18h2) was a
+    // reading OFF the facet score — which keys it listed and which swatch
+    // each class got — pinned by examples that planted one board each (a carried key, an uncarried
     // colour, a frame that carries and is not listed, an edge key), the
     // same shape as the instruments it reads. `svg/legend.ts` is document
     // chrome whose every decision is a coordinate, pinned by the backend's
@@ -188,13 +189,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // is mutation-shaped.
     // 81 since `spatial-canvas.ts` gave its overlay layers and its options
     // vocabulary their own modules (task #84). Four files, no new behaviour
-    // and none in the lane: `comments.ts` and `proposals.ts` are the moved
-    // bodies, already covered by `comments.test.ts` and `proposals.test.ts`
-    // through the same entry point as before; `layout-options.ts` is type
+    // and none in the lane: the comment and proposal layers were the moved
+    // bodies, covered by `comments.test.ts` and `proposals.test.ts` through
+    // the same entry point as before; `layout-options.ts` is type
     // declarations plus one zod union, so there is nothing in it to mutate;
-    // `scene-extent.ts` is the two-line extent the two overlays were each
-    // computing with the same `Math.max(0, ...)` pair, pinned by every
-    // bubble-placement example that reads a bubble's size.
+    // the scene-extent module was the two-line extent the two overlays were
+    // each computing with the same `Math.max(0, ...)` pair. The layers and
+    // the extent went with the composer in S18h2.
     // 82 and 16 since `min-heap.ts` came out of `grid-route.ts` (the A*
     // priority queue, forty lines of index arithmetic that could not be
     // tested where it sat). It is IN the lane rather than merely counted:
@@ -223,7 +224,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // 86 and 19 since `edge-ink.ts` came out of `edge-rules.ts` the same way
     // — the ink TERMS — and is in the lane for the same reason.
     //
-    // 87 and 19 since `layout/compose-node.ts` came out of `spatial-canvas.ts`
+    // 87 and 19 since the node composer came out of `spatial-canvas.ts`
     // — how one node's box is drawn and filled, 47% of that file. OUTSIDE the
     // lane, because the file it left was: splitting it changes nothing the
     // lane saw, which is the opposite case from `edge-ink.ts` and
@@ -241,13 +242,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // in them for a mutant to weaken, and the example tests beside them say
     // exactly what they admit.
     //
-    // 93 and 19 since `layout/nodes/mdast-blocks.ts` gave up its code block
-    // (`mdast-code-block.ts`), its table (`mdast-table.ts`) and the
-    // vocabulary both share with it (`mdast-layout-options.ts`). Outside the
-    // lane, because the file they left was: `mdast-blocks.ts` is pinned by
-    // the text-wrapping scoreboard and its example suites, which are the
-    // reason it was never in the lane, and a split moves none of that. The
-    // options module is types and three font constants besides.
+    // 93 and 19 since the typesetter's block module gave up its code block,
+    // its table and the vocabulary both shared with it to modules of their
+    // own. Outside the lane, because the file they left was: the typesetter
+    // was pinned by the text-wrapping scoreboard and its example suites,
+    // which were the reason it was never in the lane, and a split moved none
+    // of that. The options module was types and three font constants
+    // besides. All four went with the typesetter in S18h2.
     //
     // 96 and 19 since `layout/edges/spatial-edges.ts` gave up its side
     // vocabulary (`edge-sides.ts`), its anchor pass (`edge-anchors.ts`) and
@@ -276,11 +277,11 @@ describe('the mutation lane covers what it says it covers', () => {
     // 97 since the highlight folder's one-line barrel was deleted: a
     // re-export nothing imported, outside the lane for the reason a barrel is.
     //
-    // 99 since `layout/compose-node.ts` gave up its box primitives
-    // (`node-box.ts`) and a file node's representations
-    // (`compose-file-node.ts`). Outside the lane for the reason the file they
-    // left was: the scene and SVG example suites pin them, and a split moves
-    // none of that.
+    // 99 since the node composer gave up its box primitives and a file
+    // node's representations to modules of their own. Outside the lane for
+    // the reason the file they left was: the scene and SVG example suites
+    // pinned them, and a split moved none of that. All three went with the
+    // composer in S18h2.
     //
     // 100 since `finite-box.ts` became the one definition of a box with
     // finite sides, which three SVG leaves and two layout leaves each spelled
@@ -313,28 +314,32 @@ describe('the mutation lane covers what it says it covers', () => {
     // Outside the lane: the decoder's table test pins every branch, and the
     // schema is a two-member enum.
     //
-    // 108 with `layout/nodes/embed-budget.ts`, the nested-layout budget every
-    // embed spends from. Outside the lane: a counter whose budget test pins
-    // both the bound and that the excess still draws.
+    // 108 with the embed budget, the nested-layout budget every embed spent
+    // from. Outside the lane: a counter whose budget test pinned both the
+    // bound and that the excess still drew.
     //
-    // 109 and 23 with `layout/nodes/longest-fit.ts`, the prefix search lifted
-    // out of `truncate.ts`'s cut loop; in the lane because that file is.
+    // 109 and 23 with the longest-fit search, the prefix search lifted out of
+    // the truncation's cut loop; in the lane because that file was.
     //
-    // 110 with `layout/loose-occurrences.ts`, the whitespace-loose passage
-    // search lifted out of `passage-highlight.ts`. Outside the lane, as that
-    // file is: a property against the regex it replaced pins every span, and
-    // its overlap, squash and end-offset branches were mutation-checked by
-    // hand against it.
+    // 110 with the loose-occurrence finder, the whitespace-loose passage
+    // search lifted out of the passage highlight. Outside the lane, as that
+    // file was: a property against the regex it replaced pinned every span,
+    // and its overlap, squash and end-offset branches were mutation-checked
+    // by hand against it.
     //
-    // 111 with `layout/edges/segment-intersection.ts`, the line-jump narrow
-    // phase lifted out of `edge-jumps.ts` so its cost test can count calls.
-    // Outside the lane, as that file is: the edge-jumps tests pin its three
-    // rejection branches — a hit outside either segment, one too close to
-    // an end for the arc, and a non-finite hit point.
+    // 111 with the line-jump narrow phase, lifted out of the line jumps so
+    // its cost test could count calls. Outside the lane, as that file was:
+    // the line-jump tests pinned its three rejection branches — a hit outside
+    // either segment, one too close to an end for the arc, and a non-finite
+    // hit point.
+    //
+    // (The embed budget, the longest-fit search, the truncation, the loose-
+    // occurrence finder and the passage highlight went with the typesetter in
+    // S18h2; the line jumps and their narrow phase in S18h3.)
     //
     // 112 with `layout/edges/routing-budget.ts`, the per-layout account the
     // grid router and the side-choice search spend from. Outside the lane,
-    // as `embed-budget.ts` is: it holds two constants and a constructor, and
+    // as the embed budget was: it holds two constants and a constructor, and
     // the checks that spend it live in `grid-route.ts` and
     // `edge-crossing-sweep.ts`, which are in it.
     //
@@ -344,27 +349,28 @@ describe('the mutation lane covers what it says it covers', () => {
     // weight, raster scale, clip, largest-first order and definition removal
     // were each mutation-checked by hand against it.
     //
-    // 114 with `highlight/tokenizer-budget.ts`, the per-layout tokeniser
-    // account every fence the default highlighter colours spends from.
-    // Outside the lane, as `embed-budget.ts` is: a constructor and one spend,
-    // and `highlight-layout-budget.test.ts` pins both accounts, the refusal
-    // count a cache reads, and a fresh account per layout — each
-    // mutation-checked by hand against it.
+    // 114 with the tokeniser budget, the per-layout tokeniser account every
+    // fence the default highlighter coloured spent from. Outside the lane, as
+    // the embed budget was: a constructor and one spend, whose highlight
+    // budget test pinned both accounts, the refusal count a cache read, and a
+    // fresh account per layout — each mutation-checked by hand against it.
+    // The core keeps the account now; the module went in S18h3.
     //
     // 115 with `references/content-budget.ts`, one reference walk's account
     // of the characters and canvas elements it loads. Outside the lane, as
-    // `embed-budget.ts` is: two constants and an account whose refusal,
+    // the embed budget was: two constants and an account whose refusal,
     // closing and node-text charge `content-budget.test.ts` pins, and whose
     // use by the daemon's loader `canvas-view.cost.test.ts` counts — each
     // mutation-checked by hand against them.
     //
-    // 116 with `layout/nodes/mdast-embed-pending.ts`, the framed "Loading…"
-    // a block embed draws while its target is still being fetched, and the
-    // "Empty canvas" line a canvas embed with nothing on it draws. Outside
-    // the lane: three guards and one small layout, each pinned by example
-    // in `mdast-embed-pending.test.ts` and reached from the browser by
-    // `embed-loading-preview.browser.test.tsx`; nothing in it is a cost
-    // model or a search a survivor could hide in.
+    // 116 with the loading-embed placeholder, the framed "Loading…" a block
+    // embed draws while its target is still being fetched, and the "Empty
+    // canvas" line a canvas embed with nothing on it draws. Outside the lane:
+    // three guards and one small layout, each pinned by example in its own
+    // test and reached from the browser by
+    // `embed-loading-preview.browser.test.tsx`; nothing in it was a cost
+    // model or a search a survivor could hide in. It went with the
+    // typesetter in S18h2, and the core draws the placeholder now.
     //
     // 117 with `theme/text-halo.ts`, the one constant for a haloed run's
     // pad, read by the painter and by `sceneBounds` so the pill it draws is
@@ -380,8 +386,11 @@ describe('the mutation lane covers what it says it covers', () => {
     //
     // 119 with `layout/edges/stroke-weight.ts`, the multiple of the theme's
     // line weight a stroke's named weight draws at. Outside the lane: a
-    // three-entry table and one product, pinned by `stroke-weight.test.ts`
-    // and mutated by hand against it (the call removed, the factor changed).
+    // three-entry table and one product, pinned through the TypeScript
+    // layout by a stroke-weight test and mutated by hand against it (the call
+    // removed, the factor changed). Since S18h2 the core applies the weight
+    // and the test went with the layout it drove; the table stays for the
+    // editor's draft under the pen.
     //
     // 120 and 24 with `layout/edges/straight-detour.ts`, the straight
     // style's corner search, which the lane DOES cover: it is a search, and
@@ -403,11 +412,11 @@ describe('the mutation lane covers what it says it covers', () => {
     // lane for the same reason: its two recordings and its drop are each
     // pinned by an example in `edge-straight-detour.test.ts` and mutated by
     // hand against them.
-    // 124 with `legend/legend-scene.ts`, a board's legend as scene nodes for
-    // a canvas embedded in a note. Outside the lane: a row walk with no cost
-    // model or search, pinned by `embed-legend.test.ts` (rows, unscaled
+    // 124 with the legend scene, a board's legend as scene nodes for a
+    // canvas embedded in a note. Outside the lane: a row walk with no cost
+    // model or search, pinned by its embedded-legend test (rows, unscaled
     // size, place inside the frame, swatch colours) and mutated by hand
-    // against it.
+    // against it. Both went with the composer in S18h2.
     // 123 without the contributed-router module: the edge-router
     // contribution seam had no consumer but its own test, and edge routing
     // is this package's alone. It was outside the lane, so the reach is
@@ -428,19 +437,21 @@ describe('the mutation lane covers what it says it covers', () => {
     // core when a root hands one, else the TypeScript routing. Outside the
     // lane: it is a two-way dispatch, both branches driven by
     // `layout/route-layout.test.ts`, and it goes when the TypeScript routing does.
-    // 128 with `layout/nodes/phrase-pairs.ts`: the join of a BudouX phrase that
-    // ends inside a surrogate pair, outside the lane because it is one loop
-    // whose every branch `mdast-blocks-surrogate-pair.test.ts` drives.
+    // 128 with the phrase-pair rule: the join of a BudouX phrase that ends
+    // inside a surrogate pair, outside the lane because it was one loop whose
+    // every branch its surrogate-pair test drove. Both went with the
+    // typesetter in S18h2.
     // 130 with `canvas-core.ts` (types alone) and `layout/canvas-switch.ts`,
     // the whole layout's dispatch to the core. Outside the lane for the routing
     // seam's reason: a dispatch and a request built from options,
-    // every branch driven by `layout/canvas-switch.test.ts`, and it goes when
-    // the TypeScript layout does.
-    // 132 with `fragment-ask.ts` (a schema and one key) and
-    // `layout/fragment-table.ts`, rendered math and diagrams as a table.
-    // Outside the lane for the same reason: one wrapper and the switch's
-    // handling of what it asked, every branch driven by
-    // `layout/fragment-table.test.ts` and mutation-checked by hand.
+    // every branch driven by `layout/canvas-switch.test.ts`. It stays: since
+    // S18h2 it is the request each option becomes, with no TypeScript behind it.
+    // 132 with `fragment-ask.ts` (a schema and one key) and the fragment
+    // table module, rendered math and diagrams as a table. Outside the lane
+    // for the same reason: one wrapper and the switch's handling of what it
+    // asked, every branch driven by the table's own test and mutation-checked
+    // by hand. The table module and its test went in S18h2, when the core
+    // became the only reader of a table.
     // 134 with `hit-boxes.ts`, the box half of `hit-test.ts` split out with no
     // import so the MCP Apps widget can read it, and
     // `picture/canvas-view-picture.ts`, the widget's picture contract (a schema
@@ -450,7 +461,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // a markdown note's dispatch to the core. Outside the lane for the canvas
     // dispatch's reason: a dispatch and a request built from options,
     // every branch driven by `layout/markdown-switch.test.ts` and
-    // mutation-checked by hand, and it goes when the TypeScript layout does.
+    // mutation-checked by hand. It stays, as the canvas switch does.
     // 139 with `query-core.ts` (types alone), `layout/query-switch.ts` (the
     // queries' switch) and `layout/queries.ts` (the editors' geometry through
     // it). Outside the lane for the same reason: every branch driven by
@@ -462,14 +473,25 @@ describe('the mutation lane covers what it says it covers', () => {
     // 143 with three modules moved out of `layout/` ahead of its deletion
     // (S18h1): `containment.ts` (`fullyContains`, out of `edge-rules.ts`) and
     // `comment-geometry.ts` (`nearestPointOnPolyline` out of
-    // `comment-placement.ts`, with `commentAnchor` and the bubble constants)
+    // the comment-bubble placement, with `commentAnchor` and the bubble constants)
     // join the lane, since both files they left were in it and leaving them
     // out would shrink what it sees; `paint-order.ts` (`paintOrderOf`, out of
     // `spatial-canvas.ts`, which never was) stays outside, its three branches
     // driven by `paint-order.test.ts`.
+    // 111 and 23 since the TypeScript composer and typesetter were deleted
+    // (S18h2): the layout is the Rust core's, so `layout/` keeps only the
+    // request builders and queries over it, and the four mutated modules that
+    // went with it (the truncation, the longest-fit search, the
+    // inline-junction rule and the comment-bubble placement) are the Rust
+    // ports' to hold now, by cargo-mutants over the frozen recordings.
+    // Nothing that remained left the lane.
+    // 107 since the dead exports they left were deleted (S18h3): the
+    // tokeniser budget, the line jumps, the edge-label placement, and the
+    // line-jump narrow phase, which moved to `test-utils/wasm/` as the
+    // reference its Rust port is held to. None was in the lane.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 27,
-      production: 143,
+      mutated: 23,
+      production: 107,
     })
   })
 

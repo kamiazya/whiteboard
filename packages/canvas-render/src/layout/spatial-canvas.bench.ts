@@ -34,14 +34,15 @@ import { groupNode, textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry, visualShapeFacetSchema } from '@kamiazya/whiteboard-plugin-visual'
 import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const OPTIONS: SpatialLayoutOptions = {
+  core: testLayoutCore(),
   measure: createFakeMeasure(),
   // A fixed body rather than a real parse: markdown parsing is
-  // `mdast-blocks.bench.ts`'s subject, and leaving it in here would be the
+  // the deleted typesetter's bench's subject, and leaving it in here would be the
   // same drowning problem the edge search causes.
-  parseBody: () => ({ type: 'root', children: [{ type: 'paragraph', children: [] }] }),
   appearance: { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) },
 }
 

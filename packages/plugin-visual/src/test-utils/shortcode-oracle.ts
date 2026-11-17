@@ -1,9 +1,10 @@
 /**
  * The two shortcode vocabularies a drawn body reads, recorded for the Rust
  * scans to replay (`crates/core/plugin-visual/tests/shortcode_oracle.rs`):
- * per text, what `expandEmojiShortcodes` makes of it and the ranges
- * `iconShortcodeRanges` answers, offsets in UTF-16 code units as the
- * typesetter is handed them.
+ * per text, what `expandEmojiShortcodes` makes of it and the icon ranges the
+ * TypeScript icon scan answered, offsets in UTF-16 code units as the
+ * typesetter is handed them. The icon ranges are frozen (ADR-0054 step 7,
+ * S18h): that scan is deleted and only the core answers them now.
  *
  * The texts are hand-written cases and a seeded stream built from fragments
  * that sit on the scans' edges: real slugs and icon names, the same names
@@ -14,16 +15,14 @@
  */
 import { randomFrom } from '@kamiazya/whiteboard-model/test-utils'
 import { EMOJI_GROUPS } from '../emoji/catalog-data.js'
-import { expandEmojiShortcodes } from '../emoji/shortcode.js'
 import { emojiSlug } from '../emoji/slug.js'
 import { BUILT_IN_ICON_NAMES } from '../icons/icons.js'
-import { iconShortcodeRanges } from '../icons/shortcode.js'
 
 export interface ShortcodeLine {
   readonly in: string
   /** `expandEmojiShortcodes(in)`. */
   readonly emoji: string
-  /** `iconShortcodeRanges(in)` as `[from, to, name]`. */
+  /** The icon ranges in `in` as `[from, to, name]`; frozen. */
   readonly icons: ReadonlyArray<readonly [number, number, string]>
 }
 
@@ -120,15 +119,7 @@ function seededTexts(count: number): string[] {
   return texts
 }
 
-export function shortcodeLineOf(text: string): ShortcodeLine {
-  return {
-    in: text,
-    emoji: expandEmojiShortcodes(text),
-    icons: [...iconShortcodeRanges(text)].map(({ from, to, name }) => [from, to, name] as const),
-  }
-}
-
 /** Every recorded text, in order. */
-export function recordShortcodeLines(): ShortcodeLine[] {
-  return [...HAND_WRITTEN, ...seededTexts(1500)].map(shortcodeLineOf)
+export function recordedTexts(): string[] {
+  return [...HAND_WRITTEN, ...seededTexts(1500)]
 }

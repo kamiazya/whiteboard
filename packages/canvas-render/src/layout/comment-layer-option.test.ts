@@ -1,17 +1,17 @@
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { threadsOf } from '../test-utils/comment-board.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const measure = createFakeMeasure()
 const base: SpatialLayoutOptions = {
+  core: testLayoutCore(),
   measure,
-  parseBody: parseMarkdownBody,
   appearance: createSpatialTheme({ mode: 'light' }),
 }
 
@@ -25,11 +25,11 @@ const threads: readonly CommentThread[] = [
   },
   {
     id: 't2',
-    anchor: { kind: 'spatial', nodeIds: ['n1'] },
+    anchor: { kind: 'spatial', x: 0, y: 0, width: 400, height: 100 },
     status: 'open',
     messages: [{ id: 'm2', body: 'region' }],
   },
-] as unknown as readonly CommentThread[]
+]
 const card = threadsOf([{ id: 'c1', x: 500, y: 60, text: 'a card' }])
 const without: SpatialCanvas = { nodes: [NOTE], edges: [] }
 

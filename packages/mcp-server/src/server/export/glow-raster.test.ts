@@ -7,6 +7,7 @@
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { renderSceneToSvg, type Scene } from '@kamiazya/whiteboard-canvas-render'
+import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { Resvg } from '@resvg/resvg-js'
@@ -101,7 +102,10 @@ describe('glow under the export filter budget', () => {
 
   /** Red above the ground, six user units off the middle of the edge's longest segment. */
   async function haloAt(scale: number): Promise<number> {
-    const { svg } = await renderSpatialCanvasToSvg(canvas, fonts, { style: 'document' })
+    const { svg } = await renderSpatialCanvasToSvg(canvas, fonts, {
+      core: testLayoutCore(),
+      style: 'document',
+    })
     const [vx, vy] = /viewBox="([^"]+)"/.exec(svg)![1]!.split(' ').map(Number)
     const points = /<polyline points="([^"]+)"/
       .exec(svg)![1]!
@@ -117,7 +121,11 @@ describe('glow under the export filter budget', () => {
     const horizontal = y0 === y1
     const ux = (x0 + x1) / 2 + (horizontal ? 0 : 6)
     const uy = (y0 + y1) / 2 + (horizontal ? 6 : 0)
-    const png = await renderSpatialCanvasToPng(canvas, fonts, { style: 'document', scale })
+    const png = await renderSpatialCanvasToPng(canvas, fonts, {
+      core: testLayoutCore(),
+      style: 'document',
+      scale,
+    })
     const pixels = decode(png.png, png.width, png.height)
     const at = (x: number, y: number) => {
       const i = (Math.round((y - vy!) * scale) * png.width + Math.round((x - vx!) * scale)) * 4

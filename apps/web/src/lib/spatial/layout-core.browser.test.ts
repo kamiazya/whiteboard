@@ -1,6 +1,5 @@
 // The Rust core, loaded for real in a browser (ADR-0054): the staged wasm
-// fetched from where the bundler serves it, and a board laid out through it
-// as the TypeScript composer lays it out. The jsdom suites pin the host
+// fetched from where the bundler serves it, and a board laid out through it. The jsdom suites pin the host
 // against a fake core; only here does the artifact itself run.
 //
 // The artifact is built in the pipeline, never committed, and every browser
@@ -26,6 +25,7 @@ import type { LayoutRequest, LayoutResponse } from '../layout-worker-protocol.js
 import { startLayoutCore } from '../page-layout-core.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { createLayoutCoreHost, layoutCoreReady } from './layout-core.js'
+import { requireLayoutCore } from './require-layout-core.js'
 
 async function loadRealCore() {
   try {
@@ -84,7 +84,9 @@ describe('the real Rust core in a browser', () => {
       }
       const scene = layoutSpatialCanvas(board(style), { ...options, core: counted })
       expect(scene.nodes.length).toBeGreaterThan(0)
-      expect(scene, style).toEqual(layoutSpatialCanvas(board(style), options))
+      expect(scene, style).toEqual(
+        layoutSpatialCanvas(board(style), { ...options, core: requireLayoutCore() }),
+      )
     }
     // The core was asked for every board, so the comparison compared its answers.
     expect(calls).toBe(3)
