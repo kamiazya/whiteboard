@@ -39,7 +39,9 @@ fn other_end(edge: (Option<usize>, Option<usize>), key: usize) -> Option<usize> 
     }
 }
 
-/// `hub`'s connections that are lone boxes sitting in its own row, one per edge.
+/// `hub`'s connections that are lone boxes sitting in its own row, one per BOX
+/// in the order its edges first name it: two edges to one box are one partner,
+/// or a box whose only partner is the hub would count as a hub itself.
 fn partners_along_row(
     units: &[Unit],
     hub: usize,
@@ -48,7 +50,8 @@ fn partners_along_row(
     by_key: &[Option<usize>],
 ) -> Vec<usize> {
     let Some(me) = units.get(hub) else { return Vec::new() };
-    edges
+    let mut along: Vec<usize> = Vec::new();
+    for other in edges
         .iter()
         .filter_map(|&edge| other_end(edge, hub_key))
         .filter_map(|key| by_key.get(key).copied().flatten())
@@ -57,7 +60,12 @@ fn partners_along_row(
         .filter(|&other| {
             units.get(other).is_some_and(|o| !js_ge((me.bbox.y - o.bbox.y).abs(), TIDY_BAND_PX))
         })
-        .collect()
+    {
+        if !along.contains(&other) {
+            along.push(other);
+        }
+    }
+    along
 }
 
 /// The partner `hub` should trade places with: the nearest of them, when they

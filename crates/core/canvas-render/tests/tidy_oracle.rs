@@ -29,6 +29,15 @@ const RECORDING: &str = include_str!("../../../../packages/canvas-render/src/ora
 /// within the account and answers as recorded.
 const CORRECTED_SCOOP_BUDGET: [&str; 1] = ["extra/past-level-budget"];
 
+/// Boards the row-order pass answers differently, by count: those that join one
+/// pair of boxes by more than one edge, and differ. The TypeScript counted a
+/// hub's partners per EDGE, so a box whose one distinct partner was the hub,
+/// reached by two edges, passed the two-partner test, was treated as a hub too
+/// and swapped the hub straight back. Partners are now counted per box, so the
+/// hub's swap stands. A board with no doubled edge cannot differ for this
+/// reason, which is what the predicate holds the allowance to.
+const CORRECTED_DOUBLED_EDGE_BOARDS: usize = 8;
+
 /// A number JSON cannot hold is written by name.
 #[derive(Deserialize)]
 #[serde(untagged)]
@@ -98,6 +107,17 @@ impl Case {
         }
     }
 
+    /// Whether two edges name the same two boxes, in either direction.
+    fn joins_a_pair_twice(&self) -> bool {
+        let mut seen: BTreeSet<(&str, &str)> = BTreeSet::new();
+        self.edges
+            .iter()
+            .flatten()
+            .filter_map(|(a, b)| Some((a.as_deref()?, b.as_deref()?)))
+            .map(|(a, b)| if a <= b { (a, b) } else { (b, a) })
+            .any(|pair| !seen.insert(pair))
+    }
+
     /// The recorded moves.
     fn recorded(&self) -> Vec<Move> {
         self.m
@@ -143,12 +163,18 @@ fn every_recorded_board_is_tidied_to_the_recorded_moves() {
     assert!(cases.len() > 2200, "the recording holds {} cases", cases.len());
     assert_eq!(cases.iter().filter(|c| c.id.starts_with("seeded/")).count(), boards);
     let mut differing: Vec<&str> = Vec::new();
+    let mut doubled: Vec<&str> = Vec::new();
     for case in &cases {
         let got = answered(&tidy_nodes(&case.nodes(), &case.options()));
-        if got != case.recorded() {
+        if got == case.recorded() {
+            continue;
+        }
+        if case.joins_a_pair_twice() {
+            doubled.push(&case.id);
+        } else {
             differing.push(&case.id);
         }
     }
     assert_eq!(differing, CORRECTED_SCOOP_BUDGET, "boards answering other than recorded");
-    assert_eq!(differing.len(), 1);
+    assert_eq!(doubled.len(), CORRECTED_DOUBLED_EDGE_BOARDS, "{doubled:?}");
 }
