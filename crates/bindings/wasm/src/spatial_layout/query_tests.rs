@@ -379,6 +379,16 @@ fn a_tidy_answers_the_boxes_it_moves_and_a_frame_that_grew_carries_its_size() {
     assert_eq!(tidy(board.clone(), &[("scope", s(vec![json!("zz")]))]), json!(["ok"]));
     let edge = s(vec![json!("a"), json!(null)]);
     assert_eq!(tidy(board, &[("edges", s(vec![edge]))])[0], json!("ok"));
+    // Edges order a row: a hub joined to the far box swaps with the near one.
+    let row3 = vec![
+        row("a", false, 0.0, 0.0, 100.0, 40.0),
+        row("b", false, 200.0, 0.0, 100.0, 40.0),
+        row("c", false, 400.0, 0.0, 100.0, 40.0),
+    ];
+    let joined = s(vec![s(vec![json!("a"), json!("b")]), s(vec![json!("a"), json!("c")])]);
+    assert_eq!(tidy(row3.clone(), &[]), json!(["ok"]));
+    let swapped = tidy(row3, &[("edges", joined)]);
+    assert_eq!(swapped, json!(["ok", ["a", hex(200.0), hex(0.0)], ["b", hex(0.0), hex(0.0)]]));
     // A frame too small for the member it holds grows to hold it.
     let grown = tidy(
         vec![row("f", true, 0.0, 0.0, 100.0, 100.0), row("m", false, 10.0, 10.0, 90.0, 50.0)],
