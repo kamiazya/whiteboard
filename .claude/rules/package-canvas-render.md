@@ -848,11 +848,15 @@ only producers of an edge's path.
 - The live-drag parity property (`layoutSpatialEdges` equal to the edge
   suffix of `layoutSpatialCanvas`, over a generator reading the facet
   REGISTRY through `test-utils/facet-arbitraries.ts`) compared two
-  TypeScript entry points and went with them (S18h2). The edge layer is now
-  the core's query over the whole layout's own request (`edgesThroughCore`
-  builds it with `canvasLayoutRequest`), so the two cannot fold over
-  different facets the way two TypeScript walks could; dropping the
-  property is on owner question q84's list.
+  TypeScript entry points and went with them (S18h2). It is back as
+  `layout/live-drag-parity.rust.test.ts` (canvas-render-rust): the same
+  law and generator, now through the core over the real theme, plus the
+  `edgeSideOverrides` the drag layer always passes. The edge layer is the
+  core's query over the whole layout's own request (`edgesThroughCore`
+  builds it with `canvasLayoutRequest`), and the property is what holds
+  that request to the full layout's: dropping its tag library, side
+  overrides, style, canvas/node/edge facets or the answer's jumps each
+  turns it red.
 - `routing/edge-routing-quality.rust.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". It judges the Rust router
   through the oracle core, in `canvas-render-rust`; the TypeScript router it
@@ -1485,8 +1489,8 @@ so an un-libraried layout keeps the frozen-singleton property the editor's
 `useMemo` relies on. `layoutSpatialEdges` applies it too, for the reason it
 resolves the theme: a live drag drew edges in the stored colour over a
 committed scene that drew them by intent, and the live-drag parity property
-now draws a library and tagged edges (its stub resolver reads `edge.color`,
-or the step would be invisible to it). In the mutation lane.
+draws a library and tagged edges, and fails when the edges request drops
+the library. In the mutation lane.
 Nested canvases too (the core applies it per canvas).
 
 Recorded oracle: `src/oracle/`; decisions.
