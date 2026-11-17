@@ -1,3 +1,15 @@
+// Translated from fdlibm's e_log.c (@(#)e_log.c 1.3 95/01/18), whose notice
+// the permission below requires to be kept with any copy:
+//
+// ====================================================
+// Copyright (C) 1993 by Sun Microsystems, Inc. All rights reserved.
+//
+// Developed at SunSoft, a Sun Microsystems, Inc. business.
+// Permission to use, copy, modify, and distribute this
+// software is freely granted, provided that this notice
+// is preserved.
+// ====================================================
+
 //! `Math.log` as V8 computes it: Sun's `e_log.c`, written out.
 //!
 //! The `libm` crate's `log` is not the same function: it answers one ulp away
