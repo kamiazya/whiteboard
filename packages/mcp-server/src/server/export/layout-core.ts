@@ -11,7 +11,12 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import { type Core, type CoreGlue, coreFrom } from '@kamiazya/whiteboard-core-wasm'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import { facetWriteCoreInstalled, installFacetWriteCore } from '@kamiazya/whiteboard-server-core'
+import {
+  facetWriteCoreInstalled,
+  installFacetWriteCore,
+  installSearchCore,
+  searchCoreInstalled,
+} from '@kamiazya/whiteboard-server-core'
 import { z } from 'zod'
 import { findPackageRoot } from '../../shared/package-root.js'
 
@@ -140,25 +145,33 @@ function loadCoreFrom(dir: string): Promise<Core> {
 }
 
 /**
- * Installs the Rust core as this process's OKF and JSON Canvas codecs and its
- * facet write, before anything is served. None has a TypeScript to degrade to,
- * so a daemon that cannot load the artifact refuses to start, naming where it
- * looked, rather than failing its first read of a document. A realm that
- * already installed all three (a test realm) keeps them.
+ * Installs the Rust core as this process's OKF and JSON Canvas codecs, its
+ * search and its facet write, before anything is served. None has a TypeScript
+ * to degrade to, so a daemon that cannot load the artifact refuses to start,
+ * naming where it looked, rather than failing its first read of a document. A
+ * realm that already installed all four (a test realm) keeps them.
  */
 export async function installRustCoresAtBoot(
   settings: LayoutCoreSettings = layoutCoreSettingsFrom(process.env),
 ): Promise<void> {
-  if (okfCoreInstalled() && spatialCoreInstalled() && facetWriteCoreInstalled()) return
+  if (
+    okfCoreInstalled() &&
+    spatialCoreInstalled() &&
+    searchCoreInstalled() &&
+    facetWriteCoreInstalled()
+  ) {
+    return
+  }
   const dir = artifactDirectory(settings)
   try {
     const core = await loadCoreFrom(dir)
     if (!okfCoreInstalled()) installOkfCore(core)
     if (!spatialCoreInstalled()) installSpatialCore(core)
+    if (!searchCoreInstalled()) installSearchCore(core.search)
     if (!facetWriteCoreInstalled()) installFacetWriteCore(core)
   } catch (err) {
     throw new Error(
-      `the Rust core is required to read and write OKF Markdown and JSON Canvas and to judge a facet write, and did not load from ${dir}; build it with \`pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm\` or point WHITEBOARD_CORE_DIR at a directory holding it`,
+      `the Rust core is required to read and write OKF Markdown and JSON Canvas, to search and to judge a facet write, and did not load from ${dir}; build it with \`pnpm --filter @kamiazya/whiteboard-core-wasm build:wasm\` or point WHITEBOARD_CORE_DIR at a directory holding it`,
       { cause: err },
     )
   }

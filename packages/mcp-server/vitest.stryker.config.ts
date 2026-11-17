@@ -16,15 +16,21 @@ import sharedConfig from './vitest.shared.js'
 // derived from the import graph (`scripts/mutation/covering-tests.mjs`, which
 // says how near) so a test that starts importing a mutated module joins the
 // lane by itself.
-// The Rust cores every realm installs (the OKF and JSON Canvas codecs, the facet
+// The Rust cores every realm installs (the OKF and JSON Canvas codecs, search, the facet
 // write), as vitest.node.config.ts installs them. Found through node_modules
 // rather than `../codec`: Stryker's sandbox is a copy of this package alone, so
 // a sibling path does not exist there, while its linked node_modules still
 // reach the workspace packages.
 const require = createRequire(import.meta.url)
 const packageDir = (name: string) => dirname(realpathSync(require.resolve(`${name}/package.json`)))
+const serverCore = join(packageDir('@kamiazya/whiteboard-server-core'), 'package.json')
+// Not a dependency of this package: reached through the one that is.
+const searchDir = dirname(
+  realpathSync(createRequire(serverCore).resolve('@kamiazya/whiteboard-search/package.json')),
+)
 const coreSetups = [
   join(packageDir('@kamiazya/whiteboard-codec'), 'src/test-utils/core-setup/node.setup.ts'),
+  join(searchDir, 'src/test-utils/core-setup/node.setup.ts'),
   join(packageDir('@kamiazya/whiteboard-server-core'), 'src/test-utils/core-setup.node.setup.ts'),
 ]
 
