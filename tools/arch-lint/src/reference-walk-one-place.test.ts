@@ -41,18 +41,24 @@ const isLoop = (node: ts.Node): boolean =>
   ts.isDoStatement(node)
 
 /**
- * The local names `referenceTargets` answers to: its own, unless an import
+ * The functions that read a document's targets: what a walk follows, and
+ * every link it writes past the loading budget. A loop around either is a
+ * walk written by hand.
+ */
+const TARGET_READERS: readonly string[] = ['referenceTargets', 'writtenTargets']
+
+/**
+ * The local names a target reader answers to: its own, unless an import
  * gives that name to something else, plus whatever an import renames it to.
  */
 function targetsNames(file: ts.SourceFile): ReadonlySet<string> {
   const bindings = importBindingsOf(file)
   const aliases = new Set(
-    bindings.filter((b) => b.imported === 'referenceTargets').map((b) => b.local),
+    bindings.filter((b) => TARGET_READERS.includes(b.imported)).map((b) => b.local),
   )
-  const shadowed = bindings.some(
-    (b) => b.local === 'referenceTargets' && b.imported !== 'referenceTargets',
-  )
-  if (!shadowed) aliases.add('referenceTargets')
+  for (const reader of TARGET_READERS) {
+    if (!bindings.some((b) => b.local === reader && b.imported !== reader)) aliases.add(reader)
+  }
   return aliases
 }
 
@@ -171,7 +177,7 @@ function scan(
   const isTargetsCall = (call: ts.CallExpression): boolean => {
     const callee = call.expression
     if (ts.isIdentifier(callee)) return names.has(callee.text)
-    return ts.isPropertyAccessExpression(callee) && callee.name.text === 'referenceTargets'
+    return ts.isPropertyAccessExpression(callee) && TARGET_READERS.includes(callee.name.text)
   }
   const functions = namedFunctions(file)
   const callees = callGraph(functions)
@@ -199,6 +205,8 @@ const FIXTURES: readonly { readonly source: string; readonly walks: boolean }[] 
   { source: 'for (const s of seeds) out.push(...referenceTargets(s))', walks: true },
   { source: 'const key = referenceTargets({ bodies: [text] }).join("\\n")', walks: false },
   { source: 'for (const t of referenceTargets(s)) load(t)', walks: true },
+  { source: 'while (true) { if (!writtenTargets(s).length) break }', walks: true },
+  { source: 'const key = writtenTargets({ bodies: [text] }).join("\\n")', walks: false },
   // A callback is its own function: the loop around it is not the walk.
   { source: 'for (const d of docs) d.on(() => referenceTargets(d.seeds))', walks: false },
   { source: 'for (;;) { const w = otherTargets(s); if (!w.length) break }', walks: false },

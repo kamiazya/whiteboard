@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest'
 import type { DocumentIndex, WorkspaceEntry } from '../index.js'
 import {
   DocumentHasDescendantsError,
-  DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
@@ -11,6 +10,7 @@ import {
 } from '../index.js'
 import { describeDuplicateDocumentName } from './document-index-duplicate-name-conformance.js'
 import { describeRefusedInput } from './document-index-input-conformance.js'
+import { describeMoveRefusals } from './document-index-move-refusal-conformance.js'
 import { describeRenameHeldBy } from './document-index-rename-held-conformance.js'
 
 const FRESH = '012F53DDJXJRR3BNBM4FDP2KH7'
@@ -345,20 +345,6 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
     })
   })
 
-  it('refuses a move into the moving subtree', async () => {
-    await withIndex(async (index) => {
-      await index.createDocument({ workspaceId: WS, path: 'a', kind: 'spatial' })
-      await index.createDocument({ workspaceId: WS, path: 'a/x', kind: 'spatial' })
-
-      await expect(index.moveDocument({ workspaceId: WS, from: 'a', to: 'a/b' })).rejects.toThrow(
-        DocumentMoveIntoSelfError,
-      )
-
-      expect(await index.resolveDocument({ workspaceId: WS, path: 'a' })).not.toBeNull()
-      expect(await index.resolveDocument({ workspaceId: WS, path: 'a/x' })).not.toBeNull()
-    })
-  })
-
   it('deletes a document whose name merely prefixes a sibling', async () => {
     await withIndex(async (index) => {
       await index.createDocument({ workspaceId: WS, path: 'design', kind: 'spatial' })
@@ -389,14 +375,6 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
     })
   })
 
-  it('refuses to move a path that names nothing', async () => {
-    await withIndex(async (index) => {
-      await expect(
-        index.moveDocument({ workspaceId: WS, from: 'absent', to: 'somewhere' }),
-      ).rejects.toThrow(DocumentNotFoundError)
-    })
-  })
-
   it('treats deleting an absent path as done', async () => {
     await withIndex(async (index) => {
       await expect(
@@ -423,6 +401,7 @@ export function describeDocumentIndexConformance(makeIndex: MakeIndex): void {
     })
   })
 
+  describeMoveRefusals(withIndex, WS)
   describeDocumentNaming(withIndex)
   describeWorkspacesAndInput(makeIndex, withIndex)
 }

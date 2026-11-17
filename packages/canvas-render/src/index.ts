@@ -165,6 +165,7 @@ export {
   overlayReferences,
   type ReferenceExtra,
   type ReferenceWire,
+  type ReferenceWireOptions,
   referenceSeamsFromWire,
   referenceWire,
   referenceWireFor,

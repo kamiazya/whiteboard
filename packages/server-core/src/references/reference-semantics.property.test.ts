@@ -520,14 +520,23 @@ describe('reference semantics under command sequences', () => {
               await expect(attempt()).rejects.toThrow()
               break
             }
-            // A subtree move fails when any PRODUCED path is already taken
-            // by a document the move does not carry.
+            // The workspace is a tree: every path, and every folder above
+            // one, is a node. A subtree move fails when a node it PRODUCES
+            // is a node that stays — a document the move does not carry, or
+            // a folder something that stays is still under.
             const movedPaths = model.movedBy(from).map((d) => d.path)
             const produced = (path: string) => cmd.to + path.slice(from.length)
-            const collides = movedPaths.some((path) => {
-              const holder = model.byPath(produced(path))
-              return holder !== undefined && !movedPaths.includes(holder.path)
-            })
+            const nodesOf = (path: string) =>
+              path.split('/').map((_, i, segments) => segments.slice(0, i + 1).join('/'))
+            const isUnder = (path: string) => path === from || path.startsWith(`${from}/`)
+            const staying = [...model.docs.values()]
+              .map((d) => d.path)
+              .filter((path) => !movedPaths.includes(path))
+            const remaining = new Set(staying.flatMap(nodesOf))
+            const collides = movedPaths
+              .flatMap(nodesOf)
+              .filter(isUnder)
+              .some((node) => remaining.has(produced(node)))
             if (collides) {
               await expect(attempt()).rejects.toThrow()
               break
