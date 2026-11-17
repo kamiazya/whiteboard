@@ -134,6 +134,32 @@ fn a_wiki_link_reads_as_its_alias_else_its_id_with_the_fragment() {
     assert_eq!(texts, ["01ID › Part", "shown"]);
 }
 
+/// Each wiki link is a run of its own and the space between two is a cursor
+/// advance, never a glyph, so the gap between the runs IS the space: a reader
+/// of the SVG's text content sees the titles run together either way.
+#[test]
+fn wiki_links_written_a_space_apart_are_drawn_a_space_apart_and_adjacent_ones_abut() {
+    let aliases = [("a", "ID-A"), ("b", "ID-B"), ("c", "ID-C")]
+        .map(|(alias, id)| (alias.to_owned(), id.to_owned()))
+        .into();
+    let gaps = |body: &str| {
+        let parsed = whiteboard_codec::markdown::parse_markdown_body(body).expect("parses");
+        let root = whiteboard_codec::references::resolve_references(&parsed, &aliases);
+        let host = Host { title: Some("Note"), ..Host::default() };
+        let scene = laid_by(&host, 1000.0, root.children);
+        let runs = runs_of(&scene);
+        assert!(runs.iter().all(|r| r.text == "Note" && r.link.is_some()), "{runs:?}");
+        runs.windows(2).map(|w| w[1].bbox.x - (w[0].bbox.x + w[0].bbox.w)).collect::<Vec<_>>()
+    };
+    let one_space = 9.6;
+    let spaced = gaps("[[a]] [[b]] [[c]]");
+    assert_eq!(spaced.len(), 2);
+    assert!(spaced.iter().all(|&gap| gap >= one_space - 1e-9), "{spaced:?}");
+    let adjacent = gaps("[[a]][[b]] [[c]]");
+    same(adjacent[0], 0.0);
+    assert!(adjacent[1] >= one_space - 1e-9, "{adjacent:?}");
+}
+
 #[test]
 fn a_picture_with_nowhere_to_load_from_reads_as_its_alt() {
     let relative =
