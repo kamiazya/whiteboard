@@ -695,7 +695,10 @@ dependencies = [
  "unicode-normalization",
  "unicode-properties",
  "unicode-script",
+ "unicode-segmentation",
  "wasm-bindgen-test",
+ "whiteboard-det",
+ "whiteboard-model",
 ]
 
 [[package]]

@@ -10,9 +10,24 @@
 // `#[expect(..., reason = "...")]` on the one expression.
 #![cfg_attr(not(test), deny(clippy::indexing_slicing, clippy::arithmetic_side_effects))]
 
+mod cluster;
+pub mod excerpt;
 pub mod fold;
+mod markup;
+pub mod rank;
+pub mod snippet;
+pub mod terms;
+pub mod texts;
 pub mod tokenize;
 pub mod unicode;
+mod units;
 
+pub use cluster::grapheme_cuts;
+pub use excerpt::{EXCERPT_TOKENS_MAX, Excerpter, excerpter_for};
 pub use fold::{Folded, Found, find_folded, fold_for_search, fold_with_offsets, span_of};
+pub use markup::LinkLabel;
+pub use rank::{SearchHit, SearchOptions, SearchableDocument, full_text_search};
+pub use snippet::{CONTEXT_RADIUS, LinkEntry, LinkLabels, snippet_around};
+pub use terms::{AlsoIndex, DOCUMENT_TERMS_MAX, DocumentTerms, document_terms};
+pub use texts::{SearchableContent, folder_names_of, searchable_texts};
 pub use tokenize::{tokenize, tokenize_for_index, tokenize_runs};
