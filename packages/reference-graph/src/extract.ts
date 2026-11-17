@@ -12,7 +12,7 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { frameLabel, isDocumentId, nodeFile, nodeText } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
-import { searchableTexts } from '@kamiazya/whiteboard-search'
+import { isSearchRefusal, searchableTexts } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
 import type { DocumentReferenceFacts, RawReference } from './reference-aggregate.js'
 
@@ -105,6 +105,20 @@ function spatialBearers(canvas: SpatialCanvas): TagBearer[] {
   return bearers
 }
 
+/**
+ * What `content` contributes to search. A document the core declines (past its
+ * caps) is searched as nothing rather than failing the read of its references
+ * and tags, which do not depend on it.
+ */
+function textsOf(content: DocumentContent): string[] {
+  try {
+    return searchableTexts(content)
+  } catch (err) {
+    if (isSearchRefusal(err)) return []
+    throw err
+  }
+}
+
 export function extractContentFacts(
   entry: Pick<DocumentEntry, 'kind'>,
   doc: LoroDoc,
@@ -115,13 +129,13 @@ export function extractContentFacts(
       refs: textReferences(content.body),
       // The prose itself, for mention detection against other documents'
       // names — and the same strings search ranks, by construction.
-      texts: searchableTexts(content),
+      texts: textsOf(content),
       bearers: tagBearersOf(doc, content),
     }
   }
   return {
     refs: spatialReferences(content.canvas),
-    texts: searchableTexts(content),
+    texts: textsOf(content),
     bearers: tagBearersOf(doc, content),
   }
 }

@@ -1,7 +1,7 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import { MARKDOWN_MAX_CHARS } from '@kamiazya/whiteboard-model'
 import { fc, fcTest, withDefaults } from '@kamiazya/whiteboard-model/test-utils'
-import { snippetAround } from '@kamiazya/whiteboard-search'
+import { linkLabels, snippetAround } from '@kamiazya/whiteboard-search'
 import { describe, expect, it } from 'vitest'
 import { backlinksIn, unlinkedNameSpans } from './reference-aggregate.js'
 
@@ -80,14 +80,12 @@ describe('backlinks', () => {
     }))
     const out = backlinksIn(entries as never, new Map([[B, { refs, texts: [] }]]), A)
     expect(out.backlinks).toHaveLength(1)
+    const labels = linkLabels(entries)
     expect(out.backlinks[0]?.contexts).toEqual(
       // The id link reads as the document it names, by its path's leaf.
-      refs
-        .slice(0, 3)
-        .map((ref) =>
-          snippetAround(text, ref.index, ref.length, (t) => (t === A ? 'plan' : undefined)),
-        ),
+      refs.slice(0, 3).map((ref) => snippetAround(text, ref.index, ref.length, labels)),
     )
+    labels.release()
   })
 })
 
