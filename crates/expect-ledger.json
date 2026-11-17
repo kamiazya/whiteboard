@@ -86,6 +86,12 @@
       "reason": "f64::midpoint avoids the overflow (a + b) / 2 has, and the TypeScript's expression overflows where midpoint would not; the port reproduces the TypeScript bit for bit"
     },
     {
+      "crate": "crates/core/edge-routing",
+      "lint": "clippy::stable_sort_primitive",
+      "count": 1,
+      "reason": "a sort of indices, which no two equal keys can tell apart, so stable and unstable answer alike (sort_unstable is a disallowed method here anyway); the stable sort over usize is already linked for BTreeSet<usize>, and a sort_by spelling instantiated a second copy of it, 6761 bytes of the cargo artifact"
+    },
+    {
       "crate": "crates/core/markdown",
       "lint": "clippy::arithmetic_side_effects",
       "count": 1,
