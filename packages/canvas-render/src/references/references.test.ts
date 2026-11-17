@@ -381,6 +381,40 @@ describe('referenceWire', () => {
     expect(referenceSeamsFromWire(referenceWire(new Map())).isLoading).toBeUndefined()
   })
 
+  it('asks the tables of every link the seeds write, past the loading budget too', () => {
+    // REFERENCE_BUDGET bounds what is LOADED; an alias costs no load, so a
+    // link the walk never reached still resolves and keeps its name.
+    const idOf = (i: number) => `01BX5ZZKBKACTAV9WEVG${String(i).padStart(6, '0')}`
+    const count = REFERENCE_BUDGET + 44
+    const body = Array.from({ length: count }, (_, i) => `[[note-${i}]] [[${idOf(1000 + i)}]]`)
+    const loaded = graphOf({ 'note-0': { body: 'see [[nested-past]]' } })
+    const wire = referenceWire(loaded, {
+      resolveAlias: (alias) => (alias.startsWith('note-') ? idOf(Number(alias.slice(5))) : null),
+      resolveTitle: (id) => `T${Number(id.slice(20))}`,
+      seeds: { bodies: [body.join(' ')] },
+    })
+    const last = count - 1
+    expect(wire.aliases).toContainEqual([`note-${last}`, idOf(last)])
+    expect(wire.titles).toContainEqual([idOf(last), `T${last}`])
+    // A link written by id names itself, so only its title has to ride.
+    expect(wire.titles).toContainEqual([idOf(1000 + last), `T${1000 + last}`])
+    const seams = referenceSeamsFromWire(wire)
+    expect(seams.resolveAlias(`note-${last}`)).toBe(idOf(last))
+    // The cut a canvas layout takes keeps them as well.
+    const canvas: SpatialCanvas = {
+      nodes: [textNode({ id: 't', x: 0, y: 0, width: 9, height: 9, text: body.join(' ') })],
+      edges: [],
+    }
+    const onBoard = referenceWire(loaded, {
+      resolveAlias: (alias) => (alias.startsWith('note-') ? idOf(Number(alias.slice(5))) : null),
+      resolveTitle: (id) => `T${Number(id.slice(20))}`,
+      seeds: { canvases: [canvas] },
+    })
+    const cut = referenceWireFor(onBoard, { canvases: [canvas] })
+    expect(cut.aliases).toContainEqual([`note-${last}`, idOf(last)])
+    expect(cut.titles).toContainEqual([idOf(1000 + last), `T${1000 + last}`])
+  })
+
   it('rebuilds the last extra of a key, an empty one included, as a wire without the mark did', () => {
     const extras: [string, ReferenceExtra][] = [
       ['a', { label: 'Extra' }],

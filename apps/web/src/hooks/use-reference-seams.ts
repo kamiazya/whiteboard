@@ -110,12 +110,14 @@ function pictureExtra(href: string, sizes: ReadonlyMap<string, ImageSize>): Refe
 
 /**
  * The bundle over what loaded, rebuilt from its wire so the Rust core can be
- * handed it. Every target the body names, transitively, is in the cache once
- * nothing is pending, so the page's tables evaluated over it answer whatever
- * the layout can ask; while a load is in flight, the targets still loading
- * cross marked `pending`, and the core draws the placeholder that says so.
+ * handed it. The page's tables are evaluated over every target the body and
+ * what loaded write — past the loading budget too, which bounds loads and
+ * not links — so they answer whatever the layout can ask; while a load is in
+ * flight, the targets still loading cross marked `pending`, and the core
+ * draws the placeholder that says so.
  */
 function bundleOver(
+  body: string,
   cache: ReadonlyMap<string, LoadedReference | null>,
   pending: ReadonlySet<string>,
   extras: ReadonlyMap<string, ReferenceExtra>,
@@ -125,7 +127,9 @@ function bundleOver(
     ...(page.resolveAlias !== undefined ? { resolveAlias: page.resolveAlias } : {}),
     ...(page.resolveTitle !== undefined ? { resolveTitle: page.resolveTitle } : {}),
   }
-  return referenceSeamsFromWire(referenceWire(cache, { ...tables, extras, pending }))
+  return referenceSeamsFromWire(
+    referenceWire(cache, { ...tables, extras, pending, seeds: { bodies: [body] } }),
+  )
 }
 
 export function useReferenceSeams({
@@ -185,6 +189,9 @@ export function useReferenceSeams({
   return useMemo(() => {
     const extras = new Map<string, ReferenceExtra>()
     for (const [ref, href] of imageUrls) extras.set(ref, pictureExtra(href, imageSizes))
-    return bundleOver(cache, pendingTargets(body, cache), extras, { resolveAlias, resolveTitle })
+    return bundleOver(body, cache, pendingTargets(body, cache), extras, {
+      resolveAlias,
+      resolveTitle,
+    })
   }, [body, cache, imageUrls, imageSizes, resolveAlias, resolveTitle])
 }

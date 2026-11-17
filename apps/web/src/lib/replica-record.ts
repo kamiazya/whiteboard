@@ -11,6 +11,7 @@ import {
   type LoadedReference,
   type ReferenceExtra,
   type ReferenceGraph,
+  type ReferenceSeeds,
   type ReferenceWire,
   referenceWire,
   walkReferencesSync,
@@ -197,6 +198,8 @@ export const REPLICA_IMAGE_UNAVAILABLE = 'Image unavailable offline'
 /** The selected document's reference graph, and the pictures drawing it needs. */
 export interface ReplicaReferences {
   readonly graph: ReferenceGraph
+  /** What the selected document writes, so its links past the loading budget resolve too. */
+  readonly seeds: ReferenceSeeds
   /** Every image reference the graph draws, as written (`asset:<id>`). */
   readonly images: readonly string[]
 }
@@ -236,7 +239,7 @@ export function replicaReferenceGraph({
   const seed = readReplicaContent(record, selected)
   const seeds = seed.kind === 'spatial' ? { canvases: [seed.canvas] } : { bodies: [seed.body] }
   const graph = walkReferencesSync(seeds, load)
-  return { graph, images: imageTargets({ ...seeds, loaded: graph }) }
+  return { graph, seeds, images: imageTargets({ ...seeds, loaded: graph }) }
 }
 
 /**
@@ -260,5 +263,10 @@ export function replicaReferenceWire({
     const href = images?.get(ref)
     extras.set(ref, href === undefined ? { label: REPLICA_IMAGE_UNAVAILABLE } : { image: { href } })
   }
-  return referenceWire(references.graph, { resolveAlias, resolveTitle, extras })
+  return referenceWire(references.graph, {
+    resolveAlias,
+    resolveTitle,
+    extras,
+    seeds: references.seeds,
+  })
 }

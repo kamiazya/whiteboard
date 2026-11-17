@@ -66,23 +66,15 @@ const RESERVED: [&str; 10] = [
     "__proto__",
 ];
 
-/// What `serializeOkf` cannot write back: a multi-line string with a line
-/// that starts with a space or tab can be folded at a space on that
-/// more-indented line.
-fn written_back(text: &str) -> bool {
-    !(text.contains('\n') && text.split('\n').any(|line| line.starts_with([' ', '\t'])))
-}
-
 fn awkward() -> impl Strategy<Value = String> {
     prop_oneof![
         4 => prop::collection::vec(prop::sample::select(AWKWARD), 0..16).prop_map(|p| p.concat()),
         1 => any::<String>().prop_map(|text| text.replace('\u{feff}', "")),
         2 => prop::collection::vec("[a-z]{1,10}", 8..16).prop_map(|w| w.join(" ")),
+        // A first line that starts with a space and is long enough to fold.
+        2 => (prop::collection::vec("[a-z]{1,10}", 8..16), " {1,2}", "[ a-z]{0,8}")
+            .prop_map(|(w, lead, rest)| format!("{lead}{}\n{rest}", w.join(" "))),
     ]
-}
-
-fn text() -> impl Strategy<Value = String> {
-    awkward().prop_filter("a string the writer loses", |text| written_back(text))
 }
 
 fn key() -> impl Strategy<Value = String> {
@@ -107,7 +99,7 @@ fn distinct(entries: Vec<(String, Value)>) -> Map {
 
 fn payload() -> impl Strategy<Value = Value> {
     let leaf = prop_oneof![
-        text().prop_map(Value::String),
+        awkward().prop_map(Value::String),
         number().prop_map(Value::Number),
         any::<bool>().prop_map(Value::Bool),
         prop::strategy::Just(Value::Null),
@@ -139,12 +131,12 @@ fn record(keys: impl Strategy<Value = String>, least: usize) -> impl Strategy<Va
 
 fn frontmatter() -> impl Strategy<Value = OkfMarkdownFrontmatter> {
     let head = (
-        text().prop_filter("a document needs a type", |t| !t.is_empty()),
-        prop::option::of(text()),
-        prop::option::of(text()),
-        prop::option::of(text()),
-        prop::option::of(prop::collection::vec(text(), 0..4)),
-        prop::option::of(text()),
+        awkward().prop_filter("a document needs a type", |t| !t.is_empty()),
+        prop::option::of(awkward()),
+        prop::option::of(awkward()),
+        prop::option::of(awkward()),
+        prop::option::of(prop::collection::vec(awkward(), 0..4)),
+        prop::option::of(awkward()),
     );
     let tail = (
         prop::option::of(event()),
@@ -317,36 +309,6 @@ fn schema_breaks() -> impl Strategy<Value = String> {
         .prop_map(|(line, before)| format!("---\n{before}{line}\n---\nbody\n"))
 }
 
-/// Whether a string the document holds is one the writer loses a character of.
-fn holds_lossy_text(doc: &Document) -> bool {
-    fn lossy(value: &Value) -> bool {
-        match value {
-            Value::String(text) => !written_back(text),
-            Value::Seq(items) => items.iter().any(lossy),
-            Value::Map(entries) => entries.iter().any(|(_, item)| lossy(item)),
-            _ => false,
-        }
-    }
-    let fm = &doc.frontmatter;
-    let texts = [
-        Some(&fm.r#type),
-        fm.title.as_ref(),
-        fm.description.as_ref(),
-        fm.resource.as_ref(),
-        fm.view.as_ref(),
-    ];
-    let events = fm.generated.iter().chain(fm.verified.iter().flatten());
-    texts.into_iter().flatten().chain(fm.tags.iter().flatten()).any(|t| !written_back(t))
-        || events.flat_map(|e| [&e.by, &e.at]).any(|t| !written_back(t))
-        || fm
-            .verified
-            .iter()
-            .flatten()
-            .chain(fm.generated.iter())
-            .any(|e| e.extra.iter().any(|(_, v)| lossy(v)))
-        || [&fm.facets, &fm.facets_raw].into_iter().flatten().flatten().any(|(_, v)| lossy(v))
-}
-
 #[test]
 fn the_split_and_the_reader_agree_and_what_is_read_writes_back_stably() {
     let accepted = Floor::new("an accepted text");
@@ -360,13 +322,9 @@ fn the_split_and_the_reader_agree_and_what_is_read_writes_back_stably() {
         unfenced.draw(first == Err(Failure::NoFence));
         schema.draw(matches!(first, Err(Failure::Schema(_))));
         let Ok(read) = first else { return Ok(()) };
-        // Only what the writer can spell and read back is held to a second reading.
+        // Only what the writer can spell is held to a second reading.
         let Ok(written) = serialize(&read) else { return Ok(()) };
-        let skipped = holds_lossy_text(&read);
-        stable.draw(!skipped);
-        if skipped {
-            return Ok(());
-        }
+        stable.draw(true);
         let again = parse(&written).map(|doc| serialize(&doc));
         prop_assert_eq!(again, Ok(Ok(written.clone())), "{:?}", written);
         Ok(())

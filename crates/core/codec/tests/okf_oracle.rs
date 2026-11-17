@@ -19,7 +19,7 @@ mod common;
 
 use common::{decode, encode};
 use serde_json::{Value as Json, json};
-use whiteboard_codec::frontmatter::{Refusal, Unwritable, Value};
+use whiteboard_codec::frontmatter::{self, Refusal, Unwritable, Value};
 use whiteboard_codec::okf::{
     Code, Document, Failure, Issue, OkfMarkdownFrontmatter, OkfTrustEvent, Step, parse, serialize,
 };
@@ -272,20 +272,99 @@ fn document_of(case: &Json) -> Result<Option<Document>, String> {
     Ok(Some(Document { frontmatter, body: text_field(&whole, "body").ok_or("no body")? }))
 }
 
+/// The root a recorded frontmatter is written as: `facetsRaw`'s entries spread
+/// over the rest, each taking the value of a key it meets, as `serializeOkf`'s
+/// `{...rest, ...facetsRaw, facets}` does. A `facetsRaw` that is no mapping is
+/// left where it is, as the writer leaves it.
+fn as_written(recorded: &Value) -> Value {
+    let Value::Map(entries) = recorded else { return recorded.clone() };
+    let mut root: Vec<(String, Value)> = Vec::new();
+    let mut raw: Vec<(String, Value)> = Vec::new();
+    for (name, item) in entries {
+        match (name.as_str(), item) {
+            ("facetsRaw", Value::Map(record)) => raw.extend(record.iter().cloned()),
+            _ => root.push((name.clone(), item.clone())),
+        }
+    }
+    for (name, item) in raw {
+        match root.iter_mut().find(|(held, _)| *held == name) {
+            Some(slot) => slot.1 = item,
+            None => root.push((name, item)),
+        }
+    }
+    Value::Map(root)
+}
+
+/// A value with every mapping's keys sorted, so two values compare by what
+/// they hold and not by the order the writer chose for it.
+fn sorted(value: &Value) -> Value {
+    match value {
+        Value::Seq(items) => Value::Seq(items.iter().map(sorted).collect()),
+        Value::Map(entries) => {
+            let mut entries: Vec<(String, Value)> =
+                entries.iter().map(|(k, v)| (k.clone(), sorted(v))).collect();
+            entries.sort_by(|(a, _), (b, _)| a.cmp(b));
+            Value::Map(entries)
+        }
+        other => other.clone(),
+    }
+}
+
+/// Whether a written text's frontmatter reads back as the recorded one: the
+/// same keys holding the same values of the same types, numbers to the bit.
+/// The document itself may be one the schema refuses, so the frontmatter is
+/// read alone.
+fn reads_back_as(recorded: &Value, text: &str) -> bool {
+    let yaml = text.strip_prefix("---\n").and_then(|rest| rest.split_once("\n---\n"));
+    yaml.and_then(|(yaml, _)| frontmatter::parse(yaml).ok())
+        .is_some_and(|read| encode(&sorted(&read)) == encode(&sorted(&as_written(recorded))))
+}
+
+fn reads_back_holding(case: &Json, text: &str) -> bool {
+    let whole = map_of(&decode(&case["d"]).unwrap_or(Value::Null)).unwrap_or_default();
+    field(&whole, "frontmatter").is_some_and(|recorded| reads_back_as(recorded, text))
+}
+
+#[test]
+fn a_read_back_is_judged_by_every_field_not_by_the_strings_it_holds() {
+    let text = |s: &str| Value::String(s.to_string());
+    let recorded = Value::Map(vec![
+        ("type".to_string(), text("note")),
+        ("title".to_string(), text("same")),
+        ("description".to_string(), text("same")),
+        ("facetsRaw".to_string(), Value::Map(vec![("count".to_string(), Value::Number(2.0))])),
+    ]);
+    let read = |yaml: &str| reads_back_as(&recorded, &format!("---\n{yaml}\n---\n"));
+    assert!(read("type: note\ntitle: same\ndescription: same\ncount: 2"));
+    assert!(read("count: 2\ndescription: same\ntitle: same\ntype: note"), "order is the writer's");
+    // Damage a string-membership check cannot see: a second field holding the
+    // same string, a number, a type, a key moved.
+    assert!(!read("type: note\ntitle: same\ndescription: other\ncount: 2"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: 3"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: '2'"));
+    assert!(!read("type: note\ntitle: same\nsummary: same\ncount: 2"));
+    assert!(!read("type: note\ntitle: same\ndescription: same"));
+    assert!(!read("type: note\ntitle: same\ndescription: same\ncount: 2\nextra: 1"));
+}
+
 #[test]
 fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
     let recording = recording();
     let cases: Vec<&Json> = recording.iter().filter(|c| c["k"] == "w").collect();
     let mut problems: Vec<String> = Vec::new();
-    let (mut written, mut unwritable, mut unrepresentable) = (0usize, 0usize, 0usize);
+    let (mut written, mut unwritable, mut unrepresentable, mut corrected) = (0, 0, 0, 0usize);
     for case in &cases {
         let Some(doc) = document_of(case).expect("a recorded document") else {
             unrepresentable += 1;
             assert!(case.get("err").is_some(), "a lone surrogate was written: {case}");
             continue;
         };
+        let reads_back = |text: &str| reads_back_holding(case, text);
         match (serialize(&doc), case.get("y").and_then(Json::as_str), case.get("err")) {
             (Ok(text), Some(y), _) if text == y => written += 1,
+            // A first line that starts with a space, folded by the TypeScript
+            // where a reader keeps the break: see `recorded_oracle.rs`.
+            (Ok(text), Some(y), _) if !reads_back(y) && reads_back(&text) => corrected += 1,
             (Err(faults), ..) if faults.iter().any(|f| f.why == Unwritable::TooDeep) => {
                 problems.push(format!("too deep: {case}"));
             }
@@ -303,6 +382,7 @@ fn every_recorded_document_is_written_as_the_typescript_wrote_it() {
         &problems[..problems.len().min(5)]
     );
     assert!(written > 350, "{written} documents written");
+    assert_eq!(corrected, 1, "recorded writes that did not read back, written so they do");
     assert!(unwritable > 20, "{unwritable} documents refused");
     assert!(unrepresentable > 3, "{unrepresentable} documents held a lone surrogate");
 }

@@ -159,6 +159,7 @@ export {
   type WalkReferencesOptions,
   walkReferences,
   walkReferencesSync,
+  writtenTargets,
 } from './references/targets.js'
 export {
   overlayReferences,
