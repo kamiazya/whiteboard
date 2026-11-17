@@ -126,32 +126,15 @@ if (mode === 'plan') {
     `rust:mutants plan: ${mutantCount ?? 'unknown'} mutants -> ${lines.join(' ')}\n`,
   )
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${lines.join('\n')}\n`)
+  // A pull request planned no leg still owes the ledger check the legs would
+  // have run first: a change to .cargo/mutants.toml alone, or one that only
+  // deletes Rust, lists no mutant, and a stale entry would otherwise surface
+  // on the next full run instead of here.
+  if (event === 'pull_request' && scopeRuns && shards.length === 0) checkLedger()
   process.exit(0)
 }
 
-const version = spawnSync('cargo', ['mutants', '--version'], { encoding: 'utf8' })
-const found = (version.stdout ?? '').trim()
-if (version.status !== 0) fail(`cargo-mutants is not installed. Install it with:\n  ${INSTALL}`)
-if (!found.endsWith(VERSION))
-  fail(`cargo-mutants ${VERSION} is required, found \`${found}\`:\n  ${INSTALL}`)
-
-// `--colors never`: CI sets CARGO_TERM_COLOR=always, and coloured names
-// (`replace \x1b[38;5;13mmeasure\x1b[0m ->`) match no ledger pattern, which
-// reads as every entry being stale.
-const listed = spawnSync(
-  'cargo',
-  ['mutants', '--workspace', '--list', '--no-config', '--colors', 'never'],
-  {
-    encoding: 'utf8',
-    maxBuffer: 64 * 1024 * 1024,
-  },
-)
-if (listed.status !== 0) fail(`cargo mutants --list failed:\n${listed.stderr}`)
-const problems = ledgerProblems(
-  ledgerEntries(readFileSync('.cargo/mutants.toml', 'utf8')),
-  mutantNames(listed.stdout),
-)
-if (problems.length > 0) fail(`the mutants ledger:\n  ${problems.join('\n  ')}`)
+checkLedger()
 
 const args = [
   'mutants',
@@ -193,3 +176,33 @@ const run = spawnSync('cargo', args, { stdio: 'inherit' })
 const status = run.status ?? 1
 if (status === 0) process.exit(0)
 fail(`cargo mutants exited ${status}: ${MEANING[status] ?? 'it did not run to an answer'}`)
+
+/**
+ * Every `.cargo/mutants.toml` entry still names a mutant the workspace lists,
+ * at the pinned cargo-mutants version. Fails the run otherwise.
+ */
+function checkLedger() {
+  const version = spawnSync('cargo', ['mutants', '--version'], { encoding: 'utf8' })
+  const found = (version.stdout ?? '').trim()
+  if (version.status !== 0) fail(`cargo-mutants is not installed. Install it with:\n  ${INSTALL}`)
+  if (!found.endsWith(VERSION))
+    fail(`cargo-mutants ${VERSION} is required, found \`${found}\`:\n  ${INSTALL}`)
+
+  // `--colors never`: CI sets CARGO_TERM_COLOR=always, and coloured names
+  // (`replace \x1b[38;5;13mmeasure\x1b[0m ->`) match no ledger pattern, which
+  // reads as every entry being stale.
+  const listed = spawnSync(
+    'cargo',
+    ['mutants', '--workspace', '--list', '--no-config', '--colors', 'never'],
+    {
+      encoding: 'utf8',
+      maxBuffer: 64 * 1024 * 1024,
+    },
+  )
+  if (listed.status !== 0) fail(`cargo mutants --list failed:\n${listed.stderr}`)
+  const problems = ledgerProblems(
+    ledgerEntries(readFileSync('.cargo/mutants.toml', 'utf8')),
+    mutantNames(listed.stdout),
+  )
+  if (problems.length > 0) fail(`the mutants ledger:\n  ${problems.join('\n  ')}`)
+}

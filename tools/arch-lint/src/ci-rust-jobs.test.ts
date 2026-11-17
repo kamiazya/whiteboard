@@ -200,7 +200,9 @@ describe('the rust-mutants legs are planned from the diff and the plan cannot pl
     expect(planStep?.env?.SCOPE_RUNS).toBe(`\${{ steps.scope.outputs.run }}`)
     const script = readFileSync(join(REPO_ROOT, 'tools/checks/src/rust-mutants.mjs'), 'utf8')
     expect(script).toContain("process.env.SCOPE_RUNS !== 'false'")
-    for (const step of plan.filter((s) => s.if?.includes('steps.scope.outputs.run'))) {
+    const scoped = plan.filter((s) => s.if?.includes('steps.scope.outputs.run'))
+    expect(scoped.length).toBeGreaterThan(0)
+    for (const step of scoped) {
       expect(step.if, step.name).toContain("steps.scope.outputs.run != 'false'")
     }
   })
