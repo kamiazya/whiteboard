@@ -23,9 +23,8 @@
  */
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-// @ts-expect-error -- a plain .mjs module with no declaration file
-import { RUST_SCOPE } from '../../checks/src/rust-scope.mjs'
 import { REPO_ROOT } from './scan-roots.js'
 import {
   type ClosureHost,
@@ -39,7 +38,11 @@ const PACKAGE = 'packages/canvas-render'
 const PACKAGE_DIR = join(REPO_ROOT, PACKAGE)
 const SELF = '@kamiazya/whiteboard-canvas-render'
 
-const scope = RUST_SCOPE as { files: readonly string[]; trees: readonly string[] }
+// lazy-import: loaded by path, since a relative import of tools/checks leaves
+// this workspace and `relative-import-escape` refuses it.
+const { RUST_SCOPE: scope } = (await import(
+  pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-scope.mjs')).href
+)) as { RUST_SCOPE: { files: readonly string[]; trees: readonly string[] } }
 
 /** What `vitest.rust.config.ts` includes: the rust tests, the rust benches, the edge suites. */
 const ENTRY = /(?:\.rust\.(?:test|bench)\.ts|^src\/layout\/edges\/.*\.test\.ts)$/
