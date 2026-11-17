@@ -4,11 +4,11 @@ import type { JunctionRecord } from '../test-utils/text-primitives-oracle/juncti
 import type { DigestRecord, FitRecord } from '../test-utils/text-primitives-oracle/oracle.js'
 
 /**
- * The committed recording of what the text primitives answer equals what the
- * TypeScript answers today, and the Rust port replays it exactly
- * (`tests/text_primitives_oracle.rs` in `crates/core/canvas-render`). Re-record
- * after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node text-primitives-recorded`.
+ * The committed recording of what the text primitives answered, taken from
+ * the TypeScript before it was deleted (ADR-0054 step 7, S18h) and frozen.
+ * The Rust port replays it exactly (`tests/text_primitives_oracle.rs` in
+ * `crates/core/canvas-render`). This test holds the recording to the inputs
+ * it must reach.
  */
 const FILE = new URL('./text-primitives.jsonl', import.meta.url)
 

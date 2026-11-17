@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 import type { SectionRecord } from '../test-utils/typeset-oracle/section-oracle.js'
 
 /**
- * The committed recording of what `selectMarkdownSection` answers equals what
- * it answers today, and the Rust port replays it exactly
- * (`tests/section_oracle.rs` in `crates/core/canvas-render`). Re-record after a
- * deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node section-recorded`.
+ * The committed recording of what `selectMarkdownSection` answered, taken
+ * from the TypeScript before it was deleted (ADR-0054 step 7, S18h) and
+ * frozen. The Rust port replays it exactly (`tests/section_oracle.rs` in
+ * `crates/core/canvas-render`). This test holds the recording to the inputs
+ * it must reach.
  */
 const FILE = new URL('./section.jsonl', import.meta.url)
 

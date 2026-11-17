@@ -4,15 +4,15 @@ import type { MarkdownMeta, MarkdownRecord } from '../test-utils/markdown-docume
 
 /**
  * The committed recordings of what a markdown DOCUMENT lays out as on each
- * surface (`layout-markdown.<surface>.jsonl`, ADR-0054 step 7, S18a) equal
- * what the TypeScript answers today. They exist for the core's markdown entry,
- * which replays them once the TypeScript that wrote them is deleted.
+ * surface (`layout-markdown.<surface>.jsonl`, ADR-0054 step 7, S18a), taken
+ * from the TypeScript before it was deleted (S18h) and frozen. The core's
+ * markdown entry replays them (`layout-markdown.rust.test.ts`, and natively
+ * `crates/bindings/wasm/tests/markdown_oracle.rs`).
  *
  * Each file's first line holds the reference wire, the fragment table and the
  * tag library its records name, and each record holds its body and options,
- * so this test reads no corpus: the freshness check re-answers the recorded
- * inputs. Re-record after a deliberate layout change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node layout-markdown-recorded`.
+ * so a replay reads no corpus. This test holds the recordings to the surfaces
+ * and inputs they must reach.
  */
 const DIR = new URL('./', import.meta.url)
 const SURFACE_FILE = /^layout-markdown\.([a-z]+)\.jsonl$/

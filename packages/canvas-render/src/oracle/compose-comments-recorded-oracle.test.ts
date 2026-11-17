@@ -4,11 +4,11 @@ import type { ComposeCommentsRecord } from '../test-utils/compose-comments-oracl
 import { f64Hex } from '../test-utils/render-oracle/scene-dump.js'
 
 /**
- * The committed recording of what the comment and proposal layers draw over a whole canvas
- * equals what it draws today, and the Rust port replays it exactly
- * (`tests/compose_canvas_support/comments.rs` in `crates/core/canvas-render`). Re-record
- * after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node compose-comments-recorded`.
+ * The committed recording of what the comment and proposal layers drew over a
+ * whole canvas, taken from the TypeScript before it was deleted (ADR-0054 step
+ * 7, S18h) and frozen. The Rust port replays it exactly
+ * (`tests/compose_canvas_support/comments.rs` in `crates/core/canvas-render`).
+ * This test holds the recording to the outcomes it must reach.
  */
 const FILE = new URL('./compose-comments.jsonl', import.meta.url)
 

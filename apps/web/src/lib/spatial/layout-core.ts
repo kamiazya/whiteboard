@@ -238,8 +238,9 @@ let installed: LayoutCoreHost | undefined
 /**
  * Makes this realm's host. Each realm that lays out installs once (the page
  * at boot, the layout worker at start). A realm that never does (a jsdom unit
- * test of a component) answers no core, and its layouts are the TypeScript
- * composer's, which S18h deletes with the TypeScript itself.
+ * test of a component) answers no core, and a layout asked there throws in
+ * `requireLayoutCore`: there is no TypeScript composer to lay it out
+ * (ADR-0054 step 7, S18h).
  */
 export function installLayoutCore(): LayoutCoreHost {
   // The platform's fetch as it stood now. The wasm is a build asset, not an

@@ -30,8 +30,10 @@ root calls the core through, never an implementation:
   back: a refusal drawn as `refusalScene`, degradations to `onDegrade`.
 - `layout/layout-options.ts` — `SpatialLayoutOptions`, the vocabulary a
   caller asks in.
-- `layout/edges/` — the orthogonal router's TypeScript, which S18h3 deletes;
-  until then it answers only canvas-render's own routing tests.
+- `layout/edges/` — the orthogonal router's TypeScript, which S18h3 kept
+  (`routeLayout` at stage 2): the web editor's connect preview routes the
+  tentative edge with it in a realm that holds no core, and the route-layout
+  differential holds the core's `edge_route_layout` to it.
 
 A measurer nobody named (`describeMeasure`) is the host's: the core asks the
 function itself through its one host import, so any `MeasureText` a root

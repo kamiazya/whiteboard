@@ -5,10 +5,10 @@ import { HAND_SCENES } from '../test-utils/typeset-oracle/fit-scenes.js'
 
 /**
  * The committed recording of what `fitBlocksToHeight` and `firstLineOfBlocks`
- * keep of a laid-out body equals what they keep today, and the Rust port replays
- * it exactly (`tests/fit_oracle.rs` in `crates/core/canvas-render`). Re-record after
- * a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node fit-recorded`.
+ * kept of a laid-out body, taken from the TypeScript before it was deleted
+ * (ADR-0054 step 7, S18h) and frozen. The Rust port replays it exactly
+ * (`tests/fit_oracle.rs` in `crates/core/canvas-render`). This test holds the
+ * recording to the inputs it must reach.
  */
 const FILE = new URL('./fit.jsonl', import.meta.url)
 

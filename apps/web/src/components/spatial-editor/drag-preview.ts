@@ -254,8 +254,9 @@ function routedByCore(
 
 /**
  * The TypeScript's routing of the tentative edge alone, for a realm that holds
- * no core (a jsdom unit test; S18h deletes it with the TypeScript): the side
- * search sees every edge, but only this one is routed.
+ * no core (a jsdom unit test). The edge routing is the one layout piece whose
+ * TypeScript ADR-0054 step 7 kept (`routeLayout` at stage 2), so this path
+ * stays: the side search sees every edge, but only this one is routed.
  */
 function routeTentativeOnly(
   nodes: SpatialCanvas['nodes'],

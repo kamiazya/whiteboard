@@ -4,10 +4,10 @@ import type { ProposalConflictsRecord } from '../test-utils/proposal-oracle/conf
 
 /**
  * The committed recording of whether a proposed change still fits its board
- * (`canvasChangeConflicts`) equals what the TypeScript answers today, and the
- * Rust port replays it exactly (`tests/compose_canvas_support/proposals.rs` in
- * `crates/core/canvas-render`). Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node proposal-conflicts-recorded`.
+ * (`canvasChangeConflicts`), taken from the TypeScript before it was deleted
+ * (ADR-0054 step 7, S18h) and frozen. The Rust port replays it exactly
+ * (`tests/compose_canvas_support/proposals.rs` in `crates/core/canvas-render`).
+ * This test holds the recording to the answers it must reach.
  */
 const FILE = new URL('./proposal-conflicts.jsonl', import.meta.url)
 

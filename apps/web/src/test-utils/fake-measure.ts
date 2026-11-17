@@ -10,10 +10,9 @@ import { createFixedMeasure } from '@kamiazya/whiteboard-canvas-render/test-util
  * Names a test's measurer as the HOST measurer, the way the page's canvas
  * measurer is named: a realm with the Rust core installed hands it the
  * function and the core asks it mid-layout through its host import. A
- * measurer named nothing cannot be handed to the core at all, and a layout
- * given one throws `CoreUnaskable` — the core answers every layout here, so
- * there is no TypeScript for it to fall back to. Returns `measure` itself, so
- * a `vi.fn` keeps its call record.
+ * measurer named nothing is asked as `host` too (`measureSpecOf`), so this
+ * states at the call site what the core will do rather than changing it.
+ * Returns `measure` itself, so a `vi.fn` keeps its call record.
  */
 export function hostMeasure<M extends MeasureText>(measure: M): M {
   describeMeasure(measure, { kind: 'host' })

@@ -34,7 +34,8 @@ paths:
   (`fragments` + `onFragmentsAsked`), never the `renderMath`/`renderDiagram`
   functions the core's request gate skips, and lays out through the `core`
   its host hands it (ADR-0054 step 7, S18e) — the host owns the wasm
-  instance and its switch; absent, the TypeScript answers.
+  instance and its switch. `core` is required: there is no TypeScript
+  layout to answer without one (S18h).
 - `SceneSvg.tsx`: the ONE component that turns a scene's SVG string into
   DOM; apps/web imports it too.
 - `widget/`: the self-contained single-file MCP Apps widget build. It lays

@@ -3,13 +3,13 @@ import { describe, expect, it } from 'vitest'
 import type { RecordMeta, TypesetRecord } from '../test-utils/typeset-oracle/oracle.js'
 
 /**
- * The committed recording of what `typesetMdastBlocks` answers for a paragraph
- * or a heading — the scene it lays out and how many times it asked the
- * measurer — equals what the TypeScript answers today, and the Rust typesetter
- * replays it exactly (`tests/typeset_oracle.rs` in `crates/core/canvas-render`).
- * The recording holds its inputs and the answers of the host seams, so the
- * freshness check reads no corpus. Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node typeset-recorded`.
+ * The committed recording of what `typesetMdastBlocks` answered for a
+ * paragraph or a heading — the scene it laid out and how many times it asked
+ * the measurer — taken from the TypeScript before it was deleted (ADR-0054
+ * step 7, S18h) and frozen. The Rust typesetter replays it exactly
+ * (`tests/typeset_oracle.rs` in `crates/core/canvas-render`). The recording
+ * holds its inputs and the answers of the host seams; this test holds it to
+ * the kinds of input it must reach.
  */
 const FILE = new URL('./typeset.jsonl', import.meta.url)
 

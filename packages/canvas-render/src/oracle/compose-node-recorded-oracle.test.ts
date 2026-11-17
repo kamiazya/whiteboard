@@ -3,10 +3,11 @@ import { describe, expect, it } from 'vitest'
 import type { ComposeNodeRecord } from '../test-utils/compose-node-oracle/oracle.js'
 
 /**
- * The committed recording of what `composeNode` answers equals what it answers
- * today, and the Rust port replays it exactly (`tests/compose_node_oracle.rs` in
- * `crates/core/canvas-render`). Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node compose-node-recorded`.
+ * The committed recording of what `composeNode` answered, taken from the
+ * TypeScript before it was deleted (ADR-0054 step 7, S18h) and frozen. The
+ * Rust port replays it exactly (`tests/compose_node_oracle.rs` in
+ * `crates/core/canvas-render`). This test holds the recording to the kinds of
+ * node and the outcomes it must reach.
  */
 const FILE = new URL('./compose-node.jsonl', import.meta.url)
 

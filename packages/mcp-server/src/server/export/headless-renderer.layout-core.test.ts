@@ -1,6 +1,7 @@
 // The file export lays a board out through the same core as `wb_scene_render`
-// (ADR-0054 step 7): the Rust core answers the layout, a document style
-// included, and the bytes are the TypeScript composer's, in both export modes.
+// (ADR-0054 step 7): the daemon's core answers the layout in one call, a
+// document style included, to the bytes the shipped core lays out, in both
+// export modes.
 
 import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
@@ -65,7 +66,7 @@ async function countedCore() {
 
 describe.runIf(built)('the file export through the layout core', () => {
   for (const theme of ['light', 'dark'] as const) {
-    it(`the core lays the ${theme} export out, to the TypeScript's SVG bytes`, async () => {
+    it(`the core lays the ${theme} export out, to the shipped core's SVG bytes`, async () => {
       const { core, seen } = await countedCore()
       const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, {
         core: testLayoutCore(),
@@ -76,7 +77,7 @@ describe.runIf(built)('the file export through the layout core', () => {
       expect(rust.svg).toBe(ts.svg)
     })
 
-    it(`the core lays the ${theme} PNG out, to the TypeScript's PNG bytes`, async () => {
+    it(`the core lays the ${theme} PNG out, to the shipped core's PNG bytes`, async () => {
       const { core, seen } = await countedCore()
       const ts = await renderSpatialCanvasToPng(board, NO_INSTALLED_FONTS, {
         core: testLayoutCore(),
@@ -93,7 +94,7 @@ describe.runIf(built)('the file export through the layout core', () => {
     })
   }
 
-  it("the core lays a document-style export out, to the TypeScript's bytes", async () => {
+  it("the core lays a document-style export out, to the shipped core's bytes", async () => {
     const { core, seen } = await countedCore()
     const options = { style: 'document' as const, theme: 'dark' as const }
     const ts = await renderSpatialCanvasToSvg(board, NO_INSTALLED_FONTS, {

@@ -22,7 +22,7 @@ import { built, requireWasm, wasmBytes } from './glue.js'
  * and the references it holds as dangling — laid over a keeper's wire the way
  * the web editor does (the cut to the canvas, then `overlayReferences`),
  * through the REAL core: the core answers every board, never declining one,
- * and its scene is the TypeScript composer's.
+ * and its scene is the one the shipped core draws for the same options.
  */
 const inner: SpatialCanvas = {
   nodes: [textNode({ id: 'i', x: 0, y: 0, width: 120, height: 60, text: 'inside' })],
@@ -134,7 +134,7 @@ describe.runIf(built)("a surface's reference chrome through the real core", () =
       core: fakeLayoutCore({ routing: real, layout: counting }),
     })
 
-  it('draws what the TypeScript draws', () => {
+  it('answers every board, as the shipped core draws it', () => {
     for (const { name, canvas, expanded } of boards) {
       const wire = overlayReferences(referenceWireFor(keeper, { canvases: [canvas] }), chrome)
       const options: SpatialLayoutOptions = {

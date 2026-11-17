@@ -3,11 +3,11 @@ import { describe, expect, it } from 'vitest'
 import type { PassageHighlightRecord } from '../test-utils/passage-highlight-oracle.js'
 
 /**
- * The committed recording of what the passage highlights and the searches they
- * run answer equals what they answer today, and the Rust port replays it
- * exactly (`tests/passage_highlight_oracle.rs` in `crates/core/canvas-render`).
- * Re-record after a deliberate change with
- * `WHITEBOARD_RECORD_ORACLE=1 pnpm vitest run --project canvas-render-node passage-highlight-recorded`.
+ * The committed recording of what the passage highlights and the searches
+ * they run answered, taken from the TypeScript before it was deleted
+ * (ADR-0054 step 7, S18h) and frozen. The Rust port replays it exactly
+ * (`tests/passage_highlight_oracle.rs` in `crates/core/canvas-render`). This
+ * test holds the recording to the inputs it must reach.
  */
 const FILE = new URL('./passage-highlight.jsonl', import.meta.url)
 
