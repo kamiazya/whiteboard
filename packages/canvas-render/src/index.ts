@@ -198,7 +198,7 @@ export { renderSceneToKeyedSvg } from './svg/keyed.js'
  * boards a reader would call correct (ADR-0031's twenty-fourth reading).
  */
 export { withDeclaredColours } from './tags/declared-colours.js'
-export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
+export { SPATIAL_THEME_FONT_FAMILY, SPATIAL_THEME_FONT_STACK } from './theme/font-family.js'
 export type { MarkdownTheme } from './theme/markdown-theme.js'
 export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX } from './theme/markdown-theme.js'
 export type {

@@ -1,8 +1,28 @@
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
-import { constantRatioMeasureText, describeMeasure } from '@kamiazya/whiteboard-canvas-render'
+import {
+  constantRatioMeasureText,
+  describeMeasure,
+  SPATIAL_THEME_FONT_FAMILY,
+  SPATIAL_THEME_FONT_STACK,
+} from '@kamiazya/whiteboard-canvas-render'
+
+/**
+ * The family list a run is measured in. The theme family is measured in the
+ * stack the SVG backend EMITS for it, not the bare name: until the vendored
+ * face loads, or when it never does, the bare name falls back to the 2D
+ * context's default face while the drawn run falls back through
+ * `system-ui, sans-serif`, so every run is placed by one face's advances and
+ * drawn in a wider one's, and the space after it is painted over.
+ */
+function familyList(font: FontDescriptor): string {
+  if (font.family === SPATIAL_THEME_FONT_FAMILY && font.fallbackChain.length === 0) {
+    return SPATIAL_THEME_FONT_STACK
+  }
+  return [font.family, ...font.fallbackChain].filter((name) => name.length > 0).join(', ')
+}
 
 function fontCss(font: FontDescriptor): string {
-  const family = [font.family, ...font.fallbackChain].filter((name) => name.length > 0).join(', ')
+  const family = familyList(font)
   return `${font.style} ${font.weight} ${font.sizePx}px ${family || 'sans-serif'}`
 }
 

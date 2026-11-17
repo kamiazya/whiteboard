@@ -63,6 +63,9 @@ export default defineConfig({
   },
   test: {
     name: 'web-browser',
+    // The browser realm has no `process.env`: a test whose premise can skip
+    // asks this, so the skip is impossible on CI (test-authoring rule 9).
+    provide: { onCi: process.env.CI === 'true' },
     // BOTH extensions: a `.browser.test.ts` (no x) matched by neither this
     // include nor web-jsdom (which excludes it) would silently never run.
     include: ['src/**/*.browser.test.tsx', 'src/**/*.browser.test.ts'],
