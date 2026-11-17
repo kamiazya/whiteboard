@@ -92,12 +92,6 @@ interface DecorationContext {
  *  the union stays closed, contributions build from it. */
 export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
 
-/** A point in canvas coordinates — the same shape a scene path is made of. */
-export interface ScenePoint {
-  readonly x: number
-  readonly y: number
-}
-
 /**
  * Everything one plugin contributes to rendering.
  *

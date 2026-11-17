@@ -1,13 +1,14 @@
-import type { Point, Rect } from '../../layout/edges/edge-geometry.js'
-import type { RoutingBudget } from '../../layout/edges/routing-budget.js'
+import type { RoutingBudget } from '../../edge-routing.js'
+import type { Point, Rect } from '../../generated/geometry.zod.js'
 import { requireWasm } from './glue.js'
 
 /**
- * `routeOnGrid` answered by the Rust port through the wasm artifact, with the
- * TypeScript signature, so canvas-render-rust can run every suite that
- * reaches the grid router against Rust unchanged (ADR-0054 step 5's routing
- * spike, QR-21 layer 1). vitest.rust.config.ts aliases `./grid-route.js` to
- * this module; the routing scoreboards then pin the Rust router's numbers.
+ * `routeOnGrid` answered by the Rust port through the wasm artifact's
+ * oracle-surface export (`edge_route_on_grid`), with the signature the
+ * deleted TypeScript grid router had, so canvas-render-rust's grid examples,
+ * its optimality property and its scoreboard pin the Rust router's numbers
+ * (ADR-0054 step 5's routing spike, QR-21 layer 1; the TypeScript went in
+ * step 7, S18h3b). Test-only: no shipped artifact carries the export.
  */
 export function routeOnGrid(
   start: Point,

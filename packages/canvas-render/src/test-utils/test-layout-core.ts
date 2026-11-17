@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import type { Core } from '@kamiazya/whiteboard-core-wasm'
 import { loadCore } from '@kamiazya/whiteboard-core-wasm/load'
-import type { LayoutCore } from '../layout/edges/layout-core.js'
+import type { LayoutCore } from '../layout-core.js'
 
 /**
  * The Rust core a Node-hosted test hands a layout, loaded from the staged

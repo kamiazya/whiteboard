@@ -87,11 +87,6 @@ const EXPORTED_FOR_ITS_TEST: readonly string[] = [
   'apps/web/src/lib/theme-fonts.ts#themeFontFamilies',
   'apps/web/src/lib/user-settings-store.ts#defaultUserSettings',
   'apps/web/src/lib/user-settings-store.ts#migrateV4',
-  'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreSegmentPair',
-  'packages/canvas-render/src/layout/edges/edge-router.ts#DETOUR_REACH_PX',
-  'packages/canvas-render/src/layout/edges/edge-router.ts#detourCandidates',
-  'packages/canvas-render/src/layout/edges/edge-rules.ts#dominantAxisOrder',
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#routeCacheKey',
   'packages/canvas-render/src/quality/polyline-geometry.ts#Point',
   'packages/canvas-render/src/quality/polyline-geometry.ts#Rect',
   'packages/canvas-render/src/quality/polyline-geometry.ts#segmentLength',
@@ -233,8 +228,6 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
     "where the daemon reads the staged wasm by default; exported so layout-core.test.ts asserts CI staged it at the SAME path, rather than a second spelling of the path that could drift from the loader's",
   'apps/web/src/lib/spatial/layout-core.ts#createLayoutCoreHost':
     "the host a realm installs over the build's artifact (`installLayoutCore`); exported so its load-failure policy is driven with a fake source, which the real artifact cannot be made to fail within one run",
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds':
-    'the coincident-ends repair its Rust port is held to (test-utils/wasm/coincident-ends.rust.test.ts, ADR-0054 step 5); assignEdgeAnchors is its production caller, in its own file',
   'packages/canvas-render/src/generated/geometry.zod.ts#pointSchema':
     'generated from contracts/geometry; production reads only the inferred type until the wasm boundary parses with it (ADR-0054 decision 8), and the contract test holds the refusals the Rust half makes',
   'packages/canvas-render/src/generated/geometry.zod.ts#rectSchema':
@@ -380,7 +373,7 @@ const INTENTIONAL: Readonly<Record<string, string>> = {
 }
 
 /** How many entries the `dead` and `reached` lists hold together, pinned by equality. */
-const DEBT_CEILING = 135
+const DEBT_CEILING = 130
 
 /** How many entries the `barrel-only` list holds, pinned by equality. */
 const PUBLISHED_CEILING = 9

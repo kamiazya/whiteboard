@@ -12,7 +12,8 @@ import { parseSource } from './ast-helpers.js'
  * per-function switch (`LayoutCore['impl']`) was retired in step 7's S18g: the
  * core answers every layout a root hands it. S18h2 deleted the composer and
  * the typesetter, moving the layout and its node queries to stage 4; S18h3
- * deleted the edge label's placement, moving its queries there too.
+ * deleted the edge label's placement, moving its queries there too, and
+ * S18h3b the edge router, moving `routeLayout`.
  *
  * Stage 4 has three shapes. A function whose callers can import the shim
  * re-exports it. One whose callers are synchronous and reach it by import from
@@ -21,8 +22,9 @@ import { parseSource } from './ast-helpers.js'
  * `realm` instead: the export is a dispatcher over the one core each realm
  * installs, never an implementation, and the files that held the
  * TypeScript must be gone. The OKF envelope, the JSON Canvas codec and the facet write are the second shape.
- * The third is canvas-render's layout: the export takes the core it asks
- * (`options.core`, which every root holds), so there is nothing to install;
+ * The third is canvas-render's layout and routing: the export takes the core it
+ * asks (`options.core`, or the routing's first argument, which every root holds),
+ * so there is nothing to install;
  * it declares `handed`, and the files that held the TypeScript must be gone.
  */
 export interface PortedFunction {
@@ -118,20 +120,37 @@ const LABEL_TYPESCRIPT = [
   'packages/canvas-render/src/layout/edges/edge-label-anchor.cost.test.ts',
 ] as const
 
+/**
+ * Where the edge router lived (S18h3b), which stage 4 requires gone: the side
+ * search, the router, the grid search, the cost model and its vocabulary, and
+ * the dispatch that chose between the TypeScript and the core.
+ */
+const ROUTER_TYPESCRIPT = [
+  'packages/canvas-render/src/layout/edges/layout-core.ts',
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts',
+  'packages/canvas-render/src/layout/edges/edge-router.ts',
+  'packages/canvas-render/src/layout/edges/grid-route.ts',
+  'packages/canvas-render/src/layout/edges/edge-anchors.ts',
+  'packages/canvas-render/src/layout/edges/edge-sides.ts',
+  'packages/canvas-render/src/layout/edges/edge-rules.ts',
+  'packages/canvas-render/src/layout/edges/edge-geometry.ts',
+] as const
+
 export const PORTED_FUNCTIONS: readonly PortedFunction[] = [
   {
     name: 'routeLayout',
-    // Stays 2 although the core answers every layout a root hands it (S18g):
-    // the TypeScript export is still the composer's own routing. It moves
-    // with the TypeScript's deletion (S18h3).
-    stage: 2,
-    ts: { file: 'packages/canvas-render/src/layout/edges/layout-core.ts', export: 'routeLayout' },
+    // The core answers every layout's routing (S18g), and the crate replays
+    // the recording; the TypeScript router is gone (S18h3b). What remains is
+    // one call into the core a caller hands it, which the connect preview asks.
+    stage: 4,
+    ts: { file: 'packages/canvas-render/src/layout-core.ts', export: 'routeLayout' },
     rust: { file: 'crates/bindings/wasm/src/spatial_edges.rs', fn: 'edge_route_layout' },
     shim: {
       module: '@kamiazya/whiteboard-core-wasm',
       file: 'packages/core-wasm/src/index.ts',
       member: 'routeLayout',
     },
+    handed: { deleted: ROUTER_TYPESCRIPT },
   },
   {
     name: 'layoutSpatialCanvas',

@@ -441,28 +441,6 @@ const FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/pages/use-document-actions.tsx#useDocumentActions': 85, // +5: the Move to folder… row and its picker
   'apps/web/src/pwa/UpdateToast.tsx#UpdateToast': 57,
   'apps/web/src/test-utils/document-page.contract.tsx#describeDocumentPageContract': 86,
-  'packages/canvas-render/src/layout/edges/edge-crossing-sweep.ts#scoreQuantizedSegmentPair': 53,
-  // Raised for the layout's routing budget, which the repair pass's routes
-  // spend from.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#anchorsWithoutCoincidentEnds': 71,
-  'packages/canvas-render/src/layout/edges/edge-anchors.ts#computeAnchorsFor': 56,
-  // The trial evaluator's three steps are named closures (applySelfCosts /
-  // applyPairCosts / rescorePairsOf / rescorePairInto), each carrying the
-  // invariant that would otherwise be a comment inside the loop it came from.
-  // The closure is longer by those doc comments and shorter by nothing; the next
-  // real shrink is lifting the score object into a module of its own, which
-  // needs its eight captured caches passed as a bundle. Raised by 9 for the
-  // routing budget: a build or a trial pair it cannot cover leaves the
-  // configuration unpriced, and that has to be carried to the adoption test.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#createConfigScore': 317,
-  // +3, threading the routing budget to both runs of a region.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeAcrossRegions': 97,
-  // `improveEdge` replaces the candidate loop's body and brings its
-  // incumbent-wins-ties rationale with it. +3 for the routing budget.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts#optimizeSideChoices': 105,
-  'packages/canvas-render/src/layout/edges/edge-anchors.ts#patchAnchorGroups': 54,
-  'packages/canvas-render/src/layout/edges/edge-router.ts#routeEdge': 75,
-  'packages/canvas-render/src/layout/edges/edge-router.ts#routeOrthogonal': 139,
   'packages/canvas-render/src/quality/drawing-score.ts#scoreDrawing': 63,
   'packages/canvas-render/src/quality/facet-score.ts#scoreFacets': 67,
   'packages/canvas-render/src/references/seams.ts#referenceSeams': 76,
@@ -635,8 +613,7 @@ const TEST_FUNCTION_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/spatial-editor/navigation.property.test.ts#drive': 137,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#browserHarness': 72,
   'apps/web/src/lib/versions-backend.contract.browser.test.tsx#daemonHarness': 83,
-  'packages/canvas-render/src/layout/edges/edge-crossing-sweep-narrow-phase.test.ts#referenceScore': 53,
-  'packages/canvas-render/src/layout/edges/grid-route.optimality.properties.test.ts#referenceCost': 106,
+  'packages/canvas-render/src/routing/grid-route.optimality.properties.rust.test.ts#referenceCost': 106,
   'packages/codec/src/markdown/round-trip.property.test.ts#hasNoExcludedDescendant': 88,
   // The fake daemon can refuse a credential, and the harness hands that on.
   'packages/daemon-client/src/sse-stream-hub.contract.test.ts#createHarness': 90,

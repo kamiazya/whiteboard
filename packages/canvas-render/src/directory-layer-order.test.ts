@@ -13,8 +13,9 @@ import { describe, expect, it } from 'vitest'
  * contract types, the small root helpers, the legend's measurements, a
  * node's silhouette in `outline/` and a drawn edge's path in `edge-path/`);
  * `quality/` scores a drawing;
- * `engines` is `layout/edges/`, the routing the core's own replaced; `ink`
- * is `ink/`; `scene-bounds` is the
+ * `engines` is the core's contract — the request and answer types of each
+ * entry and the `LayoutCore` that names them, root files all, since the
+ * routing TypeScript that was `layout/edges/` is deleted; `ink` is `ink/`; `scene-bounds` is the
  * root module that knows how far a drawn node or edge reaches, so it sits
  * above the ink it measures and below the composers and the SVG backend that
  * ask it; `layout` asks the Rust core for the scene (ADR-0054 step 7);
@@ -58,7 +59,7 @@ type Layer = (typeof LAYERS)[number]
 
 const rank = (layer: Layer): number => LAYERS.indexOf(layer)
 
-/** Longest prefix wins, so `layout/edges/` is resolved before `layout/`. */
+/** Longest prefix wins, so a subdirectory is resolved before its parent. */
 const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   theme: 'theme',
   highlight: 'highlight',
@@ -67,7 +68,6 @@ const DIRECTORY_LAYERS: Readonly<Record<string, Layer>> = {
   generated: 'leaf',
   quality: 'quality',
   legend: 'leaf',
-  'layout/edges': 'engines',
   ink: 'ink',
   outline: 'leaf',
   'edge-path': 'leaf',
@@ -89,9 +89,17 @@ const FILE_LAYERS: Readonly<Record<string, Layer>> = {
  * to be placed.
  */
 const ROOT_FILES: Readonly<Record<string, Layer>> = {
-  // The whole layout's request and answer, which the routing switch's
-  // `LayoutCore` names: an engine's own rank, reading the edge vocabulary.
+  // The whole layout's request and answer, which `LayoutCore` names: an
+  // engine's own rank, reading the routing contract.
   'canvas-core.ts': 'engines',
+  // The core as a root hands it, naming every entry's contract, and the one
+  // call that routes an edge set outside a layout.
+  'layout-core.ts': 'engines',
+  // What a caller hands the core's routing and reads back: sides, anchors,
+  // the budget. Reads nothing of this package but the generated geometry.
+  'edge-routing.ts': 'leaf',
+  // How many times the theme's line weight each named pen weight draws at.
+  'stroke-weight.ts': 'leaf',
   'canvas-fragment.ts': 'leaf',
   // What a comment points at and the bubble constants the editor shares.
   'comment-geometry.ts': 'leaf',
@@ -227,16 +235,16 @@ describe('render pipeline layers', () => {
 
   it('reports a planted back edge, in a value import, a type import and a dynamic import', () => {
     const planted = {
-      './theme/a.ts': "import type { X } from '../layout/edges/spatial-appearance.js'",
-      './highlight/b.ts': "export type { Y } from '../layout/edges/mdast-layout-options.js'",
-      './layout/edges/c.ts': "export const m = () => import('../../svg/format.js')",
-      './layout/edges/ok.ts': "import { z } from '../../theme/z.js'",
+      './theme/a.ts': "import type { X } from '../layout-core.js'",
+      './highlight/b.ts': "export type { Y } from '../canvas-core.js'",
+      './ink/c.ts': "export const m = () => import('../svg/format.js')",
+      './ink/ok.ts': "import { z } from '../theme/z.js'",
       './svg/ok.ts': "import { w } from '../layout/w.js'",
     }
     expect(backEdges(planted)).toEqual([
-      './theme/a.ts (theme) imports ../layout/edges/spatial-appearance.js (engines)',
-      './highlight/b.ts (highlight) imports ../layout/edges/mdast-layout-options.js (engines)',
-      './layout/edges/c.ts (engines) imports ../../svg/format.js (svg)',
+      './theme/a.ts (theme) imports ../layout-core.js (engines)',
+      './highlight/b.ts (highlight) imports ../canvas-core.js (engines)',
+      './ink/c.ts (ink) imports ../svg/format.js (svg)',
     ])
   })
 

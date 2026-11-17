@@ -1,9 +1,9 @@
 import {
-  assignEdgeAnchors,
   constantRatioMeasureText,
+  createRoutingBudget,
   createSpatialTheme,
   layoutSpatialCanvas,
-  routeEdge,
+  routeLayout,
 } from '@kamiazya/whiteboard-canvas-render'
 import { testLayoutCore } from '@kamiazya/whiteboard-canvas-render/test-utils/node-core'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -55,18 +55,25 @@ describe('composeCanvasScene', () => {
     )
     expect(fileChrome).toBeDefined()
 
-    // (b) each routed edge matches routeEdge + assignEdgeAnchors run together
-    // over the whole edge set — the anchor fan-out/side-optimization pass
-    // that a per-edge `routeEdge` call (with no anchors) never runs. The
-    // theme's edge appearance is merged on top, matching what
-    // layoutSpatialCanvas's own composeEdge does.
-    const style = resolveCanvasEdgeStyle(canvas).style
-    const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, style)
+    // (b) each routed edge matches the core's routing of the whole edge set
+    // in one call — the anchor fan-out/side-optimization pass and every route
+    // between the anchors it settles. The theme's edge appearance is merged
+    // on top, matching what the layout's own edge composition does.
+    const style = resolveCanvasEdgeStyle(canvas).style ?? 'straight'
+    const { routes } = routeLayout(
+      testLayoutCore(),
+      canvas.nodes,
+      canvas.edges,
+      () => style,
+      undefined,
+      createRoutingBudget(),
+      [],
+    )
     const theme = createSpatialTheme({ mode: 'light' })
     const edgeNodes = scene.nodes.filter((n) => n.kind === 'edge')
     expect(edgeNodes).toHaveLength(2)
-    for (const edge of canvas.edges) {
-      const routed = routeEdge(canvas.nodes, edge, style, anchors.get(edge.id))
+    for (const [i, edge] of canvas.edges.entries()) {
+      const routed = routes[i] as (typeof routes)[number]
       const appearance = theme.resolveEdge(edge)
       const expected = appearance === undefined ? routed : { ...routed, appearance }
       const actual = edgeNodes.find((n) => n.kind === 'edge' && n.id === edge.id)

@@ -27,7 +27,8 @@ nothing.
   optional chains. It went red, and the reported mutant was only one of them.
   Mutating more than what was reported can only produce red; red then says
   nothing about the reported mutant.
-- `okSecond` was called unreachable after measuring that `zeroBendFacingFirst`
+- A preference rule's second push (in the TypeScript edge rules, since ported to
+  `edge_rules.rs`) was called unreachable after measuring that `zero_bend_facing_first`
   never returns two pairs. True, and about a different question: the two pushes
   are mutually exclusive, so a single pair can arrive from either. Measured on
   the branch that actually answers the claim, 242 of 7893 firings came from the

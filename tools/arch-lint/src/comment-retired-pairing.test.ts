@@ -80,9 +80,6 @@ const LEDGER: Readonly<Record<string, { readonly count: number; readonly why: Wh
     why: 'says the flow is gone, or what a migration drops',
   },
   'apps/web/src/lib/render-preview.ts': { count: 1, why: 'ordinary English' },
-  'packages/canvas-render/src/layout/edges/edge-anchors.ts': { count: 1, why: 'ordinary English' },
-  'packages/canvas-render/src/layout/edges/grid-route.ts': { count: 1, why: 'ordinary English' },
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': { count: 2, why: 'ordinary English' },
   'packages/canvas-render/src/layout/spatial-canvas.bench.ts': {
     count: 1,
     why: 'ordinary English',

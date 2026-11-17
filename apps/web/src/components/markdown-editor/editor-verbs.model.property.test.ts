@@ -524,8 +524,8 @@ describe('markdown editor verbs as a state machine over the caret line', () => {
     () => {
       assertLedger('editing verb', VERB_COVERAGE, drives)
       // A FLOOR for the marks, not only the ledger's "at least once" — the
-      // same guard-of-the-guard edge-rules.properties.test.ts carries, for the
-      // same reason. Without `Type` in the pool the marks were driven 0–13
+      // same guard-of-the-guard the edge rules' property suite carried (now
+      // `edge_rules_properties.rs`), for the same reason. Without `Type` in the pool the marks were driven 0–13
       // times per execution against ~400+ for every structure verb, and the
       // ledger failed only on the tail of that distribution: a red build
       // pointing at a file nobody had changed. With `Type`, measured over five

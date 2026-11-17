@@ -1,6 +1,6 @@
 //! The pairwise crossing scorer's answers that cargo-mutants showed no other
 //! test pinned. Every expected value is what canvas-render's
-//! `edge-crossing-sweep.ts` returns for the same input.
+//! the TypeScript crossing sweep returns for the same input.
 //!
 //! The broad phase's y-gate is safe to loosen or tighten by one slack step
 //! only while the quarter-pixel slack actually moves a coordinate. From

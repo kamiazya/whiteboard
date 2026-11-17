@@ -48,6 +48,12 @@ export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { flattenDrawnEdgePath } from './edge-path/edge-flatten.js'
 export { flattenRoundedEdgePath } from './edge-path/edge-rounding.js'
 export {
+  createRoutingBudget,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+  type EdgeSides,
+} from './edge-routing.js'
+export {
   type FragmentAsk,
   type FragmentEntry,
   fragmentAskKey,
@@ -71,13 +77,6 @@ export {
   resolveCanvasThemeFontFamily,
   resolveThemeTable,
 } from './layout/canvas-theme.js'
-export { routeEdge } from './layout/edges/edge-router.js'
-export type { EdgeAnchorOverride, EdgeAnchorPair, EdgeSides } from './layout/edges/edge-sides.js'
-export type { LayoutCore, RoutingCore } from './layout/edges/layout-core.js'
-export { routeLayout } from './layout/edges/layout-core.js'
-export { createRoutingBudget } from './layout/edges/routing-budget.js'
-export { assignEdgeAnchors } from './layout/edges/spatial-edges.js'
-export { STROKE_WEIGHT_FACTOR } from './layout/edges/stroke-weight.js'
 export { fittedTextNodeHeight } from './layout/fitted-height.js'
 export {
   type CommentDocumentOptions,
@@ -109,6 +108,7 @@ export {
   naturalNodeContentSize,
   spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
+export { type LayoutCore, type RoutingCore, routeLayout } from './layout-core.js'
 export { legendValueLabel } from './legend/legend-geometry.js'
 export type {
   MarkdownCommentRequest,
@@ -185,6 +185,7 @@ export type { SceneWalkNode } from './scene-children.js'
 export { sceneChildrenOf } from './scene-children.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
+export { STROKE_WEIGHT_FACTOR } from './stroke-weight.js'
 export type { SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
 export { documentIdOfHref } from './svg/document-href.js'

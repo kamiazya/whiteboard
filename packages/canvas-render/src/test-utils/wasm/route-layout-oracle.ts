@@ -1,9 +1,8 @@
 import type { EdgeRoutingStyle, EdgeSide } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { Rect } from '../../layout/edges/edge-geometry.js'
-import { routeEdge } from '../../layout/edges/edge-router.js'
-import { createRoutingBudget, type RoutingBudget } from '../../layout/edges/routing-budget.js'
-import { assignEdgeAnchors } from '../../layout/edges/spatial-edges.js'
+import { createRoutingBudget, type EdgeAnchorPair, type RoutingBudget } from '../../edge-routing.js'
+import type { Rect } from '../../generated/geometry.zod.js'
+import type { RoutingCore } from '../../layout-core.js'
 import { fc } from '../fast-check.js'
 import {
   latticeLayouts,
@@ -25,21 +24,18 @@ import {
 } from './search-arbitraries.js'
 
 /**
- * `edge_route_layout`'s answer as the TypeScript composes it, and the
- * recorded corpus of those answers the Rust crate replays natively
- * (ADR-0054 step 5, QR-17).
+ * The recorded corpus of `edge_route_layout`'s answers (ADR-0054 step 5,
+ * QR-17), and the draws it was recorded from.
  *
- * cargo-mutants judges a mutant by the Rust workspace's own tests, and the
- * edge crate's real oracle is the TypeScript, reached through wasm by the
- * `*.rust.test.ts` differentials, which cargo-mutants cannot run. So the
- * TypeScript's answers are recorded: `recorded-oracle.test.ts` holds the
- * committed file equal to what the TypeScript answers today (a stale
- * recording fails there), and `crates/bindings/wasm/tests/recorded_oracle.rs`
- * holds the export equal to the recording, bit for bit.
- *
- * The recording must be made where `edge-router`, `spatial-edges` and
- * `grid-route` are the TypeScript: the node project, never
- * `canvas-render-rust`, which aliases them to the Rust ports.
+ * The recording was taken from the TypeScript composer's routing while it
+ * existed, and is frozen since its deletion (step 7, S18h3b; D13: every
+ * recording is kept and still read by a test). Two replays read it:
+ * `crates/bindings/wasm/tests/recorded_oracle.rs` holds the export equal to
+ * it natively, bit for bit, so cargo-mutants judges the edge crate's mutants
+ * by it; `recorded-oracle.test.ts` regenerates the same draws, routes them
+ * through `@kamiazya/whiteboard-core-wasm`'s typed call, the one a root hands
+ * canvas-render, and holds both the wire it encodes and the answer it decodes
+ * to the recording.
  */
 
 const end = (e: string | undefined) => (e === 'arrow' ? 1 : 0)
@@ -53,32 +49,34 @@ const routedValues = (r: ResolvedEdgeNode) => [
   ...r.path.flatMap((p) => [p.x, p.y]),
 ]
 
-/** One layout: the wire `edge_route_layout` reads and what the TypeScript answers to it. */
+/** One layout: the wire `edge_route_layout` reads and what the core answers to it. */
 export interface RouteLayoutCase {
   readonly input: Float64Array
   readonly expected: readonly number[]
   readonly routed: readonly ResolvedEdgeNode[]
-  readonly anchors: ReturnType<typeof assignEdgeAnchors>
+  readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
   readonly budget: RoutingBudget
-  readonly afterSearch: number
 }
 
 /**
- * The composer's edge routing for `d` with `grid` in the grid account:
- * `assignEdgeAnchors`, then `routeEdge` of every edge on the same budget,
- * laid out as `edge_route_layout` answers it.
+ * The edge routing of `d` with `grid` in the grid account, asked of `core`
+ * (the side search, then every edge's route on the same budget), laid out as
+ * `edge_route_layout` answers it.
  */
-export function routeLayoutCase(d: Drawn, grid: number): RouteLayoutCase {
+export function routeLayoutCase(core: RoutingCore, d: Drawn, grid: number): RouteLayoutCase {
   const wire = encodeRouting(d.nodes, d.edges)
   const overrides = overrideMap(d)
   const labels = d.labels as readonly Rect[]
   const styleByEdge = new Map(d.edges.map((e, i) => [e, d.styles[i] as EdgeRoutingStyle]))
   const styleOf = (e: RoutableElement) => styleByEdge.get(e) ?? 'straight'
   const budget: RoutingBudget = { ...createRoutingBudget(), grid, trials: d.trials, pairs: d.pairs }
-  const anchors = assignEdgeAnchors(d.nodes, d.edges, styleOf, overrides, budget, labels)
-  const afterSearch = budget.grid
-  const routed = d.edges.map((edge) =>
-    routeEdge(d.nodes, edge, styleOf(edge), anchors.get(edge.id), undefined, budget, labels),
+  const { routes: routed, anchors } = core.routeLayout(
+    d.nodes,
+    d.edges,
+    styleOf,
+    overrides,
+    budget,
+    labels,
   )
   const expected = [
     budget.grid,
@@ -91,7 +89,7 @@ export function routeLayoutCase(d: Drawn, grid: number): RouteLayoutCase {
     ...[...anchors].flatMap(([id, e]) => entryValues(wire.edgeIds.indexOf(id), e)),
   ]
   const input = wireInput(d, wire, overrides, d.trials, grid)
-  return { input, expected, routed, anchors, budget, afterSearch }
+  return { input, expected, routed, anchors, budget }
 }
 
 const STYLE_NAMES: readonly EdgeRoutingStyle[] = ['straight', 'orthogonal', 'curved']

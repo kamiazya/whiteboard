@@ -1,5 +1,5 @@
 //! Routing-budget answers that cargo-mutants showed no other test pinned.
-//! Every expected value is what canvas-render's `routing-budget.ts` returns
+//! Every expected value is what canvas-render's TypeScript routing budget returns
 //! for the same input.
 
 #[cfg(target_arch = "wasm32")]

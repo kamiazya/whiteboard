@@ -1,10 +1,11 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { textNode } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect, it } from 'vitest'
+import { createRoutingBudget } from '../edge-routing.js'
+import { routeLayout } from '../layout-core.js'
 import { describeMeasure } from '../measure.js'
 import { testLayoutCore } from '../test-utils/test-layout-core.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import { assignEdgeAnchors } from './edges/spatial-edges.js'
 import type { SpatialLayoutOptions } from './spatial-canvas.js'
 import { layoutSpatialCanvas, layoutSpatialCanvasWithAnchors } from './spatial-canvas.js'
 
@@ -47,7 +48,16 @@ describe('layoutSpatialCanvasWithAnchors', () => {
     // anchor pass (it is the most expensive part of a drag start) — the
     // layout already computed it, so it travels out alongside the scene.
     const { anchors } = layoutSpatialCanvasWithAnchors(canvas, options)
-    const expected = assignEdgeAnchors(canvas.nodes, canvas.edges, 'orthogonal')
+    // The core's one-call routing of the same edge set, outside any layout.
+    const { anchors: expected } = routeLayout(
+      testLayoutCore(),
+      canvas.nodes,
+      canvas.edges,
+      () => 'orthogonal',
+      undefined,
+      createRoutingBudget(),
+      [],
+    )
     expect([...anchors.entries()]).toEqual([...expected.entries()])
   })
 })

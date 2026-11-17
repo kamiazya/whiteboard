@@ -67,8 +67,8 @@ export default {
   // mutant (one its coverage cannot map to a test, so every test runs after a
   // reload) is most of the time, and also most of what this lane is for.
   // Measured over one whole weekly report: 1885 of 3378 mutants static,
-  // among them 453 of `edge-rules.ts`'s 457, all 228 of
-  // `edge-crossing-sweep.ts`'s and 354 of `tidy.ts`'s 378. Ignoring them
+  // among them 453 of the TypeScript edge rules's 457, all 228 of
+  // the TypeScript crossing sweep's and 354 of `tidy.ts`'s 378. Ignoring them
   // would drop the cost model and the tidy heuristic from the report while
   // its score kept looking whole. The time is met by sharding instead.
   ignoreStatic: false,

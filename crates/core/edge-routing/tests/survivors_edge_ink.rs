@@ -1,5 +1,5 @@
 //! Concrete answers of the ink measures that cargo-mutants showed no other
-//! test pinned. Every expected value is what canvas-render's `edge-ink.ts`
+//! test pinned. Every expected value is what canvas-render's TypeScript ink terms
 //! returns for the same input.
 
 #[cfg(target_arch = "wasm32")]

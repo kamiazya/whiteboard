@@ -17,30 +17,6 @@
 // properties worth trusting belongs in the lane; one whose tests are examples
 // only will report true-but-unsurprising survivors.
 export const MUTATED = [
-  // The cost model and the searches the differential oracles cover.
-  'src/layout/edges/edge-rules.ts',
-  // Split out of `edge-rules.ts` and covered for that reason: the ink TERMS
-  // were part of that file's lane, and leaving them out would have SHRUNK
-  // what the lane sees while the report kept looking the same — the failure
-  // this list's pinned counts exist to stop.
-  'src/layout/edges/edge-ink.ts',
-  // The diagonal clip the intrusion tier reads: a sampled oracle and two
-  // invariants, so a survivor here would be a chord read wrong.
-  'src/layout/edges/diagonal-ink.ts',
-  'src/layout/edges/edge-crossing-sweep.ts',
-  'src/layout/edges/grid-route.ts',
-  // The priority queue grid-route searches with, extracted from inside it so
-  // it could be read and tested at all. Two properties — non-decreasing cost
-  // order, and the same multiset out as in — and neither is stated from the
-  // sift code: they are what a min-heap MEANS. Ties are deliberately not
-  // pinned, because the router has several optimal routes and ordering them
-  // here would fix one by accident.
-  'src/layout/edges/min-heap.ts',
-  // The straight style's corner search: a search, held by
-  // `straight-detour.properties.test.ts`, whose oracle is written from the
-  // definition (a route clear of every obstacle's open interior) rather than
-  // from the search, so a survivor is a corner or clearance nothing pins.
-  'src/layout/edges/straight-detour.ts',
   // Colour by intent (ADR-0040 decision 5): three properties over random
   // boards and libraries, stated from the declaration rather than the code.
   'src/tags/declared-colours.ts',
@@ -78,8 +54,8 @@ export const MUTATED = [
   // rather than restating it.
   'src/tidy-axis.ts',
   'src/tidy-bands.ts',
-  // Moved out of the TypeScript comment-bubble placement and `edge-rules.ts` (S18h1), both in
-  // the lane, so leaving them out would shrink what it sees.
+  // Moved out of the TypeScript comment-bubble placement and the TypeScript edge rules (S18h1), both
+  // then in the lane, so leaving them out would have shrunk what it saw.
   'src/comment-geometry.ts',
   'src/containment.ts',
   // The sketch ink decomposition: reach, determinism and translation
@@ -111,7 +87,8 @@ export const MUTATED = [
  * phase: the figure the legs are dealt by. Mutant COUNT does not predict it —
  * per mutant, the cost is the tests it runs, and that differs by two orders of
  * magnitude between files. Dealt by count, one run's six legs took 11 to 60
- * minutes: `grid-route.ts` is 303 mutants and 42 minutes, `sketch.ts` 473 and
+ * minutes: the grid router (the TypeScript grid router, deleted with the TypeScript
+ * routing in S18h3b) was 303 mutants and 42 minutes, `sketch.ts` 473 and
  * under five.
  *
  * measured: 2026-10-05, weekly run 37303929216 (dealt by file count, six
@@ -131,18 +108,6 @@ export const MUTATED = [
  * @type {Readonly<Record<string, number>>}
  */
 export const MINUTES = {
-  'src/layout/edges/edge-rules.ts': 45.8,
-  'src/layout/edges/edge-ink.ts': 15.7,
-  'src/layout/edges/diagonal-ink.ts': 2,
-  'src/layout/edges/edge-crossing-sweep.ts': 23.3,
-  'src/layout/edges/grid-route.ts': 42,
-  'src/layout/edges/min-heap.ts': 5,
-  // ESTIMATED, not yet measured on a runner: 257 mutants, priced at
-  // `grid-route.ts`'s rate (303 mutants, 42 minutes), the file whose tests
-  // and timeouts it shares. A local run (2026-11-06, 3 runners on a machine
-  // at load ~20) tested 66 in 27 minutes, 0 survived and 6 timed out, and
-  // was stopped there; replace this with the weekly run's figure.
-  'src/layout/edges/straight-detour.ts': 36,
   'src/tags/declared-colours.ts': 1.3,
   'src/svg/format.ts': 3.8,
   'src/xml-escape.ts': 6.8,
@@ -213,7 +178,7 @@ export function shardOf(files, spec, minutes = MINUTES) {
  * Survivors that NO test can kill, because the mutation does not change what
  * the code does. They are a real triage answer rather than debt, and without
  * somewhere to record them the same set is re-investigated every time the
- * lane runs — `edge-crossing-sweep.ts` alone reports 23 of them on every
+ * lane runs — the TypeScript crossing sweep alone reports 23 of them on every
  * report, which is more than the PR comment's whole table holds, so one file's
  * settled findings would hide every other file's live one.
  *
@@ -400,14 +365,6 @@ export const KNOWN_EQUIVALENT = {
   'src/tidy-axis.ts': {
     'ConditionalExpression: delta === 0 -> false': 2,
   },
-  // `p` is a signed segment delta that the axis-aligned skip above the loop
-  // keeps nonzero, so `<=` and `<` agree; a chord whose entry and exit
-  // parameters coincide adds zero length under either comparison. Judged by
-  // all 635 tests and hand-read.
-  'src/layout/edges/diagonal-ink.ts': {
-    'EqualityOperator: p < 0 -> p <= 0': 1,
-    'EqualityOperator: t1 > t0 -> t1 >= t0': 1,
-  },
   'src/svg/hoist.ts': {
     'ConditionalExpression: !isVNode(child) -> false': 1,
     'ConditionalExpression: attrs === undefined -> false': 1,
@@ -434,31 +391,5 @@ export const KNOWN_EQUIVALENT = {
     'ConditionalExpression: value === 0 -> false': 1,
     'StringLiteral: \'\' -> "Stryker was here!"': 1,
     'StringLiteral: \'.\' -> ""': 1,
-  },
-  // Every one of these is the broad phase, whose comparisons cannot change
-  // the answer in either direction, or a narrow-phase boundary whose two
-  // sides compute the same value. The invariant is on `buildPairwiseScores`;
-  // the algebra for `hi > lo`, `denom < 0` and `axisLength` is in the clause
-  // each sits in. Hand-verified: deleting the y-gate, dropping the parallel
-  // early return, and seeding either array with junk each leave all 983
-  // canvas-render tests green.
-  'src/layout/edges/edge-crossing-sweep.ts': {
-    'ArithmeticOperator: 1 / COST_QUANTUM -> 1 * COST_QUANTUM': 1,
-    'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
-    'ConditionalExpression: active[i]!.maxX >= minX -> true': 1,
-    'ConditionalExpression: denom === 0 -> false': 1,
-    'ConditionalExpression: dx === 0 -> false': 1,
-    'ConditionalExpression: dy === 0 -> false': 1,
-    'ConditionalExpression: illegible === 0 -> true': 1,
-    'ConditionalExpression: other.maxY < segment.minY -> false': 1,
-    'ConditionalExpression: other.maxY < segment.minY || other.minY > segment.maxY -> false': 1,
-    'ConditionalExpression: other.minY > segment.maxY -> false': 1,
-    'EqualityOperator: active[i]!.maxX >= minX -> active[i]!.maxX > minX': 1,
-    'EqualityOperator: denom < 0 -> denom <= 0': 1,
-    'EqualityOperator: hi > lo -> hi >= lo': 2,
-    'EqualityOperator: other.edge < segment.edge -> other.edge <= segment.edge': 1,
-    'EqualityOperator: other.maxY < segment.minY -> other.maxY <= segment.minY': 1,
-    'EqualityOperator: other.minY > segment.maxY -> other.minY >= segment.maxY': 1,
-    'LogicalOperator: other.maxY < segment.minY || other.minY > segment.maxY -> other.maxY < segment.minY && other.minY > segment.maxY': 1,
   },
 }

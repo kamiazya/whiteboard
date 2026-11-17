@@ -3,7 +3,7 @@
 //! (or nearly shipped) as a real defect, generalized from its example test so
 //! the generator explores the arrangements nobody thought to write down.
 //!
-//! The TypeScript twin is `edge-routing.properties.test.ts`; a group node is a
+//! The canvas-render-rust twin is `edge-routing.properties.rust.test.ts`; a group node is a
 //! plain box here, since the edge layer reads nothing of a node but its box.
 
 // The TypeScript compares coordinates with toBe and toEqual, exactly.

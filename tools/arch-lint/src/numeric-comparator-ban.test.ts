@@ -119,7 +119,9 @@ const production = walkSourceFiles(join(REPO_ROOT, 'packages/canvas-render/src')
 describe('canvas-render sorts numbers through compareNumbers', () => {
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
-    expect(production.length).toBeGreaterThan(100)
+    // 88 production files since the TypeScript edge routing went (ADR-0054
+    // step 7, S18h3b); the floor follows the package, not the other way round.
+    expect(production.length).toBeGreaterThan(80)
   })
 
   it('no comparator answers with a subtraction', () => {

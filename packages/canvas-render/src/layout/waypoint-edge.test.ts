@@ -1,5 +1,5 @@
 // An edge's stored bends, end to end through the whole layout —
-// `bend-route.test.ts` holds the route itself, and this proves it reaches a
+// `survivors_bend_route.rs` holds the route itself, and this proves it reaches a
 // composed scene with no option passed and nothing contributed.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'

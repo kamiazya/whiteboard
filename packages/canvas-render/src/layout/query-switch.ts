@@ -1,12 +1,12 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { highlightCode } from '../highlight/lowlight.js'
+import type { LayoutCore } from '../layout-core.js'
 import { type MeasureText, measureSpecOf } from '../measure.js'
 import type { QueryAnswer, QueryNumbers, QueryRequest } from '../query-core.js'
 import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
 import { bundledThemeModeOf } from '../theme/spatial-theme.js'
 import { CoreUnaskable, canvasLayoutRequest, hostEvent, styleOptions } from './canvas-switch.js'
-import type { LayoutCore } from './edges/layout-core.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 
 // The layout pieces a root calls on their own, through the Rust core's query

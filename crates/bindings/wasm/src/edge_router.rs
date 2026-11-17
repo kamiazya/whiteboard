@@ -1,5 +1,5 @@
 //! `routeEdge` over the routing wire, for QR-21 layer 1: canvas-render's
-//! `layout/edges` suites, scoreboards included, run against the Rust router
+//! routing examples and scoreboards (`src/routing`) run against the Rust router
 //! through `test-utils/wasm/edge-router.ts` (ADR-0054 step 5). One call per
 //! edge, which is the spike's measured-slow shape and a test surface only:
 //! the layout will cross the wire once.

@@ -1,6 +1,6 @@
 //! Concrete answers of the straight style's detour helpers that
 //! cargo-mutants showed no other test pinned. Every expected value is what
-//! canvas-render's `straight-detour.ts` returns for the same input.
+//! canvas-render's TypeScript corner search returns for the same input.
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;

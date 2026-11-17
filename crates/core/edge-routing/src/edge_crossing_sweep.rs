@@ -1,5 +1,5 @@
 //! The pairwise crossing and overlap scorer, ported from canvas-render's
-//! `edge-crossing-sweep.ts`: a sweep-and-prune over x with a y-interval gate
+//! the TypeScript crossing sweep: a sweep-and-prune over x with a y-interval gate
 //! as the broad phase, and the exact quantized segment-pair test as the
 //! narrow one. Every quantity is a JavaScript number in the TypeScript, so
 //! this keeps them `f64` and rounds with [`js_round`].
@@ -235,7 +235,7 @@ fn score_against_active(
 }
 
 /// Every edge pair's summed `[overlap, illegible, crossings]`, keyed by
-/// `i * paths.len() + j` with `i < j`, as `buildPairwiseScores`. `None` when
+/// `i * paths.len() + j` with `i < j`, as `build_pairwise_scores`. `None` when
 /// the sweep would examine more segment pairs than `budget.pairs` has left;
 /// what it examined is spent either way.
 #[must_use]

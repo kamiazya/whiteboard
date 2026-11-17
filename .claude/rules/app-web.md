@@ -461,8 +461,10 @@ too, and the worker asks again before each request; a load that succeeds moves `
 the editor's scene and the preview pane are keyed on, so they draw again
 without a reload. A realm that installs no host — a jsdom unit test of a component — gets
 `undefined`, and a layout asked there throws in `requireLayoutCore`: there is
-no TypeScript composer behind the core since S18h. Only the connect preview's
-edge routing still has TypeScript to run there (`routeLayout`, at stage 2). The core measures through the page's own measurer, which
+no TypeScript composer behind the core since S18h. The connect preview's
+edge routing asks it the same way (`requireLayoutCore` unless it is handed a
+core): the TypeScript router went in S18h3b, its last caller having been that
+preview in a realm with no core, which after boot no realm is. The core measures through the page's own measurer, which
 canvas-viewer's `createBrowserMeasureText` names `{kind: 'host'}` and the core
 asks mid-layout through its one import. Every spatial layout the editor runs
 — its committed scene, drag layers and layout worker, and the export — hands

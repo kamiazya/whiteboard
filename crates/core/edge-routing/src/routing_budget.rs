@@ -1,5 +1,5 @@
 //! The work a layout's edge routing may still do: canvas-render's
-//! `layout/edges/routing-budget.ts`, ported as written. Counts are `f64`,
+//! the TypeScript routing budget, ported as written. Counts are `f64`,
 //! JavaScript's numbers, because the grid search spends its account in the
 //! same unit as [`crate::grid_route::route_on_grid`]'s allowance.
 

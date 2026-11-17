@@ -1,5 +1,5 @@
 //! Touching boxes are marked, not routed: canvas-render's
-//! `layout/edges/edge-contact.ts`, ported function for function. The
+//! the TypeScript contact mark, ported function for function. The
 //! reasoning is written once, in the TypeScript; `Math.min`/`Math.max` are
 //! [`js_min`]/[`js_max`] here, and a NaN takes the branch the TypeScript's
 //! comparisons give it.

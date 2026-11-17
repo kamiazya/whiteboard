@@ -5,7 +5,7 @@ import type { EdgeSide } from '@kamiazya/whiteboard-model'
 // importing it: canvas-render will take this package's implementation
 // through its layout options, and the dependency must point that way.
 
-/** The four accounts a layout's routing may spend (`routing-budget.ts`). */
+/** The four accounts a layout's routing may spend (`routing_budget.rs`). */
 export interface RoutingBudget {
   grid: number
   pairs: number

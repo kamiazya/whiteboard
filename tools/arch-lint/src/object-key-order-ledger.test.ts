@@ -97,7 +97,9 @@ const used = new Map(
 describe('canvas-render names the key domain of every object-key walk', () => {
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
-    expect(production.length).toBeGreaterThan(100)
+    // 88 production files since the TypeScript edge routing went (ADR-0054
+    // step 7, S18h3b); the floor follows the package, not the other way round.
+    expect(production.length).toBeGreaterThan(80)
     expect(used.size).toBeGreaterThan(0)
   })
 

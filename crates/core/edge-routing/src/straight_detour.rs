@@ -1,5 +1,5 @@
 //! The straight style's way around boxes, and the stub squaring both styles
-//! share: canvas-render's `layout/edges/straight-detour.ts`, ported function
+//! share: canvas-render's TypeScript corner search, ported function
 //! for function.
 //!
 //! The reasoning is written once, in the TypeScript. Rust works for the same

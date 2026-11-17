@@ -1,8 +1,17 @@
-import { edgeSideSchema, type SpatialNode } from '@kamiazya/whiteboard-model'
+import { type EdgeSide, edgeSideSchema, type SpatialNode } from '@kamiazya/whiteboard-model'
 import type { RoutableElement } from '@kamiazya/whiteboard-scene'
-import { rectOf, sidePoint } from '../../layout/edges/edge-geometry.js'
 import { fc } from '../fast-check.js'
 import { coordinate, point, rect } from './edge-arbitraries.js'
+
+/** The midpoint of one side of a node's box. */
+function sideMidpoint(node: SpatialNode, side: EdgeSide): { x: number; y: number } {
+  const midX = node.x + node.width / 2
+  const midY = node.y + node.height / 2
+  if (side === 'top') return { x: midX, y: node.y }
+  if (side === 'bottom') return { x: midX, y: node.y + node.height }
+  if (side === 'left') return { x: node.x, y: midY }
+  return { x: node.x + node.width, y: midY }
+}
 
 /**
  * Whole canvases for the edge layer's Rust differentials (ADR-0054 step 5):
@@ -45,7 +54,7 @@ const canvas = fc
     if (occluded !== null) {
       // A bystander over the midpoint of one of the first box's sides, so
       // the default side choice has to move off it.
-      const p = sidePoint(rectOf(first), occluded)
+      const p = sideMidpoint(first, occluded)
       nodes.push({
         ...first,
         id: 'occluder',

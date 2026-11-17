@@ -2,10 +2,10 @@
 //! unpinned, each found by a cargo-mutants survivor in `spatial_edges.rs`:
 //! how edges past the gate are cut into Morton-ordered regions, which
 //! offenders a pass above the full size tries, and what a search cut short
-//! by its budget keeps. The expected values are `spatial-edges.ts`'s.
+//! by its budget keeps. The expected values are the TypeScript side-choice search's.
 //!
 //! Most of them read the region cut through one probe: the two edges of
-//! `edge-crossing-min.test.ts`'s first case, which cross unless they are
+//! `edge-crossing-min.rust.test.ts`'s first case, which cross unless they are
 //! searched together, when orange (edge 1) moves to red's top and yellow's
 //! right. In one region the probe is untangled; split across two, each half
 //! keeps its initial sides. A board then decides whether the cut falls
@@ -187,7 +187,7 @@ fn stacked_frames() -> Board {
 
 #[test]
 fn a_seed_adopted_on_other_sides_survives_a_search_cut_short() {
-    // edge-straight-detour.test.ts: the first run adopts a3_b1 stepping
+    // edge-straight-detour.rust.test.ts: the first run adopts a3_b1 stepping
     // round on other sides, then runs out before it has priced a1_b6, for
     // a trials account in [3154, 4294). The adopted one stays round.
     let (nodes, edges) = stacked_frames();

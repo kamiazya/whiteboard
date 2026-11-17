@@ -1,6 +1,7 @@
-//! The anchor pass over the routing wire, for the layer-2 differential that
-//! holds it to canvas-render's `edge-anchors.ts` (ADR-0054 step 5, QR-21
-//! layer 2). A test surface like [`crate::edge_router_leaves`]: the layout's
+//! The anchor pass over the routing wire, built for the layer-2 differential
+//! that held it to canvas-render's TypeScript anchor pass (ADR-0054 step 5,
+//! QR-21 layer 2), which went with that TypeScript in step 7 (S18h3b).
+//! A test surface like [`crate::edge_router_leaves`]: the layout's
 //! one call will run it inside the side-choice search instead.
 
 use crate::edge_primitives::{count, points_len_of};
@@ -66,14 +67,14 @@ pub(crate) fn entry_values(id: EdgeId, e: &EdgeAnchorPair) -> impl Iterator<Item
         .chain([side(e.from_side), side(e.to_side), if e.around { 1.0 } else { 0.0 }])
 }
 
-/// `computeAnchorsFor`, built from scratch or patched from a base.
+/// `compute_anchors_for`, built from scratch or patched from a base.
 ///
 /// In: the routing wire's nodes and edges; the side map as a count and per
 /// entry `[edge id, from side, to side, around]`; align 0/1; the pins as a
 /// count and per pin `[edge id, its side pair (3), from (a set flag, x, y),
 /// from lane depth (a set flag, value), to, to lane depth]`; then `-1` for a
 /// full build, or an edge index and the side pair it is re-sided to, which
-/// patches `buildAnchorGroups` of the side map into the map with that edge
+/// patches `build_anchor_groups` of the side map into the map with that edge
 /// set. Out: `[patchWork (0 for a full build), entry count, then 14 numbers
 /// an entry: edge id, from (flag, x, y), to, from lane depth (flag, value),
 /// to lane depth, from side, to side (-1 for none), around]`; an empty

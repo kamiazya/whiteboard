@@ -30,10 +30,16 @@ root calls the core through, never an implementation:
   back: a refusal drawn as `refusalScene`, degradations to `onDegrade`.
 - `layout/layout-options.ts` — `SpatialLayoutOptions`, the vocabulary a
   caller asks in.
-- `layout/edges/` — the orthogonal router's TypeScript, which S18h3 kept
-  (`routeLayout` at stage 2): the web editor's connect preview routes the
-  tentative edge with it in a realm that holds no core, and the route-layout
-  differential holds the core's `edge_route_layout` to it.
+- `edge-routing.ts`, `layout-core.ts` (package root) — the routing contract
+  the core answers and the core as a root hands it: the sides, anchors and
+  budget a caller passes and reads back, `LayoutCore`, and `routeLayout`, one
+  call into the core the caller hands it (the web editor's connect preview).
+  The router's TypeScript (`layout/edges/`) is deleted (S18h3b): the editor's
+  connect preview was its last caller, and only in a realm with no core,
+  which after boot no realm is. Its examples and scoreboards judge the core in
+  `canvas-render-rust` from `routing/*.rust.test.ts`, through the oracle
+  exports' shims in `test-utils/wasm/`; the recording it was held to
+  (`route_layout.f64`) is frozen and replayed.
 
 A measurer nobody named (`describeMeasure`) is the host's: the core asks the
 function itself through its one host import, so any `MeasureText` a root
@@ -97,28 +103,13 @@ the table alone.
 - Plain-TS scene graph types (`scene-graph.ts`): resolved bounding boxes,
   shape kind, text runs, list/heading/table structure, the SVG-fragment
   (math/diagram) seam node, resolved edges.
-- `layout/edges/edge-geometry.ts`: the geometry VOCABULARY the edge layer is
-  written in — rectangles, points, sides, polylines — with no opinion about
-  routing or side choice. It exists because that vocabulary had no home:
-  `spatial-edges.ts` held the side-choice search, the router and these
-  primitives in one file, and the search reached into the router's half for
-  `rectOf`/`centerOf`/`pathLength`/`tangentCoordinate` only because that is
-  where the words lived. Judgement stays out: which side to prefer and what
-  makes one route better are `edge-rules.ts` and `spatial-edges.ts`. Keeping
-  this layer opinion-free is what lets both share it without either
-  importing the other — and it was the piece the router/search split
-  needed first.
-  So `layout/edges/` is now `edge-sides.ts` (which side an
-  edge leaves from and arrives at, and the first guess), `edge-anchors.ts`
-  (where on that side, given every edge sharing it), `edge-router.ts`
-  (`routeEdge`: the path between two placed anchors) and `spatial-edges.ts`
-  (the side-choice search, `assignEdgeAnchors`), with the dependency
-  pointing one way and `boundingBoxOf` / `rectAtEnd` joining the geometry
-  vocabulary since both halves read them.
-- Pure layout functions: spatial-canvas edge routing (`layout/edges/edge-router.ts`
-  under `layout/edges/spatial-edges.ts`'s side-choice search) and mdast block
-  layout (the TypeScript typesetter) — the single mdast -> scene-graph
-  render path shared by preview / spatial text node / export.
+- The edge router's structure, as its TypeScript had it and the Rust port
+  (`crates/core/edge-routing`) keeps it module for module: a geometry
+  vocabulary with no opinion about routing (`edge_geometry.rs`), the side
+  vocabulary and first guess (`edge_sides.rs`), the anchor pass
+  (`edge_anchors.rs`), the router between two placed anchors
+  (`edge_router.rs`) and the side-choice search over them all
+  (`spatial_edges.rs`), the dependency pointing one way.
 - `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
   `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
   the browser viewer) — see the resolved decision below.
@@ -434,14 +425,13 @@ the table alone.
       only and are never traded against penalties; penalty rules are
       cost-tuple terms with a declared lexicographic tier. New routing
       feedback = one named rule + its own test, not a new branch in an
-      existing function. `layout/edges/edge-rules.ts` implements the PREFERENCE
-      half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
+      existing function. The edge rules (`edge_rules.rs` now) implement the PREFERENCE
+      half: the side preference rules name zero-bend-facing-first,
       dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
       gap-valid-opposing-before-invalid, u-hook-span-exposed-first, and
-      incumbent-wins-ties; `composeSidePairs` is the composition
-      `rankedSidePairs` (`layout/edges/edge-sides.ts`) wraps, and
-      `shouldAdoptCandidate` is the incumbent-wins-ties predicate
-      `optimizeSideChoices` consults. `u-hook-span-exposed-first` demotes a
+      incumbent-wins-ties; `compose_side_pairs` is the composition
+      the side vocabulary's ranking wraps, and the adoption test is the
+      incumbent-wins-ties predicate `optimize_side_choices` consults. `u-hook-span-exposed-first` demotes a
       same-side U-hook candidate whose DEPARTURE side border runs through
       the target's strict interior (group frames excluded via
       `fullyContains`) behind one that does not — this is what makes the
@@ -452,20 +442,20 @@ the table alone.
       (tier 0, collinear overlap plus self-retrace/body-intrusion),
       illegibility (tier 1), crossings (tier 2), endpoint-body-ink (tier 3,
       self-only — a routed segment STRICTLY BETWEEN a rect's two borders,
-      priced against the edge's OWN endpoint rects since `foreignBodies`
+      priced against the edge's OWN endpoint rects since `foreign_bodies`
       deliberately excludes them for the tunnel check), border-tracing
       (tier 4, self-only — the border complement: a segment collinear with
-      AND overlapping a node's own border, `nodeBorders` including the
-      path's own endpoint rects unlike `foreignBodies`), path-reversal
+      AND overlapping a node's own border, `node_borders` including the
+      path's own endpoint rects unlike `foreign_bodies`), path-reversal
       (tier 5) and realized-bends (tier 6, self-only and deliberately
       last).
-      `pairScore`/`selfPenalty`
-      (`spatial-edges.ts`) compose over the list, and every cost-tuple
-      helper (`ConfigCost` shape, `addCost`, `lessCost`,
-      `hasRepairableProblem`) derives from the declared tiers, so a new
+      `pair_score`/`self_penalty`
+      (`spatial_edges.rs`) compose over the list, and every cost-tuple
+      helper (the cost tuple's shape, `add_cost`, `less_cost`,
+      `has_repairable_problem`) derives from the declared tiers, so a new
       penalty rule is one list entry, never a new slot threaded by hand.
     - **The side-choice search runs TWICE, and only the second run sees the
-      geometry that gets drawn.** `optimizeSideChoices` scores its trials
+      geometry that gets drawn.** `optimize_side_choices` scores its trials
       from unaligned anchors, because varying alignment *within* a run moves
       trial costs mid-search and shifts side-choice equilibria (a bystander
       edge was observed re-siding onto a worse face). The price is that a
@@ -484,7 +474,7 @@ the table alone.
       nothing for the pass to fix.
     - **Past the optimizer's edge gate the search runs over spatial REGIONS,
       not over nothing.**
-      `optimizeAcrossRegions` groups edges along a Morton curve
+      `optimize_across_regions` groups edges along a Morton curve
       through their midpoints, chunks them into even regions of at most the
       gate, and runs the ordinary two-run search per region. It works because
       interaction is LOCAL: 4-5% of edge pairs survive a bounding-box test on
@@ -512,14 +502,14 @@ the table alone.
       trade. The speed work goes
       into the CPU-side costs the profile named.
       One cost off that profile is taken: the routed-path cache is owned by
-      the REGION rather than by each `optimizeSideChoices`, so it spans a
+      the REGION rather than by each `optimize_side_choices`, so it spans a
       region's unaligned and aligned runs. That pairing is where the repeats
       are — 1021 of 1900 routings on the clustered canvas repeat a key the
       other run of their own region already saw, against 567 caught by the
       per-search caches. Worth 15-19% there in six of six interleaved
       comparisons, within noise on the grid canvas. Sound because `nodes`,
       `style` and an edge's obstacle list are fixed across those two runs,
-      leaving the anchor pair as the only variable — and `routeCacheKey`
+      leaving the anchor pair as the only variable — and the route cache's key
       covers it field by field, pinned one case per field, because a field
       the key misses is a wrong path rather than a slow one.
       **`routeOnGrid` searches with A*, and finding that out took refuting the
@@ -544,18 +534,18 @@ the table alone.
       **What DID pay was pruning the obstacle set per routing call.**
       The bound is where the care is, and the first version got it wrong.
       Elbows live inside `bbox(start, exit, entry, end)`, which is exact for
-      the clearance tests and for `crossedBy` — that only ever tests elbow
+      the clearance tests and for the crossing test — that only ever tests elbow
       segments. But a DETOUR waypoint is placed `OBSTACLE_CLEARANCE_PX`
       OUTSIDE the region, so a box stopping at the region dropped obstacles a
       detour still ran into. The routing scoreboard caught it, as moved pins
       rather than as a crash — which is a long way from naming the cause. So
       the bound is pinned rather than remembered: `DETOUR_REACH_PX` is
-      exported beside `detourCandidates` and
-      `detour-reach.properties.test.ts` asserts every waypoint stays inside
+      exported beside `detour_candidates` and
+      the detour-reach property (`detour_properties.rs` now) asserts every waypoint stays inside
       it, mutation-checked by zeroing the constant (the bug as shipped) and by
       moving a waypoint one pixel further out. A prune whose bound is too
       small does not throw; it quietly reroutes.
-      The guard for all of this is `grid-route.optimality.properties.test.ts`,
+      The guard for all of this is `grid-route.optimality.properties.rust.test.ts`,
       an independent-oracle property: a plain Dijkstra written in the test from
       the definition, asserting equal COST (never equal path — equal-cost
       routes are the norm on a lattice). It exists because an inadmissible
@@ -890,7 +880,7 @@ the table alone.
     working one.
 
 **An edge drawn through its STORED bends is the renderer's own**
-(`layout/edges/bend-route.ts`, taken inside `routeEdge` before the self-edge
+(`bend_route.rs`, the TypeScript bend route's port, taken inside `routeEdge` before the self-edge
 shape and before any computed routing). Every other routing here computes a
 path from two boxes and the obstacles between them, so none of them can
 honour a point somebody placed; this is what happens INSTEAD of choosing one,
@@ -915,12 +905,13 @@ to the origin. Drawing one — the router taking a box-less end — is
 job. Until then the model can STORE an end this renderer will not draw, which
 is the honest state and is pinned by example rather than left to be found.
 
-**A layout's routing is ONE call** (`routeLayout`, `layout/edges/layout-core.ts`),
-answered by the TypeScript or the Rust core as `SpatialLayoutOptions.core` says.
+**A layout's routing is ONE call** (`edge_route_layout`), the Rust core's; a
+caller outside a layout asks it through `routeLayout` (`layout-core.ts`), which
+takes the core as its first argument and has no TypeScript behind it.
 
 **An edge's algorithm is not contributable.** The seam was deleted
-(2026-11-06); `routeEdge` and `bend-route.ts` are the only producers of an
-edge's path.
+(2026-11-06); the core's router and its bend route (`bend_route.rs`) are the
+only producers of an edge's path.
 
 ## Conventions
 
@@ -1002,22 +993,24 @@ edge's path.
   builds it with `canvasLayoutRequest`), so the two cannot fold over
   different facets the way two TypeScript walks could; dropping the
   property is on owner question q84's list.
-- `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
-  answer to "did that rule change help overall".
+- `routing/edge-routing-quality.rust.test.ts` is the routing SCOREBOARD, and the
+  answer to "did that rule change help overall". It judges the Rust router
+  through the oracle core, in `canvas-render-rust`; the TypeScript router it
+  was written against is deleted (S18h3b).
   It holds one
   invariant — no routed line runs strictly inside a node body it could have
   gone around — strictly over the named corpus, and COUNTS violations over
   2000 deterministic synthetic layouts, split by which search should have
-  stopped each: `own-endpoint` (invisible to `bestCandidate`, since
+  stopped each: `own-endpoint` (invisible to `best_candidate`, since
   `routeEdge` drops both endpoint nodes from its obstacle list),
-  `foreign` (`bestCandidate`'s last fallback returning the shortest BLOCKED
+  `foreign` (`best_candidate`'s last fallback returning the shortest BLOCKED
   candidate when none of its six is clear), `degenerate` (coincident
   anchors). The exemption is `routeEdge`'s own: a rect STRICTLY containing
   an anchor cannot be routed around; a rect merely touched on its border
   can. The counts are pinned EXACTLY, not as a ceiling, so an improvement is
   as loud as a regression — they are a debt figure whose target is three
   zeroes, at which point the aggregate becomes the strict property. Metrics
-  live in `src/test-utils/routing-metrics.ts` and never call `edge-rules.ts`
+  live in `src/test-utils/routing-metrics.ts` and never call the router's cost model
   (the `reversal-count.ts` independent-oracle contract); layouts live in
   `src/test-utils/routing-corpus.ts`.
 - `stryker-targets.mjs` + `stryker.config.mjs` + `vitest.stryker.config.ts` are the MUTATION
@@ -1083,7 +1076,7 @@ edge's path.
   die in 73 seconds at 1.2 tests a mutant, and the whole file reads 100%
   (136 killed, 5 timed out, 8 minutes) where it read 89.4% with 15
   survivors. The config says `'perTest'` now: with the patched runner it
-  yields the same `min-heap.ts` survivors as `'off'` under core 9.6.1, and
+  yields the same min-heap survivors (the TypeScript min-heap, deleted with the router) as `'off'` under core 9.6.1, and
   fewer test runs a mutant; the weekly lane runs it as six sharded legs.
   `mutation-comment.mjs` lists a
   zero-test survivor apart from real ones now, under "the lane ran NO test
@@ -1125,10 +1118,10 @@ edge's path.
   moves and the decision is on the record. It also runs on `pre-push`, because
   that decision belongs to the diff that adds the module rather than to
   whoever reads a report months later.
-  Two exclusions in the vitest config are about run TIME, not value: the
-  routing and text-wrapping SCOREBOARDS above are re-run once per mutant that
-  touches their code, and `edge-routing-quality.test.ts` alone is ~22s of the
-  project's ~30s.
+  The routing and text-wrapping SCOREBOARDS above are outside the lane for
+  the reason every `*.rust.test.ts` is: they judge the Rust core, not a line
+  Stryker mutates. While the routing one was TypeScript, its exclusion was
+  about run TIME: it alone was ~22s of the project's ~30s.
 
 ## Common mistakes (append as review finds them)
 
@@ -1145,8 +1138,8 @@ edge's path.
   be routed around — every detour still has to reach the point inside
   it — so it must be excluded from the obstacle set, or the router falls
   back to a garbage shortest-detour around the whole frame. This applies
-  to the COST MODEL as much as to the router: `optimizeSideChoices`'s
-  `foreignBodiesFor` used to omit the `fullyContains` filter `routeEdge`
+  to the COST MODEL as much as to the router: `optimize_side_choices`'s
+  its foreign-body list used to omit the `fullyContains` filter `routeEdge`
   applies, so the search priced ink through a group frame the router had
   correctly ignored, and could be talked into a dogleg to "save" ink no
   route could avoid. A cost model that disagrees with the router about
@@ -1477,7 +1470,7 @@ style's routes are diagonals** — so a diagonal back through the edge's
 own box (a top-side stub, then the line down to a target below) cost the
 search nothing while the score read 63px of it (sixth reading).
 What fixed
-the board is `diagonalInkThrough` in `overlap-and-intrusion`'s self term,
+the board is `diagonal_ink_through` in `overlap-and-intrusion`'s self term,
 over the edge's OWN endpoint bodies only: every legitimate straight route
 has zero of it, since the diagonal runs from one stub's end to the
 other's, so it is the defect itself and belongs at tier 0 as the straight
@@ -1492,7 +1485,7 @@ overruled** (seventh reading: a model pinned `bottom/top` on every edge,
 same-row pairs included, and the same-row one drew a stub down and a
 diagonal up through both its boxes, 140px). A named side asks where the
 line attaches, and a line through the box it attaches to satisfies
-nobody, so `optimizeSideChoices` treats such an edge as free; `routeEdge`
+nobody, so `optimize_side_choices` treats such an edge as free; `routeEdge`
 now lets the anchor pass's side win over the edge's own, since the two
 differ only where the search overruled — the overrule has to reach the
 trial that adopts it and the final render alike. The search is no
@@ -1502,10 +1495,10 @@ whatever the initial ranking picked, foreign body and all — `foreign` 15
 to 7, `own-endpoint` 12 to 10, `interiorInk` 2083 to 955, every price
 column down with them.
 
-**Touching boxes are not routed** (`edge-contact.ts`, owner
+**Touching boxes are not routed** (`edge_contact.rs`, owner
 decision): a pair sharing a border or overlapping draws an
 arrowhead mark on the target's facing side and leaves the side
-search, so the coincident-ends repair and U-hook preference are narrow now. A gap still routes; `edge-touching-boxes.test.ts` pins it.
+search, so the coincident-ends repair and U-hook preference are narrow now. A gap still routes; `edge-touching-boxes.rust.test.ts` pins it.
 ## The facet score judges what the board SAYS, not where it puts things
 
 `quality/facet-score.ts` (`scoreFacets(canvas)`, from `/scoring`) is

@@ -1,6 +1,6 @@
-//! The edge layer's geometry and ink primitives over flat arrays, for the
-//! property differential that holds them to canvas-render's TypeScript
-//! (ADR-0054 step 5, QR-21 layer 2).
+//! The edge layer's geometry and ink primitives over flat arrays, built for
+//! the property differential that held them to canvas-render's TypeScript
+//! (ADR-0054 step 5, QR-21 layer 2), which went with it in step 7 (S18h3b).
 //!
 //! Each export answers a whole batch in one call, so a property crosses the
 //! boundary once per run (QR-22b). They are a test surface, not the shape of
@@ -103,7 +103,7 @@ pub fn edge_segment_tests(cases: &[f64]) -> Vec<f64> {
 ///
 /// In: `[n, then x, y per point, m, then x, y, w, h per rect]`. Out, in order:
 /// `pathLength`; `inkAlongRects` on either border and strictly between them
-/// (the two predicates edge-rules.ts passes); `tunnelledInk`;
+/// (the two predicates the TypeScript edge rules passed); `tunnelledInk`;
 /// `selfRetracedInk`; `diagonalInkThrough`; `pathIsClear` as 0/1;
 /// `unionRect` as 4 numbers, NaN for none; `boundingBoxOf` the path as 4;
 /// `midpointExtent` the path as span x, span y, origin x, origin y; then

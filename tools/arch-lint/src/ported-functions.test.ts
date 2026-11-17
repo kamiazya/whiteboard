@@ -20,7 +20,22 @@ const readReal: ReadFile = (path) => {
   return existsSync(full) ? readFileSync(full, 'utf8') : undefined
 }
 
-const entry = PORTED_FUNCTIONS[0] as PortedFunction
+/**
+ * A stage-2 entry the fixtures plant each departure on: the routing as it was
+ * ledgered before its TypeScript went, so the checker's stage-2 and stage-3
+ * shapes stay exercised now that no real entry of that name is at either.
+ */
+const entry: PortedFunction = {
+  name: 'routeLayout',
+  stage: 2,
+  ts: { file: 'packages/canvas-render/src/layout-core.ts', export: 'routeLayout' },
+  rust: { file: 'crates/bindings/wasm/src/spatial_edges.rs', fn: 'edge_route_layout' },
+  shim: {
+    module: '@kamiazya/whiteboard-core-wasm',
+    file: 'packages/core-wasm/src/index.ts',
+    member: 'routeLayout',
+  },
+}
 
 /** A tree with just enough in it for `entry`, each file overridable. */
 function tree(files: Record<string, string> = {}): ReadFile {
@@ -58,7 +73,7 @@ describe('PORTED_FUNCTIONS against the tree', () => {
   })
 
   it('finds no per-function switch on LayoutCore: the core answers every layout it is handed', () => {
-    const file = 'packages/canvas-render/src/layout/edges/layout-core.ts'
+    const file = 'packages/canvas-render/src/layout-core.ts'
     const text = readReal(file) as string
     expect(text).toContain('export interface LayoutCore')
     expect(switchKeys(text, 'LayoutCore')).toBeUndefined()
@@ -89,6 +104,7 @@ describe('the layout functions at stage 4', () => {
 
   it('ask the core they are handed, with their TypeScript gone', () => {
     expect(handed.map((f) => [f.name, f.stage])).toEqual([
+      ['routeLayout', 4],
       ['layoutSpatialCanvas', 4],
       ['layoutMarkdown', 4],
       ['layoutSpatialEdges', 4],

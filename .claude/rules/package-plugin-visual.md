@@ -418,7 +418,8 @@ Follow the README's recipe when adding one, and keep the table alphabetical.
 `visual.path/v0` and this package's own edge-router module are GONE
 ([ADR-0037](../../docs/contributing/adr/0037-model-and-format.md) slice 4).
 An edge's bends are `edge.bends`, a field of the model, and the route through
-them is `canvas-render`'s `layout/edges/bend-route.ts`. Do not re-add a bend
+them is the Rust core's (`bend_route.rs`; canvas-render's TypeScript bend route
+went with the router, ADR-0054 step 7). Do not re-add a bend
 facet here.
 
 **Why they existed and why they left, because the reasoning is what stops

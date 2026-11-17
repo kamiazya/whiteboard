@@ -4,7 +4,8 @@
 //! the shared narrow phase is the oracle, and the shared-corner count is taken
 //! here by set intersection rather than by the sweep's bucket walk.
 //!
-//! The TypeScript twin is `edge-crossing-sweep.properties.test.ts`.
+//! The TypeScript twin was the crossing sweep property suite, deleted with the
+//! TypeScript router (ADR-0054 step 7, S18h3b).
 
 // The scores are integer-quantized sums, so the sweep owes the scan exact
 // equality, as the TypeScript's toEqual asks of it.

@@ -6,24 +6,18 @@ import { defineConfig } from 'vitest/config'
  *
  * The exclusions are about run TIME rather than value. Stryker re-runs the
  * tests covering a mutated line once per mutant, so a single slow file is
- * multiplied by the mutant count: `edge-routing-quality.test.ts` alone takes
- * ~22s of the project's ~30s, and it is an aggregate SCOREBOARD (counts
- * pinned exactly over a 2000-layout corpus) rather than a correctness test —
- * a mutant it kills is one the properties beside it should have killed on
- * their own. Excluding it is what makes the lane finish; the mutants it
- * would have caught still have to be caught by something, which is exactly
- * the report this lane exists to produce. The `*.rust.test.ts` suites (the
- * other scoreboards among them) are excluded as the node project excludes
- * them: they need the oracle artifact, and judge the Rust core, not a line
- * Stryker mutates here.
+ * multiplied by the mutant count. The `*.rust.test.ts` suites (the routing
+ * and layout scoreboards among them) are excluded as the node project
+ * excludes them: they need the oracle artifact, and judge the Rust core, not
+ * a line Stryker mutates here.
  *
  * Every cost and budget test is excluded too (`*cost*`, `*budget*`). Each
  * bounds how much WORK a layout does on an input sized to make a quadratic
  * blow up, so none asserts what a mutated line computes, and together they
  * were 87 of 2182 tests and 294 of 412 seconds. A static mutant re-runs every
  * test, so those seconds are paid once per static mutant: the weekly leg that
- * holds the edge router's mutants went from a 15 s test run to 138 s and no
- * longer fit its job. `tools/arch-lint/src/mutation-lane.test.ts` holds the
+ * held the (since deleted) TypeScript edge router's mutants went from a 15 s
+ * test run to 138 s and no longer fit its job. `tools/arch-lint/src/mutation-lane.test.ts` holds the
  * glob to the files that exist.
  *
  * `tidy-quality.test.ts` is the same KIND of instrument and is deliberately
@@ -43,7 +37,6 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     exclude: [
       'src/**/*.browser.test.ts',
-      'src/layout/edges/edge-routing-quality.test.ts',
       'src/**/*.rust.test.ts',
       'src/**/*cost*.test.ts',
       'src/**/*budget*.test.ts',

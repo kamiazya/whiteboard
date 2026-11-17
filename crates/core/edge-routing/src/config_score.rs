@@ -1,5 +1,5 @@
 //! The side-choice search's incremental configuration score, ported from
-//! `createConfigScore` in canvas-render's `spatial-edges.ts`: per-edge routed
+//! the score object canvas-render's TypeScript side-choice search built: per-edge routed
 //! paths, the pairwise score matrix and the aggregate cost, kept patchable
 //! because a trial re-sides ONE edge, so only the edges whose anchors moved
 //! re-route and re-score their pairs.
@@ -193,7 +193,7 @@ pub struct ScoreInputs<'a> {
     pub pins: Option<&'a JsMap<EdgeId, EdgeAnchorOverride>>,
 }
 
-/// The incremental score, as the object `createConfigScore` returns.
+/// The incremental score, as the object `ConfigScore::new` returns.
 pub struct ConfigScore<'a> {
     inputs: ScoreInputs<'a>,
     ctx: AnchorContext<'a>,
@@ -216,7 +216,7 @@ pub struct ConfigScore<'a> {
 /// One rect list per edge, by position.
 type PerEdge = Vec<Vec<Rect>>;
 
-/// The per-edge obstacle lists `createConfigScore` derives once.
+/// The per-edge obstacle lists `ConfigScore::new` derives once.
 fn obstacle_lists(inputs: &ScoreInputs<'_>) -> (PerEdge, PerEdge, PerEdge) {
     let ScoreInputs { nodes, labels, edges, .. } = *inputs;
     let others_for: Vec<Vec<Rect>> = edges
@@ -256,7 +256,7 @@ fn obstacle_lists(inputs: &ScoreInputs<'_>) -> (PerEdge, PerEdge, PerEdge) {
 }
 
 impl<'a> ConfigScore<'a> {
-    /// `createConfigScore`: the incumbent's anchors, routes, self costs and
+    /// `ConfigScore::new`: the incumbent's anchors, routes, self costs and
     /// pair matrix, priced at zero when the budget cannot build the matrix.
     pub fn new(
         inputs: ScoreInputs<'a>,
@@ -392,7 +392,7 @@ impl<'a> ConfigScore<'a> {
         interior_ink_through(path, ends) + diagonal_ink_through(path, ends) > 0.0
     }
 
-    /// Swaps every touched edge's self term for the new one, as `applySelfCosts`.
+    /// Swaps every touched edge's self term for the new one, as `apply_self_costs`.
     fn apply_self_costs(
         &self,
         cost: &mut Cost,
@@ -440,7 +440,7 @@ impl<'a> ConfigScore<'a> {
         updates.set(key, next);
     }
 
-    /// Every pair a touched edge belongs to, each visited once, as `applyPairCosts`.
+    /// Every pair a touched edge belongs to, each visited once, as `apply_pair_costs`.
     fn apply_pair_costs(
         &mut self,
         cost: &mut Cost,

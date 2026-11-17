@@ -1,6 +1,7 @@
-//! The edge layer's named rules over flat arrays, for the property
-//! differential that holds them to canvas-render's `edge-rules.ts`
-//! (ADR-0054 step 5, QR-21 layer 2). Batched, a test surface like
+//! The edge layer's named rules over flat arrays, built for the property
+//! differential that held them to canvas-render's TypeScript edge rules
+//! (ADR-0054 step 5, QR-21 layer 2), which went with that TypeScript in
+//! step 7 (S18h3b). Batched, a test surface like
 //! [`crate::edge_primitives`]: a layout will call the edge layer once, not
 //! these.
 //!

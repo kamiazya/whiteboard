@@ -5,8 +5,8 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
+import type { EdgeAnchorPair } from '../edge-routing.js'
 import { layoutThroughCore } from './canvas-switch.js'
-import type { EdgeAnchorPair } from './edges/edge-sides.js'
 import type { SpatialLayoutOptions } from './layout-options.js'
 import { edgesThroughCore, naturalSizeThroughCore } from './query-switch.js'
 

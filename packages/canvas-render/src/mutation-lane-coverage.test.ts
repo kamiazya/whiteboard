@@ -106,7 +106,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // and the scoreboards' oracles share, outside the lane for the reason
     // the oracles are: what pins it is the scoreboards it feeds, whose
     // exact numbers move on any change to it.
-    // 66 and 12 since `layout/edges/diagonal-ink.ts`, the straight style's
+    // 66 and 12 since the TypeScript diagonal clip, the straight style's
     // chord through an edge's own box, which the lane DOES cover: its
     // sampled oracle and invariants are properties, and a survivor would be
     // a chord read wrong.
@@ -135,9 +135,9 @@ describe('the mutation lane covers what it says it covers', () => {
     // 70 after two files arrived from opposite directions, both OUTSIDE the
     // lane and each for its own reason.
     //
-    // `layout/edges/bend-route.ts` (the model-and-format ADR's bends slice):
+    // the TypeScript bend route (the model-and-format ADR's bends slice):
     // its branches are ways of declining, or of picking one of four borders,
-    // each pinned by name in `bend-route.test.ts`. Nothing in it is a
+    // each pinned by name in the bend route's own test. Nothing in it is a
     // property that could be silently asserting nothing. If a stored path
     // ever grows a COST model — a bend that yields to an obstacle, say —
     // that answer changes.
@@ -196,7 +196,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // the scene-extent module was the two-line extent the two overlays were
     // each computing with the same `Math.max(0, ...)` pair. The layers and
     // the extent went with the composer in S18h2.
-    // 82 and 16 since `min-heap.ts` came out of `grid-route.ts` (the A*
+    // 82 and 16 since the TypeScript min-heap came out of the TypeScript grid router (the A*
     // priority queue, forty lines of index arithmetic that could not be
     // tested where it sat). It is IN the lane rather than merely counted:
     // its two properties are stated from what a min-heap means, not from
@@ -221,13 +221,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // is: leaving a piece of the heuristic out would shrink what the lane
     // sees while the report kept looking the same.
     //
-    // 86 and 19 since `edge-ink.ts` came out of `edge-rules.ts` the same way
+    // 86 and 19 since the TypeScript ink terms came out of the TypeScript edge rules the same way
     // — the ink TERMS — and is in the lane for the same reason.
     //
     // 87 and 19 since the node composer came out of `spatial-canvas.ts`
     // — how one node's box is drawn and filled, 47% of that file. OUTSIDE the
     // lane, because the file it left was: splitting it changes nothing the
-    // lane saw, which is the opposite case from `edge-ink.ts` and
+    // lane saw, which is the opposite case from the TypeScript ink terms and
     // `tidy-units.ts`. What pins it is the scene and SVG suites, which are
     // examples, so a mutation report over it would be survivors nobody can
     // act on — the reasoning `svg/paint.ts` left under.
@@ -250,9 +250,9 @@ describe('the mutation lane covers what it says it covers', () => {
     // of that. The options module was types and three font constants
     // besides. All four went with the typesetter in S18h2.
     //
-    // 96 and 19 since `layout/edges/spatial-edges.ts` gave up its side
-    // vocabulary (`edge-sides.ts`), its anchor pass (`edge-anchors.ts`) and
-    // its router (`edge-router.ts`), keeping the search. Outside the lane for
+    // 96 and 19 since the TypeScript side-choice search gave up its side
+    // vocabulary, its anchor pass and its router into modules of their own,
+    // keeping the search. Outside the lane for
     // the reason the file they left was: what pins the router and the side
     // choice is the routing scoreboard, which re-runs per mutant at ~22s and
     // is excluded from the lane on price, and the example suites beside it.
@@ -287,7 +287,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // finite sides, which three SVG leaves and two layout leaves each spelled
     // for themselves. A predicate the painting suites pin at every call.
     //
-    // 101 since `layout/edges/route-ends.ts`: the record types the router's
+    // 101 since the TypeScript route-end records: the record types the router's
     // two path builders take, so their ten positional parameters cannot be
     // handed over in the wrong order. Types only, nothing to mutate.
     //
@@ -337,11 +337,11 @@ describe('the mutation lane covers what it says it covers', () => {
     // occurrence finder and the passage highlight went with the typesetter in
     // S18h2; the line jumps and their narrow phase in S18h3.)
     //
-    // 112 with `layout/edges/routing-budget.ts`, the per-layout account the
+    // 112 with the TypeScript routing budget, the per-layout account the
     // grid router and the side-choice search spend from. Outside the lane,
     // as the embed budget was: it holds two constants and a constructor, and
-    // the checks that spend it live in `grid-route.ts` and
-    // `edge-crossing-sweep.ts`, which are in it.
+    // the checks that spend it live in the TypeScript grid router and
+    // the TypeScript crossing sweep, which are in it.
     //
     // 113 with `svg/filter-budget.ts`, the summed filter-region bound. Outside
     // the lane, as the rest of `svg/` is: `filter-region-budget.test.ts`
@@ -378,13 +378,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // pinned by `scene-bounds.test.ts`'s haloed-run case and mutated by hand
     // to 0 against it.
     //
-    // 118 with `layout/edges/edge-contact.ts`, the contact mark two touching
+    // 118 with the TypeScript contact mark, the contact mark two touching
     // boxes are drawn as instead of a route. Outside the lane: a predicate
     // and one small geometry, pinned by example and by a property over
-    // touching pairs in `edge-touching-boxes.test.ts`, its guards each
+    // touching pairs in `edge-touching-boxes.rust.test.ts`, its guards each
     // mutated by hand against them; nothing in it is a cost model or a search.
     //
-    // 119 with `layout/edges/stroke-weight.ts`, the multiple of the theme's
+    // 119 with `stroke-weight.ts` (then under `layout/`), the multiple of the theme's
     // line weight a stroke's named weight draws at. Outside the lane: a
     // three-entry table and one product, pinned through the TypeScript
     // layout by a stroke-weight test and mutated by hand against it (the call
@@ -392,25 +392,25 @@ describe('the mutation lane covers what it says it covers', () => {
     // and the test went with the layout it drove; the table stays for the
     // editor's draft under the pen.
     //
-    // 120 and 24 with `layout/edges/straight-detour.ts`, the straight
+    // 120 and 24 with the TypeScript corner search, the straight
     // style's corner search, which the lane DOES cover: it is a search, and
-    // `straight-detour.properties.test.ts` states its oracle from the
+    // the corner search's property suite states its oracle from the
     // definition rather than from the code — checked by hand against three
     // mutations (the escape test, a corner's clearance, a skipped obstacle)
     // before the lane took it. Its `MINUTES` figure is an estimate until a
     // weekly run measures it (`stryker-targets.mjs` says how).
     //
     // 122 with two modules split out of files the lane does not mutate
-    // either, to keep them under the size budget: `layout/edges/side-slides.ts`
-    // (moving a route's end along its side, from `edge-router.ts`) and
-    // `layout/edges/coincident-ends.ts` (scoring a repaired pair, from
-    // `spatial-edges.ts`). Same code, same tests, same answer as before.
+    // either, to keep them under the size budget: the TypeScript side slides
+    // (moving a route's end along its side, from the TypeScript edge router) and
+    // the TypeScript coincident-ends repair (scoring a repaired pair, from
+    // the TypeScript side-choice search). Same code, same tests, same answer as before.
     //
-    // 123 with `layout/edges/around-ledger.ts`, the side search's record of
-    // which stepping-round choices it priced, split out of `spatial-edges.ts`
+    // 123 with the TypeScript around ledger, the side search's record of
+    // which stepping-round choices it priced, split out of the TypeScript side-choice search
     // (which the lane does not mutate) under the size budget. Outside the
     // lane for the same reason: its two recordings and its drop are each
-    // pinned by an example in `edge-straight-detour.test.ts` and mutated by
+    // pinned by an example in `edge-straight-detour.rust.test.ts` and mutated by
     // hand against them.
     // 124 with the legend scene, a board's legend as scene nodes for a
     // canvas embedded in a note. Outside the lane: a row walk with no cost
@@ -433,10 +433,10 @@ describe('the mutation lane covers what it says it covers', () => {
     // codegen` emits from contracts/geometry. Outside the lane: it is
     // generated, so an edit to it fails `codegen --check` before any test,
     // and its refusals are pinned by `geometry-contract.test.ts`.
-    // 127 with `layout/edges/layout-core.ts`, ADR-0054's routing seam: the
+    // 127 with the TypeScript routing seam (ADR-0054): the
     // core when a root hands one, else the TypeScript routing. Outside the
-    // lane: it is a two-way dispatch, both branches driven by
-    // `layout/route-layout.test.ts`, and it goes when the TypeScript routing does.
+    // lane: it was a two-way dispatch, both branches driven by its own test,
+    // and it went with the TypeScript routing (S18h3b).
     // 128 with the phrase-pair rule: the join of a BudouX phrase that ends
     // inside a surrogate pair, outside the lane because it was one loop whose
     // every branch its surrogate-pair test drove. Both went with the
@@ -471,7 +471,7 @@ describe('the mutation lane covers what it says it covers', () => {
     // every branch driven by `refusal.test.ts` and the switches' tests, and
     // mutation-checked by hand.
     // 143 with three modules moved out of `layout/` ahead of its deletion
-    // (S18h1): `containment.ts` (`fullyContains`, out of `edge-rules.ts`) and
+    // (S18h1): `containment.ts` (`fullyContains`, out of the TypeScript edge rules) and
     // `comment-geometry.ts` (`nearestPointOnPolyline` out of
     // the comment-bubble placement, with `commentAnchor` and the bubble constants)
     // join the lane, since both files they left were in it and leaving them
@@ -489,9 +489,20 @@ describe('the mutation lane covers what it says it covers', () => {
     // tokeniser budget, the line jumps, the edge-label placement, and the
     // line-jump narrow phase, which moved to `test-utils/wasm/` as the
     // reference its Rust port is held to. None was in the lane.
+    // 88 and 16 since the TypeScript edge routing was deleted (S18h3b): the
+    // twenty-one modules and the bench under `layout/edges/` went, and three
+    // root modules took what outlives them — `edge-routing.ts` (the sides,
+    // anchors and budget a caller hands the core), the TypeScript routing seam (the core
+    // as a root hands it, and `routeLayout`, one call into it) and
+    // the TypeScript stroke-weight table, moved as it stood. None of the three joins the lane:
+    // types, a constant table and a one-line forward, with nothing a mutant
+    // could change that a test could see. The seven mutated routing modules
+    // (the cost model, the ink terms, the diagonal clip, the crossing sweep,
+    // the grid router, its heap and the corner search) are the Rust ports' to
+    // hold now, by cargo-mutants over the frozen recording.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 23,
-      production: 107,
+      mutated: 16,
+      production: 88,
     })
   })
 
@@ -524,7 +535,7 @@ describe('the mutation lane covers what it says it covers', () => {
   it('names an expression that is still in the file it names', () => {
     // The way this ledger actually decays. The two guards above catch a moved
     // FILE; nothing catches a moved EXPRESSION, and that is the common edit —
-    // rewrite a condition in `edge-crossing-sweep.ts` and its entries match no
+    // rewrite a condition in the TypeScript crossing sweep and its entries match no
     // mutant ever again, while the ledger goes on claiming 23 settled findings
     // and the report goes on being read as if they were still true.
     //

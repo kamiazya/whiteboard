@@ -1,22 +1,19 @@
 import type { EdgeRoutingStyle, EdgeSide, SpatialNode } from '@kamiazya/whiteboard-model'
 import { edgeSideSchema } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode, RoutableElement } from '@kamiazya/whiteboard-scene'
-import type { Rect } from '../../layout/edges/edge-geometry.js'
-import type { EdgeAnchorPair } from '../../layout/edges/edge-sides.js'
-import type { RoutingBudget } from '../../layout/edges/routing-budget.js'
+import type { EdgeAnchorPair, RoutingBudget } from '../../edge-routing.js'
+import type { Rect } from '../../generated/geometry.zod.js'
 import { requireWasm } from './glue.js'
 import { encodeRouting } from './routing-wire.js'
 
 /**
- * `routeEdge` answered by the Rust port through the wasm artifact, with the
- * TypeScript signature, so canvas-render-rust can run every suite that
- * reaches the router against Rust unchanged (ADR-0054 step 5, QR-21 layer
- * 1). vitest.rust.config.ts aliases `./edge-router.js` to this module, so the
- * side-choice search, the coincident-ends repair and the routing scoreboards
- * all route through it. The rest of edge-router.ts's surface is re-exported
- * as written.
+ * `routeEdge` answered by the Rust port through the wasm artifact's
+ * oracle-surface export (`edge_route_edge`), with the signature the deleted
+ * TypeScript router had, so canvas-render-rust's routing examples and
+ * scoreboards (`src/routing/*.rust.test.ts`) route one edge between the
+ * anchors they choose (ADR-0054 step 5, QR-21 layer 1; the TypeScript went in
+ * step 7, S18h3b). Test-only: no shipped artifact carries the export.
  */
-export { DETOUR_REACH_PX, detourCandidates } from '../../layout/edges/edge-router.js'
 
 const SIDES = edgeSideSchema.options
 const STYLES: Record<EdgeRoutingStyle, number> = { straight: 0, orthogonal: 1, curved: 2 }

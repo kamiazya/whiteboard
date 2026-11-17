@@ -2,10 +2,11 @@
 //! properties: every waypoint stays inside the bound the obstacle prune
 //! assumes, and a corner detour crosses nothing it was told to avoid.
 //!
-//! The TypeScript twins are `detour-reach.properties.test.ts` and
-//! `straight-detour.properties.test.ts`. The leg test is written here from the
-//! definition (a Liang-Barsky clip against the open rect), not borrowed from
-//! the router, so a broken clearance test cannot agree with itself.
+//! The TypeScript twins were the detour-reach and corner-search property
+//! suites, deleted with the TypeScript router (ADR-0054 step 7, S18h3b).
+//! The leg test is written here from the definition (a Liang-Barsky clip
+//! against the open rect), not borrowed from the router, so a broken
+//! clearance test cannot agree with itself.
 
 use whiteboard_edge_routing::edge_router::{DETOUR_REACH_PX, detour_candidates};
 use whiteboard_edge_routing::geometry::{Point, Rect};

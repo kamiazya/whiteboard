@@ -1,6 +1,6 @@
 //! Concrete answers of the edge geometry helpers that cargo-mutants showed
 //! no other test pinned. Every expected value is what canvas-render's
-//! `edge-geometry.ts` returns for the same input.
+//! the TypeScript edge geometry returns for the same input.
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_test::wasm_bindgen_test as test;

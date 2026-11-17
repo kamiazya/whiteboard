@@ -4,9 +4,9 @@ import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 /**
  * The rectangle arithmetic the quality instruments share with each other.
  *
- * Deliberately NOT shared with `layout/`: the router, tidy and the bubble
- * placer keep their own geometry (`layout/edges/edge-geometry.ts`,
- * `tidy-units.ts`), because an instrument that read the code it judges through
+ * Deliberately NOT shared with what they judge: the router and the bubble
+ * placer (the Rust core's, `edge_geometry.rs`) and tidy (`tidy-units.ts`)
+ * keep their own geometry, because an instrument that read the code it judges through
  * the same primitive would agree with that code's mistakes by construction —
  * the rule `polyline-geometry.independence.test.ts` pins for the polyline
  * primitives.

@@ -1,5 +1,5 @@
 //! The path between two placed anchors: canvas-render's
-//! `layout/edges/edge-router.ts`, ported function for function.
+//! the TypeScript edge router, ported function for function.
 //!
 //! The reasoning behind each pass is written once, in the TypeScript. Rust
 //! works for the same answer in two places:
