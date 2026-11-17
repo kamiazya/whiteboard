@@ -19,7 +19,6 @@ const {
   prExcludeGlobs,
   prExcludeProblems,
   shardPlan,
-  MAX_SHARDS,
 } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/rust-mutants-ledger.mjs')).href
 )) as {
@@ -30,8 +29,10 @@ const {
   prExcludeGlobs: (text: string) => string[]
   prExcludeProblems: (globs: string[], exists: (path: string) => boolean) => string[]
   shardPlan: (input: { event: string; scopeRuns: boolean; mutantCount: number | null }) => number[]
-  MAX_SHARDS: number
 }
+
+/** Every leg, as push, the schedule and an unreadable count plan. */
+const FULL_SET = 8
 
 // .cargo/mutants.toml is the ledger of mutants the Rust mutation gate does
 // not judge (QR-17). Whether each entry still matches a mutant needs
@@ -98,7 +99,6 @@ describe('the shard plan of a pull request', () => {
     expect(pr(1)).toEqual([1])
     expect(pr(7)).toEqual([1, 2])
     expect(pr(500)).toEqual([1, 2, 3, 4, 5, 6, 7, 8])
-    expect(MAX_SHARDS).toBe(8)
   })
 
   it('runs no shard when the diff holds no mutant or the scope does not reach the job', () => {
@@ -107,9 +107,9 @@ describe('the shard plan of a pull request', () => {
   })
 
   it('fails closed to the full set when the count is unknown', () => {
-    expect(pr(null)).toHaveLength(MAX_SHARDS)
-    expect(pr(Number.NaN)).toHaveLength(MAX_SHARDS)
-    expect(pr(-1)).toHaveLength(MAX_SHARDS)
+    expect(pr(null)).toHaveLength(FULL_SET)
+    expect(pr(Number.NaN)).toHaveLength(FULL_SET)
+    expect(pr(-1)).toHaveLength(FULL_SET)
   })
 
   it.each([
@@ -118,7 +118,7 @@ describe('the shard plan of a pull request', () => {
     'merge_group',
     'workflow_dispatch',
   ])('keeps the full set on %s, whatever the diff holds', (event) => {
-    expect(shardPlan({ event, scopeRuns: false, mutantCount: 0 })).toHaveLength(MAX_SHARDS)
+    expect(shardPlan({ event, scopeRuns: false, mutantCount: 0 })).toHaveLength(FULL_SET)
   })
 })
 

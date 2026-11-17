@@ -135,7 +135,7 @@ export function prExcludeProblems(globs, exists) {
 }
 
 /** The most legs the job fans out to; what main, a schedule and a merge queue always run. */
-export const MAX_SHARDS = 8
+const MAX_SHARDS = 8
 
 /**
  * Mutants one leg is asked to judge before another leg is worth its fixed
@@ -143,7 +143,7 @@ export const MAX_SHARDS = 8
  * for one or two mutants spends more on the baseline than on judging.
  * Past MAX_SHARDS legs the ratio only grows, as it did with a fixed eight.
  */
-export const MUTANTS_PER_SHARD = 6
+const MUTANTS_PER_SHARD = 6
 
 /**
  * The legs of the mutants job: `[1..n]`, or `[]` when no leg is owed.
