@@ -169,9 +169,17 @@
       "ceiling": 9,
       "reason": "tests only (through the whiteboard-proptest dev-dependency), never shipped: array-from-iterator construction with MaybeUninit under proptest"
     },
+    "unicode-case-mapping": {
+      "ceiling": 1,
+      "reason": "linked into whiteboard-search, so shipped once a wasm export reaches it: one block of `NonZeroU32::new_unchecked` over the simple case-folding table (`case_folded`, which search does not call), each destination checked non-zero when the table was generated"
+    },
     "unicode-ident": {
       "ceiling": 2,
       "reason": "build time only (inside a proc macro the wasm build runs), never in an artifact: identifier tables for proc-macro2"
+    },
+    "unicode-normalization": {
+      "ceiling": 5,
+      "reason": "linked into whiteboard-search, so shipped once a wasm export reaches it: Hangul syllable decomposition and composition, `char::from_u32_unchecked` over arithmetic the source bounds to U+AC00..U+D7A3 before the call"
     },
     "wasm-bindgen": {
       "ceiling": 136,
