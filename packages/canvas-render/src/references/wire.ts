@@ -1,9 +1,9 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, type SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import type { ResolvedReference } from './resolved.js'
 import { type ReferenceSeams, referenceSeams } from './seams.js'
-import { imageTargets, referenceTargets } from './targets.js'
+import { imageTargets, type ReferenceSeeds, referenceTargets, writtenTargets } from './targets.js'
 
 /**
  * What a surface adds beside a reference's loaded content — a label, an
@@ -52,6 +52,30 @@ export interface ReferenceWireOptions {
    * its id, and its extra is marked `pending`.
    */
   readonly pending?: ReadonlySet<string>
+  /**
+   * The document the wire is drawn for. Its links, and those of every
+   * record loaded, are asked of the alias table too — past the loading
+   * budget as well, since a link resolved by the caller's table needs no
+   * load — so a link the walk never reached still resolves.
+   */
+  readonly seeds?: ReferenceSeeds
+}
+
+const isDocumentId = (target: string): boolean => documentIdSchema.safeParse(target).success
+
+/**
+ * Every target the caller's tables are asked of: what loaded, what is still
+ * loading, and — when there is a table to ask — every link the seeds and
+ * what loaded write, past the loading budget too.
+ */
+function askedOf(
+  graph: ReferenceGraph,
+  pending: ReadonlySet<string>,
+  options: ReferenceWireOptions,
+): ReadonlySet<string> {
+  const asks = options.resolveAlias !== undefined || options.resolveTitle !== undefined
+  const written = asks ? writtenTargets({ ...options.seeds, loaded: graph }) : []
+  return new Set([...graph.keys(), ...pending, ...written])
 }
 
 /**
@@ -64,10 +88,11 @@ export function referenceWire(
   options: ReferenceWireOptions = {},
 ): ReferenceWire {
   const aliases: [string, string][] = []
-  const ids = new Set<string>()
   const pending = options.pending ?? new Set<string>()
-  const keys = [...graph.keys(), ...[...pending].filter((target) => !graph.has(target))]
-  for (const key of keys) {
+  const asked = askedOf(graph, pending, options)
+  // A canonical id names itself, so its link is titled without an alias.
+  const ids = new Set([...asked].filter(isDocumentId))
+  for (const key of asked) {
     const entry = graph.get(key) ?? null
     if (entry !== null) ids.add(entry.documentId ?? key)
     const own = options.resolveAlias?.(key)
@@ -172,8 +197,12 @@ export function referenceWireFor(
   // `referenceTargets` names documents; a picture is not one, and its href
   // still rides the wire as an extra the layout draws.
   for (const ref of imageTargets({ ...seeds, loaded })) keys.add(ref)
-  const aliases = wire.aliases.filter(([key]) => keys.has(key))
+  // An alias costs no load, so the links past the loading budget keep theirs.
+  const read = new Map([...loaded].filter(([key]) => keys.has(key)))
+  const written = new Set(writtenTargets({ ...seeds, loaded: read }))
+  const aliases = wire.aliases.filter(([key]) => keys.has(key) || written.has(key))
   const ids = new Set(aliases.map(([, id]) => id))
+  for (const target of written) if (isDocumentId(target)) ids.add(target)
   for (const [key, entry] of wire.entries) {
     if (keys.has(key) && entry !== null) ids.add(entry.documentId ?? key)
   }

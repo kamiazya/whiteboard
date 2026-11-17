@@ -198,7 +198,7 @@ export function createRowReferenceReader(
     )
 
     return {
-      wire: referenceWire(graph, { resolveAlias, resolveTitle, extras: images.extras }),
+      wire: referenceWire(graph, { resolveAlias, resolveTitle, extras: images.extras, seeds }),
       key: await referencesKey([...keyRows(graph, resolve, resolveTitle), ...images.rows]),
     }
   }

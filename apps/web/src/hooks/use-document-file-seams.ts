@@ -262,8 +262,9 @@ export function useDocumentFileSeams({
         ...(resolveAlias !== undefined ? { resolveAlias } : {}),
         ...(resolveTitle !== undefined ? { resolveTitle } : {}),
         extras,
+        seeds: { canvases: [canvas], bodies },
       }),
-    [graph, extras, resolveAlias, resolveTitle],
+    [graph, extras, resolveAlias, resolveTitle, canvas, bodies],
   )
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
