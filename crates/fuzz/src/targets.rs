@@ -736,29 +736,39 @@ pub fn register_layout_fonts_wasm(data: &[u8]) {
 }
 
 /// `search_op`, the one export a host calls for every search question, on any
-/// UTF-8 text read as its request. It holds an index and label sets between
-/// calls, so a run of inputs drives the handle table too. It must answer one
-/// JSON text, `["ok", ...]` or `["refused", code]` with a code from the
-/// refusal vocabulary, refuse exactly the request past its cap as too large,
-/// and never panic or run past its budget.
+/// UTF-8 text read as up to [`SEARCH_REQUESTS_PER_INPUT`] requests, one per
+/// line, answered in order by a fresh instance: the held indexes and label sets
+/// a sequence mints, uses and releases belong to that input alone, so no
+/// earlier input decides what this one reaches. Each answer must be one JSON
+/// text, `["ok", ...]` or `["refused", code]` with a code from the refusal
+/// vocabulary, a request past its cap refused as too large, and the export
+/// must never panic or run past its budget.
 ///
 /// # Panics
 ///
 /// When the export panics or answers off its shape.
 pub fn search_wasm(data: &[u8]) {
     use whiteboard_wasm::input_caps::SEARCH_OP;
-    use whiteboard_wasm::search::search_op;
+    use whiteboard_wasm::search::search_ops_in_fresh_instance;
 
-    let Ok(request) = std::str::from_utf8(data) else {
+    let Ok(input) = std::str::from_utf8(data) else {
         return;
     };
-    let answer = search_op(request);
-    if request.len() > SEARCH_OP.max_bytes {
-        assert_eq!(answer, "[\"refused\",\"input-too-large\"]");
-        return;
+    let requests: Vec<&str> = input.split('\n').take(SEARCH_REQUESTS_PER_INPUT).collect();
+    let answers = search_ops_in_fresh_instance(requests.iter().copied());
+    for (request, answer) in requests.iter().zip(&answers) {
+        if request.len() > SEARCH_OP.max_bytes {
+            assert_eq!(answer, "[\"refused\",\"input-too-large\"]");
+            continue;
+        }
+        let ok = answer.starts_with("[\"ok\"") && answer.ends_with(']');
+        let refused = answer == "[\"refused\",\"malformed\"]"
+            || answer == "[\"refused\",\"input-too-large\"]";
+        assert!(ok || refused, "{answer:.120} is not an answer");
     }
-    let ok = answer.starts_with("[\"ok\"") && answer.ends_with(']');
-    let refused =
-        answer == "[\"refused\",\"malformed\"]" || answer == "[\"refused\",\"input-too-large\"]";
-    assert!(ok || refused, "{answer:.120} is not an answer");
 }
+
+/// How many requests one fuzz input may name: enough for a handle's whole
+/// life (mint, fill, query, release) and some interleaving, few enough that
+/// one input stays one quick run.
+pub const SEARCH_REQUESTS_PER_INPUT: usize = 32;

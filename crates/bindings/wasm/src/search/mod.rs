@@ -431,6 +431,18 @@ pub fn search_op(request: &str) -> String {
     answer(request, &mut held())
 }
 
+/// Answers `requests` in order against holdings of their own, as a fresh
+/// instance would. What the fuzz target drives: one input's indexes and handles
+/// never decide what the next input reaches, and a sequence inside one input
+/// exercises live handles and their release. Not exported to a host.
+#[doc(hidden)]
+pub fn search_ops_in_fresh_instance<'a>(
+    requests: impl IntoIterator<Item = &'a str>,
+) -> Vec<String> {
+    let mut held = Held::new(MAX_HELD_BYTES);
+    requests.into_iter().map(|request| answer(request, &mut held)).collect()
+}
+
 fn answer(request: &str, held: &mut Held) -> String {
     if request.len() > SEARCH_OP.max_bytes {
         return refused(TOO_LARGE).to_string();
